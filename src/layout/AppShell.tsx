@@ -1,9 +1,10 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { FileText, Megaphone, Radio } from 'lucide-react';
+import { BarChart3, FileText, Inbox, Megaphone } from 'lucide-react';
 
 const NAV = [
-  { to: '/', label: 'Canales', end: true, icon: Radio },
+  { to: '/', label: 'Bandeja', end: true, icon: Inbox },
   { to: '/leads', label: 'Formularios', end: false, icon: FileText },
+  { to: '/analisis', label: 'Análisis', end: false, icon: BarChart3 },
   { to: '/campanas', label: 'Campañas', end: false, icon: Megaphone },
 ];
 

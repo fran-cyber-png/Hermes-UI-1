@@ -3,14 +3,16 @@ import { API_URL } from '../../config';
 import type { Intencion, Interaccion } from './types';
 
 /**
- * Carga paginada de un canal.
+ * La bandeja: una sola cola, todos los canales juntos.
  *
- * Con 15.482 interacciones en Facebook, traerlas todas de una sería absurdo:
- * nadie scrollea 15.000 tarjetas. Se traen de a 40 y se piden más al llegar al
- * fondo. El total solo se cuenta en la primera página — contar 15.000 filas en
- * cada scroll cuesta y no aporta nada.
+ * Antes se pedía un canal por columna. Pero nadie trabaja "por canal" — se
+ * trabaja por persona, y a la persona que se te está por vencer no te importa
+ * si te escribió por Facebook o por Instagram. El canal pasó a ser una insignia.
+ *
+ * El backend ya devuelve la cola ordenada por urgencia (ventana abierta primero,
+ * y dentro de esa, la más vieja arriba: es a la que le quedan menos horas).
  */
-export function useInteracciones(canal: string, intencion: Intencion, rango: string) {
+export function useBandeja(intencion: Intencion) {
   const [items, setItems] = useState<Interaccion[]>([]);
   const [total, setTotal] = useState(0);
   const [hayMas, setHayMas] = useState(false);
@@ -21,11 +23,11 @@ export function useInteracciones(canal: string, intencion: Intencion, rango: str
     async (offset: number) => {
       const q = intencion ? `&intencion=${intencion}` : '';
       const res = await fetch(
-        `${API_URL}/api/interactions?canal=${canal}&limit=40&offset=${offset}&rango=${rango}${q}`,
+        `${API_URL}/api/interactions?limit=30&offset=${offset}&rango=todo${q}`,
       ).then((r) => r.json());
       return res as { interacciones: Interaccion[]; total?: number; hayMas: boolean };
     },
-    [canal, intencion, rango],
+    [intencion],
   );
 
   useEffect(() => {

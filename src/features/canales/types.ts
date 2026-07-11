@@ -10,7 +10,12 @@ export interface Interaccion {
   pide_info: boolean;
   /** ¿Meta todavía deja mandarle un mensaje privado? Se cierra a los 7 días. */
   ventana_abierta: boolean;
+  /** Días desde que escribió. Con ventana abierta, le quedan 7 − dias. */
+  dias: number;
 }
+
+/** Los 7 días que da Meta para responder un comentario en privado. */
+export const VENTANA_DIAS = 7;
 
 export interface EstadoCanal {
   canal: string;

@@ -11,11 +11,16 @@ const PAIS_NOMBRE: Record<string, string> = {
   AR: 'Argentina', ES: 'España', HN: 'Honduras', PA: 'Panamá', SV: 'El Salvador',
 };
 
+/** Cuántos se muestran de entrada. Pintar los 680 de una hacía una pantalla de
+ *  20.000 píxeles: no es una lista, es un muro. */
+const TANDA = 25;
+
 export default function LeadsInbox() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [total, setTotal] = useState(0);
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
+  const [visibles, setVisibles] = useState(TANDA);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -23,16 +28,19 @@ export default function LeadsInbox() {
       fetchLeads({ q }).then((d) => {
         setLeads(d.leads);
         setTotal(d.total);
+        setVisibles(TANDA); // buscar es empezar de nuevo, no seguir donde ibas
         setLoading(false);
       });
     }, 200);
     return () => clearTimeout(t);
   }, [q]);
 
+  const mostrados = leads.slice(0, visibles);
+
   return (
     <div className={cardClass}>
       <div className={`${cardHeaderClass} flex items-center justify-between`}>
-        <span>Bandeja</span>
+        <span>Formularios</span>
         <span className="text-xs font-normal text-navy-muted">
           {loading ? 'cargando...' : `${total.toLocaleString('es')} personas`}
         </span>
@@ -51,7 +59,7 @@ export default function LeadsInbox() {
       </div>
 
       <div className="divide-y divide-border">
-        {leads.map((lead) => {
+        {mostrados.map((lead) => {
           const temp = temperatureOf(lead.createdTime);
           const meta = TEMPERATURE_META[temp];
           const dias = daysSince(lead.createdTime);
@@ -106,6 +114,21 @@ export default function LeadsInbox() {
 
       {!loading && leads.length === 0 && (
         <p className="p-5 text-sm text-muted-foreground">No hay leads que coincidan.</p>
+      )}
+
+      {visibles < leads.length && (
+        <div className="border-t border-border p-3 text-center">
+          <button
+            type="button"
+            onClick={() => setVisibles((v) => v + TANDA)}
+            className="rounded-xl border border-border px-5 py-2 text-xs font-bold text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+          >
+            Ver {Math.min(TANDA, leads.length - visibles)} más
+            <span className="ml-1.5 font-normal">
+              (quedan {(leads.length - visibles).toLocaleString('es')})
+            </span>
+          </button>
+        </div>
       )}
     </div>
   );

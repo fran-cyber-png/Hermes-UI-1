@@ -23,6 +23,24 @@ const PIDE_INFO = sql`texto ~* '(informaci|info\\b|precio|costo|cuánto|cuanto|i
  */
 const VENTANA_ABIERTA = sql`(tipo = 'comentario' AND canal = 'facebook' AND occurred_at > now() - interval '7 days')`;
 
+/**
+ * El orden de la bandeja: urgencia real, no fecha.
+ *
+ * Lo urgente es a quien se le está por cerrar la ventana de 7 días. Y dentro de
+ * la ventana, el MÁS VIEJO es el más urgente — es al que le quedan menos horas.
+ * Ordenar por fecha descendente, que es el reflejo de cualquier feed, pondría
+ * justo abajo del todo a la persona que estás por perder.
+ *
+ * Lo demás (ventana ya cerrada) va después, y ahí sí lo reciente primero: solo
+ * se le puede responder en público, y un comentario de hace dos años no espera
+ * nada.
+ */
+const ORDEN_URGENCIA = sql`
+  ORDER BY (${VENTANA_ABIERTA}) DESC,
+           CASE WHEN (${VENTANA_ABIERTA}) THEN occurred_at END ASC,
+           occurred_at DESC
+`;
+
 /** Rangos que se pueden pedir. Se acotan para que nadie mande SQL por la query. */
 const RANGOS: Record<string, number | null> = {
   "7d": 7,
@@ -59,10 +77,11 @@ interactionsRouter.get("/", async (req, res) => {
   const filas = await db.execute(sql`
     SELECT id, canal, tipo, persona_nombre, texto, contexto_texto, occurred_at, status,
            (${PIDE_INFO})       AS pide_info,
-           (${VENTANA_ABIERTA}) AS ventana_abierta
+           (${VENTANA_ABIERTA}) AS ventana_abierta,
+           extract(day from now() - occurred_at)::int AS dias
     FROM interactions
     ${where(ws)}
-    ORDER BY occurred_at DESC
+    ${ORDEN_URGENCIA}
     LIMIT ${limit} OFFSET ${offset}
   `);
 
