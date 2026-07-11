@@ -31,3 +31,6 @@ dist-ssr
 # Salidas de herramientas locales
 .playwright-mcp/
 *.png
+
+# Artefactos de build de TS
+*.tsbuildinfo

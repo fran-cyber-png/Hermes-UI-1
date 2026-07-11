@@ -1,10 +1,13 @@
 import { API_URL } from '../../config';
 import type { Accion, FeedResponse } from './types';
 
-export async function fetchDecisiones(accountIds: string[], datePreset: string): Promise<FeedResponse> {
+export async function fetchDecisiones(accountIds: string[], rango: string): Promise<FeedResponse> {
   const res = await fetch(
-    `${API_URL}/api/decisions?accountIds=${accountIds.join(',')}&datePreset=${datePreset}`,
+    `${API_URL}/api/decisions?accountIds=${accountIds.join(',')}&rango=${rango}`,
   );
+  // Un 500 no es "no hay decisiones". Sin esto, un fallo del servidor se leía
+  // como "la pauta está sana".
+  if (!res.ok) throw new Error(`El servidor respondió ${res.status}`);
   return res.json();
 }
 

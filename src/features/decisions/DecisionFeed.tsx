@@ -4,15 +4,18 @@ import { useLocalStorage } from '../../lib/useLocalStorage';
 import { fetchDecisiones } from './api';
 import type { Decision } from './types';
 import DecisionCard from './DecisionCard';
-import DateRangePicker from '../campaigns/DateRangePicker';
-import type { DatePreset } from '../campaigns/types';
+import RangoPicker from '../canales/RangoPicker';
+import type { Rango } from '../canales/types';
 
 interface Props {
   accountIds: string[];
 }
 
 export default function DecisionFeed({ accountIds }: Props) {
-  const [datePreset, setDatePreset] = useLocalStorage<DatePreset>('meta-escuela.feedRango', 'last_30d');
+  // El MISMO rango que el dashboard, y la misma clave: si en el home miras 90
+  // días, aquí también. Tener dos rangos distintos con dos vocabularios distintos
+  // ('90d' vs 'last_90d') era pedirle al usuario que tradujera.
+  const [rango, setRango] = useLocalStorage<Rango>('meta-escuela.rango', '90d');
   const [ignoradas, setIgnoradas] = useLocalStorage<string[]>('meta-escuela.decisionesIgnoradas', []);
 
   const [decisiones, setDecisiones] = useState<Decision[]>([]);
@@ -24,17 +27,19 @@ export default function DecisionFeed({ accountIds }: Props) {
     if (accountIds.length === 0) return;
     let cancelado = false;
     setLoading(true);
-    fetchDecisiones(accountIds, datePreset).then((d) => {
-      if (cancelado) return;
-      setDecisiones(d.decisiones ?? []);
-      setModo(d.modo);
-      setAnalizadas(d.campanasAnalizadas ?? 0);
-      setLoading(false);
-    });
+    fetchDecisiones(accountIds, rango)
+      .then((d) => {
+        if (cancelado) return;
+        setDecisiones(d.decisiones ?? []);
+        setModo(d.modo);
+        setAnalizadas(d.campanasAnalizadas ?? 0);
+        setLoading(false);
+      })
+      .catch(() => !cancelado && setLoading(false));
     return () => {
       cancelado = true;
     };
-  }, [accountIds, datePreset]);
+  }, [accountIds, rango]);
 
   const visibles = decisiones.filter((d) => !ignoradas.includes(d.id));
   const plataTotal = visibles.reduce((s, d) => s + d.plataEnJuego, 0);
@@ -43,7 +48,7 @@ export default function DecisionFeed({ accountIds }: Props) {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <DateRangePicker value={datePreset} onChange={setDatePreset} />
+        <RangoPicker valor={rango} onChange={setRango} />
 
         {modo === 'simulacion' && (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted-foreground">

@@ -4,6 +4,7 @@ import type { LeadStats } from '../features/leads/types';
 import LeadsInbox from '../features/leads/LeadsInbox';
 import LlegadaChart from '../features/leads/LlegadaChart';
 import DesgloseBars from '../features/leads/DesgloseBars';
+import Volver from '../layout/Volver';
 
 const PAIS_NOMBRE: Record<string, string> = {
   MX: 'México', GT: 'Guatemala', CL: 'Chile', PE: 'Perú', EC: 'Ecuador',
@@ -26,7 +27,9 @@ export default function LeadsPage() {
   }, []);
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-6">
+    <div className="mx-auto flex max-w-[1400px] flex-col gap-5">
+      <Volver />
+
       <div>
         <h1 className="font-heading mb-1 text-2xl font-bold text-navy">Formularios</h1>
         <p className="text-sm text-muted-foreground">
@@ -34,13 +37,13 @@ export default function LeadsPage() {
         </p>
       </div>
 
-      <LeadsInbox />
+      {/* La lista manda y se lleva el ancho. El perfil de la gente va al costado:
+          es contexto para leer la lista, no una pantalla aparte. */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_22rem]">
+        <LeadsInbox />
 
-      {stats && (
-        <>
-          <LlegadaChart porDia={stats.porDia} />
-
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        {stats && (
+          <aside className="flex flex-col gap-4">
             <DesgloseBars
               titulo="Quiénes son"
               filas={stats.porPerfil.map((p) => ({ etiqueta: p.perfil, valor: p.leads }))}
@@ -51,9 +54,10 @@ export default function LeadsPage() {
               filas={stats.porPais.map((p) => ({ etiqueta: p.pais, valor: p.leads }))}
               formatoEtiqueta={(s) => PAIS_NOMBRE[s] ?? s}
             />
-          </div>
-        </>
-      )}
+            <LlegadaChart porDia={stats.porDia} />
+          </aside>
+        )}
+      </div>
     </div>
   );
 }

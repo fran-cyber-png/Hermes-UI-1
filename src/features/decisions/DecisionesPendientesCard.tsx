@@ -1,50 +1,143 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, CheckCircle2, Coins } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, Coins, Loader2, Settings } from 'lucide-react';
 import { useLocalStorage } from '../../lib/useLocalStorage';
+import { useConfig } from '../../layout/ConfigContext';
 import { fetchDecisiones } from './api';
 import type { Decision } from './types';
+import type { Rango } from '../canales/types';
+
+type Estado =
+  | { fase: 'sin-cuentas' }
+  | { fase: 'cargando' }
+  | { fase: 'listo'; decisiones: Decision[]; fallaron: number }
+  | { fase: 'error'; mensaje: string };
 
 /**
- * El puente entre el Pulso y el feed: cuánta plata está en juego en la pauta,
- * sin sacarte de la pantalla principal. Muestra las dos más caras y te lleva
- * al feed si quieres resolverlas.
+ * Cuánta plata está mal puesta en la pauta, sin sacarte del dashboard.
+ *
+ * Depende de qué cuentas elegiste mirar en la configuración. Como ese valor vive
+ * en localStorage compartido, cambiarlo allá rehace esto solo — sin recargar.
+ *
+ * Tres cosas que esta tarjeta NO hace, porque las hacía y mentía:
+ *
+ *  1. No conserva el resultado viejo mientras carga. Antes, al cambiar de
+ *     cuentas, seguía mostrando el "[]" anterior — es decir, "la pauta está
+ *     sana" — durante los dos minutos que Meta tarda en contestar por 19
+ *     cuentas. Una buena noticia inventada es peor que ninguna noticia.
+ *  2. No se calla los errores. Si Meta no dejó leer algunas cuentas, decir
+ *     "está sana" es afirmar algo sobre plata que nunca se miró.
+ *  3. No trata un fallo de red como "no hay nada". Silencio ≠ todo bien.
  */
-export default function DecisionesPendientesCard() {
+export default function DecisionesPendientesCard({ rango }: { rango: Rango }) {
   const [cuentas] = useLocalStorage<string[]>('meta-escuela.dashboardAccounts', []);
-  const [decisiones, setDecisiones] = useState<Decision[] | null>(null);
+  const { abrir } = useConfig();
+  const [estado, setEstado] = useState<Estado>({ fase: 'sin-cuentas' });
 
   useEffect(() => {
     if (cuentas.length === 0) {
-      setDecisiones([]);
+      setEstado({ fase: 'sin-cuentas' });
       return;
     }
-    // Ventana amplia a propósito: en 30 días el feed sale vacío porque las
-    // campañas gastaron antes. Aquí interesa la plata mal puesta, no lo reciente.
-    fetchDecisiones(cuentas, 'maximum').then((d) => setDecisiones(d.decisiones ?? []));
-  }, [cuentas]);
 
-  if (decisiones === null) return null;
+    let cancelado = false;
+    setEstado({ fase: 'cargando' });
 
-  if (cuentas.length === 0) {
+    fetchDecisiones(cuentas, rango)
+      .then((d) => {
+        if (cancelado) return;
+        setEstado({
+          fase: 'listo',
+          decisiones: d.decisiones ?? [],
+          fallaron: d.errores?.length ?? 0,
+        });
+      })
+      .catch((e) => {
+        if (cancelado) return;
+        setEstado({
+          fase: 'error',
+          mensaje: e instanceof Error ? e.message : 'No se pudo leer la pauta',
+        });
+      });
+
+    return () => {
+      cancelado = true;
+    };
+  }, [cuentas, rango]);
+
+  if (estado.fase === 'sin-cuentas') {
     return (
-      <Link
-        to="/campanas"
-        className="flex items-center justify-between rounded-2xl border border-border bg-card px-5 py-4 shadow-sm hover:border-primary"
+      <button
+        type="button"
+        onClick={abrir}
+        className="flex w-full items-center justify-between gap-3 rounded-2xl border border-dashed border-border bg-card px-5 py-4 text-left shadow-sm transition-colors hover:border-primary"
       >
-        <span className="text-sm font-bold text-foreground">Elige qué cuentas de pauta mirar</span>
-        <ArrowRight size={16} className="text-primary" />
-      </Link>
+        <span className="min-w-0">
+          <span className="block text-sm font-bold text-foreground">Elige tus cuentas de pauta</span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            Sin eso no se puede saber cuánto costó cada persona.
+          </span>
+        </span>
+        <Settings size={16} className="shrink-0 text-primary" />
+      </button>
     );
   }
 
+  if (estado.fase === 'cargando') {
+    return (
+      <div className="flex items-start gap-3 rounded-2xl border border-border bg-card px-5 py-4 shadow-sm">
+        <Loader2 size={16} className="mt-0.5 shrink-0 animate-spin text-muted-foreground" />
+        <div>
+          <p className="text-sm font-semibold text-foreground">
+            Revisando {cuentas.length} {cuentas.length === 1 ? 'cuenta' : 'cuentas'}...
+          </p>
+          {cuentas.length > 6 && (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Meta contesta lento cuando son muchas. Puede tardar un par de minutos.
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (estado.fase === 'error') {
+    return (
+      <div className="flex items-start gap-3 rounded-2xl border border-destructive/40 bg-destructive/5 px-5 py-4">
+        <AlertTriangle size={16} className="mt-0.5 shrink-0 text-destructive" />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-foreground">No se pudo revisar la pauta</p>
+          <p className="mt-0.5 break-words text-xs text-muted-foreground">{estado.mensaje}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const { decisiones, fallaron } = estado;
+
+  // Un aviso, no una tarjeta aparte: lo que importa sigue siendo el resultado,
+  // pero el resultado ahora dice de cuánto NO sabe nada.
+  const aviso = fallaron > 0 && (
+    <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-destructive">
+      <AlertTriangle size={12} />
+      Meta no dejó leer {fallaron} {fallaron === 1 ? 'cuenta' : 'cuentas'}: no están contadas.
+    </p>
+  );
+
   if (decisiones.length === 0) {
     return (
-      <div className="flex items-center gap-3 rounded-2xl border border-temp-fresco/40 bg-temp-fresco/5 px-5 py-4">
-        <CheckCircle2 size={18} className="shrink-0 text-temp-fresco" />
-        <span className="text-sm text-foreground">
-          La pauta está sana. No hay plata mal repartida ni anuncios quemando presupuesto.
-        </span>
+      <div className="rounded-2xl border border-temp-fresco/40 bg-temp-fresco/5 px-5 py-4">
+        <div className="flex items-start gap-3">
+          <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-temp-fresco" />
+          <div className="min-w-0">
+            <p className="text-sm text-foreground">
+              {fallaron > 0
+                ? 'En las cuentas que sí se pudieron leer no hay plata mal repartida.'
+                : 'La pauta está sana. No hay plata mal repartida ni anuncios quemando presupuesto.'}
+            </p>
+            {aviso}
+          </div>
+        </div>
       </div>
     );
   }
@@ -74,11 +167,11 @@ export default function DecisionesPendientesCard() {
               </li>
             ))}
             {decisiones.length > 2 && (
-              <li className="text-xs text-muted-foreground">
-                · y {decisiones.length - 2} más
-              </li>
+              <li className="text-xs text-muted-foreground">· y {decisiones.length - 2} más</li>
             )}
           </ul>
+
+          {aviso}
 
           <span className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-primary">
             Ver qué hacer

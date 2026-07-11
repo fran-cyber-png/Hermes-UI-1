@@ -5,9 +5,9 @@ import '@fontsource/montserrat/700.css';
 import '@fontsource/montserrat/800.css';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import AppShell from './layout/AppShell';
-import BandejaPage from './pages/BandejaPage';
+import HomePage from './pages/HomePage';
 import LeadsPage from './pages/LeadsPage';
-import AnalisisPage from './pages/AnalisisPage';
+import BandejaPage from './pages/BandejaPage';
 import CampaignsListPage from './pages/CampaignsListPage';
 import NewCampaignPage from './pages/NewCampaignPage';
 import CampaignStructurePage from './pages/CampaignStructurePage';
@@ -17,11 +17,12 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<AppShell />}>
-          {/* La home es para actuar. Entender es otra pantalla, a propósito:
-              cuando compartían plano, se estorbaban y se contradecían. */}
-          <Route index element={<BandejaPage />} />
+          {/* El home es el único punto de partida: contiene el trabajo (la
+              bandeja) y las puertas a todo lo demás. Todo lo de abajo se abre
+              desde ahí y vuelve ahí. Por eso no hay pestañas. */}
+          <Route index element={<HomePage />} />
           <Route path="leads" element={<LeadsPage />} />
-          <Route path="analisis" element={<AnalisisPage />} />
+          <Route path="bandeja" element={<BandejaPage />} />
           <Route path="campanas" element={<CampaignsListPage />} />
           <Route path="campanas/nueva" element={<NewCampaignPage />} />
           <Route path="campanas/:campaignId" element={<CampaignStructurePage />} />

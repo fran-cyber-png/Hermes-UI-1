@@ -21,7 +21,7 @@ function hace(dias: number): string {
 /**
  * Una persona esperando, en una línea.
  *
- * La regla que manda acá: el botón dice lo que REALMENTE se puede hacer. Si la
+ * La regla que manda aquí: el botón dice lo que REALMENTE se puede hacer. Si la
  * ventana de Meta ya cerró, dice "Responder en público" — porque el privado no
  * va a salir, y ofrecerlo sería mentir antes de intentarlo.
  */

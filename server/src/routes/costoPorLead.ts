@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { MetaGraphClient } from "../meta/metaClient.js";
+import { diasDe, type Rango } from "../lib/rangos.js";
 
 /**
  * El costo REAL por lead: cruza los leads que capturamos con lo que Meta dice
@@ -21,11 +22,22 @@ export interface CostoPorLead {
   adName: string | null;
 }
 
-export async function costoPorLead(token: string): Promise<{
+export async function costoPorLead(
+  token: string,
+  rango: Rango = "todo",
+): Promise<{
   porCampana: CostoPorLead[];
   porAnuncio: CostoPorLead[];
   totales: { leads: number; gasto: number; costoPorLead: number } | null;
 }> {
+  // El rango se aplica a los LEADS, y el gasto lo sigue solo: como la ventana
+  // que se le pide a Meta se calcula desde el primer y último lead (abajo),
+  // filtrar aquí achica también la ventana de gasto. Un solo filtro, y las dos
+  // mitades de la división quedan hablando del mismo período.
+  const dias = diasDe(rango);
+  const desdeRango =
+    dias === null ? sql`` : sql`AND created_time > now() - (${String(dias)} || ' days')::interval`;
+
   // 1. Cuántos leads trajo cada campaña/anuncio, y en qué ventana de fechas.
   const filas = await db.execute<{
     campaign_id: string;
@@ -44,6 +56,7 @@ export async function costoPorLead(token: string): Promise<{
       max(created_time)::date::text AS hasta
     FROM leads
     WHERE campaign_id IS NOT NULL
+    ${desdeRango}
     GROUP BY 1, 2, 3
   `);
 

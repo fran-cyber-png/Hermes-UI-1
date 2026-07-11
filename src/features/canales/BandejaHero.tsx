@@ -21,10 +21,7 @@ export default function BandejaHero({
   estado: CanalesResponse | null;
   abiertas: number;
 }) {
-  const canales = estado?.interacciones ?? [];
   const formularios = estado?.formularios;
-  const pidenInfo = canales.reduce((s, c) => s + c.pide_info, 0);
-
   const vacia = abiertas === 0;
 
   return (
@@ -59,23 +56,25 @@ export default function BandejaHero({
         </>
       )}
 
-      {/* El pasivo: real, grande, y sin botón. No hay nada que "hacer" con él
-          hoy, y ponerle una acción sería inventar una que no existe. */}
-      <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-white/10 pt-4 text-sm">
-        {formularios && formularios.sin_atender > 0 && (
+      {/* Acá SOLO va lo accionable. El histórico —cuánta gente entró, cuántos
+          pidieron información— vive abajo, en el panorama, con su propio filtro
+          de fechas. Si el hero también contara, habría dos cifras distintas
+          diciendo lo mismo, y eso fue lo que hizo que esta pantalla mintiera. */}
+      {formularios && formularios.sin_atender > 0 && (
+        <div className="mt-5 border-t border-white/10 pt-4">
           <Link
             to="/leads"
-            className="inline-flex items-center gap-1.5 font-semibold text-white hover:text-gold"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-white hover:text-gold"
           >
             {formularios.sin_atender.toLocaleString('es')} formularios sin contactar
             <ArrowRight size={13} />
           </Link>
-        )}
-        <span className="text-navy-muted">
-          {pidenInfo.toLocaleString('es')} pidieron información alguna vez. A la mayoría ya solo se
-          les puede responder en público.
-        </span>
-      </div>
+          <p className="mt-1 text-sm text-navy-muted">
+            Traen nombre, teléfono y correo. A estos se les puede escribir cuando quieras: no tienen
+            ventana que se cierre.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

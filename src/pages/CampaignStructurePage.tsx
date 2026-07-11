@@ -21,7 +21,7 @@ export default function CampaignStructurePage() {
 
       <h1 className="font-heading text-2xl font-bold text-navy mb-1">Las tres etapas</h1>
       <p className="text-sm text-muted-foreground mb-4">
-        Campaña, conjuntos y anuncios — con la plata en cada nivel. Tocá un conjunto para abrirlo.
+        Campaña, conjuntos y anuncios — con la plata en cada nivel. Toca un conjunto para abrirlo.
       </p>
 
       <div className="mb-5">

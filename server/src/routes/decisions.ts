@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { paraMeta, rangoDe } from "../lib/rangos.js";
 import { sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { events } from "../db/schema.js";
@@ -44,7 +45,9 @@ decisionsRouter.get("/", async (req, res) => {
     res.json({ decisiones: [], modo: MODO, campanasAnalizadas: 0 });
     return;
   }
-  const datePreset = String(req.query.datePreset ?? "last_30d");
+  // El mismo rango que gobierna todo el home. Meta no tiene preset de "últimos
+  // 365 días", así que se le manda time_range con fechas exactas.
+  const ventana = paraMeta(rangoDe(req.query.rango ?? req.query.datePreset));
 
   const client = new MetaGraphClient(token);
   const campanas: CampaignInput[] = [];
@@ -68,7 +71,7 @@ decisionsRouter.get("/", async (req, res) => {
         });
         const insights = await client.getAll(`${camp.id}/insights`, {
           level: "ad",
-          date_preset: datePreset,
+          ...ventana,
           fields: "ad_id,spend,results,cost_per_result",
           limit: "200",
         });

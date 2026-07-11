@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../db/client.js";
+import { diasDe, rangoDe } from "../lib/rangos.js";
 
 export const interactionsRouter = Router();
 
@@ -41,19 +42,12 @@ const ORDEN_URGENCIA = sql`
            occurred_at DESC
 `;
 
-/** Rangos que se pueden pedir. Se acotan para que nadie mande SQL por la query. */
-const RANGOS: Record<string, number | null> = {
-  "7d": 7,
-  "30d": 30,
-  "90d": 90,
-  "1y": 365,
-  todo: null,
-};
-
-function rangoDe(q: unknown): SQL | null {
-  const dias = RANGOS[String(q ?? "30d")];
-  if (dias === null || dias === undefined) return null;
-  return sql`occurred_at > now() - (${String(dias)} || ' days')::interval`;
+/** El rango vive en un solo lugar (lib/rangos): el home entero obedece al mismo. */
+function filtroFecha(q: unknown, columna: "occurred_at" | "created_time"): SQL | null {
+  const dias = diasDe(rangoDe(q));
+  if (dias === null) return null;
+  const col = columna === "occurred_at" ? sql`occurred_at` : sql`created_time`;
+  return sql`${col} > now() - (${String(dias)} || ' days')::interval`;
 }
 
 const where = (ws: SQL[]) => (ws.length > 0 ? sql`WHERE ${sql.join(ws, sql` AND `)}` : sql``);
@@ -69,7 +63,7 @@ interactionsRouter.get("/", async (req, res) => {
   if (intencion === "pide-info") ws.push(PIDE_INFO);
   if (intencion === "puedo-escribirle") ws.push(VENTANA_ABIERTA);
 
-  const rango = rangoDe(req.query.rango);
+  const rango = filtroFecha(req.query.rango, "occurred_at");
   // "Le puedo escribir" ya implica menos de 7 días: filtrar además por rango lo
   // haría desaparecer si alguien elige un rango raro.
   if (rango && intencion !== "puedo-escribirle") ws.push(rango);
@@ -106,11 +100,11 @@ interactionsRouter.get("/", async (req, res) => {
  * no de intención.
  */
 interactionsRouter.get("/canales", async (req, res) => {
-  const rango = rangoDe(req.query.rango);
+  const rango = filtroFecha(req.query.rango, "occurred_at");
   const w = rango ? sql`WHERE ${rango}` : sql``;
-  const wLeads = rango
-    ? sql`WHERE created_time > now() - (${String(RANGOS[String(req.query.rango ?? "30d")])} || ' days')::interval`
-    : sql``;
+
+  const rangoLeads = filtroFecha(req.query.rango, "created_time");
+  const wLeads = rangoLeads ? sql`WHERE ${rangoLeads}` : sql``;
 
   const interacciones = await db.execute<{
     canal: string;

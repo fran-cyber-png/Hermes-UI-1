@@ -2,6 +2,7 @@ import { Router } from "express";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { leads } from "../db/schema.js";
+import { rangoDe } from "../lib/rangos.js";
 import { costoPorLead } from "./costoPorLead.js";
 
 export const leadsRouter = Router();
@@ -10,14 +11,14 @@ export const leadsRouter = Router();
  * Lo que costó traer los leads que tenemos. Cruza nuestra base con el gasto
  * real de Meta, en la ventana exacta en que llegaron.
  */
-leadsRouter.get("/costo", async (_req, res) => {
+leadsRouter.get("/costo", async (req, res) => {
   const token = process.env.META_ACCESS_TOKEN;
   if (!token) {
     res.status(500).json({ type: "config_error", message: "META_ACCESS_TOKEN no está configurado." });
     return;
   }
   try {
-    res.json(await costoPorLead(token));
+    res.json(await costoPorLead(token, rangoDe(req.query.rango)));
   } catch (err) {
     res.status(502).json({ type: "api_error", message: (err as Error).message });
   }
