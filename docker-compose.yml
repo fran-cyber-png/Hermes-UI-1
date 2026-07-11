@@ -1,0 +1,23 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: meta_escuela_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: meta_escuela
+      POSTGRES_PASSWORD: meta_escuela_dev
+      POSTGRES_DB: meta_escuela
+    ports:
+      # Solo loopback — nunca expuesto a la red.
+      # 5433 ya lo usa goberna_escuela_db (el LMS), por eso 5434.
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - meta_escuela_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meta_escuela -d meta_escuela"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  meta_escuela_pgdata:

@@ -1,0 +1,137 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+ * Goberna design tokens (azul + dorado, light-mode institucional).
+ * Fuente: skill goberna-design-system — mantener estos valores en sync si el
+ * token oficial cambia. --primary/--accent/etc siguen la convención de
+ * shadcn/ui para que sus componentes salgan con la marca ya puesta.
+ */
+:root {
+  --background: #F5F7FB;
+  --foreground: #16213A;
+
+  --card: #FFFFFF;
+  --card-foreground: #16213A;
+  --popover: #FFFFFF;
+  --popover-foreground: #16213A;
+
+  --primary: #2563EB;
+  --primary-hover: #1D4ED8;
+  --primary-foreground: #FFFFFF;
+
+  --secondary: #EFF4FE;
+  --secondary-foreground: #0E2A52;
+
+  --muted: #F5F7FB;
+  --muted-foreground: #5B6B86;
+
+  /* shadcn usa --accent para hover/estado activo de muchos componentes — aquí
+     va un celeste sutil, NO el dorado. El dorado es señal funcional escasa
+     (racha, cifra héroe), nunca un color de hover genérico. */
+  --accent: #EFF4FE;
+  --accent-foreground: #0E2A52;
+
+  --destructive: #DC2626;
+  --destructive-foreground: #FFFFFF;
+
+  --success: #16A34A;
+  --success-foreground: #FFFFFF;
+
+  --warning: #F59E0B;
+  --warning-foreground: #78350F;
+
+  --border: #E6EAF2;
+  --input: #E6EAF2;
+  --ring: #2563EB;
+  --radius: 0.75rem;
+
+  /* Marca */
+  --navy: #0E2A52;
+  --navy-muted: #CDDCF2;
+  --gold: #FFC800;
+  --gold-ink: #CAA106;
+
+  /* Única excepción documentada: color de marca externa (Meta), para el CTA
+     "Ver en Ads Manager" — ver crear_campana.html en goberna-dashboard. */
+  --meta-blue: #1877F2;
+  --meta-blue-hover: #1558B0;
+
+  /* TEMPERATURA DEL DATO — no es decoración, codifica el problema central.
+     Un lead recién llegado está "tibio" (todavía se puede convertir); cada día
+     que pasa se enfría. La rampa va de dorado (fresco) a acero (frío/muerto).
+     Se usa en la banda de severidad de cada lead y en el Pulso. */
+  --temp-fresco: #16A34A;   /* < 1 día  — todavía a tiempo */
+  --temp-tibio: #CAA106;    /* < 3 días — se está yendo */
+  --temp-frio: #C2410C;     /* < 14 días — difícil */
+  --temp-helado: #64748B;   /* 14+ días — prácticamente perdido */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-navy: var(--navy);
+  --color-navy-muted: var(--navy-muted);
+  --color-gold: var(--gold);
+  --color-gold-ink: var(--gold-ink);
+  --color-meta-blue: var(--meta-blue);
+  --color-meta-blue-hover: var(--meta-blue-hover);
+  --color-temp-fresco: var(--temp-fresco);
+  --color-temp-tibio: var(--temp-tibio);
+  --color-temp-frio: var(--temp-frio);
+  --color-temp-helado: var(--temp-helado);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-heading: 'Montserrat', system-ui, sans-serif;
+  --font-sans: system-ui, 'Inter', sans-serif;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  font-family: var(--font-sans);
+  color: var(--foreground);
+  background: var(--background);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100dvh;
+}

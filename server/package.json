@@ -1,0 +1,33 @@
+{
+  "name": "meta-escuela-server",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -b",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -b --noEmit",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "ingest:leads": "tsx src/scripts/ingestLeads.ts",
+    "cleanup:test": "tsx src/scripts/cleanupTest.ts",
+    "test": "tsx --test src/**/*.test.ts",
+    "ingest:interactions": "tsx src/scripts/ingestInteractions.ts"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.45.2",
+    "express": "^4.21.2",
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^24.13.2",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.19.2",
+    "typescript": "~6.0.2"
+  }
+}

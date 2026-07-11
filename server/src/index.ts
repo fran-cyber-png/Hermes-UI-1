@@ -1,0 +1,40 @@
+import "dotenv/config";
+import cors from "cors";
+import express from "express";
+import { adsRouter } from "./routes/ads.js";
+import { audiencesRouter } from "./routes/audiences.js";
+import { adsetsRouter } from "./routes/adsets.js";
+import { campaignsRouter } from "./routes/campaigns.js";
+import { decisionsRouter } from "./routes/decisions.js";
+import { interactionsRouter } from "./routes/interactions.js";
+import { leadsRouter } from "./routes/leads.js";
+import { metaAssetsRouter } from "./routes/metaAssets.js";
+import { personaRouter } from "./routes/persona.js";
+import { responderRouter } from "./routes/responder.js";
+import { structureRouter } from "./routes/structure.js";
+
+const app = express();
+const port = process.env.PORT ? Number(process.env.PORT) : 4100;
+
+app.use(cors());
+app.use(express.json());
+
+// Las tres etapas de Meta, una por nivel.
+app.use("/api/campaigns", campaignsRouter); // 1. campaña
+app.use("/api/adsets", adsetsRouter); //      2. conjunto de anuncios
+app.use("/api/ads", adsRouter); //            3. anuncio
+
+app.use("/api/leads", leadsRouter);
+app.use("/api/interactions", interactionsRouter);
+app.use("/api/responder", responderRouter);
+app.use("/api/persona", personaRouter);
+app.use("/api/meta", metaAssetsRouter);
+app.use("/api/audiences", audiencesRouter);
+app.use("/api/decisions", decisionsRouter); // el feed: qué requiere atención
+app.use("/api/structure", structureRouter); // las 3 etapas anidadas, con la plata en cada nivel
+
+app.get("/health", (_req, res) => res.json({ ok: true }));
+
+app.listen(port, () => {
+  console.log(`meta-escuela server listening on http://localhost:${port}`);
+});
