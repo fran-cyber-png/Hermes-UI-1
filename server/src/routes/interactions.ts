@@ -58,8 +58,14 @@ interactionsRouter.get("/", async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 40, 100);
   const offset = Number(req.query.offset) || 0;
 
+  // Comentario y mensaje NO son lo mismo, y por eso se pueden separar: a un
+  // comentario le respondes en público (y tienes 7 días para el privado); un
+  // mensaje ya ES una conversación abierta. Cambia lo que puedes hacer.
+  const tipo = req.query.tipo === "comentario" || req.query.tipo === "mensaje" ? req.query.tipo : "";
+
   const ws: SQL[] = [];
   if (canal) ws.push(sql`canal = ${canal}`);
+  if (tipo) ws.push(sql`tipo = ${tipo}`);
   if (intencion === "pide-info") ws.push(PIDE_INFO);
   if (intencion === "puedo-escribirle") ws.push(VENTANA_ABIERTA);
 
@@ -112,13 +118,17 @@ interactionsRouter.get("/canales", async (req, res) => {
     pide_info: number;
     ventana_abierta: number;
     sin_atender: number;
+    comentarios: number;
+    mensajes: number;
   }>(sql`
     SELECT
       canal,
-      count(*)::int                                   AS total,
-      count(*) FILTER (WHERE ${PIDE_INFO})::int       AS pide_info,
-      count(*) FILTER (WHERE ${VENTANA_ABIERTA})::int AS ventana_abierta,
-      count(*) FILTER (WHERE status = 'nuevo')::int   AS sin_atender
+      count(*)::int                                        AS total,
+      count(*) FILTER (WHERE ${PIDE_INFO})::int            AS pide_info,
+      count(*) FILTER (WHERE ${VENTANA_ABIERTA})::int      AS ventana_abierta,
+      count(*) FILTER (WHERE status = 'nuevo')::int        AS sin_atender,
+      count(*) FILTER (WHERE tipo = 'comentario')::int     AS comentarios,
+      count(*) FILTER (WHERE tipo = 'mensaje')::int        AS mensajes
     FROM interactions
     ${w}
     GROUP BY 1

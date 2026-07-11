@@ -12,9 +12,13 @@ const CANALES: { clave: string; nombre: string; color: string; icono: LucideIcon
 /**
  * Por dónde entra la gente. Lo primero que se ve, y obedece al filtro de fechas.
  *
- * WhatsApp aparece aunque no esté conectado, y lo dice. Esconderlo sería fingir
- * que el mapa está completo: es el canal donde se cierra la venta, y que falte
- * es el dato más importante de esta fila.
+ * Cada tarjeta es una puerta: lleva a la pantalla del canal, donde se separan
+ * comentarios de mensajes y se ve qué se puede hacer con cada uno.
+ *
+ * WhatsApp aparece aunque no esté conectado, y su puerta también abre — a una
+ * pantalla que explica qué falta. Esconderlo sería fingir que el mapa está
+ * completo: es el canal donde se cierra la venta, y que falte es el dato más
+ * importante de esta fila.
  */
 export default function CanalesStrip({ estado }: { estado: CanalesResponse | null }) {
   const porCanal = (c: string) => estado?.interacciones.find((x) => x.canal === c);
@@ -27,16 +31,21 @@ export default function CanalesStrip({ estado }: { estado: CanalesResponse | nul
         const conectado = datos !== undefined;
 
         return (
-          <div
+          <Link
             key={clave}
+            to={`/canal/${clave}`}
             className={
-              'rounded-2xl border bg-card p-5 shadow-sm ' +
+              'group flex flex-col rounded-2xl border bg-card p-5 shadow-sm transition-colors hover:border-primary ' +
               (conectado ? 'border-border' : 'border-dashed border-border')
             }
           >
             <div className="flex items-center gap-2">
               <Icono size={15} className="shrink-0" style={{ color }} />
               <span className="text-sm font-bold text-foreground">{nombre}</span>
+              <ArrowRight
+                size={13}
+                className="ml-auto shrink-0 text-primary opacity-0 transition-opacity group-hover:opacity-100"
+              />
             </div>
 
             {conectado ? (
@@ -44,7 +53,13 @@ export default function CanalesStrip({ estado }: { estado: CanalesResponse | nul
                 <p className="mt-2 font-heading text-3xl font-extrabold tabular-nums text-foreground">
                   {datos.total.toLocaleString('es')}
                 </p>
+                {/* El desglose que importa: un comentario y un mensaje privado no
+                    se atienden igual, ni permiten lo mismo. */}
                 <p className="text-xs text-muted-foreground">
+                  {datos.comentarios.toLocaleString('es')} comentarios ·{' '}
+                  {datos.mensajes.toLocaleString('es')} mensajes
+                </p>
+                <p className="mt-1 text-xs font-semibold text-gold-ink">
                   {datos.pide_info.toLocaleString('es')} piden información
                 </p>
               </>
@@ -58,26 +73,31 @@ export default function CanalesStrip({ estado }: { estado: CanalesResponse | nul
                 </p>
               </>
             )}
-          </div>
+          </Link>
         );
       })}
 
-      {/* Los formularios son otra clase de entrada: traen el dato ya estructurado.
-          Por eso cierran la fila en vez de mezclarse con los canales. */}
+      {/* Los formularios son otra clase de entrada: traen el dato ya estructurado
+          (nombre, teléfono, correo). Por eso cierran la fila en vez de mezclarse
+          con los canales, y su puerta lleva a otra pantalla. */}
       <Link
         to="/leads"
-        className="group rounded-2xl border border-border bg-card p-5 shadow-sm transition-colors hover:border-primary"
+        className="group flex flex-col rounded-2xl border border-border bg-card p-5 shadow-sm transition-colors hover:border-primary"
       >
         <div className="flex items-center gap-2">
           <FileText size={15} className="shrink-0 text-navy" />
           <span className="text-sm font-bold text-foreground">Formularios</span>
+          <ArrowRight
+            size={13}
+            className="ml-auto shrink-0 text-primary opacity-0 transition-opacity group-hover:opacity-100"
+          />
         </div>
         <p className="mt-2 font-heading text-3xl font-extrabold tabular-nums text-foreground">
           {(formularios?.total ?? 0).toLocaleString('es')}
         </p>
-        <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground">Traen nombre, teléfono y correo</p>
+        <p className="mt-1 text-xs font-semibold text-gold-ink">
           {(formularios?.sin_atender ?? 0).toLocaleString('es')} sin contactar
-          <ArrowRight size={11} className="text-primary opacity-0 transition-opacity group-hover:opacity-100" />
         </p>
       </Link>
     </div>

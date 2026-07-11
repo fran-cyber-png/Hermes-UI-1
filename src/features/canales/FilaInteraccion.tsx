@@ -1,4 +1,4 @@
-import { Check, Clock, MessageSquare } from 'lucide-react';
+import { Check, Clock, MessageCircle, MessageSquare, Send } from 'lucide-react';
 import type { Interaccion } from './types';
 import { VENTANA_DIAS } from './types';
 
@@ -21,22 +21,30 @@ function hace(dias: number): string {
 /**
  * Una persona esperando, en una línea.
  *
- * La regla que manda aquí: el botón dice lo que REALMENTE se puede hacer. Si la
- * ventana de Meta ya cerró, dice "Responder en público" — porque el privado no
- * va a salir, y ofrecerlo sería mentir antes de intentarlo.
+ * Dos reglas mandan aquí:
+ *
+ *  · El botón dice lo que REALMENTE se puede hacer. Si la ventana de Meta ya
+ *    cerró, dice "Responder en público" — porque el privado no va a salir, y
+ *    ofrecerlo sería mentir antes de intentarlo.
+ *  · Comentario y mensaje se distinguen, porque no son lo mismo: el comentario
+ *    es público y tiene reloj (7 días para el privado); el mensaje ya es una
+ *    conversación abierta y no tiene ventana que se cierre.
  */
 export default function FilaInteraccion({
   i,
   respondida,
   onAbrir,
+  mostrarCanal = true,
 }: {
   i: Interaccion;
   respondida: boolean;
   onAbrir: (i: Interaccion) => void;
+  /** En la pantalla de un canal, repetir el canal en cada fila es ruido. */
+  mostrarCanal?: boolean;
 }) {
   const canal = CANAL[i.canal as keyof typeof CANAL];
   const restan = VENTANA_DIAS - i.dias;
-  const esChat = i.tipo === 'mensaje';
+  const esMensaje = i.tipo === 'mensaje';
 
   return (
     <button
@@ -47,9 +55,9 @@ export default function FilaInteraccion({
         (respondida ? 'bg-success/5' : 'hover:bg-muted/50')
       }
     >
-      {/* El reloj solo aparece cuando corre. Si la ventana cerró, no hay cuenta
-          regresiva que mostrar y un reloj apagado sería ruido. */}
       <div className="flex w-28 shrink-0 flex-col items-start gap-1 pt-0.5">
+        {/* El reloj solo aparece cuando corre. Un mensaje privado no tiene
+            ventana que se cierre, así que mostrarle una sería inventarla. */}
         {i.ventana_abierta ? (
           <span className="inline-flex items-center gap-1 rounded-md bg-gold/20 px-1.5 py-0.5 text-xs font-bold text-gold-ink">
             <Clock size={11} />
@@ -59,13 +67,20 @@ export default function FilaInteraccion({
           <span className="text-xs text-muted-foreground">{hace(i.dias)}</span>
         )}
 
-        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-          <span
-            className="size-2 shrink-0 rounded-full"
-            style={{ backgroundColor: canal?.color ?? '#94A3B8' }}
-          />
-          {canal?.nombre ?? i.canal}
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground">
+          {esMensaje ? <Send size={11} /> : <MessageCircle size={11} />}
+          {esMensaje ? 'Mensaje' : 'Comentario'}
         </span>
+
+        {mostrarCanal && canal && (
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span
+              className="size-2 shrink-0 rounded-full"
+              style={{ backgroundColor: canal.color }}
+            />
+            {canal.nombre}
+          </span>
+        )}
       </div>
 
       <div className="min-w-0 flex-1">
@@ -84,9 +99,9 @@ export default function FilaInteraccion({
         >
           {i.texto || '(sin texto)'}
         </p>
-        {i.contexto_texto && (
+        {i.contexto_texto && !esMensaje && (
           <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
-            {esChat ? 'por privado' : `en “${i.contexto_texto}”`}
+            en “{i.contexto_texto}”
           </p>
         )}
       </div>
@@ -100,7 +115,7 @@ export default function FilaInteraccion({
         ) : (
           <span className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-bold text-foreground transition-colors group-hover:border-primary group-hover:bg-primary group-hover:text-primary-foreground">
             <MessageSquare size={12} />
-            {i.ventana_abierta ? 'Escribirle' : 'Responder en público'}
+            {esMensaje ? 'Abrir chat' : i.ventana_abierta ? 'Escribirle' : 'Responder en público'}
           </span>
         )}
       </div>

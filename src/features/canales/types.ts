@@ -23,7 +23,14 @@ export interface EstadoCanal {
   pide_info: number;
   ventana_abierta: number;
   sin_atender: number;
+  /** Comentario público bajo una publicación. */
+  comentarios: number;
+  /** Mensaje privado (Messenger / Direct). Ya es una conversación abierta. */
+  mensajes: number;
 }
+
+/** Comentario o mensaje: cambia lo que puedes hacer, no solo cómo se ve. */
+export type TipoFiltro = '' | 'comentario' | 'mensaje';
 
 /** Cuántas interacciones entraron cada día, por canal. Para el gráfico de flujo. */
 export interface DiaCanal {

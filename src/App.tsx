@@ -8,6 +8,7 @@ import AppShell from './layout/AppShell';
 import HomePage from './pages/HomePage';
 import LeadsPage from './pages/LeadsPage';
 import BandejaPage from './pages/BandejaPage';
+import CanalPage from './pages/CanalPage';
 import CampaignsListPage from './pages/CampaignsListPage';
 import NewCampaignPage from './pages/NewCampaignPage';
 import CampaignStructurePage from './pages/CampaignStructurePage';
@@ -23,6 +24,9 @@ function App() {
           <Route index element={<HomePage />} />
           <Route path="leads" element={<LeadsPage />} />
           <Route path="bandeja" element={<BandejaPage />} />
+          {/* Cada canal a fondo: los canales NO son intercambiables, y una sola
+              cola escondía justamente eso. */}
+          <Route path="canal/:canal" element={<CanalPage />} />
           <Route path="campanas" element={<CampaignsListPage />} />
           <Route path="campanas/nueva" element={<NewCampaignPage />} />
           <Route path="campanas/:campaignId" element={<CampaignStructurePage />} />
