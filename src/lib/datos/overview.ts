@@ -22,7 +22,9 @@ export type ItemBandeja = {
 
 /** ¿Meta sabe que vendimos? Es la razón de ser del sistema. */
 export type Lazo = {
+  /** Sale del registro de sincronización, NO de contar ventas. "No se midió" ≠ "es cero". */
   conectado: boolean;
+  sincronizadoAt: string | null;
   ventasConocidas: number;
   reportadas: number;
   /** El 17%: Tesorería confirmó tarde y Meta rechaza el evento. Antes fallaba en silencio. */

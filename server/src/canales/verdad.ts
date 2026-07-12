@@ -33,8 +33,20 @@ const VENTANA_META = sql`(
 )`;
 
 export type Lazo = {
-  /** ¿Ya conectamos Cerberus? Si no, Meta no sabe que vendimos, y eso es LO importante. */
+  /**
+   * ¿Ya conectamos Cerberus?
+   *
+   * Sale de `sincronizaciones`, NO de contar ventas. La diferencia importa: si contáramos filas,
+   * una conexión recién hecha que todavía no sincronizó se vería igual que "no hay conexión",
+   * y "cero ventas conocidas" se leería igual que "cero ventas". Son cosas distintas.
+   *
+   * (Es el mismo bug que goberna-dashboard tiene en producción: `inversion = agg[...] or 0` →
+   * si el sync no corrió, la inversión da cero, la utilidad da igual a las ventas, y la pantalla
+   * muestra un badge verde de 100% de margen. "No se midió" y "es cero" no pueden verse igual.)
+   */
   conectado: boolean;
+  /** Cuándo se sincronizó Cerberus por última vez. `null` si nunca. */
+  sincronizadoAt: Date | null;
   ventasConocidas: number;
   reportadas: number;
   /** El 17%: Tesorería confirmó tarde y Meta rechaza el evento en silencio. Acá es ruidoso. */
@@ -74,16 +86,26 @@ export type Preguntas = {
 export async function estadoDelLazo(): Promise<Lazo> {
   const [filas] = (await db.execute(sql`
     SELECT
+      -- La CONEXIÓN sale del registro de sincronización, no de contar filas.
+      (SELECT ultima_ok FROM sincronizaciones WHERE fuente = 'cerberus')  AS sincronizado_at,
       (SELECT count(*)::int FROM fuentes.registro
-        WHERE fuente = 'cerberus' AND tabla = 'tb_venta')            AS ventas_conocidas,
+        WHERE fuente = 'cerberus' AND tabla = 'tb_venta')                 AS ventas_conocidas,
       (SELECT count(*)::int FROM ontologia.conversiones
-        WHERE enviado_at IS NOT NULL AND es_prueba = false)          AS reportadas,
+        WHERE enviado_at IS NOT NULL AND es_prueba = false)               AS reportadas,
       (SELECT count(*)::int FROM ontologia.conversiones
-        WHERE descarte = 'fuera_de_ventana')                         AS perdidas
-  `)) as unknown as { ventas_conocidas: number; reportadas: number; perdidas: number }[];
+        WHERE descarte = 'fuera_de_ventana')                              AS perdidas
+  `)) as unknown as {
+    sincronizado_at: Date | null;
+    ventas_conocidas: number;
+    reportadas: number;
+    perdidas: number;
+  }[];
+
+  const sincronizadoAt = filas?.sincronizado_at ?? null;
 
   return {
-    conectado: (filas?.ventas_conocidas ?? 0) > 0,
+    conectado: sincronizadoAt != null,
+    sincronizadoAt,
     ventasConocidas: filas?.ventas_conocidas ?? 0,
     reportadas: filas?.reportadas ?? 0,
     perdidasPorVentana: filas?.perdidas ?? 0,
