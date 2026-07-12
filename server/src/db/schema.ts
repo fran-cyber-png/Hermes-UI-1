@@ -137,6 +137,27 @@ export const interactions = pgTable(
     canal: text("canal").notNull(), // 'facebook' | 'instagram' | 'whatsapp'
     tipo: text("tipo").notNull(), //   'comentario' | 'mensaje'
 
+    /**
+     * 'entrante' (nos habló) | 'saliente' (le hablamos).
+     *
+     * Existía un bug: la ingesta DESCARTABA los mensajes salientes de la Página. Resultado: la
+     * base no sabía a quién le habíamos respondido, y todo relato sobre "N personas esperando"
+     * era indemostrable con nuestros propios datos. Las 94.371 filas viejas son todas entrantes
+     * (es lo único que se guardó), así que el default es honesto.
+     */
+    direccion: text("direccion").notNull().default("entrante"),
+
+    /**
+     * Quién escribió: 'persona' | 'pagina' | 'bot'.
+     *
+     * Revelar que un interlocutor es un bot reduce las compras un 79,7% (Luo, Tong, Fang & Qu,
+     * 2019, Marketing Science — experimento de campo, 6.200 clientes reales). Es el efecto más
+     * grande y mejor identificado de toda la literatura de conversión.
+     *
+     * Si no registramos quién respondió, no podemos medir el costo de nuestra propia honestidad.
+     */
+    autor: text("autor").notNull().default("persona"),
+
     /** Quién. Meta a veces no da el nombre (privacidad) — por eso es nullable. */
     personaId: text("persona_id"),
     personaNombre: text("persona_nombre"),

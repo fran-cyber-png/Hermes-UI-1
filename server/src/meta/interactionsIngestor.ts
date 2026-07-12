@@ -26,6 +26,10 @@ async function guardar(
     externalId: string;
     canal: string;
     tipo: string;
+    /** 'entrante' | 'saliente'. Sin esto no sabemos a quién le respondimos. */
+    direccion?: string;
+    /** 'persona' | 'pagina' | 'bot'. */
+    autor?: string;
     personaId: string | null;
     personaNombre: string | null;
     texto: string | null;
@@ -68,7 +72,11 @@ async function comentariosFacebook(client: MetaGraphClient, pageId: string): Pro
     let nuevos = 0;
 
     for (const post of posts) {
-      for (const c of post.comments?.data ?? []) {
+      // Sigue la paginación anidada: sin esto, todo post con más de 50 comentarios se
+      // truncaba en silencio. 112 de nuestros 1.873 posts tocan ese tope.
+      const comentarios = await client.getAllNested(post.comments);
+
+      for (const c of comentarios) {
         encontrados += 1;
         const esNuevo = await guardar("meta_comment_fb", { ...c, post_id: post.id }, {
           externalId: c.id,
@@ -108,16 +116,24 @@ async function mensajesMessenger(client: MetaGraphClient, pageId: string): Promi
 
     for (const conv of convs) {
       for (const m of conv.messages?.data ?? []) {
-        // Los mensajes que mandó la Página no son "alguien levantando la mano".
-        if (m.from?.id === pageId) continue;
+        // ANTES esto hacía `if (m.from?.id === pageId) continue` — o sea, TIRABA nuestras
+        // propias respuestas. Consecuencia: la base no sabía a quién le habíamos contestado,
+        // y "N personas esperando respuesta" era indemostrable con nuestros propios datos.
+        // Ahora se guardan las dos mitades de la conversación. Una conversación a medias no
+        // es una conversación: es una acusación sin pruebas.
+        const esDeLaPagina = m.from?.id === pageId;
 
         encontrados += 1;
         const esNuevo = await guardar("meta_message_fb", { ...m, conversation_id: conv.id }, {
           externalId: m.id,
           canal: "facebook",
           tipo: "mensaje",
-          personaId: m.from?.id ?? null,
-          personaNombre: m.from?.name ?? null,
+          direccion: esDeLaPagina ? "saliente" : "entrante",
+          // Hoy todo lo saliente es humano. El día que se prenda un bot, esto se marca 'bot'
+          // y recién ahí se puede medir si vende mejor o peor que una persona.
+          autor: esDeLaPagina ? "pagina" : "persona",
+          personaId: esDeLaPagina ? null : (m.from?.id ?? null),
+          personaNombre: esDeLaPagina ? null : (m.from?.name ?? null),
           texto: m.message ?? null,
           pageId,
           contextoId: conv.id,
@@ -151,7 +167,11 @@ async function comentariosInstagram(
     let nuevos = 0;
 
     for (const m of media) {
-      for (const c of m.comments?.data ?? []) {
+      // Mismo truncamiento que en Facebook: `comments.limit(50)` sin seguir la paginación
+      // anidada corta en silencio los posts más comentados — justo los que más importan.
+      const comentarios = await client.getAllNested(m.comments);
+
+      for (const c of comentarios) {
         encontrados += 1;
         const esNuevo = await guardar("meta_comment_ig", { ...c, media_id: m.id }, {
           externalId: c.id,

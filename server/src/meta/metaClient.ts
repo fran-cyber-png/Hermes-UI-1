@@ -89,4 +89,32 @@ export class MetaGraphClient {
       resp = await res.json().catch(() => ({}));
     }
   }
+
+  /**
+   * Sigue la paginación de un edge ANIDADO (ej. `post.comments`) hasta agotarlo.
+   *
+   * `getAll` solo sigue el `paging.next` del nivel superior. Cuando los comentarios vienen
+   * adentro del post (`comments.limit(50){...}`), su `paging.next` propio nunca se seguía —
+   * así que TODO post con más de 50 comentarios se truncaba en silencio.
+   *
+   * Medido: 112 de nuestros 1.873 posts tocan el tope exacto de 50. Entre los posts que sí
+   * son atribuibles a un anuncio, 48 de 274 (17,5%) están cortados. Estábamos perdiendo
+   * comentarios sin saberlo.
+   *
+   * Devuelve el `data[]` completo del edge, incluyendo lo que ya venía en la primera página.
+   */
+  async getAllNested(edge: { data?: any[]; paging?: { next?: string } } | undefined): Promise<any[]> {
+    const out: any[] = [...(edge?.data ?? [])];
+    let nextUrl = edge?.paging?.next;
+
+    // Tope de seguridad: un post con 200.000 comentarios no debe colgar la ingesta.
+    for (let pagina = 0; nextUrl && pagina < 200; pagina++) {
+      const res = await fetch(nextUrl);
+      const json: any = await res.json().catch(() => ({}));
+      if (!res.ok) throw metaErrorFrom(json, res.status);
+      out.push(...(json.data ?? []));
+      nextUrl = json.paging?.next;
+    }
+    return out;
+  }
 }
