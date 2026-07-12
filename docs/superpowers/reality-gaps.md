@@ -84,22 +84,28 @@ horas al lado de quien atiende.
 
 | ID | Suposición | Clase | Tipo | Estado | Importancia |
 |---|---|---|---|---|---|
-| [RG-001](#rg-001) | Existe un registro de ventas | **A** | Existencia | 🔍 `UNKNOWN` → buscando | **Crítica** |
+| [RG-001](#rg-001) | Existe un registro de ventas | **A** | Existencia | ✅ **`OBSERVED`** — vive en Cerberus | **Crítica** |
 | [RG-002](#rg-002) | Existe un flujo de community manager | **A** | **Comportamiento** | `UNKNOWN` | **Crítica** |
 | [RG-003](#rg-003) | Meta aprueba `human_agent` | **A** | Existencia | `HYPOTHESIS` — no solicitado | **Crítica** |
 | [RG-004](#rg-004) | Meta aprueba `page_events` | **A** | Existencia | `HYPOTHESIS` — no solicitado | **Crítica** |
 | [RG-005](#rg-005) | Los comentarios están sobre posts promocionados | **A** | Relación | `HYPOTHESIS` — 0/8, sin barrer | Alta |
 | [RG-006](#rg-006) | Los "teléfonos" en el texto son teléfonos | **A** | Confianza | `HYPOTHESIS` — regex sin validar | Alta |
-| [RG-007](#rg-007) | Existe WhatsApp conectado | **A** | Existencia | `UNKNOWN` — cero mensajes | Media |
-| [RG-008](#rg-008) | Un curso tiene un precio conocido | **A** | Ubicación | 🔍 `UNKNOWN` → buscando | Alta |
+| [RG-007](#rg-007) | **Existe WhatsApp conectado** | **A** | Existencia | `UNKNOWN` — cero mensajes | **CRÍTICA** ⬆ |
+| [RG-008](#rg-008) | Un curso tiene un precio conocido | **A** | Ubicación | ✅ **`OBSERVED`** | Alta |
 | [RG-009](#rg-009) | El vocabulario de `hechos` refleja lo que dicen | **B** | Comportamiento | `HYPOTHESIS` — copiado de papers | Media |
 | [RG-010](#rg-010) | Hay identidades basura que fusionan mal | **B** | Existencia | `HYPOTHESIS` | Baja |
 | [RG-011](#rg-011) | Alguien va a querer una inferencia | **B** | Existencia | `HYPOTHESIS` — nada la puebla | Baja |
 | [RG-012](#rg-012) | Existe (o existirá) un bot respondiendo | **B** | Existencia | `HYPOTHESIS` — no hay bot | Baja |
+| [RG-013](#rg-013) | **Una venta se confirma dentro de la ventana de 7 días de CAPI** | **A** | **Temporalidad** | `UNKNOWN` | **Crítica** |
+| [RG-014](#rg-014) | Las 5.134 ventas históricas se pueden mandar por CAPI | **A** | Comportamiento | `HYPOTHESIS` — probablemente NO | Alta |
+| [RG-015](#rg-015) | El CRM usa la API oficial de WhatsApp | **A** | Existencia | 🔍 `UNKNOWN` → auditando | **Crítica** |
+| [RG-016](#rg-016) | Nadie resolvió antes el cruce venta × anuncio | **A** | Relación | `HYPOTHESIS` — **`goberna-dashboard` dice que sí lo hace** | Alta |
+| [RG-017](#rg-017) | Existe un camino seguro de lectura hacia Cerberus | **A** | Ubicación | 🔍 `UNKNOWN` → mapeando | Alta |
 | [RG-M001](#rg-m001) | **Existe un proceso estable para convertir incertidumbre en conocimiento** | **B** | Comportamiento | `HYPOTHESIS` — **N=1** | Alta |
 
-**Estado del modelo, dicho sin adornos:** de 13 suposiciones, **cero están en `VERIFIED`.**
-El spec está construido íntegramente sobre hipótesis. Eso no lo invalida — lo ubica.
+**Estado del modelo:** 18 suposiciones. **Dos en `OBSERVED`. Cero en `VERIFIED`.**
+El spec sigue construido sobre hipótesis. Cerrar RG-001 abrió cinco gaps nuevos — eso es lo que
+se supone que pase: **la evidencia no reduce la incertidumbre, la reubica donde importa.**
 
 ---
 
@@ -107,25 +113,148 @@ El spec está construido íntegramente sobre hipótesis. Eso no lo invalida — 
 
 **Suposición.** Existe, en algún sistema de Goberna, el registro de que una persona compró.
 
-**Estado.** 🔍 En verificación (búsqueda en los repos: LMS, CRM, icarus, cerberus).
+**Estado.** ✅ **`OBSERVED`** — 2026-07-12. *(No `VERIFIED`: los números salen del export CSV que
+vive en el repo, no de la base viva. Falta un conteo contra la MySQL de producción, que requiere
+autorización.)*
 
-**Clase.** A — hecho del mundo.
+**Clase.** A. **Tipo.** Existencia.
 
-**Importancia.** **Crítica. Es el cimiento.**
+### La respuesta
 
-**Por qué duele.** El spec entero (`2026-07-12-ontologia-goberna-design.md`) declara que el
-sistema existe para saber quién compró y decírselo a Meta. La tabla `conversiones` es su centro.
-Diseñé la tubería completa —normalización, hasheo, idempotencia, reintentos, dataset— para
-transportar un dato **que nunca verifiqué que exista**.
+**La venta vive en Cerberus** (`~/goberna/ceberusapp`), un ERP en Django sobre la MySQL de
+producción `goberna_app`. Modelo `Venta` — `sales/models.py:90-303`.
 
-**Qué pasa según la respuesta:**
-- *Existe, con correo o teléfono* → el lazo se puede cerrar. El plan sigue como está.
-- *Existe, sin forma de unirlo a un lead* → el primer trabajo es construir ese puente, no CAPI.
-- *No existe en ningún lado* → **el paso 1 del proyecto no es programar. Es conseguir que exista
-  una venta registrada.** Y eso probablemente no es código.
+| | |
+|---|---|
+| Ventas históricas | **5.134** |
+| En estado "Pagado" | **4.729** |
+| Con correo del comprador | **99,5%** |
+| Con teléfono del comprador | **100%** |
+| Monedas | 7 (USD, MXN, PEN, BOB, DOP, COP, CLP), con tipo de cambio congelado por venta |
+| Pagos registrados | 5.255 · Cuotas: 8.400 · Matrículas: 3.386 · Clientes: 5.657 |
 
-**Acción.** Encontrar dónde vive el hecho "compra". Primero en el código; solo si el código no
-responde, hablar con personas.
+Modelos alrededor: `DetalleVenta`, `Cuota`, `Pago` (con foto del voucher y confirmación de
+Tesorería), `MetodoPago`, `Matricula` (que cuelga de `DetalleVenta` y tiene `moodle_user_id`).
+
+### Lo que NO existe, en ningún repo
+
+**Ni `ad_id`, ni `lead_id`, ni `fbclid`, ni `utm_*`.** El único rastro del origen es un
+desplegable que llena **el vendedor a mano**: `origen` (Facebook/WhatsApp/Google/…) y `medio`
+(Pagado/Orgánico/PostVenta/…).
+
+**Y no importa.** El mecanismo probado (§ el RCT de los 70.000 anunciantes) **no necesita saber
+qué anuncio produjo la venta**. Le decimos a Meta quién compró, con correo y teléfono hasheados,
+y su optimizador hace el resto. La atribución multi-touch —lo único que necesitaría ese
+identificador— es un espejismo que se equivoca por 3×.
+
+**El eslabón que faltaba resultó ser el eslabón que no hacía falta.**
+
+### Lo que cambia en el plan
+
+El spec decía "empezar por CAPI con los 680 leads". **Está mal.** El activo son las **4.729
+ventas pagadas**, y hay dos caminos con tiempos distintos:
+
+1. **Audiencia de valor — hoy, sin permisos, sin ventana de tiempo.** Subir los 4.729 clientes
+   (correo + teléfono hasheados + **cuánto pagó cada uno**) como Custom Audience → **Lookalike
+   basado en valor**. *"Búscame más gente parecida a la que realmente paga, ponderada por cuánto
+   paga."* Es la palanca más grande y la más barata.
+2. **El lazo continuo — cada venta nueva.** `Purchase` por CAPI con correo/teléfono hasheados.
+   **Bloqueado por RG-013 y RG-014.**
+
+### El hallazgo colateral que reordenó el registro
+
+> **2.981 de las 5.134 ventas vienen de WhatsApp. El 58%.**
+> Y no tenemos WhatsApp conectado.
+
+RG-007 pasa de Media a **Crítica**. El canal que produce más de la mitad del dinero es el único
+que no está en el sistema.
+
+---
+
+## RG-013
+
+**Suposición.** Una venta queda confirmada dentro de los 7 días que CAPI acepta como `event_time`.
+
+**Estado.** `UNKNOWN`.
+
+**Clase.** A. **Tipo.** **Temporalidad.**
+
+**Por qué importa.** Las ventas de Goberna **se registran a mano**: el asesor sube la foto del
+voucher, y **Tesorería la confirma después** (`Pago.confirmado_por`, `sales/models.py:480-559`).
+Si esa confirmación demora cinco o seis días, estamos raspando el límite de CAPI. Si demora más,
+**el lazo no cierra y no nos enteramos** — Meta rechaza el evento en silencio.
+
+**Acción.** Una consulta a Cerberus: distribución de `Pago.fecha_pago − Venta.fecha_venta`.
+Mediana, p90, p99. Es SQL, no opinión.
+
+---
+
+## RG-014
+
+**Suposición.** Las 5.134 ventas históricas se pueden mandar a Meta por CAPI.
+
+**Estado.** `HYPOTHESIS` — **probablemente NO.**
+
+**Clase.** A. **Tipo.** Comportamiento.
+
+**Por qué.** La documentación dice que `event_time` admite **hasta 7 días hacia atrás**. Eso deja
+afuera todo el histórico. Y la Offline Conversions API —que era el camino para datos viejos de
+CRM— **está muerta desde mayo de 2025**.
+
+**Pero:** para la **Custom Audience de valor no hay ventana de tiempo.** El histórico igual
+trabaja, solo que enseñándole a Meta *a quién buscar*, no *qué anuncio funcionó*.
+
+**Acción.** Confirmar en la documentación si existe una ventana más larga para datos de CRM
+(`action_source: system_generated` / `physical_store`). Si no existe, el histórico va **solo** a
+audiencias, y hay que dejarlo escrito para que nadie lo prometa.
+
+---
+
+## RG-015
+
+**Suposición.** El CRM usa la API oficial de WhatsApp.
+
+**Estado.** 🔍 Auditando.
+
+**Clase.** A. **Tipo.** Existencia.
+
+**Importancia.** **Crítica.**
+
+**Por qué duele.** Si usa una biblioteca no oficial (Baileys, whatsapp-web.js), entonces:
+viola los términos de WhatsApp, **el número se puede banear — y con él se va el 58% de las
+ventas**, y no hay `ctwa_clid` ni webhooks ni CAPI. **El canal que más vende sería el único que
+no puede cerrar el lazo con Meta.**
+
+---
+
+## RG-016
+
+**Suposición.** Nadie en Goberna resolvió antes el cruce venta × anuncio.
+
+**Estado.** `HYPOTHESIS` — y hay indicios de que **es falsa**.
+
+**Clase.** A. **Tipo.** Relación.
+
+**Por qué.** `goberna-dashboard` se describe a sí mismo como *"BI satélite: ventas × Meta Ads"*.
+Si alguien ya construyó ese cruce, hay que **mirarlo antes de rediseñarlo**. Puede estar mal,
+puede estar bien, pero ignorarlo sería arrogancia, no ingeniería.
+
+Lo mismo con Icarus: ya tiene `contacts.total_usd_spent`, `n_purchases`, `first_purchase_at` y un
+`import-erp.py` que replica Cerberus. **Puede ser el camino que necesitamos, ya escrito.**
+
+---
+
+## RG-017
+
+**Suposición.** Existe un camino seguro de lectura hacia Cerberus.
+
+**Estado.** 🔍 Mapeando.
+
+**Clase.** A. **Tipo.** Ubicación.
+
+**Por qué.** No se hacen consultas analíticas contra la MySQL que corre el negocio. Necesitamos
+una copia de solo lectura. `goberna-dashboard` dice conectarse read-only con `managed=False`, e
+Icarus ya importa desde un dump. **Si el camino seguro ya existe, se usa. No se inventa otro.**
 
 ---
 
