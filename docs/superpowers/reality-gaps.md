@@ -47,22 +47,59 @@ se observa, y se corrige**.
 
 ---
 
+## Los estados del conocimiento
+
+Un gap no se "hace". **Avanza de estado.** Un checklist miente; un estado no.
+
+```
+UNKNOWN → HYPOTHESIS → OBSERVED → VERIFIED → MODELED → IMPLEMENTED → MONITORED
+```
+
+**La regla con dientes:**
+
+> **El modelo solo acepta entidades en estado `VERIFIED`. Todo lo demás vive acá.**
+
+Si esta regla hubiera existido ayer, la tabla `conversiones` **no habría entrado al spec** como si
+fuera un hecho. Es `HYPOTHESIS`, y es el centro del diseño.
+
+## Los tipos de gap (y por qué cambian dónde buscas)
+
+No es taxonomía decorativa: **el tipo determina la fuente de evidencia.**
+
+| Tipo | Pregunta | Dónde se resuelve |
+|---|---|---|
+| **Existencia** | ¿Existe? | Código, base de datos, API |
+| **Ubicación** | ¿Dónde vive? | Código, sistemas, personas |
+| **Relación** | ¿Cómo se conecta con lo demás? | Código + base + API cruzados |
+| **Comportamiento** | ¿Cómo funciona de verdad? | **Observación humana.** No hay `grep` que lo responda |
+| **Medición** | ¿Cómo sabremos que cambió? | Diseño de experimento |
+| **Responsabilidad** | ¿Quién lo mantiene? | Personas |
+| **Temporalidad** | ¿Cuándo cambia? | Logs, histórico |
+| **Confianza** | ¿Qué tan seguros estamos? | Metadato de todo lo anterior |
+
+RG-002 es de **Comportamiento**. Por eso no se cierra con un agente: se cierra sentándose dos
+horas al lado de quien atiende.
+
 ## Estado del registro
 
-| ID | Suposición | Clase | Estado | Importancia |
-|---|---|---|---|---|
-| [RG-001](#rg-001) | Existe un registro de ventas | **A** | 🔍 En verificación | **Crítica** |
-| [RG-002](#rg-002) | Existe un flujo de community manager | **A** | ❌ Nunca observado | **Crítica** |
-| [RG-003](#rg-003) | Meta aprueba `human_agent` | **A** | ⏳ No solicitado | **Crítica** |
-| [RG-004](#rg-004) | Meta aprueba `page_events` | **A** | ⏳ No solicitado | **Crítica** |
-| [RG-005](#rg-005) | Los comentarios están sobre posts promocionados | **A** | ❌ 0/8 verificado, sin barrer | Alta |
-| [RG-006](#rg-006) | Los "teléfonos" en el texto son teléfonos | **A** | ❌ Sin validar | Alta |
-| [RG-007](#rg-007) | Existe WhatsApp conectado | **A** | ❌ Cero mensajes | Media |
-| [RG-008](#rg-008) | Un curso tiene un precio conocido | **A** | 🔍 En verificación | Alta |
-| [RG-009](#rg-009) | El vocabulario de `hechos` refleja lo que la gente dice | **B** | ❌ Copiado de papers | Media |
-| [RG-010](#rg-010) | Hay identidades basura que fusionan mal | **B** | ❌ Nunca observado | Baja |
-| [RG-011](#rg-011) | Alguien va a querer una inferencia | **B** | ❌ Nada la puebla | Baja |
-| [RG-012](#rg-012) | Existe (o existirá) un bot respondiendo | **B** | ❌ No hay bot | Baja |
+| ID | Suposición | Clase | Tipo | Estado | Importancia |
+|---|---|---|---|---|---|
+| [RG-001](#rg-001) | Existe un registro de ventas | **A** | Existencia | 🔍 `UNKNOWN` → buscando | **Crítica** |
+| [RG-002](#rg-002) | Existe un flujo de community manager | **A** | **Comportamiento** | `UNKNOWN` | **Crítica** |
+| [RG-003](#rg-003) | Meta aprueba `human_agent` | **A** | Existencia | `HYPOTHESIS` — no solicitado | **Crítica** |
+| [RG-004](#rg-004) | Meta aprueba `page_events` | **A** | Existencia | `HYPOTHESIS` — no solicitado | **Crítica** |
+| [RG-005](#rg-005) | Los comentarios están sobre posts promocionados | **A** | Relación | `HYPOTHESIS` — 0/8, sin barrer | Alta |
+| [RG-006](#rg-006) | Los "teléfonos" en el texto son teléfonos | **A** | Confianza | `HYPOTHESIS` — regex sin validar | Alta |
+| [RG-007](#rg-007) | Existe WhatsApp conectado | **A** | Existencia | `UNKNOWN` — cero mensajes | Media |
+| [RG-008](#rg-008) | Un curso tiene un precio conocido | **A** | Ubicación | 🔍 `UNKNOWN` → buscando | Alta |
+| [RG-009](#rg-009) | El vocabulario de `hechos` refleja lo que dicen | **B** | Comportamiento | `HYPOTHESIS` — copiado de papers | Media |
+| [RG-010](#rg-010) | Hay identidades basura que fusionan mal | **B** | Existencia | `HYPOTHESIS` | Baja |
+| [RG-011](#rg-011) | Alguien va a querer una inferencia | **B** | Existencia | `HYPOTHESIS` — nada la puebla | Baja |
+| [RG-012](#rg-012) | Existe (o existirá) un bot respondiendo | **B** | Existencia | `HYPOTHESIS` — no hay bot | Baja |
+| [RG-M001](#rg-m001) | **Existe un proceso estable para convertir incertidumbre en conocimiento** | **B** | Comportamiento | `HYPOTHESIS` — **N=1** | Alta |
+
+**Estado del modelo, dicho sin adornos:** de 13 suposiciones, **cero están en `VERIFIED`.**
+El spec está construido íntegramente sobre hipótesis. Eso no lo invalida — lo ubica.
 
 ---
 
@@ -311,6 +348,127 @@ más grande de toda la literatura de conversión: revelar que es un bot **reduce
 
 Si no registramos quién respondió desde el día uno, el día que se prenda un bot **no vamos a poder
 medir su efecto**, y la decisión ética se tomará a ciegas. La columna es barata; la ceguera no.
+
+---
+
+## RG-M001
+
+**Suposición.** Existe un proceso estable para convertir incertidumbre en conocimiento — y ese
+proceso se puede especializar en agentes.
+
+**Estado.** `HYPOTHESIS`. **Un solo ciclo observado.** N=1.
+
+**Clase.** B — solo se descubre usándolo.
+
+**Tipo.** Comportamiento.
+
+**Por qué está acá.** Toda metodología debe poder investigarse con su propia metodología. Si se
+exceptúa a sí misma, deja de ser método y pasa a ser dogma. Este registro se aplica al registro.
+
+**La hipótesis descartada (por ahora).** Se propuso un pipeline de agentes especializados **por
+rol epistemológico**: Gap Hunter → Evidence Hunter → Validator → World Journal Writer → World
+Model Architect → Impact Analyzer → Planner.
+
+**Lo que la evidencia del N=1 muestra:** los agentes que funcionaron **no estaban especializados
+por rol. Estaban especializados por FUENTE DE EVIDENCIA.** Y dos roles del pipeline propuesto
+resultaron no necesitar un agente:
+- El **Gap Hunter** fue una lectura del spec preguntando "¿qué realidad obligó a esta tabla?".
+  Una pasada, cero agentes, y encontró que la tabla central no tenía evidencia.
+- El **World Model Architect** es la conversación misma.
+
+**Lo que sí se observó como real:** el rol de **Validator** existió (verificación adversarial de
+tres votos en el deep research) y **mató casi todo lo que le pasó**. Ese rol está probado.
+
+**Acción.** Repetir cinco veces. Llenar la tabla de abajo. **No construir nada hasta entonces.**
+
+**Criterio de aceptación.** Que aparezcan patrones estables en: tipos de gap, fuentes de
+evidencia, estados del conocimiento, y cambios reales al modelo.
+
+**Prohibición explícita.** No se le pone nombre todavía. Un nombre bonito para algo que no sabemos
+si existe es la forma más rápida de dejar de investigarlo.
+
+---
+
+## El libro mayor de la evidencia
+
+La única forma de saber qué fuentes sirven es **anotar cuáles sirvieron**. Esta tabla se llena
+después de cada ciclo, no antes.
+
+### Ciclo 1 — 2026-07-12 · Ontología Goberna
+
+| Gap | Fuente | ¿Encontró evidencia? | ¿Cambió el modelo? | Qué produjo |
+|---|---|---|---|---|
+| Varios | **Nuestra propia base de datos** | ✅ | ✅✅ | Reacciones sin identidad, comentarios anónimos, `conversation_id` existe, **el bug de los salientes**, el puente del teléfono en el texto |
+| Varios | **API real de Meta** | ✅ | ✅✅ | **Faltan `human_agent` y `page_events`** — el hallazgo que cambió la operación, no solo el diseño |
+| Varios | Documentación oficial | ✅ | ✅ | CAPI Business Messaging, **la frontera legal (3.a.v)**, retención real de audiencias |
+| Varios | Papers académicos | ✅ | ✅ | Mató el event sourcing. Mató la atribución multi-touch. Reveló que **nadie sabe des-fusionar** |
+| Varios | Psicología (papers) | ✅ | ✅ | Mató el "×21". Dio la separación **hecho/inferencia**. Dio el campo `autor = bot` |
+| Varios | Repos (Chatwoot, SDKs) | ✅ | ✅ | Validó el modelo de identidad por convergencia. Nadie modela atribución |
+| Varios | Ontologías de industria | ✅ | ✅ | **Fuerte vs débil**. CampaignMember. Los antipatrones |
+| Varios | Foros | ⚠️ parcial | ⚠️ | Riesgo de ban del comment-to-DM (real). **Reddit y Stack Overflow bloqueados** |
+| Varios | Deep research (109 agentes) | ✅ | ✅ | **El RCT de los 70.000 anunciantes.** Y la confirmación de que todo lo demás es humo |
+| RG-002 | **Observación humana** | ❓ **sin hacer** | ❓ | — |
+
+**Lecturas del ciclo 1, honestas:**
+
+1. **Las dos fuentes más baratas fueron las más decisivas.** Consultar nuestra propia base y
+   llamar a la API real cambiaron la operación. Ninguna requirió investigación externa.
+2. **La investigación externa sirvió sobre todo para MATAR hipótesis**, no para construirlas.
+   Es un rol distinto y hay que nombrarlo: no es *Evidence Hunter*, es **verdugo de hipótesis**.
+3. **El deep research costó ~5 millones de tokens y produjo un (1) hallazgo decisivo** — pero ese
+   hallazgo es el cimiento del proyecto, y de paso confirmó que el resto de la industria es humo.
+   Saber que todo lo demás es humo **también es conocimiento**, y probablemente el más caro de
+   conseguir por otros medios.
+4. **La fuente que falta es la única que no se puede automatizar.** RG-002 se cierra mirando a
+   una persona trabajar. Ningún agente lo va a hacer por nosotros.
+
+---
+
+## Las prohibiciones de los agentes
+
+Baratas de aplicar (son líneas de prompt), caras de omitir. Un agente que salta de paso
+contamina la evidencia con interpretación, y después nadie puede separarlas.
+
+| Agente | **No puede** |
+|---|---|
+| El que busca gaps | Proponer soluciones. Solo identificar incertidumbre |
+| El que busca evidencia | Interpretar. Solo traer lo que encontró, con su ruta y su cita |
+| El que valida | Buscar evidencia nueva. Solo evaluar la que ya está |
+| El que modela | Inventar conceptos. Solo incorporar lo que la evidencia hizo **inevitable** |
+| El que planifica | Tocar el modelo. Solo convertir conocimiento validado en trabajo |
+
+Y una prohibición que aplica a todos, incluido el hilo principal:
+
+> **Si no encontraste, decí que no encontraste.** Una búsqueda negativa reportada honestamente
+> vale más que un hallazgo inventado para no volver con las manos vacías.
+
+(Funcionó: el agente de foros reportó que Reddit y Stack Overflow estaban bloqueados en vez de
+rellenar con humo. El de papers dijo que no pudo verificar la cifra de Gartner sobre MDM y se
+negó a citarla. Esas dos confesiones valen más que veinte párrafos de relleno.)
+
+---
+
+## Abstracción anticipada vs. abstracción comprimida
+
+La pregunta que hay que hacerse antes de crear cualquier concepto nuevo:
+
+> **¿Estoy anticipando una estructura, o comprimiendo una que ya observé?**
+
+| | |
+|---|---|
+| **Anticipada** | *"Creo que van a existir estos siete agentes."* → Sin evidencia. Es una predicción disfrazada de diseño |
+| **Comprimida** | *"Observamos seis investigaciones. Este patrón apareció siempre. Lo nombramos."* → Nace de la realidad |
+
+Las mejores arquitecturas son **compresiones de patrones repetidos**, no predicciones de patrones
+futuros.
+
+Y el criterio de aceptación de cualquier concepto nuevo, que es el mismo para una tabla que para
+un agente:
+
+> **La arquitectura no crece cuando tenemos una buena idea.
+> Crece cuando ya no podemos explicar la realidad sin introducir un concepto nuevo.**
+
+Cada pieza tiene que ser **inevitable**.
 
 ---
 
