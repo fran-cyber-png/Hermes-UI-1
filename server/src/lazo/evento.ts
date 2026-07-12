@@ -17,11 +17,30 @@ import { normalizarEmail, normalizarTelefono, type Pais } from "./normalizar.js"
 /** Meta acepta un `event_time` de hasta 7 días en el pasado. Más viejo, lo descarta sin avisar. */
 export const VENTANA_CAPI_DIAS = 7;
 
-/** Estados de `Venta` en Cerberus que significan "esta persona pagó y no se arrepintió". */
-const ESTADOS_COMPRA = new Set([
-  1, // Pagado
-  9, // Pagado por crédito (nota de crédito interna: no hay caja nueva, pero sí conversión)
-]);
+/**
+ * LA FUGA DE LAS CUOTAS — leer antes de tocar esto.
+ *
+ * Deliberadamente NO exigimos `estado === 1 (Pagado)`. Cerberus solo pone ese estado cuando se
+ * pagan TODAS las cuotas, y el 9,9% de las ventas se paga en cuotas — lo que puede tardar meses.
+ *
+ * Si el gatillo fuera "estado = Pagado", esas ventas nunca llegarían a Meta. No por la ventana de
+ * 7 días: porque la venta nunca alcanza ese estado a tiempo. Sería una fuga silenciosa del 9,9%
+ * que no aparecería en ningún contador.
+ *
+ * El gatillo es la PRIMERA CUOTA CONFIRMADA POR TESORERÍA (`confirmadaAt`). La persona ya pagó,
+ * ya compró, y Meta tiene que enterarse hoy — no cuando termine de pagar la última cuota.
+ *
+ * (Cerberus aprendió la misma lección al revés, en producción — commit `4b0712e`: nunca mutes el
+ * estado financiero al REGISTRAR una intención de pago; solo al CONFIRMAR el hecho.)
+ *
+ * Lo único que descalifica a una venta es su estado terminal:
+ *   4 = Anulado      · nunca se concretó
+ *   5 = Cotización   · ni siquiera se intentó
+ *   7 = Retirado     ┐ compró y se arrepintió: el 1,6% de las ventas. Meta no tiene forma limpia
+ *   8 = Reembolsado  ┘ de retractar un `Purchase` ya enviado, así que la defensa es no mandarlo.
+ */
+const NUNCA_FUE_COMPRA = new Set([4, 5]);
+const SE_ARREPINTIO = new Set([7, 8]);
 
 export type VentaConfirmada = {
   /** Folio de Cerberus (`GOB-11851`). Único, estable, y por eso sirve de clave de idempotencia. */
@@ -60,6 +79,9 @@ export type EventoCapi = {
 
 /** Por qué una venta NO produce un evento. Cada motivo es un número que hay que poder mirar. */
 export type MotivoDescarte =
+  /** Anulada o solo una cotización: nunca hubo intención de comprar. */
+  | "venta_no_valida"
+  /** Retirada o reembolsada: compró y se arrepintió (1,6%). */
   | "estado_no_pagado"
   | "sin_confirmacion"
   | "fuera_de_ventana"
@@ -76,7 +98,11 @@ export function hashear(valorNormalizado: string): string {
 }
 
 export function construirCompra(venta: VentaConfirmada, ahora: Date): Resultado {
-  if (!ESTADOS_COMPRA.has(venta.estado)) return { ok: false, motivo: "estado_no_pagado" };
+  if (NUNCA_FUE_COMPRA.has(venta.estado)) return { ok: false, motivo: "venta_no_valida" };
+  if (SE_ARREPINTIO.has(venta.estado)) return { ok: false, motivo: "estado_no_pagado" };
+
+  // Y NADA MÁS sobre el estado. Una venta en cuotas (estado 2) con la primera cuota confirmada
+  // ES una compra. Ver el comentario de arriba: exigir `estado = Pagado` fugaba el 9,9%.
   if (!venta.confirmadaAt) return { ok: false, motivo: "sin_confirmacion" };
   if (!(venta.montoTotal > 0)) return { ok: false, motivo: "valor_invalido" };
 

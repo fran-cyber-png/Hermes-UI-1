@@ -94,12 +94,27 @@ describe("construirCompra — cuándo SÍ", () => {
 });
 
 describe("construirCompra — cuándo NO, y por qué", () => {
-  test("no manda si la venta no está pagada", () => {
-    for (const estado of [2, 3, 4, 5, 6] as const) {
+  test("no manda si la venta se anuló o es solo una cotización", () => {
+    for (const estado of [4, 5] as const) {
       const r = construirCompra(ventaPeruana({ estado }), AHORA);
       assert.equal(r.ok, false);
-      if (!r.ok) assert.equal(r.motivo, "estado_no_pagado");
+      if (!r.ok) assert.equal(r.motivo, "venta_no_valida");
     }
+  });
+
+  test("LA FUGA DE LAS CUOTAS: una venta en cuotas SÍ se reporta con la primera confirmada", () => {
+    // Cerberus solo pone `estado = 1 (Pagado)` cuando se pagan TODAS las cuotas, y el 9,9% de
+    // las ventas paga en cuotas — lo que puede tardar MESES.
+    //
+    // Si el gatillo fuera `estado === 1`, esas ventas nunca llegarían a Meta: no por la ventana
+    // de 7 días, sino porque la venta nunca alcanza ese estado a tiempo. Es una fuga silenciosa
+    // del 9,9% que no se ve en ningún lado.
+    //
+    // El gatillo es la PRIMERA CUOTA CONFIRMADA POR TESORERÍA. La persona ya pagó, ya compró,
+    // y Meta tiene que enterarse hoy — no cuando termine de pagar la última cuota en diciembre.
+    const enCuotas = ventaPeruana({ estado: 2 }); // Pendiente: quedan cuotas por pagar
+    const r = construirCompra(enCuotas, AHORA);
+    assert.equal(r.ok, true, "una venta en cuotas con la primera confirmada ES una compra");
   });
 
   test("no manda una venta revertida — compró y se arrepintió (1,6% de los casos)", () => {
