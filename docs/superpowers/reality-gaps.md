@@ -84,28 +84,85 @@ horas al lado de quien atiende.
 
 | ID | Suposición | Clase | Tipo | Estado | Importancia |
 |---|---|---|---|---|---|
-| [RG-001](#rg-001) | Existe un registro de ventas | **A** | Existencia | ✅ **`OBSERVED`** — vive en Cerberus | **Crítica** |
-| [RG-002](#rg-002) | Existe un flujo de community manager | **A** | **Comportamiento** | `UNKNOWN` | **Crítica** |
-| [RG-003](#rg-003) | Meta aprueba `human_agent` | **A** | Existencia | `HYPOTHESIS` — no solicitado | **Crítica** |
-| [RG-004](#rg-004) | Meta aprueba `page_events` | **A** | Existencia | `HYPOTHESIS` — no solicitado | **Crítica** |
-| [RG-005](#rg-005) | Los comentarios están sobre posts promocionados | **A** | Relación | `HYPOTHESIS` — 0/8, sin barrer | Alta |
-| [RG-006](#rg-006) | Los "teléfonos" en el texto son teléfonos | **A** | Confianza | `HYPOTHESIS` — regex sin validar | Alta |
-| [RG-007](#rg-007) | **Existe WhatsApp conectado** | **A** | Existencia | `UNKNOWN` — cero mensajes | **CRÍTICA** ⬆ |
-| [RG-008](#rg-008) | Un curso tiene un precio conocido | **A** | Ubicación | ✅ **`OBSERVED`** | Alta |
-| [RG-009](#rg-009) | El vocabulario de `hechos` refleja lo que dicen | **B** | Comportamiento | `HYPOTHESIS` — copiado de papers | Media |
+| [RG-001](#rg-001) | Existe un registro de ventas | **A** | Existencia | ✅ `OBSERVED` — vive en Cerberus | **Crítica** |
+| [RG-002](#rg-002) | Existe un flujo de community manager | **A** | **Comportamiento** | `UNKNOWN` — **nadie lo miró nunca** | **Crítica** |
+| [RG-003](#rg-003) | Meta aprueba `human_agent` | **A** | Existencia | `HYPOTHESIS` — no solicitado | Media ⬇ |
+| [RG-004](#rg-004) | Meta aprueba `page_events` | **A** | Existencia | `HYPOTHESIS` — no solicitado | Media ⬇ |
+| [RG-005](#rg-005) | Los comentarios están sobre posts promocionados | **A** | Relación | ✅ `OBSERVED` — **31,6% sí** | Alta |
+| [RG-006](#rg-006) | Los "teléfonos" en el texto son teléfonos | **A** | Confianza | ✅ `OBSERVED` — **97 de 100 sí** | Alta |
+| [RG-007](#rg-007) | Existe WhatsApp conectado | **A** | Existencia | ✅ `OBSERVED` — **Baileys, no oficial** | **Crítica** |
+| [RG-008](#rg-008) | Un curso tiene un precio conocido | **A** | Ubicación | ✅ `OBSERVED` | Alta |
+| [RG-009](#rg-009) | El vocabulario de `hechos` refleja lo que dicen | **B** | Comportamiento | ✅ `OBSERVED` — **estaba casi todo mal** | Media |
 | [RG-010](#rg-010) | Hay identidades basura que fusionan mal | **B** | Existencia | `HYPOTHESIS` | Baja |
-| [RG-011](#rg-011) | Alguien va a querer una inferencia | **B** | Existencia | `HYPOTHESIS` — nada la puebla | Baja |
-| [RG-012](#rg-012) | Existe (o existirá) un bot respondiendo | **B** | Existencia | `HYPOTHESIS` — no hay bot | Baja |
-| [RG-013](#rg-013) | **Una venta se confirma dentro de la ventana de 7 días de CAPI** | **A** | **Temporalidad** | `UNKNOWN` | **Crítica** |
+| [RG-011](#rg-011) | Alguien va a querer una inferencia | **B** | Existencia | `HYPOTHESIS` — la tabla espera | Baja |
+| [RG-012](#rg-012) | Existe (o existirá) un bot respondiendo | **B** | Existencia | ✅ `OBSERVED` — **ya existe, y niega serlo** | **Alta** ⬆ |
+| [RG-013](#rg-013) | **Una venta se confirma dentro de los 7 días de CAPI** | **A** | **Temporalidad** | `UNKNOWN` | **Crítica** |
 | [RG-014](#rg-014) | Las 5.134 ventas históricas se pueden mandar por CAPI | **A** | Comportamiento | `HYPOTHESIS` — probablemente NO | Alta |
-| [RG-015](#rg-015) | El CRM usa la API oficial de WhatsApp | **A** | Existencia | 🔍 `UNKNOWN` → auditando | **Crítica** |
-| [RG-016](#rg-016) | Nadie resolvió antes el cruce venta × anuncio | **A** | Relación | `HYPOTHESIS` — **`goberna-dashboard` dice que sí lo hace** | Alta |
-| [RG-017](#rg-017) | Existe un camino seguro de lectura hacia Cerberus | **A** | Ubicación | 🔍 `UNKNOWN` → mapeando | Alta |
+| [RG-015](#rg-015) | El CRM usa la API oficial de WhatsApp | **A** | Existencia | ✅ `OBSERVED` — **NO. Baileys** | **Crítica** |
+| [RG-016](#rg-016) | Nadie resolvió antes el cruce venta × anuncio | **A** | Relación | ✅ `OBSERVED` — **`goberna-dashboard` sí lo hace** | Alta |
+| [RG-017](#rg-017) | Existe un camino seguro de lectura hacia Cerberus | **A** | Ubicación | ✅ `OBSERVED` — **webhook + dump** | Alta |
+| [RG-018](#rg-018) | Icarus está viejo / abandonado | **A** | Existencia | ✅ `OBSERVED` — **FALSA. Commit de hace 2 días** | **Crítica** |
+| [RG-019](#rg-019) | **La tienda web no tiene lazo con Meta** | **A** | Existencia | ✅ `OBSERVED` — **el CAPI ya corre, sin `Purchase`** | **Crítica** |
+| [RG-020](#rg-020) | La ingesta guarda todo lo que Meta devuelve | **A** | Comportamiento | ✅ `OBSERVED` — **NO. Dos bugs que borran datos** | Alta |
 | [RG-M001](#rg-m001) | **Existe un proceso estable para convertir incertidumbre en conocimiento** | **B** | Comportamiento | `HYPOTHESIS` — **N=1** | Alta |
 
-**Estado del modelo:** 18 suposiciones. **Dos en `OBSERVED`. Cero en `VERIFIED`.**
-El spec sigue construido sobre hipótesis. Cerrar RG-001 abrió cinco gaps nuevos — eso es lo que
-se supone que pase: **la evidencia no reduce la incertidumbre, la reubica donde importa.**
+**Estado del modelo:** 21 suposiciones. **Once en `OBSERVED`. Cero en `VERIFIED`.**
+
+**Y de las once observadas, seis salieron distintas de lo que el spec afirmaba.** Ese es el
+rendimiento real del método: más de la mitad de lo que dábamos por cierto era falso.
+
+---
+
+## Lo que cambió el 2026-07-12 (ciclo 1)
+
+### Gaps cerrados a favor del diseño
+- **RG-005** — 31,6% de los comentarios de FB (4.661 de 14.736) **sí son atribuibles a un anuncio**,
+  vía `effective_object_story_id`. Y es un **piso**, no un techo (ver RG-020). Instagram: **0%**.
+- **RG-006** — El puente del teléfono **funciona**: 97 de 100 son teléfonos reales, 50 de 50 correos
+  válidos. Me preocupé de más. Igual hay que validar por país (rechazaría los 3 malos por la razón
+  correcta, no por casualidad).
+- **RG-017** — El camino a Cerberus **ya existe, dos veces**: un webhook que ya empuja cada venta, y
+  un `/descargar-bd/` con `mysqldump --single-transaction`. **Cero infraestructura nueva.**
+
+### Gaps cerrados en contra
+- **RG-009** — El vocabulario de `hechos` que copié de papers **estaba casi todo mal**.
+  `pregunto_certificacion`: 0 de 200. `expreso_compromiso`: 0 de 200. Y la categoría **dominante
+  (37%)** no está en ningún paper: **la gente escribe su número de teléfono y se va.** No es una
+  pregunta — es una entrega.
+- **RG-015** — El CRM usa **Baileys**, no la API oficial. Y con Baileys **es estructuralmente
+  imposible cerrar el lazo de mensajería** (CAPI exige un WABA ID que Baileys no genera).
+- **RG-018** — Icarus **no está viejo**. Último commit hace 2 días, en vivo, con tests y usuarios.
+  El clon local estaba 14 commits atrás y nos mintió.
+- **RG-012** — El bot **ya existe** (`prompts.ts:160`, "Kathy Alva") y tiene instrucción explícita
+  de **negar ser un bot** (`prompts.ts:182`). La decisión ya está tomada; lo que no existe es la
+  instrumentación para saber si funcionó.
+
+### El hallazgo que reordenó el plan
+- **RG-019** — **El lazo con Meta ya está construido y corriendo.** Pixel `513556103518928`, nuestro,
+  activo desde 2022, **con CAPI server-side funcionando** (630 eventos por servidor en 24 h).
+  Pero transporta la carga equivocada:
+
+  | | |
+  |---|---|
+  | Eventos `Purchase` en 24 h | **0** |
+  | Correos en ~1.200 eventos | **3** |
+  | Teléfonos | **1** |
+
+  Y hay un campo oculto llamado `fbclid` con el valor **hardcodeado en `"ORGANICO"`** — no falta la
+  captura: **hay una captura que miente.**
+
+  **No hay que construir el lazo. Hay que darle la carga correcta**: las 4.729 ventas pagadas de
+  Cerberus, con correo (99,5%) y teléfono (100%). Y eso **no necesita `human_agent`, ni
+  `page_events`, ni App Review, ni migrar WhatsApp** — por eso RG-003 y RG-004 bajan a Media.
+
+### RG-020 — Dos bugs de ingesta que borran datos en silencio
+1. `interactionsIngestor.ts:111-113` **descarta los mensajes salientes de la página**. La base no
+   sabe a quién le respondimos.
+2. `interactionsIngestor.ts:63,146` — `comments.limit(50)` **hardcodeado**, y `getAll()` nunca sigue
+   la paginación anidada de `post.comments`. **Todo post con más de 50 comentarios se trunca.**
+   112 posts tocan el tope exacto; entre los atribuidos, 48 de 274 (17,5%).
+
+Los dos invisibles. Los dos encontrados **mirando los datos, no leyendo el código.**
 
 ---
 
