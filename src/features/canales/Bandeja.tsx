@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useLocalStorage } from '../../lib/useLocalStorage';
 import type { Intencion, Interaccion } from './types';
 import { useBandeja } from './useBandeja';
+import { useInvalidarBandeja } from './useInteracciones';
 import FilaInteraccion from './FilaInteraccion';
 import ResponderPanel from './ResponderPanel';
 
@@ -36,7 +37,11 @@ export default function Bandeja() {
     'puedo-escribirle',
   );
   const [abierta, setAbierta] = useState<Interaccion | null>(null);
-  const [respondidas, setRespondidas] = useState<number[]>([]);
+  const invalidarBandeja = useInvalidarBandeja();
+
+  // `respondida` NO es un estado del cliente: es una derivación de `status`, que el servidor
+  // ya persiste y la API ya devuelve. Antes esto era un `useState<number[]>([])` que se vaciaba
+  // en cada recarga — respondías, apretabas F5, y el trabajo hecho se volvía invisible.
 
   const { items, total, hayMas, cargando, cargandoMas, cargarMas } = useBandeja(intencion);
   const filtro = FILTROS.find((f) => f.valor === intencion) ?? FILTROS[0];
@@ -79,7 +84,7 @@ export default function Bandeja() {
             <FilaInteraccion
               key={i.id}
               i={i}
-              respondida={respondidas.includes(i.id)}
+              respondida={i.status !== 'nuevo'}
               onAbrir={setAbierta}
             />
           ))
@@ -102,7 +107,7 @@ export default function Bandeja() {
       <ResponderPanel
         interaccion={abierta}
         onCerrar={() => setAbierta(null)}
-        onRespondido={(id) => setRespondidas((prev) => [...prev, id])}
+        onRespondido={invalidarBandeja}
       />
     </div>
   );

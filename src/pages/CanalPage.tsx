@@ -12,7 +12,7 @@ import type {
   Rango,
   TipoFiltro,
 } from '../features/canales/types';
-import { useInteracciones } from '../features/canales/useInteracciones';
+import { useInteracciones, useInvalidarBandeja } from '../features/canales/useInteracciones';
 import RangoPicker from '../features/canales/RangoPicker';
 import FilaInteraccion from '../features/canales/FilaInteraccion';
 import ResponderPanel from '../features/canales/ResponderPanel';
@@ -86,7 +86,11 @@ export default function CanalPage() {
   const [tipo, setTipo] = useState<TipoFiltro>('');
   const [intencion, setIntencion] = useState<Intencion>('');
   const [abierta, setAbierta] = useState<Interaccion | null>(null);
-  const [respondidas, setRespondidas] = useState<number[]>([]);
+  const invalidarBandeja = useInvalidarBandeja();
+
+  // `respondida` NO es un estado del cliente: es una derivación de `status`, que el servidor
+  // ya persiste y la API ya devuelve. Antes esto era un `useState<number[]>([])` que se vaciaba
+  // en cada recarga — respondías, apretabas F5, y el trabajo hecho se volvía invisible.
   const [estado, setEstado] = useState<EstadoCanal | null>(null);
   const [cargandoEstado, setCargandoEstado] = useState(true);
 
@@ -248,7 +252,7 @@ export default function CanalPage() {
             <FilaInteraccion
               key={i.id}
               i={i}
-              respondida={respondidas.includes(i.id)}
+              respondida={i.status !== 'nuevo'}
               onAbrir={setAbierta}
               mostrarCanal={false}
             />
@@ -272,7 +276,7 @@ export default function CanalPage() {
       <ResponderPanel
         interaccion={abierta}
         onCerrar={() => setAbierta(null)}
-        onRespondido={(id) => setRespondidas((prev) => [...prev, id])}
+        onRespondido={invalidarBandeja}
       />
     </div>
   );

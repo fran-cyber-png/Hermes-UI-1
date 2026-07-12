@@ -1,10 +1,10 @@
 import { Router } from "express";
-import { paraMeta, rangoDe } from "../lib/rangos.js";
 import { sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { events } from "../db/schema.js";
-import { detectar, type CampaignInput } from "../decisions/detectors.js";
+import { detectar } from "../decisions/detectors.js";
 import { MetaGraphClient, MetaGraphError } from "../meta/metaClient.js";
+import { refrescarPauta, ultimoSnapshot } from "../pauta/snapshot.js";
 
 export const decisionsRouter = Router();
 
@@ -19,123 +19,81 @@ export const decisionsRouter = Router();
  */
 const MODO = process.env.DECISIONES_MODO === "ejecucion" ? "ejecucion" : "simulacion";
 
-function indicatorValue(arr: unknown): number | null {
-  if (!Array.isArray(arr) || arr.length === 0) return null;
-  const raw = (arr[0] as any)?.values?.[0]?.value;
-  return raw != null ? Number(raw) : null;
+/** El rango pedido, normalizado. Los snapshots se guardan por rango. */
+function rangoDe(q: unknown): string {
+  const v = typeof q === "string" ? q : "";
+  return ["7d", "30d", "90d", "1y", "todo"].includes(v) ? v : "90d";
 }
 
 /**
- * Trae las campañas ACTIVAS de las cuentas elegidas con su estructura e
- * insights, y corre los detectores encima.
+ * Las decisiones. LEE POSTGRES. No llama a Meta.
  *
- * Solo mira campañas activas: una campaña pausada no está gastando plata, así
- * que no hay nada que decidir sobre ella.
+ * Antes esto hacía 866 llamadas secuenciales a la Graph API (24 cuentas × 2, más 409 campañas
+ * × 2) y tardaba entre 2 y 4 minutos — al MONTAR dos pantallas distintas, sin caché entre ellas.
+ * Abrías la home, ibas a campañas, y pagabas la cuenta dos veces.
+ *
+ * Ahora Meta se consulta por detrás (`pauta/snapshot.ts`) y esto lee el resultado. Los detectores
+ * (`decisions/detectors.ts`) ya eran funciones puras: no hubo que tocarlos, solo cambiar de dónde
+ * vienen los datos.
+ *
+ * La card deja de mentir: en vez de fingir que está "en vivo", dice su edad — "revisado hace 2 h".
  */
 decisionsRouter.get("/", async (req, res) => {
-  const token = process.env.META_ACCESS_TOKEN;
-  if (!token) {
-    res.status(500).json({ type: "config_error", message: "META_ACCESS_TOKEN no está configurado." });
+  const rango = rangoDe(req.query.rango ?? req.query.datePreset);
+  const snap = await ultimoSnapshot(rango);
+
+  if (!snap) {
+    // Nunca se corrió para este rango. No es un error: es que falta revisar.
+    res.json({
+      decisiones: [],
+      campanasAnalizadas: 0,
+      errores: [],
+      modo: MODO,
+      snapshot: null,
+    });
     return;
-  }
-
-  const raw = req.query.accountIds;
-  const ids = (typeof raw === "string" ? raw.split(",") : []).map((s) => s.trim()).filter(Boolean);
-  if (ids.length === 0) {
-    res.json({ decisiones: [], modo: MODO, campanasAnalizadas: 0 });
-    return;
-  }
-  // El mismo rango que gobierna todo el home. Meta no tiene preset de "últimos
-  // 365 días", así que se le manda time_range con fechas exactas.
-  const ventana = paraMeta(rangoDe(req.query.rango ?? req.query.datePreset));
-
-  const client = new MetaGraphClient(token);
-  const campanas: CampaignInput[] = [];
-  const errores: { accountId: string; message: string }[] = [];
-
-  for (const accountId of ids) {
-    const actId = accountId.startsWith("act_") ? accountId : `act_${accountId}`;
-    try {
-      const cuenta = await client.get(actId, { fields: "name,currency" });
-
-      // Solo las activas: sobre una campaña pausada no hay nada que decidir.
-      const activas = await client.getAll(`${actId}/campaigns`, {
-        fields: "id,name,status",
-        effective_status: JSON.stringify(["ACTIVE"]),
-        limit: "25",
-      });
-
-      for (const camp of activas) {
-        const estructura = await client.get(camp.id, {
-          fields: "name,status,adsets.limit(25){name,status,targeting,ads.limit(25){name,status}}",
-        });
-        const insights = await client.getAll(`${camp.id}/insights`, {
-          level: "ad",
-          ...ventana,
-          fields: "ad_id,spend,results,cost_per_result",
-          limit: "200",
-        });
-
-        const porAd = new Map(
-          insights.map((r) => [
-            r.ad_id,
-            {
-              spend: Number(r.spend ?? 0),
-              results: indicatorValue(r.results),
-              costPerResult: indicatorValue(r.cost_per_result),
-            },
-          ]),
-        );
-
-        const adsets = (estructura.adsets?.data ?? []).map((as: any) => {
-          const ads = (as.ads?.data ?? []).map((ad: any) => {
-            const m = porAd.get(ad.id) ?? { spend: 0, results: null, costPerResult: null };
-            return { id: ad.id, name: ad.name, status: ad.status, ...m };
-          });
-          const spend = ads.reduce((s: number, a: any) => s + a.spend, 0);
-          const results = ads.reduce((s: number, a: any) => s + (a.results ?? 0), 0);
-          const t = as.targeting ?? {};
-          return {
-            id: as.id,
-            name: as.name,
-            status: as.status,
-            spend,
-            results: results || null,
-            costPerResult: results > 0 ? spend / results : null,
-            includedAudiences: (t.custom_audiences ?? []).map((x: any) => x.name),
-            excludedAudiences: (t.excluded_custom_audiences ?? []).map((x: any) => x.name),
-            ads,
-          };
-        });
-
-        const spend = adsets.reduce((s: number, a: any) => s + a.spend, 0);
-        const results = adsets.reduce((s: number, a: any) => s + (a.results ?? 0), 0);
-
-        campanas.push({
-          id: camp.id,
-          name: camp.name,
-          status: camp.status,
-          spend,
-          results: results || null,
-          costPerResult: results > 0 ? spend / results : null,
-          accountId,
-          accountName: cuenta.name,
-          currency: cuenta.currency,
-          adsets,
-        });
-      }
-    } catch (err) {
-      const message = err instanceof MetaGraphError ? err.message : (err as Error).message;
-      errores.push({ accountId, message });
-    }
   }
 
   res.json({
-    decisiones: detectar(campanas),
-    campanasAnalizadas: campanas.length,
-    errores,
+    decisiones: detectar(snap.campanas),
+    campanasAnalizadas: snap.campanas.length,
+    errores: snap.errores,
     modo: MODO,
+    snapshot: {
+      creadoAt: snap.creadoAt,
+      edadMinutos: snap.edadMinutos,
+      cuentas: snap.cuentas.length,
+    },
   });
+});
+
+/**
+ * "Revisar ahora". Dispara la recolección contra Meta y espera el resultado.
+ *
+ * Es el ÚNICO endpoint de esta ruta que habla con Meta, y solo cuando alguien lo pide
+ * explícitamente. Nunca al cargar una pantalla.
+ */
+decisionsRouter.post("/refrescar", async (req, res) => {
+  const rango = rangoDe(req.body?.rango ?? req.query.rango);
+  try {
+    const snap = await refrescarPauta(rango);
+    if (!snap) {
+      res.status(400).json({
+        type: "sin_cuentas",
+        message: "No hay cuentas publicitarias configuradas para revisar.",
+      });
+      return;
+    }
+    res.json({
+      decisiones: detectar(snap.campanas),
+      campanasAnalizadas: snap.campanas.length,
+      errores: snap.errores,
+      modo: MODO,
+      snapshot: { creadoAt: snap.creadoAt, edadMinutos: 0, cuentas: snap.cuentas.length },
+    });
+  } catch (err) {
+    res.status(502).json({ type: "meta_error", message: (err as Error).message });
+  }
 });
 
 /**

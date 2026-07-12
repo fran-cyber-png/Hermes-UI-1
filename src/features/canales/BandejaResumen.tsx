@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Check, Clock } from 'lucide-react';
 import type { CanalesResponse, Interaccion } from './types';
 import { useBandeja } from './useBandeja';
+import { useInvalidarBandeja } from './useInteracciones';
 import ResponderPanel from './ResponderPanel';
 
 const COLOR: Record<string, string> = {
@@ -27,7 +28,11 @@ const ASOMO = 4;
  */
 export default function BandejaResumen({ estado }: { estado: CanalesResponse | null }) {
   const [abierta, setAbierta] = useState<Interaccion | null>(null);
-  const [respondidas, setRespondidas] = useState<number[]>([]);
+  const invalidarBandeja = useInvalidarBandeja();
+
+  // `respondida` NO es un estado del cliente: es una derivación de `status`, que el servidor
+  // ya persiste y la API ya devuelve. Antes esto era un `useState<number[]>([])` que se vaciaba
+  // en cada recarga — respondías, apretabas F5, y el trabajo hecho se volvía invisible.
 
   const { items, total, cargando } = useBandeja('puedo-escribirle');
   const asomo = items.slice(0, ASOMO);
@@ -103,7 +108,7 @@ export default function BandejaResumen({ estado }: { estado: CanalesResponse | n
         ) : (
           asomo.map((i) => {
             const restan = 7 - i.dias;
-            const respondida = respondidas.includes(i.id);
+            const respondida = i.status !== 'nuevo';
 
             return (
               <button
@@ -155,7 +160,7 @@ export default function BandejaResumen({ estado }: { estado: CanalesResponse | n
       <ResponderPanel
         interaccion={abierta}
         onCerrar={() => setAbierta(null)}
-        onRespondido={(id) => setRespondidas((prev) => [...prev, id])}
+        onRespondido={invalidarBandeja}
       />
     </aside>
   );

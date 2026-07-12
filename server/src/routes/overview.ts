@@ -1,0 +1,114 @@
+import { Router } from "express";
+import { sql } from "drizzle-orm";
+import { db } from "../db/client.js";
+import { detectar } from "../decisions/detectors.js";
+import { ultimoSnapshot } from "../pauta/snapshot.js";
+import { estadoDeCanales } from "../canales/consultas.js";
+import { estadoDelLazo, flujoPorDia, loAccionable, loCerrado, loQuePreguntan } from "../canales/verdad.js";
+
+export const overviewRouter = Router();
+
+/**
+ * EL BFF — Backend For Frontend.
+ *
+ * Una sola llamada que devuelve todo lo que la pantalla necesita, con la forma de la PANTALLA
+ * y no de la base.
+ *
+ * ── Lo que reemplaza ──
+ * La home hacía CUATRO llamadas al montar, cada una desde un componente distinto, sin caché
+ * entre ellas:
+ *
+ *   GET /api/interactions/canales   → SQL, ~324 ms (Seq Scan sobre 94.371 filas)
+ *   GET /api/leads/costo            → llamaba a Meta en vivo
+ *   GET /api/interactions           → SQL, ~358 ms (Seq Scan)
+ *   GET /api/decisions              → 866 llamadas a Meta. 2 a 4 minutos.
+ *
+ * Y `/api/decisions` se pedía TAMBIÉN desde la pantalla de campañas, sin compartir nada: abrías
+ * la home, ibas a campañas, y pagabas la cuenta dos veces.
+ *
+ * Ahora: una llamada, solo Postgres, milisegundos. Meta se consulta por detrás, en un job.
+ *
+ * ── La regla ──
+ * NINGUNA PANTALLA LLAMA A META. NUNCA.
+ * Si un endpoint del camino de render necesita la Graph API, el diseño está mal.
+ */
+
+const RANGOS = ["7d", "30d", "90d", "1y", "todo"] as const;
+type Rango = (typeof RANGOS)[number];
+
+function rangoDe(q: unknown): Rango {
+  const v = typeof q === "string" ? q : "";
+  return (RANGOS as readonly string[]).includes(v) ? (v as Rango) : "90d";
+}
+
+/**
+ * El corte de fecha para el rango. `todo` no corta nada.
+ *
+ * Devuelve un string ISO, no un `Date`: el driver `postgres` no bindea objetos Date en
+ * consultas crudas — falla en runtime, no en compilación.
+ */
+function desdeDe(rango: Rango): string | null {
+  if (rango === "todo") return null;
+  const dias = { "7d": 7, "30d": 30, "90d": 90, "1y": 365 }[rango];
+  return new Date(Date.now() - dias * 86_400_000).toISOString();
+}
+
+overviewRouter.get("/", async (req, res) => {
+  const rango = rangoDe(req.query.rango);
+
+  // Todo a Postgres, todo en paralelo. Cero llamadas a Meta.
+  const [canales, bandeja, snap, lazo, accionable, cerrado, preguntas, flujo] = await Promise.all([
+    estadoDeCanales(rango),
+    bandejaDe(),
+    ultimoSnapshot(rango),
+    estadoDelLazo(),
+    loAccionable(),
+    loCerrado(),
+    loQuePreguntan(),
+    flujoPorDia(desdeDe(rango)),
+  ]);
+
+  res.json({
+    rango,
+
+    // ── Los cuatro números que la home debería haber mostrado siempre ──
+    lazo,        // ¿Meta sabe que vendimos? Es la razón de ser del sistema.
+    accionable,  // Lo que una persona puede trabajar HOY. Decenas, no 94.371.
+    cerrado,     // Lo que Meta cerró. No es deuda: es audiencia.
+    preguntas,   // Qué pregunta la gente. El dato que le sirve al creativo.
+    flujo,       // El gráfico: la puerta cerrándose, día por día.
+
+    canales,
+    bandeja,
+
+    // Del snapshot. Si nunca se corrió, `pauta` viene en null y la pantalla dice "falta revisar"
+    // en vez de mostrar un cero que parece un dato.
+    pauta: snap
+      ? {
+          decisiones: detectar(snap.campanas),
+          campanasAnalizadas: snap.campanas.length,
+          costo: snap.costo,
+          errores: snap.errores,
+          // La card dice su EDAD en vez de fingir que está en vivo.
+          revisadoAt: snap.creadoAt,
+          edadMinutos: snap.edadMinutos,
+        }
+      : null,
+  });
+});
+
+/** Las últimas que se pueden trabajar: dentro de ventana y sin atender. */
+async function bandejaDe() {
+  const filas = await db.execute(sql`
+    SELECT id, canal, tipo, persona_nombre, texto, contexto_texto, occurred_at, status
+    FROM interactions
+    WHERE status = 'nuevo'
+      AND direccion = 'entrante'
+      -- Solo lo accionable: un comentario fuera de la ventana de 7 días de Meta no se puede
+      -- responder en privado, así que no es trabajo — es archivo.
+      AND (tipo = 'mensaje' OR occurred_at > now() - interval '7 days')
+    ORDER BY occurred_at DESC
+    LIMIT 15
+  `);
+  return filas as unknown as Record<string, unknown>[];
+}

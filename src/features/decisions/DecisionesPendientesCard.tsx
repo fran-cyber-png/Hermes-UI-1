@@ -1,71 +1,43 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, ArrowRight, CheckCircle2, Coins, Loader2, Settings } from 'lucide-react';
-import { useLocalStorage } from '../../lib/useLocalStorage';
+import { AlertTriangle, ArrowRight, CheckCircle2, Clock, Coins, Loader2, Settings } from 'lucide-react';
 import { useConfig } from '../../layout/ConfigContext';
-import { fetchDecisiones } from './api';
+import { useRefrescarPauta } from '../../lib/datos/overview';
+import type { Overview } from '../../lib/datos/overview';
 import type { Decision } from './types';
-import type { Rango } from '../canales/types';
-
-type Estado =
-  | { fase: 'sin-cuentas' }
-  | { fase: 'cargando' }
-  | { fase: 'listo'; decisiones: Decision[]; fallaron: number }
-  | { fase: 'error'; mensaje: string };
 
 /**
- * Cuánta plata está mal puesta en la pauta, sin sacarte del dashboard.
+ * Cuánta plata está mal puesta en la pauta.
  *
- * Depende de qué cuentas elegiste mirar en la configuración. Como ese valor vive
- * en localStorage compartido, cambiarlo allá rehace esto solo — sin recargar.
+ * ── Qué cambió ──
+ * Esta tarjeta hacía su PROPIA llamada a `/api/decisions`, que a su vez hacía 866 llamadas
+ * secuenciales a Meta y tardaba de 2 a 4 minutos. Y la pantalla de campañas hacía exactamente
+ * la misma llamada: abrías la home, ibas a campañas, y se pagaba la cuenta dos veces.
  *
- * Tres cosas que esta tarjeta NO hace, porque las hacía y mentía:
+ * Ahora lee del BFF, que lee de un snapshot que un job dejó en Postgres. Instantáneo.
  *
- *  1. No conserva el resultado viejo mientras carga. Antes, al cambiar de
- *     cuentas, seguía mostrando el "[]" anterior — es decir, "la pauta está
- *     sana" — durante los dos minutos que Meta tarda en contestar por 19
- *     cuentas. Una buena noticia inventada es peor que ninguna noticia.
- *  2. No se calla los errores. Si Meta no dejó leer algunas cuentas, decir
- *     "está sana" es afirmar algo sobre plata que nunca se miró.
- *  3. No trata un fallo de red como "no hay nada". Silencio ≠ todo bien.
+ * ── Y la mentira que se arregló ──
+ * Antes, cuando no había decisiones, decía «La pauta está sana». Pero eso también aparecía
+ * cuando la pauta NUNCA SE HABÍA REVISADO. Afirmar que algo está sano sin haberlo mirado es
+ * peor que no decir nada: es una buena noticia inventada.
+ *
+ * Ahora son cuatro estados distintos y se ven distintos:
+ *   · no hay cuentas elegidas   → elegí cuentas
+ *   · nunca se revisó            → «falta revisar», con un botón
+ *   · se revisó y está sana      → sana, Y CON LA EDAD del dato («hace 2 h»)
+ *   · se revisó y hay plata mal  → cuánta, y qué hacer
  */
-export default function DecisionesPendientesCard({ rango }: { rango: Rango }) {
-  const [cuentas] = useLocalStorage<string[]>('meta-escuela.dashboardAccounts', []);
+export default function DecisionesPendientesCard({
+  pauta,
+  cuentas,
+}: {
+  pauta: Overview['pauta'];
+  cuentas: string[];
+}) {
   const { abrir } = useConfig();
-  const [estado, setEstado] = useState<Estado>({ fase: 'sin-cuentas' });
+  const refrescar = useRefrescarPauta();
 
-  useEffect(() => {
-    if (cuentas.length === 0) {
-      setEstado({ fase: 'sin-cuentas' });
-      return;
-    }
-
-    let cancelado = false;
-    setEstado({ fase: 'cargando' });
-
-    fetchDecisiones(cuentas, rango)
-      .then((d) => {
-        if (cancelado) return;
-        setEstado({
-          fase: 'listo',
-          decisiones: d.decisiones ?? [],
-          fallaron: d.errores?.length ?? 0,
-        });
-      })
-      .catch((e) => {
-        if (cancelado) return;
-        setEstado({
-          fase: 'error',
-          mensaje: e instanceof Error ? e.message : 'No se pudo leer la pauta',
-        });
-      });
-
-    return () => {
-      cancelado = true;
-    };
-  }, [cuentas, rango]);
-
-  if (estado.fase === 'sin-cuentas') {
+  // 1. Nadie eligió qué cuentas mirar.
+  if (cuentas.length === 0) {
     return (
       <button
         type="button"
@@ -83,40 +55,51 @@ export default function DecisionesPendientesCard({ rango }: { rango: Rango }) {
     );
   }
 
-  if (estado.fase === 'cargando') {
+  // 2. Nunca se revisó. NO decimos que está sana: no la miramos.
+  if (!pauta) {
     return (
-      <div className="flex items-start gap-3 rounded-2xl border border-border bg-card px-5 py-4 shadow-sm">
-        <Loader2 size={16} className="mt-0.5 shrink-0 animate-spin text-muted-foreground" />
-        <div>
-          <p className="text-sm font-semibold text-foreground">
-            Revisando {cuentas.length} {cuentas.length === 1 ? 'cuenta' : 'cuentas'}...
-          </p>
-          {cuentas.length > 6 && (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Meta contesta lento cuando son muchas. Puede tardar un par de minutos.
-            </p>
-          )}
-        </div>
+      <div className="rounded-2xl border border-dashed border-border bg-card px-5 py-4">
+        <p className="text-sm font-semibold text-foreground">Falta revisar la pauta</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          No sabemos si hay plata mal repartida, porque todavía no la miramos.
+        </p>
+        <button
+          type="button"
+          onClick={() => refrescar.mutate()}
+          disabled={refrescar.isPending}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+        >
+          {refrescar.isPending && <Loader2 size={12} className="animate-spin" />}
+          {refrescar.isPending ? 'Revisando...' : 'Revisar ahora'}
+        </button>
       </div>
     );
   }
 
-  if (estado.fase === 'error') {
-    return (
-      <div className="flex items-start gap-3 rounded-2xl border border-destructive/40 bg-destructive/5 px-5 py-4">
-        <AlertTriangle size={16} className="mt-0.5 shrink-0 text-destructive" />
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-foreground">No se pudo revisar la pauta</p>
-          <p className="mt-0.5 break-words text-xs text-muted-foreground">{estado.mensaje}</p>
-        </div>
-      </div>
-    );
-  }
+  const decisiones = (pauta.decisiones ?? []) as Decision[];
+  const fallaron = pauta.errores?.length ?? 0;
 
-  const { decisiones, fallaron } = estado;
+  // La EDAD del dato. La card ya no finge que está "en vivo": dice cuándo se miró.
+  const edad = (
+    <p className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
+      <Clock size={11} />
+      Revisado {pauta.edadMinutos < 60
+        ? `hace ${pauta.edadMinutos} min`
+        : `hace ${Math.round(pauta.edadMinutos / 60)} h`}
+      {' · '}
+      <button
+        type="button"
+        onClick={() => refrescar.mutate()}
+        disabled={refrescar.isPending}
+        className="font-bold text-primary hover:underline disabled:opacity-60"
+      >
+        {refrescar.isPending ? 'revisando...' : 'revisar ahora'}
+      </button>
+    </p>
+  );
 
-  // Un aviso, no una tarjeta aparte: lo que importa sigue siendo el resultado,
-  // pero el resultado ahora dice de cuánto NO sabe nada.
+  // Si Meta no dejó leer algunas cuentas, decir "está sana" es afirmar algo sobre plata que
+  // nunca se miró. Se dice de cuánto NO sabemos nada.
   const aviso = fallaron > 0 && (
     <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-destructive">
       <AlertTriangle size={12} />
@@ -124,6 +107,7 @@ export default function DecisionesPendientesCard({ rango }: { rango: Rango }) {
     </p>
   );
 
+  // 3. Se revisó y no hay nada mal.
   if (decisiones.length === 0) {
     return (
       <div className="rounded-2xl border border-temp-fresco/40 bg-temp-fresco/5 px-5 py-4">
@@ -136,20 +120,19 @@ export default function DecisionesPendientesCard({ rango }: { rango: Rango }) {
                 : 'La pauta está sana. No hay plata mal repartida ni anuncios quemando presupuesto.'}
             </p>
             {aviso}
+            {edad}
           </div>
         </div>
       </div>
     );
   }
 
+  // 4. Hay plata mal puesta.
   const plata = decisiones.reduce((s, d) => s + d.plataEnJuego, 0);
   const moneda = decisiones[0].moneda;
 
   return (
-    <Link
-      to="/campanas"
-      className="block rounded-2xl border border-gold/40 bg-gold/10 p-5 transition-colors hover:border-gold"
-    >
+    <div className="rounded-2xl border border-gold/40 bg-gold/10 p-5">
       <div className="flex items-start gap-3">
         <Coins size={18} className="mt-0.5 shrink-0 text-gold-ink" />
         <div className="min-w-0 flex-1">
@@ -172,13 +155,17 @@ export default function DecisionesPendientesCard({ rango }: { rango: Rango }) {
           </ul>
 
           {aviso}
+          {edad}
 
-          <span className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-primary">
+          <Link
+            to="/campanas"
+            className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline"
+          >
             Ver qué hacer
             <ArrowRight size={12} />
-          </span>
+          </Link>
         </div>
       </div>
-    </Link>
+    </div>
   );
 }
