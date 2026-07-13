@@ -33,28 +33,29 @@ import { leerColumnas, parsearInserts, type Valor } from "./mysqldump.js";
  * hardcodearlo. Si Cerberus agrega una columna, el espejo la recibe sin que toquemos nada.
  */
 const TABLAS: Record<string, { clave: string }> = {
-  // El camino del dinero
-  tb_venta: { clave: "id" },
-  tb_detalleVenta: { clave: "id" },
-  tb_cuotas: { clave: "id" },
-  tb_pago: { clave: "id" },
-  tb_metodoPago: { clave: "id" },
-  tb_moneda: { clave: "id" },
+  // El camino del dinero. Las claves son las PRIMARY KEY reales, leídas del dump — Cerberus no
+  // usa `id` sino `codigo_*` (y `tb_cliente`/`tb_pais` usan `id_*`, la única inconsistencia).
+  tb_venta: { clave: "codigo_venta" },
+  tb_detalleVenta: { clave: "codigo_detalle" },
+  tb_cuotas: { clave: "codigo_cuota" },
+  tb_pago: { clave: "codigo_pago" },
+  tb_metodoPago: { clave: "codigo_metodo_pago" },
+  tb_moneda: { clave: "codigo_moneda" },
 
-  // Quién es quién — el grafo de identidades que Cerberus ya tenía
-  tb_cliente: { clave: "id" },
-  tb_correo: { clave: "id" },
-  tb_telefono: { clave: "id" },
-  tb_pais: { clave: "id" },
+  // Quién es quién — el grafo de identidades que Cerberus ya tenía.
+  tb_cliente: { clave: "id_cliente" },
+  tb_correo: { clave: "codigo_correo" },
+  tb_telefono: { clave: "codigo_telefono" },
+  tb_pais: { clave: "id_pais" },
 
-  // Qué se vendió
-  tb_producto: { clave: "id" },
+  // Qué se vendió.
+  tb_producto: { clave: "codigo_producto" },
   tb_categoria: { clave: "codigo_categoria" },
 
   // El puente con Moodle. OJO: es una fuente INCOMPLETA — las matrículas hechas vía Cerberus
   // llegan a Moodle pero no siempre escriben acá (verificado: 20 ventas "sin matrícula" estaban
   // 20/20 en Moodle). Moodle es la fuente de verdad; esto es solo una señal parcial.
-  tb_matricula: { clave: "id" },
+  tb_matricula: { clave: "codigo_matricula" },
 };
 
 export type ResumenIngesta = {
