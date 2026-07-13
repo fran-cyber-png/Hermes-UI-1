@@ -15,6 +15,7 @@
     "test": "tsx --test src/**/*.test.ts",
     "ingest:interactions": "tsx src/scripts/ingestInteractions.ts",
     "cerberus:ingestar": "tsx src/scripts/cerberus.ts ingestar",
+    "cerberus:proyectar": "tsx src/scripts/cerberus.ts proyectar",
     "lazo": "tsx src/scripts/cerberus.ts lazo"
   },
   "dependencies": {

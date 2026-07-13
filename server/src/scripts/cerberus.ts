@@ -5,11 +5,16 @@ import { poblarIdentidad } from "../ontologia/poblarIdentidad.js";
 import { correrLazo } from "../lazo/worker.js";
 
 /**
- * Los dos comandos del lazo.
+ * Los comandos de Cerberus.
  *
- *   npm run cerberus:ingestar -- ruta/al/dump.sql   → espejo crudo
+ *   npm run cerberus:ingestar -- ruta/al/dump.sql   → espejo crudo + proyección + grafo
+ *   npm run cerberus:proyectar                      → SOLO rehace la capa canónica y el grafo
  *   npm run lazo -- --simular                        → evalúa y guarda, SIN mandarle nada a Meta
  *   npm run lazo                                     → manda de verdad
+ *
+ * `proyectar` existe porque la capa canónica es DERIVADA: cuando cambia la semántica del negocio
+ * (una tasa nueva, un estado que pasa a contar como cobrado, un bug de conversión que se arregla)
+ * hay que rehacerla, y el dump no cambió. Volver a ingerir 100 MB de SQL para eso es absurdo.
  *
  * SEGURIDAD: si `META_TEST_EVENT_CODE` está seteado, TODO va a la pestaña Test Events de Events
  * Manager y NO afecta la optimización de los anuncios. Es el modo con el que hay que probar
@@ -47,6 +52,32 @@ async function main() {
     console.log(
       `Grafo de identidad: ${id.personas.toLocaleString("es")} personas · ${id.clientesVinculados.toLocaleString("es")} clientes vinculados`,
     );
+    return;
+  }
+
+  if (comando === "proyectar") {
+    // Rehace la capa canónica desde el espejo crudo, sin volver a leer el dump. La proyección
+    // corre en UNA transacción: si algo falla, la capa vieja sigue en pie. Un dato de hace una
+    // hora es infinitamente mejor que un cero que parece un dato.
+    const p = await proyectarCerberus();
+    console.log(
+      `\nProyección canónica\n` +
+        `  ${p.ventas.toLocaleString("es")} ventas · ${p.clientes.toLocaleString("es")} clientes · ` +
+        `${p.productos.toLocaleString("es")} productos\n` +
+        `  ${p.detalles.toLocaleString("es")} líneas · ${p.cuotas.toLocaleString("es")} cuotas · ` +
+        `${p.pagos.toLocaleString("es")} pagos`,
+    );
+
+    const id = await poblarIdentidad();
+    console.log(
+      `\nGrafo de identidad\n` +
+        `  ${id.personas.toLocaleString("es")} personas · ${id.identidades.toLocaleString("es")} identidades\n` +
+        `  ${id.clientesVinculados.toLocaleString("es")} clientes vinculados · ` +
+        `${id.conversionesVinculadas.toLocaleString("es")} conversiones ancladas`,
+    );
+    if (id.vetadasDescartadas > 0) {
+      console.log(`  ⚠ ${id.vetadasDescartadas} claves quedaron fuera: están en identidades_bloqueadas`);
+    }
     return;
   }
 
@@ -93,7 +124,7 @@ async function main() {
     return;
   }
 
-  console.error("Comandos: ingestar <ruta> | lazo [--simular]");
+  console.error("Comandos: ingestar <ruta> | proyectar | lazo [--simular]");
   process.exit(1);
 }
 
