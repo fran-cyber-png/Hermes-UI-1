@@ -26,6 +26,12 @@ export type RoasPais = {
   confianza: Confianza;
   /** La plata en juego, en USD. Es el criterio de orden, no el ROAS. */
   oportunidadUsd: number;
+  /** Qué % del PRESUPUESTO total se lleva este país. */
+  budgetSharePct: number;
+  /** Qué % de las VENTAS totales trae. Si trae menos ventas que gasto, es caro. */
+  ventasSharePct: number;
+  /** Costo por venta real, en USD (gasto / ventas). null si no vendió. */
+  cacVenta: number | null;
 };
 
 export function roasPorPais(gasto: GastoPais[], ventas: VentaPaisUsd[]): RoasPais[] {
@@ -34,11 +40,19 @@ export function roasPorPais(gasto: GastoPais[], ventas: VentaPaisUsd[]): RoasPai
     ventas.map((v) => ({ pais: v.pais, ventasUsd: v.ventasUsd, ventas: v.ventas })),
   );
 
-  return segmentos
-    // "Sin país" del gasto (audiencia con país desconocido) y "Sin país" de las ventas (cliente cuyo
-    // país no resolvió) son DOS incógnitas distintas: cruzarlas daría un ROAS sin sentido con un
-    // veredicto accionable. Se excluye del ROAS; el gasto sigue contando en el total, no acá.
-    .filter((s) => normalizarPais(s.nombre) !== "sin pais")
+  // "Sin país" del gasto (audiencia con país desconocido) y "Sin país" de las ventas (cliente cuyo
+  // país no resolvió) son DOS incógnitas distintas: cruzarlas daría un ROAS sin sentido con un
+  // veredicto accionable. Se excluye del ROAS; el gasto sigue contando en el total, no acá.
+  const reales = segmentos.filter((s) => normalizarPais(s.nombre) !== "sin pais");
+
+  // Los SHARES: qué tajada del presupuesto se lleva cada país, y qué tajada de las ventas trae.
+  // Un país que se lleva el 30% del gasto y trae el 10% de las ventas es caro, aunque su ROAS
+  // no sea horrible — esa es la señal que el ROAS solo no da.
+  const gastoTotal = reales.reduce((s, x) => s + x.gastoUsd, 0);
+  const ventasTotal = reales.reduce((s, x) => s + x.ventasUsd, 0);
+  const pct = (parte: number, total: number) => (total > 0 ? Math.round((parte / total) * 1000) / 10 : 0);
+
+  return reales
     .map((s) => ({
       pais: s.nombre,
       gastoUsd: Math.round(s.gastoUsd),
@@ -48,6 +62,9 @@ export function roasPorPais(gasto: GastoPais[], ventas: VentaPaisUsd[]): RoasPai
       accion: clasificar(s),
       confianza: confianza(s.ventas, s.gastoUsd),
       oportunidadUsd: Math.round(oportunidadUsd(s)),
+      budgetSharePct: pct(s.gastoUsd, gastoTotal),
+      ventasSharePct: pct(s.ventasUsd, ventasTotal),
+      cacVenta: s.ventas > 0 ? Math.round((s.gastoUsd / s.ventas) * 100) / 100 : null,
     }))
     .sort((a, b) => b.oportunidadUsd - a.oportunidadUsd);
 }

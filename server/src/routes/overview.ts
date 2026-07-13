@@ -9,6 +9,7 @@ import { lazoDetalle } from "../canales/lazoDetalle.js";
 import { salud } from "../canales/salud.js";
 import { ventasPorPais } from "../analisis/ventasPorPais.js";
 import { roasPorPais } from "../analisis/roasPais.js";
+import { explicar } from "../analisis/explicar.js";
 import { creativos } from "../analisis/creativos.js";
 import { comercial } from "../analisis/comercial.js";
 import { cartera } from "../analisis/cartera.js";
@@ -97,7 +98,12 @@ overviewRouter.get("/", async (req, res) => {
   const desdeVentana =
     snap && dias ? new Date(snap.creadoAt.getTime() - dias * 86_400_000).toISOString() : null;
   const ventasVentana = snap?.gasto ? await ventasPorPais(desdeVentana, hastaVentana) : null;
-  const roasPais = snap?.gasto && ventasVentana ? roasPorPais(snap.gasto, ventasVentana) : null;
+  // Cada fila lleva su EXPLICACIÓN: el copiloto determinista que responde por qué, con qué
+  // evidencia, qué hacer y qué pasa si — para que nadie mueva presupuesto detrás de una caja negra.
+  const roasPais =
+    snap?.gasto && ventasVentana
+      ? roasPorPais(snap.gasto, ventasVentana).map((r) => ({ ...r, explicacion: explicar(r) }))
+      : null;
 
   res.json({
     rango,

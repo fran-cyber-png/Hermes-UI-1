@@ -65,6 +65,20 @@ export type VentaPais = { pais: string; ventasUsd: number; ventas: number };
 
 /** El ROAS real por país: ventas (cliente) × gasto (audiencia), con el cerebro de decisiones. */
 export type Accion = 'escalar' | 'recortar' | 'mantener' | 'observar' | 'sin_ventas' | 'sin_gasto';
+/** El copiloto: motor de reglas determinista que responde las 4 preguntas del media buyer. */
+export type Evidencia = { tipo: 'ok' | 'warn' | 'alert' | 'info'; texto: string };
+export type Explicacion = {
+  pregunta: string;
+  /** 0-100, heurístico. La confianza lo MULTIPLICA: un 641× con 2 ventas no puede dar alto. */
+  score: number;
+  veredicto: string;
+  evidencia: Evidencia[];
+  recomendacion: string;
+  quePasaSi: string;
+  riesgos: string[];
+  confianza: string;
+};
+
 export type RoasPais = {
   pais: string;
   gastoUsd: number;
@@ -74,7 +88,12 @@ export type RoasPais = {
   roas: number | null;
   accion: Accion;
   confianza: 'alta' | 'media' | 'baja';
+  /** La plata en juego. Es el criterio de orden, no el ROAS crudo. */
   oportunidadUsd: number;
+  budgetSharePct: number;
+  ventasSharePct: number;
+  cacVenta: number | null;
+  explicacion: Explicacion;
 };
 
 /** Un creativo rankeado: cómo se ve, qué dice, cuánto cuesta cada resultado, y el veredicto. */
