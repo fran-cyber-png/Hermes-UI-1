@@ -168,15 +168,28 @@ export async function proyectarCerberus(): Promise<ResumenProyeccion> {
   });
 
   // ── DETALLE DE VENTA ──
+  // Cada línea se convierte a USD con la moneda y la tasa congelada de SU venta: sumar precio_total
+  // crudo entre países mezclaría soles con dólares (el mismo error que ya nos costó caro).
+  const monedaDeVenta = new Map(
+    ventas.map((v) => [
+      String(v.codigo_venta),
+      { iso: isoPorMoneda.get(String(v.codigo_moneda)) ?? null, radio: num(v.radio_multiplicador_usado) },
+    ]),
+  );
   const detalles = await crudo("tb_detalleVenta");
-  const filasDetalle = detalles.map((d) => ({
-    codigo: String(d.codigo_detalle),
-    ventaFolio: String(d.codigo_venta),
-    productoCodigo: d.codigo_producto != null ? String(d.codigo_producto) : null,
-    cantidad: num(d.cantidad),
-    precioVenta: d.precio_venta != null ? String(d.precio_venta) : null,
-    precioTotal: d.precio_total != null ? String(d.precio_total) : null,
-  }));
+  const filasDetalle = detalles.map((d) => {
+    const mv = monedaDeVenta.get(String(d.codigo_venta));
+    const usd = aUsd(num(d.precio_total), mv?.iso ?? null, mv?.radio ?? null, tasas);
+    return {
+      codigo: String(d.codigo_detalle),
+      ventaFolio: String(d.codigo_venta),
+      productoCodigo: d.codigo_producto != null ? String(d.codigo_producto) : null,
+      cantidad: num(d.cantidad),
+      precioVenta: d.precio_venta != null ? String(d.precio_venta) : null,
+      precioTotal: d.precio_total != null ? String(d.precio_total) : null,
+      precioUsd: usd != null ? String(usd) : null,
+    };
+  });
 
   // ── CUOTA ──
   const filasCuota = cuotasRaw.map((c) => ({

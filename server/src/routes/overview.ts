@@ -10,6 +10,7 @@ import { salud } from "../canales/salud.js";
 import { ventasPorPais } from "../analisis/ventasPorPais.js";
 import { roasPorPais } from "../analisis/roasPais.js";
 import { creativos } from "../analisis/creativos.js";
+import { comercial } from "../analisis/comercial.js";
 import { tasasDeCambio } from "../analisis/tasas.js";
 import { leadColdnessStats } from "../meta/leadsIngestor.js";
 import { estadoDelLazo, flujoPorDia, loAccionable, loCerrado, loQuePreguntan } from "../canales/verdad.js";
@@ -182,4 +183,14 @@ overviewRouter.get("/lazo", async (_req, res) => {
  */
 overviewRouter.get("/salud", async (_req, res) => {
   res.json(await salud());
+});
+
+
+/**
+ * La inteligencia comercial de Cerberus, que el ERP siempre supo y nadie miraba: la serie mensual
+ * (el eje del tiempo que no teníamos), la latencia de Tesorería (lo que saca ventas de la ventana de
+ * Meta), el mix de producto (qué se vende de verdad) y el embudo de estados (cuánto se reembolsa).
+ */
+overviewRouter.get("/comercial", async (_req, res) => {
+  res.json(await comercial());
 });

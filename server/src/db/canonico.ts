@@ -125,6 +125,11 @@ export const detalleVenta = ontologia.table(
     cantidad: integer("cantidad"),
     precioVenta: numeric("precio_venta", { precision: 14, scale: 2 }),
     precioTotal: numeric("precio_total", { precision: 14, scale: 2 }),
+    /**
+     * La línea en USD, convertida con la moneda y la tasa congelada de SU venta. Sin esto, sumar
+     * `precio_total` entre países mezcla soles con dólares — el mismo error que ya nos costó caro.
+     */
+    precioUsd: numeric("precio_usd", { precision: 14, scale: 2 }),
   },
   (t) => [
     index("detalle_venta_folio_idx").on(t.ventaFolio),
