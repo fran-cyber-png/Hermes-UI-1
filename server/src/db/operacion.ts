@@ -1,4 +1,13 @@
-import { bigserial, index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  bigserial,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 
 /**
  * La infraestructura de operación: lo que hace que las pantallas no le hablen a Meta.
@@ -69,6 +78,46 @@ export const configuracion = pgTable("configuracion", {
   valor: jsonb("valor").notNull(),
   actualizadoAt: timestamp("actualizado_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Cada webhook que recibimos, crudo, ANTES de procesarlo.
+ *
+ * Es el mismo principio que el espejo de fuentes: guardar lo que llegó, tal cual, antes de
+ * entenderlo. Si el procesamiento falla —o si mañana Cerberus cambia el payload— el webhook
+ * original queda a salvo y se puede re-procesar. Un webhook que se pierde por un error de
+ * parseo es una venta que Meta nunca ve, y no hay forma de recuperarla: Cerberus no reintenta
+ * para siempre.
+ *
+ * También es la defensa contra el doble-envío: si Cerberus manda el mismo evento dos veces
+ * (reintento por timeout), el `evento_id` único lo deduplica.
+ */
+export const webhooksRecibidos = pgTable(
+  "webhooks_recibidos",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+
+    /** 'cerberus' | 'woocommerce' | … */
+    fuente: text("fuente").notNull(),
+    /** 'sale.updated' | 'payment.confirmed' | … lo que el emisor declare. */
+    tipo: text("tipo"),
+    /** El id que el emisor considera único de ESTE evento. Deduplica reintentos. */
+    eventoId: text("evento_id").notNull(),
+
+    /** El cuerpo entero, crudo, sin interpretar. La red de seguridad. */
+    payload: jsonb("payload").notNull(),
+
+    /** 'recibido' | 'procesado' | 'error'. Un webhook procesado no se vuelve a tocar. */
+    estado: text("estado").notNull().default("recibido"),
+    error: text("error"),
+
+    recibidoAt: timestamp("recibido_at", { withTimezone: true }).notNull().defaultNow(),
+    procesadoAt: timestamp("procesado_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("webhooks_fuente_evento_uq").on(t.fuente, t.eventoId),
+    index("webhooks_pendientes_idx").on(t.estado),
+  ],
+);
 
 /**
  * El estado de cada fuente de sincronización: hasta dónde leímos, cuándo, y qué falló.
