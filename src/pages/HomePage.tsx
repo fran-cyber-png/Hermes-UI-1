@@ -1,12 +1,13 @@
-import { Link } from 'react-router-dom';
-import { Plus } from 'lucide-react';
 import { useLocalStorage } from '../lib/useLocalStorage';
 import { useOverview, useCuentasPauta } from '../lib/datos/overview';
 import type { Rango } from '../features/canales/types';
 import RangoPicker from '../features/canales/RangoPicker';
+import BarraDeMando from '../features/home/BarraDeMando';
 import FlujoEmbudo from '../features/home/FlujoEmbudo';
 import FlujoVentana from '../features/home/FlujoVentana';
 import VentasPorPais from '../features/home/VentasPorPais';
+import PanelFaena from '../features/home/PanelFaena';
+import FichaEstado from '../features/home/FichaEstado';
 import BandejaCanales from '../features/canales/BandejaCanales';
 import CostoPorLeadCard from '../features/leads/CostoPorLeadCard';
 import DecisionesPendientesCard from '../features/decisions/DecisionesPendientesCard';
@@ -20,32 +21,18 @@ const ETIQUETA: Record<Rango, string> = {
   todo: 'todo el histórico',
 };
 
-/** Un encabezado de estación: hace legible que bajar por el home es caminar el embudo. */
-function Estacion({ etapa, quien }: { etapa: string; quien: string }) {
-  return (
-    <div className="flex items-baseline gap-3">
-      <h2 className="font-heading text-lg font-bold text-navy">{etapa}</h2>
-      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {quien}
-      </span>
-    </div>
-  );
-}
-
 /**
- * El home: el embudo de Goberna, de principio a fin.
+ * EL HOME — la matriz de Goberna como un puente de mando en tres pisos.
  *
- * ── La idea ──
- * Una sola historia de izquierda a derecha —entra → conversa → lead → compra → se lo decimos a
- * Meta—, para que cada profesional (community, ventas, pauta, creativos, dirección) reconozca su
- * etapa sin traducir nuestros conceptos internos.
+ *   PISO 1 · BARRA DE MANDO — qué fluye, qué falta, qué sigue. La foto de dirección sin scrollear.
+ *   PISO 2 · EL RIEL        — el embudo de principio a fin, la firma. Estado + navegación + relato.
+ *   PISO 3 · BANCO DE FAENA — el bento donde el espacio sigue al dato: los dueños con dato vivo
+ *                             (CONVERSA, la ventana que se cierra; COMPRA, la plata) se llevan los
+ *                             paneles grandes; las etapas de una cifra bajan a fichas finas.
  *
- * Arriba, EL FLUJO: las cinco estaciones con su semáforo (el tablero de salud, ahora vuelto la
- * barra de estado del recorrido). Abajo, el detalle de cada estación, en orden de uso diario: la
- * bandeja por canal (lo que se trabaja todos los días), las ventas por país, y la pauta.
- *
- * ── Una sola llamada ──
- * Todo sale de `GET /api/overview`, solo Postgres. Ninguna pantalla habla con Meta al renderizar.
+ * El color está racionado: casi todo vive en el riel; el resto es navy sobre blanco con dos acentos
+ * reservados —oro para el dinero, meta-blue para la frontera con Meta—. Un clic en el riel ancla a
+ * la estación de abajo. Todo sale de GET /api/overview: una llamada, solo Postgres.
  */
 export default function HomePage() {
   // PREFERENCIA de UI: qué rango elegiste no le importa a nadie más. localStorage es correcto acá.
@@ -57,10 +44,13 @@ export default function HomePage() {
   const costo = data?.pauta?.costo ?? null;
 
   return (
-    <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
+    <div className="mx-auto flex max-w-[1400px] flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-heading text-2xl font-bold text-navy">Lo que está pasando</h1>
+          <p className="font-mono text-[10px] font-medium uppercase tracking-[0.16em] text-navy/45">
+            Goberna · la matriz
+          </p>
+          <h1 className="mt-1 font-heading text-2xl font-bold text-navy">Lo que está pasando</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
             El gráfico y la pauta miran {ETIQUETA[rango]}. Las ventas y lo pendiente son el total real.
           </p>
@@ -69,62 +59,122 @@ export default function HomePage() {
       </div>
 
       {isPending && (
-        <p className="rounded-2xl border border-border bg-card px-5 py-10 text-center text-sm text-muted-foreground">
+        <p className="rounded-xl border border-border bg-card px-5 py-10 text-center text-sm text-muted-foreground">
           Cargando...
         </p>
       )}
 
       {data && (
         <>
-          {/* LA COLUMNA VERTEBRAL: las cinco estaciones con su semáforo, y lo que sigue. */}
+          {/* PISO 1 — la foto de dirección. */}
+          <BarraDeMando overview={data} />
+
+          {/* PISO 2 — la firma: el embudo de principio a fin. */}
           <FlujoEmbudo overview={data} />
 
-          {/* CONVERSA — lo que se trabaja todos los días. Los canales no son intercambiables. */}
-          <section className="flex flex-col gap-3">
-            <Estacion etapa="Conversa" quien="Community" />
-            <BandejaCanales canales={data.canales} accionable={data.accionable} compacto />
-          </section>
+          {/* PISO 3 — el bento: el espacio sigue al dato. Cada panel toma su altura natural. */}
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:items-start">
+            {/* CONVERSA (grande): todo lo que trabaja el community, en un panel. */}
+            <PanelFaena
+              id="conversa"
+              indice="02"
+              etapa="Conversa"
+              dueno="community"
+              tono="tibio"
+              link={{ label: 'abrir bandeja', href: '/bandeja' }}
+              className="lg:col-span-8"
+            >
+              <BandejaCanales canales={data.canales} accionable={data.accionable} plano />
 
-          {/* La puerta cerrándose, y lo que ya cerró (audiencia) + qué escribe la gente. */}
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_22rem]">
-            <FlujoVentana flujo={data.flujo} rango={rango} />
-            <div className="flex flex-col gap-5">
-              <CardCerrado c={data.cerrado} />
-              <CardPreguntas p={data.preguntas} />
-            </div>
+              <div className="mt-5 border-t border-border pt-5">
+                <FlujoVentana flujo={data.flujo} rango={rango} plano />
+              </div>
+
+              <div className="mt-5 grid grid-cols-1 gap-5 border-t border-border pt-5 sm:grid-cols-2 sm:gap-0 sm:divide-x sm:divide-border">
+                <div className="sm:pr-5">
+                  <CardPreguntas p={data.preguntas} plano />
+                </div>
+                <div className="sm:pl-5">
+                  <CardCerrado c={data.cerrado} plano />
+                </div>
+              </div>
+            </PanelFaena>
+
+            {/* COMPRA (grande): la plata, por país. */}
+            <PanelFaena
+              id="compra"
+              indice="04"
+              etapa="Compra"
+              dueno="ventas · dirección"
+              tono="fresco"
+              link={{ label: 'ver tesorería', href: '/tesoreria' }}
+              className="lg:col-span-4"
+            >
+              <VentasPorPais ventas={data.ventas} plano />
+            </PanelFaena>
           </div>
 
-          {/* COMPRA — las ventas reales, por país, en dólares. */}
-          <section className="flex flex-col gap-3">
-            <Estacion etapa="Compra" quien="Ventas · Dirección" />
-            <VentasPorPais ventas={data.ventas} />
-          </section>
+          {/* PISO 3 — las estaciones de una cifra: fichas finas, en orden de embudo. */}
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+            <FichaEstado
+              id="entra"
+              indice="01"
+              etapa="Entra"
+              dueno="pauta · creativos"
+              tono={data.pauta ? 'fresco' : 'helado'}
+              numero={data.pauta ? data.pauta.decisiones.length.toLocaleString('es') : undefined}
+              vacio={data.pauta ? undefined : 'Sin revisar'}
+              caption={
+                data.pauta
+                  ? `${data.pauta.campanasAnalizadas} campañas activas · revisado hace ${data.pauta.edadMinutos} min`
+                  : 'Conecta las cuentas de pauta para ver qué escalar y qué recortar.'
+              }
+              cta={
+                data.pauta
+                  ? { label: 'ver la pauta', href: '/campanas' }
+                  : { label: 'crear campaña', href: '/campanas/nueva', meta: true }
+              }
+            />
 
-          {/* ENTRA — la pauta: qué escalar, qué recortar, y cuánto cuesta traer a cada persona. */}
-          <section className="flex flex-col gap-3">
-            <Estacion etapa="Entra" quien="Pauta · Creativos" />
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-              <DecisionesPendientesCard pauta={data.pauta} cuentas={cfg?.cuentas ?? []} />
-              <div className="flex flex-col gap-5">
-                {data.pauta && !costo && (
-                  <p className="rounded-2xl border border-dashed border-border bg-card px-5 py-8 text-center text-sm text-muted-foreground">
-                    No llegó ningún formulario en {ETIQUETA[rango]}, así que no hay costo por persona
-                    que calcular.
-                  </p>
-                )}
+            <FichaEstado
+              id="lead"
+              indice="03"
+              etapa="Lead"
+              dueno="ventas"
+              tono={data.leads.sinContactar > 0 ? 'frio' : 'fresco'}
+              numero={data.leads.sinContactar.toLocaleString('es')}
+              caption={`sin contactar · de ${data.leads.total.toLocaleString('es')} formularios · traen teléfono`}
+              cta={{ label: 'ver formularios', href: '/leads' }}
+            />
+
+            <FichaEstado
+              id="meta"
+              indice="05"
+              etapa="A Meta"
+              dueno="el lazo"
+              tono="fresco"
+              metaFrontera
+              numero={data.lazo.reportadas.toLocaleString('es')}
+              caption={
+                data.lazo.perdidasPorVentana > 0
+                  ? `reportadas · ${data.lazo.perdidasPorVentana.toLocaleString('es')} perdidas por la ventana de 7 días`
+                  : 'ventas reportadas a Meta'
+              }
+              cta={{ label: 'ver el lazo', href: '/tesoreria', meta: true }}
+            />
+          </div>
+
+          {/* ENTRA a fondo: solo cuando hay pauta revisada. Hoy está dormido (sin cuentas). */}
+          {data.pauta && (
+            <PanelFaena id="entra-detalle" indice="01" etapa="Entra · la pauta" dueno="pauta · creativos" tono="fresco">
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                <DecisionesPendientesCard pauta={data.pauta} cuentas={cfg?.cuentas ?? []} />
                 {costo != null && (
                   <CostoPorLeadCard porAnuncio={(costo as { porAnuncio: never[] }).porAnuncio} />
                 )}
-                <Link
-                  to="/campanas/nueva"
-                  className="flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-4 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-                >
-                  <Plus size={16} />
-                  Crear campaña
-                </Link>
               </div>
-            </div>
-          </section>
+            </PanelFaena>
+          )}
         </>
       )}
     </div>

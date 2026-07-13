@@ -1,137 +1,140 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
-import {
-  ArrowRight,
-  ChevronRight,
-  CircleAlert,
-  CircleCheck,
-  CircleDashed,
-  FileText,
-  Megaphone,
-  MessageCircle,
-  Receipt,
-  Send,
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { CornerRightDown } from 'lucide-react';
 import { api } from '../../lib/datos/cliente';
 import type { Overview } from '../../lib/datos/overview';
 
 /**
- * EL EMBUDO DE GOBERNA — la columna vertebral del home.
+ * EL RIEL — la firma de la matriz.
  *
- * Una sola historia, de izquierda a derecha: entra → conversa → lead → compra → se lo decimos a
- * Meta. Cinco estaciones. Cada profesional reconoce "su" estación, pero ve el recorrido completo.
- * Cada estación es una puerta a su pantalla de detalle: esto es el mapa, no el volcado de datos.
+ * El embudo de Goberna en una sola banda, de izquierda a derecha: 01 entra → 02 conversa →
+ * 03 lead → 04 compra → 05 a Meta. Y hace tres trabajos a la vez: ESTADO (cada estación encendida
+ * por la temperatura de su dato), NAVEGACIÓN (un clic ancla al panel de esa estación) y RELATO.
  *
- * Absorbe el tablero de salud: cada estación lleva su propio semáforo (de /api/overview/salud),
- * y abajo queda "lo que sigue" —los próximos pasos reales, sacados de los gaps abiertos—. Así el
- * estado del sistema no es una lista suelta arriba, sino el color de cada etapa del flujo.
+ * ── Por qué NO es un embudo que se estrecha ──
+ * Los números vienen de ventanas y sistemas distintos: 27 en ventana ahora, 680 leads acumulados,
+ * 4.142 ventas históricas, 107 del lazo de 7 días. Dibujarlos angostándose fingiría una conversión
+ * que no existe. Nodos IGUALES, y la verdad contada por la FORMA:
+ *   · nodo HUECO (◌) donde falta el dato — la pauta sin revisar.
+ *   · CORTE en la vía donde falta el cable — WhatsApp sin conectar, el 77% de la inversión.
+ *   · el FORK de Meta — 107 entran sólidas, 309 caen como fuga (la ventana de 7 días que se venció).
  *
- * Nada miente: una etapa sin dato dice "sin conectar" o "sin revisar", nunca un cero que engañe.
+ * Todo el color del producto vive acá. Lo de afuera es navy sobre blanco. Si borras el riel, se
+ * cae la identidad: esa es la prueba de que es la firma.
  */
 
 type Estado = 'ok' | 'atencion' | 'falta';
 type Pieza = { clave: string; estado: Estado };
 type Salud = { piezas: Pieza[]; loQueSigue: { texto: string; porQue: string }[] };
 
-const SEMAFORO: Record<Estado, { Icon: LucideIcon; color: string; titulo: string }> = {
-  ok: { Icon: CircleCheck, color: '#16A34A', titulo: 'fluye' },
-  atencion: { Icon: CircleAlert, color: '#CAA106', titulo: 'a medias' },
-  falta: { Icon: CircleDashed, color: '#C2410C', titulo: 'falta' },
-};
+/** La rampa de temperatura del dato — el motor semántico de toda la matriz. */
+const TEMP = { fresco: '#16A34A', tibio: '#CAA106', frio: '#C2410C', helado: '#64748B' } as const;
+const META_BLUE = '#1877F2';
+const RIEL = '#CDDCF2'; // navy-muted: la vía apagada
+
+type Tono = keyof typeof TEMP;
 
 type Estacion = {
   id: string;
+  indice: string;
   etapa: string;
-  icono: LucideIcon;
   dueno: string;
-  /** Qué pieza de salud da el semáforo de esta etapa. */
-  saludClave: string;
   numero: string;
-  sub: string;
-  link: string;
-  destino: string;
+  /** El número va en oro (momento-dinero) en vez de navy. */
+  oro?: boolean;
+  estado: string;
+  tono: Tono;
+  /** Nodo hueco: hay etapa pero todavía no hay dato (p. ej. pauta sin revisar). */
+  hueco?: boolean;
+  /** La vía que SALE de esta estación está cortada (falta el cable). */
+  corte?: string;
 };
 
-/** Convierte los datos del overview en las cinco estaciones. Toda la verdad del flujo, en orden. */
-function estaciones(d: Overview): Estacion[] {
+function estaciones(d: Overview, salud: Map<string, Estado>): Estacion[] {
   const totalVentas = d.ventas.reduce((s, v) => s + v.ventas, 0);
   const totalUsd = d.ventas.reduce((s, v) => s + v.ventasUsd, 0);
-  const paises = d.ventas.filter((v) => v.ventasUsd > 0).length;
+  const ABREV: Record<string, string> = { facebook: 'fb', instagram: 'ig', whatsapp: 'wa' };
   const porCanal = d.accionable.porCanal
     .filter((c) => c.n > 0)
-    .map((c) => `${c.n} ${c.canal}`)
+    .map((c) => `${c.n} ${ABREV[c.canal] ?? c.canal}`)
     .join(' · ');
+  const waCortado = salud.get('whatsapp') === 'falta';
 
   return [
     {
       id: 'entra',
+      indice: '01',
       etapa: 'Entra',
-      icono: Megaphone,
-      dueno: 'Pauta · Creativos',
-      saludClave: 'pauta',
+      dueno: 'pauta',
       numero: d.pauta ? d.pauta.decisiones.length.toLocaleString('es') : '—',
-      sub: d.pauta
-        ? d.pauta.decisiones.length > 0
-          ? 'decisiones de pauta que esperan'
-          : `${d.pauta.campanasAnalizadas} campañas, sin alertas`
-        : 'sin revisar todavía',
-      link: '/campanas',
-      destino: 'Ver la pauta',
+      estado: d.pauta ? `${d.pauta.campanasAnalizadas} campañas` : 'sin revisar',
+      tono: d.pauta ? 'fresco' : 'helado',
+      hueco: !d.pauta,
     },
     {
       id: 'conversa',
+      indice: '02',
       etapa: 'Conversa',
-      icono: MessageCircle,
-      dueno: 'Community',
-      saludClave: 'meta_ingesta',
+      dueno: 'community',
       numero: d.accionable.total.toLocaleString('es'),
-      sub: porCanal ? `${porCanal} · esperan respuesta` : 'nadie esperando ahora',
-      link: '/bandeja',
-      destino: 'Abrir la bandeja',
+      estado: porCanal || 'nadie esperando',
+      tono: d.accionable.total > 0 ? 'tibio' : 'fresco',
+      // El corte de la vía: WhatsApp, el canal que más vende, sin conectar.
+      corte: waCortado ? 'WhatsApp sin conectar' : undefined,
     },
     {
       id: 'lead',
+      indice: '03',
       etapa: 'Lead',
-      icono: FileText,
-      dueno: 'Ventas',
-      saludClave: 'meta_ingesta',
+      dueno: 'ventas',
       numero: d.leads.sinContactar.toLocaleString('es'),
-      sub: `sin contactar · de ${d.leads.total.toLocaleString('es')} formularios · traen teléfono`,
-      link: '/leads',
-      destino: 'Ver formularios',
+      estado: 'sin contactar',
+      tono: d.leads.sinContactar > 0 ? 'frio' : 'fresco',
     },
     {
       id: 'compra',
+      indice: '04',
       etapa: 'Compra',
-      icono: Receipt,
-      dueno: 'Ventas · Dirección',
-      saludClave: 'cerberus',
+      dueno: 'ventas · dirección',
       numero: totalUsd > 0 ? `$${Math.round(totalUsd).toLocaleString('es')}` : '—',
-      sub:
-        totalVentas > 0
-          ? `${totalVentas.toLocaleString('es')} ventas · ${paises} países`
-          : 'sin ventas sincronizadas',
-      link: '/tesoreria',
-      destino: 'Ver Tesorería',
+      oro: totalUsd > 0,
+      estado: totalVentas > 0 ? `${totalVentas.toLocaleString('es')} ventas` : 'sin ventas',
+      tono: 'fresco',
     },
     {
       id: 'meta',
-      etapa: 'Se lo decimos a Meta',
-      icono: Send,
-      dueno: 'Todos',
-      saludClave: 'lazo',
+      indice: '05',
+      etapa: 'A Meta',
+      dueno: 'el lazo',
       numero: d.lazo.reportadas.toLocaleString('es'),
-      sub:
-        d.lazo.perdidasPorVentana > 0
-          ? `reportadas · ${d.lazo.perdidasPorVentana} perdidas por tiempo`
-          : d.lazo.reportadas > 0
-            ? 'ventas reportadas a Meta'
-            : 'Meta aún no sabe que vendemos',
-      link: '/tesoreria',
-      destino: 'Ver el lazo',
+      estado: 'reportadas',
+      tono: 'fresco',
     },
   ];
+}
+
+const EYEBROW = 'font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-navy/45';
+
+/** El nodo de una estación: relleno con brillo, o hueco si el dato todavía no está. */
+function Nodo({ tono, hueco, meta }: { tono: Tono; hueco?: boolean; meta?: boolean }) {
+  const c = meta ? META_BLUE : TEMP[tono];
+  if (meta) {
+    // El rombo de Meta: la frontera del sistema, distinta de toda estación interna.
+    return (
+      <span
+        className="z-10 size-3 shrink-0 rotate-45 rounded-[3px]"
+        style={{ background: c, boxShadow: `0 0 0 4px ${c}22` }}
+      />
+    );
+  }
+  if (hueco) {
+    return <span className="z-10 size-3.5 shrink-0 rounded-full border-2 bg-card" style={{ borderColor: c }} />;
+  }
+  return (
+    <span
+      className="z-10 size-3.5 shrink-0 rounded-full"
+      style={{ background: c, boxShadow: `0 0 0 4px ${c}22` }}
+    />
+  );
 }
 
 export default function FlujoEmbudo({ overview }: { overview: Overview }) {
@@ -141,86 +144,128 @@ export default function FlujoEmbudo({ overview }: { overview: Overview }) {
     refetchInterval: 120_000,
   });
 
-  const estadoPorClave = new Map<string, Estado>(
-    (salud?.piezas ?? []).map((p) => [p.clave, p.estado]),
-  );
-  const cols = estaciones(overview);
+  const est = new Map<string, Estado>((salud?.piezas ?? []).map((p) => [p.clave, p.estado]));
+  const cols = estaciones(overview, est);
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-5">
-      <h2 className="mb-4 font-heading text-sm font-bold uppercase tracking-wide text-muted-foreground">
-        El flujo, de principio a fin
-      </h2>
+    <section className="rounded-xl border border-border bg-card px-5 py-5 shadow-[0_1px_2px_rgba(14,42,82,0.04)] sm:px-7 sm:py-6">
+      <p className={EYEBROW + ' mb-5'}>El riel · el embudo, de principio a fin</p>
 
-      {/* Las cinco estaciones, izquierda a derecha, con la flecha del recorrido entre ellas. */}
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-stretch lg:gap-0">
+      {/* ── LA VÍA HORIZONTAL (desktop) ── */}
+      <div className="hidden lg:flex">
         {cols.map((e, i) => {
-          const Icono = e.icono;
-          const estado = estadoPorClave.get(e.saludClave);
-          const sem = estado ? SEMAFORO[estado] : null;
-
+          const ultima = i === cols.length - 1;
+          const meta = e.id === 'meta';
           return (
-            <div key={e.id} className="flex items-stretch lg:flex-1">
-              <Link
-                to={e.link}
-                className="group flex flex-1 flex-col rounded-xl p-3 transition-colors hover:bg-muted"
-              >
-                <div className="flex items-center gap-2">
-                  <Icono size={15} className="shrink-0 text-navy" />
-                  <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+            <a key={e.id} href={`#panel-${e.id}`} className="group flex flex-1 flex-col">
+              {/* Fila de la vía: medio tramo entra, el nodo, medio tramo sale. */}
+              <div className="flex items-center">
+                <span className="h-[3px] flex-1 rounded-full" style={{ background: i > 0 ? RIEL : 'transparent' }} />
+                <span className="px-2">
+                  <Nodo tono={e.tono} hueco={e.hueco} meta={meta} />
+                </span>
+                {/* El tramo que sale: cortado (dashed) si falta el cable; sólido meta-blue si va a Meta. */}
+                {!ultima ? (
+                  e.corte ? (
+                    <span
+                      className="h-0 flex-1 border-t-[3px] border-dashed"
+                      style={{ borderColor: TEMP.helado }}
+                    />
+                  ) : (
+                    <span
+                      className="h-[3px] flex-1 rounded-full"
+                      style={{ background: cols[i + 1].id === 'meta' ? META_BLUE : RIEL }}
+                    />
+                  )
+                ) : (
+                  <span className="flex-1" />
+                )}
+              </div>
+
+              {/* Micro-anotación honesta de fuga/corte, sobre la vía. */}
+              <span className="mt-1.5 block h-3 text-center font-mono text-[9px] uppercase tracking-wide text-navy/40">
+                {e.corte ? `✕ ${e.corte}` : ''}
+              </span>
+
+              {/* Contenido de la estación. */}
+              <div className="mt-1.5 px-1">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="font-mono text-[10px] font-medium tabular-nums text-navy/40">{e.indice}</span>
+                  <span className="font-heading text-[13px] font-bold uppercase tracking-[0.02em] text-navy">
                     {e.etapa}
                   </span>
-                  {sem && (
-                    <sem.Icon
-                      size={13}
-                      className="ml-auto shrink-0"
-                      style={{ color: sem.color }}
-                      aria-label={sem.titulo}
-                    />
-                  )}
                 </div>
-
-                <p className="mt-2 font-heading text-3xl font-extrabold tabular-nums text-foreground">
+                <span className="font-mono text-[10px] uppercase tracking-wide text-navy/40">{e.dueno}</span>
+                <p
+                  className="mt-1 font-heading text-[26px] font-extrabold leading-none tabular-nums"
+                  style={{ color: e.oro ? '#B58900' : 'var(--navy)' }}
+                >
                   {e.numero}
                 </p>
-                <p className="text-xs leading-snug text-muted-foreground">{e.sub}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{e.estado}</p>
 
-                <span className="mt-auto flex items-center gap-1 pt-3 text-xs font-bold text-primary opacity-0 transition-opacity group-hover:opacity-100">
-                  {e.destino}
-                  <ArrowRight size={12} />
-                </span>
-              </Link>
-
-              {/* La flecha del recorrido: solo entre estaciones, y solo en fila (desktop). */}
-              {i < cols.length - 1 && (
-                <div className="hidden items-center lg:flex">
-                  <ChevronRight size={18} className="shrink-0 text-border" />
-                </div>
-              )}
-            </div>
+                {/* El FORK de Meta: lo que entra y lo que cae. Honesto: es la ventana de 7 días. */}
+                {meta && overview.lazo.perdidasPorVentana > 0 && (
+                  <p
+                    className="mt-1 flex items-center gap-1 font-mono text-[10px] tabular-nums"
+                    style={{ color: TEMP.helado }}
+                  >
+                    <CornerRightDown size={11} className="shrink-0" />
+                    {overview.lazo.perdidasPorVentana.toLocaleString('es')} caen · ventana 7 días
+                  </p>
+                )}
+              </div>
+            </a>
           );
         })}
       </div>
 
-      {/* Lo que sigue: los próximos pasos reales, sacados de los gaps abiertos. */}
-      {salud && salud.loQueSigue.length > 0 && (
-        <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-            Lo que sigue
-          </p>
-          <ol className="flex flex-col gap-2">
-            {salud.loQueSigue.map((x, idx) => (
-              <li key={idx} className="flex items-start gap-2 text-sm">
-                <ArrowRight size={14} className="mt-0.5 shrink-0 text-primary" />
-                <span>
-                  <span className="font-semibold text-foreground">{x.texto}</span>
-                  <span className="block text-xs text-muted-foreground">{x.porQue}</span>
-                </span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
-    </div>
+      {/* ── LA VÍA VERTICAL (móvil) ── */}
+      <div className="flex flex-col lg:hidden">
+        {cols.map((e, i) => {
+          const ultima = i === cols.length - 1;
+          const meta = e.id === 'meta';
+          return (
+            <a key={e.id} href={`#panel-${e.id}`} className="flex gap-3">
+              <div className="flex flex-col items-center self-stretch pt-1">
+                <Nodo tono={e.tono} hueco={e.hueco} meta={meta} />
+                {!ultima && (
+                  <span
+                    className={'my-1 w-[3px] flex-1 rounded-full ' + (e.corte ? 'border-l-[3px] border-dashed' : '')}
+                    style={e.corte ? { borderColor: TEMP.helado } : { background: RIEL }}
+                  />
+                )}
+              </div>
+              <div className={ultima ? 'pb-1' : 'pb-5'}>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="font-mono text-[10px] tabular-nums text-navy/40">{e.indice}</span>
+                  <span className="font-heading text-xs font-bold uppercase tracking-wide text-navy">{e.etapa}</span>
+                  <span className="font-mono text-[10px] uppercase text-navy/40">· {e.dueno}</span>
+                </div>
+                <div className="mt-0.5 flex items-baseline gap-2">
+                  <span
+                    className="font-heading text-2xl font-extrabold tabular-nums"
+                    style={{ color: e.oro ? '#B58900' : 'var(--navy)' }}
+                  >
+                    {e.numero}
+                  </span>
+                  <span className="text-xs text-muted-foreground">{e.estado}</span>
+                </div>
+                {e.corte && (
+                  <span className="font-mono text-[10px] uppercase" style={{ color: TEMP.helado }}>
+                    ✕ {e.corte}
+                  </span>
+                )}
+                {meta && overview.lazo.perdidasPorVentana > 0 && (
+                  <span className="font-mono text-[10px] tabular-nums" style={{ color: TEMP.helado }}>
+                    ↓ {overview.lazo.perdidasPorVentana.toLocaleString('es')} caen · ventana 7 días
+                  </span>
+                )}
+              </div>
+            </a>
+          );
+        })}
+      </div>
+    </section>
   );
 }

@@ -22,9 +22,9 @@ function pct(n: number, de: number): string {
  *
  * Su destino real es audiencia publicitaria, no conversación.
  */
-export function CardCerrado({ c }: { c: Cerrado }) {
+export function CardCerrado({ c, plano = false }: { c: Cerrado; plano?: boolean }) {
   return (
-    <div className="rounded-2xl border border-dashed border-border bg-muted/30 px-6 py-5">
+    <div className={plano ? '' : 'rounded-2xl border border-dashed border-border bg-muted/30 px-6 py-5'}>
       <div className="flex items-start gap-3">
         <Archive className="mt-0.5 shrink-0 text-muted-foreground" size={18} />
         <div>
@@ -56,11 +56,11 @@ export function CardCerrado({ c }: { c: Cerrado }) {
  *
  * Ningún paper de marketing menciona esto. Solo se sabe leyendo lo que escribieron.
  */
-export function CardPreguntas({ p }: { p: Preguntas }) {
+export function CardPreguntas({ p, plano = false }: { p: Preguntas; plano?: boolean }) {
   const precioOInfo = p.precio + p.info;
 
   return (
-    <div className="rounded-2xl border border-border bg-card px-6 py-5">
+    <div className={plano ? '' : 'rounded-2xl border border-border bg-card px-6 py-5'}>
       <div className="flex items-start gap-3">
         <MessageSquareQuote className="mt-0.5 shrink-0 text-primary" size={18} />
         <div className="flex-1">

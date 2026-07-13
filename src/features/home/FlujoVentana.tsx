@@ -66,7 +66,18 @@ function etiqueta(bucket: string, grano: Grano): string {
   return `${Number(d)} ${MESES[Number(m) - 1]}`;
 }
 
-export default function FlujoVentana({ flujo, rango }: { flujo: DiaFlujo[]; rango: Rango }) {
+export default function FlujoVentana({
+  flujo,
+  rango,
+  plano = false,
+}: {
+  flujo: DiaFlujo[];
+  rango: Rango;
+  plano?: boolean;
+}) {
+  const marco = plano
+    ? ''
+    : 'rounded-2xl border border-border bg-card p-5 shadow-sm';
   const grano = GRANO[rango];
 
   const { barras, maximo, totales } = useMemo(() => {
@@ -117,7 +128,7 @@ export default function FlujoVentana({ flujo, rango }: { flujo: DiaFlujo[]; rang
 
   if (barras.length === 0) {
     return (
-      <div className="rounded-2xl border border-border bg-card px-6 py-8 text-center shadow-sm">
+      <div className={marco || 'py-8 text-center'}>
         <p className="text-sm text-muted-foreground">No entró nadie en este rango.</p>
       </div>
     );
@@ -126,7 +137,7 @@ export default function FlujoVentana({ flujo, rango }: { flujo: DiaFlujo[]; rang
   const total = totales.abiertas + totales.respondidas + totales.cerradas;
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+    <div className={marco}>
       <div className="mb-1 flex flex-wrap items-baseline justify-between gap-3">
         <h2 className="font-heading text-sm font-bold text-navy">La puerta cerrándose</h2>
         <span className="text-xs text-muted-foreground">pico: {maximo.toLocaleString('es')}/día</span>
