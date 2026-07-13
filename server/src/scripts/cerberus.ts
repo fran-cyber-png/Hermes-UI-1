@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { ingestarDump } from "../fuentes/cerberus.js";
+import { proyectarCerberus } from "../ontologia/proyectar.js";
 import { correrLazo } from "../lazo/worker.js";
 
 /**
@@ -34,6 +35,13 @@ async function main() {
     if (r.faltantes.length) {
       console.log(`\n⚠ No se encontraron en el dump: ${r.faltantes.join(", ")}`);
     }
+
+    // El espejo crudo cambió: se rehace la capa canónica (venta/pago/cuota/cliente/producto) para
+    // que todos los análisis vean el dato nuevo, con la semántica resuelta en un solo lugar.
+    const p = await proyectarCerberus();
+    console.log(
+      `\nProyección canónica: ${p.ventas.toLocaleString("es")} ventas · ${p.clientes.toLocaleString("es")} clientes · ${p.pagos.toLocaleString("es")} pagos`,
+    );
     return;
   }
 
