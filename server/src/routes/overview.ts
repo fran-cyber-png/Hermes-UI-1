@@ -11,6 +11,7 @@ import { ventasPorPais } from "../analisis/ventasPorPais.js";
 import { roasPorPais } from "../analisis/roasPais.js";
 import { creativos } from "../analisis/creativos.js";
 import { comercial } from "../analisis/comercial.js";
+import { cartera } from "../analisis/cartera.js";
 import { tasasDeCambio } from "../analisis/tasas.js";
 import { leadColdnessStats } from "../meta/leadsIngestor.js";
 import { estadoDelLazo, flujoPorDia, loAccionable, loCerrado, loQuePreguntan } from "../canales/verdad.js";
@@ -193,4 +194,13 @@ overviewRouter.get("/salud", async (_req, res) => {
  */
 overviewRouter.get("/comercial", async (_req, res) => {
   res.json(await comercial());
+});
+
+
+/**
+ * La cartera y el cliente: la cobranza viva (que nadie medía), los medios de pago y su tasa de
+ * rechazo, y los segmentos de valor — la semilla de las audiencias lookalike de Meta.
+ */
+overviewRouter.get("/cartera", async (_req, res) => {
+  res.json(await cartera());
 });

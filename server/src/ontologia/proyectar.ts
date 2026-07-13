@@ -191,35 +191,49 @@ export async function proyectarCerberus(): Promise<ResumenProyeccion> {
     };
   });
 
-  // ── CUOTA ──
-  const filasCuota = cuotasRaw.map((c) => ({
-    codigo: String(c.codigo_cuota),
-    ventaFolio: String(c.codigo_venta),
-    numeroCuotas: num(c.numero_cuotas),
-    montoTotal: c.monto_total != null ? String(c.monto_total) : null,
-    estado: num(c.estado),
-    fechaVencimiento: fecha(c.fecha_vencimiento),
-    fechaRegistro: fecha(c.fecha_registro),
-  }));
+  // ── CUOTA ── (en USD con la tasa CONGELADA de su venta, igual que la venta y sus pagos)
+  const filasCuota = cuotasRaw.map((c) => {
+    const mv = monedaDeVenta.get(String(c.codigo_venta));
+    const usd = aUsd(num(c.monto_total), mv?.iso ?? null, mv?.radio ?? null, tasas);
+    return {
+      codigo: String(c.codigo_cuota),
+      ventaFolio: String(c.codigo_venta),
+      numeroCuotas: num(c.numero_cuotas),
+      montoTotal: c.monto_total != null ? String(c.monto_total) : null,
+      montoUsd: usd != null ? String(usd) : null,
+      estado: num(c.estado),
+      fechaVencimiento: fecha(c.fecha_vencimiento),
+      fechaRegistro: fecha(c.fecha_registro),
+    };
+  });
 
   // ── PAGO (con la latencia de Tesorería) ──
+  const metodos = await crudo("tb_metodoPago");
+  const nombreMetodo = new Map(
+    metodos.map((m) => [String(m.codigo_metodo_pago), m.tipo_pago ? String(m.tipo_pago) : null]),
+  );
   const pagos = await crudo("tb_pago");
   const filasPago = pagos.map((p) => {
     const estado = num(p.estado);
-    const iso = isoPorMoneda.get(String(p.codigo_moneda)) ?? null;
     const monto = num(p.monto_pagado);
     const fp = fecha(p.fecha_pago);
     const fc = fecha(p.fecha_confirmacion);
     const latencia = fp && fc ? Math.round(((fc.getTime() - fp.getTime()) / 86_400_000) * 100) / 100 : null;
-    const usd = aUsd(monto, iso, null, tasas);
+    // El pago se convierte con la tasa CONGELADA de SU VENTA, no con la de hoy: toda la plata que
+    // orbita una venta (monto, cuotas, pagos, líneas) tiene que usar la misma vara.
+    const folio = ventaPorCuota.get(String(p.codigo_cuota)) ?? null;
+    const mv = folio ? monedaDeVenta.get(folio) : undefined;
+    const iso = mv?.iso ?? isoPorMoneda.get(String(p.codigo_moneda)) ?? null;
+    const usd = aUsd(monto, iso, mv?.radio ?? null, tasas);
     return {
       codigo: String(p.codigo_pago),
       cuotaCodigo: p.codigo_cuota != null ? String(p.codigo_cuota) : null,
-      ventaFolio: ventaPorCuota.get(String(p.codigo_cuota)) ?? null,
+      ventaFolio: folio,
       monto: monto != null ? String(monto) : null,
       monedaIso: iso,
       montoUsd: usd != null ? String(usd) : null,
       metodoPago: p.codigo_metodo_pago != null ? String(p.codigo_metodo_pago) : null,
+      metodoNombre: nombreMetodo.get(String(p.codigo_metodo_pago)) ?? null,
       estado,
       valido: estado === 1 || estado === 2,
       fechaPago: fp,

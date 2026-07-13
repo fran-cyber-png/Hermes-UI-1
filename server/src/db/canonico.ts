@@ -150,6 +150,8 @@ export const cuota = ontologia.table(
     ventaFolio: text("venta_folio").notNull(),
     numeroCuotas: integer("numero_cuotas"),
     montoTotal: numeric("monto_total", { precision: 16, scale: 2 }),
+    /** El monto en USD, con la tasa CONGELADA de su venta (la misma que usan la venta y sus pagos). */
+    montoUsd: numeric("monto_usd", { precision: 16, scale: 2 }),
     estado: integer("estado"),
     fechaVencimiento: timestamp("fecha_vencimiento", { withTimezone: true }),
     fechaRegistro: timestamp("fecha_registro", { withTimezone: true }),
@@ -173,6 +175,8 @@ export const pago = ontologia.table(
     monedaIso: text("moneda_iso"),
     montoUsd: numeric("monto_usd", { precision: 16, scale: 2 }),
     metodoPago: text("metodo_pago"),
+    /** El nombre del medio de pago (tb_metodoPago), no su código: "Yape", "Transferencia", etc. */
+    metodoNombre: text("metodo_nombre"),
     estado: integer("estado"),
     /** ¿Es un cobro válido? (estado 1/2). Un pago denegado NO salda cuota ni cuenta como cobrado. */
     valido: boolean("valido").notNull().default(false),

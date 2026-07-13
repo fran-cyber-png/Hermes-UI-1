@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Link, Outlet } from 'react-router-dom';
-import { BarChart3, Settings, Users } from 'lucide-react';
+import { BarChart3, Settings, Users, Wallet } from 'lucide-react';
 import ConfiguracionPanel from '../features/config/ConfiguracionPanel';
 import { ConfigContext } from './ConfigContext';
 
@@ -38,6 +38,13 @@ export default function AppShell() {
               >
                 <BarChart3 size={15} />
                 Comercial
+              </Link>
+              <Link
+                to="/cartera"
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-muted hover:text-navy"
+              >
+                <Wallet size={15} />
+                Cartera
               </Link>
               <Link
                 to="/gente"

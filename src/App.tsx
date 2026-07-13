@@ -15,6 +15,7 @@ import CampaignStructurePage from './pages/CampaignStructurePage';
 import TesoreriaPage from './pages/TesoreriaPage';
 import GentePage from './pages/GentePage';
 import ComercialPage from './pages/ComercialPage';
+import CarteraPage from './pages/CarteraPage';
 
 function App() {
   return (
@@ -32,6 +33,8 @@ function App() {
           <Route path="tesoreria" element={<TesoreriaPage />} />
           {/* El análisis comercial: lo que Cerberus siempre supo (tiempo, cobranza, catálogo, embudo). */}
           <Route path="comercial" element={<ComercialPage />} />
+          {/* La cartera y el cliente: cobranza, medios de pago y segmentos de valor (semilla lookalike). */}
+          <Route path="cartera" element={<CarteraPage />} />
           {/* La gente: la persona canónica del grafo, con su 360 y su línea de tiempo. */}
           <Route path="gente" element={<GentePage />} />
           <Route path="gente/:id" element={<GentePage />} />
