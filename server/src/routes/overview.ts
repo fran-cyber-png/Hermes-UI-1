@@ -98,6 +98,9 @@ overviewRouter.get("/", async (req, res) => {
   const desdeVentana =
     snap && dias ? new Date(snap.creadoAt.getTime() - dias * 86_400_000).toISOString() : null;
   const ventasVentana = snap?.gasto ? await ventasPorPais(desdeVentana, hastaVentana) : null;
+  // Se calcula UNA vez y se corta: la pantalla muestra 9 creativos, no hace falta mandar los 129
+  // con su copy entero (eran 128 KB de payload). El BFF manda lo que la pantalla necesita.
+  const todosLosCreativos = snap ? creativos(snap.campanas, tasas ?? new Map()) : [];
   // Cada fila lleva su EXPLICACIÓN: el copiloto determinista que responde por qué, con qué
   // evidencia, qué hacer y qué pasa si — para que nadie mueva presupuesto detrás de una caja negra.
   const roasPais =
@@ -131,8 +134,9 @@ overviewRouter.get("/", async (req, res) => {
           decisiones: detectar(snap.campanas),
           campanasAnalizadas: snap.campanas.length,
           costo: snap.costo,
-          // Los creativos rankeados por plata: miniatura, copy, costo por resultado y veredicto.
-          creativos: creativos(snap.campanas, tasas ?? new Map()),
+          // Los 24 con más inversión detrás, no los 129: la pantalla muestra 9.
+          creativos: todosLosCreativos.slice(0, 24),
+          creativosTotales: todosLosCreativos.length,
           errores: snap.errores,
           // La card dice su EDAD en vez de fingir que está en vivo.
           revisadoAt: snap.creadoAt,
