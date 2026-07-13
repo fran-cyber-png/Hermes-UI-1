@@ -48,4 +48,13 @@ describe("roasPorPais — cruzar gasto y ventas, decidir con volumen", () => {
     assert.equal(bo.ventasUsd, 0);
     assert.equal(bo.accion, "sin_ventas");
   });
+
+  test('"Sin país" se excluye del ROAS: cruzar dos incógnitas no es una decisión', () => {
+    // Gasto en audiencia de país desconocido × ventas de clientes sin país resuelto = ruido.
+    const r = roasPorPais(
+      [{ pais: "Sin país", gastoUsd: 500 }],
+      [{ pais: "Sin país", ventasUsd: 9000, ventas: 40 }],
+    );
+    assert.equal(r.find((x) => x.pais === "Sin país"), undefined);
+  });
 });

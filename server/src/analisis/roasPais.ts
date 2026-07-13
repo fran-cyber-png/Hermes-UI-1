@@ -1,4 +1,4 @@
-import { cruzarPorPais, type GastoPais } from "./geo.js";
+import { cruzarPorPais, normalizarPais, type GastoPais } from "./geo.js";
 import { clasificar, confianza, oportunidadUsd, safeDiv, type Accion, type Confianza } from "./roas.js";
 import type { VentaPaisUsd } from "./ventasPorPais.js";
 
@@ -35,6 +35,10 @@ export function roasPorPais(gasto: GastoPais[], ventas: VentaPaisUsd[]): RoasPai
   );
 
   return segmentos
+    // "Sin país" del gasto (audiencia con país desconocido) y "Sin país" de las ventas (cliente cuyo
+    // país no resolvió) son DOS incógnitas distintas: cruzarlas daría un ROAS sin sentido con un
+    // veredicto accionable. Se excluye del ROAS; el gasto sigue contando en el total, no acá.
+    .filter((s) => normalizarPais(s.nombre) !== "sin pais")
     .map((s) => ({
       pais: s.nombre,
       gastoUsd: Math.round(s.gastoUsd),

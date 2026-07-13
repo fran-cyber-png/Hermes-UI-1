@@ -20,7 +20,10 @@ const CAMPOS_CREATIVO = "creative{thumbnail_url,body,title,object_type,effective
 export async function adjuntarCreativos(
   token: string,
   campanas: CampaignInput[],
-  tope = 80,
+  // Cubre TODOS los anuncios con gasto (no solo los top): si uno queda sin creativo, `creativos`
+  // lo agrupa por ad.id en vez de por story_id y parte el gasto del creativo. El lote es barato
+  // (50 por llamado), así que el tope solo existe como tope de seguridad, no como recorte real.
+  tope = 1000,
 ): Promise<number> {
   // Todos los anuncios con gasto, de mayor a menor: son los únicos que el análisis va a mirar.
   const conGasto: AdInput[] = [];

@@ -87,9 +87,14 @@ overviewRouter.get("/", async (req, res) => {
   // ── ROAS por país y creativos: solo cuando la pauta se revisó. Necesitan las tasas del negocio
   // para convertir el gasto de Meta a USD. Si no hay snapshot, ni se piden (pauta viene en null). ──
   const tasas = snap ? await tasasDeCambio() : null;
-  // El ROAS compara ventas y gasto de la MISMA ventana (el rango del snapshot), no el histórico:
-  // dividir ventas de todo el histórico por el gasto de 90 días daría un ROAS inflado y falso.
-  const ventasVentana = snap?.gasto ? await ventasPorPais(desdeDe(rango)) : null;
+  // El ROAS compara ventas y gasto del MISMO intervalo, anclado al momento en que se TOMÓ el snapshot
+  // (no a "ahora"). El gasto de Meta quedó congelado en ese instante; si las ventas se recalcularan a
+  // now, un snapshot viejo dividiría ventas de esta semana por el gasto de otra — un ROAS fabricado.
+  const dias = { "7d": 7, "30d": 30, "90d": 90, "1y": 365, todo: null }[rango];
+  const hastaVentana = snap ? snap.creadoAt.toISOString() : null;
+  const desdeVentana =
+    snap && dias ? new Date(snap.creadoAt.getTime() - dias * 86_400_000).toISOString() : null;
+  const ventasVentana = snap?.gasto ? await ventasPorPais(desdeVentana, hastaVentana) : null;
   const roasPais = snap?.gasto && ventasVentana ? roasPorPais(snap.gasto, ventasVentana) : null;
 
   res.json({

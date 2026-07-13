@@ -21,6 +21,7 @@ import { aUsd, type Tasas } from "./tasas.js";
  */
 
 const MIN_GASTO_USD = 20; // debajo de esto, no hay con qué juzgar un creativo
+const MIN_RESULTADOS = 3; // el mismo portón que roasPais: no se acciona sobre 1-2 conversaciones
 
 export type VeredictoCreativo = "eficiente" | "caro" | "medio" | "sin_resultados" | "poco_gasto";
 
@@ -99,9 +100,13 @@ export function creativos(campanas: CampaignInput[], tasas: Tasas): Creativo[] {
     }))
     .filter((c) => c.gastoUsd > 0); // solo creativos que efectivamente corrieron
 
-  // La mediana del costo por resultado, sobre los que tienen con qué juzgarse. Es la vara del veredicto.
+  // La mediana del costo por resultado, sobre los que tienen con qué juzgarse (gasto Y volumen
+  // mínimos). Es la vara del veredicto: un creativo con 1 conversación no debe torcerla.
   const costos = items
-    .filter((c) => c.costoPorResultadoUsd != null && c.gastoUsd >= MIN_GASTO_USD)
+    .filter(
+      (c) =>
+        c.costoPorResultadoUsd != null && c.gastoUsd >= MIN_GASTO_USD && c.resultados >= MIN_RESULTADOS,
+    )
     .map((c) => c.costoPorResultadoUsd as number)
     .sort((a, b) => a - b);
   const mediana = costos.length ? costos[Math.floor(costos.length / 2)] : null;
@@ -121,8 +126,10 @@ function veredicto(
   costo: number | null,
   mediana: number | null,
 ): VeredictoCreativo {
-  if (gastoUsd < MIN_GASTO_USD) return "poco_gasto"; // sin volumen no se acciona
+  if (gastoUsd < MIN_GASTO_USD) return "poco_gasto"; // sin gasto mínimo no se acciona
   if (resultados === 0 || costo == null) return "sin_resultados"; // gastó y no generó conversación
+  // Con 1-2 conversaciones el costo por resultado es ruido: no se dice "eficiente" ni "caro".
+  if (resultados < MIN_RESULTADOS) return "medio";
   if (mediana == null) return "medio";
   if (costo <= mediana * 0.75) return "eficiente"; // notablemente más barato que el resto
   if (costo >= mediana * 1.5) return "caro"; // notablemente más caro

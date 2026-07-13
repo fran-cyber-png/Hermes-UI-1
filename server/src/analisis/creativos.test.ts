@@ -88,6 +88,18 @@ describe("creativos — agrupar por story y convertir a USD", () => {
     assert.equal(v("CHICO"), "poco_gasto");
   });
 
+  test("no dice eficiente/caro sobre 1-2 conversaciones (piso de volumen)", () => {
+    const c = camp("USD", [
+      // gastó $300 pero con UNA sola conversación: el costo por resultado es ruido, no señal.
+      ad({ id: "una", spend: 300, results: 1, creative: { thumbnailUrl: null, body: "x", title: null, objectType: null, storyId: "UNA" } }),
+      // vara de referencia, con volumen
+      ad({ id: "ref", spend: 300, results: 30, creative: { thumbnailUrl: null, body: "y", title: null, objectType: null, storyId: "REF" } }),
+    ]);
+    const r = creativos([c], tasas);
+    // $300/1 = 300, carísimo contra la mediana, pero con 1 conversación NO se marca "caro".
+    assert.equal(r.find((x) => x.clave === "UNA")?.veredicto, "medio");
+  });
+
   test("se ordena por plata (gasto) descendente", () => {
     const c = camp("USD", [
       ad({ id: "chico", spend: 30, results: 3, creative: { thumbnailUrl: null, body: "x", title: null, objectType: null, storyId: "CHICO" } }),
