@@ -33,6 +33,8 @@ const VENTANA_META = sql`(
 )`;
 
 export type Lazo = {
+  /** Cuántas conversiones se mandaron a la pestaña de PRUEBAS (no afectan la optimización). */
+  reportadasPrueba: number;
   /**
    * ¿Ya conectamos Cerberus?
    *
@@ -93,12 +95,15 @@ export async function estadoDelLazo(): Promise<Lazo> {
       (SELECT count(*)::int FROM ontologia.conversiones
         WHERE enviado_at IS NOT NULL AND es_prueba = false)               AS reportadas,
       (SELECT count(*)::int FROM ontologia.conversiones
+        WHERE enviado_at IS NOT NULL AND es_prueba = true)                AS reportadas_prueba,
+      (SELECT count(*)::int FROM ontologia.conversiones
         WHERE descarte = 'fuera_de_ventana')                              AS perdidas
   `)) as unknown as {
     sincronizado_at: Date | null;
     ventas_conocidas: number;
     reportadas: number;
     perdidas: number;
+    reportadas_prueba: number;
   }[];
 
   const sincronizadoAt = filas?.sincronizado_at ?? null;
@@ -108,6 +113,7 @@ export async function estadoDelLazo(): Promise<Lazo> {
     sincronizadoAt,
     ventasConocidas: filas?.ventas_conocidas ?? 0,
     reportadas: filas?.reportadas ?? 0,
+    reportadasPrueba: filas?.reportadas_prueba ?? 0,
     perdidasPorVentana: filas?.perdidas ?? 0,
   };
 }

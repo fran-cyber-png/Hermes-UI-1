@@ -5,6 +5,7 @@ import { detectar } from "../decisions/detectors.js";
 import { ultimoSnapshot } from "../pauta/snapshot.js";
 import { estadoDeCanales } from "../canales/consultas.js";
 import { relojDeTesoreria } from "../canales/tesoreria.js";
+import { lazoDetalle } from "../canales/lazoDetalle.js";
 import { estadoDelLazo, flujoPorDia, loAccionable, loCerrado, loQuePreguntan } from "../canales/verdad.js";
 
 export const overviewRouter = Router();
@@ -127,4 +128,13 @@ async function bandejaDe() {
  */
 overviewRouter.get("/tesoreria", async (_req, res) => {
   res.json(await relojDeTesoreria());
+});
+
+
+/**
+ * El detalle del lazo — para monitorear el envío. Muestra por qué cada venta va o no va, si el
+ * último envío fue de prueba o real, y las que Meta rechazó con el error a la vista.
+ */
+overviewRouter.get("/lazo", async (_req, res) => {
+  res.json(await lazoDetalle());
 });
