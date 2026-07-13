@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { and, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { conversiones } from "../db/ontologia.js";
 import { ventasParaElLazo } from "../ontologia/ventas.js";
@@ -157,22 +157,21 @@ async function guardar(filas: (typeof conversiones.$inferInsert)[]): Promise<voi
 }
 
 async function marcarEnviadas(eventIds: string[], respuesta: unknown): Promise<void> {
-  await db.execute(sql`
-    UPDATE ontologia.conversiones
-       SET enviado_at = now(),
-           meta_respuesta = ${JSON.stringify(respuesta)}::jsonb,
-           intentos = intentos + 1,
-           descarte = NULL,
-           ultimo_error = NULL
-     WHERE event_id = ANY(${eventIds})
-  `);
+  await db
+    .update(conversiones)
+    .set({
+      enviadoAt: new Date(),
+      metaRespuesta: respuesta,
+      intentos: sql`${conversiones.intentos} + 1`,
+      descarte: null,
+      ultimoError: null,
+    })
+    .where(inArray(conversiones.eventId, eventIds));
 }
 
 async function marcarError(eventIds: string[], error: string): Promise<void> {
-  await db.execute(sql`
-    UPDATE ontologia.conversiones
-       SET intentos = intentos + 1,
-           ultimo_error = ${error}
-     WHERE event_id = ANY(${eventIds}) AND enviado_at IS NULL
-  `);
+  await db
+    .update(conversiones)
+    .set({ intentos: sql`${conversiones.intentos} + 1`, ultimoError: error })
+    .where(and(inArray(conversiones.eventId, eventIds), isNull(conversiones.enviadoAt)));
 }

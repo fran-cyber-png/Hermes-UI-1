@@ -48,19 +48,35 @@ export function CardLazo({ lazo }: { lazo: Lazo }) {
     );
   }
 
+  const soloPrueba = lazo.reportadas === 0 && lazo.reportadasPrueba > 0;
+
   return (
     <div className="rounded-2xl border border-border bg-card px-6 py-5">
       <h2 className="font-heading text-sm font-bold uppercase tracking-wide text-muted-foreground">
         El lazo con Meta
       </h2>
-      <div className="mt-2 flex flex-wrap items-baseline gap-x-6 gap-y-1">
-        <span className="text-3xl font-bold text-success">
-          {lazo.reportadas.toLocaleString('es')}
-        </span>
-        <span className="text-sm text-muted-foreground">
-          de {lazo.ventasConocidas.toLocaleString('es')} ventas, reportadas a Meta
-        </span>
-      </div>
+
+      {soloPrueba ? (
+        <div className="mt-2">
+          <p className="text-sm text-foreground">
+            <strong>{lazo.reportadasPrueba.toLocaleString('es')}</strong> ventas enviadas a{' '}
+            <strong>Test Events</strong> — Meta las aceptó sin errores.
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Es una prueba: no afectan la optimización todavía. Falta quitar el modo prueba para
+            que Meta empiece a aprender de verdad.
+          </p>
+        </div>
+      ) : (
+        <div className="mt-2 flex flex-wrap items-baseline gap-x-6 gap-y-1">
+          <span className="text-3xl font-bold text-success">
+            {lazo.reportadas.toLocaleString('es')}
+          </span>
+          <span className="text-sm text-muted-foreground">
+            de {lazo.ventasConocidas.toLocaleString('es')} ventas, reportadas a Meta
+          </span>
+        </div>
+      )}
       {lazo.perdidasPorVentana > 0 && (
         // El 17%: Tesorería confirmó tarde y Meta rechaza el evento. Antes fallaba en SILENCIO.
         <p className="mt-2 text-sm text-destructive">
