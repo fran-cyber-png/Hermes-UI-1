@@ -7,7 +7,8 @@ import RangoPicker from '../features/canales/RangoPicker';
 import FlujoVentana from '../features/home/FlujoVentana';
 import CostoPorLeadCard from '../features/leads/CostoPorLeadCard';
 import DecisionesPendientesCard from '../features/decisions/DecisionesPendientesCard';
-import { CardAccionable, CardCerrado, CardLazo, CardPreguntas } from '../features/home/Verdad';
+import { CardAccionable, CardCerrado, CardPreguntas } from '../features/home/Verdad';
+import TableroSalud from '../features/home/TableroSalud';
 import { useCuentasPauta } from '../lib/datos/overview';
 
 const ETIQUETA: Record<Rango, string> = {
@@ -72,8 +73,9 @@ export default function HomePage() {
 
       {data && (
         <>
-          {/* 1. Arriba de todo, porque si esto está roto nada más importa. */}
-          <CardLazo lazo={data.lazo} />
+          {/* Lo primero de todo: el estado del sistema, para que cualquiera entienda de un
+              vistazo qué fluye, qué falta y qué sigue. */}
+          <TableroSalud />
 
           {/* 2 y 3. Lo que se puede hacer, y lo que Meta cerró. Juntos porque son la misma
               pregunta vista de los dos lados: ¿dónde está la puerta abierta? */}

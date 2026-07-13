@@ -6,6 +6,7 @@ import { ultimoSnapshot } from "../pauta/snapshot.js";
 import { estadoDeCanales } from "../canales/consultas.js";
 import { relojDeTesoreria } from "../canales/tesoreria.js";
 import { lazoDetalle } from "../canales/lazoDetalle.js";
+import { salud } from "../canales/salud.js";
 import { estadoDelLazo, flujoPorDia, loAccionable, loCerrado, loQuePreguntan } from "../canales/verdad.js";
 
 export const overviewRouter = Router();
@@ -137,4 +138,14 @@ overviewRouter.get("/tesoreria", async (_req, res) => {
  */
 overviewRouter.get("/lazo", async (_req, res) => {
   res.json(await lazoDetalle());
+});
+
+
+/**
+ * El tablero de salud: qué fluye, qué falta, qué sigue. Para que cualquiera entienda el estado
+ * del sistema sin saber nada. Cada pieza con su semáforo y su edad; "lo que sigue" sale de los
+ * gaps abiertos, no inventado.
+ */
+overviewRouter.get("/salud", async (_req, res) => {
+  res.json(await salud());
 });
