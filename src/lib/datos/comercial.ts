@@ -21,7 +21,16 @@ export type Latencia = {
   total: number;
   porSede: { sede: string; p50: number | null; p90: number | null; pagos: number; tarde: number }[];
 };
-export type Comercial = { serie: MesVentas[]; mix: ProductoMix[]; embudo: EmbudoEstados; latencia: Latencia };
+export type Sede = { sede: string; ventas: number; usd: number; ticket: number; clientes: number };
+export type Bundle = { a: string; b: string; juntas: number };
+export type Comercial = {
+  serie: MesVentas[];
+  mix: ProductoMix[];
+  embudo: EmbudoEstados;
+  latencia: Latencia;
+  sedes: Sede[];
+  bundles: Bundle[];
+};
 
 export function useComercial() {
   return useQuery({

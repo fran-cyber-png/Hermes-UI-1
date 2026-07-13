@@ -140,19 +140,77 @@ export async function latenciaTesoreria(): Promise<Latencia> {
   };
 }
 
+/** Rendimiento por sede: la dimensión de gestión que no existía. */
+export type Sede = { sede: string; ventas: number; usd: number; ticket: number; clientes: number };
+/** Productos que se compran JUNTOS: la base para armar bundles. */
+export type Bundle = { a: string; b: string; juntas: number };
+
+/**
+ * Rendimiento por SEDE. El país de la venta en Cerberus "suele ser la sede que la registró" — eso,
+ * que es una TRAMPA para atribuir geografía (por eso el ROAS usa el país del CLIENTE), es dado vuelta
+ * la dimensión exacta para medir gestión: qué sede vende más, con qué ticket, a cuánta gente.
+ */
+export async function rendimientoSede(): Promise<Sede[]> {
+  const filas = (await db.execute(sql`
+    SELECT coalesce(sede, 'sin sede')            AS sede,
+           count(*)::int                          AS ventas,
+           round(sum(monto_usd))::int             AS usd,
+           count(DISTINCT cliente_codigo)::int    AS clientes
+    FROM ontologia.venta
+    WHERE cobrada AND monto_usd IS NOT NULL
+    GROUP BY 1
+    HAVING count(*) >= 10
+    ORDER BY 3 DESC
+    LIMIT 10
+  `)) as unknown as { sede: string; ventas: number; usd: number; clientes: number }[];
+  return filas.map((f) => ({
+    sede: f.sede,
+    ventas: f.ventas,
+    usd: f.usd ?? 0,
+    clientes: f.clientes,
+    ticket: f.ventas > 0 ? Math.round((f.usd ?? 0) / f.ventas) : 0,
+  }));
+}
+
+/**
+ * CROSS-SELL: qué productos se compran JUNTOS en la misma venta.
+ *
+ * Inteligencia de catálogo que no existía. Sirve para armar packs y para pautar el producto ancla
+ * que arrastra a los otros, en vez de pautar SKUs sueltos.
+ */
+export async function crossSell(tope = 8): Promise<Bundle[]> {
+  const filas = (await db.execute(sql`
+    SELECT pa.nombre AS a, pb.nombre AS b, count(*)::int AS juntas
+    FROM ontologia.detalle_venta da
+    JOIN ontologia.detalle_venta db2
+      ON db2.venta_folio = da.venta_folio AND db2.producto_codigo > da.producto_codigo
+    JOIN ontologia.venta v ON v.folio = da.venta_folio AND v.cobrada
+    JOIN ontologia.producto pa ON pa.codigo = da.producto_codigo
+    JOIN ontologia.producto pb ON pb.codigo = db2.producto_codigo
+    GROUP BY 1, 2
+    ORDER BY 3 DESC
+    LIMIT ${tope}
+  `)) as unknown as { a: string; b: string; juntas: number }[];
+  return filas;
+}
+
 export type Comercial = {
   serie: MesVentas[];
   mix: ProductoMix[];
   embudo: EmbudoEstados;
   latencia: Latencia;
+  sedes: Sede[];
+  bundles: Bundle[];
 };
 
 export async function comercial(): Promise<Comercial> {
-  const [serie, mix, embudo, latencia] = await Promise.all([
+  const [serie, mix, embudo, latencia, sedes, bundles] = await Promise.all([
     serieMensual(),
     mixProducto(),
     embudoEstados(),
     latenciaTesoreria(),
+    rendimientoSede(),
+    crossSell(),
   ]);
-  return { serie, mix, embudo, latencia };
+  return { serie, mix, embudo, latencia, sedes, bundles };
 }

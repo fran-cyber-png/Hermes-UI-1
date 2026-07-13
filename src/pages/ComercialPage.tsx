@@ -224,6 +224,51 @@ export default function ComercialPage() {
               </p>
             </Panel>
 
+            <Panel indice="05" titulo="Las sedes" dueno="gestión" tono="helado">
+              <div className="flex flex-col gap-2">
+                {data.sedes.slice(0, 6).map((s) => {
+                  const tope = data.sedes[0]?.usd || 1;
+                  return (
+                    <div key={s.sede} className="flex items-center gap-2 text-xs">
+                      <span className="w-20 shrink-0 truncate font-semibold text-navy">{s.sede}</span>
+                      <div className="flex flex-1 items-center">
+                        <div className="h-4 rounded" style={{ width: `${Math.max(3, (s.usd / tope) * 100)}%`, background: NAVY }} />
+                        <span className="ml-2 whitespace-nowrap font-mono tabular-nums text-navy/50">
+                          ${s.usd.toLocaleString('es')} · {s.ventas} vta · tkt ${s.ticket}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">
+                La mayoría de las ventas no tiene sede asignada — y son justamente las que peor
+                confirman (mirá la latencia: "sin sede" tiene p90 de 64,8 días). Asignar la sede no es
+                burocracia: es lo que permite saber dónde se traba el lazo con Meta.
+              </p>
+            </Panel>
+
+            <Panel indice="06" titulo="Se compran juntos" dueno="catálogo · pauta" tono="tibio">
+              <div className="flex flex-col gap-1.5">
+                {data.bundles.slice(0, 6).map((b) => (
+                  <div key={b.a + b.b} className="flex items-center gap-2 border-b border-border pb-1.5 text-xs last:border-0">
+                    <span className="flex-1 truncate text-navy" title={`${b.a} + ${b.b}`}>
+                      <span className="font-semibold">{b.a}</span>
+                      <span className="text-navy/40"> + </span>
+                      <span className="font-semibold">{b.b}</span>
+                    </span>
+                    <span className="shrink-0 font-mono tabular-nums text-navy/50">{b.juntas}×</span>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">
+                Productos que la gente compra en la MISMA venta. Es la base para armar packs y para
+                pautar el producto ancla que arrastra a los otros, en vez de SKUs sueltos.
+              </p>
+            </Panel>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             <Panel indice="04" titulo="El embudo" dueno="ventas · dirección" tono="helado">
               <div className="grid grid-cols-2 gap-4">
                 {[
