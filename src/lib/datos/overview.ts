@@ -63,6 +63,34 @@ export type DiaFlujo = {
 /** La estación COMPRA: ventas reales por país del cliente, en USD, desde el espejo de Cerberus. */
 export type VentaPais = { pais: string; ventasUsd: number; ventas: number };
 
+/** El ROAS real por país: ventas (cliente) × gasto (audiencia), con el cerebro de decisiones. */
+export type Accion = 'escalar' | 'recortar' | 'mantener' | 'observar' | 'sin_ventas' | 'sin_gasto';
+export type RoasPais = {
+  pais: string;
+  gastoUsd: number;
+  ventasUsd: number;
+  ventas: number;
+  /** null cuando no hay gasto: no medible ≠ cero. */
+  roas: number | null;
+  accion: Accion;
+  confianza: 'alta' | 'media' | 'baja';
+  oportunidadUsd: number;
+};
+
+/** Un creativo rankeado: cómo se ve, qué dice, cuánto cuesta cada resultado, y el veredicto. */
+export type Creativo = {
+  clave: string;
+  nombre: string;
+  thumbnailUrl: string | null;
+  copy: string | null;
+  gastoUsd: number;
+  resultados: number;
+  costoPorResultadoUsd: number | null;
+  anuncios: number;
+  campana: string;
+  veredicto: 'eficiente' | 'caro' | 'medio' | 'sin_resultados' | 'poco_gasto';
+};
+
 export type Overview = {
   rango: string;
   lazo: Lazo;
@@ -76,12 +104,16 @@ export type Overview = {
   bandeja: ItemBandeja[];
   /** La estación COMPRA del embudo. Ordenada por plata. Vacía si Cerberus no se ingirió aún. */
   ventas: VentaPais[];
+  /** El ROAS real por país. null hasta que la pauta se revise y traiga el gasto por país de Meta. */
+  roasPais: RoasPais[] | null;
   /** La estación LEAD, ACUMULADA (no por rango): un lead viejo sin contactar sigue siendo trabajo. */
   leads: { total: number; sinContactar: number };
   pauta: {
     decisiones: unknown[];
     campanasAnalizadas: number;
     costo: unknown;
+    /** Los creativos rankeados por plata: miniatura, copy, costo por resultado y veredicto. */
+    creativos: Creativo[];
     errores: { accountId: string; message: string }[];
     revisadoAt: string;
     edadMinutos: number;

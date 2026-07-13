@@ -8,6 +8,9 @@ import { relojDeTesoreria } from "../canales/tesoreria.js";
 import { lazoDetalle } from "../canales/lazoDetalle.js";
 import { salud } from "../canales/salud.js";
 import { ventasPorPais } from "../analisis/ventasPorPais.js";
+import { roasPorPais } from "../analisis/roasPais.js";
+import { creativos } from "../analisis/creativos.js";
+import { tasasDeCambio } from "../analisis/tasas.js";
 import { leadColdnessStats } from "../meta/leadsIngestor.js";
 import { estadoDelLazo, flujoPorDia, loAccionable, loCerrado, loQuePreguntan } from "../canales/verdad.js";
 
@@ -81,6 +84,14 @@ overviewRouter.get("/", async (req, res) => {
       leadColdnessStats(),
     ]);
 
+  // ── ROAS por país y creativos: solo cuando la pauta se revisó. Necesitan las tasas del negocio
+  // para convertir el gasto de Meta a USD. Si no hay snapshot, ni se piden (pauta viene en null). ──
+  const tasas = snap ? await tasasDeCambio() : null;
+  // El ROAS compara ventas y gasto de la MISMA ventana (el rango del snapshot), no el histórico:
+  // dividir ventas de todo el histórico por el gasto de 90 días daría un ROAS inflado y falso.
+  const ventasVentana = snap?.gasto ? await ventasPorPais(desdeDe(rango)) : null;
+  const roasPais = snap?.gasto && ventasVentana ? roasPorPais(snap.gasto, ventasVentana) : null;
+
   res.json({
     rango,
 
@@ -94,6 +105,9 @@ overviewRouter.get("/", async (req, res) => {
     canales,
     bandeja,
     ventas, // La estación COMPRA: [{ pais, ventasUsd, ventas }], ordenado por plata.
+    // El ROAS real por país: ventas (cliente) × gasto (audiencia), con el cerebro de decisiones.
+    // null hasta que la pauta se revise y traiga el gasto por país desde Meta.
+    roasPais,
     // La estación LEAD, acumulada (no por rango): total y cuántos siguen sin contactar.
     leads: { total: leadsStats.total, sinContactar: leadsStats.sin_atender },
 
@@ -104,6 +118,8 @@ overviewRouter.get("/", async (req, res) => {
           decisiones: detectar(snap.campanas),
           campanasAnalizadas: snap.campanas.length,
           costo: snap.costo,
+          // Los creativos rankeados por plata: miniatura, copy, costo por resultado y veredicto.
+          creativos: creativos(snap.campanas, tasas ?? new Map()),
           errores: snap.errores,
           // La card dice su EDAD en vez de fingir que está en vivo.
           revisadoAt: snap.creadoAt,

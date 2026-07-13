@@ -4,6 +4,10 @@ import { configuracion, pautaSnapshots, sincronizaciones } from "../db/operacion
 import type { CampaignInput } from "../decisions/detectors.js";
 import { paraMeta, rangoDe } from "../lib/rangos.js";
 import { recolectarPauta } from "./recolectar.js";
+import { adjuntarCreativos } from "./adjuntarCreativos.js";
+import { gastoPorPais } from "./geoGasto.js";
+import { tasasDeCambio } from "../analisis/tasas.js";
+import type { GastoPais } from "../analisis/geo.js";
 import { costoPorLead } from "../routes/costoPorLead.js";
 
 /**
@@ -17,6 +21,8 @@ export type Snapshot = {
   campanas: CampaignInput[];
   /** El costo por lead, ya calculado. La pantalla no vuelve a pedirle nada a Meta. */
   costo: unknown;
+  /** El gasto por país de la audiencia, en USD. La otra mitad del ROAS por país. */
+  gasto: GastoPais[] | null;
   errores: { accountId: string; message: string }[];
   cuentas: string[];
   creadoAt: Date;
@@ -59,6 +65,7 @@ export async function ultimoSnapshot(rango: string): Promise<Snapshot | null> {
   return {
     campanas: fila.campanas as CampaignInput[],
     costo: fila.costo ?? null,
+    gasto: (fila.gasto ?? null) as GastoPais[] | null,
     errores: (fila.errores ?? []) as { accountId: string; message: string }[],
     cuentas: (fila.cuentas ?? []) as string[],
     creadoAt: fila.creadoAt,
@@ -82,21 +89,29 @@ export async function refrescarPauta(rango: string): Promise<Snapshot | null> {
   if (cuentas.length === 0) return null;
 
   const ventana = paraMeta(rangoDe(rango));
+  const tasas = await tasasDeCambio();
 
-  // Las dos cosas que necesitan Meta, en el MISMO job. Después de esto, la pantalla no vuelve
-  // a tocar la Graph API ni para respirar.
-  const [pauta, costo] = await Promise.all([
+  // Todo lo que necesita Meta, en el MISMO job. Después de esto, la pantalla no vuelve a tocar la
+  // Graph API ni para respirar: pauta, costo por lead, y el gasto por país (para el ROAS por país).
+  const [pauta, costo, geo] = await Promise.all([
     recolectarPauta(token, cuentas, ventana),
     costoPorLead(token, rangoDe(rango)).catch(() => null),
+    gastoPorPais(token, cuentas, ventana, tasas).catch(() => null),
   ]);
   const { campanas, errores, llamadas, duracionMs } = pauta;
+  const erroresTodos = [...errores, ...(geo?.errores ?? [])];
+
+  // Los creativos de los anuncios que gastaron (en lote, acotado). Muta `campanas` en su lugar.
+  // Un fallo acá no debe perder el snapshot: los creativos son un plus, la pauta es lo esencial.
+  await adjuntarCreativos(token, campanas).catch(() => 0);
 
   await db.insert(pautaSnapshots).values({
     cuentas,
     rango,
     campanas,
     costo,
-    errores,
+    gasto: geo?.gasto ?? null,
+    errores: erroresTodos,
     duracionMs,
   });
 
@@ -107,8 +122,8 @@ export async function refrescarPauta(rango: string): Promise<Snapshot | null> {
       ultimaOk: new Date(),
       duracionMs,
       cursor: `${campanas.length} campañas · ${llamadas} llamadas a Meta`,
-      ultimoError: errores.length ? `${errores.length} cuenta(s) fallaron` : null,
-      ultimoErrorAt: errores.length ? new Date() : null,
+      ultimoError: erroresTodos.length ? `${erroresTodos.length} cuenta(s) fallaron` : null,
+      ultimoErrorAt: erroresTodos.length ? new Date() : null,
     })
     .onConflictDoUpdate({
       target: sincronizaciones.fuente,
@@ -116,8 +131,8 @@ export async function refrescarPauta(rango: string): Promise<Snapshot | null> {
         ultimaOk: new Date(),
         duracionMs,
         cursor: `${campanas.length} campañas · ${llamadas} llamadas a Meta`,
-        ultimoError: errores.length ? `${errores.length} cuenta(s) fallaron` : null,
-        ultimoErrorAt: errores.length ? new Date() : null,
+        ultimoError: erroresTodos.length ? `${erroresTodos.length} cuenta(s) fallaron` : null,
+        ultimoErrorAt: erroresTodos.length ? new Date() : null,
       },
     });
 

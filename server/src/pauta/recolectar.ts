@@ -60,6 +60,9 @@ async function recolectarCuenta(
     })),
     (contar(),
     client.getAll(`${actId}/ads`, {
+      // Sin expandir el creativo acá: expandirlo inline para TODOS los anuncios (la mayoría sin
+      // gasto) hace el llamado lentísimo —60s para una cuenta—. El creativo se trae después, solo
+      // para los anuncios que gastaron, en lote (ver `adjuntarCreativos`).
       fields: "id,name,status,adset_id",
       limit: "500",
     })),
@@ -88,8 +91,24 @@ async function recolectarCuenta(
   for (const ad of anuncios) {
     if (!ad.adset_id) continue;
     const m = metricaPorAd.get(ad.id) ?? { spend: 0, results: null, costPerResult: null };
+    const c = ad.creative ?? null;
     const lista = adsPorConjunto.get(ad.adset_id) ?? [];
-    lista.push({ id: ad.id, name: ad.name, status: ad.status, ...m });
+    lista.push({
+      id: ad.id,
+      name: ad.name,
+      status: ad.status,
+      ...m,
+      // El creativo, aplanado a lo que la pantalla necesita. Si Meta no lo devolvió, queda null.
+      creative: c
+        ? {
+            thumbnailUrl: c.thumbnail_url ?? null,
+            body: c.body ?? null,
+            title: c.title ?? null,
+            objectType: c.object_type ?? null,
+            storyId: c.effective_object_story_id ?? null,
+          }
+        : null,
+    });
     adsPorConjunto.set(ad.adset_id, lista);
   }
 

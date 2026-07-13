@@ -6,6 +6,8 @@ import BarraDeMando from '../features/home/BarraDeMando';
 import FlujoEmbudo from '../features/home/FlujoEmbudo';
 import FlujoVentana from '../features/home/FlujoVentana';
 import VentasPorPais from '../features/home/VentasPorPais';
+import RoasPorPais from '../features/home/RoasPorPais';
+import Creativos from '../features/home/Creativos';
 import PanelFaena from '../features/home/PanelFaena';
 import FichaEstado from '../features/home/FichaEstado';
 import BandejaCanales from '../features/canales/BandejaCanales';
@@ -110,7 +112,12 @@ export default function HomePage() {
               link={{ label: 'ver tesorería', href: '/tesoreria' }}
               className="lg:col-span-4"
             >
-              <VentasPorPais ventas={data.ventas} plano />
+              {/* Con gasto por país (pauta revisada) → el ROAS real; si no, las ventas por país. */}
+              {data.roasPais ? (
+                <RoasPorPais roasPais={data.roasPais} plano />
+              ) : (
+                <VentasPorPais ventas={data.ventas} plano />
+              )}
             </PanelFaena>
           </div>
 
@@ -164,16 +171,20 @@ export default function HomePage() {
             />
           </div>
 
-          {/* ENTRA a fondo: solo cuando hay pauta revisada. Hoy está dormido (sin cuentas). */}
+          {/* ENTRA a fondo: solo cuando hay pauta revisada. Los creativos primero (qué funciona),
+              y debajo las decisiones de pauta y el costo por lead. */}
           {data.pauta && (
-            <PanelFaena id="entra-detalle" indice="01" etapa="Entra · la pauta" dueno="pauta · creativos" tono="fresco">
+            <>
+              <PanelFaena id="entra-detalle" indice="01" etapa="Entra · los creativos" dueno="creativos" tono="fresco">
+                <Creativos creativos={data.pauta.creativos} />
+              </PanelFaena>
               <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
                 <DecisionesPendientesCard pauta={data.pauta} cuentas={cfg?.cuentas ?? []} />
                 {costo != null && (
                   <CostoPorLeadCard porAnuncio={(costo as { porAnuncio: never[] }).porAnuncio} />
                 )}
               </div>
-            </PanelFaena>
+            </>
           )}
         </>
       )}

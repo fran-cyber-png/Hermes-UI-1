@@ -9,6 +9,16 @@ import type { Decision } from "./types.js";
  * en dinero no es una decisión: es ruido.
  */
 
+/** El creativo de un anuncio: cómo se ve y qué dice. Opcional — Meta no siempre lo devuelve. */
+export interface CreativeInput {
+  thumbnailUrl: string | null;
+  body: string | null;
+  title: string | null;
+  objectType: string | null;
+  /** El post real detrás del anuncio: la llave para unir comentarios con creativos (RG-005). */
+  storyId: string | null;
+}
+
 export interface AdInput {
   id: string;
   name: string;
@@ -16,6 +26,7 @@ export interface AdInput {
   spend: number;
   results: number | null;
   costPerResult: number | null;
+  creative?: CreativeInput | null;
 }
 
 export interface AdsetInput {

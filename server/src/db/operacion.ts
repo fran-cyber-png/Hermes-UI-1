@@ -54,6 +54,12 @@ export const pautaSnapshots = pgTable(
     costo: jsonb("costo"),
 
     /**
+     * El gasto por país de la AUDIENCIA, en USD (`GastoPais[]`). Es la mitad que le faltaba al
+     * ROAS por país: viene del breakdown de Meta, así que también vive en el snapshot, no al render.
+     */
+    gasto: jsonb("gasto"),
+
+    /**
      * Las cuentas que fallaron, con su error. Antes los `fetch failed` de Bolivia y Ecuador se
      * perdían en un log y la pantalla mostraba números incompletos como si fueran completos.
      */

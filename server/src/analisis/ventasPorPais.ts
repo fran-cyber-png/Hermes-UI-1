@@ -17,7 +17,16 @@ import { aUsd } from "./geo.js";
 
 export type VentaPaisUsd = { pais: string; ventasUsd: number; ventas: number };
 
-export async function ventasPorPais(): Promise<VentaPaisUsd[]> {
+/**
+ * Ventas por país, en USD. Sin `desde` es el ACUMULADO real (las barras de COMPRA). Con `desde`
+ * (ISO) se acota por `fecha_venta` — necesario para el ROAS por país, que tiene que comparar ventas
+ * y gasto de la MISMA ventana; si no, dividir ventas de todo el histórico por el gasto de 90 días da
+ * un ROAS inflado y falso.
+ */
+export async function ventasPorPais(desde: string | null = null): Promise<VentaPaisUsd[]> {
+  const filtroFecha = desde
+    ? sql`AND (v.payload->>'fecha_venta')::timestamp >= ${desde}::timestamp`
+    : sql``;
   const filas = (await db.execute(sql`
     SELECT pa.payload->>'nombre_pais'                         AS pais,
            v.payload->>'monto_total'                          AS monto,
@@ -32,6 +41,7 @@ export async function ventasPorPais(): Promise<VentaPaisUsd[]> {
       ON m.fuente='cerberus' AND m.tabla='tb_moneda' AND m.clave = v.payload->>'codigo_moneda'
     WHERE v.fuente='cerberus' AND v.tabla='tb_venta'
       AND (v.payload->>'estado')::int IN (1, 9)   -- solo cobradas de verdad
+      ${filtroFecha}
   `)) as unknown as { pais: string | null; monto: string; radio: string | null; radio_moneda: string | null }[];
 
   const porPais = new Map<string, { ventasUsd: number; ventas: number }>();
