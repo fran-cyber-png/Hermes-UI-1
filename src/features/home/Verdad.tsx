@@ -1,16 +1,12 @@
-import { Link } from 'react-router-dom';
-import { AlertTriangle, Archive, ArrowRight, Clock, MessageSquareQuote } from 'lucide-react';
-import type { Accionable, Cerrado, Lazo, Preguntas } from '../../lib/datos/overview';
+import { Archive, MessageSquareQuote } from 'lucide-react';
+import type { Cerrado, Preguntas } from '../../lib/datos/overview';
 
 /**
- * Las cuatro tarjetas que dicen la verdad.
+ * Dos tarjetas que dicen la verdad de lo que ya no se puede tocar, y de lo que la gente pide.
  *
- * La home vieja contaba VOLUMEN: "946 sin atender". Verdadero e inútil — de esos 946, a 928 Meta
- * les cerró la puerta y no se les puede escribir nunca más. Un contador gigante de pendientes no
- * es un sistema de trabajo: es una acusación. Y cuando la mayoría son inalcanzables, es una
- * acusación falsa.
- *
- * Estas cuatro cuentan lo que se puede mirar y hacer algo.
+ * El lazo con Meta y la cola accionable se mudaron al embudo del home (FlujoEmbudo y
+ * BandejaCanales). Acá quedan las dos que no tienen otro lugar natural: lo que Meta cerró
+ * —que no es deuda, es audiencia— y qué escribe la gente, el dato que le sirve al creativo.
  */
 
 function pct(n: number, de: number): string {
@@ -18,128 +14,7 @@ function pct(n: number, de: number): string {
 }
 
 /**
- * 1. EL LAZO. Va arriba de todo porque es la razón de ser del sistema.
- *
- * Quitarle a Meta la señal de conversión sube el costo mediano por cliente incremental de
- * US$38,16 a US$49,93 — un 31% más caro (RCT con 70.000+ anunciantes, NBER w32765 /
- * Marketing Science 2025). El evento de conversión ES la variable dependiente del modelo de
- * entrega de Meta: si no se lo mandamos, está adivinando.
- */
-export function CardLazo({ lazo }: { lazo: Lazo }) {
-  if (!lazo.conectado) {
-    return (
-      <div className="rounded-2xl border-2 border-destructive/30 bg-destructive/5 px-6 py-5">
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="mt-0.5 shrink-0 text-destructive" size={20} />
-          <div className="flex-1">
-            <h2 className="font-heading text-lg font-bold text-navy">
-              Meta no sabe que vendiste.
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Pagamos por traer gente, y nunca le contamos a Meta quién compró. Optimiza contra
-              «alguien abrió un chat», no contra «alguien pagó».
-            </p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Falta conectar Cerberus, donde vive la venta.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const soloPrueba = lazo.reportadas === 0 && lazo.reportadasPrueba > 0;
-
-  return (
-    <div className="rounded-2xl border border-border bg-card px-6 py-5">
-      <h2 className="font-heading text-sm font-bold uppercase tracking-wide text-muted-foreground">
-        El lazo con Meta
-      </h2>
-
-      {soloPrueba ? (
-        <div className="mt-2">
-          <p className="text-sm text-foreground">
-            <strong>{lazo.reportadasPrueba.toLocaleString('es')}</strong> ventas enviadas a{' '}
-            <strong>Test Events</strong> — Meta las aceptó sin errores.
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Es una prueba: no afectan la optimización todavía. Falta quitar el modo prueba para
-            que Meta empiece a aprender de verdad.
-          </p>
-        </div>
-      ) : (
-        <div className="mt-2 flex flex-wrap items-baseline gap-x-6 gap-y-1">
-          <span className="text-3xl font-bold text-success">
-            {lazo.reportadas.toLocaleString('es')}
-          </span>
-          <span className="text-sm text-muted-foreground">
-            de {lazo.ventasConocidas.toLocaleString('es')} ventas, reportadas a Meta
-          </span>
-        </div>
-      )}
-      {lazo.perdidasPorVentana > 0 && (
-        // El 17%: Tesorería confirmó tarde y Meta rechaza el evento. Antes fallaba en SILENCIO.
-        <p className="mt-2 text-sm text-destructive">
-          {lazo.perdidasPorVentana.toLocaleString('es')} se perdieron porque el pago se confirmó
-          después de los 7 días que Meta acepta.
-        </p>
-      )}
-    </div>
-  );
-}
-
-/**
- * 2. LO QUE SE PUEDE HACER HOY.
- *
- * Decenas, no 94.371. Es la única cola que una persona puede mirar y actuar.
- */
-export function CardAccionable({ a }: { a: Accionable }) {
-  const urge = a.horasRestantesMasUrgente != null && a.horasRestantesMasUrgente < 24;
-
-  return (
-    <Link
-      to="/bandeja"
-      className="group rounded-2xl border border-border bg-card px-6 py-5 transition-colors hover:border-primary/40"
-    >
-      <h2 className="font-heading text-sm font-bold uppercase tracking-wide text-muted-foreground">
-        Se puede responder ahora
-      </h2>
-
-      <div className="mt-2 flex items-baseline gap-3">
-        <span className="text-4xl font-bold text-navy">{a.total}</span>
-        <span className="text-sm text-muted-foreground">
-          {a.total === 1 ? 'persona' : 'personas'}
-        </span>
-      </div>
-
-      <p className="mt-1 text-sm text-muted-foreground">
-        {a.porCanal.map((c) => `${c.n} en ${c.canal}`).join(' · ') || 'Nada dentro de ventana'}
-      </p>
-
-      {a.horasRestantesMasUrgente != null && (
-        <p
-          className={
-            'mt-3 flex items-center gap-1.5 text-sm font-bold ' +
-            (urge ? 'text-destructive' : 'text-muted-foreground')
-          }
-        >
-          <Clock size={14} />
-          {/* El reloj de Meta. Cuando llega a cero, esa persona es inalcanzable para siempre. */}
-          A la más urgente le quedan {a.horasRestantesMasUrgente}{' '}
-          {a.horasRestantesMasUrgente === 1 ? 'hora' : 'horas'}
-        </p>
-      )}
-
-      <span className="mt-3 flex items-center gap-1 text-sm font-bold text-primary">
-        Trabajar
-        <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" />
-      </span>
-    </Link>
-  );
-}
-
-/**
- * 3. LO QUE META CERRÓ.
+ * LO QUE META CERRÓ.
  *
  * Sin adornos y sin culpa: no es trabajo pendiente, es archivo. Sin el permiso `human_agent`
  * (verificado ausente con `debug_token`), a las conversaciones de Messenger de más de 24 h NO SE
@@ -174,7 +49,7 @@ export function CardCerrado({ c }: { c: Cerrado }) {
 }
 
 /**
- * 4. QUÉ PREGUNTA LA GENTE. El dato que le sirve al creativo, y que nadie miraba.
+ * QUÉ PREGUNTA LA GENTE. El dato que le sirve al creativo, y que nadie miraba.
  *
  * El hallazgo más grande no es una pregunta: 1 de cada 5 personas escribe SOLO su número de
  * teléfono y se va. No es una consulta — es una entrega. Alguien te está dando la llave.

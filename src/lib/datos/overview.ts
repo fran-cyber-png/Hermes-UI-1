@@ -60,6 +60,9 @@ export type DiaFlujo = {
   cerradas: number;
 };
 
+/** La estación COMPRA: ventas reales por país del cliente, en USD, desde el espejo de Cerberus. */
+export type VentaPais = { pais: string; ventasUsd: number; ventas: number };
+
 export type Overview = {
   rango: string;
   lazo: Lazo;
@@ -71,6 +74,10 @@ export type Overview = {
   /** La misma forma que servía `/api/interactions/canales`. Los componentes no cambian. */
   canales: CanalesResponse;
   bandeja: ItemBandeja[];
+  /** La estación COMPRA del embudo. Ordenada por plata. Vacía si Cerberus no se ingirió aún. */
+  ventas: VentaPais[];
+  /** La estación LEAD, ACUMULADA (no por rango): un lead viejo sin contactar sigue siendo trabajo. */
+  leads: { total: number; sinContactar: number };
   pauta: {
     decisiones: unknown[];
     campanasAnalizadas: number;

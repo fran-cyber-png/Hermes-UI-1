@@ -1,33 +1,38 @@
-import { useEffect, useState } from 'react';
-import { API_URL } from '../config';
-import type { CanalesResponse } from '../features/canales/types';
-import BandejaHero from '../features/canales/BandejaHero';
+import { useOverview } from '../lib/datos/overview';
+import BandejaCanales from '../features/canales/BandejaCanales';
 import Bandeja from '../features/canales/Bandeja';
 import Volver from '../layout/Volver';
 
 /**
- * La bandeja completa: aquí sí se trabaja.
+ * La bandeja completa: la estación CONVERSA a fondo.
  *
- * En el home solo se asoma (los más urgentes, para enterarte). Acá está todo:
- * los filtros, la cola entera, y el scroll. Una sola cosa en pantalla, porque
- * responderle a gente es una sola cosa.
+ * Arriba, las tres tarjetas por canal —Instagram, Facebook, WhatsApp—, cada una honesta sobre lo
+ * que se puede hacer ahí: los canales NO son intercambiables, y meterlos en una sola cola escondía
+ * justamente eso. Cada tarjeta lleva a su canal, donde se responde de a uno.
+ *
+ * Abajo, la cola unificada de los más urgentes: para trabajar rápido sin elegir canal, a quien se
+ * le está por vencer el reloj.
+ *
+ * Todo sale de `GET /api/overview` (canales + accionable), cacheado. Ninguna llamada a Meta.
  */
 export default function BandejaPage() {
-  const [estado, setEstado] = useState<CanalesResponse | null>(null);
-
-  useEffect(() => {
-    fetch(`${API_URL}/api/interactions/canales?rango=todo`)
-      .then((r) => r.json())
-      .then(setEstado)
-      .catch(() => setEstado(null));
-  }, []);
-
-  const abiertas = (estado?.interacciones ?? []).reduce((s, c) => s + c.ventana_abierta, 0);
+  const { data } = useOverview('todo');
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-5">
+    <div className="mx-auto flex max-w-5xl flex-col gap-6">
       <Volver a="/" texto="Volver al inicio" />
-      <BandejaHero estado={estado} abiertas={abiertas} />
+
+      <div>
+        <h1 className="font-heading text-2xl font-bold text-navy">La bandeja, por canal</h1>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          Cada canal permite cosas distintas. Elige por dónde entrar, o trabaja abajo a quien se le
+          vence el reloj.
+        </p>
+      </div>
+
+      {data && <BandejaCanales canales={data.canales} accionable={data.accionable} />}
+
+      {/* La cola unificada: los más urgentes, sin importar el canal. Aquí sí se responde. */}
       <Bandeja />
     </div>
   );

@@ -7,6 +7,8 @@ import { estadoDeCanales } from "../canales/consultas.js";
 import { relojDeTesoreria } from "../canales/tesoreria.js";
 import { lazoDetalle } from "../canales/lazoDetalle.js";
 import { salud } from "../canales/salud.js";
+import { ventasPorPais } from "../analisis/ventasPorPais.js";
+import { leadColdnessStats } from "../meta/leadsIngestor.js";
 import { estadoDelLazo, flujoPorDia, loAccionable, loCerrado, loQuePreguntan } from "../canales/verdad.js";
 
 export const overviewRouter = Router();
@@ -60,16 +62,24 @@ overviewRouter.get("/", async (req, res) => {
   const rango = rangoDe(req.query.rango);
 
   // Todo a Postgres, todo en paralelo. Cero llamadas a Meta.
-  const [canales, bandeja, snap, lazo, accionable, cerrado, preguntas, flujo] = await Promise.all([
-    estadoDeCanales(rango),
-    bandejaDe(),
-    ultimoSnapshot(rango),
-    estadoDelLazo(),
-    loAccionable(),
-    loCerrado(),
-    loQuePreguntan(),
-    flujoPorDia(desdeDe(rango)),
-  ]);
+  const [canales, bandeja, snap, lazo, accionable, cerrado, preguntas, flujo, ventas, leadsStats] =
+    await Promise.all([
+      estadoDeCanales(rango),
+      bandejaDe(),
+      ultimoSnapshot(rango),
+      estadoDelLazo(),
+      loAccionable(),
+      loCerrado(),
+      loQuePreguntan(),
+      flujoPorDia(desdeDe(rango)),
+      // La estación COMPRA del embudo: ventas reales por país del cliente, en USD, desde el
+      // espejo de Cerberus. Ya estaba calculada (analisis/ventasPorPais); faltaba que llegara
+      // a la pantalla. No mira la ventana de fechas: es el acumulado real del negocio.
+      ventasPorPais(),
+      // La estación LEAD: formularios sin contactar, ACUMULADO. Un lead viejo sin contactar
+      // sigue siendo un lead — filtrarlo por rango lo mostraría en cero y escondería trabajo real.
+      leadColdnessStats(),
+    ]);
 
   res.json({
     rango,
@@ -83,6 +93,9 @@ overviewRouter.get("/", async (req, res) => {
 
     canales,
     bandeja,
+    ventas, // La estación COMPRA: [{ pais, ventasUsd, ventas }], ordenado por plata.
+    // La estación LEAD, acumulada (no por rango): total y cuántos siguen sin contactar.
+    leads: { total: leadsStats.total, sinContactar: leadsStats.sin_atender },
 
     // Del snapshot. Si nunca se corrió, `pauta` viene en null y la pantalla dice "falta revisar"
     // en vez de mostrar un cero que parece un dato.
