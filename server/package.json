@@ -13,7 +13,9 @@
     "ingest:leads": "tsx src/scripts/ingestLeads.ts",
     "cleanup:test": "tsx src/scripts/cleanupTest.ts",
     "test": "tsx --test src/**/*.test.ts",
-    "ingest:interactions": "tsx src/scripts/ingestInteractions.ts"
+    "ingest:interactions": "tsx src/scripts/ingestInteractions.ts",
+    "cerberus:ingestar": "tsx src/scripts/cerberus.ts ingestar",
+    "lazo": "tsx src/scripts/cerberus.ts lazo"
   },
   "dependencies": {
     "cors": "^2.8.5",

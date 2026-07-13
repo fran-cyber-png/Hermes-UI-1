@@ -4,6 +4,7 @@ import { db } from "../db/client.js";
 import { detectar } from "../decisions/detectors.js";
 import { ultimoSnapshot } from "../pauta/snapshot.js";
 import { estadoDeCanales } from "../canales/consultas.js";
+import { relojDeTesoreria } from "../canales/tesoreria.js";
 import { estadoDelLazo, flujoPorDia, loAccionable, loCerrado, loQuePreguntan } from "../canales/verdad.js";
 
 export const overviewRouter = Router();
@@ -112,3 +113,18 @@ async function bandejaDe() {
   `);
   return filas as unknown as Record<string, unknown>[];
 }
+
+
+/**
+ * EL RELOJ DE TESORERÍA — la pantalla que recupera el 17%.
+ *
+ * Cerberus ordena su bandeja por `-fecha_pago` (lo más reciente primero), sin columna de
+ * antigüedad y sin ninguna alerta. Un pago viejo queda enterrado y no vuelve a subir nunca.
+ * Ahí está el p90 de 10 días contra la ventana de 7 de Meta.
+ *
+ * Esto lo da vuelta: lo más viejo arriba, con el reloj corriendo al lado.
+ * Solo LEE el espejo. La confirmación sigue ocurriendo en Cerberus, donde debe.
+ */
+overviewRouter.get("/tesoreria", async (_req, res) => {
+  res.json(await relojDeTesoreria());
+});
