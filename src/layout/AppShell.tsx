@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Link, Outlet } from 'react-router-dom';
-import { Settings } from 'lucide-react';
+import { Settings, Users } from 'lucide-react';
 import ConfiguracionPanel from '../features/config/ConfiguracionPanel';
 import { ConfigContext } from './ConfigContext';
 
@@ -31,14 +31,23 @@ export default function AppShell() {
               GOBERNA
             </Link>
 
-            <button
-              type="button"
-              onClick={abrir}
-              aria-label="Configuración"
-              className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <Settings size={17} />
-            </button>
+            <div className="flex items-center gap-1">
+              <Link
+                to="/gente"
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-muted hover:text-navy"
+              >
+                <Users size={15} />
+                Gente
+              </Link>
+              <button
+                type="button"
+                onClick={abrir}
+                aria-label="Configuración"
+                className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <Settings size={17} />
+              </button>
+            </div>
           </div>
         </header>
 

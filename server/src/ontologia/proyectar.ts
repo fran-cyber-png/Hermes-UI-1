@@ -147,6 +147,7 @@ export async function proyectarCerberus(): Promise<ResumenProyeccion> {
     const monto = num(v.monto_total);
     return {
       folio: String(v.codigo_venta),
+      folioHumano: v.folio_venta != null ? String(v.folio_venta) : null,
       clienteCodigo: v.codigo_cliente != null ? String(v.codigo_cliente) : null,
       paisCliente: paisPorCliente.get(String(v.codigo_cliente)) ?? null,
       montoTotal: monto != null ? String(monto) : null,

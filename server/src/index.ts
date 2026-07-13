@@ -12,6 +12,7 @@ import { leadsRouter } from "./routes/leads.js";
 import { metaAssetsRouter } from "./routes/metaAssets.js";
 import { overviewRouter } from "./routes/overview.js";
 import { personaRouter } from "./routes/persona.js";
+import { genteRouter } from "./routes/gente.js";
 import { responderRouter } from "./routes/responder.js";
 import { structureRouter } from "./routes/structure.js";
 import { arrancarReloj } from "./pauta/reloj.js";
@@ -38,6 +39,7 @@ app.use("/api/leads", leadsRouter);
 app.use("/api/interactions", interactionsRouter);
 app.use("/api/responder", responderRouter);
 app.use("/api/persona", personaRouter);
+app.use("/api/gente", genteRouter); // la persona canónica del grafo: su 360 y la búsqueda
 app.use("/api/meta", metaAssetsRouter);
 app.use("/api/audiences", audiencesRouter);
 app.use("/api/decisions", decisionsRouter); // el feed: qué requiere atención

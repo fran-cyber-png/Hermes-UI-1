@@ -67,8 +67,10 @@ export const producto = ontologia.table("producto", {
 export const venta = ontologia.table(
   "venta",
   {
-    /** `codigo_venta` — el folio (GOB-XXXXX). Único en Cerberus, ancla acá. */
+    /** `codigo_venta` — el PK numérico de la venta en Cerberus. */
     folio: text("folio").primaryKey(),
+    /** `folio_venta` — el folio humano (GOB-XXXXX). Es lo que usa el lazo como ancla del evento. */
+    folioHumano: text("folio_humano"),
     clienteCodigo: text("cliente_codigo"),
     /** País del CLIENTE (no de la sede que registró): la atribución geográfica correcta. */
     paisCliente: text("pais_cliente"),

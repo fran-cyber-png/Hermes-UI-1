@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { ingestarDump } from "../fuentes/cerberus.js";
 import { proyectarCerberus } from "../ontologia/proyectar.js";
+import { poblarIdentidad } from "../ontologia/poblarIdentidad.js";
 import { correrLazo } from "../lazo/worker.js";
 
 /**
@@ -41,6 +42,10 @@ async function main() {
     const p = await proyectarCerberus();
     console.log(
       `\nProyección canónica: ${p.ventas.toLocaleString("es")} ventas · ${p.clientes.toLocaleString("es")} clientes · ${p.pagos.toLocaleString("es")} pagos`,
+    );
+    const id = await poblarIdentidad();
+    console.log(
+      `Grafo de identidad: ${id.personas.toLocaleString("es")} personas · ${id.clientesVinculados.toLocaleString("es")} clientes vinculados`,
     );
     return;
   }
