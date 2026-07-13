@@ -15,6 +15,7 @@ import { personaRouter } from "./routes/persona.js";
 import { responderRouter } from "./routes/responder.js";
 import { structureRouter } from "./routes/structure.js";
 import { arrancarReloj } from "./pauta/reloj.js";
+import { webhookRouter } from "./webhook/ruta.js";
 
 const app = express();
 const port = process.env.PORT ? Number(process.env.PORT) : 4100;
@@ -26,6 +27,7 @@ app.use(express.json());
 // Reemplaza las 4 llamadas que la pantalla hacía al montar — una de ellas de 4 minutos.
 app.use("/api/overview", overviewRouter);
 app.use("/api/config", configRouter); // cuentas de pauta: en la base, no en localStorage
+app.use("/webhook", webhookRouter);   // Cerberus manda cada venta acá → ontología → Meta, en vivo
 
 // Las tres etapas de Meta, una por nivel.
 app.use("/api/campaigns", campaignsRouter); // 1. campaña
