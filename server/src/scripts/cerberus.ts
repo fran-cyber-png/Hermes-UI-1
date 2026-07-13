@@ -50,6 +50,7 @@ async function main() {
 
     console.log(`\n  POR QUÉ LAS DEMÁS NO VAN:`);
     const etiquetas: Record<string, string> = {
+      historico: "confirmada hace +30 días — es historia, va a la audiencia de valor",
       venta_no_valida: "anulada o cotización (nunca fue compra)",
       estado_no_pagado: "retirada o reembolsada (se arrepintió)",
       sin_confirmacion: "Tesorería todavía no confirmó el voucher",

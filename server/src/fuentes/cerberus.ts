@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { registro } from "../db/ontologia.js";
 import { sincronizaciones } from "../db/operacion.js";
-import { parsearInserts, type Valor } from "./mysqldump.js";
+import { leerColumnas, parsearInserts, type Valor } from "./mysqldump.js";
 
 /**
  * Ingesta de Cerberus: del dump al espejo crudo.
@@ -57,27 +57,6 @@ const TABLAS: Record<string, { clave: string }> = {
   tb_matricula: { clave: "id" },
 };
 
-/** Las columnas de cada tabla, leídas del `CREATE TABLE` del propio dump. */
-function leerColumnas(dump: string): Map<string, string[]> {
-  const cols = new Map<string, string[]>();
-  const re = /CREATE\s+TABLE\s+`?([A-Za-z0-9_]+)`?\s*\(([\s\S]*?)\n\)\s*ENGINE/gi;
-
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(dump)) !== null) {
-    const tabla = m[1];
-    if (!(tabla in TABLAS)) continue;
-
-    const nombres: string[] = [];
-    for (const linea of m[2].split("\n")) {
-      // Solo las definiciones de columna: `nombre` tipo … — no KEY, PRIMARY KEY, CONSTRAINT.
-      const c = linea.trim().match(/^`([A-Za-z0-9_]+)`\s+\w/);
-      if (c) nombres.push(c[1]);
-    }
-    cols.set(tabla, nombres);
-  }
-  return cols;
-}
-
 export type ResumenIngesta = {
   porTabla: Record<string, number>;
   total: number;
@@ -90,7 +69,10 @@ export async function ingestarDump(rutaDump: string): Promise<ResumenIngesta> {
   const arranque = Date.now();
   const dump = await leerArchivo(rutaDump);
 
-  const columnas = leerColumnas(dump);
+  // Las columnas salen del `CREATE TABLE` del propio dump: si Cerberus agrega una, la
+  // recibimos sin tocar nada.
+  const todas = leerColumnas(dump);
+  const columnas = new Map([...todas].filter(([t]) => t in TABLAS));
   const faltantes = Object.keys(TABLAS).filter((t) => !columnas.has(t));
 
   const porTabla: Record<string, number> = {};

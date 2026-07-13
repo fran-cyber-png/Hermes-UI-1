@@ -33,6 +33,7 @@ export type ResumenLazo = {
 };
 
 const MOTIVOS: MotivoDescarte[] = [
+  "historico",
   "venta_no_valida",
   "estado_no_pagado",
   "sin_confirmacion",

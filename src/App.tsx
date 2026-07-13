@@ -12,6 +12,7 @@ import CanalPage from './pages/CanalPage';
 import CampaignsListPage from './pages/CampaignsListPage';
 import NewCampaignPage from './pages/NewCampaignPage';
 import CampaignStructurePage from './pages/CampaignStructurePage';
+import TesoreriaPage from './pages/TesoreriaPage';
 
 function App() {
   return (
@@ -24,6 +25,9 @@ function App() {
           <Route index element={<HomePage />} />
           <Route path="leads" element={<LeadsPage />} />
           <Route path="bandeja" element={<BandejaPage />} />
+          {/* El reloj de Tesorería: la misma cola que Cerberus, ordenada al revés — lo más
+              viejo arriba. Es la única pantalla que recupera plata sin depender de nadie. */}
+          <Route path="tesoreria" element={<TesoreriaPage />} />
           {/* Cada canal a fondo: los canales NO son intercambiables, y una sola
               cola escondía justamente eso. */}
           <Route path="canal/:canal" element={<CanalPage />} />

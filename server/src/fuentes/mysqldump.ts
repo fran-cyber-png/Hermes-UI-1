@@ -171,3 +171,100 @@ function terminar(bruto: string, vacio: boolean, fueString: boolean): Valor {
   if (t === "NULL") return null;
   return bruto;
 }
+
+
+/**
+ * Las columnas de cada tabla, leídas del `CREATE TABLE` del propio dump.
+ *
+ * Se lee del dump y no se hardcodea: si Cerberus agrega una columna, el espejo la recibe sin que
+ * toquemos nada.
+ *
+ * Es más delicado de lo que parece:
+ *   · `decimal(12,2)` y `enum('a','b')` tienen COMAS ADENTRO → no se puede partir por comas.
+ *   · `PRIMARY KEY`, `KEY`, `CONSTRAINT` viven en la misma lista y NO son columnas.
+ *   · mysqldump emite multilínea, pero no hay que DEPENDER de los saltos de línea.
+ */
+export function leerColumnas(dump: string): Map<string, string[]> {
+  const cols = new Map<string, string[]>();
+  const re = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?([A-Za-z0-9_]+)`?\s*\(/gi;
+
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(dump)) !== null) {
+    const cuerpo = cuerpoBalanceado(dump, m.index + m[0].length - 1);
+    if (cuerpo == null) continue;
+    cols.set(m[1], columnasDe(cuerpo));
+  }
+  return cols;
+}
+
+/** Devuelve lo que hay entre el `(` en `i` y su `)` correspondiente, contando anidamiento. */
+function cuerpoBalanceado(s: string, i: number): string | null {
+  let nivel = 0;
+  let comilla: string | null = null;
+
+  for (let j = i; j < s.length; j++) {
+    const c = s[j];
+
+    if (comilla) {
+      if (c === "\\") j++;
+      else if (c === comilla) comilla = null;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === "`") {
+      comilla = c;
+      continue;
+    }
+    if (c === "(") nivel++;
+    else if (c === ")") {
+      nivel--;
+      if (nivel === 0) return s.slice(i + 1, j);
+    }
+  }
+  return null;
+}
+
+/** Parte el cuerpo por las comas de NIVEL 0 y se queda con las definiciones de columna. */
+function columnasDe(cuerpo: string): string[] {
+  const partes: string[] = [];
+  let actual = "";
+  let nivel = 0;
+  let comilla: string | null = null;
+
+  for (let i = 0; i < cuerpo.length; i++) {
+    const c = cuerpo[i];
+
+    if (comilla) {
+      actual += c;
+      if (c === "\\") {
+        actual += cuerpo[++i] ?? "";
+      } else if (c === comilla) comilla = null;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === "`") {
+      comilla = c;
+      actual += c;
+      continue;
+    }
+    if (c === "(") nivel++;
+    if (c === ")") nivel--;
+
+    // La coma solo separa si estamos FUERA de todo paréntesis: `decimal(12,2)` no se parte.
+    if (c === "," && nivel === 0) {
+      partes.push(actual);
+      actual = "";
+      continue;
+    }
+    actual += c;
+  }
+  if (actual.trim()) partes.push(actual);
+
+  const columnas: string[] = [];
+  for (const p of partes) {
+    const t = p.trim();
+    // `nombre` tipo… es una columna. PRIMARY KEY / KEY / UNIQUE / CONSTRAINT / INDEX no lo son.
+    if (/^(PRIMARY|UNIQUE|FULLTEXT|SPATIAL|FOREIGN|KEY|INDEX|CONSTRAINT|CHECK)\b/i.test(t)) continue;
+    const c = t.match(/^`?([A-Za-z0-9_]+)`?\s+\S/);
+    if (c) columnas.push(c[1]);
+  }
+  return columnas;
+}

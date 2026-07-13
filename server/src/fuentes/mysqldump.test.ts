@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test, describe } from "node:test";
-import { parsearInserts, type FilaCruda } from "./mysqldump.js";
+import { leerColumnas, parsearInserts, type FilaCruda } from "./mysqldump.js";
 
 /**
  * El dump de Cerberus llega como texto plano desde `/descargar-bd/` (un `mysqldump
@@ -107,5 +107,38 @@ describe("parsearInserts", () => {
   test("un dump vacío no explota", () => {
     assert.deepEqual([...parsearInserts("", new Set(["t"]))], []);
     assert.deepEqual([...parsearInserts("-- solo comentarios", new Set(["t"]))], []);
+  });
+});
+
+describe("leerColumnas", () => {
+  test("CREATE TABLE en varias líneas — como lo emite mysqldump", () => {
+    const dump = [
+      "CREATE TABLE `tb_venta` (",
+      "  `id` int NOT NULL AUTO_INCREMENT,",
+      "  `folio_venta` varchar(20) DEFAULT NULL,",
+      "  `monto_total` decimal(12,2) NOT NULL,",
+      "  PRIMARY KEY (`id`),",
+      "  KEY `idx_folio` (`folio_venta`),",
+      "  CONSTRAINT `fk_x` FOREIGN KEY (`id`) REFERENCES `t` (`id`)",
+      ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;",
+    ].join("\n");
+    // Solo las COLUMNAS. Ni PRIMARY KEY, ni KEY, ni CONSTRAINT.
+    assert.deepEqual(leerColumnas(dump).get("tb_venta"), ["id", "folio_venta", "monto_total"]);
+  });
+
+  test("CREATE TABLE en UNA sola línea — no todos los dumps van multilinea", () => {
+    const dump = "CREATE TABLE `t` (`id` int NOT NULL, `nombre` varchar(100)) ENGINE=InnoDB;";
+    assert.deepEqual(leerColumnas(dump).get("t"), ["id", "nombre"]);
+  });
+
+  test("un tipo con coma adentro no parte la columna", () => {
+    // `decimal(12,2)` tiene una coma. Si partiéramos por comas a ciegas, se rompería.
+    const dump = "CREATE TABLE `t` (`a` decimal(12,2), `b` enum('x','y'), `c` int) ENGINE=InnoDB;";
+    assert.deepEqual(leerColumnas(dump).get("t"), ["a", "b", "c"]);
+  });
+
+  test("sin ENGINE al final también se lee", () => {
+    const dump = "CREATE TABLE `t` (`id` int, `x` varchar(10));";
+    assert.deepEqual(leerColumnas(dump).get("t"), ["id", "x"]);
   });
 });

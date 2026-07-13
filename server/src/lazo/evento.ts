@@ -18,6 +18,20 @@ import { normalizarEmail, normalizarTelefono, type Pais } from "./normalizar.js"
 export const VENTANA_CAPI_DIAS = 7;
 
 /**
+ * Más allá de esto, una venta es HISTORIA, no un fracaso.
+ *
+ * Sin esta distinción, el contador de "fuera de ventana" mezcla dos cosas incompatibles:
+ *
+ *   · una venta de hace 6 meses  → nunca iba a entrar por CAPI. Es histórico. No es culpa de nadie.
+ *   · una venta de hace 10 días  → Tesorería tardó. ESO sí se puede arreglar.
+ *
+ * Contarlas juntas produce un número que acusa a Tesorería de algo que no hizo, y que además
+ * nunca baja — porque el histórico solo crece. El histórico va a la audiencia de valor
+ * (que NO tiene ventana de tiempo); el 17% real es solo lo segundo.
+ */
+export const HISTORICO_DIAS = 30;
+
+/**
  * LA FUGA DE LAS CUOTAS — leer antes de tocar esto.
  *
  * Deliberadamente NO exigimos `estado === 1 (Pagado)`. Cerberus solo pone ese estado cuando se
@@ -79,6 +93,8 @@ export type EventoCapi = {
 
 /** Por qué una venta NO produce un evento. Cada motivo es un número que hay que poder mirar. */
 export type MotivoDescarte =
+  /** Confirmada hace más de 30 días: es historia, no un fracaso. Va a la audiencia de valor. */
+  | "historico"
   /** Anulada o solo una cotización: nunca hubo intención de comprar. */
   | "venta_no_valida"
   /** Retirada o reembolsada: compró y se arrepintió (1,6%). */
@@ -107,10 +123,16 @@ export function construirCompra(venta: VentaConfirmada, ahora: Date): Resultado 
   if (!(venta.montoTotal > 0)) return { ok: false, motivo: "valor_invalido" };
 
   const atrasoMs = ahora.getTime() - venta.confirmadaAt.getTime();
+  const dias = Math.round(atrasoMs / 86_400_000);
+
+  // HISTORIA, no fracaso. Una venta de hace meses nunca iba a entrar por CAPI, y contarla como
+  // "perdida por la ventana" sería acusar a Tesorería de algo que no hizo.
+  if (dias > HISTORICO_DIAS) return { ok: false, motivo: "historico", diasDeAtraso: dias };
+
   if (atrasoMs > VENTANA_CAPI_DIAS * 86_400_000) {
-    // Esto le pasa a ~1 de cada 6 ventas (p90 de confirmación de Tesorería: 10 días).
-    // No es un caso raro y no se arregla con código: se arregla confirmando más rápido.
-    return { ok: false, motivo: "fuera_de_ventana", diasDeAtraso: Math.round(atrasoMs / 86_400_000) };
+    // ESTE sí es el 17%: una venta reciente que Tesorería confirmó tarde (su p90 es 10 días).
+    // No se arregla con código: se arregla confirmando más rápido.
+    return { ok: false, motivo: "fuera_de_ventana", diasDeAtraso: dias };
   }
 
   const email = venta.cliente.email ? normalizarEmail(venta.cliente.email) : null;
