@@ -127,6 +127,20 @@ function LatenciaPanel({ l }: { l: Comercial['latencia'] }) {
         </span>
       </p>
 
+      {/* La cobertura de la medición. Sin esto, «el p90 es 10 días» suena a un hecho sobre TODOS los
+          pagos, y es un hecho sobre los que tienen fecha de confirmación. Los que no la tienen son,
+          por definición, los que nunca completaron el paso que estamos midiendo: el número de arriba
+          es el PISO del problema, no su tamaño. */}
+      {l.sinConfirmar > 0 && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Medido sobre <strong className="text-foreground">{l.total.toLocaleString('es')}</strong> pagos
+          con fecha de confirmación. Otros{' '}
+          <strong className="text-foreground">{l.sinConfirmar.toLocaleString('es')}</strong> pagos
+          válidos no la tienen y no entran a ningún percentil — nunca completaron el paso que se está
+          midiendo, así que el p90 real solo puede ser peor que este.
+        </p>
+      )}
+
       {l.porSede.length > 0 && (
         <div className="mt-4 border-t border-border pt-4">
           <p className={EYEBROW + ' mb-2'}>Por sede — dónde se traba</p>

@@ -17,7 +17,10 @@ export type Persona360 = {
   identidades: { tipo: string; valor: string }[];
   resumen: {
     compras: number;
-    ltvUsd: number;
+    /** null cuando ninguna compra se pudo convertir a USD. No medible ≠ $0. */
+    ltvUsd: number | null;
+    /** Compras cobradas que quedaron fuera del LTV por no tener tasa de cambio. */
+    comprasNoMedibles: number;
     primeraCompra: string | null;
     ultimaCompra: string | null;
     diasDesdeUltima: number | null;

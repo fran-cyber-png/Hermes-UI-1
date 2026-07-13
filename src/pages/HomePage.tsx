@@ -12,6 +12,7 @@ import PanelFaena from '../features/home/PanelFaena';
 import FichaEstado from '../features/home/FichaEstado';
 import BandejaCanales from '../features/canales/BandejaCanales';
 import CostoPorLeadCard from '../features/leads/CostoPorLeadCard';
+import type { CostoResponse } from '../features/leads/costoTypes';
 import DecisionesPendientesCard from '../features/decisions/DecisionesPendientesCard';
 import { CardCerrado, CardPreguntas } from '../features/home/Verdad';
 
@@ -53,8 +54,14 @@ export default function HomePage() {
             Goberna · la matriz
           </p>
           <h1 className="mt-1 font-heading text-2xl font-bold text-navy">Lo que está pasando</h1>
+          {/* Esta línea decía «las ventas son el total real», y el panel de ROAS de abajo usa las
+              ventas RECORTADAS a la misma ventana que el gasto (si no, dividiría ventas de siempre
+              por pauta de 90 días y fabricaría un retorno). Las dos cosas eran ciertas por separado
+              y juntas se contradecían. Se dice cuál es cuál. */}
           <p className="mt-0.5 text-sm text-muted-foreground">
-            El gráfico y la pauta miran {ETIQUETA[rango]}. Las ventas y lo pendiente son el total real.
+            El gráfico y la pauta miran {ETIQUETA[rango]}. Las ventas totales y lo pendiente son el
+            acumulado real; el retorno por país compara solo {ETIQUETA[rango]}, contra el gasto del
+            mismo período.
           </p>
         </div>
         <RangoPicker valor={rango} onChange={setRango} />
@@ -181,7 +188,10 @@ export default function HomePage() {
               <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
                 <DecisionesPendientesCard pauta={data.pauta} cuentas={cfg?.cuentas ?? []} />
                 {costo != null && (
-                  <CostoPorLeadCard porAnuncio={(costo as { porAnuncio: never[] }).porAnuncio} />
+                  <CostoPorLeadCard
+                    porAnuncio={(costo as CostoResponse).porAnuncio}
+                    sinTasa={(costo as CostoResponse).sinTasa}
+                  />
                 )}
               </div>
             </>

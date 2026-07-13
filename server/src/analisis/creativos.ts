@@ -38,8 +38,14 @@ export type Creativo = {
   anuncios: number;
   campana: string;
   veredicto: VeredictoCreativo;
-  /** ¿Se quemó? Frecuencia sube Y CTR baja: al mismo público se le muestra más y responde menos. */
+  /** ¿Se quemó? Frecuencia sube Y CTR baja, los dos de forma material (ver `pauta/fatiga.ts`). */
   fatiga: boolean;
+  /**
+   * LA EVIDENCIA del «quemado». −0.32 = el CTR cayó 32% entre la primera y la segunda mitad de la
+   * serie. Sin esto, la insignia es una afirmación sin respaldo — y pausar un creativo cuesta plata.
+   */
+  fatigaDeltaCtr: number | null;
+  fatigaDeltaFrecuencia: number | null;
   /** CTR promedio del creativo, en %. null si Meta no dio la serie diaria. */
   ctr: number | null;
 };
@@ -53,6 +59,8 @@ type Agg = {
   anuncios: number;
   campana: string;
   fatiga: boolean;
+  fatigaDeltaCtr: number | null;
+  fatigaDeltaFrecuencia: number | null;
   ctrs: number[];
 };
 
@@ -80,6 +88,8 @@ export function creativos(campanas: CampaignInput[], tasas: Tasas): Creativo[] {
             anuncios: 0,
             campana: camp.name,
             fatiga: false,
+            fatigaDeltaCtr: null,
+            fatigaDeltaFrecuencia: null,
             ctrs: [],
           } as Agg);
 
@@ -87,8 +97,15 @@ export function creativos(campanas: CampaignInput[], tasas: Tasas): Creativo[] {
         prev.resultados += ad.results ?? 0;
         prev.anuncios += 1;
         // Si CUALQUIER anuncio de este creativo está quemado, el creativo está quemado: es el
-        // mismo post mostrándose de más al mismo público.
-        if (ad.fatiga) prev.fatiga = true;
+        // mismo post mostrándose de más al mismo público. Se guarda la evidencia del PEOR caso
+        // (la caída de CTR más grande): es la que justifica pausarlo.
+        if (ad.fatiga) {
+          prev.fatiga = true;
+          if (ad.fatigaDeltaCtr != null && (prev.fatigaDeltaCtr == null || ad.fatigaDeltaCtr < prev.fatigaDeltaCtr)) {
+            prev.fatigaDeltaCtr = ad.fatigaDeltaCtr;
+            prev.fatigaDeltaFrecuencia = ad.fatigaDeltaFrecuencia ?? null;
+          }
+        }
         if (ad.ctr != null) prev.ctrs.push(ad.ctr);
         // Se conserva la primera miniatura/copy no vacíos que aparezcan.
         prev.thumbnailUrl ||= cr?.thumbnailUrl ?? null;
@@ -110,6 +127,8 @@ export function creativos(campanas: CampaignInput[], tasas: Tasas): Creativo[] {
       anuncios: a.anuncios,
       campana: a.campana,
       fatiga: a.fatiga,
+      fatigaDeltaCtr: a.fatigaDeltaCtr,
+      fatigaDeltaFrecuencia: a.fatigaDeltaFrecuencia,
       ctr: a.ctrs.length ? Math.round((a.ctrs.reduce((s, x) => s + x, 0) / a.ctrs.length) * 100) / 100 : null,
     }))
     .filter((c) => c.gastoUsd > 0); // solo creativos que efectivamente corrieron

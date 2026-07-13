@@ -95,9 +95,24 @@ function Copiloto({ r }: { r: RoasPais }) {
 export default function RoasPorPais({ roasPais, plano = false }: { roasPais: RoasPais[]; plano?: boolean }) {
   const [abierto, setAbierto] = useState<string | null>(null);
 
-  const totalGasto = roasPais.reduce((s, r) => s + r.gastoUsd, 0);
-  const totalVentas = roasPais.reduce((s, r) => s + r.ventasUsd, 0);
+  // ── EL DENOMINADOR TIENE QUE MERECER SU NUMERADOR ──
+  //
+  // El ROAS global sumaba TODAS las ventas por país arriba y TODO el gasto abajo. Pero hay países
+  // que venden SIN que les pongamos un dólar de pauta (demanda orgánica: el sistema hasta los marca
+  // con `accion: "sin_gasto"`). Esas ventas entraban al numerador y no tenían nada abajo que las
+  // sostuviera — o sea, le atribuíamos a la pauta plata que la pauta no trajo. El retorno global
+  // salía estructuralmente inflado, y hacia arriba, que es la dirección en la que un error de
+  // marketing nunca se descubre solo.
+  //
+  // Ahora el ROAS global se calcula SOLO sobre los países donde efectivamente invertimos. Las
+  // ventas orgánicas no desaparecen: se dicen aparte, que además es una noticia buena de verdad.
+  const conPauta = roasPais.filter((r) => r.gastoUsd > 0);
+  const totalGasto = conPauta.reduce((s, r) => s + r.gastoUsd, 0);
+  const totalVentas = conPauta.reduce((s, r) => s + r.ventasUsd, 0);
   const roasGlobal = totalGasto > 0 ? totalVentas / totalGasto : null;
+  const ventasOrganicas = roasPais
+    .filter((r) => r.gastoUsd === 0)
+    .reduce((s, r) => s + r.ventasUsd, 0);
 
   const VISIBLES = 8;
   const cabeza = roasPais.slice(0, VISIBLES);
@@ -113,7 +128,16 @@ export default function RoasPorPais({ roasPais, plano = false }: { roasPais: Roa
           {roasGlobal != null ? `${roasGlobal.toFixed(1)}×` : '—'}
         </span>{' '}
         de retorno: ${Math.round(totalVentas).toLocaleString('es')} en ventas por $
-        {Math.round(totalGasto).toLocaleString('es')} de pauta. Tocá un país para ver por qué.
+        {Math.round(totalGasto).toLocaleString('es')} de pauta, en los {conPauta.length} países donde
+        invertimos.
+        {ventasOrganicas > 0 && (
+          <>
+            {' '}
+            Otros ${Math.round(ventasOrganicas).toLocaleString('es')} se vendieron en países SIN pauta
+            — no cuentan acá, porque no los trajo la pauta.
+          </>
+        )}{' '}
+        Tocá un país para ver por qué.
       </p>
 
       <div className="flex flex-col divide-y divide-border">

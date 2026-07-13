@@ -22,8 +22,15 @@ export interface Decision {
   nivel: Nivel;
   titulo: string;
   detalle: string;
+  /** El gasto en la moneda de LA CUENTA. Sirve para mostrar la decisión individual, nunca para sumar. */
   plataEnJuego: number;
   moneda: string;
+  /**
+   * El MISMO monto en dólares, convertido con la tasa del negocio. Lo único que se puede sumar
+   * entre cuentas: el snapshot mezcla USD, COP y BOB. `null` si no hay tasa para esa moneda —
+   * y entonces la decisión queda FUERA del total, no entra como cero.
+   */
+  plataEnJuegoUsd?: number | null;
   campaignId: string;
   campaignName: string;
   accountId: string;

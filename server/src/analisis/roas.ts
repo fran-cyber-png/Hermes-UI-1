@@ -82,17 +82,35 @@ export function confianza(ventas: number, gastoUsd: number): Confianza {
 }
 
 /**
- * La plata en juego, en dólares. Es lo que hay que priorizar — no el ROAS crudo.
+ * La plata en juego, en dólares de PRESUPUESTO. Es lo que hay que priorizar — no el ROAS crudo.
  *
  * Un país con ROAS 8 pero $20 de gasto mueve menos aguja que uno con ROAS 3 y $5.000. Rankear por
  * ROAS persigue el ratio lindo de bajo volumen; rankear por esto persigue la plata.
  *
- * Es la distancia (en USD) entre lo que el segmento devuelve y lo que devolvería al ROAS objetivo,
- * ponderada por el tamaño del gasto.
+ * ── EL BUG DIMENSIONAL QUE ESTO ARREGLA ──
+ * La fórmula era `|objetivo − roas| × gasto`. Eso NO tiene unidades de presupuesto: son unidades de
+ * FACTURACIÓN. Desarmándola:
+ *
+ *     |objetivo − roas| × gasto  =  |objetivo·gasto − ventas|  =  objetivo × |gasto − ventas/objetivo|
+ *
+ * O sea: era exactamente CUATRO VECES la cifra correcta. Y en `recortar` producía imposibles —
+ * un país con $5.000 de gasto y ROAS 0,5 daba «$17.500 de desperdicio», más plata de la que
+ * existió jamás. No se puede desperdiciar más de lo que se gastó. La pantalla imprimía ese número
+ * como plata recuperable.
+ *
+ * ── La fórmula correcta, y es UNA SOLA para los dos lados ──
+ * El nivel de gasto en el que este segmento rendiría justo el objetivo es `ventas / objetivo`.
+ * La distancia entre ese techo y el gasto real ES la plata en juego:
+ *
+ *     margen = ventas/objetivo − gasto
+ *       > 0  → ESCALAR:  cabe ese presupuesto más antes de caer al objetivo.
+ *       < 0  → RECORTAR: ese presupuesto está de más. Y su tope natural es el gasto entero:
+ *                        con ventas = 0 el desperdicio es exactamente el gasto, nunca más.
+ *
+ * Sigue siendo una estimación LINEAL —no modela rendimientos decrecientes— y eso se dice en el
+ * texto de cada recomendación (`analisis/explicar.ts`), no en una nota al pie.
  */
 export function oportunidadUsd(s: Segmento): number {
   if (s.gastoUsd === 0) return 0;
-  const roas = s.ventasUsd / s.gastoUsd;
-  // Cuánto MÁS podría rendir (o cuánto se está desperdiciando) a la escala de este gasto.
-  return Math.abs(ROAS_OBJETIVO - roas) * s.gastoUsd;
+  return Math.abs(s.ventasUsd / ROAS_OBJETIVO - s.gastoUsd);
 }

@@ -131,7 +131,7 @@ overviewRouter.get("/", async (req, res) => {
     // en vez de mostrar un cero que parece un dato.
     pauta: snap
       ? {
-          decisiones: detectar(snap.campanas),
+          decisiones: detectar(snap.campanas, tasas ?? new Map()),
           campanasAnalizadas: snap.campanas.length,
           costo: snap.costo,
           // Los 24 con más inversión detrás, no los 129: la pantalla muestra 9.

@@ -42,8 +42,12 @@ export default function DecisionFeed({ accountIds }: Props) {
   }, [accountIds, rango]);
 
   const visibles = decisiones.filter((d) => !ignoradas.includes(d.id));
-  const plataTotal = visibles.reduce((s, d) => s + d.plataEnJuego, 0);
-  const moneda = visibles[0]?.moneda ?? '';
+  // El total va SIEMPRE en dólares. Sumar el gasto crudo mezclaba USD, COP y BOB en un mismo
+  // número y le ponía la etiqueta de la primera moneda que apareciera. Las decisiones cuya moneda
+  // no tiene tasa no se suman con un cero: se dicen aparte.
+  const convertidas = visibles.filter((d) => d.plataEnJuegoUsd != null);
+  const plataTotal = convertidas.reduce((s, d) => s + (d.plataEnJuegoUsd ?? 0), 0);
+  const sinTasa = visibles.length - convertidas.length;
 
   return (
     <div className="flex flex-col gap-5">
@@ -86,11 +90,18 @@ export default function DecisionFeed({ accountIds }: Props) {
           {/* La suma primero: cuánta plata hay en juego en total. */}
           <div className="rounded-2xl border border-border bg-navy p-5 text-white">
             <div className="font-heading text-3xl font-extrabold tabular-nums text-gold">
-              {moneda} {plataTotal.toFixed(0)}
+              USD {plataTotal.toFixed(0)}
             </div>
             <p className="mt-1 text-sm text-navy-muted">
               en juego, repartidos en {visibles.length} decisión{visibles.length === 1 ? '' : 'es'} sobre{' '}
               {analizadas} campañas activas. Ordenadas por lo que más te cuesta.
+              {sinTasa > 0 && (
+                <>
+                  {' '}
+                  {sinTasa} {sinTasa === 1 ? 'queda' : 'quedan'} fuera del total: no tenemos tasa de
+                  cambio para su moneda.
+                </>
+              )}
             </p>
           </div>
 

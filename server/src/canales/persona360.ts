@@ -27,7 +27,10 @@ export type Persona360 = {
   identidades: { tipo: string; valor: string }[];
   resumen: {
     compras: number;
-    ltvUsd: number;
+    /** null cuando ninguna compra se pudo convertir a USD. No medible ≠ $0. */
+    ltvUsd: number | null;
+    /** Cuántas compras cobradas quedaron fuera del LTV por no tener tasa de cambio. */
+    comprasNoMedibles: number;
     primeraCompra: string | null;
     ultimaCompra: string | null;
     diasDesdeUltima: number | null;
@@ -138,7 +141,18 @@ export async function persona360(id: number): Promise<Persona360 | null> {
 
   // ── El resumen ──
   const cobradas = vs.filter((v) => v.cobrada);
-  const ltvUsd = Math.round(cobradas.reduce((s, v) => s + (v.musd ?? 0), 0));
+
+  // El LTV solo suma las ventas que SE PUDIERON convertir a dólares. Una venta en una moneda sin
+  // tasa no vale cero: no se sabe cuánto vale. Sumarla como 0 —que es lo que hacía el `?? 0`—
+  // subestima al cliente en silencio y puede sacarlo del segmento "oro" al que pertenece.
+  //
+  // Cuando NINGUNA de sus compras es medible, `ltvUsd` es `null`, no 0: la pantalla dice "no
+  // medible" en vez de pintar de pobre a alguien que quizá sea el mejor cliente del negocio.
+  const medibles = cobradas.filter((v) => v.musd != null);
+  const ltvUsd = medibles.length ? Math.round(medibles.reduce((s, v) => s + (v.musd as number), 0)) : null;
+  /** Cuántas compras cobradas quedaron fuera del LTV por no tener tasa de cambio. */
+  const comprasNoMedibles = cobradas.length - medibles.length;
+
   const fechas = cobradas.map((v) => v.fecha_venta).filter(Boolean).sort() as string[];
   const primera = fechas[0] ?? null;
   const ultima = fechas[fechas.length - 1] ?? null;
@@ -151,8 +165,13 @@ export async function persona360(id: number): Promise<Persona360 | null> {
 
   // ── Las inferencias: quién es esta persona, deducido de su historia ──
   const inferencias: Persona360["inferencias"] = [];
-  if (cobradas.length >= 3 || ltvUsd >= 300)
+  if (cobradas.length >= 3 || (ltvUsd != null && ltvUsd >= 300))
     inferencias.push({ texto: "Cliente de valor — semilla de audiencia lookalike", tono: "valor" });
+  if (comprasNoMedibles > 0)
+    inferencias.push({
+      texto: `${comprasNoMedibles} ${comprasNoMedibles === 1 ? "compra queda" : "compras quedan"} fuera del LTV: sin tasa de cambio`,
+      tono: "neutro",
+    });
   if (cobradas.length > 1)
     inferencias.push({ texto: `Cliente recurrente · ${cobradas.length} compras`, tono: "valor" });
   if (enCuotas) inferencias.push({ texto: "Paga en cuotas — mirar cobranza", tono: "riesgo" });
@@ -167,7 +186,7 @@ export async function persona360(id: number): Promise<Persona360 | null> {
     id: p.id,
     nombre: p.nombre_display,
     identidades,
-    resumen: { compras: cobradas.length, ltvUsd, primeraCompra: primera, ultimaCompra: ultima, diasDesdeUltima, paises, reembolsos, enCuotas },
+    resumen: { compras: cobradas.length, ltvUsd, comprasNoMedibles, primeraCompra: primera, ultimaCompra: ultima, diasDesdeUltima, paises, reembolsos, enCuotas },
     inferencias,
     timeline,
   };

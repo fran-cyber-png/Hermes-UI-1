@@ -18,7 +18,10 @@ export type Latencia = {
   p50: number | null;
   p90: number | null;
   fueraDeVentana: number;
+  /** El universo MEDIBLE: pagos válidos CON fecha de confirmación. Los percentiles salen de acá. */
   total: number;
+  /** Pagos válidos sin fecha de confirmación: invisibles al percentil. El p90 real solo puede ser peor. */
+  sinConfirmar: number;
   porSede: { sede: string; p50: number | null; p90: number | null; pagos: number; tarde: number }[];
 };
 export type Sede = { sede: string; ventas: number; usd: number; ticket: number; clientes: number };

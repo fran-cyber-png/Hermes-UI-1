@@ -43,10 +43,29 @@ const plata = (v: number) => `$${Math.round(Math.abs(v)).toLocaleString("es")}`;
 const equis = (v: number | null) => (v == null ? "—" : `${v.toFixed(2)}×`);
 
 /**
- * Score heurístico 0-100, MODULADO por la confianza (el tamaño de la muestra).
+ * El techo del score cuando el país NO PASÓ LAS COMPUERTAS DE VOLUMEN (`accion === "observar"`).
  *
- * La confianza multiplica, no suma: si multiplicara, un ROAS altísimo con muestra chica todavía
- * daría un número alto y alguien movería plata detrás de ruido.
+ * ── EL BUG QUE ESTO MATA ──
+ * El multiplicador de confianza solo no alcanzaba. Uruguay —$0,56 de gasto, 1 venta, un ROAS de
+ * 641× que es puro artefacto de dividir por casi cero— sacaba **39**. Perú —3× de ROAS, decenas de
+ * ventas, confianza alta, el mercado más grande del negocio— sacaba **32**.
+ *
+ * El ruido le ganaba al mercado real EN EL PROPIO RANKING que le dice a alguien dónde poner la plata.
+ * Y el sistema ya lo sabía: le había puesto `accion: "observar"` a Uruguay, o sea «no toques esto».
+ * El score simplemente no leía su propio veredicto.
+ *
+ * `observar` no es una acción con prioridad baja. Es la AUSENCIA de una acción. Su score tiene que
+ * quedar debajo de cualquier país sobre el que sí se pueda decidir algo.
+ */
+const TECHO_SIN_VOLUMEN = 10;
+
+/**
+ * Score heurístico 0-100 — la PRIORIDAD DE ACCIÓN sobre este país, no la calidad de su ROAS.
+ *
+ * Dos frenos, no uno:
+ *  1. La confianza MULTIPLICA (no suma): sin volumen, la calidad observada no es confiable.
+ *  2. Las compuertas de volumen MANDAN: si el país no las pasó (`observar`), el score se capa. Un
+ *     ROAS espectacular calculado sobre 1 venta no puede encabezar el ranking de dónde invertir.
  */
 export function score(
   roas: number | null,
@@ -54,6 +73,7 @@ export function score(
   ventasShare: number,
   budgetShare: number,
   objetivo = OBJETIVO,
+  accion?: string,
 ): number {
   if (roas == null) return 0;
   const mult = ({ alta: 0.85, media: 0.6, baja: 0.35 } as Record<string, number>)[conf] ?? 0.35;
@@ -61,7 +81,9 @@ export function score(
   let base = (Math.min(roas / objetivo, 2) / 2) * 100;
   // Eficiencia de share: trae más ventas de las que su gasto haría esperar.
   if (ventasShare > budgetShare) base += 12;
-  return Math.max(0, Math.min(100, Math.round(base * mult)));
+  const s = Math.max(0, Math.min(100, Math.round(base * mult)));
+  // La compuerta de volumen tiene la última palabra sobre el multiplicador de confianza.
+  return accion === "observar" ? Math.min(s, TECHO_SIN_VOLUMEN) : s;
 }
 
 export function explicar(r: RoasPais, objetivo = OBJETIVO): Explicacion {
@@ -99,7 +121,7 @@ export function explicar(r: RoasPais, objetivo = OBJETIVO): Explicacion {
   switch (r.accion) {
     case "escalar":
       veredicto = `${pais} es una oportunidad: rinde ${equis(roas)}, por encima del objetivo, con confianza ${conf}. Hay margen para escalar.`;
-      recomendacion = `Subí el presupuesto. El techo estimado es ~${plata(opp)} más antes de bajar del objetivo.`;
+      recomendacion = `Subí el presupuesto. Con lo que ya factura, cabrían ~${plata(opp)} más de inversión antes de bajar del objetivo de ${objetivo}×.`;
       quePasaSi = `Escalando hacia ese techo sumarías ~${plata(opp)} de inversión que todavía rinde. ${NOTA_LINEAL}`;
       break;
     case "mantener":
@@ -109,8 +131,10 @@ export function explicar(r: RoasPais, objetivo = OBJETIVO): Explicacion {
       break;
     case "recortar":
       veredicto = `${pais} no rinde (${equis(roas)}, por debajo del objetivo de ${objetivo}×) — revisá y recortá.`;
-      recomendacion = `Bajá o reoptimizá. El desperdicio estimado contra el objetivo es ~${plata(opp)}.`;
-      quePasaSi = `Recortando liberás ~${plata(opp)} para moverlos a los mercados que sí rinden. ${NOTA_LINEAL}`;
+      // `opp` es presupuesto SOBRANTE, y su tope natural es el gasto entero: de los ${plata(gastoUsd)}
+      // invertidos, ~${plata(opp)} no están justificados al objetivo. Nunca puede dar más que el gasto.
+      recomendacion = `Bajá o reoptimizá. De los ${plata(gastoUsd)} invertidos, ~${plata(opp)} no se justifican al objetivo de ${objetivo}×.`;
+      quePasaSi = `Recortando liberás hasta ~${plata(opp)} para moverlos a los mercados que sí rinden. ${NOTA_LINEAL}`;
       break;
     case "sin_ventas":
       veredicto = `${pais} gastó ${plata(gastoUsd)} y no tiene ventas registradas — revisá ANTES de cortar.`;
@@ -141,7 +165,8 @@ export function explicar(r: RoasPais, objetivo = OBJETIVO): Explicacion {
 
   return {
     pregunta: `¿Por qué ${pais}?`,
-    score: score(roas, conf, vshare, bshare, objetivo),
+    // El score lee el veredicto de volumen: `observar` no compite con los países accionables.
+    score: score(roas, conf, vshare, bshare, objetivo, r.accion),
     veredicto,
     evidencia,
     recomendacion,

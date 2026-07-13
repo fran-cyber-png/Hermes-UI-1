@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test, describe } from "node:test";
-import { hayFatiga, type PuntoSerie } from "./fatiga.js";
+import { evaluarFatiga, hayFatiga, type PuntoSerie } from "./fatiga.js";
 
 /**
  * La fatiga del creativo. Lo que se protege acá es la CONDICIÓN DOBLE: no alcanza con que el CTR
@@ -46,5 +46,40 @@ describe("hayFatiga — la frecuencia SUBE y el CTR BAJA (las dos, no una)", () 
   test("con datos faltantes (Meta no devolvió frecuencia) no se opina", () => {
     const sinFreq = serie(20, [1, 3], [2, 0.5]).map((p) => ({ ...p, frecuencia: null }));
     assert.equal(hayFatiga(sinFreq), false);
+  });
+});
+
+describe("el umbral mínimo de efecto — sin esto, 1 de cada 4 creativos sanos daba QUEMADO", () => {
+  test("EL FALSO POSITIVO: una diferencia infinitesimal NO es fatiga", () => {
+    // La condición era `freqFin > freqIni && ctrFin < ctrIni`: CUALQUIER diferencia, por chica que
+    // fuera, marcaba el creativo. Frecuencia 1,2000 → 1,2001 y CTR 2,5000 → 2,4999 daba «quemado».
+    // Como las dos comparaciones son casi simétricas, un creativo PERFECTAMENTE ESTABLE daba
+    // positivo por puro ruido ~25% de las veces. Pausar un creativo sano cuesta plata.
+    const ruido = serie(20, [1.2, 1.2001], [2.5, 2.4999]);
+    assert.equal(hayFatiga(ruido), false, "eso es ruido de medición, no un creativo agotado");
+  });
+
+  test("una caída de CTR real pero SIN que suba la frecuencia sigue sin ser fatiga", () => {
+    assert.equal(hayFatiga(serie(20, [2.0, 2.0], [3.0, 1.5])), false);
+  });
+
+  test("la frecuencia sube fuerte pero el CTR apenas se mueve → no alcanza", () => {
+    // −2% de CTR no es un creativo quemado: es una semana con menos suerte.
+    assert.equal(hayFatiga(serie(20, [1.0, 2.0], [2.0, 1.96])), false);
+  });
+
+  test("el veredicto viene con su EVIDENCIA: cuánto cayó el CTR y cuánto subió la frecuencia", () => {
+    // «Quemado» sin números es un sello sin respaldo — y detrás de ese sello alguien pausa un anuncio.
+    const f = evaluarFatiga(serie(20, [1.0, 3.0], [4.0, 1.0]));
+    assert.ok(f, "con 20 días de datos hay veredicto");
+    assert.equal(f.quemado, true);
+    assert.ok(f.deltaCtr < -0.15, `el CTR cayó ${Math.round(f.deltaCtr * 100)}%`);
+    assert.ok(f.deltaFrecuencia > 0.1, `la frecuencia subió ${Math.round(f.deltaFrecuencia * 100)}%`);
+  });
+
+  test("'no lo sé' es null, no 'está sano'", () => {
+    // Una serie corta no es un creativo saludable: es un creativo sobre el que no se puede opinar.
+    assert.equal(evaluarFatiga(serie(10, [1.2, 3.5], [1.8, 0.6])), null);
+    assert.equal(evaluarFatiga([]), null);
   });
 });

@@ -109,11 +109,17 @@ function Ficha360({ p }: { p: Persona360 }) {
               )}
             </div>
           </div>
-          {/* El LTV: el número que resume el valor de esta persona. En oro. */}
+          {/* El LTV: el número que resume el valor de esta persona. En oro.
+              Y cuando no se puede medir, lo dice — no lo pinta de $0. Una compra en una moneda sin
+              tasa no vale cero: no sabemos cuánto vale, y eso es otra cosa. */}
           <div className="text-right">
-            <p className="font-heading text-3xl font-extrabold tabular-nums" style={{ color: GOLD_INK }}>
-              ${r.ltvUsd.toLocaleString('es')}
-            </p>
+            {r.ltvUsd != null ? (
+              <p className="font-heading text-3xl font-extrabold tabular-nums" style={{ color: GOLD_INK }}>
+                ${r.ltvUsd.toLocaleString('es')}
+              </p>
+            ) : (
+              <p className="font-heading text-2xl font-extrabold text-navy/35">no medible</p>
+            )}
             <p className="font-mono text-[10px] uppercase tracking-wide text-navy/45">
               valor de vida · {r.compras} {r.compras === 1 ? 'compra' : 'compras'}
             </p>

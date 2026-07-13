@@ -58,10 +58,10 @@ function semanticoVenta(estado: number | null): string {
   return "otro";
 }
 
-/** Inserta en lotes (la tabla ya fue truncada). */
-async function insertar(tabla: any, filas: any[]): Promise<void> {
+/** Inserta en lotes, dentro de la transacción del rebuild. */
+async function insertar(tx: any, tabla: any, filas: any[]): Promise<void> {
   for (let i = 0; i < filas.length; i += LOTE) {
-    await db.insert(tabla).values(filas.slice(i, i + LOTE));
+    await tx.insert(tabla).values(filas.slice(i, i + LOTE));
   }
 }
 
@@ -243,16 +243,27 @@ export async function proyectarCerberus(): Promise<ResumenProyeccion> {
     };
   });
 
-  // ── Rebuild: vaciar y re-insertar (la capa es derivada, se rehace entera) ──
-  await db.execute(
-    sql`TRUNCATE ontologia.venta, ontologia.detalle_venta, ontologia.cuota, ontologia.pago, ontologia.producto, ontologia.cliente`,
-  );
-  await insertar(cliente, filasCliente);
-  await insertar(producto, filasProducto);
-  await insertar(venta, filasVenta);
-  await insertar(detalleVenta, filasDetalle);
-  await insertar(cuota, filasCuota);
-  await insertar(pago, filasPago);
+  // ── Rebuild: vaciar y re-insertar, TODO O NADA ──
+  //
+  // Esto vaciaba las seis tablas y las re-insertaba en seis pasos sueltos, sin transacción. Si la
+  // conexión se caía entre el TRUNCATE y el último INSERT —o si un lote reventaba por un dato raro
+  // de Cerberus— la capa canónica quedaba MUTILADA: las ventas borradas y no repuestas, y toda la
+  // plataforma leyendo de ahí. La home habría mostrado $0 de ventas con total naturalidad, porque
+  // "cero" es una respuesta perfectamente válida de una tabla vacía.
+  //
+  // Adentro de una transacción, el TRUNCATE también se revierte. Si algo falla, la capa vieja sigue
+  // en pie: un dato de hace una hora es infinitamente mejor que un cero que parece un dato.
+  await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`TRUNCATE ontologia.venta, ontologia.detalle_venta, ontologia.cuota, ontologia.pago, ontologia.producto, ontologia.cliente`,
+    );
+    await insertar(tx, cliente, filasCliente);
+    await insertar(tx, producto, filasProducto);
+    await insertar(tx, venta, filasVenta);
+    await insertar(tx, detalleVenta, filasDetalle);
+    await insertar(tx, cuota, filasCuota);
+    await insertar(tx, pago, filasPago);
+  });
 
   return {
     clientes: filasCliente.length,

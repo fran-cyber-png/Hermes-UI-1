@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { Tasas } from "../analisis/tasas.js";
 import { test } from "node:test";
 import {
   anuncioCaro,
@@ -9,6 +10,15 @@ import {
   sinExclusiones,
   type CampaignInput,
 } from "./detectors.js";
+
+/**
+ * Las tasas del negocio. Las campañas de prueba están en USD (conversión 1:1, no distrae del
+ * detector); las otras monedas están acá para el test que prueba que la plata se compara en dólares.
+ */
+const TASAS: Tasas = new Map([
+  ["PEN", 3.49],
+  ["BOB", 9.07],
+]);
 
 /**
  * El caso base son los números REALES de la campaña OSINT, leídos de Meta:
@@ -80,7 +90,7 @@ test("presupuestoMalRepartido encuentra la fuga real de OSINT", () => {
   assert.match(abril.titulo, /2\.0×/, "ABRIL cuesta 2x más que MAYO ($1.24 vs $0.62)");
   assert.ok(abril.plataEnJuego > 0);
   // Es el hallazgo más caro de la campaña: debe encabezar el feed.
-  assert.equal(detectar([osint()])[0].id, abril.id);
+  assert.equal(detectar([osint()], TASAS)[0].id, abril.id);
 });
 
 test("presupuestoMalRepartido no dispara cuando todo rinde parecido", () => {
@@ -157,11 +167,45 @@ test("ganadorSinEscalar no dispara si el mejor ya tiene buen presupuesto", () =>
 });
 
 test("detectar ordena por plata en juego, no por tipo", () => {
-  const d = detectar([osint()]);
+  const d = detectar([osint()], TASAS);
   assert.ok(d.length > 1);
   for (let i = 1; i < d.length; i++) {
-    assert.ok(d[i - 1].plataEnJuego >= d[i].plataEnJuego, "el feed va de mayor a menor plata en juego");
+    assert.ok(
+      (d[i - 1].plataEnJuegoUsd ?? 0) >= (d[i].plataEnJuegoUsd ?? 0),
+      "el feed va de mayor a menor plata en juego",
+    );
   }
+});
+
+test("la plata se compara en DÓLARES, no en la moneda de cada cuenta", () => {
+  // EL BUG QUE ESTO MATA: el snapshot real mezcla USD, COP y BOB. Con el gasto crudo, una campaña
+  // en bolivianos (9,07 por dólar) o en pesos colombianos (4.138 por dólar) encabezaba el feed y
+  // engordaba el total por PURO TIPO DE CAMBIO. La card llegó a mostrar "USD 351" cuando eran
+  // USD 165 + BOB 186 sumados — y esos 186 bolivianos son ~20 dólares.
+  const enBolivianos = osint();
+  enBolivianos.id = "c-bob";
+  enBolivianos.currency = "BOB";
+
+  const d = detectar([osint(), enBolivianos], TASAS);
+  const usd = d.filter((x) => x.moneda === "USD");
+  const bob = d.filter((x) => x.moneda === "BOB");
+
+  // Mismos números crudos, pero en bolivianos valen 9,07 veces menos.
+  assert.ok(usd[0].plataEnJuegoUsd! > bob[0].plataEnJuegoUsd!, "el mismo gasto en BOB vale menos en dólares");
+  assert.ok(
+    Math.abs(bob[0].plataEnJuegoUsd! - bob[0].plataEnJuego / 9.07) < 0.01,
+    "la conversión usa la tasa del negocio",
+  );
+  // Y el orden del feed ya no lo decide el tipo de cambio.
+  assert.equal(d[0].moneda, "USD", "la campaña en dólares encabeza: es la que realmente cuesta más");
+});
+
+test("una moneda sin tasa NO se falsea: da null y va al final", () => {
+  const enPesosArgentinos = osint();
+  enPesosArgentinos.currency = "ARS"; // no está en las tasas del negocio
+  const d = detectar([enPesosArgentinos], TASAS);
+  assert.ok(d.length > 0);
+  assert.equal(d[0].plataEnJuegoUsd, null, "sin tasa no se inventa el monto en dólares");
 });
 
 test("una campaña sana no genera ninguna decisión", () => {
@@ -200,5 +244,5 @@ test("una campaña sana no genera ninguna decisión", () => {
       },
     ],
   };
-  assert.deepEqual(detectar([c]), [], "si no hay nada que hacer, el feed está vacío");
+  assert.deepEqual(detectar([c], TASAS), [], "si no hay nada que hacer, el feed está vacío");
 });

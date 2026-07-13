@@ -35,17 +35,37 @@ export type MedioPago = {
 export type SegmentoValor = { segmento: string; personas: number; ltvUsd: number; ticket: number };
 export type ClienteValor = { personaId: number; nombre: string | null; ltvUsd: number; compras: number; pais: string | null };
 
+/**
+ * LAS CUOTAS QUE DE VERDAD SE PUEDEN COBRAR.
+ *
+ * ── El bug que este JOIN mata ──
+ * Las tres consultas de cobranza leían `ontologia.cuota` SUELTA, sin mirar en qué estado quedó la
+ * venta que la originó. Una venta ANULADA o REEMBOLSADA conserva sus cuotas en Cerberus —nadie las
+ * borra— así que entraban enteras a la cartera. Son 248 cuotas por USD 34.599 sobre una cartera que
+ * reportaba ~39.000 en total: la mayor parte de «lo que nos deben» era plata que nadie debe.
+ *
+ * Se le manda a cobranza a perseguir a un cliente al que ya se le devolvió el dinero.
+ *
+ * También expone `cliente_codigo`: agrupar los deudores por `persona_id` colapsaba a TODOS los
+ * clientes sin persona vinculada en una sola fila NULL — un deudor fantasma, sumatoria de gente
+ * distinta, que además encabezaba el ranking. Ahora se agrupa por el cliente real.
+ */
+const CUOTAS_COBRABLES = sql`
+  SELECT c.codigo, c.venta_folio, v.cliente_codigo,
+         c.monto_usd::numeric AS debe, c.fecha_vencimiento,
+         coalesce(sum(p.monto_usd::numeric) FILTER (WHERE p.valido), 0) AS pagado
+  FROM ontologia.cuota c
+  JOIN ontologia.venta v ON v.folio = c.venta_folio
+  LEFT JOIN ontologia.pago p ON p.cuota_codigo = c.codigo
+  WHERE c.monto_usd IS NOT NULL
+    AND v.estado_semantico NOT IN ('anulada', 'reembolsada')
+  GROUP BY 1, 2, 3, 4, 5
+`;
+
 /** La cartera de crédito viva: cuánto nos deben y hace cuánto. */
 export async function cobranza(): Promise<Cobranza> {
   const [g] = (await db.execute(sql`
-    WITH saldo AS (
-      SELECT c.codigo, c.venta_folio, c.monto_usd::numeric AS debe, c.fecha_vencimiento,
-             coalesce(sum(p.monto_usd::numeric) FILTER (WHERE p.valido), 0) AS pagado
-      FROM ontologia.cuota c
-      LEFT JOIN ontologia.pago p ON p.cuota_codigo = c.codigo
-      WHERE c.monto_usd IS NOT NULL
-      GROUP BY 1, 2, 3, 4
-    )
+    WITH saldo AS (${CUOTAS_COBRABLES})
     SELECT round(sum(debe - pagado))::int                                          AS saldo_usd,
            count(*)::int                                                            AS pendientes,
            count(*) FILTER (WHERE fecha_vencimiento < now())::int                   AS en_mora,
@@ -54,14 +74,7 @@ export async function cobranza(): Promise<Cobranza> {
   `)) as unknown as { saldo_usd: number; pendientes: number; en_mora: number; sin_un_pago: number }[];
 
   const aging = (await db.execute(sql`
-    WITH saldo AS (
-      SELECT c.codigo, c.monto_usd::numeric AS debe, c.fecha_vencimiento,
-             coalesce(sum(p.monto_usd::numeric) FILTER (WHERE p.valido), 0) AS pagado
-      FROM ontologia.cuota c
-      LEFT JOIN ontologia.pago p ON p.cuota_codigo = c.codigo
-      WHERE c.monto_usd IS NOT NULL
-      GROUP BY 1, 2, 3
-    )
+    WITH saldo AS (${CUOTAS_COBRABLES})
     SELECT CASE
              WHEN fecha_vencimiento IS NULL OR fecha_vencimiento >= now() THEN 'al día'
              WHEN fecha_vencimiento >= now() - interval '30 days'  THEN '1-30 días'
@@ -75,26 +88,22 @@ export async function cobranza(): Promise<Cobranza> {
     GROUP BY 1
   `)) as unknown as { tramo: string; cuotas: number; saldo_usd: number }[];
 
+  // Se agrupa por CLIENTE, no por persona: si el cliente todavía no está vinculado al grafo, su
+  // `persona_id` es NULL — y agrupar por NULL fusiona a todos los desconocidos en un deudor que no
+  // existe. El nombre sale del grafo si lo hay, y si no, del propio Cerberus.
   const deudores = (await db.execute(sql`
-    WITH saldo AS (
-      SELECT c.codigo, c.venta_folio, c.monto_usd::numeric AS debe, c.fecha_vencimiento,
-             coalesce(sum(p.monto_usd::numeric) FILTER (WHERE p.valido), 0) AS pagado
-      FROM ontologia.cuota c
-      LEFT JOIN ontologia.pago p ON p.cuota_codigo = c.codigo
-      WHERE c.monto_usd IS NOT NULL
-      GROUP BY 1, 2, 3, 4
-    )
+    WITH saldo AS (${CUOTAS_COBRABLES})
     SELECT cl.persona_id::int                                                  AS persona_id,
-           pe.nombre_display                                                    AS nombre,
+           coalesce(pe.nombre_display,
+                    nullif(trim(coalesce(cl.nombre, '') || ' ' || coalesce(cl.apellido, '')), '')) AS nombre,
            round(sum(s.debe - s.pagado))::int                                   AS saldo_usd,
            count(*)::int                                                        AS cuotas,
            coalesce(max(extract(day FROM now() - s.fecha_vencimiento))::int, 0) AS dias_mora
     FROM saldo s
-    JOIN ontologia.venta v ON v.folio = s.venta_folio
-    LEFT JOIN ontologia.cliente cl ON cl.codigo = v.cliente_codigo
+    LEFT JOIN ontologia.cliente cl ON cl.codigo = s.cliente_codigo
     LEFT JOIN ontologia.personas pe ON pe.id = cl.persona_id
     WHERE s.pagado < s.debe
-    GROUP BY 1, 2
+    GROUP BY cl.codigo, cl.persona_id, pe.nombre_display, cl.nombre, cl.apellido
     ORDER BY 3 DESC
     LIMIT 10
   `)) as unknown as { persona_id: number | null; nombre: string | null; saldo_usd: number; cuotas: number; dias_mora: number }[];

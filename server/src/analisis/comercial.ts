@@ -34,7 +34,16 @@ export type Latencia = {
   p90: number | null;
   /** Pagos confirmados DESPUÉS de los 7 días que Meta acepta: la venta no cerró el lazo. */
   fueraDeVentana: number;
+  /** El universo MEDIBLE: pagos válidos con fecha de confirmación. Sobre estos se calculan p50/p90. */
   total: number;
+  /**
+   * Los pagos válidos SIN fecha de confirmación — invisibles para el percentil.
+   *
+   * Importa decirlo: son, por definición, los que nunca completaron el paso que medimos. Si el p90
+   * ya da 10 días sobre los que sí se confirmaron, estos solo pueden empeorarlo. El número que
+   * mostramos es el PISO del problema, no su tamaño.
+   */
+  sinConfirmar: number;
   porSede: { sede: string; p50: number | null; p90: number | null; pagos: number; tarde: number }[];
 };
 
@@ -64,7 +73,10 @@ export async function mixProducto(tope = 12): Promise<ProductoMix[]> {
     LEFT JOIN ontologia.producto p ON p.codigo = dv.producto_codigo
     WHERE dv.precio_usd IS NOT NULL
     GROUP BY 1, 2
-    ORDER BY 3 DESC
+    -- Por PLATA (columna 4), no por unidades (columna 3). Ordenar por unidades ponía arriba al
+    -- certificado de $49 y dejaba afuera del top al programa de $1.200 que sostiene el negocio:
+    -- el ranking decía "esto es lo que más se vende" y significaba otra cosa.
+    ORDER BY 4 DESC NULLS LAST
     LIMIT ${tope}
   `)) as unknown as { producto: string; categoria: string | null; ventas: number; usd: number }[];
   return filas.map((f) => ({
@@ -107,14 +119,31 @@ export async function embudoEstados(): Promise<EmbudoEstados> {
  * se arregla con código, se arregla con gente — pero primero hay que verlo, y por sede.
  */
 export async function latenciaTesoreria(): Promise<Latencia> {
+  // `total` acá es el UNIVERSO MEDIBLE, no todos los pagos: la latencia solo se puede calcular
+  // cuando el pago tiene fecha de confirmación. Miles de pagos válidos no la tienen —nunca pasaron
+  // por el paso de confirmación, o son de antes de que Cerberus lo registrara— y esos no aparecen
+  // en ningún percentil.
+  //
+  // Por eso se devuelve también `sinConfirmar`: decir "el p90 es 10 días sobre 1.983 pagos" cuando
+  // hay 5.228 pagos válidos más sin fecha es cierto y es engañoso al mismo tiempo. El p90 puede ser
+  // optimista justamente porque los pagos que nunca se confirmaron son, por definición, los peores.
   const [g] = (await db.execute(sql`
-    SELECT round(percentile_cont(0.5) WITHIN GROUP (ORDER BY latencia_dias)::numeric, 1)::float AS p50,
-           round(percentile_cont(0.9) WITHIN GROUP (ORDER BY latencia_dias)::numeric, 1)::float AS p90,
-           count(*) FILTER (WHERE latencia_dias > 7)::int                                        AS tarde,
-           count(*)::int                                                                          AS total
+    SELECT round(percentile_cont(0.5) WITHIN GROUP (ORDER BY latencia_dias)
+             FILTER (WHERE latencia_dias IS NOT NULL AND latencia_dias >= 0)::numeric, 1)::float AS p50,
+           round(percentile_cont(0.9) WITHIN GROUP (ORDER BY latencia_dias)
+             FILTER (WHERE latencia_dias IS NOT NULL AND latencia_dias >= 0)::numeric, 1)::float AS p90,
+           count(*) FILTER (WHERE latencia_dias > 7)::int                       AS tarde,
+           count(*) FILTER (WHERE latencia_dias IS NOT NULL AND latencia_dias >= 0)::int AS total,
+           count(*) FILTER (WHERE fecha_confirmacion IS NULL)::int              AS sin_confirmar
     FROM ontologia.pago
-    WHERE valido AND latencia_dias IS NOT NULL AND latencia_dias >= 0
-  `)) as unknown as { p50: number | null; p90: number | null; tarde: number; total: number }[];
+    WHERE valido
+  `)) as unknown as {
+    p50: number | null;
+    p90: number | null;
+    tarde: number;
+    total: number;
+    sin_confirmar: number;
+  }[];
 
   const sedes = (await db.execute(sql`
     SELECT coalesce(v.sede, 'sin sede')                                                          AS sede,
@@ -136,6 +165,7 @@ export async function latenciaTesoreria(): Promise<Latencia> {
     p90: g.p90,
     fueraDeVentana: g.tarde,
     total: g.total,
+    sinConfirmar: g.sin_confirmar,
     porSede: sedes,
   };
 }

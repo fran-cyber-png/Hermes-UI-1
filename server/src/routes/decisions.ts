@@ -1,3 +1,4 @@
+import { tasasDeCambio } from "../analisis/tasas.js";
 import { Router } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db/client.js";
@@ -54,8 +55,10 @@ decisionsRouter.get("/", async (req, res) => {
     return;
   }
 
+  // Las tasas del negocio: sin ellas no se puede comparar plata entre cuentas de monedas distintas.
+  const tasas = await tasasDeCambio();
   res.json({
-    decisiones: detectar(snap.campanas),
+    decisiones: detectar(snap.campanas, tasas),
     campanasAnalizadas: snap.campanas.length,
     errores: snap.errores,
     modo: MODO,
@@ -84,8 +87,9 @@ decisionsRouter.post("/refrescar", async (req, res) => {
       });
       return;
     }
+    const tasas = await tasasDeCambio();
     res.json({
-      decisiones: detectar(snap.campanas),
+      decisiones: detectar(snap.campanas, tasas),
       campanasAnalizadas: snap.campanas.length,
       errores: snap.errores,
       modo: MODO,

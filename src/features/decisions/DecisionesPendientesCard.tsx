@@ -128,8 +128,18 @@ export default function DecisionesPendientesCard({
   }
 
   // 4. Hay plata mal puesta.
-  const plata = decisiones.reduce((s, d) => s + d.plataEnJuego, 0);
-  const moneda = decisiones[0].moneda;
+  //
+  // ── EL BUG QUE ESTO MATA ──
+  // Esto sumaba `plataEnJuego` CRUDO —el gasto en la moneda de cada cuenta— y le pegaba encima
+  // la etiqueta de la PRIMERA decisión. El snapshot real trae USD, COP y BOB mezclados: la card
+  // llegó a mostrar «USD 351» cuando eran USD 165 + BOB 186 sumados. Esos 186 bolivianos son
+  // ~20 dólares, no 186. Sobreestimaba 90% y llamaba dólares a los bolivianos.
+  //
+  // Ahora se suma `plataEnJuegoUsd` —convertido en el backend con la tasa del negocio— y las
+  // decisiones sin tasa NO se falsean con un cero: se cuentan aparte y se dicen.
+  const convertidas = decisiones.filter((d) => d.plataEnJuegoUsd != null);
+  const plata = convertidas.reduce((s, d) => s + (d.plataEnJuegoUsd ?? 0), 0);
+  const sinTasa = decisiones.length - convertidas.length;
 
   return (
     <div className="rounded-2xl border border-gold/40 bg-gold/10 p-5">
@@ -138,7 +148,7 @@ export default function DecisionesPendientesCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
             <span className="font-heading text-2xl font-extrabold tabular-nums text-gold-ink">
-              {moneda} {plata.toFixed(0)}
+              USD {plata.toFixed(0)}
             </span>
             <span className="text-sm font-semibold text-foreground">mal repartidos en la pauta</span>
           </div>
@@ -153,6 +163,13 @@ export default function DecisionesPendientesCard({
               <li className="text-xs text-muted-foreground">· y {decisiones.length - 2} más</li>
             )}
           </ul>
+
+          {sinTasa > 0 && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {sinTasa} {sinTasa === 1 ? 'decisión queda' : 'decisiones quedan'} fuera del total: no
+              tenemos tasa de cambio para su moneda.
+            </p>
+          )}
 
           {aviso}
           {edad}

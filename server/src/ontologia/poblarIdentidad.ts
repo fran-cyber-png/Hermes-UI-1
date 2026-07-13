@@ -63,9 +63,28 @@ export type ResumenIdentidad = {
   identidades: number;
   clientesVinculados: number;
   conversionesVinculadas: number;
+  /** Cuántas claves quedaron afuera por estar en `identidades_bloqueadas`. Se reporta, no se esconde. */
+  vetadasDescartadas: number;
 };
 
 export async function poblarIdentidad(): Promise<ResumenIdentidad> {
+  // ── 0. LAS CLAVES BLOQUEADAS — el arma de seguridad que estaba declarada y desconectada ──
+  //
+  // `ontologia.identidades_bloqueadas` existía desde el día uno con su comentario y todo, y NADIE la
+  // consultaba nunca. Era una promesa de protección que el código no cumplía.
+  //
+  // Qué protege: un `informes@goberna.pe` o un teléfono de recepción cargado en 300 fichas fusiona
+  // a 300 personas distintas en UNA. Y no se rompe ruidosamente — se rompe en silencio, y todo lo
+  // que cuelga del grafo (el LTV, la línea de tiempo, las audiencias que se le mandan a Meta)
+  // empieza a mentir sobre un Frankenstein que nadie creó a propósito.
+  //
+  // Hoy los datos están limpios (ningún correo se repite en más de 2 clientes). El día que no lo
+  // estén, esto es una fila insertada en una tabla, no una migración de emergencia.
+  const bloqueadas = (await db.execute(sql`
+    SELECT tipo, valor FROM ontologia.identidades_bloqueadas
+  `)) as unknown as { tipo: string; valor: string }[];
+  const vetadas = new Set(bloqueadas.map((b) => `${b.tipo}:${b.valor}`));
+
   // ── 1. Juntar los registros con identidad FUERTE: clientes + leads ──
   const clientes = (await db.execute(sql`
     SELECT codigo, nombre, apellido, email, telefono FROM ontologia.cliente
@@ -75,13 +94,19 @@ export async function poblarIdentidad(): Promise<ResumenIdentidad> {
     SELECT full_name, email, phone FROM leads
   `)) as unknown as { full_name: string | null; email: string | null; phone: string | null }[];
 
+  /** Una clave vetada no entra al grafo: no fusiona, y tampoco se guarda como identidad. */
+  const permitida = (tipo: "email" | "telefono", valor: string) => !vetadas.has(`${tipo}:${valor}`);
+
   const registros: Registro[] = [];
+  let vetadasDescartadas = 0;
   for (const c of clientes) {
     const claims: Claim[] = [];
     const e = normEmail(c.email);
     const t = normTel(c.telefono);
-    if (e) claims.push({ tipo: "email", valor: e, fuerza: "fuerte" });
-    if (t) claims.push({ tipo: "telefono", valor: t, fuerza: "fuerte" });
+    if (e && permitida("email", e)) claims.push({ tipo: "email", valor: e, fuerza: "fuerte" });
+    else if (e) vetadasDescartadas++;
+    if (t && permitida("telefono", t)) claims.push({ tipo: "telefono", valor: t, fuerza: "fuerte" });
+    else if (t) vetadasDescartadas++;
     if (claims.length) {
       registros.push({ claims, nombre: [c.nombre, c.apellido].filter(Boolean).join(" ") || null, clienteCodigo: c.codigo });
     }
@@ -90,8 +115,10 @@ export async function poblarIdentidad(): Promise<ResumenIdentidad> {
     const claims: Claim[] = [];
     const e = normEmail(l.email);
     const t = normTel(l.phone);
-    if (e) claims.push({ tipo: "email", valor: e, fuerza: "fuerte" });
-    if (t) claims.push({ tipo: "telefono", valor: t, fuerza: "fuerte" });
+    if (e && permitida("email", e)) claims.push({ tipo: "email", valor: e, fuerza: "fuerte" });
+    else if (e) vetadasDescartadas++;
+    if (t && permitida("telefono", t)) claims.push({ tipo: "telefono", valor: t, fuerza: "fuerte" });
+    else if (t) vetadasDescartadas++;
     if (claims.length) registros.push({ claims, nombre: l.full_name || null });
   }
 
@@ -215,5 +242,6 @@ export async function poblarIdentidad(): Promise<ResumenIdentidad> {
     identidades: filasIdent.length,
     clientesVinculados,
     conversionesVinculadas: (convVinc as unknown as unknown[]).length,
+    vetadasDescartadas,
   };
 }

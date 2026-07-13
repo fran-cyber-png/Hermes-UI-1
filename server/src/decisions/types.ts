@@ -41,8 +41,14 @@ export interface Decision {
    * Cuánta plata hay en juego. ES el criterio de orden del feed — no la
    * severidad abstracta. Lo que más cuesta, primero.
    */
+  /** La plata en juego en la moneda de la cuenta. Sirve para el detalle, NO para sumar ni ordenar. */
   plataEnJuego: number;
   moneda: string;
+  /**
+   * La plata en juego EN DÓLARES. Es lo único con lo que se puede sumar y ordenar entre cuentas:
+   * el snapshot mezcla USD, COP y BOB. `null` cuando la moneda no tiene tasa — no se inventa.
+   */
+  plataEnJuegoUsd?: number | null;
 
   /** Contexto para poder navegar al detalle. */
   campaignId: string;

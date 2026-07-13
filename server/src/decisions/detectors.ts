@@ -1,4 +1,5 @@
 import type { Decision } from "./types.js";
+import { aUsd, type Tasas } from "../analisis/tasas.js";
 
 /**
  * Los detectores son funciones PURAS sobre una estructura ya traída de Meta.
@@ -27,8 +28,12 @@ export interface AdInput {
   results: number | null;
   costPerResult: number | null;
   creative?: CreativeInput | null;
-  /** ¿Está quemado? Frecuencia sube Y CTR baja sobre ≥14 días (ver `pauta/fatiga.ts`). */
+  /** ¿Está quemado? Frecuencia sube Y CTR baja, los dos de forma material, sobre ≥14 días (`pauta/fatiga.ts`). */
   fatiga?: boolean;
+  /** La evidencia del veredicto: −0.32 = el CTR cayó 32% entre la primera y la segunda mitad. */
+  fatigaDeltaCtr?: number | null;
+  /** +0.18 = la frecuencia subió 18%. Sin estos dos números, «quemado» es un sello sin respaldo. */
+  fatigaDeltaFrecuencia?: number | null;
   ctr?: number | null;
   frecuencia?: number | null;
   diasConDatos?: number;
@@ -259,16 +264,34 @@ export function ganadorSinEscalar(c: CampaignInput): Decision[] {
   ];
 }
 
-/** Corre todos los detectores y ordena por plata en juego. */
-export function detectar(campanas: CampaignInput[]): Decision[] {
-  const todas = campanas.flatMap((c) => [
-    ...presupuestoMalRepartido(c),
-    ...sinExclusiones(c),
-    ...anuncioCaro(c),
-    ...gastoSinResultados(c),
-    ...ganadorSinEscalar(c),
-  ]);
+/**
+ * Corre todos los detectores y ordena por plata en juego, EN DÓLARES.
+ *
+ * ── El bug que esto mata ──
+ * Cada campaña gasta en la moneda de SU cuenta (el snapshot real tiene USD, COP y BOB). Hasta hoy
+ * `plataEnJuego` salía en esa moneda cruda, el feed las ORDENABA todas juntas y la card SUMABA
+ * dólares con bolivianos y le ponía la etiqueta de la primera decisión. Mostraba "USD 351" cuando
+ * eran USD 165 + BOB 186 — y esos 186 bolivianos son ~20 dólares. Sobreestimaba el 90% y llamaba
+ * dólares a los bolivianos. Un peso colombiano (~4.138 por dólar) habría dominado el ranking entero
+ * por puro tipo de cambio.
+ *
+ * Ahora cada decisión lleva su `plataEnJuegoUsd`, y el orden y las sumas usan ESE número. Una moneda
+ * sin tasa da `null` —no se falsea— y la pantalla dice cuántas quedaron afuera.
+ */
+export function detectar(campanas: CampaignInput[], tasas: Tasas): Decision[] {
+  const todas = campanas.flatMap((c) => {
+    const decisiones = [
+      ...presupuestoMalRepartido(c),
+      ...sinExclusiones(c),
+      ...anuncioCaro(c),
+      ...gastoSinResultados(c),
+      ...ganadorSinEscalar(c),
+    ];
+    // La conversión pasa acá, donde todavía se sabe de qué campaña —y de qué moneda— viene.
+    return decisiones.map((d) => ({ ...d, plataEnJuegoUsd: aUsd(d.plataEnJuego, c.currency, tasas) }));
+  });
 
-  // El orden del feed: lo que más plata cuesta, primero.
-  return todas.sort((a, b) => b.plataEnJuego - a.plataEnJuego);
+  // El orden del feed: lo que más plata cuesta, primero — comparando dólares con dólares.
+  // Las que no se pudieron convertir van al final, no adelante con un número inflado.
+  return todas.sort((a, b) => (b.plataEnJuegoUsd ?? -1) - (a.plataEnJuegoUsd ?? -1));
 }

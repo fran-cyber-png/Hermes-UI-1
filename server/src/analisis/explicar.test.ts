@@ -80,6 +80,31 @@ describe("explicar — responde las cuatro preguntas, con sus caveats", () => {
   test("observar: no propone mover plata sobre una muestra chica", () => {
     const e = explicar(fila({ accion: "observar", ventas: 2, confianza: "baja", roas: 641 }));
     assert.match(e.recomendacion, /más datos|muestra/i);
-    assert.ok(e.score < 40, "un 641× con 2 ventas no puede tener score alto");
+    // Esta aserción decía `< 40` y PASABA CON 39. Era lo bastante floja como para dejar entrar el
+    // bug de abajo: el ruido de Uruguay le ganaba a Perú en el propio ranking que dice dónde
+    // invertir. Un test que no puede fallar no está protegiendo nada.
+    assert.ok(e.score <= 10, `un 641× con 2 ventas no puede tener score ${e.score}`);
+  });
+
+  test("EL RUIDO NO LE GANA AL MERCADO REAL — la compuerta de volumen manda sobre el ROAS", () => {
+    // El bug exacto que encontró la auditoría, con los números que lo delataron:
+    //
+    //   Uruguay:  641× de ROAS, 1 venta, $0,56 de gasto, confianza baja  →  score 39
+    //   Perú:       3× de ROAS, volumen real, confianza alta             →  score 32
+    //
+    // El ranking que le dice a una persona dónde poner el presupuesto ponía primero al artefacto
+    // aritmético. Y el sistema YA LO SABÍA: le había puesto `accion: "observar"` a Uruguay, o sea
+    // «no toques esto». El score simplemente no leía su propio veredicto.
+    const uruguay = explicar(
+      fila({ pais: "Uruguay", accion: "observar", roas: 641, confianza: "baja", ventas: 1, gastoUsd: 0.56 }),
+    );
+    const peru = explicar(
+      fila({ pais: "Perú", accion: "mantener", roas: 3, confianza: "alta", ventas: 40, gastoUsd: 5000 }),
+    );
+
+    assert.ok(
+      peru.score > uruguay.score,
+      `Perú (${peru.score}) tiene que superar a Uruguay (${uruguay.score}): uno es un mercado, el otro es ruido`,
+    );
   });
 });
