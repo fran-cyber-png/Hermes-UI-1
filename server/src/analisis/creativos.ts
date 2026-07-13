@@ -38,6 +38,10 @@ export type Creativo = {
   anuncios: number;
   campana: string;
   veredicto: VeredictoCreativo;
+  /** ¿Se quemó? Frecuencia sube Y CTR baja: al mismo público se le muestra más y responde menos. */
+  fatiga: boolean;
+  /** CTR promedio del creativo, en %. null si Meta no dio la serie diaria. */
+  ctr: number | null;
 };
 
 type Agg = {
@@ -48,6 +52,8 @@ type Agg = {
   resultados: number;
   anuncios: number;
   campana: string;
+  fatiga: boolean;
+  ctrs: number[];
 };
 
 export function creativos(campanas: CampaignInput[], tasas: Tasas): Creativo[] {
@@ -73,11 +79,17 @@ export function creativos(campanas: CampaignInput[], tasas: Tasas): Creativo[] {
             resultados: 0,
             anuncios: 0,
             campana: camp.name,
+            fatiga: false,
+            ctrs: [],
           } as Agg);
 
         prev.gastoUsd += spendUsd;
         prev.resultados += ad.results ?? 0;
         prev.anuncios += 1;
+        // Si CUALQUIER anuncio de este creativo está quemado, el creativo está quemado: es el
+        // mismo post mostrándose de más al mismo público.
+        if (ad.fatiga) prev.fatiga = true;
+        if (ad.ctr != null) prev.ctrs.push(ad.ctr);
         // Se conserva la primera miniatura/copy no vacíos que aparezcan.
         prev.thumbnailUrl ||= cr?.thumbnailUrl ?? null;
         prev.copy ||= cr?.body ?? cr?.title ?? null;
@@ -97,6 +109,8 @@ export function creativos(campanas: CampaignInput[], tasas: Tasas): Creativo[] {
       costoPorResultadoUsd: a.resultados > 0 ? Math.round((a.gastoUsd / a.resultados) * 100) / 100 : null,
       anuncios: a.anuncios,
       campana: a.campana,
+      fatiga: a.fatiga,
+      ctr: a.ctrs.length ? Math.round((a.ctrs.reduce((s, x) => s + x, 0) / a.ctrs.length) * 100) / 100 : null,
     }))
     .filter((c) => c.gastoUsd > 0); // solo creativos que efectivamente corrieron
 

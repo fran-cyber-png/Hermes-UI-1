@@ -27,6 +27,11 @@ export interface AdInput {
   results: number | null;
   costPerResult: number | null;
   creative?: CreativeInput | null;
+  /** ¿Está quemado? Frecuencia sube Y CTR baja sobre ≥14 días (ver `pauta/fatiga.ts`). */
+  fatiga?: boolean;
+  ctr?: number | null;
+  frecuencia?: number | null;
+  diasConDatos?: number;
 }
 
 export interface AdsetInput {

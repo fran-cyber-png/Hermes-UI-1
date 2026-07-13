@@ -1,4 +1,4 @@
-import { ImageOff } from 'lucide-react';
+import { Flame, ImageOff } from 'lucide-react';
 import type { Creativo } from '../../lib/datos/overview';
 
 /**
@@ -40,7 +40,18 @@ export default function Creativos({ creativos }: { creativos: Creativo[] }) {
           return (
             <div key={c.clave} className="flex flex-col overflow-hidden rounded-xl border border-border bg-card">
               {/* La miniatura: lo que la persona ve. Si Meta no la dio, un marcador honesto. */}
-              <div className="flex aspect-[1.91/1] items-center justify-center overflow-hidden bg-muted">
+              <div className="relative flex aspect-[1.91/1] items-center justify-center overflow-hidden bg-muted">
+                {/* Quemado: la frecuencia subió Y el CTR bajó. Sigue gastando y ya no funciona. */}
+                {c.fatiga && (
+                  <span
+                    className="absolute left-2 top-2 z-10 flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wide text-white"
+                    style={{ background: TEMP.frio }}
+                    title="Al mismo público se le muestra cada vez más y responde cada vez menos."
+                  >
+                    <Flame size={10} />
+                    quemado
+                  </span>
+                )}
                 {c.thumbnailUrl ? (
                   <img src={c.thumbnailUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
                 ) : (
@@ -67,6 +78,7 @@ export default function Creativos({ creativos }: { creativos: Creativo[] }) {
                     </span>
                   </div>
                   <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wide text-navy/45">
+                    {c.ctr != null ? `CTR ${c.ctr}% · ` : ''}
                     {c.costoPorResultadoUsd != null
                       ? `${c.costoPorResultadoUsd < 0.01 ? '<$0,01' : `$${c.costoPorResultadoUsd.toLocaleString('es')}`} / conversación`
                       : 'sin conversaciones'}
@@ -80,6 +92,11 @@ export default function Creativos({ creativos }: { creativos: Creativo[] }) {
       </div>
 
       <p className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
+        <strong className="text-foreground">Quemado</strong> = la frecuencia sube <em>y</em> el CTR
+        baja: al mismo público se le muestra cada vez más y responde cada vez menos. Es presupuesto
+        que se va en un creativo agotado.
+      </p>
+      <p className="mt-1 text-xs text-muted-foreground">
         Es costo por <strong className="text-foreground">conversación</strong>, no por venta. Atribuir
         la venta al creativo necesita el clic-a-WhatsApp, que llega con la migración a la Cloud API.
       </p>

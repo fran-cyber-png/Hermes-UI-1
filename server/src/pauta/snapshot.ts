@@ -5,6 +5,7 @@ import type { CampaignInput } from "../decisions/detectors.js";
 import { paraMeta, rangoDe } from "../lib/rangos.js";
 import { recolectarPauta } from "./recolectar.js";
 import { adjuntarCreativos } from "./adjuntarCreativos.js";
+import { adjuntarFatiga } from "./fatiga.js";
 import { gastoPorPais } from "./geoGasto.js";
 import { tasasDeCambio } from "../analisis/tasas.js";
 import type { GastoPais } from "../analisis/geo.js";
@@ -104,6 +105,10 @@ export async function refrescarPauta(rango: string): Promise<Snapshot | null> {
   // Los creativos de los anuncios que gastaron (en lote, acotado). Muta `campanas` en su lugar.
   // Un fallo acá no debe perder el snapshot: los creativos son un plus, la pauta es lo esencial.
   await adjuntarCreativos(token, campanas).catch(() => 0);
+
+  // La fatiga necesita la serie DIARIA por anuncio (time_increment=1), que el snapshot normal no
+  // trae. Se pide solo para los que gastaron. Un fallo acá no debe perder el snapshot.
+  await adjuntarFatiga(token, cuentas, campanas, ventana).catch(() => 0);
 
   await db.insert(pautaSnapshots).values({
     cuentas,

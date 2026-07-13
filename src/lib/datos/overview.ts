@@ -108,6 +108,9 @@ export type Creativo = {
   anuncios: number;
   campana: string;
   veredicto: 'eficiente' | 'caro' | 'medio' | 'sin_resultados' | 'poco_gasto';
+  /** ¿Se quemó? Frecuencia sube Y CTR baja: al mismo público se le muestra más y responde menos. */
+  fatiga: boolean;
+  ctr: number | null;
 };
 
 export type Overview = {
