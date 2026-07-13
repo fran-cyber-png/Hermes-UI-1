@@ -130,6 +130,7 @@ export async function correrLazo(opciones: { soloRegistrar?: boolean } = {}): Pr
     await marcarEnviadas(
       lote.map((x) => `venta:${x.folio}`),
       res.crudo,
+      capi.esPrueba,
     );
   }
 
@@ -156,12 +157,19 @@ async function guardar(filas: (typeof conversiones.$inferInsert)[]): Promise<voi
   }
 }
 
-async function marcarEnviadas(eventIds: string[], respuesta: unknown): Promise<void> {
+async function marcarEnviadas(
+  eventIds: string[],
+  respuesta: unknown,
+  esPrueba: boolean,
+): Promise<void> {
   await db
     .update(conversiones)
     .set({
       enviadoAt: new Date(),
       metaRespuesta: respuesta,
+      // El modo del ÚLTIMO envío. Sin esto, una venta probada y después mandada a producción
+      // seguía figurando como prueba — la pantalla mentiría sobre si el lazo está prendido.
+      esPrueba,
       intentos: sql`${conversiones.intentos} + 1`,
       descarte: null,
       ultimoError: null,
