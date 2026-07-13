@@ -111,26 +111,50 @@ export async function poblarIdentidad(): Promise<ResumenIdentidad> {
     if (!nombrePorRaiz.has(raiz)) nombrePorRaiz.set(raiz, r.nombre);
   }
 
-  // ── 3. Rebuild del grafo (está vacío hoy; el día que haya des-fusiones, esto es incremental) ──
+  // ── 3. Rebuild del grafo ──
+  // Los VÍNCULOS y las IDENTIDADES se rehacen (son derivados puros). Las PERSONAS **no**: se hace
+  // UPSERT sobre su `clave_raiz`, para que su id sobreviva al rebuild. Si se borraran y recrearan,
+  // la misma persona tendría un id nuevo cada vez y todo link guardado (/gente/7083) se rompería.
+  //
   // DELETE en orden, NO truncate CASCADE: `conversiones` tiene FK a `personas` y un CASCADE se
-  // llevaría puesto el lazo. Primero se sueltan las referencias, después se borra de hoja a raíz.
+  // llevaría puesto el lazo.
   await db.execute(sql`UPDATE ontologia.conversiones SET persona_id = NULL`);
   await db.execute(sql`UPDATE ontologia.cliente SET persona_id = NULL`);
   await db.execute(sql`DELETE FROM ontologia.vinculos_identidad`);
   await db.execute(sql`DELETE FROM ontologia.identidades`);
-  await db.execute(sql`DELETE FROM ontologia.personas`);
+  // Limpieza única de las personas viejas sin ancla (las de antes de que existiera `clave_raiz`).
+  // Ya no las referencia nadie, y sus ids nunca fueron estables.
+  await db.execute(sql`DELETE FROM ontologia.personas WHERE clave_raiz IS NULL`);
 
   const grupos = uf.raices();
   const personaPorRaiz = new Map<string, number>();
-  // Insert personas en lote y recuperar ids en orden.
+
+  // La CLAVE ANCLA de cada grupo: su identidad más chica en orden lexicográfico. Determinista —
+  // no depende de en qué orden se hayan procesado los clientes ni los leads.
+  const anclaDe = new Map<string, string>();
+  for (const [raiz, keys] of grupos) anclaDe.set(raiz, [...keys].sort()[0]);
+
   const raices = [...grupos.keys()];
   for (let i = 0; i < raices.length; i += 1000) {
     const chunk = raices.slice(i, i + 1000);
     const ids = await db
       .insert(personas)
-      .values(chunk.map((raiz) => ({ nombreDisplay: nombrePorRaiz.get(raiz) ?? null })))
-      .returning({ id: personas.id });
-    chunk.forEach((raiz, j) => personaPorRaiz.set(raiz, ids[j].id));
+      .values(
+        chunk.map((raiz) => ({
+          claveRaiz: anclaDe.get(raiz)!,
+          nombreDisplay: nombrePorRaiz.get(raiz) ?? null,
+        })),
+      )
+      // Ya existe esa persona: se le refresca el nombre y se CONSERVA su id.
+      .onConflictDoUpdate({
+        target: personas.claveRaiz,
+        set: { nombreDisplay: sql`excluded.nombre_display` },
+      })
+      .returning({ id: personas.id, claveRaiz: personas.claveRaiz });
+
+    // El returning no garantiza el orden del input: se mapea por la clave, no por la posición.
+    const idPorClave = new Map(ids.map((r) => [r.claveRaiz!, r.id]));
+    for (const raiz of chunk) personaPorRaiz.set(raiz, idPorClave.get(anclaDe.get(raiz)!)!);
   }
 
   // identidades + vínculos

@@ -73,9 +73,24 @@ export const registro = fuentes.table(
 // CAPA 1 — Personas e identidad
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Delgada a propósito. El id es estable: `/persona/:id` no se rompe nunca. */
+/**
+ * Delgada a propósito. El id es estable: `/persona/:id` no se rompe nunca.
+ *
+ * Y para que ESO sea verdad y no una intención, la persona se ancla a una `claveRaiz`: la identidad
+ * más chica de su grupo (orden lexicográfico), que NO depende del orden en que se procesen los datos.
+ * El grafo se reconstruye con UPSERT sobre esa clave, no borrando y recreando — si se recreara, cada
+ * rebuild le daría un id nuevo a la misma persona y todo link guardado se rompería. (Pasó: alguien
+ * quedó como /gente/7083 y al rebuild siguiente era /gente/17781.)
+ */
 export const personas = ontologia.table("personas", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
+  /**
+   * La identidad ancla del grupo: `email:x@y.com` o `telefono:519...`, la más chica del clúster.
+   * Determinista: el mismo conjunto de identidades siempre produce la misma clave, así que el id
+   * sobrevive a los rebuilds. Cambia solo si el clúster se fusiona con otro de clave menor — y eso
+   * es un evento real de fusión, no un accidente del rebuild.
+   */
+  claveRaiz: text("clave_raiz").unique(),
   /** Derivado, no fuente de verdad: lead.full_name > nombre de Messenger > usuario de IG. */
   nombreDisplay: text("nombre_display"),
   creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
