@@ -80,6 +80,67 @@ export function analizarCampanas(detalles: PautaDetalle[]): AnalisisCampana[] {
     .sort((a, b) => b.score - a.score);
 }
 
+export interface AnalisisAd {
+  fila: FilaAd;
+  /** Score compuesto 0-100, misma fórmula que `analizarCampanas` pero entre los anuncios de una campaña. */
+  score: number;
+  /** 0 o 1 — la fatiga es propia del anuncio, no un conteo. */
+  quemados: number;
+}
+
+/**
+ * Analiza los ANUNCIOS de una campaña entre sí — el espejo de `analizarCampanas`
+ * a nivel anuncio. Existe para el caso de 1 sola campaña seleccionada: ahí ya no
+ * hay campañas que comparar, pero sus anuncios sí son genuinamente comparables.
+ * Solo entran los que gastaron (los únicos con algo que juzgar).
+ */
+export function analizarAds(ads: FilaAd[]): AnalisisAd[] {
+  const conGasto = ads.filter((a) => a.gasto > 0);
+  if (conGasto.length === 0) return [];
+
+  const resultados = conGasto.map((a) => a.resultados ?? 0);
+  const cprs = conGasto.map((a) => a.costoPorResultado ?? Infinity);
+  const ctrs = conGasto.map((a) => a.ctr ?? 0);
+
+  const norm = (v: number, min: number, max: number) =>
+    max === min ? 0.5 : (v - min) / (max - min);
+
+  return conGasto
+    .map((a) => {
+      const sResultados = norm(a.resultados ?? 0, Math.min(...resultados), Math.max(...resultados));
+      const sCpr = 1 - norm(a.costoPorResultado ?? Infinity, Math.min(...cprs), Math.max(...cprs));
+      const sCtr = norm(a.ctr ?? 0, Math.min(...ctrs), Math.max(...ctrs));
+      const score = Math.round((sResultados * 0.45 + sCpr * 0.35 + sCtr * 0.2) * 100);
+      return { fila: a, score, quemados: a.fatiga ? 1 : 0 };
+    })
+    .sort((a, b) => b.score - a.score);
+}
+
+export interface ResumenAlertas {
+  quemados: number;
+  desperdicioCount: number;
+  desperdicioGasto: number;
+  moneda: string;
+}
+
+/**
+ * Agregado de alertas de creativos (fatiga + presupuesto sin resultados) para
+ * un resumen chico arriba de la pestaña Creativos — en vez de repetir estas
+ * mismas dos señales en 3 lugares distintos de la página.
+ */
+export function resumenAlertas(ads: FilaAd[]): ResumenAlertas | null {
+  const quemados = ads.filter((a) => a.fatiga && a.gasto > 0).length;
+  const desperdicio = ads.filter((a) => a.gasto > 0 && (a.resultados ?? 0) === 0);
+  if (quemados === 0 && desperdicio.length === 0) return null;
+
+  return {
+    quemados,
+    desperdicioCount: desperdicio.length,
+    desperdicioGasto: desperdicio.reduce((s, a) => s + a.gasto, 0),
+    moneda: desperdicio[0]?.moneda ?? ads[0]?.moneda ?? '',
+  };
+}
+
 export type Verdict = 'escalar' | 'ok' | 'revisar' | 'desperdicia';
 
 export interface Veredicto {
@@ -88,8 +149,12 @@ export interface Veredicto {
   clase: string;
 }
 
-/** Veredicto de acción a partir de score + creativos quemados. */
-export function veredicto(a: AnalisisCampana): Veredicto {
+/**
+ * Veredicto de acción a partir de score + quemados. Toma solo esas dos claves
+ * (no el objeto `AnalisisCampana` completo) para poder juzgar por igual una
+ * campaña o un anuncio analizado — ver `analizarAds`.
+ */
+export function veredicto(a: { score: number; quemados: number }): Veredicto {
   if (a.score >= 75 && a.quemados === 0)
     return { tipo: 'escalar', label: 'Escalar', clase: 'bg-success/10 text-success' };
   if (a.quemados > 0 && a.score < 50)
