@@ -36,7 +36,16 @@ export interface AdInput {
   fatigaDeltaFrecuencia?: number | null;
   ctr?: number | null;
   frecuencia?: number | null;
+  clics?: number | null;
+  impresiones?: number | null;
   diasConDatos?: number;
+  /** Engagement orgánico del anuncio en la ventana pedida (`pauta/engagement.ts`). */
+  reacciones?: number | null;
+  comentarios?: number | null;
+  compartidos?: number | null;
+  guardados?: number | null;
+  /** Leads reales (on-Facebook + offsite) — distinto de `results`, que depende del objetivo. */
+  leads?: number | null;
 }
 
 export interface AdsetInput {

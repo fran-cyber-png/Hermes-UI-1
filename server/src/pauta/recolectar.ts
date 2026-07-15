@@ -1,6 +1,7 @@
 import type { CampaignInput } from "../decisions/detectors.js";
 import { MetaGraphClient, MetaGraphError } from "../meta/metaClient.js";
 import { indicatorValue } from "../lib/indicator.js";
+import { extraerEngagement, type Engagement } from "./engagement.js";
 
 /**
  * Recolecta el estado de la pauta desde Meta. Corre en un JOB, nunca en el camino de una pantalla.
@@ -70,19 +71,23 @@ async function recolectarCuenta(
     client.getAll(`${actId}/insights`, {
       level: "ad",
       ...ventana,
-      fields: "ad_id,spend,results,cost_per_result",
+      fields: "ad_id,spend,results,cost_per_result,actions",
       limit: "500",
     })),
   ]);
 
   // ── El armado, en memoria. Cero llamadas más. ──
-  const metricaPorAd = new Map<string, { spend: number; results: number | null; costPerResult: number | null }>(
+  const metricaPorAd = new Map<
+    string,
+    { spend: number; results: number | null; costPerResult: number | null } & Engagement
+  >(
     insights.map((r: any) => [
       r.ad_id,
       {
         spend: Number(r.spend ?? 0),
         results: indicatorValue(r.results),
         costPerResult: indicatorValue(r.cost_per_result),
+        ...extraerEngagement(r.actions),
       },
     ]),
   );
@@ -90,7 +95,16 @@ async function recolectarCuenta(
   const adsPorConjunto = new Map<string, any[]>();
   for (const ad of anuncios) {
     if (!ad.adset_id) continue;
-    const m = metricaPorAd.get(ad.id) ?? { spend: 0, results: null, costPerResult: null };
+    const m = metricaPorAd.get(ad.id) ?? {
+      spend: 0,
+      results: null,
+      costPerResult: null,
+      reacciones: null,
+      comentarios: null,
+      compartidos: null,
+      guardados: null,
+      leads: null,
+    };
     const c = ad.creative ?? null;
     const lista = adsPorConjunto.get(ad.adset_id) ?? [];
     lista.push({
