@@ -15,13 +15,20 @@
  * Identidad categórica (campaña o anuncio), orden fijo — nunca se cicla ni se
  * regenera por filtro. Excluye a propósito los tonos de éxito/alerta/destructivo
  * (reservados a estado) para que un veredicto nunca se confunda con "serie N".
+ *
+ * Validado con el script de la skill `dataviz` (`validate_palette.js`, modo
+ * light, superficie #FFFFFF, `--pairs all` — la app la usa también en
+ * scatter/bubble, donde dos series cualquiera pueden terminar adyacentes):
+ * pasa piso de luminosidad, piso de croma, separación CVD y contraste. El
+ * violeta (#7C3AED) se descartó: quedaba a ΔE 12.4 del azul primario para
+ * visión normal (piso mínimo 15) — casi indistinguible.
  */
 export const CATEGORICAL = [
-  'var(--primary)', // #2563EB
-  '#7C3AED', // violeta
-  '#0891B2', // aqua
+  'var(--primary)', // #2563EB — azul
+  '#0891B2', // teal
   '#DB2777', // magenta
-  '#C2410C', // naranja quemado
+  '#65A30D', // oliva
+  '#9A3412', // marrón
 ] as const;
 
 /**

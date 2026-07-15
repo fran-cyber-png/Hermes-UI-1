@@ -52,6 +52,23 @@ export function metricasDerivadas(d: PautaDetalle) {
   };
 }
 
+function norm(v: number, min: number, max: number) {
+  return max === min ? 0.5 : (v - min) / (max - min);
+}
+
+/**
+ * Score del costo por resultado (menos es mejor), tratado aparte: un `null`
+ * (sin resultados) NO es "neutro", es el peor caso de esa dimensión. Mezclar
+ * `Infinity` adentro de `norm()` — la versión anterior lo hacía — producía
+ * `Infinity / Infinity = NaN` en cuanto CUALQUIER elemento del set no tenía
+ * resultados, y ese NaN se propagaba al score entero.
+ */
+function scoreCpr(cpr: number | null, finitos: number[]): number {
+  if (cpr == null || !Number.isFinite(cpr)) return 0;
+  if (finitos.length === 0) return 0.5;
+  return 1 - norm(cpr, Math.min(...finitos), Math.max(...finitos));
+}
+
 /**
  * Score compuesto 0-100 normalizando resultados (a más es mejor), CPR (a menos
  * es mejor) y CTR (a más es mejor) contra el set seleccionado.
@@ -62,16 +79,13 @@ export function analizarCampanas(detalles: PautaDetalle[]): AnalisisCampana[] {
   const metricas = detalles.map((d) => ({ d, ...metricasDerivadas(d) }));
 
   const resultados = metricas.map((m) => m.d.resultados ?? 0);
-  const cprs = metricas.map((m) => m.d.costoPorResultado ?? Infinity);
+  const cprsFinitos = metricas.map((m) => m.d.costoPorResultado).filter((v): v is number => v != null && Number.isFinite(v));
   const ctrs = metricas.map((m) => m.ctr ?? 0);
-
-  const norm = (v: number, min: number, max: number) =>
-    max === min ? 0.5 : (v - min) / (max - min);
 
   return metricas
     .map((m) => {
       const sResultados = norm(m.d.resultados ?? 0, Math.min(...resultados), Math.max(...resultados));
-      const sCpr = 1 - norm(m.d.costoPorResultado ?? Infinity, Math.min(...cprs), Math.max(...cprs));
+      const sCpr = scoreCpr(m.d.costoPorResultado, cprsFinitos);
       const sCtr = norm(m.ctr ?? 0, Math.min(...ctrs), Math.max(...ctrs));
       // Pesos: resultados 45%, CPR 35%, CTR 20%.
       const score = Math.round((sResultados * 0.45 + sCpr * 0.35 + sCtr * 0.2) * 100);
@@ -99,16 +113,13 @@ export function analizarAds(ads: FilaAd[]): AnalisisAd[] {
   if (conGasto.length === 0) return [];
 
   const resultados = conGasto.map((a) => a.resultados ?? 0);
-  const cprs = conGasto.map((a) => a.costoPorResultado ?? Infinity);
+  const cprsFinitos = conGasto.map((a) => a.costoPorResultado).filter((v): v is number => v != null && Number.isFinite(v));
   const ctrs = conGasto.map((a) => a.ctr ?? 0);
-
-  const norm = (v: number, min: number, max: number) =>
-    max === min ? 0.5 : (v - min) / (max - min);
 
   return conGasto
     .map((a) => {
       const sResultados = norm(a.resultados ?? 0, Math.min(...resultados), Math.max(...resultados));
-      const sCpr = 1 - norm(a.costoPorResultado ?? Infinity, Math.min(...cprs), Math.max(...cprs));
+      const sCpr = scoreCpr(a.costoPorResultado, cprsFinitos);
       const sCtr = norm(a.ctr ?? 0, Math.min(...ctrs), Math.max(...ctrs));
       const score = Math.round((sResultados * 0.45 + sCpr * 0.35 + sCtr * 0.2) * 100);
       return { fila: a, score, quemados: a.fatiga ? 1 : 0 };
