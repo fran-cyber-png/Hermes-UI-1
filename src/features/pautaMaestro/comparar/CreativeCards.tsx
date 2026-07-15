@@ -36,7 +36,7 @@ const METRAS = [
  * preguntas del estratega: qué creativo convierte, cuál tiene el mejor CTR y
  * cuál está quemando presupuesto sin resultados.
  */
-export default function CreativeCards({ ads }: { ads: FilaAd[]; moneda: string }) {
+export default function CreativeCards({ ads }: { ads: FilaAd[] }) {
   if (ads.length === 0)
     return <p className="py-8 text-center text-sm text-muted-foreground">No hay creativos con datos en este set.</p>;
 
