@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import type { VentaConfirmada } from "../lazo/evento.js";
+import { HISTORICO_DIAS, type VentaConfirmada } from "../lazo/evento.js";
 import type { Pais } from "../lazo/normalizar.js";
 
 /**
@@ -21,6 +21,11 @@ import type { Pais } from "../lazo/normalizar.js";
  *
  * 3. `fecha_pago` la TIPEA EL ASESOR (mediana 0 días — autoreportada). El único timestamp
  *    confiable es `fecha_confirmacion`: cuando Tesorería miró el voucher y lo aceptó.
+ *
+ *    Este comentario estaba acá desde el principio y el código de abajo lo violaba: un `coalesce`
+ *    caía a `fecha_pago` para CUALQUIER pago sin confirmar, no solo para los viejos migrados del
+ *    Excel. Tres eventos salieron hacia Meta con la palabra del asesor como única evidencia.
+ *    Declarar una regla en un comentario no la aplica. Ver el detalle en la CTE de abajo.
  */
 
 /** Estados de `tb_pago` que cuentan como dinero real (1 Procesando, 2 Completado). Los demás NO. */
@@ -72,10 +77,36 @@ export async function ventasParaElLazo(): Promise<VentaConfirmada[]> {
       -- respaldo: igual son históricos, así que caen en "historico" y van a la audiencia de valor,
       -- no al lazo con ventana. Sin el respaldo aparecían como "sin confirmar" (71% de las ventas),
       -- lo cual es falso: sí se cobraron, solo les falta el timestamp.
+      --
+      -- ── EL RESPALDO ES SOLO PARA LOS VIEJOS (arreglado 2026-07-16) ──
+      -- El razonamiento de arriba asumía que TODO pago sin confirmar es viejo. No es cierto, y el
+      -- respaldo se estaba disparando también para pagos RECIENTES: la fecha del asesor caía
+      -- dentro de la ventana de 7 días y el evento salía hacia Meta.
+      --
+      -- Medido antes de tocar esto: de las 107 conversiones enviadas, 3 se apoyaban solo en la
+      -- palabra del asesor — GOB-13740, GOB-13745 y GOB-13746, las mismas tres que estaban en la
+      -- bandeja de Tesorería esperando que alguien mirara el voucher. Le estábamos diciendo a
+      -- Meta "esta persona compró $1.350" porque un asesor tipeó una fecha.
+      --
+      -- Y evento.ts:74-75 ya lo prohibía explícitamente: "Tampoco es Pago.fecha_pago: esa la
+      -- tipea el asesor a mano y su mediana es 0 días — es autoreportada, no verificada."
+      -- El coalesce violaba en silencio la regla que el módulo de al lado declara.
+      --
+      -- Por qué importa: si Tesorería después RECHAZA el voucher (hay 33 pagos en estado 4),
+      -- Meta ya aprendió que hubo una compra. Y Meta no tiene forma limpia de retractar un
+      -- Purchase — es el mismo motivo por el que nunca mandamos los reembolsados (evento.ts:50).
+      --
+      -- El corte en HISTORICO_DIAS no es arbitrario: es exactamente el caso que el comentario de
+      -- arriba decía querer cubrir. Un pago de hace más de 30 días ya cae en "historico" y no
+      -- entra al lazo con ventana; uno reciente sin confirmar tiene que ESPERAR a Tesorería.
       SELECT c.payload->>'codigo_venta'                              AS venta,
              min(coalesce(
                (p.payload->>'fecha_confirmacion')::timestamptz,
-               (p.payload->>'fecha_pago')::timestamptz
+               CASE
+                 WHEN (p.payload->>'fecha_pago')::timestamptz
+                        < now() - make_interval(days => ${HISTORICO_DIAS})
+                 THEN (p.payload->>'fecha_pago')::timestamptz
+               END
              ))                                                       AS confirmada_at
       FROM fuentes.registro p
       JOIN fuentes.registro c
