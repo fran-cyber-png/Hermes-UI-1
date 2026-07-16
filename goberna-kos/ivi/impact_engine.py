@@ -46,18 +46,26 @@ def compute_impact(k: KPIs) -> List[ImpactItem]:
     items: List[ImpactItem] = []
 
     # ── Δ revenue / Δ ventas: último mes vs previo (HECHO) ──
-    last = k.last_month()
-    prev = k.prev_month()
+    # Scope guard (docs/14 §5 P1): si el último mes está EN CURSO, comparar 1..cutoff
+    # vs 1..cutoff (mismas ventanas) en vez de mes parcial contra mes completo.
+    cutoff = k.cutoff_mes_parcial()
+    comparable = k.serie_comparable(cutoff) if cutoff else []
+    if cutoff and len(comparable) >= 2:
+        last, prev = comparable[-1], comparable[-2]
+        nota_ventana = f" — mes parcial, mismos días 1..{cutoff}"
+    else:
+        last, prev = k.last_month(), k.prev_month()
+        nota_ventana = ""
     if last and prev:
         items.append(ImpactItem(
             label=f"Δ ingresos {prev.label}→{last.label}",
             kind=HECHO, value=_r(last.usd - prev.usd), unit="USD", signed=True,
-            nota=f"{prev.label}: USD {_r(prev.usd)} → {last.label}: USD {_r(last.usd)}",
+            nota=f"{prev.label}: USD {_r(prev.usd)} → {last.label}: USD {_r(last.usd)}{nota_ventana}",
         ))
         items.append(ImpactItem(
             label=f"Δ ventas {prev.label}→{last.label}",
             kind=HECHO, value=_r(last.ventas - prev.ventas), unit="ventas", signed=True,
-            nota=f"{prev.label}: {prev.ventas} → {last.label}: {last.ventas}",
+            nota=f"{prev.label}: {prev.ventas} → {last.label}: {last.ventas}{nota_ventana}",
         ))
 
     # ── Revenue en riesgo por ventana Meta (ESTIMACIÓN) ──
@@ -104,20 +112,33 @@ def compute_impact(k: KPIs) -> List[ImpactItem]:
             nota="no hay serie histórica de gasto por período para derivar tendencia",
         ))
 
-    # ── Impacto forecast próximos días (HECHO + caveat) ──
+    # ── Impacto forecast próximos días (HECHO honesto) ──
+    # Forecast honesto (docs/14 §5 P4): con R² < 0.3 no hay señal de tendencia — se
+    # reporta el ritmo diario medido (± error), nunca un total "proyectado" que
+    # aparenta precisión que la regresión no tiene.
     fc = k.forecast or {}
     proj = fc.get("proyeccion") or []
     if proj:
         r2 = fc.get("r2")
-        total = _r(sum(p.get("ventas", 0) or 0 for p in proj))
         low_r2 = r2 is not None and r2 < 0.3
-        items.append(ImpactItem(
-            label=f"Ventas proyectadas próximos {len(proj)} días",
-            kind=HECHO, value=total, unit="ventas",
-            confianza="baja" if low_r2 else "media",
-            nota=(f"R²={r2}: orden de magnitud, no cifra exacta" if low_r2
-                  else f"regresión lineal, R²={r2}"),
-        ))
+        if low_r2:
+            ritmo = round(sum(p.get("ventas", 0) or 0 for p in proj) / len(proj), 1)
+            err = fc.get("errorTipico")
+            nota = f"R²={r2}: sin tendencia estadística, no se proyecta un total"
+            if err is not None:
+                nota += f"; error típico ±{err}"
+            items.append(ImpactItem(
+                label="Ritmo diario reciente (no forecast, R² bajo)",
+                kind=HECHO, value=_r(ritmo), unit="ventas",
+                confianza="alta", nota=nota,
+            ))
+        else:
+            total = _r(sum(p.get("ventas", 0) or 0 for p in proj))
+            items.append(ImpactItem(
+                label=f"Ventas proyectadas próximos {len(proj)} días",
+                kind=HECHO, value=total, unit="ventas",
+                confianza="media", nota=f"regresión lineal, R²={r2}",
+            ))
 
     return items
 

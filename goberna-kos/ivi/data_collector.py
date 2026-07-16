@@ -28,6 +28,7 @@ class RawData:
     atribucion: Dict = field(default_factory=dict)
     endpoints_hit: List[str] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
+    frescura: Dict[str, str] = field(default_factory=dict)
 
     _SLOT = {
         "overview": "overview", "comercial": "comercial", "cartera": "cartera",
@@ -55,6 +56,22 @@ def _fetch(name: str) -> Any:
         return {"_error": str(e)}
 
 
+def _frescura(raw: RawData) -> Dict[str, str]:
+    """"Datos hasta el D", derivado SOLO de lo que ya se trajo — sin fetches nuevos.
+    Nadie más en el pipeline calculaba esto (docs/14 §4): el modelo narraba datos
+    con días de rezago en presente porque nadie se lo decía."""
+    out: Dict[str, str] = {}
+    diaria = (raw.comercial or {}).get("diaria") or []
+    dias = [str(d.get("dia", ""))[:10] for d in diaria if d.get("dia")]
+    if dias:
+        out["ventas"] = f"datos de ventas hasta el {max(dias)}"
+    for pieza in (raw.salud or {}).get("piezas") or []:
+        clave = pieza.get("clave")
+        if clave in ("cerberus", "meta_ingesta") and pieza.get("detalle"):
+            out[clave] = pieza["detalle"]
+    return out
+
+
 def collect(plan: List[str]) -> RawData:
     raw = RawData()
     # Parallel fetch, one slot per endpoint.
@@ -72,4 +89,5 @@ def collect(plan: List[str]) -> RawData:
                 continue
             setattr(raw, RawData._SLOT[name], data or {})
             raw.endpoints_hit.append(name)
+    raw.frescura = _frescura(raw)
     return raw

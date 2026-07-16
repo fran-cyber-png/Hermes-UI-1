@@ -34,15 +34,30 @@ def detect(k: KPIs, a: Analysis) -> List[Insight]:
     out: List[Insight] = []
 
     # 1) Attribution gap with Meta (lazo)
+    # docs/10 §2 + docs/14 §4: `ventas_perdidas_ventana` es un ACUMULADO histórico que
+    # nunca baja (no un flujo corriente). Solo es correcto culpar la latencia de
+    # Tesorería si su propia p90 (que llega en el mismo payload) de verdad la supera;
+    # si Tesorería está sana, es backlog histórico (el período sin cron, docs/10 §2),
+    # no un problema activo — y no se arregla confirmando vouchers más rápido.
     if k.ventas_perdidas_ventana:
         perd = k.ventas_perdidas_ventana
         conn = k.ventas_conocidas or 0
+        p90 = (k.latencia or {}).get("p90")
         if conn > 0 and perd / conn > 0.02:
-            out.append(Insight("crit", "⚠",
-                f"{perd} ventas se pierden fuera de la ventana de Meta (CAPI): "
-                f"Tesorería confirma el voucher después de los 7 días que Meta acepta. "
-                f"Eso mata la señal de conversión y encarece el CAC.",
-                confidence="alta"))
+            if p90 is not None and p90 > 7:
+                out.append(Insight("crit", "⚠",
+                    f"{perd} ventas se pierden fuera de la ventana de Meta (CAPI): "
+                    f"Tesorería confirma el voucher después de los 7 días que Meta acepta "
+                    f"(p90 actual: {p90} días). Eso mata la señal de conversión y encarece el CAC.",
+                    confidence="alta"))
+            else:
+                p90_txt = f"{p90}" if p90 is not None else "s/d"
+                out.append(Insight("info", "ℹ",
+                    f"{perd} ventas acumuladas fuera de la ventana de Meta (CAPI) es backlog "
+                    f"histórico, no pérdida corriente: la latencia de Tesorería hoy es sana "
+                    f"(p90={p90_txt} días, dentro de la ventana de 7). No se arregla "
+                    f"confirmando vouchers más rápido; requiere encender el envío del backlog.",
+                    confidence="alta"))
     if k.lazo.get("modo") == "prueba":
         out.append(Insight("crit", "⚠",
             "El lazo con Meta está en MODO PRUEBA: los eventos no están optimizando la pauta. "
@@ -129,25 +144,30 @@ def detect(k: KPIs, a: Analysis) -> List[Insight]:
             f"Momentum comercial al alza ({a.momentum_pct:+}% reciente vs previo).",
             confidence="media"))
 
-    # Forecast
+    # Forecast honesto (docs/14 §5 P4): con R² < 0.3 no hay tendencia real — nunca
+    # afirmar una dirección (a la baja/al alza). Se reporta el ritmo diario ± error.
     fc = k.forecast or {}
-    if fc.get("proyeccion"):
+    proj = fc.get("proyeccion") or []
+    if proj:
         pend = fc.get("pendiente") or 0
         r2 = fc.get("r2") or 0
-        if pend < 0:
+        if r2 < 0.3:
+            ritmo = round(sum(p.get("ventas", 0) or 0 for p in proj) / len(proj), 1)
+            err = fc.get("errorTipico")
+            err_txt = f" ± {err}" if err is not None else ""
+            out.append(Insight("info", "ℹ",
+                f"Ritmo estable ~{ritmo}/día{err_txt}: no hay tendencia estadística "
+                f"(R²={r2}), no se proyecta un número de ventas futuras con esta señal.",
+                confidence="alta"))
+        elif pend < 0:
             out.append(Insight("warn", "⚠",
                 f"Forecast a la baja: pendiente {pend}/día (R²={r2}). "
                 f"Hipótesis: la tendencia reciente es negativa; proyectar requiere acción de pauta.",
-                confidence="baja" if r2 < 0.3 else "media", hypothesis=True))
+                confidence="media", hypothesis=True))
         elif pend > 0:
             out.append(Insight("good", "📈",
                 f"Forecast al alza: pendiente +{pend}/día (R²={r2}).",
-                confidence="baja" if r2 < 0.3 else "media"))
-        if r2 < 0.3:
-            out.append(Insight("info", "ℹ",
-                f"El forecast tiene R²={r2} (ruido alto): trátalo como orden de magnitud, no cifra. "
-                f"La serie es estacional y la regresión lineal la subestima.",
-                confidence="alta"))
+                confidence="media"))
 
     # ROAS débil
     if k.roas_por_pais:

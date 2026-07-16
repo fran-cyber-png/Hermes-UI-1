@@ -8,6 +8,7 @@ Pure math over KPIs. Produces an `Analysis` object:
   - distributions / participations (share by channel, product, sede)
 """
 
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 from collections import defaultdict
@@ -70,7 +71,7 @@ def analyze(k: KPIs) -> Analysis:
         sem = defaultdict(lambda: {"ventas": 0, "usd": 0})
         for d in k.serie_diaria:
             try:
-                dt = _re.sub(r"T.*", "", d.get("dia", ""))
+                dt = re.sub(r"T.*", "", d.get("dia", ""))
                 y, w, _ = date.fromisoformat(dt).isocalendar()
                 sem[f"{y}-S{str(w).zfill(2)}"]["ventas"] += d.get("ventas", 0) or 0
                 sem[f"{y}-S{str(w).zfill(2)}"]["usd"] += d.get("ventasUsd", 0) or d.get("usd", 0) or 0
@@ -95,10 +96,27 @@ def analyze(k: KPIs) -> Analysis:
             delta_pct=_pct(w[-1].ventas, w[-2].ventas), approx=True,
         ))
 
+    # Scope guard de períodos (docs/14 §5 P1): si el último mes está EN CURSO, todas
+    # las comparaciones multi-mes deben usar ventanas iguales (1..cutoff vs 1..cutoff),
+    # nunca un mes parcial contra uno completo — esa fue "la mentira más gorda" del
+    # caso 2026-07-16 (julio 155 vs junio 339 completo ⇒ "-54%" fabricado).
+    cutoff = k.cutoff_mes_parcial()
+    comparable = k.serie_comparable(cutoff) if cutoff else []
+    serie_para_tendencia = comparable if cutoff else k.serie_mensual
+
     if k.serie_mensual:
         last = k.last_month()
         prev = k.prev_month()
-        if last:
+        if cutoff and len(comparable) >= 2:
+            c_last, c_prev = comparable[-1], comparable[-2]
+            a.comparisons.append(Comparison(
+                label=(f"Mes actual ({last.label}) — PARCIAL, datos hasta el día {cutoff}: "
+                       f"comparado contra los mismos días de {c_prev.label}"),
+                current=c_last.ventas, previous=c_prev.ventas,
+                delta_abs=c_last.ventas - c_prev.ventas,
+                delta_pct=_pct(c_last.ventas, c_prev.ventas),
+            ))
+        elif last:
             a.comparisons.append(Comparison(
                 label=f"Mes actual ({last.label})", current=last.ventas,
                 previous=prev.ventas if prev else None,
@@ -114,26 +132,37 @@ def analyze(k: KPIs) -> Analysis:
                 delta_abs=cur - ant, delta_pct=_pct(cur, ant),
             ))
 
-    # ── Forecast ──
+    # ── Forecast (honesto: si R² < 0.3 no hay tendencia real — se reporta el ritmo
+    # diario ± error, nunca un total "proyectado" con falsa precisión) ──
     fc = k.forecast or {}
     if fc.get("proyeccion"):
         proj = fc["proyeccion"]
-        a.comparisons.append(Comparison(
-            label=f"Forecast próximos {len(proj)} días (pendiente {fc.get('pendiente')}/día, "
-                   f"error típico ±{fc.get('errorTipico')}, R²={fc.get('r2')})",
-            current=sum(p.get("ventas", 0) for p in proj), previous=None,
-        ))
+        r2 = fc.get("r2")
+        if r2 is not None and r2 < 0.3 and proj:
+            ritmo = round(sum(p.get("ventas", 0) or 0 for p in proj) / len(proj), 1)
+            a.comparisons.append(Comparison(
+                label=(f"Ritmo diario reciente (no forecast — R²={r2}, sin tendencia "
+                       f"estadística): ~{ritmo}/día ± {fc.get('errorTipico')}"),
+                current=ritmo, previous=None,
+            ))
+        else:
+            a.comparisons.append(Comparison(
+                label=f"Forecast próximos {len(proj)} días (pendiente {fc.get('pendiente')}/día, "
+                       f"error típico ±{fc.get('errorTipico')}, R²={fc.get('r2')})",
+                current=sum(p.get("ventas", 0) for p in proj), previous=None,
+            ))
 
     # ── Rolling averages ──
-    if len(k.serie_mensual) >= 3:
-        a.rolling["3m"] = round(sum(s.ventas for s in _last_n(k.serie_mensual, 3)) / 3, 1)
-    if len(k.serie_mensual) >= 6:
-        a.rolling["6m"] = round(sum(s.ventas for s in _last_n(k.serie_mensual, 6)) / 6, 1)
+    if len(serie_para_tendencia) >= 3:
+        a.rolling["3m"] = round(sum(s.ventas for s in _last_n(serie_para_tendencia, 3)) / 3, 1)
+    if len(serie_para_tendencia) >= 6:
+        a.rolling["6m"] = round(sum(s.ventas for s in _last_n(serie_para_tendencia, 6)) / 6, 1)
 
-    # ── Momentum / trend ──
-    if len(k.serie_mensual) >= 4:
-        recent = sum(s.ventas for s in _last_n(k.serie_mensual, 2)) / 2
-        prior = sum(s.ventas for s in k.serie_mensual[-4:-2]) / 2
+    # ── Momentum / trend (sobre la serie comparable si el mes está en curso: nunca
+    # promediar un mes parcial junto a meses completos) ──
+    if len(serie_para_tendencia) >= 4:
+        recent = sum(s.ventas for s in _last_n(serie_para_tendencia, 2)) / 2
+        prior = sum(s.ventas for s in serie_para_tendencia[-4:-2]) / 2
         a.momentum_pct = _pct(recent, prior)
         if a.momentum_pct is not None:
             if a.momentum_pct > 5:
@@ -188,21 +217,23 @@ def analyze(k: KPIs) -> Analysis:
             for c in por_canal
         ]
 
-    # ── Anomalies (simple rules) ──
-    if len(k.serie_mensual) >= 3:
-        vals = [s.ventas for s in k.serie_mensual[-3:]]
+    # ── Anomalies (simple rules; sobre ventanas iguales si el mes está en curso) ──
+    if len(serie_para_tendencia) >= 3:
+        vals = [s.ventas for s in serie_para_tendencia[-3:]]
         mean = sum(vals) / len(vals)
-        last_v = k.serie_mensual[-1].ventas
+        last_v = serie_para_tendencia[-1].ventas
+        etiqueta = " (mismos días, mes parcial)" if cutoff else ""
         if mean > 0:
             drop = (last_v - mean) / mean
             if drop < -0.15:
                 a.anomalies.append(Anomaly("warn", "⚠",
-                    f"Caída reciente: el último mes ({last_v}) está {abs(round(drop*100))}% "
-                    f"bajo el promedio de los 3 meses previos ({round(mean)})."))
+                    f"Caída reciente{etiqueta}: el último mes ({last_v}) está "
+                    f"{abs(round(drop*100))}% bajo el promedio de los 3 meses previos "
+                    f"({round(mean)})."))
             elif drop > 0.15:
                 a.anomalies.append(Anomaly("info", "📈",
-                    f"Pico reciente: el último mes ({last_v}) está {round(drop*100)}% "
-                    f"sobre el promedio reciente ({round(mean)})."))
+                    f"Pico reciente{etiqueta}: el último mes ({last_v}) está "
+                    f"{round(drop*100)}% sobre el promedio reciente ({round(mean)})."))
 
     # Anomalia semanal EXACTA (se a serie diaria existe)
     if k.serie_diaria and len(k.serie_diaria) >= 14:

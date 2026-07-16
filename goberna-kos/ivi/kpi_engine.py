@@ -10,7 +10,7 @@ Produces a `KPIs` object consumed by the AnalyticsEngine.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from calendar import monthrange
 from datetime import date
 
@@ -23,6 +23,48 @@ class SeriePoint:
     ventas: int
     usd: int
     approx: bool = False
+
+
+def _dia_de(dia_str: str) -> Optional[int]:
+    try:
+        return date.fromisoformat(str(dia_str)[:10]).day
+    except Exception:
+        return None
+
+
+def _dias_en_mes(mes: str) -> Optional[int]:
+    try:
+        y, m = (int(x) for x in mes.split("-"))
+        return monthrange(y, m)[1]
+    except Exception:
+        return None
+
+
+def dias_presentes(serie_diaria: List[Dict], mes: str) -> List[int]:
+    """Días (1..31) de `mes` ('YYYY-MM') presentes en serie_diaria."""
+    out = []
+    for d in serie_diaria:
+        dia_s = str(d.get("dia", ""))
+        if not dia_s.startswith(mes):
+            continue
+        n = _dia_de(dia_s)
+        if n:
+            out.append(n)
+    return out
+
+
+def suma_hasta_dia(serie_diaria: List[Dict], mes: str, hasta_dia: int) -> Tuple[int, int]:
+    """Suma ventas/usd de `mes` para los días 1..hasta_dia (ventana igualada)."""
+    ventas = usd = 0
+    for d in serie_diaria:
+        dia_s = str(d.get("dia", ""))
+        if not dia_s.startswith(mes):
+            continue
+        n = _dia_de(dia_s)
+        if n is not None and n <= hasta_dia:
+            ventas += d.get("ventas", 0) or 0
+            usd += d.get("ventasUsd", 0) or d.get("usd", 0) or 0
+    return ventas, usd
 
 
 @dataclass
@@ -56,11 +98,44 @@ class KPIs:
     forecast: Dict = field(default_factory=dict)            # {pendiente, proyeccion, errorTipico, r2}
     roas_por_pais: List[Dict] = field(default_factory=list)
 
+    # frescura ("datos hasta el D" por fuente) — la calcula data_collector, sin fetches nuevos
+    frescura: Dict[str, str] = field(default_factory=dict)
+
     def last_month(self) -> Optional[SeriePoint]:
         return self.serie_mensual[-1] if self.serie_mensual else None
 
     def prev_month(self) -> Optional[SeriePoint]:
         return self.serie_mensual[-2] if len(self.serie_mensual) >= 2 else None
+
+    def cutoff_mes_parcial(self) -> Optional[int]:
+        """Si el último mes de `serie_mensual` está EN CURSO (la serie diaria no llega
+        a fin de mes), devuelve el último día con datos. None si el mes está completo
+        o no hay serie diaria para verificarlo — nunca asume, solo lee la base."""
+        last = self.last_month()
+        if not last or not self.serie_diaria:
+            return None
+        dias = dias_presentes(self.serie_diaria, last.label)
+        if not dias:
+            return None
+        cutoff = max(dias)
+        total = _dias_en_mes(last.label)
+        if total is None or cutoff >= total:
+            return None
+        return cutoff
+
+    def serie_comparable(self, cutoff: int) -> List[SeriePoint]:
+        """`serie_mensual` re-alineada: cada mes sumado SOLO días 1..cutoff (mismas
+        ventanas), usando serie_diaria. Se detiene en el primer mes sin cobertura
+        diaria suficiente — nunca inventa un número para igualar la ventana."""
+        out: List[SeriePoint] = []
+        for sp in reversed(self.serie_mensual):
+            dias = dias_presentes(self.serie_diaria, sp.label)
+            if not dias or max(dias) < cutoff:
+                break
+            ventas, usd = suma_hasta_dia(self.serie_diaria, sp.label, cutoff)
+            out.append(SeriePoint(label=sp.label, ventas=ventas, usd=usd))
+        out.reverse()
+        return out
 
 
 def _week_key(mes: str, day: int) -> Optional[str]:
@@ -161,5 +236,7 @@ def compute(raw: RawData) -> KPIs:
     attr = raw.atribucion or {}
     if attr.get("disponible") and attr.get("roasPais"):
         k.roas_por_pais = attr["roasPais"]
+
+    k.frescura = raw.frescura
 
     return k

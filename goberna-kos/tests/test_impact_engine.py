@@ -90,13 +90,27 @@ def test_roas_cac_trend_omitted():
     assert trend is not None and trend.kind == SIN_EVIDENCIA
 
 
-def test_forecast_low_r2_is_flagged():
+def test_forecast_low_r2_reports_ritmo_not_projection():
+    """P4 (docs/14 §5): R² < 0.3 ⇒ no hay total 'proyectado' (falsa precisión);
+    se reporta el ritmo diario medido, ± error, marcado explícitamente 'no forecast'."""
     items = compute_impact(_kpis_full())
+    assert _by_label(items, "proyectadas") is None
+    fc = _by_label(items, "Ritmo diario")
+    assert fc is not None and fc.kind == HECHO
+    assert fc.value == 6               # round((5+6)/2, 1) = 5.5 -> _r() = 6
+    assert fc.confianza == "alta"
+    assert "sin tendencia estadística" in (fc.nota or "")
+
+
+def test_forecast_high_r2_still_projects_total():
+    k = _kpis_full()
+    k.forecast["r2"] = 0.55
+    items = compute_impact(k)
     fc = _by_label(items, "proyectadas")
     assert fc is not None and fc.kind == HECHO
     assert fc.value == 11              # 5 + 6
-    assert fc.confianza == "baja"
-    assert "orden de magnitud" in (fc.nota or "")
+    assert fc.confianza == "media"
+    assert _by_label(items, "Ritmo diario") is None
 
 
 def test_render_lines_are_tagged():

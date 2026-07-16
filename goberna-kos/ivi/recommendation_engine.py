@@ -26,6 +26,12 @@ def recommend(k: KPIs, a: Analysis, insights: List[Insight]) -> List[Action]:
     prio = 1
 
     has = lambda key: any(i.text and key in i.text for i in insights)
+    # docs/14 §4 "Acciones recicladas": `has()` por substring no distinguía severidad —
+    # recomendaba arreglar Tesorería aunque insight_engine ya reportara su latencia SANA
+    # (p90 controlado ⇒ severity "good"/"info", nunca "crit"/"warn"). Gatear por
+    # severidad real evita recomendar lo que ya no hace falta.
+    has_crit = lambda key: any(i.text and key in i.text and i.severity == "crit" for i in insights)
+    has_warn = lambda key: any(i.text and key in i.text and i.severity == "warn" for i in insights)
 
     if has("MODO PRUEBA") or has("nunca se ha corrido"):
         actions.append(Action(prio, "Pasar el envío CAPI de Meta a MODO PRODUCCIÓN",
@@ -33,13 +39,13 @@ def recommend(k: KPIs, a: Analysis, insights: List[Insight]) -> List[Action]:
             "Growth / DevOps"))
         prio += 1
 
-    if has("fuera de la ventana"):
+    if has_crit("fuera de la ventana"):
         actions.append(Action(prio, "Reordenar la bandeja de Tesorería por antigüedad (más viejo arriba)",
             "Los vouchers viejos se entierran bajo los nuevos y confirman tarde, "
             "perdiendo la ventana de 7 días de Meta.", "Tesorería"))
         prio += 1
 
-    if has("Latencia de tesorería") and any("p90" in i.text and "crit" not in i.severity for i in insights):
+    if has_warn("Latencia de tesorería") and has_warn("p90"):
         actions.append(Action(prio, "Medir y recortar la latencia de confirmación de vouchers a < 7 días",
             "Cada día de retraso es una venta que Meta nunca ve.", "Tesorería / Ops"))
 

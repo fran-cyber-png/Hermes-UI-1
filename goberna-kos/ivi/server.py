@@ -9,6 +9,9 @@
 #          -> ResponseFormatter
 # ─────────────────────────────────────────────────────────
 import json
+import logging
+import threading
+import time
 import urllib.request
 import http.server
 import socketserver
@@ -26,7 +29,19 @@ from .impact_engine import compute_impact
 from .memory import get_session, remember, is_followup, apply_followup_filters, Turn
 from .prompt_builder import build
 from .response_formatter import format_response
-from .config import OLLAMA_URL, MODEL, PORT, OLLAMA_CTX, OLLAMA_TEMP
+from .config import OLLAMA_URL, MODEL, PORT, OLLAMA_CTX, OLLAMA_TEMP, OLLAMA_TIMEOUT
+
+log = logging.getLogger("ivi")
+
+# Requests currently inside handle_chat. Ollama serves a bounded number of them
+# at a time and queues the rest, so this gauge is what tells a reader of the log
+# whether a slow answer was slow inference or slow queue.
+_inflight = 0
+_inflight_lock = threading.Lock()
+
+
+class OllamaError(RuntimeError):
+    """Ollama did not answer: timeout, connection refused, or a 5xx."""
 
 HTML = r"""<!DOCTYPE html>
 <html lang="es">
@@ -102,10 +117,14 @@ async function send(){
     const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({message:q})});
     const data=await r.json();
-    t.classList.remove('typing'); t.innerHTML=data.response.replace(/^## /gm,'\n\n<h2>').replace(/<\/h2>/g,'</h2>');
-    if(data.live){ const l=document.createElement('div'); l.className='live';
+    t.classList.remove('typing');
+    // El server manda 503 cuando el modelo no contesta; el payload igual trae
+    // `response` legible, pero no es un análisis: no se marca como dato en vivo.
+    t.innerHTML=(data.response||'Sin respuesta del servidor.').replace(/^## /gm,'\n\n<h2>').replace(/<\/h2>/g,'</h2>');
+    if(!r.ok){ t.style.color='#f59e0b'; }
+    if(r.ok&&data.live){ const l=document.createElement('div'); l.className='live';
       l.textContent='⦿ datos en vivo de Cerberus'; t.parentElement.appendChild(l); }
-  }catch(e){ t.classList.remove('typing'); t.textContent='Error: '+e; }
+  }catch(e){ t.classList.remove('typing'); t.textContent='Error de red: '+e; }
   busy=false; btn.disabled=false;
 }
 addMsg('bot','Hola, soy Ivi. Analizo ventas de Goberna como un analista senior de BI: tendencias, comparaciones de periodo, embudos, cartera, tesorería y el lazo con Meta. Cada respuesta trae interpretación, riesgos, oportunidades y acciones. ¿Qué quieres saber?');
@@ -121,8 +140,11 @@ def call_ollama(prompt: str) -> str:
         "options": {"temperature": OLLAMA_TEMP, "num_ctx": OLLAMA_CTX},
     }).encode()
     req = urllib.request.Request(OLLAMA_URL, data=payload, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        return json.loads(resp.read().decode()).get("response", "")
+    try:
+        with urllib.request.urlopen(req, timeout=OLLAMA_TIMEOUT) as resp:
+            return json.loads(resp.read().decode()).get("response", "")
+    except Exception as e:
+        raise OllamaError(f"{type(e).__name__}: {e}") from e
 
 
 def related_questions(intent_scores: dict) -> list:
@@ -157,6 +179,19 @@ def related_questions(intent_scores: dict) -> list:
 
 
 def handle_chat(message: str, sid: str = "default") -> dict:
+    global _inflight
+    with _inflight_lock:
+        _inflight += 1
+        queued = _inflight
+    t0 = time.monotonic()
+    try:
+        return _handle_chat(message, sid, t0, queued)
+    finally:
+        with _inflight_lock:
+            _inflight -= 1
+
+
+def _handle_chat(message: str, sid: str, t0: float, queued: int) -> dict:
     sess = get_session(sid)
     followup = is_followup(message, sid)
     intent = analyze(message)
@@ -168,7 +203,9 @@ def handle_chat(message: str, sid: str = "default") -> dict:
                      f"continuación del análisis previo sobre {sess.last.scope or intent.dominant()}"
 
     endpoints = plan(intent)
+    t_collect = time.monotonic()
     raw = collect(endpoints)
+    collect_s = time.monotonic() - t_collect
     kpis = compute(raw)
     analysis = analyze_metrics(kpis)
     insights = detect(kpis, analysis)
@@ -181,10 +218,25 @@ def handle_chat(message: str, sid: str = "default") -> dict:
 
     live = bool(raw.endpoints_hit)
     prompt = build(intent, kpis, analysis, insights, actions, related, impact, scope_note)
+
+    t_llm = time.monotonic()
     try:
         llm = call_ollama(prompt)
-    except Exception as e:
-        llm = f"Error al llamar a Ollama: {e}"
+    except OllamaError as e:
+        # Never dress a failure as an answer: the caller turns this into a 5xx.
+        # Returning 200 with the error text inside `response` (as this did
+        # before) hid every outage from status-code monitoring.
+        log.error("chat sid=%s FALLO ollama=%.1fs inflight=%d prompt=%dch — %s",
+                  sid, time.monotonic() - t_llm, queued, len(prompt), e)
+        raise
+    llm_s = time.monotonic() - t_llm
+
+    log.info("chat sid=%s ok intents=%s endpoints=%s prompt=%dch inflight=%d "
+             "collect=%.1fs ollama=%.1fs total=%.1fs — %r",
+             sid, intent.intents, raw.endpoints_hit, len(prompt), queued,
+             collect_s, llm_s, time.monotonic() - t0, message[:80])
+    if raw.errors:
+        log.warning("chat sid=%s endpoints con error: %s", sid, raw.errors)
     return format_response(llm, insights, related, impact, live)
 
 
@@ -203,23 +255,51 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send(404, "not found")
 
     def do_POST(self):
-        if self.path == "/api/chat":
-            length = int(self.headers.get("Content-Length", 0))
-            data = json.loads(self.rfile.read(length).decode())
-            message = data.get("message", "")
-            sid = data.get("session", "default")
-            out = handle_chat(message, sid)
-            self._send(200, json.dumps(out, ensure_ascii=False))
-        else:
+        if self.path != "/api/chat":
             self._send(404, "not found")
+            return
+        length = int(self.headers.get("Content-Length", 0))
+        data = json.loads(self.rfile.read(length).decode())
+        message = data.get("message", "")
+        sid = data.get("session", "default")
+        try:
+            out = handle_chat(message, sid)
+        except OllamaError as e:
+            # 503 so monitoring and the UI can both tell this apart from an
+            # answer. `response` stays populated so the chat renders something
+            # readable instead of blowing up on an undefined field.
+            self._send(503, json.dumps({
+                "response": "El modelo no respondió a tiempo. El servidor sigue vivo — "
+                            "reintentá en unos segundos.",
+                "error": str(e), "live": False,
+                "insights": [], "related": [], "impact": [],
+            }, ensure_ascii=False))
+            return
+        except Exception as e:
+            log.exception("chat sid=%s error inesperado", sid)
+            self._send(500, json.dumps({
+                "response": f"Error interno del motor: {type(e).__name__}.",
+                "error": str(e), "live": False,
+                "insights": [], "related": [], "impact": [],
+            }, ensure_ascii=False))
+            return
+        self._send(200, json.dumps(out, ensure_ascii=False))
 
-    def log_message(self, *args):
-        pass
+    def log_message(self, fmt, *args):
+        # BaseHTTPRequestHandler writes its access log to stderr by hand; route
+        # it through logging so it lands in the same stream as everything else.
+        log.info("http %s - %s", self.address_string(), fmt % args)
 
 
 def main():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
+    )
     with socketserver.ThreadingTCPServer(("0.0.0.0", PORT), Handler) as httpd:
-        print(f"Ivi Analytical Engine en http://0.0.0.0:{PORT}")
+        log.info("Ivi Analytical Engine en http://0.0.0.0:%d — modelo=%s ctx=%d timeout=%ds",
+                 PORT, MODEL, OLLAMA_CTX, OLLAMA_TIMEOUT)
         httpd.serve_forever()
 
 

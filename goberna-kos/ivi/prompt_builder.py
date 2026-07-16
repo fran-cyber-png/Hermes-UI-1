@@ -29,6 +29,12 @@ from datetime import date
 _SEV_ORDER = {"crit": 0, "warn": 1, "info": 2, "good": 3}
 
 
+def _fmt_frescura(k: KPIs) -> str:
+    if not k.frescura:
+        return "(sin dato de frescura — no declares una fecha de corte que no tengas)"
+    return "\n".join(f"- {v}" for v in k.frescura.values())
+
+
 def _fmt_kpis(k: KPIs) -> str:
     lines = []
     if k.ventas_conocidas is not None:
@@ -102,9 +108,23 @@ def _fmt_target_month(k: KPIs, intent) -> str:
     prev = k.serie_mensual[idx - 1] if idx > 0 else None
     lines = [f"MES SOLICITADO ({pt.label}{note}): {pt.ventas} ventas, USD {pt.usd}"]
     if prev:
-        dv = pt.ventas - prev.ventas
-        pct = (dv / prev.ventas * 100) if prev.ventas else 0
-        lines.append(f"  vs mes previo ({prev.label}): {dv:+d} ventas ({pct:+.1f}%)")
+        # Scope guard (docs/14 §5 P1): si `pt` es el mes EN CURSO, comparar contra los
+        # mismos días de `prev` — nunca un mes parcial contra uno completo.
+        last = k.last_month()
+        cutoff = k.cutoff_mes_parcial() if last and pt.label == last.label else None
+        c_prev = None
+        if cutoff:
+            comparable = k.serie_comparable(cutoff)
+            c_prev = next((s for s in comparable if s.label == prev.label), None)
+        if c_prev:
+            dv = pt.ventas - c_prev.ventas
+            pct = (dv / c_prev.ventas * 100) if c_prev.ventas else 0
+            lines.append(f"  vs mismos días de {prev.label} (mes parcial, hasta el día "
+                         f"{cutoff}): {dv:+d} ventas ({pct:+.1f}%)")
+        else:
+            dv = pt.ventas - prev.ventas
+            pct = (dv / prev.ventas * 100) if prev.ventas else 0
+            lines.append(f"  vs mes previo ({prev.label}): {dv:+d} ventas ({pct:+.1f}%)")
     return "\n".join(lines)
 
 
@@ -240,10 +260,13 @@ def build(intent: IntentResult, k: KPIs, a: Analysis, insights: List[Insight],
         "(revenue, USD, ROAS, CAC, forecast ya vienen calculados en -- IMPACTO ECONÓMICO --).\n"
         "3. Si falta evidencia para concluir algo, dilo: \"no existe evidencia suficiente para "
         "concluir X\". No rellenes huecos.\n"
-        "4. No digas \"no tengo datos\" si la sección correspondiente TRAE información.\n\n"
+        "4. No digas \"no tengo datos\" si la sección correspondiente TRAE información.\n"
+        "5. Abre el Resumen Ejecutivo con la fecha de corte de los datos (sección -- FRESCURA "
+        "--). Nunca narres en presente algo que ya tiene días de rezago sin decirlo.\n\n"
         "=== INVESTIGACIÓN DEL MOTOR (no recalcular) ===\n"
         f"INTENCIÓN DETECTADA: {intent.dominant()} (scores: {intent.scores})\n"
         f"PERÍODO SOLICITADO: {intent.primary_period}\n"
+        f"\n-- FRESCURA (declarar SIEMPRE al abrir el Resumen) --\n{_fmt_frescura(k)}\n"
     )
     if scope_note:
         prompt += f"CONTEXTO PREVIO (follow-up): {scope_note}\n"
