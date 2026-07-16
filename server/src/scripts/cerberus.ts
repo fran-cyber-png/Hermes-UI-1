@@ -1,14 +1,16 @@
 import "dotenv/config";
 import { ingestarDump } from "../fuentes/cerberus.js";
 import { proyectarCerberus } from "../ontologia/proyectar.js";
+import { proyectarHechos } from "../ontologia/proyectarHechos.js";
 import { poblarIdentidad } from "../ontologia/poblarIdentidad.js";
 import { correrLazo } from "../lazo/worker.js";
 
 /**
  * Los comandos de Cerberus.
  *
- *   npm run cerberus:ingestar -- ruta/al/dump.sql   → espejo crudo + proyección + grafo
+ *   npm run cerberus:ingestar -- ruta/al/dump.sql   → espejo crudo + proyección + grafo + hechos
  *   npm run cerberus:proyectar                      → SOLO rehace la capa canónica y el grafo
+ *   npm run cerberus:hechos                         → SOLO rehace el eje del tiempo (capa 1)
  *   npm run lazo -- --simular                        → evalúa y guarda, SIN mandarle nada a Meta
  *   npm run lazo                                     → manda de verdad
  *
@@ -51,6 +53,42 @@ async function main() {
     const id = await poblarIdentidad();
     console.log(
       `Grafo de identidad: ${id.personas.toLocaleString("es")} personas · ${id.clientesVinculados.toLocaleString("es")} clientes vinculados`,
+    );
+
+    // El eje del tiempo (capa 1). Va acá porque el dump nuevo trae hechos nuevos, y un hecho que
+    // no se deriva hoy no aparece mañana solo.
+    const h = await proyectarHechos();
+    console.log(
+      `Hechos: ${h.hechos.toLocaleString("es")} · ${h.ventanaHechos.desde} → ${h.ventanaHechos.hasta}`,
+    );
+    return;
+  }
+
+  if (comando === "hechos") {
+    // Rehace SOLO la capa 1 desde el espejo crudo. Es re-proyectable a propósito: si mañana
+    // cambia la regla de qué es un hecho, se corre esto y listo. El dump no cambió.
+    const h = await proyectarHechos();
+    console.log(`\nHechos derivados — el eje del tiempo\n`);
+    for (const [tipo, n] of Object.entries(h.porTipo).sort((a, b) => b[1] - a[1])) {
+      console.log(`  ${tipo.padEnd(18)} ${n.toLocaleString("es").padStart(8)}`);
+    }
+    console.log(`  ${"".padEnd(18)} ${"─".repeat(8)}`);
+    console.log(`  ${"TOTAL".padEnd(18)} ${h.hechos.toLocaleString("es").padStart(8)}`);
+    console.log(`\n  ventana: ${h.ventanaHechos.desde} → ${h.ventanaHechos.hasta}`);
+    console.log(`  tardó:   ${h.segundos}s`);
+
+    // Los descartes se DICEN. La mitad importante de una proyección es lo que no derivó y por qué
+    // — misma disciplina que `lazo/worker.ts:16-23`.
+    const conDescartes = Object.entries(h.descartes).filter(([, n]) => n > 0);
+    if (conDescartes.length > 0) {
+      console.log(`\n  ── filas que NO produjeron hecho ──`);
+      for (const [motivo, n] of conDescartes) {
+        console.log(`  ${motivo.padEnd(18)} ${String(n).padStart(8)}`);
+      }
+    }
+    console.log(
+      `\n  NOTA: no existen VentaAnulada ni VentaReembolsada. Cerberus no guarda CUÁNDO cambió\n` +
+        `  el estado de una venta, solo el estado final. Ver dominio del hecho en db/hechos.ts.`,
     );
     return;
   }

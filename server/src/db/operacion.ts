@@ -1,8 +1,10 @@
 import {
   bigserial,
+  date,
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -141,3 +143,81 @@ export const sincronizaciones = pgTable("sincronizaciones", {
   ultimoErrorAt: timestamp("ultimo_error_at", { withTimezone: true }),
   duracionMs: integer("duracion_ms"),
 });
+
+/**
+ * LA SERIE DIARIA DE META — el eje del tiempo que la pauta nunca tuvo.
+ *
+ * ── El agujero que tapa ──
+ * `pauta_snapshots` guarda una FOTO AGREGADA del período cada 6 h. Sirve para "¿cómo está la
+ * pauta ahora?" y no sirve para nada más: al 2026-07-16 había 10 snapshots, o sea **3,1 días**
+ * de historia. Cualquier pregunta con un eje de tiempo —"¿venimos mejor que el año pasado?",
+ * "¿este creativo se está quemando?"— era incontestable.
+ *
+ * Y no porque el dato no existiera: porque nadie lo pidió. `recolectar.ts:71` pide insights SIN
+ * `time_increment`, así que Meta devuelve una fila agregada de los 90 días. La serie estaba ahí
+ * todo el tiempo, del otro lado de un parámetro.
+ *
+ * ── Lo que se midió antes de escribir esto (2026-07-16, contra la API real) ──
+ * Meta retiene **37 meses** de insights diarios. Más atrás responde:
+ *     ERROR(3018) "The start date of the time range cannot be beyond 37 months"
+ *
+ * Y no se le pueden pedir de una: a nivel `ad`, 37 meses da HTTP 400; a nivel `campaign`, HTTP
+ * 500. **No es rate limit** (Meta reportaba `call_count=1%`) ni permisos: es el tamaño de la
+ * consulta. Medido sobre la misma cuenta y nivel:
+ *
+ *     14 días → ✓ 125 filas · 1,0 s        6 meses  → ✓ 1.039 filas · 13,9 s
+ *      1 mes  → ✓  96 filas · 0,6 s       37 meses  → ✗ HTTP 400
+ *      3 meses→ ✓ 447 filas · 2,6 s
+ *
+ * Por eso `pauta/backfill.ts` trocea en ventanas de 3 meses. Un HTTP 500 de la Graph API casi
+ * nunca es "Meta está caído": es "la consulta es muy grande".
+ *
+ * ── Por qué es append-only y no un snapshot más ──
+ * Un día que ya pasó no cambia. Meta puede reprocesar atribución hasta 28 días atrás, así que la
+ * fila se puede pisar con `UNIQUE(nivel, entidad_id, fecha)` — pero el pasado lejano es
+ * inmutable, y por eso el backfill se puede correr dos veces sin duplicar nada.
+ */
+export const pautaSerie = pgTable(
+  "pauta_serie",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+
+    /** `account` | `campaign` | `ad`. El mismo dato a tres granularidades: Meta las cobra igual. */
+    nivel: text("nivel").notNull(),
+    /** El id de Meta de la entidad: `act_123`, el campaign_id, el ad_id. */
+    entidadId: text("entidad_id").notNull(),
+    /** La cuenta a la que pertenece. Permite borrar/re-backfillear una cuenta sola. */
+    cuentaId: text("cuenta_id").notNull(),
+
+    /** El día. `date` y no `timestamp`: Meta reporta por día en el huso de la cuenta, sin hora. */
+    fecha: date("fecha").notNull(),
+
+    /**
+     * Gasto del día, en la MONEDA DE LA CUENTA. Sin convertir.
+     *
+     * Convertir acá sería hornear una tasa en un hecho: las tasas del negocio cambian, y una fila
+     * de 2023 convertida con la tasa de hoy es una mentira con formato de dato. La conversión es
+     * una decisión de análisis y vive donde ya vive (`analisis/tasas.ts:44`), aplicada al leer.
+     * Es la misma lección que `db/canonico.ts:4-21` documenta como bug real.
+     */
+    gasto: numeric("gasto"),
+    /** El ISO de la moneda de la cuenta, para que nadie sume soles con dólares. */
+    moneda: text("moneda"),
+
+    impresiones: integer("impresiones"),
+    clicks: integer("clicks"),
+    /** El array `actions` crudo de Meta: leads, compras, reacciones. Sin interpretar. */
+    acciones: jsonb("acciones"),
+
+    /** Cuándo lo trajimos. Un backfill viejo se distingue de uno de hoy. */
+    traidoAt: timestamp("traido_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // La idempotencia: correr el backfill dos veces pisa, no duplica.
+    uniqueIndex("pauta_serie_uq").on(t.nivel, t.entidadId, t.fecha),
+    // "¿cómo viene esta campaña?" — el índice de la pregunta más frecuente.
+    index("pauta_serie_entidad_idx").on(t.nivel, t.entidadId, t.fecha),
+    // "¿cómo venimos este mes?" — el agregado por cuenta.
+    index("pauta_serie_cuenta_idx").on(t.cuentaId, t.fecha),
+  ],
+);

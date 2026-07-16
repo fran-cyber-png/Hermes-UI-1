@@ -16,7 +16,9 @@
     "ingest:interactions": "tsx src/scripts/ingestInteractions.ts",
     "cerberus:ingestar": "tsx src/scripts/cerberus.ts ingestar",
     "cerberus:proyectar": "tsx src/scripts/cerberus.ts proyectar",
-    "lazo": "tsx src/scripts/cerberus.ts lazo"
+    "cerberus:hechos": "tsx src/scripts/cerberus.ts hechos",
+    "lazo": "tsx src/scripts/cerberus.ts lazo",
+    "backfill": "tsx src/scripts/backfill.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",
