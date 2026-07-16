@@ -136,10 +136,13 @@ KV cache por slot (`num_ctx=8192`, KV en `q8_0` que ya estaba activo) →
 ## 7. Runbook del operador
 
 ```bash
+# desde la raíz del repo (meta-escuela/meta-escuela)
 bash goberna-kos/deploy-ivi-geografo.sh
+# o, si ya estás dentro de goberna-kos/
+bash deploy-ivi-geografo.sh
 ```
 
-Pide `sudo` en geógrafo (paso 4, systemd). Los 8 pasos: sync del engine →
+Pide `sudo` en geógrafo (paso 4, systemd) — hay que correrlo con una TTY real. Los 8 pasos: sync del engine →
 recrear modelo → apagar voz-ivi → tuning de Ollama → limpiar modelos → levantar
 server → **smoke test que falla si el fix de "mismos días" no está vivo** →
 prueba de concurrencia + VRAM.

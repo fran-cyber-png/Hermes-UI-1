@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # Activa Ivi en geógrafo: engine analítico + SYSTEM del modelo + tuning de Ollama.
-# Correr desde el Mac:  bash goberna-kos/deploy-ivi-geografo.sh
-# Requiere el alias SSH "ia" (~/.ssh/config → geografo@100.117.204.80) y sudo en geógrafo.
+#
+# Correr desde el Mac, desde donde sea (el script se ubica solo):
+#     bash goberna-kos/deploy-ivi-geografo.sh    # desde la raíz del repo
+#     bash deploy-ivi-geografo.sh                # desde goberna-kos/
+#
+# Requiere el alias SSH "ia" (~/.ssh/config → geografo@100.117.204.80) y sudo en
+# geógrafo (paso 4). Necesita una TTY real: no lo corras desde un agente.
 #
 # Qué arregla esta corrida (todo medido en prod el 2026-07-16, ver docs/18):
 #   1. impact_engine.py en prod comparaba mes PARCIAL vs mes COMPLETO → Ivi decía
