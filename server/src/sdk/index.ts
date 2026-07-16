@@ -13,6 +13,7 @@
  */
 
 import "./herramientas/atribucion.js";
+import "./herramientas/historia.js";
 import "./herramientas/lazo.js";
 import "./herramientas/tesoreria.js";
 import "./herramientas/ventas.js";
