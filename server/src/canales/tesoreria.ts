@@ -28,6 +28,22 @@ import { VENTANA_CAPI_DIAS } from "../lazo/evento.js";
  *
  * **Esta es la única mejora del sistema que recupera plata sin permisos de Meta, sin migrar
  * WhatsApp y sin esperar a nadie. Y no la hace un programador: la hace Tesorería, mirando esto.**
+ *
+ * ── POR QUÉ ESTA PANTALLA NUNCA MOSTRÓ NADA (arreglado 2026-07-16) ──
+ * Los cinco JOIN de abajo se hacían contra `id_cuota`, `id_venta`, `id_cliente`, `id_moneda` e
+ * `id_metodo`. Ninguna de esas claves existe: Cerberus usa `codigo_*`. Los JOIN internos no
+ * matcheaban nada, así que `esperando` devolvía SIEMPRE una lista vacía — desde el primer día.
+ *
+ * Y el vacío era indistinguible del éxito: una bandeja sin pagos pendientes se ve igual que una
+ * consulta rota. El histograma seguía poblado (no hace JOIN), así que la pantalla mostraba la
+ * CAUSA —la distribución de cuánto tarda Tesorería— pero nunca la ACCIÓN, que es su razón de ser.
+ * El propio proyecto ya se había dado la regla: "no se midió" no puede verse igual que "es cero"
+ * (`canales/verdad.ts:41-47`). Acá el bug era exactamente ese, del lado del código.
+ *
+ * Al arreglarlo aparecieron 12 pagos esperando, 3 de ellos TODAVÍA DENTRO de la ventana de Meta.
+ *
+ * La trampa: `ontologia/proyectar.ts` siempre usó los nombres correctos. Solo esta consulta se
+ * los inventó — y como nadie testea `canales/` (son I/O puro), nada lo atrapó.
  */
 
 /**
@@ -71,12 +87,12 @@ export type RelojTesoreria = {
 export async function relojDeTesoreria(): Promise<RelojTesoreria> {
   const [esperando, histograma] = await Promise.all([
     db.execute(sql`
-      SELECT v.payload->>'folio_venta'                                    AS folio,
-             concat(cl.payload->>'nombre', ' ', cl.payload->>'apellido')  AS cliente,
-             p.payload->>'monto_pagado'                                   AS monto,
-             m.payload->>'nombre'                                         AS moneda,
-             mp.payload->>'tipo_pago'                                     AS metodo,
-             (p.payload->>'fecha_pago')                                   AS subido_at,
+      SELECT v.payload->>'folio_venta'                                                   AS folio,
+             concat(cl.payload->>'nombre_cliente', ' ', cl.payload->>'apellido_cliente') AS cliente,
+             p.payload->>'monto_pagado'                                                  AS monto,
+             m.payload->>'nombre_moneda'                                                 AS moneda,
+             mp.payload->>'tipo_pago'                                                    AS metodo,
+             (p.payload->>'fecha_pago')                                                  AS subido_at,
              extract(day FROM now() - (p.payload->>'fecha_pago')::timestamptz)::int AS dias_esperando,
              round(extract(epoch FROM (
                ((p.payload->>'fecha_pago')::timestamptz
@@ -84,15 +100,18 @@ export async function relojDeTesoreria(): Promise<RelojTesoreria> {
              )) / 3600)::int                                              AS horas_hasta_perderla
       FROM fuentes.registro p
       JOIN fuentes.registro c  ON c.fuente='cerberus'  AND c.tabla='tb_cuotas'
-                              AND c.clave = p.payload->>'id_cuota'
+                              AND c.clave = p.payload->>'codigo_cuota'
       JOIN fuentes.registro v  ON v.fuente='cerberus'  AND v.tabla='tb_venta'
-                              AND v.clave = c.payload->>'id_venta'
+                              AND v.clave = c.payload->>'codigo_venta'
+      -- OJO: la clave de tb_cliente es \`id_cliente\`, no \`codigo_cliente\` — es la única
+      -- inconsistencia de nombres de Cerberus (\`fuentes/cerberus.ts:37\`). Pero la venta lo
+      -- referencia por \`codigo_cliente\`, y ambos valen lo mismo: 6.727/6.727 ventas matchean.
       LEFT JOIN fuentes.registro cl ON cl.fuente='cerberus' AND cl.tabla='tb_cliente'
-                              AND cl.clave = v.payload->>'id_cliente'
+                              AND cl.clave = v.payload->>'codigo_cliente'
       LEFT JOIN fuentes.registro m  ON m.fuente='cerberus'  AND m.tabla='tb_moneda'
-                              AND m.clave = p.payload->>'id_moneda'
+                              AND m.clave = p.payload->>'codigo_moneda'
       LEFT JOIN fuentes.registro mp ON mp.fuente='cerberus' AND mp.tabla='tb_metodoPago'
-                              AND mp.clave = p.payload->>'id_metodo'
+                              AND mp.clave = p.payload->>'codigo_metodo_pago'
       WHERE p.fuente='cerberus' AND p.tabla='tb_pago' AND ${ESPERANDO}
       -- EL CAMBIO: lo más VIEJO primero. Cerberus los ordena al revés y por eso se pierden.
       ORDER BY (p.payload->>'fecha_pago')::timestamptz ASC
