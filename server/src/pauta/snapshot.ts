@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { configuracion, pautaSnapshots, sincronizaciones } from "../db/operacion.js";
 import type { CampaignInput } from "../decisions/detectors.js";
@@ -52,17 +52,15 @@ export async function guardarCuentas(ids: string[]): Promise<void> {
     });
 }
 
-/** El último snapshot para ese rango. `null` si nunca se corrió. */
-export async function ultimoSnapshot(rango: string): Promise<Snapshot | null> {
-  const [fila] = await db
-    .select()
-    .from(pautaSnapshots)
-    .where(eq(pautaSnapshots.rango, rango))
-    .orderBy(desc(pautaSnapshots.creadoAt))
-    .limit(1);
-
-  if (!fila) return null;
-
+/** Mapea una fila cruda de `pauta_snapshots` a la forma que usa el resto. */
+function filaASnapshot(fila: {
+  campanas: unknown;
+  costo: unknown;
+  gasto: unknown;
+  errores: unknown;
+  cuentas: unknown;
+  creadoAt: Date;
+}): Snapshot {
   return {
     campanas: fila.campanas as CampaignInput[],
     costo: fila.costo ?? null,
@@ -72,6 +70,44 @@ export async function ultimoSnapshot(rango: string): Promise<Snapshot | null> {
     creadoAt: fila.creadoAt,
     edadMinutos: Math.round((Date.now() - fila.creadoAt.getTime()) / 60_000),
   };
+}
+
+/**
+ * La recolecta fue LIMPIA: trajo campañas y ninguna cuenta falló.
+ *
+ * Es la única condición bajo la que un snapshot puede SERVIRSE (y bajo la que `ultimaOk`
+ * avanza). Una corrida rota no es un dato viejo: es un dato falso. El 2026-07-16 la home
+ * mostró "Bolivia · ROAS 10,08× · subí el presupuesto" calculado sobre $698 de un snapshot
+ * con las 26 cuentas caídas, cuando la serie real de esos 90 días marcaba $16.587. Y filtrar
+ * solo "con campañas" tampoco alcanza: el snapshot de las 08:12 (1 campaña, 25 errores) pasaba
+ * ese filtro y el maestro mostraba esa campaña sola como "todas las pautas".
+ *
+ * La versión SQL y la TS son LA MISMA regla escrita en dos lenguajes: si tocás una, tocá la otra.
+ */
+const RECOLECTA_LIMPIA_SQL = sql`jsonb_array_length(${pautaSnapshots.campanas}) > 0 and jsonb_array_length(${pautaSnapshots.errores}) = 0`;
+
+export function esRecolectaLimpia(campanas: unknown[], errores: unknown[]): boolean {
+  return campanas.length > 0 && errores.length === 0;
+}
+
+/**
+ * El último snapshot SERVIBLE: el más reciente cuya recolecta fue limpia. Las corridas rotas
+ * o parciales quedan guardadas (son la bitácora de qué pasó) pero no se sirven.
+ *
+ * Sin `rango` busca en todos: el maestro quiere "todas las pautas", no una ventana.
+ * `null` si ninguna corrida limpia existe todavía para ese rango.
+ */
+export async function ultimoSnapshot(rango?: string): Promise<Snapshot | null> {
+  const [fila] = await db
+    .select()
+    .from(pautaSnapshots)
+    .where(
+      rango ? and(eq(pautaSnapshots.rango, rango), RECOLECTA_LIMPIA_SQL) : RECOLECTA_LIMPIA_SQL,
+    )
+    .orderBy(desc(pautaSnapshots.creadoAt))
+    .limit(1);
+
+  return fila ? filaASnapshot(fila) : null;
 }
 
 /**
@@ -110,6 +146,11 @@ export async function refrescarPauta(rango: string): Promise<Snapshot | null> {
   // trae. Se pide solo para los que gastaron. Un fallo acá no debe perder el snapshot.
   await adjuntarFatiga(token, cuentas, campanas, ventana).catch(() => 0);
 
+  const limpia = esRecolectaLimpia(campanas, erroresTodos);
+  const creadoAt = new Date();
+
+  // La corrida se guarda SIEMPRE, limpia o rota: es la bitácora de qué pasó (y de cuándo el
+  // reloj falla). Servirla o no es decisión del lector (`ultimoSnapshot`), no del que escribe.
   await db.insert(pautaSnapshots).values({
     cuentas,
     rango,
@@ -118,28 +159,34 @@ export async function refrescarPauta(rango: string): Promise<Snapshot | null> {
     gasto: geo?.gasto ?? null,
     errores: erroresTodos,
     duracionMs,
+    creadoAt,
   });
 
+  // `ultimaOk` solo avanza con una recolecta limpia: es lo que "revisada hace X" significa en
+  // el tablero de salud. El 2026-07-16 avanzó con una corrida de 26/26 cuentas caídas y salud
+  // decía "ok · revisada hace 3 h" mientras las pantallas mostraban un gasto inventado.
+  const marca = {
+    duracionMs,
+    cursor: `${campanas.length} campañas · ${llamadas} llamadas a Meta`,
+    ultimoError: erroresTodos.length ? `${erroresTodos.length} cuenta(s) fallaron` : null,
+    ultimoErrorAt: erroresTodos.length ? creadoAt : null,
+    ...(limpia ? { ultimaOk: creadoAt } : {}),
+  };
   await db
     .insert(sincronizaciones)
-    .values({
-      fuente: `pauta:${rango}`,
-      ultimaOk: new Date(),
-      duracionMs,
-      cursor: `${campanas.length} campañas · ${llamadas} llamadas a Meta`,
-      ultimoError: erroresTodos.length ? `${erroresTodos.length} cuenta(s) fallaron` : null,
-      ultimoErrorAt: erroresTodos.length ? new Date() : null,
-    })
-    .onConflictDoUpdate({
-      target: sincronizaciones.fuente,
-      set: {
-        ultimaOk: new Date(),
-        duracionMs,
-        cursor: `${campanas.length} campañas · ${llamadas} llamadas a Meta`,
-        ultimoError: erroresTodos.length ? `${erroresTodos.length} cuenta(s) fallaron` : null,
-        ultimoErrorAt: erroresTodos.length ? new Date() : null,
-      },
-    });
+    .values({ fuente: `pauta:${rango}`, ultimaOk: limpia ? creadoAt : null, ...marca })
+    .onConflictDoUpdate({ target: sincronizaciones.fuente, set: marca });
 
-  return ultimoSnapshot(rango);
+  // Devuelve lo que ESTA corrida produjo, con sus errores — no el último snapshot servible.
+  // El botón "Revisar ahora" necesita poder decir "acabo de correr y falló esto"; si acá se
+  // releyera el último bueno, una corrida rota respondería con datos de ayer y `errores: []`.
+  return {
+    campanas,
+    costo,
+    gasto: geo?.gasto ?? null,
+    errores: erroresTodos,
+    cuentas,
+    creadoAt,
+    edadMinutos: 0,
+  };
 }

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { and, desc, gte } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { pautaSnapshots } from "../db/operacion.js";
-import { ultimoSnapshotConCampanas, type Snapshot } from "../pauta/snapshot.js";
+import { ultimoSnapshot, type Snapshot } from "../pauta/snapshot.js";
 import { cursoDeCampana } from "../pauta/curso.js";
 import { rangoDe } from "../lib/rangos.js";
 import type { CampaignInput, AdInput } from "../decisions/detectors.js";
@@ -222,7 +222,7 @@ function detalleDeCampana(camp: CampaignInput, snap: Snapshot): PautaDetalle {
  * La serie de tiempo viene de los snapshots HISTÓRICOS que ya guarda el reloj
  * (cada 6 h), no de Meta en vivo: cero llamadas extra a la Graph API. Por cada
  * campaña seleccionada arma sus puntos (gasto/resultados/CPR) a lo largo de los
- * últimos ~60 snapshots. Y los detalles vienen del último snapshot con campañas.
+ * últimos ~60 snapshots. Y los detalles vienen del último snapshot servible.
  */
 pautaMaestroRouter.get("/comparar", async (req, res) => {
   const ids = String(req.query.ids ?? "")
@@ -235,7 +235,7 @@ pautaMaestroRouter.get("/comparar", async (req, res) => {
     return;
   }
 
-  const ult = await ultimoSnapshotConCampanas();
+  const ult = await ultimoSnapshot();
   if (!ult) {
     res.json({ serie: [], detalles: [] });
     return;
@@ -317,7 +317,7 @@ pautaMaestroRouter.get("/snapshots", async (req, res) => {
 
 pautaMaestroRouter.get("/:campaignId", async (req, res) => {
   const { campaignId } = req.params;
-  const snap = await ultimoSnapshotConCampanas();
+  const snap = await ultimoSnapshot();
 
   if (!snap) {
     res.json({ detalle: null });
@@ -336,7 +336,7 @@ pautaMaestroRouter.get("/:campaignId", async (req, res) => {
 });
 
 pautaMaestroRouter.get("/", async (req, res) => {
-  const snap = await ultimoSnapshotConCampanas();
+  const snap = await ultimoSnapshot();
 
   if (!snap) {
     res.json({ creadoAt: null, edadMinutos: null, campanas: [], cursos: [], paises: [] });

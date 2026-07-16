@@ -44,7 +44,8 @@ decisionsRouter.get("/", async (req, res) => {
   const snap = await ultimoSnapshot(rango);
 
   if (!snap) {
-    // Nunca se corrió para este rango. No es un error: es que falta revisar.
+    // Ninguna revisión LIMPIA para este rango todavía (nunca se corrió, o todas fallaron).
+    // No es un error: es que falta una revisión que termine bien.
     res.json({
       decisiones: [],
       campanasAnalizadas: 0,

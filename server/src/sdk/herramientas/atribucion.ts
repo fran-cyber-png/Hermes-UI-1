@@ -114,7 +114,7 @@ registrar({
     "analisis/roasPais.ts:37",
     "analisis/explicar.ts:89",
     "analisis/ventasPorPais.ts:18",
-    "pauta/snapshot.ts:76",
+    "pauta/snapshot.ts:100",
   ],
   ejecutar: async ({ rango }) => atribucionPorPais(rango, await ultimoSnapshot(rango)),
 });
