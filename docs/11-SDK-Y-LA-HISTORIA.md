@@ -212,7 +212,7 @@ npx tsx src/cli/index.ts cq verify --aprobar=cq-ventas-002 --quien=tu-nombre
 
 | | |
 |---|---|
-| **La home muestra el ROAS sobre un snapshot vacío** | Ver `10-EL-LAZO-Y-TESORERIA.md` §6. Es de grado decisión |
+| ~~La home muestra el ROAS sobre un snapshot vacío~~ | **Arreglado el 16/07** (`9b0bedf`): `ultimoSnapshot` solo sirve recolectas limpias. Ver `10-EL-LAZO-Y-TESORERIA.md` §6 |
 | **Ivi sigue leyendo el BFF de las pantallas** | Su catálogo vive a mano en Python, en otro host |
 | **`inferencias` (capa 2) no existe** | Es lo que habilita el router Qwen/Gemini con trazabilidad |
 | ~101 CQs en cuarentena sin auditar | **Contenidas**, no resueltas |

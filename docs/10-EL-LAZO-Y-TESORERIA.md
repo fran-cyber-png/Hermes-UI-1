@@ -17,7 +17,7 @@
    Tesorería.
 4. **Un cron diario sin filtro habría sido peor que no tener cron**: habría mandado 44 compras
    duplicadas por día.
-5. **La home muestra el ROAS sobre un snapshot vacío.** Sin resolver (ver §6).
+5. **La home mostraba el ROAS sobre un snapshot vacío.** Arreglado el 16/07 (`9b0bedf`, ver §6).
 
 ---
 
@@ -186,7 +186,7 @@ por 5 JOIN contra claves inexistentes (`0419011`).
 
 ---
 
-## 6. SIN RESOLVER — la home muestra el ROAS sobre un snapshot vacío
+## 6. La home mostraba el ROAS sobre un snapshot vacío — arreglado (`9b0bedf`)
 
 ```
 creado                | campanas | paises | errores
@@ -204,13 +204,34 @@ Los snapshots alternan entre buenos y rotos (`fetch failed` en 26-34 cuentas). D
 2. **`ultimoSnapshot()` toma el más reciente por fecha, sin mirar si sirve.** Una corrida fallida
    pisa a una buena.
 
-Consecuencia: la home muestra **Bolivia · ROAS 10,08× · "subí el presupuesto"** con **$698** de
-gasto, cuando `pauta_serie` dice que el gasto real de esos 90 días fue **$16.587**. El ROAS está
-inflado ~20× y la recomendación es de grado decisión.
+Consecuencia: la home mostraba **Bolivia · ROAS 10,08× · "subí el presupuesto" · confianza alta**
+con **$698** de gasto, cuando el gasto real de la audiencia BO en esa ventana era **$1.642**
+(snapshot limpio del 15/07). ROAS real: **4,28×** — inflado 2,35×, con recomendación de grado
+decisión encima.
 
-**La defensa ya existe y no se usa**: `snapshot.ts:94` tiene `ultimoSnapshotConCampanas()` con el
-comentario *"Los snapshots vacíos (falló la recolecta) se ignoran"*. Solo la usa `pautaMaestro.ts`.
-`overview.ts`, `decisions.ts` y `atribucion.ts` usan la insegura.
+> **Corrección (16/07, verificada contra `pauta_serie` y `tb_moneda`)**: la primera versión de
+> este documento decía *"el gasto real de esos 90 días fue $16.587"* e *"inflado ~20×"*. Ese
+> número no era Bolivia: era el gasto de **TODAS las cuentas** — USD $15.958 + BOB 7.103 ≈ $783
+> (a la tasa del negocio, 9,07) ≈ **$16.741**. El bug era real; la magnitud documentada, no.
+> De paso: en `tb_moneda` el `radio_divisor` de BOB (0,15 ⇒ 6,67) quedó desactualizado respecto
+> del `radio_multiplicador` (9,07) — meta-escuela solo lee el multiplicador, pero cualquier
+> sistema que use el divisor convierte BOB ~36% mal.
+
+**La defensa existía y no alcanzaba**: `ultimoSnapshotConCampanas()` (solo usada por
+`pautaMaestro.ts`) filtraba `campañas > 0` — y el snapshot de las 08:12 (**1 campaña, 25
+errores**) pasaba ese filtro: el maestro mostraba UNA campaña como "todas las pautas".
+`overview.ts`, `decisions.ts` y la Tool del SDK usaban directamente la insegura.
+
+**Arreglado** (`9b0bedf`): una sola regla — *recolecta limpia* = trajo campañas **y** cero cuentas
+caídas — aplicada por el ÚNICO lector que quedó (`ultimoSnapshot(rango?)`; la dupla de lectores
+casi iguales desapareció). Además: `refrescarPauta` devuelve lo que **su** corrida produjo (el
+botón "Revisar ahora" puede decir "acabo de fallar" en vez de responder datos de ayer con
+`errores: []`), y `sincronizaciones.ultimaOk` solo avanza con corridas limpias — había avanzado
+a las 13:34 con 26/26 cuentas caídas y el tablero de salud decía "ok · revisada hace 3 h". Las
+corridas rotas se siguen guardando: son la bitácora de cuándo falla el reloj.
+
+Verificado en vivo: decisiones 0→21 (116 campañas), maestro 1→116, Bolivia 10,08×→4,28×;
+secciones no tocadas de `/api/overview` con sha256 idéntico antes/después, piso de ruido cero.
 
 ---
 
