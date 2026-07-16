@@ -1,0 +1,227 @@
+#!/usr/bin/env python3
+# ─────────────────────────────────────────────────────────
+# Ivi Analytical Intelligence Engine — HTTP server (stdlib).
+# Replaces chat_ivi.py with the modular pipeline.
+#
+#   Usuario -> IntentAnalyzer -> DataPlanner -> DataCollector
+#          -> KPIEngine -> AnalyticsEngine -> InsightEngine
+#          -> RecommendationEngine -> PromptBuilder -> LLM
+#          -> ResponseFormatter
+# ─────────────────────────────────────────────────────────
+import json
+import urllib.request
+import http.server
+import socketserver
+import re
+from pathlib import Path
+
+from .intent_analyzer import analyze
+from .data_planner import plan
+from .data_collector import collect
+from .kpi_engine import compute
+from .analytics_engine import analyze as analyze_metrics
+from .insight_engine import detect
+from .recommendation_engine import recommend
+from .impact_engine import compute_impact
+from .memory import get_session, remember, is_followup, apply_followup_filters, Turn
+from .prompt_builder import build
+from .response_formatter import format_response
+from .config import OLLAMA_URL, MODEL, PORT, OLLAMA_CTX, OLLAMA_TEMP
+
+HTML = r"""<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ivi · Inteligencia Analítica (Goberna)</title>
+<style>
+  :root { --bg:#0f1117; --panel:#1a1d27; --me:#2563eb; --bot:#2d3340; --txt:#e6e8ee; --mut:#8a90a2; --live:#22c55e; --warn:#f59e0b; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--txt); height:100vh; display:flex; flex-direction:column; }
+  header { padding:14px 20px; background:var(--panel); border-bottom:1px solid #2a2e3a; display:flex; align-items:center; gap:10px; }
+  header .dot { width:10px; height:10px; border-radius:50%; background:var(--live); }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  header small { color:var(--mut); font-weight:400; }
+  #log { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:14px; }
+  .msg { max-width:82%; padding:12px 16px; border-radius:16px; line-height:1.55; white-space:pre-wrap; }
+  .me { align-self:flex-end; background:var(--me); border-bottom-right-radius:4px; }
+  .bot { align-self:flex-start; background:var(--bot); border-bottom-left-radius:4px; }
+  .meta { font-size:11px; color:var(--mut); margin-bottom:4px; }
+  .live { font-size:10px; color:var(--live); margin-top:6px; font-style:italic; }
+  #input { display:flex; gap:10px; padding:16px 20px; background:var(--panel); border-top:1px solid #2a2e3a; }
+  #input textarea { flex:1; resize:none; height:48px; max-height:140px; padding:12px 14px; border-radius:12px; border:1px solid #2a2e3a; background:#0f1117; color:var(--txt); font-family:inherit; font-size:14px; }
+  #input button { padding:0 22px; border:none; border-radius:12px; background:var(--me); color:#fff; font-weight:600; cursor:pointer; font-size:14px; }
+  #input button:disabled { opacity:.5; cursor:default; }
+  .typing { color:var(--mut); font-style:italic; }
+  .sug { display:flex; flex-wrap:wrap; gap:8px; padding:0 20px 14px; background:var(--panel); }
+  .sug button { background:#222633; color:var(--txt); border:1px solid #2a2e3a; border-radius:999px; padding:6px 12px; font-size:12px; cursor:pointer; }
+  h2 { font-size:14px; margin:.6em 0 .2em; color:#9db4ff; }
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="statusdot"></span>
+  <h1>Ivi · Inteligencia Analítica <small>asistente BI de Goberna — Cerberus + datos en vivo</small></h1>
+</header>
+<div id="log"></div>
+<div class="sug" id="sug"></div>
+<div id="input">
+  <textarea id="txt" placeholder="Pregunta de análisis comercial..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send();}"></textarea>
+  <button id="btn" onclick="send()">Analizar</button>
+</div>
+<script>
+const log = document.getElementById('log');
+const txt = document.getElementById('txt');
+const btn = document.getElementById('btn');
+const sug = document.getElementById('sug');
+let busy = false;
+
+const SUG = ["ventas por semana","tendencia de ventas","ventas por producto","ventas por sede",
+  "comparación mensual","qué se vende más","riesgos comerciales","embudo de estados",
+  "cartera y mora","lazo con Meta y pérdidas","ticket promedio","forecast de ventas"];
+
+function addMsg(role, content, live){
+  const d=document.createElement('div'); d.className='msg '+role;
+  const m=document.createElement('div'); m.className='meta';
+  m.textContent= role==='me'?'Tú':'Ivi';
+  const c=document.createElement('div');
+  // render markdown-ish: ## headers
+  c.innerHTML = content.replace(/^## /gm,'\n\n<h2>').replace(/<\/h2>/g,'</h2>');
+  d.appendChild(m); d.appendChild(c);
+  if(live){ const l=document.createElement('div'); l.className='live';
+    l.textContent='⦿ datos en vivo de Cerberus'; d.appendChild(l); }
+  log.appendChild(d); log.scrollTop=log.scrollHeight; return c;
+}
+function renderSugs(){ sug.innerHTML=''; SUG.forEach(s=>{ const b=document.createElement('button');
+  b.textContent=s; b.onclick=()=>{txt.value=s;send();}; sug.appendChild(b);}); }
+async function send(){
+  if(busy) return; const q=txt.value.trim(); if(!q) return; txt.value='';
+  addMsg('me',q); busy=true; btn.disabled=true;
+  const t=addMsg('bot','✍️ analizando datos en vivo...'); t.classList.add('typing');
+  try{
+    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:q})});
+    const data=await r.json();
+    t.classList.remove('typing'); t.innerHTML=data.response.replace(/^## /gm,'\n\n<h2>').replace(/<\/h2>/g,'</h2>');
+    if(data.live){ const l=document.createElement('div'); l.className='live';
+      l.textContent='⦿ datos en vivo de Cerberus'; t.parentElement.appendChild(l); }
+  }catch(e){ t.classList.remove('typing'); t.textContent='Error: '+e; }
+  busy=false; btn.disabled=false;
+}
+addMsg('bot','Hola, soy Ivi. Analizo ventas de Goberna como un analista senior de BI: tendencias, comparaciones de periodo, embudos, cartera, tesorería y el lazo con Meta. Cada respuesta trae interpretación, riesgos, oportunidades y acciones. ¿Qué quieres saber?');
+renderSugs();
+</script>
+</body>
+</html>"""
+
+
+def call_ollama(prompt: str) -> str:
+    payload = json.dumps({
+        "model": MODEL, "prompt": prompt, "stream": False,
+        "options": {"temperature": OLLAMA_TEMP, "num_ctx": OLLAMA_CTX},
+    }).encode()
+    req = urllib.request.Request(OLLAMA_URL, data=payload, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        return json.loads(resp.read().decode()).get("response", "")
+
+
+def related_questions(intent_scores: dict) -> list:
+    pool = {
+        "ventas": ["ventas por sede", "ventas por producto", "comparación mensual"],
+        "tendencia": ["forecast de ventas", "variación semanal", "estacionalidad"],
+        "comparacion": ["ventas vs mismo mes año pasado", "top crecimiento por producto"],
+        "campanas": ["ROAS por país", "gasto por campaña", "conversion por campaña"],
+        "embudo": ["tasa de reembolso", "anuladas vs cobradas", "tiempo hasta pago"],
+        "tesoreria": ["latencia de confirmación", "vouchers fuera de ventana", "histograma de días"],
+        "cartera": ["cuotas en mora", "saldo pendiente", "segmentos LTV"],
+        "productos": ["mix de producto", "productos que se compran juntos", "ticket promedio"],
+        "sedes": ["rendimiento por sede", "ticket por sede", "clientes por sede"],
+        "meta": ["lazo con Meta y pérdidas", "modo de envío CAPI", "atribución"],
+        "capi": ["ventas perdidas por ventana", "errores de Meta", "modo producción"],
+        "atribucion": ["ROAS por país", "CAC", "conversion lead a venta"],
+        "rendimiento": ["resumen ejecutivo", "riesgos comerciales", "oportunidades"],
+        "forecast": ["tendencia reciente", "comparación anual", "velocidad comercial"],
+        "anomalias": ["caídas recientes", "outliers por sede", "picos inesperados"],
+        "riesgos": ["cartera y mora", "medios de pago que rechazan", "lazo con Meta"],
+        "forecast": ["forecast de ventas", "tendencia reciente", "comparación anual",
+                     "proyección próximos 30 días"],
+        "atribucion": ["ROAS por país", "CAC por país", "qué país pierde plata en pauta"],
+        "capi": ["ventas perdidas por ventana", "errores de Meta", "modo producción"],
+    }
+    out = []
+    for it in intent_scores:
+        out.extend(pool.get(it, []))
+        if len(out) >= 4:
+            break
+    return out[:4] or ["resumen ejecutivo", "ventas por producto", "comparación mensual", "riesgos comerciales"]
+
+
+def handle_chat(message: str, sid: str = "default") -> dict:
+    sess = get_session(sid)
+    followup = is_followup(message, sid)
+    intent = analyze(message)
+    scope_note = ""
+    if followup and sess.last:
+        filters = apply_followup_filters(message, sid)
+        scope_note = f"reutilizar análisis previo ({sess.last.scope or intent.dominant()}) " \
+                     f"acotado por {filters}" if filters else \
+                     f"continuación del análisis previo sobre {sess.last.scope or intent.dominant()}"
+
+    endpoints = plan(intent)
+    raw = collect(endpoints)
+    kpis = compute(raw)
+    analysis = analyze_metrics(kpis)
+    insights = detect(kpis, analysis)
+    actions = recommend(kpis, analysis, insights)
+    impact = compute_impact(kpis)
+    related = related_questions(intent.scores)
+
+    # remember this turn
+    remember(sid, Turn(intent=intent, scope=intent.dominant(), question=message))
+
+    live = bool(raw.endpoints_hit)
+    prompt = build(intent, kpis, analysis, insights, actions, related, impact, scope_note)
+    try:
+        llm = call_ollama(prompt)
+    except Exception as e:
+        llm = f"Error al llamar a Ollama: {e}"
+    return format_response(llm, insights, related, impact, live)
+
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def _send(self, code, body, ctype="application/json"):
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body if isinstance(body, bytes) else body.encode())
+
+    def do_GET(self):
+        if self.path in ("/", "/index.html"):
+            self._send(200, HTML, "text/html; charset=utf-8")
+        else:
+            self._send(404, "not found")
+
+    def do_POST(self):
+        if self.path == "/api/chat":
+            length = int(self.headers.get("Content-Length", 0))
+            data = json.loads(self.rfile.read(length).decode())
+            message = data.get("message", "")
+            sid = data.get("session", "default")
+            out = handle_chat(message, sid)
+            self._send(200, json.dumps(out, ensure_ascii=False))
+        else:
+            self._send(404, "not found")
+
+    def log_message(self, *args):
+        pass
+
+
+def main():
+    with socketserver.ThreadingTCPServer(("0.0.0.0", PORT), Handler) as httpd:
+        print(f"Ivi Analytical Engine en http://0.0.0.0:{PORT}")
+        httpd.serve_forever()
+
+
+if __name__ == "__main__":
+    main()

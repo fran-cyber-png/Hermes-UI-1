@@ -34,3 +34,11 @@ dist-ssr
 
 # Artefactos de build de TS
 *.tsbuildinfo
+
+# Python (el engine de Ivi)
+__pycache__/
+*.pyc
+
+# Salidas generadas del CQ Engine. La fuente (cqs/catalog.json, cqs/capabilities.json) SÍ se
+# versiona; los benchmarks se derivan de ella con `kos cq export` y llevan timestamp en el nombre.
+goberna-kos/cqs/benchmarks/
