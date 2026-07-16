@@ -20,6 +20,7 @@ import type {
   FilterOptions,
   AnswerFormat,
 } from './types.js';
+import { estaVerificada } from './verificada.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -356,12 +357,13 @@ export function recalculateCapabilityCoverage(capabilityId: string): Capability 
     caps[capIdx].coverage = 0;
     caps[capIdx].criticalCovered = false;
   } else {
-    const covered = cqs.filter((q) => q.status === 'validated' || q.status === 'active').length;
+    // Cubierta = verificada contra su Tool, no "escrita y no deprecada". Ver `verificada.ts`.
+    const covered = cqs.filter(estaVerificada).length;
     caps[capIdx].coverage = covered / total;
 
     const criticalCqs = cqs.filter((q) => q.priority === 'critical');
     caps[capIdx].criticalCovered =
-      criticalCqs.length > 0 && criticalCqs.every((q) => q.status === 'validated' || q.status === 'active');
+      criticalCqs.length > 0 && criticalCqs.every(estaVerificada);
   }
 
   caps[capIdx].version += 1;

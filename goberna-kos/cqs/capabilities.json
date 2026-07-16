@@ -19,10 +19,10 @@
     ],
     "requiresEntities": [],
     "requiresRules": [],
-    "coverage": 1,
-    "criticalCovered": true,
+    "coverage": 0.125,
+    "criticalCovered": false,
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1
+    "version": 7
   },
   {
     "id": "cap-gestionar-venta",
@@ -39,10 +39,10 @@
     ],
     "requiresEntities": [],
     "requiresRules": [],
-    "coverage": 1,
+    "coverage": 0,
     "criticalCovered": false,
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1
+    "version": 7
   },
   {
     "id": "cap-conocer-pago",
@@ -61,10 +61,10 @@
     ],
     "requiresEntities": [],
     "requiresRules": [],
-    "coverage": 1,
-    "criticalCovered": true,
+    "coverage": 0,
+    "criticalCovered": false,
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1
+    "version": 7
   },
   {
     "id": "cap-validar-pago",
@@ -84,10 +84,10 @@
     ],
     "requiresEntities": [],
     "requiresRules": [],
-    "coverage": 1,
-    "criticalCovered": true,
+    "coverage": 0.16666666666666666,
+    "criticalCovered": false,
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1
+    "version": 7
   },
   {
     "id": "cap-gestionar-cuotas",
@@ -106,10 +106,10 @@
     ],
     "requiresEntities": [],
     "requiresRules": [],
-    "coverage": 1,
-    "criticalCovered": true,
+    "coverage": 0,
+    "criticalCovered": false,
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1
+    "version": 7
   },
   {
     "id": "cap-conocer-producto",
@@ -129,10 +129,10 @@
     ],
     "requiresEntities": [],
     "requiresRules": [],
-    "coverage": 1,
-    "criticalCovered": true,
+    "coverage": 0,
+    "criticalCovered": false,
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1
+    "version": 7
   },
   {
     "id": "cap-gestionar-cliente",
@@ -151,10 +151,10 @@
     ],
     "requiresEntities": [],
     "requiresRules": [],
-    "coverage": 1,
-    "criticalCovered": true,
+    "coverage": 0,
+    "criticalCovered": false,
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1
+    "version": 7
   },
   {
     "id": "cap-gestionar-matricula",
@@ -174,10 +174,10 @@
     ],
     "requiresEntities": [],
     "requiresRules": [],
-    "coverage": 1,
-    "criticalCovered": true,
+    "coverage": 0,
+    "criticalCovered": false,
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1
+    "version": 7
   },
   {
     "id": "cap-operar-meta-ads",
@@ -197,10 +197,10 @@
     ],
     "requiresEntities": [],
     "requiresRules": [],
-    "coverage": 1,
-    "criticalCovered": true,
+    "coverage": 0,
+    "criticalCovered": false,
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1
+    "version": 7
   },
   {
     "id": "cap-capturar-lead",
@@ -221,10 +221,10 @@
     ],
     "requiresEntities": [],
     "requiresRules": [],
-    "coverage": 1,
-    "criticalCovered": true,
+    "coverage": 0,
+    "criticalCovered": false,
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1
+    "version": 7
   },
   {
     "id": "cap-gestionar-interaccion",
@@ -246,10 +246,10 @@
     ],
     "requiresEntities": [],
     "requiresRules": [],
-    "coverage": 1,
-    "criticalCovered": true,
+    "coverage": 0,
+    "criticalCovered": false,
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1
+    "version": 7
   },
   {
     "id": "cap-operar-ventanas-meta",
@@ -268,10 +268,10 @@
     ],
     "requiresEntities": [],
     "requiresRules": [],
-    "coverage": 1,
-    "criticalCovered": true,
+    "coverage": 0,
+    "criticalCovered": false,
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1
+    "version": 7
   },
   {
     "id": "cap-unificar-persona",
@@ -292,10 +292,10 @@
     ],
     "requiresEntities": [],
     "requiresRules": [],
-    "coverage": 1,
-    "criticalCovered": true,
+    "coverage": 0,
+    "criticalCovered": false,
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1
+    "version": 7
   },
   {
     "id": "cap-operar-lazo",
@@ -314,10 +314,10 @@
     ],
     "requiresEntities": [],
     "requiresRules": [],
-    "coverage": 1,
-    "criticalCovered": true,
+    "coverage": 0.4,
+    "criticalCovered": false,
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1
+    "version": 7
   },
   {
     "id": "cap-conocer-metodologia",
@@ -336,10 +336,10 @@
     ],
     "requiresEntities": [],
     "requiresRules": [],
-    "coverage": 1,
+    "coverage": 0,
     "criticalCovered": false,
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1
+    "version": 7
   },
   {
     "id": "cap-conocer-marketing-politico",
@@ -357,10 +357,10 @@
     ],
     "requiresEntities": [],
     "requiresRules": [],
-    "coverage": 1,
+    "coverage": 0,
     "criticalCovered": false,
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1
+    "version": 7
   },
   {
     "id": "cap-validar-regla-negocio",
@@ -383,10 +383,10 @@
     ],
     "requiresEntities": [],
     "requiresRules": [],
-    "coverage": 1,
-    "criticalCovered": true,
+    "coverage": 0,
+    "criticalCovered": false,
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1
+    "version": 7
   },
   {
     "id": "cap-conocer-arquitectura",
@@ -405,9 +405,9 @@
     ],
     "requiresEntities": [],
     "requiresRules": [],
-    "coverage": 1,
+    "coverage": 0,
     "criticalCovered": false,
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1
+    "version": 7
   }
 ]

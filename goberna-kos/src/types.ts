@@ -78,7 +78,40 @@ export interface CompetencyQuestion {
   id: string;
   slug: string;
   text: string;
+  /**
+   * La respuesta que el sistema debe dar.
+   *
+   * ── CUIDADO: esto NO es verdad hasta que `validatedAt` exista ──
+   * Las 105 CQs originales se generaron con `source: 'domain_analysis'` — o sea, se inventaron de
+   * forma plausible y nunca se contrastaron contra el código. Varias eran falsas:
+   *
+   *   · cq-ventas-002 (critical, confidence 0.98) decía "4=en_curso, 5=retirado, 7=anulado".
+   *     El código y los datos dicen 4=Anulado, 5=Cotización, 7=Retirado. Todos los mapeos mal.
+   *   · cq-tesoreria-010 (critical, 0.97) decía "Tesorería tiene 7 días hábiles para confirmar".
+   *     No existe tal SLA: su ausencia es, literalmente, la tesis de esa pantalla.
+   *
+   * Y esto se exportaba como dataset de LoRA y como clave de corrección de benchmarks. Un modelo
+   * que respondiera BIEN se puntuaba MAL.
+   *
+   * Por eso ahora la verdad se DERIVA: `answeredBy` liga la CQ a una Tool del SDK, y
+   * `kos cq verify` compara. Una CQ sin `validatedAt` no sale hacia ningún producer.
+   */
   expectedAnswer: string;
+  /**
+   * La Tool del SDK Governa que responde esta pregunta (`governa.<dominio>.<accion>`).
+   *
+   * Es el puente entre el Capability Registry (QUÉ hay que poder responder) y el SDK (CÓMO se
+   * responde). Sin esto, `expectedAnswer` es prosa que alguien escribió de memoria; con esto, es
+   * un contrato ejecutable contra el código.
+   */
+  answeredBy?: string;
+  /**
+   * Dónde vive la verdad que sustenta esta CQ (`ruta/archivo.ts:linea`).
+   *
+   * Cuando `verify` dice que la CQ y su Tool discrepan, esto le dice al humano dónde ir a mirar
+   * para decidir quién miente. Porque el código también puede estar mal.
+   */
+  verifiedAgainst?: string[];
   answerFormat: AnswerFormat;
   type: CQType;
   capabilityId: string;

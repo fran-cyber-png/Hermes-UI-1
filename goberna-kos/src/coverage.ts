@@ -8,6 +8,7 @@ import {
   loadCatalog,
   getQuestionsByCapability,
 } from './catalog.js';
+import { estaVerificada } from './verificada.js';
 import type {
   CQDomain,
   CoverageReport,
@@ -35,21 +36,31 @@ export function measureCapabilityCoverage(capabilityId: string): CapabilityCover
   const cqs = getQuestionsByCapability(capabilityId);
   const totalCQs = cqs.length;
 
-  // A CQ is "covered" if it's active or validated (i.e., not draft/deprecated)
-  const coveredCQs = cqs.filter(
-    (q) => q.status === 'active' || q.status === 'validated'
-  ).length;
+  // ── Qué significa "cubierta" (cambiado 2026-07-16) ──
+  // Antes: "active o validated, o sea no draft/deprecated". Eso medía si ALGUIEN ESCRIBIÓ la
+  // pregunta, no si el sistema puede RESPONDERLA. Como las 105 CQs estaban `active`, la cobertura
+  // daba 1.0 en todo — un número verde que no medía nada, sobre un registro cuyas respuestas
+  // nunca se habían contrastado contra el código.
+  //
+  // Ahora: cubierta = verificada contra la Tool del SDK que la responde. La cobertura vuelve a
+  // costar algo, que es lo único que la hace útil. Ver `verificada.ts`.
+  const coveredCQs = cqs.filter(estaVerificada).length;
 
-  // All critical CQs must be covered; if no critical CQs, capability is ready
+  // ── "Ready" tiene que costar algo (endurecido 2026-07-16) ──
+  // La regla era `criticalCQs.length === 0 || todas cubiertas`: una capability SIN CQs críticas
+  // salía "✅ Ready" de arriba, sin que nadie hubiera verificado nada. Con todo en `active` eso
+  // no se notaba (todo daba 100%); al poner cuarentena quedó a la vista `gestionar-venta │ 0% │
+  // ✅ Ready` — un tilde verde sobre algo con cobertura cero.
+  //
+  // Ahora "Ready" exige que haya al menos una CQ verificada. La vacuidad no es un logro: si nadie
+  // verificó nada, no está lista — está sin mirar. Es la misma regla que el resto del sistema ya
+  // se dio: "no se midió" no puede verse igual que "está bien" (`canales/verdad.ts:41-47`).
   const criticalCQs = cqs.filter((q) => q.priority === 'critical');
   const criticalCovered =
-    criticalCQs.length === 0 ||
-    criticalCQs.every((q) => q.status === 'active' || q.status === 'validated');
+    coveredCQs > 0 && (criticalCQs.length === 0 || criticalCQs.every(estaVerificada));
 
   // Gaps = CQs that are NOT covered
-  const gaps = cqs
-    .filter((q) => q.status !== 'active' && q.status !== 'validated')
-    .map((q) => q.id);
+  const gaps = cqs.filter((q) => !estaVerificada(q)).map((q) => q.id);
 
   return {
     capabilityId: cap.id,

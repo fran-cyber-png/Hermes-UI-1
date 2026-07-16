@@ -4,7 +4,18 @@
 // ─────────────────────────────────────────────────────────
 
 import { loadCapabilities, getQuestionsByCapability } from '../catalog.js';
+import { estaVerificada } from '../verificada.js';
 import type { BenchmarkSet, BenchmarkEntry, CQDomain, CQComplexity } from '../types.js';
+
+/**
+ * ── LEER ANTES DE TOCAR EL FILTRO ──
+ * `expectedAnswer` es la CLAVE DE CORRECCIÓN con la que se puntúa al modelo. Si es falsa, un
+ * modelo que responde bien se puntúa mal — y el benchmark deja de medir al modelo para medir su
+ * coincidencia con una invención.
+ *
+ * Hasta 2026-07-16 salía cualquier CQ `active`, y ninguna de las 105 se había contrastado contra
+ * el código. Ahora solo sale lo verificado. Ver `verificada.ts`.
+ */
 
 export function produceBenchmarkSet(options: {
   capabilityId?: string;
@@ -21,7 +32,7 @@ export function produceBenchmarkSet(options: {
   for (const cap of caps) {
     const cqs = getQuestionsByCapability(cap.id);
     for (const cq of cqs) {
-      if (cq.status === 'active' || cq.status === 'validated') {
+      if (estaVerificada(cq)) {
         cqIds.push(cq.id);
       }
     }
@@ -57,7 +68,7 @@ export function produceBenchmarkEntries(options: {
   for (const cap of caps) {
     const cqs = getQuestionsByCapability(cap.id);
     for (const cq of cqs) {
-      if (cq.status === 'active' || cq.status === 'validated') {
+      if (estaVerificada(cq)) {
         entries.push({
           capabilityId: cap.id,
           question: cq.text,

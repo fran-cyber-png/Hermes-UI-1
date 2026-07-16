@@ -4,7 +4,22 @@
 // ─────────────────────────────────────────────────────────
 
 import { loadCapabilities, getQuestionsByCapability } from '../catalog.js';
+import { estaVerificada } from '../verificada.js';
 import type { LoRAInstruction, CQDomain } from '../types.js';
+
+/**
+ * ── LEER ANTES DE TOCAR EL FILTRO ──
+ * Este producer convierte `expectedAnswer` en el `output` de un dataset de entrenamiento. Lo que
+ * salga de acá se hornea en los pesos del modelo, donde ya no es auditable ni corregible con un
+ * diff.
+ *
+ * Hasta 2026-07-16 el filtro era `status === 'active' || 'validated'`, y las 105 CQs estaban
+ * `active` sin que ninguna se hubiera contrastado contra el código. Entre ellas, la que afirmaba
+ * que los estados de venta eran "4=en_curso, 5=retirado, 7=anulado" — el mapa que decide qué
+ * ventas ve Meta. Todos los mapeos estaban mal.
+ *
+ * Ahora solo sale lo verificado. Ver `verificada.ts`.
+ */
 
 export function produceLoRAInstructions(options: {
   capabilityId?: string;
@@ -21,7 +36,7 @@ export function produceLoRAInstructions(options: {
   for (const cap of caps) {
     const cqs = getQuestionsByCapability(cap.id);
     for (const cq of cqs) {
-      if (cq.status === 'active' || cq.status === 'validated') {
+      if (estaVerificada(cq)) {
         instructions.push({
           id: `lora-${cq.id}`,
           instruction: cq.text,

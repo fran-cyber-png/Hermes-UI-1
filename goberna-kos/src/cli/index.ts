@@ -9,6 +9,7 @@ import { listQuestions } from './list.js';
 import { showCoverage } from './coverage.js';
 import { showGaps } from './gaps.js';
 import { exportData } from './export.js';
+import { verify } from './verify.js';
 import type { CQDomain, CQType, CQPriority, CQComplexity } from '../types.js';
 
 // ── Arg parsing (zero deps) ───────────────────────────────
@@ -49,6 +50,7 @@ function showHelp(): void {
     coverage                       Show coverage report
     gaps                           Show gap analysis
     export                         Export to benchmark or LoRA format
+    verify                         Confronta cada CQ contra la Tool del SDK que la responde
     help                           Show this help
 
   Options:
@@ -59,6 +61,9 @@ function showHelp(): void {
     --complexity=<complexity>      Filter by complexity (simple, moderate, complex)
     --format=<format>             Export format: benchmark | lora
     --output=<path>               Output file path for export
+    --cq=<id>                     Verificar una sola CQ
+    --aprobar=<id>                Marcar una CQ como validated (acto humano, exige --quien)
+    --quien=<nombre>              Quién aprueba. Queda en validatedBy.
 
   Examples:
     kos cq list-capabilities
@@ -72,6 +77,11 @@ function showHelp(): void {
     kos cq gaps --domain=lazo
     kos cq export --format=benchmark --capability=cap-conocer-venta
     kos cq export --format=lora --domain=ventas
+    kos cq verify --domain=ventas
+    kos cq verify --cq=cq-ventas-002
+    kos cq verify --aprobar=cq-ventas-002 --quien=milaa
+
+  El SDK se lee de GOBERNA_SDK (default http://localhost:4100/api/sdk).
   `);
 }
 
@@ -122,6 +132,11 @@ function main(): void {
         domain,
         output: options.output,
       });
+      break;
+
+    case 'verify':
+      // Es el único comando async: habla con el SDK vivo por HTTP.
+      void verify({ domain, cq: options.cq, aprobar: options.aprobar, quien: options.quien });
       break;
 
     default:

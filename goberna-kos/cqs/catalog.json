@@ -15,17 +15,17 @@
     "requiresConcepts": [],
     "confidence": 0.95,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "619fdf1573a54bff80e413cfbda4f152de4f6fd84acfcf9c8dc497d1f61c7212"
   },
   {
     "id": "cq-ventas-002",
     "slug": "estados-venta",
-    "text": "¿Cuáles son los 7 estados posibles de una venta?",
-    "expectedAnswer": "Los 7 estados son: 1=vendido, 2=señado, 3=confirmado, 4=en_curso, 5=retirado, 6=suspendido, 7=anulado.",
+    "text": "¿Cuáles son los estados posibles de una venta en Cerberus?",
+    "expectedAnswer": "En los datos hay 8 estados (no 7): 1=Pagado, 2=Pendiente, 3=No Validado, 4=Anulado, 5=Cotización, 6=Preventa, 7=Retirado, 8=Reembolsado. Para el negocio se agrupan en: cobrada (1, y 9 si apareciera), en_proceso (2), anulada (4 y 5), reembolsada (7 y 8), otro (3 y 6). El estado 9 (Pagado por crédito) está en el código pero no se observó ninguna venta con ese estado.",
     "answerFormat": "list",
     "type": "enumeration",
     "capabilityId": "cap-conocer-venta",
@@ -37,11 +37,20 @@
     "requiresConcepts": [],
     "confidence": 0.98,
     "priority": "critical",
-    "status": "active",
+    "status": "validated",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1,
-    "contentHash": ""
+    "version": 3,
+    "contentHash": "071def4d09082e0289dd71a1bb542627fa59d9fca27cac16dbc8c3ca1b6d64df",
+    "answeredBy": "governa.ventas.estados",
+    "verifiedAgainst": [
+      "server/src/dominio/estadosVenta.ts:79",
+      "docs/02-CERBERUS.md:56",
+      "server/src/ontologia/proyectar.ts:53",
+      "server/src/lazo/evento.ts:51"
+    ],
+    "validatedAt": "2026-07-16T15:04:02.979Z",
+    "validatedBy": "milaa"
   },
   {
     "id": "cq-ventas-003",
@@ -59,11 +68,11 @@
     "requiresConcepts": [],
     "confidence": 0.92,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "682218a66c5baff9c97ad032aa5347a7a2c189fac5b19cb9b7dd37c50d483556"
   },
   {
     "id": "cq-ventas-004",
@@ -81,11 +90,11 @@
     "requiresConcepts": [],
     "confidence": 0.97,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "a8015882883b4043ef9d16ab2a228e55ccf7abd3e7a8534a9239a00e125f5ff6"
   },
   {
     "id": "cq-ventas-005",
@@ -103,11 +112,11 @@
     "requiresConcepts": [],
     "confidence": 0.94,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "9df7639a2a6175e28909d311779ff5573b3d0b851d9cb08a362fe562b596d8bd"
   },
   {
     "id": "cq-ventas-006",
@@ -125,11 +134,11 @@
     "requiresConcepts": [],
     "confidence": 0.96,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "e58a578ec2f87759e20e1bf65ee0fcaf32cb8fe184e2523719f908a1e543c94d"
   },
   {
     "id": "cq-ventas-007",
@@ -147,11 +156,11 @@
     "requiresConcepts": [],
     "confidence": 0.88,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "99e88d953509cdc896420aae3bc4c0202e32afa35dee0a3ecf37550d133395e7"
   },
   {
     "id": "cq-ventas-008",
@@ -169,11 +178,11 @@
     "requiresConcepts": [],
     "confidence": 0.87,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "559751951228809f36f5f6d96600571d4693654de1d8900b84d4ec0db76ce055"
   },
   {
     "id": "cq-ventas-009",
@@ -191,11 +200,11 @@
     "requiresConcepts": [],
     "confidence": 0.91,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "23ed48219236f456c7c40205bd23c2303c6ac3f28ecdfb58c0b81a81ae1e1f24"
   },
   {
     "id": "cq-ventas-010",
@@ -213,11 +222,11 @@
     "requiresConcepts": [],
     "confidence": 0.93,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "cf32f8b6af84ee2b02a97fdf64ab2f62abb53218d15b559cd0aaab5fd161fb92"
   },
   {
     "id": "cq-ventas-011",
@@ -235,11 +244,11 @@
     "requiresConcepts": [],
     "confidence": 0.94,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "b04919d5ddfc53e9c3eed9915e7b6c656af278e30b1558e8d967bbc30638f7f6"
   },
   {
     "id": "cq-tesoreria-001",
@@ -257,11 +266,11 @@
     "requiresConcepts": [],
     "confidence": 0.96,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "23fe1d272821f15bc84b0bd27ac17b2c176ca0131fed792925551b80fde35ba6"
   },
   {
     "id": "cq-tesoreria-002",
@@ -279,11 +288,11 @@
     "requiresConcepts": [],
     "confidence": 0.97,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "6fdf0154c83aa4251626dcda2845c9bf927dbe6a008d473cbc17f801bf6de31e"
   },
   {
     "id": "cq-tesoreria-003",
@@ -301,11 +310,11 @@
     "requiresConcepts": [],
     "confidence": 0.93,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "62632686159d30ee55eb2031245737e6dcd4f6d6bd117f625a7b315ea3bdf9cc"
   },
   {
     "id": "cq-tesoreria-004",
@@ -323,11 +332,11 @@
     "requiresConcepts": [],
     "confidence": 0.92,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "e42b81b3ae691158416859dde73c093a73cbb7a9674a58f9a50ef95d741df715"
   },
   {
     "id": "cq-tesoreria-005",
@@ -343,13 +352,13 @@
     "requiresRules": [],
     "requiresWorkflows": [],
     "requiresConcepts": [],
-    "confidence": 0.90,
+    "confidence": 0.9,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "ea0348f784075f3a76d37b305a2c81fd8cf0d86eb555954e935179d1641c8554"
   },
   {
     "id": "cq-tesoreria-006",
@@ -367,11 +376,11 @@
     "requiresConcepts": [],
     "confidence": 0.95,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "74f0f9a20f35e0fd2f81bd493282f45e52de7d5a190ab6960d2e564f56a61362"
   },
   {
     "id": "cq-tesoreria-007",
@@ -389,11 +398,11 @@
     "requiresConcepts": [],
     "confidence": 0.94,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "2e72d533e23420d881212f254a3ee3d6fdee3ce9b876e6ee3d240e506a6d379d"
   },
   {
     "id": "cq-tesoreria-008",
@@ -411,11 +420,11 @@
     "requiresConcepts": [],
     "confidence": 0.96,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "0d2e01fe9589c9979465252bb10948429c78fa5b28232c33e82cbeca20d0d056"
   },
   {
     "id": "cq-tesoreria-009",
@@ -433,17 +442,17 @@
     "requiresConcepts": [],
     "confidence": 0.93,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "e4fde3ae848cfd59c26c6617b894e0cd21e9630ba5370bee8accba85fb587bee"
   },
   {
     "id": "cq-tesoreria-010",
     "slug": "tiempo-confirmacion-tesoreria",
     "text": "¿Cuánto tiempo tiene Tesorería para confirmar?",
-    "expectedAnswer": "Tesorería tiene un máximo de 7 días hábiles para confirmar o rechazar un voucher de pago.",
+    "expectedAnswer": "No existe ningún plazo definido: Cerberus no tiene columna de antigüedad, ni alerta, ni SLA para confirmar un voucher (verificado por grep en todo el repo: dias_pendiente, SLA, antiguedad → cero resultados). El único plazo real es externo: los 7 días que Meta acepta como event_time. Lo que se puede medir es lo que TARDA, no lo que debería tardar: ver governa.tesoreria.latencia para el p50/p90 vigentes.",
     "answerFormat": "numeric",
     "type": "constraint",
     "capabilityId": "cap-validar-pago",
@@ -455,11 +464,18 @@
     "requiresConcepts": [],
     "confidence": 0.97,
     "priority": "critical",
-    "status": "active",
+    "status": "validated",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1,
-    "contentHash": ""
+    "version": 3,
+    "contentHash": "0c8ae2031cf84c87780e0389f0a7ae7cbe5ae6ec7c62be46867f83e9fb76e3e1",
+    "answeredBy": "governa.tesoreria.latencia",
+    "verifiedAgainst": [
+      "server/src/analisis/comercial.ts:121",
+      "server/src/canales/tesoreria.ts:15"
+    ],
+    "validatedAt": "2026-07-16T15:04:03.548Z",
+    "validatedBy": "milaa"
   },
   {
     "id": "cq-tesoreria-011",
@@ -477,11 +493,11 @@
     "requiresConcepts": [],
     "confidence": 0.91,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "c627b067babd5715632332c7fa4ea9f7ff5037afa192436612119aa009984c07"
   },
   {
     "id": "cq-tesoreria-012",
@@ -499,11 +515,11 @@
     "requiresConcepts": [],
     "confidence": 0.95,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "bc847c9bccd590308cbf7eaddfbd83c5e4f69d77ba7ccd52f9de55a7ee1db819"
   },
   {
     "id": "cq-tesoreria-013",
@@ -521,11 +537,11 @@
     "requiresConcepts": [],
     "confidence": 0.98,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "706a6a71e166e27560dfca27c066d74640e7ef48fcb5985c74980e434e466568"
   },
   {
     "id": "cq-tesoreria-014",
@@ -543,11 +559,11 @@
     "requiresConcepts": [],
     "confidence": 0.93,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "fba94b95de124d89d2fb00a11994a0d22fa2025ad27f8297b4e1224d9274de1d"
   },
   {
     "id": "cq-tesoreria-015",
@@ -565,11 +581,11 @@
     "requiresConcepts": [],
     "confidence": 0.94,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "31851a70f5c537daaf56288ae000db4fae308f1096e13557571ec6fc4ccf96ed"
   },
   {
     "id": "cq-tesoreria-016",
@@ -585,13 +601,13 @@
     "requiresRules": [],
     "requiresWorkflows": [],
     "requiresConcepts": [],
-    "confidence": 0.90,
+    "confidence": 0.9,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "1c86c47eacdaada468cdea29d77727e9840f1814dd5f56d0b8dc17ecd79208e8"
   },
   {
     "id": "cq-productos-001",
@@ -609,11 +625,11 @@
     "requiresConcepts": [],
     "confidence": 0.94,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "c18d1156145579c964598270233ca4f7d8e035546159b354dd8baf374f81b41f"
   },
   {
     "id": "cq-productos-002",
@@ -631,11 +647,11 @@
     "requiresConcepts": [],
     "confidence": 0.96,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "ec155d84895a02cb3638a707dbb3c75ee1cb08eccfea073c22f38226c072f6b2"
   },
   {
     "id": "cq-productos-003",
@@ -653,11 +669,11 @@
     "requiresConcepts": [],
     "confidence": 0.93,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "c80c24ab8a9fea73b706b099be1a6081550d256a885905457c575ff5c8730792"
   },
   {
     "id": "cq-productos-004",
@@ -675,11 +691,11 @@
     "requiresConcepts": [],
     "confidence": 0.91,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "f0ab68178cedaf582e3c6905e32e3808472cd0a89313e564fbdb7e1decf29a54"
   },
   {
     "id": "cq-productos-005",
@@ -695,13 +711,13 @@
     "requiresRules": [],
     "requiresWorkflows": [],
     "requiresConcepts": [],
-    "confidence": 0.90,
+    "confidence": 0.9,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "6b4d40958ea7394da1a1235f64de59c7962f84caec46dc9637cdfddb5b8a68c3"
   },
   {
     "id": "cq-clientes-001",
@@ -719,11 +735,11 @@
     "requiresConcepts": [],
     "confidence": 0.94,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "3edc054f747e471a7448a595c50957deaa7dfe2cbcefc6e21cd88434cd583c0e"
   },
   {
     "id": "cq-clientes-002",
@@ -741,11 +757,11 @@
     "requiresConcepts": [],
     "confidence": 0.97,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "9facc3f4730291311ed8c485c1367e98169bd61c422451b8502a999d32e16ee3"
   },
   {
     "id": "cq-clientes-003",
@@ -763,11 +779,11 @@
     "requiresConcepts": [],
     "confidence": 0.92,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "07072da04d9bce81153dd77e9e02b58c323c51db6e2578b0fd1268c9e6868b7f"
   },
   {
     "id": "cq-clientes-004",
@@ -785,11 +801,11 @@
     "requiresConcepts": [],
     "confidence": 0.93,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "300df60c9056b0c05c81bc395c2c339855cbc0a63998bf379405380a2e0383ae"
   },
   {
     "id": "cq-clientes-005",
@@ -807,11 +823,11 @@
     "requiresConcepts": [],
     "confidence": 0.96,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "d8d6a1f2c745e1b5303fecc1e0d570267004ddbe0d2a1187a8af93e2f60eadd7"
   },
   {
     "id": "cq-matriculas-001",
@@ -829,11 +845,11 @@
     "requiresConcepts": [],
     "confidence": 0.94,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "c28212e61cdec82cc3bf88fee457838c140b895bba1a89fbb19c8f15e463883b"
   },
   {
     "id": "cq-matriculas-002",
@@ -851,11 +867,11 @@
     "requiresConcepts": [],
     "confidence": 0.97,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "502b6dfd2decf7bf1791555a3648d59794a9f614e55cfe30282711edc7ca5ed1"
   },
   {
     "id": "cq-matriculas-003",
@@ -873,11 +889,11 @@
     "requiresConcepts": [],
     "confidence": 0.93,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "8c3f4ff53588573b4de1d007c5d258cd4d3097d4cd114ed23c13509e0a731e65"
   },
   {
     "id": "cq-matriculas-004",
@@ -895,11 +911,11 @@
     "requiresConcepts": [],
     "confidence": 0.92,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "67db57ac77d2ee5ed0baad86ba928866ee6a9b2b35df854e940d8336ccbeb8e5"
   },
   {
     "id": "cq-matriculas-005",
@@ -917,11 +933,11 @@
     "requiresConcepts": [],
     "confidence": 0.91,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "e762e41d04838c7e70ee73ba0faa79bea556ae3ae4c2af149f490c7f6b28b62f"
   },
   {
     "id": "cq-meta-ads-001",
@@ -939,11 +955,11 @@
     "requiresConcepts": [],
     "confidence": 0.94,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "18795512a6299821b81b9f2a04a94e37c68d8b8094917817b6d28f6f612e6290"
   },
   {
     "id": "cq-meta-ads-002",
@@ -961,11 +977,11 @@
     "requiresConcepts": [],
     "confidence": 0.96,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "1190f938b60b37a1189750c831f7aa1436bceedf59cbdb25ea662cc37571e836"
   },
   {
     "id": "cq-meta-ads-003",
@@ -983,11 +999,11 @@
     "requiresConcepts": [],
     "confidence": 0.91,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "e88a45d25739812f6da9d48707a6983c26930f6fb37a3cd346619062a104c049"
   },
   {
     "id": "cq-meta-ads-004",
@@ -1005,11 +1021,11 @@
     "requiresConcepts": [],
     "confidence": 0.93,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "71532f09583282d656fc248c9ec98cdd1032252c6bff50fa4644fd2e36242dc6"
   },
   {
     "id": "cq-meta-ads-005",
@@ -1027,11 +1043,11 @@
     "requiresConcepts": [],
     "confidence": 0.88,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "d0eb771e823e48f7eedad79b284adb214d85628ab8ac7e8629bbc5d6cb8961ee"
   },
   {
     "id": "cq-meta-ads-006",
@@ -1049,11 +1065,11 @@
     "requiresConcepts": [],
     "confidence": 0.92,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "47914bc5c6d97fddbd470c6928d191e41bbdbd2b760b75bd52ef8170f099d31b"
   },
   {
     "id": "cq-leads-001",
@@ -1071,11 +1087,11 @@
     "requiresConcepts": [],
     "confidence": 0.95,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "3b6c9192f72e60e30ef5d8b9020e5aac9bdb3fa848e246d61dec3fd163626bca"
   },
   {
     "id": "cq-leads-002",
@@ -1093,11 +1109,11 @@
     "requiresConcepts": [],
     "confidence": 0.96,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "7e5e6b1ab61e3e9659f7840570eacf3e568c58d545f1422bfd944499b2c5aa22"
   },
   {
     "id": "cq-leads-003",
@@ -1115,11 +1131,11 @@
     "requiresConcepts": [],
     "confidence": 0.91,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "d8dbda730735e4e7900fb705a9b426b66528dae5452056f44517d6d5dbd1f428"
   },
   {
     "id": "cq-leads-004",
@@ -1137,11 +1153,11 @@
     "requiresConcepts": [],
     "confidence": 0.93,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "1058b742ce6584780df365b2f2aca19141eb7f9e3c078157c71a21b5d1d56aa7"
   },
   {
     "id": "cq-leads-005",
@@ -1157,13 +1173,13 @@
     "requiresRules": [],
     "requiresWorkflows": [],
     "requiresConcepts": [],
-    "confidence": 0.90,
+    "confidence": 0.9,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "f6627b093dbbb74122bfd206a65587caac1ee2086197f516948c5bdcb6ae14bd"
   },
   {
     "id": "cq-leads-006",
@@ -1181,11 +1197,11 @@
     "requiresConcepts": [],
     "confidence": 0.89,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "55699a4853438aa9cd6858fac96b0b34c08ee783ddea408adc5585212b3425dd"
   },
   {
     "id": "cq-interacciones-001",
@@ -1203,11 +1219,11 @@
     "requiresConcepts": [],
     "confidence": 0.95,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "15b88f096d538d52870543d146f8df3dfad4bc8705578cdc76a71ea57b2fa9c0"
   },
   {
     "id": "cq-interacciones-002",
@@ -1225,11 +1241,11 @@
     "requiresConcepts": [],
     "confidence": 0.96,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "dff9f2e72460806ae4db182ce0a9e36acc97cbc1a4e5052ce72cd245e83b2b0f"
   },
   {
     "id": "cq-interacciones-003",
@@ -1247,11 +1263,11 @@
     "requiresConcepts": [],
     "confidence": 0.92,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "0d47a45a6c877151a1c585478d4f05dd3062457a0f5c22e3a9453016281fe151"
   },
   {
     "id": "cq-interacciones-004",
@@ -1269,11 +1285,11 @@
     "requiresConcepts": [],
     "confidence": 0.93,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "177a8716aee5e899fdf07c2c6538a4375c533ed7999625e60a2177af6b78c113"
   },
   {
     "id": "cq-interacciones-005",
@@ -1291,11 +1307,11 @@
     "requiresConcepts": [],
     "confidence": 0.94,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "305ff52de28ed2c7cb3ab5979c1350a26b3761883ec17bab636165a1d5c67445"
   },
   {
     "id": "cq-interacciones-006",
@@ -1313,11 +1329,11 @@
     "requiresConcepts": [],
     "confidence": 0.91,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "14ee5fb1fcc1bed15f426a90fa1dec9266d9fc3698c53080587d992dda376b0a"
   },
   {
     "id": "cq-interacciones-007",
@@ -1333,13 +1349,13 @@
     "requiresRules": [],
     "requiresWorkflows": [],
     "requiresConcepts": [],
-    "confidence": 0.90,
+    "confidence": 0.9,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "4e693dd9a1ad041adc6efb45ea0eaba972cfc463876dcd00253eb9c389432460"
   },
   {
     "id": "cq-interacciones-008",
@@ -1357,11 +1373,11 @@
     "requiresConcepts": [],
     "confidence": 0.95,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "2ca11e4290cd1778152d497721503f05b7a8188fe022a4b6e09329ebf608c561"
   },
   {
     "id": "cq-interacciones-009",
@@ -1379,11 +1395,11 @@
     "requiresConcepts": [],
     "confidence": 0.98,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "6f995aa3dd11f044413b20bc593687ecfdef42cffda96158803b3e277a1f262d"
   },
   {
     "id": "cq-interacciones-010",
@@ -1401,11 +1417,11 @@
     "requiresConcepts": [],
     "confidence": 0.93,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "cc71afb5cc900285a3078ef6d44cff5d0bd30092080bd3f38d13675f234358a6"
   },
   {
     "id": "cq-interacciones-011",
@@ -1423,11 +1439,11 @@
     "requiresConcepts": [],
     "confidence": 0.92,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "1c9278ed6aadd1c235153ca97524158d202fb6d024f23f909a940f6060f03a7b"
   },
   {
     "id": "cq-interacciones-012",
@@ -1445,11 +1461,11 @@
     "requiresConcepts": [],
     "confidence": 0.94,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "711ddcdb880a2d38ea766707dc4aaa4dea3272c197696d1f61e8d746529e476b"
   },
   {
     "id": "cq-personas-001",
@@ -1467,11 +1483,11 @@
     "requiresConcepts": [],
     "confidence": 0.95,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "8a8a7979e3364933c7c331c8326ec2daf8ce489eaabb71dadee3ba5b04899610"
   },
   {
     "id": "cq-personas-002",
@@ -1489,11 +1505,11 @@
     "requiresConcepts": [],
     "confidence": 0.96,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "d7822873d10f39c86b0cd534426bd72fad09f45cf59578149d8274b3d64e9998"
   },
   {
     "id": "cq-personas-003",
@@ -1511,11 +1527,11 @@
     "requiresConcepts": [],
     "confidence": 0.93,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "c6d427483f52c938424f4348061b49ac9512e88d9b9e0e12452be97ba5a7417b"
   },
   {
     "id": "cq-personas-004",
@@ -1531,13 +1547,13 @@
     "requiresRules": [],
     "requiresWorkflows": [],
     "requiresConcepts": [],
-    "confidence": 0.90,
+    "confidence": 0.9,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "8012ea059dbe0693c4af848d1e7a5ef52e142eca6d0851b72831165ea24aee57"
   },
   {
     "id": "cq-personas-005",
@@ -1555,11 +1571,11 @@
     "requiresConcepts": [],
     "confidence": 0.89,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "1e7f0afc2d9a08be1baa44b90075e333bd8b52aee1ce8a6dc52139c676b38850"
   },
   {
     "id": "cq-personas-006",
@@ -1577,11 +1593,11 @@
     "requiresConcepts": [],
     "confidence": 0.91,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "9258f6726607e457c1c0b628e7ce7f7b78d96212af23e8068bf35152f60e7ead"
   },
   {
     "id": "cq-lazo-001",
@@ -1599,11 +1615,11 @@
     "requiresConcepts": [],
     "confidence": 0.95,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "521a6e70c9049fc8645b50cab0ccd365926433e815a4f23b36fa44e339a542e8"
   },
   {
     "id": "cq-lazo-002",
@@ -1621,11 +1637,18 @@
     "requiresConcepts": [],
     "confidence": 0.94,
     "priority": "critical",
-    "status": "active",
+    "status": "validated",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1,
-    "contentHash": ""
+    "version": 2,
+    "contentHash": "247c3f271acbb2b0f7416fa7c2dd0c6e87aea9ee2e82bf824fa08284eb743589",
+    "answeredBy": "governa.lazo.estado",
+    "verifiedAgainst": [
+      "server/src/canales/verdad.ts:88",
+      "docs/00-OVERVIEW.md:15"
+    ],
+    "validatedAt": "2026-07-16T15:04:04.636Z",
+    "validatedBy": "milaa"
   },
   {
     "id": "cq-lazo-003",
@@ -1643,11 +1666,11 @@
     "requiresConcepts": [],
     "confidence": 0.93,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "7d40ad99bafd90255220e51288647613681901b80c68946a7495d519808e54f3"
   },
   {
     "id": "cq-lazo-004",
@@ -1665,11 +1688,18 @@
     "requiresConcepts": [],
     "confidence": 0.97,
     "priority": "critical",
-    "status": "active",
+    "status": "validated",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
-    "version": 1,
-    "contentHash": ""
+    "version": 2,
+    "contentHash": "cffd799f584a3833db78fbf8a587ab4f0efa56e656261864e6e79f6cba551647",
+    "answeredBy": "governa.lazo.ventanaCapi",
+    "verifiedAgainst": [
+      "server/src/lazo/evento.ts:18",
+      "server/src/lazo/evento.ts:33"
+    ],
+    "validatedAt": "2026-07-16T15:04:04.087Z",
+    "validatedBy": "milaa"
   },
   {
     "id": "cq-lazo-005",
@@ -1687,11 +1717,11 @@
     "requiresConcepts": [],
     "confidence": 0.91,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "a6415e5f3a3b8e6c0aa6adbd2177b0e9fceafbb6aba79585654bc8349cdbbfd5"
   },
   {
     "id": "cq-metodologia-001",
@@ -1709,11 +1739,11 @@
     "requiresConcepts": [],
     "confidence": 0.92,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "7abbc82e46b11ce262e3e2527d750230dcc8f565f5614e833f84d3865fd758b1"
   },
   {
     "id": "cq-metodologia-002",
@@ -1731,11 +1761,11 @@
     "requiresConcepts": [],
     "confidence": 0.93,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "a77cc5e1f1d1ed30837cf67528753a7b8969585dfa1e4e18fbeb56ea23b67cee"
   },
   {
     "id": "cq-metodologia-003",
@@ -1753,11 +1783,11 @@
     "requiresConcepts": [],
     "confidence": 0.91,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "c65a9a68f44d67a3f799de434e7c010ba22b3ff3a20f21841e5ffc2d6fb16b81"
   },
   {
     "id": "cq-metodologia-004",
@@ -1775,11 +1805,11 @@
     "requiresConcepts": [],
     "confidence": 0.94,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "0d213911f8e6b2afd04b9d50c7e356c020a8bfa2296d4c21f4796fc22a1da350"
   },
   {
     "id": "cq-metodologia-005",
@@ -1795,13 +1825,13 @@
     "requiresRules": [],
     "requiresWorkflows": [],
     "requiresConcepts": [],
-    "confidence": 0.90,
+    "confidence": 0.9,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "34d26591cf20c2cf4f3c6ef01d07fc12917857170b32778787f54b1827fb618f"
   },
   {
     "id": "cq-marketing-politico-001",
@@ -1819,11 +1849,11 @@
     "requiresConcepts": [],
     "confidence": 0.93,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "b81df1542302cbe8168d1f3d2c0f09a8279f6f7254682b300913b25a0b41ab0b"
   },
   {
     "id": "cq-marketing-politico-002",
@@ -1841,11 +1871,11 @@
     "requiresConcepts": [],
     "confidence": 0.92,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "aedf9e1671d9c3498504be0b3f0620915bc2a8f672259aff48b9acb173b92f34"
   },
   {
     "id": "cq-marketing-politico-003",
@@ -1863,11 +1893,11 @@
     "requiresConcepts": [],
     "confidence": 0.91,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "80029b3b36392d4e81fcca4bb94ed939756a91210d7d6cd627b0692ce6854353"
   },
   {
     "id": "cq-marketing-politico-004",
@@ -1883,13 +1913,13 @@
     "requiresRules": [],
     "requiresWorkflows": [],
     "requiresConcepts": [],
-    "confidence": 0.90,
+    "confidence": 0.9,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "d853f0316c31a7f0c72cfff4e09582dc85b72334505dbf90a37ce9faf3042ba3"
   },
   {
     "id": "cq-reglas-001",
@@ -1907,11 +1937,11 @@
     "requiresConcepts": [],
     "confidence": 0.96,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "e6ad353490ec26919f5b6f6ac3e07f55bde15fc576b4d5dec70de65a8ca39632"
   },
   {
     "id": "cq-reglas-002",
@@ -1929,11 +1959,11 @@
     "requiresConcepts": [],
     "confidence": 0.97,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "66a1fa17bdc3f224972644c1f96ff7a3377f7c0495524bca68708d51e4943198"
   },
   {
     "id": "cq-reglas-003",
@@ -1951,11 +1981,11 @@
     "requiresConcepts": [],
     "confidence": 0.93,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "8e32234cfd64fca4716bea1a68a658628e1f133dbbfa619a70c02f0ebad8c5b4"
   },
   {
     "id": "cq-reglas-004",
@@ -1973,11 +2003,11 @@
     "requiresConcepts": [],
     "confidence": 0.92,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "13e0b510f0af041e44f8edd258632fdd0c780cff37da5c0b93894b3515bec990"
   },
   {
     "id": "cq-reglas-005",
@@ -1995,11 +2025,11 @@
     "requiresConcepts": [],
     "confidence": 0.91,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "91cf0c0cf52f60c5ec602c8def5b77f96fa0fe1df149d5e40228189e3f2332e5"
   },
   {
     "id": "cq-reglas-006",
@@ -2017,11 +2047,11 @@
     "requiresConcepts": [],
     "confidence": 0.94,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "9c75a4973e7e490c3c3d6b9b5ec78e57952dd5633f2f96603ec666e5b5f14924"
   },
   {
     "id": "cq-arquitectura-001",
@@ -2039,11 +2069,11 @@
     "requiresConcepts": [],
     "confidence": 0.92,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "528b9271b63fadf63727e6519899b61b29398a81ceb5358be554d45cefecb452"
   },
   {
     "id": "cq-arquitectura-002",
@@ -2061,11 +2091,11 @@
     "requiresConcepts": [],
     "confidence": 0.93,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "b1fe4d1b0fff39a4c6bc9aab0f4726ea082b2a5ce572c8373952c92704d89558"
   },
   {
     "id": "cq-arquitectura-003",
@@ -2083,11 +2113,11 @@
     "requiresConcepts": [],
     "confidence": 0.91,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "c0b3383db7077d6592c65c594b77dc5d30341ffe4201aef83a0806d1db7a75ab"
   },
   {
     "id": "cq-arquitectura-004",
@@ -2103,13 +2133,13 @@
     "requiresRules": [],
     "requiresWorkflows": [],
     "requiresConcepts": [],
-    "confidence": 0.90,
+    "confidence": 0.9,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "e36d3e32fa4698159a87d5afc4c3f13a3f3416c47042c06b66c7aca080b0dfe4"
   },
   {
     "id": "cq-arquitectura-005",
@@ -2127,11 +2157,11 @@
     "requiresConcepts": [],
     "confidence": 0.91,
     "priority": "medium",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "f8c637d2f82c2e7ab8e4b5f3aa12879188e960c1c0713a5ef47190618bc2c2a7"
   },
   {
     "id": "cq-ventas-012",
@@ -2149,11 +2179,11 @@
     "requiresConcepts": [],
     "confidence": 0.94,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "117d4d9488f025e419940e6a8de7891025c2496e87c413fd57ec1e6e397486ee"
   },
   {
     "id": "cq-tesoreria-017",
@@ -2171,11 +2201,11 @@
     "requiresConcepts": [],
     "confidence": 0.93,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "88a77ee1396d8650c0fa82c5c26896ff40933886bb5820869cbd6600ed7a0fcf"
   },
   {
     "id": "cq-meta-ads-007",
@@ -2193,11 +2223,11 @@
     "requiresConcepts": [],
     "confidence": 0.92,
     "priority": "critical",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "3388b33bc77736f4d6c4eb62943721b037fa3a5cd34d8a6a41323a13ea259bee"
   },
   {
     "id": "cq-personas-007",
@@ -2215,11 +2245,11 @@
     "requiresConcepts": [],
     "confidence": 0.91,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "9d74a3e430f8e359a8aa98381e62625683ebd91d35e6fd2917079748051f5c05"
   },
   {
     "id": "cq-leads-007",
@@ -2237,11 +2267,11 @@
     "requiresConcepts": [],
     "confidence": 0.91,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "1779365dcfbf154da2bcdda63465fae08428bc1ff51272d7575892d258a5a19c"
   },
   {
     "id": "cq-interacciones-013",
@@ -2259,11 +2289,11 @@
     "requiresConcepts": [],
     "confidence": 0.91,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "7dc1ea4ff0c3ae97d1f1103016ec630897b95c5ec71d62cb62cc1757aa17f7ea"
   },
   {
     "id": "cq-matriculas-006",
@@ -2281,11 +2311,11 @@
     "requiresConcepts": [],
     "confidence": 0.91,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "55265058715d84ba533f9dee8656695041763666c563d835a46d1dfda63f6bbf"
   },
   {
     "id": "cq-productos-006",
@@ -2303,10 +2333,10 @@
     "requiresConcepts": [],
     "confidence": 0.91,
     "priority": "high",
-    "status": "active",
+    "status": "draft",
     "source": "domain_analysis",
     "createdAt": "2026-07-15T00:00:00Z",
     "version": 1,
-    "contentHash": ""
+    "contentHash": "a035747638aa2d65ece3cf5d0b497dc8b935662bb03c8576f60f92ab51d8acbb"
   }
 ]
