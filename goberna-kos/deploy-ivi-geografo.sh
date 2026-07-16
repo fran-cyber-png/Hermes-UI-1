@@ -18,10 +18,16 @@
 #      para cualquier monitoreo por status code.
 #   4. ivi-server.log quedaba en 0 bytes (log_message era `pass`) → cero observabilidad.
 #   5. voz-ivi (Apolo) usaba qwen3:14b y peleaba la VRAM con ivi-ventas.
+#
+# P0 de docs/19 (2026-07-16):
+#   6. El engine corría con nohup → no sobrevivía un reboot. Ahora es unidad
+#      systemd (deploy/ivi.service) con Restart=on-failure, y el paso 7 lo
+#      PRUEBA con un kill -9. Además: /api/health para monitoreo y sesión
+#      propia por navegador (antes todos compartían sid="default").
 set -euo pipefail
 
 KOS="$(cd "$(dirname "$0")" && pwd)"
-TOTAL=8
+TOTAL=9
 
 echo "== 1/$TOTAL Sincronizando engine analítico (ivi/) =="
 rsync -a --exclude='__pycache__' "$KOS/ivi/" ia:ia-local/ivi/
@@ -94,20 +100,43 @@ ollama list
 ollama list | awk '{print $1}' | grep -qx "qwen3:8b" || { echo "ERROR: qwen3:8b desapareció — sin él no se puede recrear ivi-ventas"; exit 1; }
 EOF
 
-echo "== 6/$TOTAL Levantando el engine en :8080 =="
+echo "== 6/$TOTAL Instalando el engine como unidad systemd (adiós nohup) =="
+# Migración: mata los procesos legacy (nohup) ANTES de que systemd tome :8080.
+# Los que ya corren bajo systemd se dejan en paz — el restart de abajo los
+# recicla limpio. El filtro es el cgroup, no el cmdline (ver gotcha del paso 3).
 ssh ia bash -s <<'EOF'
 set -e
-pkill -f 'python3 -u chat_ivi.py' || true
-pkill -f 'ivi.server' || true
+for pid in $(pgrep -f 'ivi\.server|chat_ivi\.py' 2>/dev/null || true); do
+  if ! grep -q 'ivi\.service' /proc/$pid/cgroup 2>/dev/null; then
+    echo "  matando proceso legacy sin systemd (pid $pid)"
+    kill "$pid" 2>/dev/null || true
+  fi
+done
 sleep 1
-cd ~/ia-local
-# -u: sin buffering, para que el log se escriba línea a línea y `tail -f` sirva.
-nohup python3 -u -m ivi.server > ivi-server.log 2>&1 < /dev/null &
-sleep 2
-pgrep -fl 'ivi.server' || { echo 'ERROR: el server no levantó'; tail -20 ivi-server.log; exit 1; }
+EOF
+scp -q "$KOS/deploy/ivi.service" ia:/tmp/ivi.service
+# Un solo ssh -t = un solo prompt de sudo para toda la instalación.
+ssh -t ia 'sudo cp /tmp/ivi.service /etc/systemd/system/ivi.service && sudo systemctl daemon-reload && sudo systemctl enable ivi && sudo systemctl restart ivi && sleep 2 && { systemctl is-active --quiet ivi && echo "  ivi.service activo ($(systemctl show ivi --property=MainPID))" || { echo "ERROR: ivi.service no levantó"; tail -20 ~/ia-local/ivi-server.log; exit 1; }; }'
+
+echo "== 7/$TOTAL Verificando que systemd revive el engine (kill -9) y /api/health =="
+ssh ia bash -s <<'EOF'
+set -e
+pid_antes=$(systemctl show ivi --property=MainPID --value)
+[ -n "$pid_antes" ] && [ "$pid_antes" != "0" ] || { echo "ERROR: ivi.service sin MainPID"; exit 1; }
+kill -9 "$pid_antes"
+sleep 6   # RestartSec=3 + margen para importar y bindear :8080
+pid_despues=$(systemctl show ivi --property=MainPID --value)
+if [ "$pid_despues" = "0" ] || [ "$pid_despues" = "$pid_antes" ]; then
+  echo "ERROR: el engine no revivió tras kill -9 (antes=$pid_antes después=$pid_despues)"
+  exit 1
+fi
+echo "  kill -9 al pid $pid_antes → systemd lo revivió como pid $pid_despues"
+health=$(curl -s -m 5 http://localhost:8080/api/health)
+echo "  health: $health"
+echo "$health" | grep -q '"ok": true' || { echo "ERROR: /api/health no contesta ok"; exit 1; }
 EOF
 
-echo "== 7/$TOTAL Smoke test: ¿el fix de 'mismos días' está vivo? =="
+echo "== 8/$TOTAL Smoke test: ¿el fix de 'mismos días' está vivo? =="
 ssh ia 'curl -s -m 300 -X POST http://localhost:8080/api/chat -H "Content-Type: application/json" -d "{\"message\":\"ventas de este mes\"}"' > /tmp/ivi-smoke.json
 python3 - <<'EOF'
 import json, sys
@@ -122,7 +151,7 @@ if not ok:
 print("  ✓ el impacto compara mismos días (fix desplegado)")
 EOF
 
-echo "== 8/$TOTAL Verificando que la concurrencia dejó de serializarse =="
+echo "== 9/$TOTAL Verificando que la concurrencia dejó de serializarse =="
 # Antes: 4 requests concurrentes tardaban 25/50/75/100s (escalón de ~25s).
 # Con NUM_PARALLEL=4 deben terminar todas en una ventana parecida.
 ssh ia bash -s <<'EOF'
@@ -139,4 +168,6 @@ EOF
 
 echo
 echo "Listo. UI: http://100.117.204.80:8080"
+echo "Health:   curl http://100.117.204.80:8080/api/health"
 echo "Logs (ahora sí escriben): ssh ia tail -f ia-local/ivi-server.log"
+echo "Servicio: ssh ia systemctl status ivi   (sobrevive reboots y kill -9)"

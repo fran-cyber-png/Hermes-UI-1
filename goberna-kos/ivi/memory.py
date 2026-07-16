@@ -7,6 +7,7 @@ global session is enough for the local chat; the API accepts a `session`
 field to extend it later).
 """
 
+import threading
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -29,18 +30,32 @@ class Session:
 
 _SESSIONS: Dict[str, Session] = {}
 
+# Con OLLAMA_NUM_PARALLEL=4 hay 4 requests reales mutando este dict a la vez.
+# RLock (no Lock): apply_followup_filters llama a get_session ya con el lock tomado.
+_LOCK = threading.RLock()
+
+# El sid lo genera el navegador (localStorage), así que es entrada del cliente:
+# sin tope, un cliente que rote sids infla el dict sin límite. Al llegar al tope
+# se desaloja la sesión creada hace más tiempo (orden de inserción del dict);
+# esa conversación solo pierde sus follow-ups, no rompe nada.
+_MAX_SESSIONS = 200
+
 
 def get_session(sid: str = "default") -> Session:
-    return _SESSIONS.setdefault(sid, Session())
+    with _LOCK:
+        if sid not in _SESSIONS and len(_SESSIONS) >= _MAX_SESSIONS:
+            _SESSIONS.pop(next(iter(_SESSIONS)))
+        return _SESSIONS.setdefault(sid, Session())
 
 
 def remember(sid: str, turn: Turn) -> None:
-    s = get_session(sid)
-    s.history.append(turn)
-    s.last = turn
-    # keep history bounded
-    if len(s.history) > 12:
-        s.history = s.history[-12:]
+    with _LOCK:
+        s = get_session(sid)
+        s.history.append(turn)
+        s.last = turn
+        # keep history bounded
+        if len(s.history) > 12:
+            s.history = s.history[-12:]
 
 
 # Common follow-up cues that mean "re-do last analysis under a narrower filter".
@@ -48,9 +63,10 @@ _FOLLOWUP = ["solo", "y ", "pero", "en ", "por ", "de ", "solo en", "y lima", "y
 
 
 def is_followup(message: str, sid: str = "default") -> bool:
-    s = get_session(sid)
-    if not s.last:
-        return False
+    with _LOCK:
+        s = get_session(sid)
+        if not s.last:
+            return False
     m = message.lower().strip()
     # short messages that are not a fresh full question
     if len(m.split()) <= 4 and not any(
@@ -70,6 +86,8 @@ def apply_followup_filters(message: str, sid: str = "default") -> Dict[str, str]
                          ("mx", "México"), ("mexico", "México"), ("ecuador", "Ecuador")]:
         if ciudad in m:
             # decide if it's sede or pais by prior scope
-            filters["sede" if "sede" in (get_session(sid).last.scope if get_session(sid).last else "") else "pais"] = key
+            with _LOCK:
+                last = get_session(sid).last
+            filters["sede" if "sede" in (last.scope if last else "") else "pais"] = key
             break
     return filters

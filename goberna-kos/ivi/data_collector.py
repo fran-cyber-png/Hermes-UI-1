@@ -10,11 +10,27 @@ import json
 import urllib.request
 import concurrent.futures
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
 
 from .config import BACKEND, CACHE_TTL
 from .cache import get, put
 from .data_planner import ENDPOINTS
+
+# Última frescura no vacía que calculó collect(), con su timestamp. La lee
+# /api/health: así el probe informa "qué frescura serviría una respuesta ahora"
+# sin disparar fetches (un health que depende del backend tarda 15s cuando el
+# backend está caído — inservible como probe). Tupla única para que el swap
+# sea una sola asignación atómica.
+_LAST_FRESCURA: Optional[Tuple[Dict[str, str], str]] = None
+
+
+def last_frescura() -> Dict[str, Any]:
+    snap = _LAST_FRESCURA
+    if snap is None:
+        return {"datos": {}, "calculada": None}
+    datos, cuando = snap
+    return {"datos": dict(datos), "calculada": cuando}
 
 
 @dataclass
@@ -90,4 +106,7 @@ def collect(plan: List[str]) -> RawData:
             setattr(raw, RawData._SLOT[name], data or {})
             raw.endpoints_hit.append(name)
     raw.frescura = _frescura(raw)
+    if raw.frescura:
+        global _LAST_FRESCURA
+        _LAST_FRESCURA = (dict(raw.frescura), datetime.now().isoformat(timespec="seconds"))
     return raw

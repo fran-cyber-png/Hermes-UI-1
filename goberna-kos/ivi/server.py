@@ -20,7 +20,7 @@ from pathlib import Path
 
 from .intent_analyzer import analyze
 from .data_planner import plan
-from .data_collector import collect
+from .data_collector import collect, last_frescura
 from .kpi_engine import compute
 from .analytics_engine import analyze as analyze_metrics
 from .insight_engine import detect
@@ -30,6 +30,7 @@ from .memory import get_session, remember, is_followup, apply_followup_filters, 
 from .prompt_builder import build
 from .response_formatter import format_response
 from .config import OLLAMA_URL, MODEL, PORT, OLLAMA_CTX, OLLAMA_TEMP, OLLAMA_TIMEOUT
+from . import cache
 
 log = logging.getLogger("ivi")
 
@@ -38,6 +39,8 @@ log = logging.getLogger("ivi")
 # whether a slow answer was slow inference or slow queue.
 _inflight = 0
 _inflight_lock = threading.Lock()
+
+_START = time.monotonic()
 
 
 class OllamaError(RuntimeError):
@@ -91,6 +94,14 @@ const btn = document.getElementById('btn');
 const sug = document.getElementById('sug');
 let busy = false;
 
+// Sesión propia por navegador: sin esto todos comparten sid="default" y los
+// follow-ups de dos personas se mezclan. crypto.randomUUID solo existe en
+// contextos seguros (https/localhost) y esta UI se sirve por http://IP:8080,
+// así que el fallback no es decorativo.
+const SID = localStorage.sid || (localStorage.sid =
+  (crypto.randomUUID ? crypto.randomUUID()
+   : 'sid-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2)));
+
 const SUG = ["ventas por semana","tendencia de ventas","ventas por producto","ventas por sede",
   "comparación mensual","qué se vende más","riesgos comerciales","embudo de estados",
   "cartera y mora","lazo con Meta y pérdidas","ticket promedio","forecast de ventas"];
@@ -115,7 +126,7 @@ async function send(){
   const t=addMsg('bot','✍️ analizando datos en vivo...'); t.classList.add('typing');
   try{
     const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({message:q})});
+      body:JSON.stringify({message:q,session:SID})});
     const data=await r.json();
     t.classList.remove('typing');
     // El server manda 503 cuando el modelo no contesta; el payload igual trae
@@ -176,6 +187,22 @@ def related_questions(intent_scores: dict) -> list:
         if len(out) >= 4:
             break
     return out[:4] or ["resumen ejecutivo", "ventas por producto", "comparación mensual", "riesgos comerciales"]
+
+
+def health() -> dict:
+    """Probe para monitoreo. No dispara fetches ni toca Ollama: siempre es O(1),
+    aun con el backend o el modelo caídos — mide que el server esté vivo y da
+    contexto (cola, caché, frescura conocida) para leer un incidente."""
+    with _inflight_lock:
+        inflight = _inflight
+    return {
+        "ok": True,
+        "model": MODEL,
+        "inflight": inflight,
+        "frescura": last_frescura(),
+        "cache": cache.stats(),
+        "uptime_s": round(time.monotonic() - _START, 1),
+    }
 
 
 def handle_chat(message: str, sid: str = "default") -> dict:
@@ -251,6 +278,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path in ("/", "/index.html"):
             self._send(200, HTML, "text/html; charset=utf-8")
+        elif self.path == "/api/health":
+            self._send(200, json.dumps(health(), ensure_ascii=False))
         else:
             self._send(404, "not found")
 
@@ -261,7 +290,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         data = json.loads(self.rfile.read(length).decode())
         message = data.get("message", "")
-        sid = data.get("session", "default")
+        sid = data.get("session") or "default"
         try:
             out = handle_chat(message, sid)
         except OllamaError as e:
@@ -288,7 +317,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         # BaseHTTPRequestHandler writes its access log to stderr by hand; route
         # it through logging so it lands in the same stream as everything else.
-        log.info("http %s - %s", self.address_string(), fmt % args)
+        # /api/health se omite: un monitor que pollea cada 30s escribiría ~3K
+        # líneas/día en un log que systemd solo appendea (sin rotación).
+        line = fmt % args
+        if "/api/health" in line:
+            return
+        log.info("http %s - %s", self.address_string(), line)
 
 
 def main():
