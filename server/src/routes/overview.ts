@@ -8,8 +8,7 @@ import { relojDeTesoreria } from "../canales/tesoreria.js";
 import { lazoDetalle } from "../canales/lazoDetalle.js";
 import { salud } from "../canales/salud.js";
 import { ventasPorPais } from "../analisis/ventasPorPais.js";
-import { roasPorPais } from "../analisis/roasPais.js";
-import { explicar } from "../analisis/explicar.js";
+import { atribucionPorPais } from "../sdk/index.js";
 import { creativos } from "../analisis/creativos.js";
 import { comercial } from "../analisis/comercial.js";
 import { cartera } from "../analisis/cartera.js";
@@ -90,23 +89,16 @@ overviewRouter.get("/", async (req, res) => {
   // ── ROAS por país y creativos: solo cuando la pauta se revisó. Necesitan las tasas del negocio
   // para convertir el gasto de Meta a USD. Si no hay snapshot, ni se piden (pauta viene en null). ──
   const tasas = snap ? await tasasDeCambio() : null;
-  // El ROAS compara ventas y gasto del MISMO intervalo, anclado al momento en que se TOMÓ el snapshot
-  // (no a "ahora"). El gasto de Meta quedó congelado en ese instante; si las ventas se recalcularan a
-  // now, un snapshot viejo dividiría ventas de esta semana por el gasto de otra — un ROAS fabricado.
-  const dias = { "7d": 7, "30d": 30, "90d": 90, "1y": 365, todo: null }[rango];
-  const hastaVentana = snap ? snap.creadoAt.toISOString() : null;
-  const desdeVentana =
-    snap && dias ? new Date(snap.creadoAt.getTime() - dias * 86_400_000).toISOString() : null;
-  const ventasVentana = snap?.gasto ? await ventasPorPais(desdeVentana, hastaVentana) : null;
   // Se calcula UNA vez y se corta: la pantalla muestra 9 creativos, no hace falta mandar los 129
   // con su copy entero (eran 128 KB de payload). El BFF manda lo que la pantalla necesita.
   const todosLosCreativos = snap ? creativos(snap.campanas, tasas ?? new Map()) : [];
-  // Cada fila lleva su EXPLICACIÓN: el copiloto determinista que responde por qué, con qué
-  // evidencia, qué hacer y qué pasa si — para que nadie mueva presupuesto detrás de una caja negra.
-  const roasPais =
-    snap?.gasto && ventasVentana
-      ? roasPorPais(snap.gasto, ventasVentana).map((r) => ({ ...r, explicacion: explicar(r) }))
-      : null;
+  // La cadena snapshot → ventana → ventas → ROAS → explicación vive ahora en el SDK
+  // (`governa.atribucion.roasPorPais`). Estaba escrita DOS veces en este archivo —acá y en el
+  // handler `/atribucion`— y ya había empezado a divergir. El snapshot se le pasa porque esta ruta
+  // ya lo tiene en la mano: volver a pedirlo sería pagar dos veces la parte cara (129 campañas en
+  // jsonb) por prolijidad. La ventana sigue anclada a `snap.creadoAt`, no a `now()`.
+  const atribucion = await atribucionPorPais(rango, snap);
+  const roasPais = atribucion.disponible ? atribucion.roasPais : null;
 
   res.json({
     rango,
@@ -213,4 +205,20 @@ overviewRouter.get("/comercial", async (_req, res) => {
  */
 overviewRouter.get("/cartera", async (_req, res) => {
   res.json(await cartera());
+});
+
+
+/**
+ * LA ATRIBUCIÓN — ROAS / CAC por país.
+ *
+ * Este endpoint nació con el comentario "listo para Ivi (consultas especializadas)": una consulta
+ * con forma de PREGUNTA, viviendo dentro del router de las PANTALLAS. Era el síntoma de que
+ * faltaba el SDK, y de que su ausencia se estaba pagando en copias — esta lógica estaba duplicada
+ * con el handler `/` de arriba.
+ *
+ * Ahora es un adaptador de una línea sobre `governa.atribucion.roasPorPais`. Se mantiene la ruta
+ * porque Ivi la consume hoy; cuando migre al catálogo (iteración 2), esto se puede borrar.
+ */
+overviewRouter.get("/atribucion", async (_req, res) => {
+  res.json(await atribucionPorPais("90d", await ultimoSnapshot("90d")));
 });

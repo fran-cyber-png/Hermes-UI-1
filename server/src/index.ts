@@ -14,7 +14,9 @@ import { overviewRouter } from "./routes/overview.js";
 import { personaRouter } from "./routes/persona.js";
 import { genteRouter } from "./routes/gente.js";
 import { responderRouter } from "./routes/responder.js";
+import { sdkRouter } from "./routes/sdk.js";
 import { structureRouter } from "./routes/structure.js";
+import { pautaMaestroRouter } from "./routes/pautaMaestro.js";
 import { arrancarReloj } from "./pauta/reloj.js";
 import { webhookRouter } from "./webhook/ruta.js";
 
@@ -44,6 +46,11 @@ app.use("/api/meta", metaAssetsRouter);
 app.use("/api/audiences", audiencesRouter);
 app.use("/api/decisions", decisionsRouter); // el feed: qué requiere atención
 app.use("/api/structure", structureRouter); // las 3 etapas anidadas, con la plata en cada nivel
+app.use("/api/pauta-maestro", pautaMaestroRouter); // el maestro: todas las pautas por país y curso
+
+// EL SDK: lo mismo, pero con la forma de la PREGUNTA en vez de la de la pantalla. Se autodescribe
+// en /api/sdk/catalogo. Lo consumen el verificador de CQs hoy, Ivi y MCP después.
+app.use("/api/sdk", sdkRouter);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
