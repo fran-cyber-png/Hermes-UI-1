@@ -41,7 +41,29 @@ echo "== 3/$TOTAL Apagando voz-ivi (Apolo) — libera la VRAM que peleaba con iv
 # Nota: voz-ivi corre en nohup, sin unidad systemd, así que no vuelve solo tras
 # un reboot. Sus archivos NO se borran: para revivirlo, cd ~/ia-local/voz-ivi &&
 # nohup python3 server.py &  (y ahí habría que repensar el modelo único).
-ssh ia 'pkill -f "voz-ivi/server.py" 2>/dev/null || true; pkill -f "python3 server.py" 2>/dev/null || true; sleep 1; pgrep -f "voz-ivi" >/dev/null && echo "AVISO: voz-ivi sigue vivo" || echo "voz-ivi apagado"'
+#
+# Se identifica por CWD, no por patrón de cmdline. Dos razones:
+#   - su cmdline es "python3 server.py" a secas (genérico de más para pkill -f),
+#     mientras que "voz-ivi/server.py" es el cwd y NO aparece en el cmdline;
+#   - `ssh ia 'pkill -f "..."'` mete el patrón en el cmdline del shell remoto y
+#     pkill se encuentra a sí mismo y se suicida antes de matar al objetivo.
+#     Por eso todo esto va por `bash -s` (el script viaja por stdin, así que el
+#     cmdline del shell remoto es sólo "bash -s").
+ssh ia bash -s <<'EOF'
+set -e
+matados=0
+for pid in $(pgrep -f "python3 server.py" 2>/dev/null || true); do
+  case "$(readlink /proc/$pid/cwd 2>/dev/null || true)" in
+    */voz-ivi) echo "  matando voz-ivi (pid $pid)"; kill "$pid" 2>/dev/null || true; matados=$((matados+1)) ;;
+  esac
+done
+sleep 1
+if ss -tln 2>/dev/null | grep -q "127.0.0.1:8600"; then
+  echo "  AVISO: algo sigue escuchando en :8600 — voz-ivi no murió"
+else
+  echo "  voz-ivi apagado ($matados proceso/s)"
+fi
+EOF
 
 echo "== 4/$TOTAL Aplicando tuning de Ollama (NUM_PARALLEL 1→4, KEEP_ALIVE 5m→24h) =="
 scp -q "$KOS/deploy/ollama-tuning.conf" ia:/tmp/ollama-tuning.conf
@@ -53,13 +75,23 @@ echo "== 5/$TOTAL Limpiando modelos que ya no se usan =="
 # `ollama pull <modelo>` si alguna vez hacen falta.
 ssh ia bash -s <<'EOF'
 set -e
+# Red de seguridad: estos dos no se borran ni por error de tipeo más arriba.
+INTOCABLES="ivi-ventas:latest qwen3:8b"
 for m in qwen3:14b qwen2.5:7b bge-m3:latest; do
-  if ollama list | grep -q "^${m%%:*}"; then
+  for guard in $INTOCABLES; do
+    if [ "$m" = "$guard" ]; then echo "  ABORTO: $m está en la lista de intocables"; exit 1; fi
+  done
+  # Match exacto contra la columna NAME. Un `grep "^qwen3"` matchearía qwen3:8b
+  # (el FROM de Modelfile.ventas) y mentiría sobre qué existe.
+  if ollama list | awk '{print $1}' | grep -qx "$m"; then
     echo "  rm $m"; ollama rm "$m" || echo "  (no se pudo borrar $m, sigo)"
+  else
+    echo "  $m ya no está, nada que hacer"
   fi
 done
-echo "--- modelos que quedan ---"
+echo "--- modelos que quedan (deben estar ivi-ventas y qwen3:8b) ---"
 ollama list
+ollama list | awk '{print $1}' | grep -qx "qwen3:8b" || { echo "ERROR: qwen3:8b desapareció — sin él no se puede recrear ivi-ventas"; exit 1; }
 EOF
 
 echo "== 6/$TOTAL Levantando el engine en :8080 =="
