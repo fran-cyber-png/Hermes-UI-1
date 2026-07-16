@@ -127,6 +127,9 @@ async function main() {
     if (r.esPrueba) console.log("Modo TEST EVENTS: no afecta la optimización de los anuncios.\n");
 
     console.log(`  Ventas evaluadas : ${r.evaluadas.toLocaleString("es")}`);
+    // Sin esta línea, un "Listas para Meta: 0" se lee como "no hay ventas" cuando en realidad
+    // significa "Meta ya las tiene todas" — que es lo contrario.
+    console.log(`  Ya estaban en Meta: ${r.yaEnviadas.toLocaleString("es")}`);
     console.log(`  Listas para Meta : ${r.aEnviar.toLocaleString("es")}`);
     if (!simular) console.log(`  Enviadas         : ${r.enviadas.toLocaleString("es")}`);
 

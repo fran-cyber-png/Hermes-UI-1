@@ -18,6 +18,7 @@ import { sdkRouter } from "./routes/sdk.js";
 import { structureRouter } from "./routes/structure.js";
 import { pautaMaestroRouter } from "./routes/pautaMaestro.js";
 import { arrancarReloj } from "./pauta/reloj.js";
+import { arrancarRelojDelLazo } from "./lazo/reloj.js";
 import { webhookRouter } from "./webhook/ruta.js";
 
 const app = express();
@@ -56,6 +57,10 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 
 app.listen(port, () => {
   console.log(`meta-escuela server listening on http://localhost:${port}`);
-  // Lo único que le habla a Meta sin que nadie lo pida. Las pantallas leen Postgres.
+  // Lo único que LEE de Meta sin que nadie lo pida. Las pantallas leen Postgres.
   arrancarReloj();
+  // Lo único que le ESCRIBE a Meta sin que nadie lo pida — y por eso arranca apagado.
+  // Sin esto, Meta no se entera de una venta hasta que alguien corre `npm run lazo` a mano.
+  // Costaba 273 ventas / $32.926 confirmadas y nunca reportadas. Ver lazo/reloj.ts.
+  arrancarRelojDelLazo();
 });

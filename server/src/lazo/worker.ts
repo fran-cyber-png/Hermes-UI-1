@@ -18,13 +18,30 @@ import { construirCompra, type MotivoDescarte } from "./evento.js";
  * Hoy ese fracaso es invisible — Meta rechaza un evento viejo y no avisa. Acá cada descarte
  * queda contado, con su motivo, y sube a la pantalla.
  *
- * El motivo `fuera_de_ventana` es ~1 de cada 6 (el p90 de confirmación de Tesorería es 10 días,
- * la ventana de Meta son 7). **Ese 17% no se arregla con código: se arregla confirmando más
- * rápido.** Por eso tiene que verse.
+ * ── `fuera_de_ventana` NO mide a Tesorería (corregido 2026-07-16) ──
+ * Este comentario decía: "es ~1 de cada 6 (el p90 de confirmación de Tesorería es 10 días, la
+ * ventana de Meta son 7). Ese 17% no se arregla con código: se arregla confirmando más rápido."
+ *
+ * **Las dos afirmaciones eran falsas, y se midió.**
+ *
+ *  1. El p90 de Tesorería es 4 días, no 10. El 94,3% confirma dentro de los 7 (1.902 de 2.016).
+ *     Verificado por dos caminos: `ontologia.hechos` y `analisis/comercial.ts:latenciaTesoreria`.
+ *
+ *  2. `construirCompra` calcula `atraso = ahora − confirmadaAt` (`evento.ts:128`), y manda
+ *     `event_time = confirmadaAt`. O sea que `fuera_de_ventana` no mide cuánto tardó Tesorería:
+ *     mide **cuánto tardamos NOSOTROS en enviar después de que ella confirmó**.
+ *
+ * Cuando se midió había 273 ventas ($32.926 USD) descartadas por ventana. Sus confirmaciones eran
+ * del 16/06 al 04/07 — de hace 12 a 30 días. Confirmadas hace menos de 8 días: CERO. Tesorería
+ * hizo su trabajo; el lazo no corrió. Corriendo a diario, el atraso es ≤ 1 día y entran todas.
+ *
+ * Sí se arregla con código. Era, literalmente, un cron que no existía.
  */
 
 export type ResumenLazo = {
   evaluadas: number;
+  /** Las que ya están en Meta y no se vuelven a mandar. Ver `yaEnMeta()`. */
+  yaEnviadas: number;
   aEnviar: number;
   enviadas: number;
   descartes: Record<MotivoDescarte, number>;
@@ -43,8 +60,41 @@ const MOTIVOS: MotivoDescarte[] = [
 ];
 
 /**
- * Corre el lazo. Idempotente: `event_id = venta:{folio}` es único, así que reenviar la misma
- * venta no crea una conversión nueva ni en nuestra base ni en Meta (dedup de 48 h).
+ * LO QUE META YA SABE — el filtro sin el cual el cron sería peor que no tener cron.
+ *
+ * ── El bug que esto evita (encontrado antes de automatizar, 2026-07-16) ──
+ * Este worker NO miraba si una venta ya se había mandado. Mientras corrió a mano, una vez cada
+ * tanto, no se notaba. Con un cron diario sí: una venta queda enviable durante los 7 días
+ * posteriores a su confirmación, así que se reenviaría siete veces.
+ *
+ *   día 1  → se envía venta:GOB-X                     primera vez
+ *   día 2  → se reenvía → Meta deduplica (< 48 h)     ok
+ *   día 3  → se reenvía → pasaron 48 h → DUPLICADO
+ *   ...
+ *   día 7  → cuatro duplicados más
+ *
+ * El docstring de abajo decía "Idempotente: reenviar la misma venta no crea una conversión nueva
+ * ni en nuestra base ni en Meta (dedup de 48 h)". La primera mitad es cierta (el `UNIQUE` de
+ * `conversiones` aguanta); **la segunda solo vale dentro de esas 48 h**. Pasada la ventana de
+ * dedup, Meta cuenta un `Purchase` nuevo. Un cron diario habría inflado las conversiones ~5× por
+ * venta — le habría enseñado al algoritmo que cada cliente compra cinco veces.
+ *
+ * Apoyarse en el dedup de un tercero para no duplicar es apostar contra su letra chica. El estado
+ * de qué ya mandamos lo tenemos nosotros, en `conversiones.enviado_at`. Se pregunta y listo.
+ */
+async function yaEnMeta(): Promise<Set<string>> {
+  const filas = (await db.execute(sql`
+    SELECT event_id FROM ontologia.conversiones WHERE enviado_at IS NOT NULL
+  `)) as unknown as { event_id: string }[];
+  return new Set(filas.map((f) => f.event_id));
+}
+
+/**
+ * Corre el lazo.
+ *
+ * Idempotente de verdad, por dos vías: no reenvía lo que ya está en Meta (`yaEnMeta()`), y el
+ * `event_id = venta:{folio}` determinista hace que un reenvío accidental dentro de 48 h lo
+ * deduplique Meta. El primero es la defensa; el segundo es la red por si falla.
  *
  * `soloRegistrar` evalúa y guarda TODO sin mandarle nada a Meta. Es el modo para mirar los
  * números antes de escribirle a producción — el mismo espíritu del `DECISIONES_MODO=simulacion`
@@ -53,13 +103,21 @@ const MOTIVOS: MotivoDescarte[] = [
 export async function correrLazo(opciones: { soloRegistrar?: boolean } = {}): Promise<ResumenLazo> {
   const capi = capiDesdeEnv();
   const ahora = new Date();
-  const ventas = await ventasParaElLazo();
+  const [ventas, enviadas] = await Promise.all([ventasParaElLazo(), yaEnMeta()]);
+  let yaEstaban = 0;
 
   const descartes = Object.fromEntries(MOTIVOS.map((m) => [m, 0])) as Record<MotivoDescarte, number>;
   const aMandar: { evento: ReturnType<typeof construirCompra>; folio: string }[] = [];
   const filas: (typeof conversiones.$inferInsert)[] = [];
 
   for (const venta of ventas) {
+    // Lo que Meta ya sabe no se vuelve a contar. Va antes de `construirCompra` para no gastar
+    // ciclos, pero sobre todo para no meterla en `aMandar`.
+    if (enviadas.has(`venta:${venta.folio}`)) {
+      yaEstaban++;
+      continue;
+    }
+
     const r = construirCompra(venta, ahora);
 
     if (!r.ok) {
@@ -101,6 +159,7 @@ export async function correrLazo(opciones: { soloRegistrar?: boolean } = {}): Pr
 
   const resumen: ResumenLazo = {
     evaluadas: ventas.length,
+    yaEnviadas: yaEstaban,
     aEnviar: aMandar.length,
     enviadas: 0,
     descartes,
