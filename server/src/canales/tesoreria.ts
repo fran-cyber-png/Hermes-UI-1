@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db/client.js";
+import { VENTANA_CAPI_DIAS } from "../lazo/evento.js";
 
 /**
  * EL RELOJ DE TESORERÍA.
@@ -29,8 +30,15 @@ import { db } from "../db/client.js";
  * WhatsApp y sin esperar a nadie. Y no la hace un programador: la hace Tesorería, mirando esto.**
  */
 
-/** Los 7 días que Meta acepta como `event_time`. Pasado eso, rechaza el evento sin avisar. */
-export const VENTANA_CAPI_DIAS = 7;
+/**
+ * La ventana de Meta se importa de `lazo/evento.ts`, que es donde se decide qué se le manda.
+ *
+ * Antes este archivo declaraba su propio `VENTANA_CAPI_DIAS = 7` — y no lo usaba: el 7 que de
+ * verdad mandaba estaba hardcodeado como `interval '7 days'` dentro del SQL de abajo. O sea que
+ * había TRES representaciones del mismo número y la que gobernaba era un literal en una cadena.
+ * Cambiar la constante no hacía nada, que es la peor forma de duplicación: la que parece resuelta.
+ */
+export { VENTANA_CAPI_DIAS };
 
 /** Estados de `Pago` que están esperando a que alguien los mire. */
 const ESPERANDO = sql`(p.payload->>'estado')::int = 1`; // 1 = Procesando
@@ -71,7 +79,8 @@ export async function relojDeTesoreria(): Promise<RelojTesoreria> {
              (p.payload->>'fecha_pago')                                   AS subido_at,
              extract(day FROM now() - (p.payload->>'fecha_pago')::timestamptz)::int AS dias_esperando,
              round(extract(epoch FROM (
-               ((p.payload->>'fecha_pago')::timestamptz + interval '7 days') - now()
+               ((p.payload->>'fecha_pago')::timestamptz
+                 + make_interval(days => ${VENTANA_CAPI_DIAS})) - now()
              )) / 3600)::int                                              AS horas_hasta_perderla
       FROM fuentes.registro p
       JOIN fuentes.registro c  ON c.fuente='cerberus'  AND c.tabla='tb_cuotas'

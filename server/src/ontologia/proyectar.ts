@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { cliente, cuota, detalleVenta, pago, producto, venta } from "../db/canonico.js";
+import { esCobrada, semanticaDe } from "../dominio/estadosVenta.js";
 import { tasasDeCambio, type Tasas } from "../analisis/tasas.js";
 
 /**
@@ -8,7 +9,8 @@ import { tasasDeCambio, type Tasas } from "../analisis/tasas.js";
  *
  * Acá, y SOLO acá, se resuelve la semántica difícil que antes estaba repartida y divergía:
  *   · a USD: USD pasa derecho; el resto con la tasa congelada de la venta, o null si no hay tasa.
- *   · estado: qué cuenta como cobrado (1,9), en proceso (2), anulado (4,5), reembolsado (7,8).
+ *   · estado: delegado a `dominio/estadosVenta.ts`. Este archivo tenía su propia copia del mapa
+ *     —una de cuatro— hasta que se unificó. El mismo patrón que costó 2.306 ventas en silencio.
  *   · país: el del CLIENTE (vía cliente→país), no el de la sede que registró.
  *   · latencia de Tesorería: fecha_confirmacion − fecha_pago, en un pago válido.
  *
@@ -48,14 +50,6 @@ function aUsd(monto: number | null, iso: string | null, radio: number | null, ta
   const r = radio || (iso ? tasas.get(iso.toUpperCase()) : null);
   if (!r || r <= 0) return null;
   return Math.round((monto / r) * 100) / 100;
-}
-
-function semanticoVenta(estado: number | null): string {
-  if (estado === 1 || estado === 9) return "cobrada";
-  if (estado === 2) return "en_proceso";
-  if (estado === 4 || estado === 5) return "anulada";
-  if (estado === 7 || estado === 8) return "reembolsada";
-  return "otro";
 }
 
 /** Inserta en lotes, dentro de la transacción del rebuild. */
@@ -157,8 +151,8 @@ export async function proyectarCerberus(): Promise<ResumenProyeccion> {
         return u != null ? String(u) : null;
       })(),
       estado,
-      estadoSemantico: semanticoVenta(estado),
-      cobrada: estado === 1 || estado === 9,
+      estadoSemantico: semanticaDe(estado),
+      cobrada: esCobrada(estado),
       fechaVenta: fecha(v.fecha_venta),
       medioVenta: v.medio_venta != null ? String(v.medio_venta) : null,
       origenVenta: v.origen_venta != null ? String(v.origen_venta) : null,

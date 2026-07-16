@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { NUNCA_FUE_COMPRA, SE_ARREPINTIO } from "../dominio/estadosVenta.js";
 import { normalizarEmail, normalizarTelefono, type Pais } from "./normalizar.js";
 
 /**
@@ -48,18 +49,20 @@ export const HISTORICO_DIAS = 30;
  * estado financiero al REGISTRAR una intención de pago; solo al CONFIRMAR el hecho.)
  *
  * Lo único que descalifica a una venta es su estado terminal:
- *   4 = Anulado      · nunca se concretó
- *   5 = Cotización   · ni siquiera se intentó
- *   7 = Retirado     ┐ compró y se arrepintió: el 1,6% de las ventas. Meta no tiene forma limpia
+ *   4 = Anulado      · nunca se concretó          ┐ NUNCA_FUE_COMPRA
+ *   5 = Cotización   · ni siquiera se intentó     ┘
+ *   7 = Retirado     ┐ compró y se arrepintió: el 1,68% de las ventas. Meta no tiene forma limpia
  *   8 = Reembolsado  ┘ de retractar un `Purchase` ya enviado, así que la defensa es no mandarlo.
+ *
+ * Los dos conjuntos viven en `dominio/estadosVenta.ts` — la fuente única que este archivo pedía
+ * desde el `Ver ESTADOS_COMPRA` de más abajo, y que hasta hoy no existía. El mapa se verificó
+ * contra los datos: el 1,6% de este comentario es 1,68% medido sobre 6.727 ventas.
  */
-const NUNCA_FUE_COMPRA = new Set([4, 5]);
-const SE_ARREPINTIO = new Set([7, 8]);
 
 export type VentaConfirmada = {
   /** Folio de Cerberus (`GOB-11851`). Único, estable, y por eso sirve de clave de idempotencia. */
   folio: string;
-  /** 1..9. Ver `ESTADOS_COMPRA`. */
+  /** 1..8 en los datos reales. Ver `ESTADOS_COMPRA` en `dominio/estadosVenta.ts`. */
   estado: number;
   montoTotal: number;
   /** ISO-4217. Cerberus maneja 7: USD, MXN, PEN, BOB, DOP, COP, CLP. Meta las acepta todas. */
