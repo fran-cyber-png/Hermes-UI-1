@@ -1,10 +1,14 @@
 """Configuration for the Ivi analytical engine."""
 
-# Backend de meta-escuela (Mac, local or via Tailscale).
-BACKEND = "http://100.98.60.92:4100"
+import os
 
-# Ollama (geógrafo, local).
-OLLAMA_URL = "http://localhost:11434/api/generate"
+# Backend de meta-escuela (Mac, local or via Tailscale). Override por env para
+# dev local del engine fuera de geógrafo. systemd no setea env -> default intacto.
+BACKEND = os.environ.get("IVI_BACKEND", "http://100.98.60.92:4100")
+
+# Ollama (geógrafo, local). Override por env: dev local apunta a la A4000 por
+# Tailscale (IVI_OLLAMA_URL=http://100.117.204.80:11434/api/generate).
+OLLAMA_URL = os.environ.get("IVI_OLLAMA_URL", "http://localhost:11434/api/generate")
 MODEL = "ivi-ventas"
 
 PORT = 8080
@@ -34,6 +38,20 @@ PREGUNTAS_SUGERIDAS = [
     "ventas por sede", "comparación mensual", "qué se vende más",
     "riesgos comerciales", "embudo de estados", "cartera y mora",
     "lazo con Meta y pérdidas", "ticket promedio", "forecast de ventas",
+]
+
+# ── Ivi Studio (Fase B): set de exploración creativa ──
+# El warmer TAMBIÉN precalienta estas para que las chips del estudio den hit
+# (≤19ms). NO entran a PREGUNTAS_SUGERIDAS (esas son las 12 de la UI BI): son un
+# pool aparte que el drawer del estudio manda SIN `contexto` (hechos de negocio,
+# Brief-independientes) para que el prompt calce con el que calienta el warmer.
+PREGUNTAS_STUDIO = [
+    "ROAS por país",
+    "CAC por país",
+    "atribución por país y canal",
+    "Facebook vs Instagram",
+    "qué país conviene para escalar la pauta",
+    "ticket promedio por producto",
 ]
 
 # Persistencia del caché de respuestas. Ruta relativa al WorkingDirectory

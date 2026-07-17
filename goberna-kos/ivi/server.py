@@ -30,7 +30,7 @@ from .memory import get_session, remember, is_followup, apply_followup_filters, 
 from .prompt_builder import build, formato_de_respuesta
 from .response_formatter import format_response
 from .config import (OLLAMA_URL, MODEL, PORT, OLLAMA_CTX, OLLAMA_TEMP, OLLAMA_TIMEOUT,
-                     PREGUNTAS_SUGERIDAS, ANSWERS_CACHE, WARM_INTERVAL, WARM_PAUSA)
+                     PREGUNTAS_SUGERIDAS, PREGUNTAS_STUDIO, ANSWERS_CACHE, WARM_INTERVAL, WARM_PAUSA)
 from . import cache
 from . import answer_cache
 from .warmer import arrancar_warmer
@@ -241,23 +241,24 @@ def health() -> dict:
     }
 
 
-def handle_chat(message: str, sid: str = "default") -> dict:
+def handle_chat(message: str, sid: str = "default", contexto: str = "") -> dict:
     global _inflight
     with _inflight_lock:
         _inflight += 1
         queued = _inflight
     t0 = time.monotonic()
     try:
-        return _handle_chat(message, sid, t0, queued)
+        return _handle_chat(message, sid, t0, queued, contexto)
     finally:
         with _inflight_lock:
             _inflight -= 1
 
 
-def _investigar(message: str, scope_note: str = ""):
+def _investigar(message: str, scope_note: str = "", contexto: str = ""):
     """El camino puro: pregunta → investigación del motor → prompt. Sin sesión
-    y sin remember() — lo comparten el chat (que agrega su scope_note) y el
-    warmer (que no tiene sesión)."""
+    y sin remember() — lo comparten el chat (que agrega su scope_note y, en el
+    estudio, el `contexto` del creativo) y el warmer (que no manda ninguno de los
+    dos, así su prompt calienta el mismo que reciben las chips sin contexto)."""
     intent = analyze(message)
     endpoints = plan(intent)
     t_collect = time.monotonic()
@@ -269,11 +270,11 @@ def _investigar(message: str, scope_note: str = ""):
     actions = recommend(kpis, analysis, insights)
     impact = compute_impact(kpis)
     related = related_questions(intent.scores)
-    prompt = build(intent, kpis, analysis, insights, actions, related, impact, scope_note)
+    prompt = build(intent, kpis, analysis, insights, actions, related, impact, scope_note, contexto)
     return intent, raw, collect_s, insights, related, impact, prompt
 
 
-def _handle_chat(message: str, sid: str, t0: float, queued: int) -> dict:
+def _handle_chat(message: str, sid: str, t0: float, queued: int, contexto: str = "") -> dict:
     sess = get_session(sid)
     followup = is_followup(message, sid)
     scope_note = ""
@@ -285,7 +286,7 @@ def _handle_chat(message: str, sid: str, t0: float, queued: int) -> dict:
 
     # El scope_note entra al prompt → los follow-ups cachean por contexto
     # propio; una misma pregunta con y sin contexto son claves distintas.
-    intent, raw, collect_s, insights, related, impact, prompt = _investigar(message, scope_note)
+    intent, raw, collect_s, insights, related, impact, prompt = _investigar(message, scope_note, contexto)
 
     # remember this turn
     remember(sid, Turn(intent=intent, scope=intent.dominant(), question=message))
@@ -337,6 +338,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
         else:
             self._send(404, "not found")
 
+    def do_OPTIONS(self):
+        # Preflight CORS: el estudio (otro origen, p.ej. http://127.0.0.1:8123)
+        # manda POST con Content-Type application/json, que dispara un OPTIONS.
+        # Sin este handler, BaseHTTPRequestHandler responde 501 (sin ACAO) y el
+        # navegador bloquea el chat. Los GET/POST ya devuelven ACAO:*; acá va el
+        # preflight que los habilita.
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Max-Age", "86400")
+        self.end_headers()
+
     def do_POST(self):
         if self.path != "/api/chat":
             self._send(404, "not found")
@@ -345,8 +359,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         data = json.loads(self.rfile.read(length).decode())
         message = data.get("message", "")
         sid = data.get("session") or "default"
+        # Ivi Studio: contexto opcional del creativo en construcción. Se pliega al
+        # prompt (Ley I intacta). El estudio lo omite en las chips (para dar cache
+        # hit del warmer) y lo manda en el texto libre (respuesta Brief-aware).
+        contexto = data.get("contexto", "") or ""
         try:
-            out = handle_chat(message, sid)
+            out = handle_chat(message, sid, contexto)
         except OllamaError as e:
             # 503 so monitoring and the UI can both tell this apart from an
             # answer. `response` stays populated so the chat renders something
@@ -391,7 +409,7 @@ def main():
     # P2: el warmer re-piensa las frecuentes en background cuando cambian los
     # datos. Sin sesión: usa el camino puro.
     arrancar_warmer(
-        preguntas=PREGUNTAS_SUGERIDAS,
+        preguntas=PREGUNTAS_SUGERIDAS + PREGUNTAS_STUDIO,
         armar_prompt=lambda q: _investigar(q)[-1],
         generar=call_ollama,
         intervalo=WARM_INTERVAL,
@@ -401,7 +419,8 @@ def main():
     with socketserver.ThreadingTCPServer(("0.0.0.0", PORT), Handler) as httpd:
         log.info("Ivi Analytical Engine en http://0.0.0.0:%d — modelo=%s ctx=%d timeout=%ds "
                  "warmer=%ds preguntas=%d",
-                 PORT, MODEL, OLLAMA_CTX, OLLAMA_TIMEOUT, WARM_INTERVAL, len(PREGUNTAS_SUGERIDAS))
+                 PORT, MODEL, OLLAMA_CTX, OLLAMA_TIMEOUT, WARM_INTERVAL,
+                 len(PREGUNTAS_SUGERIDAS) + len(PREGUNTAS_STUDIO))
         httpd.serve_forever()
 
 

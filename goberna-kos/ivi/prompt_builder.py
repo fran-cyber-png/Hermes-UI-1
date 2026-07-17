@@ -280,7 +280,7 @@ def _fmt_actions(actions: List[Action]) -> str:
 
 def build(intent: IntentResult, k: KPIs, a: Analysis, insights: List[Insight],
           actions: List[Action], related: List[str], impact: List[ImpactItem],
-          scope_note: str = "") -> str:
+          scope_note: str = "", contexto: str = "") -> str:
     prompt = (
         "Eres Ivi, Director de BI de Goberna (Cerberus). Hablas español peruano neutro y "
         "escribes como un investigador de negocio: directo, con números, causal.\n\n"
@@ -306,6 +306,14 @@ def build(intent: IntentResult, k: KPIs, a: Analysis, insights: List[Insight],
     )
     if scope_note:
         prompt += f"CONTEXTO PREVIO (follow-up): {scope_note}\n"
+    if contexto:
+        # Ivi Studio: el creativo en construcción. Enmarca la respuesta sin tocar
+        # la Ley I — las cifras siguen saliendo SOLO de las secciones de abajo.
+        prompt += ("\n-- CONTEXTO DEL CREATIVO EN CONSTRUCCIÓN (Ivi Studio) --\n"
+                   "El usuario arma un anuncio; responde pensando en ese anuncio, "
+                   "pero las cifras salen SOLO de los datos de abajo (Ley I). "
+                   "No inventes números por el contexto.\n"
+                   f"{contexto}\n")
     target_week = _fmt_target_week(k, intent)
     prompt += (
         f"\n-- HECHOS (métricas medidas, no recalcular) --\n"

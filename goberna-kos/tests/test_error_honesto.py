@@ -59,7 +59,7 @@ def _post(port, msg="ventas"):
 
 
 def test_ollama_caido_devuelve_503_y_no_200():
-    def explota(message, sid="default"):
+    def explota(message, sid="default", contexto=""):
         raise srv.OllamaError("timed out")
 
     httpd, port, original = _servidor_con_chat(explota)
@@ -79,7 +79,7 @@ def test_ollama_caido_devuelve_503_y_no_200():
 
 
 def test_error_inesperado_devuelve_500_y_no_200():
-    def explota(message, sid="default"):
+    def explota(message, sid="default", contexto=""):
         raise ValueError("el motor se rompió")
 
     httpd, port, original = _servidor_con_chat(explota)
@@ -95,7 +95,7 @@ def test_error_inesperado_devuelve_500_y_no_200():
 
 
 def test_respuesta_buena_sigue_siendo_200():
-    def responde(message, sid="default"):
+    def responde(message, sid="default", contexto=""):
         return {"response": "## Resumen\nok", "live": True,
                 "insights": [], "related": [], "impact": []}
 
