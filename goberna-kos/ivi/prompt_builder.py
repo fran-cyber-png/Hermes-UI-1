@@ -25,6 +25,21 @@ from .recommendation_engine import Action
 from .impact_engine import ImpactItem, render_impact_lines
 from datetime import date
 
+# ── Formato de la respuesta ──
+# Lo decide el MOTOR según la pregunta, no el modelo. Default = corto
+# (conversacional): "hola cómo vamos" recibía 2.400 chars de informe con cada
+# cifra repetida hasta 5 veces (queja real, 2026-07-17). El informe de 9
+# secciones queda para cuando se pide explícitamente.
+_PIDE_INFORME = ("informe", "reporte completo", "resumen ejecutivo",
+                 "auditoria", "auditoría", "analisis completo",
+                 "análisis completo", "detallado", "detallada")
+
+
+def formato_de_respuesta(pregunta: str) -> str:
+    """"corto" (default conversacional) o "informe" (solo si se pide)."""
+    p = (pregunta or "").lower()
+    return "informe" if any(s in p for s in _PIDE_INFORME) else "corto"
+
 # crit first, good last — for ordering non-hypothesis findings by severity.
 _SEV_ORDER = {"crit": 0, "warn": 1, "info": 2, "good": 3}
 
@@ -309,25 +324,48 @@ def build(intent: IntentResult, k: KPIs, a: Analysis, insights: List[Insight],
         f"\n-- ACCIONES SUGERIDAS POR EL MOTOR (prioridad, acción, responsable) --\n"
         f"{_fmt_actions(actions)}\n"
     )
-    prompt += (
-        "\n=== FORMATO DE SALIDA ===\n"
-        "Responde usando EXACTAMENTE estas secciones, en este orden (omite una solo si de "
-        "verdad no aplica; nunca inventes contenido para llenarla):\n"
-        "## Resumen Ejecutivo\n(≤5 líneas; qué está pasando, lo más importante primero)\n"
-        "## Hallazgos Clave\n(ordenados por impacto, no por categoría; de -- HALLAZGOS --)\n"
-        "## Evidencia\n(las métricas medidas que sostienen los hallazgos; de -- HECHOS --)\n"
-        "## Causas Probables\n(las HIPÓTESIS, agrupadas por confianza; marca que son hipótesis)\n"
-        "## Impacto Económico\n(copia el bloque -- IMPACTO ECONÓMICO -- respetando HECHO/ESTIMACIÓN; "
-        "no agregues cifras que no estén ahí)\n"
-        "## Riesgos\n(con prioridad)\n"
-        "## Oportunidades\n(con impacto esperado, cualitativo)\n"
-        "## Acciones Priorizadas\n"
-        "(tabla markdown con columnas: Prioridad | Acción | Responsable | Impacto esperado | Tiempo. "
-        "Prioridad/Acción/Responsable salen de -- ACCIONES --; 'Impacto esperado' y 'Tiempo' los "
-        "redactas TÚ, cualitativos, desde el rationale — nunca cifras inventadas)\n"
-        "## Próximas Investigaciones\n"
-        "(las preguntas que más reducen incertidumbre)\n"
-        + "\n".join(f"- {q}" for q in related) + "\n\n"
-        f"PREGUNTA DEL USUARIO: {intent.raw}\n"
-    )
+    if formato_de_respuesta(intent.raw) == "informe":
+        prompt += (
+            "\n=== FORMATO DE SALIDA: INFORME ===\n"
+            "Responde usando EXACTAMENTE estas secciones, en este orden (omite una solo si de "
+            "verdad no aplica; nunca inventes contenido para llenarla):\n"
+            "## Resumen Ejecutivo\n(≤5 líneas; qué está pasando, lo más importante primero)\n"
+            "## Hallazgos Clave\n(ordenados por impacto, no por categoría; de -- HALLAZGOS --)\n"
+            "## Evidencia\n(las métricas medidas que sostienen los hallazgos; de -- HECHOS --)\n"
+            "## Causas Probables\n(las HIPÓTESIS, agrupadas por confianza; marca que son hipótesis)\n"
+            "## Impacto Económico\n(copia el bloque -- IMPACTO ECONÓMICO -- respetando HECHO/ESTIMACIÓN; "
+            "no agregues cifras que no estén ahí)\n"
+            "## Riesgos\n(con prioridad)\n"
+            "## Oportunidades\n(con impacto esperado, cualitativo)\n"
+            "## Acciones Priorizadas\n"
+            "(tabla markdown con columnas: Prioridad | Acción | Responsable | Impacto esperado | Tiempo. "
+            "Prioridad/Acción/Responsable salen de -- ACCIONES --; 'Impacto esperado' y 'Tiempo' los "
+            "redactas TÚ, cualitativos, desde el rationale — nunca cifras inventadas)\n"
+            "## Próximas Investigaciones\n"
+            "(las preguntas que más reducen incertidumbre)\n"
+            + "\n".join(f"- {q}" for q in related) + "\n\n"
+            f"PREGUNTA DEL USUARIO: {intent.raw}\n"
+        )
+    else:
+        ofertas = ", ".join(f"\"{q}\"" for q in related[:3]) if related else "\"informe completo\""
+        prompt += (
+            "\n=== FORMATO DE SALIDA: CORTO (conversacional) ===\n"
+            "Reglas duras:\n"
+            "- Máximo ~15 líneas en total. Cada cifra aparece UNA sola vez en toda la respuesta.\n"
+            "- NO uses las secciones del informe (nada de ## Resumen Ejecutivo / ## Evidencia / etc.).\n"
+            "Estructura exacta:\n"
+            "1) Lead (2-4 líneas, sin título): responde LA pregunta directo, abriendo con la fecha "
+            "de corte (-- FRESCURA --) y el hallazgo más importante en negrita.\n"
+            "2) 'Los números:' 3 a 5 bullets con los hechos que sostienen el lead, con sus etiquetas "
+            "[HECHO]/[ESTIMACIÓN] tal como vienen en -- IMPACTO ECONÓMICO --. Elegí SOLO los que "
+            "responden la pregunta; NO copies el bloque entero.\n"
+            "3) '**Ojo con:**' 1-2 riesgos, SOLO si -- HALLAZGOS -- o -- IMPACTO -- traen uno real "
+            "con plata o volumen detrás. Si no hay, omití la línea entera.\n"
+            "4) '**Siguiente jugada:**' UNA acción de -- ACCIONES -- con su responsable. "
+            "Si no hay acciones del motor, omití la línea entera.\n"
+            f"5) Cierre de UNA línea ofreciendo profundizar, por ejemplo: ¿Querés {ofertas} "
+            "o el informe completo?\n"
+            "- Si -- HIPÓTESIS -- está vacía, NO lo menciones (nada de 'no se generaron hipótesis').\n\n"
+            f"PREGUNTA DEL USUARIO: {intent.raw}\n"
+        )
     return prompt

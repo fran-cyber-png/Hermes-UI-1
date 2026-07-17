@@ -30,17 +30,23 @@ def _proximas_block(related: List[str]) -> str:
 
 
 def format_response(llm_text: str, insights: List[Insight], related: List[str],
-                    impact: List[ImpactItem], live: bool) -> dict:
+                    impact: List[ImpactItem], live: bool,
+                    formato: str = "informe") -> dict:
     text = (llm_text or "").strip()
 
-    # Guarantee the engine's Impacto Económico section (only if there is a chain
-    # and the model omitted it — never duplicate an existing heading).
-    if impact and "Impacto Económico" not in text:
-        text = text + "\n\n" + _impacto_block(impact)
+    # Las garantías de sección aplican SOLO al formato informe: en el corto el
+    # modelo cita selectivamente el impacto (esa es la gracia) y re-inyectar el
+    # bloque entero desharía el formato por la puerta de atrás. La verdad del
+    # motor no se pierde: viaja completa en los campos JSON `impact` y `related`.
+    if formato == "informe":
+        # Guarantee the engine's Impacto Económico section (only if there is a
+        # chain and the model omitted it — never duplicate an existing heading).
+        if impact and "Impacto Económico" not in text:
+            text = text + "\n\n" + _impacto_block(impact)
 
-    # Guarantee the Próximas Investigaciones section.
-    if related and "Próximas Investigaciones" not in text:
-        text = text + "\n\n" + _proximas_block(related)
+        # Guarantee the Próximas Investigaciones section.
+        if related and "Próximas Investigaciones" not in text:
+            text = text + "\n\n" + _proximas_block(related)
 
     return {
         "response": text,

@@ -27,7 +27,7 @@ from .insight_engine import detect
 from .recommendation_engine import recommend
 from .impact_engine import compute_impact
 from .memory import get_session, remember, is_followup, apply_followup_filters, Turn
-from .prompt_builder import build
+from .prompt_builder import build, formato_de_respuesta
 from .response_formatter import format_response
 from .config import OLLAMA_URL, MODEL, PORT, OLLAMA_CTX, OLLAMA_TEMP, OLLAMA_TIMEOUT
 from . import cache
@@ -288,13 +288,14 @@ def _handle_chat(message: str, sid: str, t0: float, queued: int) -> dict:
         raise
     llm_s = time.monotonic() - t_llm
 
-    log.info("chat sid=%s ok intents=%s endpoints=%s prompt=%dch inflight=%d "
+    formato = formato_de_respuesta(message)
+    log.info("chat sid=%s ok intents=%s endpoints=%s formato=%s prompt=%dch inflight=%d "
              "collect=%.1fs ollama=%.1fs total=%.1fs — %r",
-             sid, intent.intents, raw.endpoints_hit, len(prompt), queued,
+             sid, intent.intents, raw.endpoints_hit, formato, len(prompt), queued,
              collect_s, llm_s, time.monotonic() - t0, message[:80])
     if raw.errors:
         log.warning("chat sid=%s endpoints con error: %s", sid, raw.errors)
-    return format_response(llm, insights, related, impact, live)
+    return format_response(llm, insights, related, impact, live, formato=formato)
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
