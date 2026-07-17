@@ -12,13 +12,15 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from .intent_analyzer import IntentResult
-from .config import PREGUNTAS_SUGERIDAS
+from .config import PREGUNTAS_SUGERIDAS, PREGUNTAS_STUDIO
 
-# Los botones de la UI mandan estas preguntas VERBATIM. Son temas nuevos
-# completos, jamás un acotamiento del turno anterior — sin esta lista, el
-# segundo botón de una sesión se marcaba follow-up (≤4 palabras), ganaba
-# scope_note, cambiaba el prompt y el caché del warmer no servía de nada.
-_CANONICAS = {q.lower().strip() for q in PREGUNTAS_SUGERIDAS}
+# Los botones de la UI y las chips del estudio mandan estas preguntas VERBATIM.
+# Son temas nuevos completos, jamás un acotamiento del turno anterior — sin esta
+# lista, el segundo botón de una sesión se marcaba follow-up (≤4 palabras), ganaba
+# scope_note, cambiaba el prompt y el caché del warmer no servía de nada. El pool
+# del estudio (Fase B) TIENE que estar acá por el mismo motivo: sin él, la segunda
+# chip de datos de una sesión hace cache miss y encima se enmarca como follow-up.
+_CANONICAS = {q.lower().strip() for q in PREGUNTAS_SUGERIDAS + PREGUNTAS_STUDIO}
 
 
 @dataclass

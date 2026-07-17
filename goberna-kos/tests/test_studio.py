@@ -57,6 +57,21 @@ def test_pool_del_estudio_es_aparte_de_las_12_de_la_ui():
         "el pool del estudio no debe duplicar las 12 canónicas"
 
 
+def test_las_chips_del_estudio_no_son_followup():
+    # Regresión Fase B: si PREGUNTAS_STUDIO no está en _CANONICAS, la 2a chip de
+    # datos de una sesión se marca follow-up (≤4 palabras) -> scope_note -> prompt
+    # distinto -> cache miss (rompe el ≤19ms) y respuesta mal enmarcada.
+    from ivi.memory import _SESSIONS, Turn, remember, is_followup
+    from ivi.intent_analyzer import analyze
+    _SESSIONS.clear()
+    remember("s", Turn(intent=analyze("ROAS por país"), scope="atribucion",
+                       question="ROAS por país"))
+    for q in PREGUNTAS_STUDIO:
+        assert is_followup(q, "s") is False, f"{q!r} (chip del estudio) no puede ser follow-up"
+    # un acotamiento de verdad sí sigue siendo follow-up
+    assert is_followup("¿y solo México?", "s") is True
+
+
 if __name__ == "__main__":
     tests = [v for name, v in sorted(globals().items())
              if name.startswith("test_") and callable(v)]

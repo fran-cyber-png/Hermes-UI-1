@@ -362,7 +362,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # Ivi Studio: contexto opcional del creativo en construcción. Se pliega al
         # prompt (Ley I intacta). El estudio lo omite en las chips (para dar cache
         # hit del warmer) y lo manda en el texto libre (respuesta Brief-aware).
-        contexto = data.get("contexto", "") or ""
+        # Cap defensivo: un caller directo (sin auth) no debe poder inundar la
+        # ventana de contexto y ahogar la sección HECHOS. El estudio manda poco.
+        contexto = str(data.get("contexto", "") or "")[:800]
         try:
             out = handle_chat(message, sid, contexto)
         except OllamaError as e:

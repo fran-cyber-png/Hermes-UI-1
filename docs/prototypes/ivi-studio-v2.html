@@ -592,7 +592,11 @@ const CLAIM=/(\bn[º°o]?\s?1\b|#\s?1|el mejor|la mejor|los mejores|l[íi]der(es
    la PREGUNTA DE DATOS va al motor Ivi real y anclado; lo demás es un nudge local
    (Fase C lo interpretará con modelo). La honestidad (CLAIM) corre siempre primero. */
 const DIRECTIVE=/(m[aá]s corto|acort|resum|breve|m[aá]s urgente|urgencia|cupos?|se llena|\bya\b|apur|m[aá]s formal|serio|institucional|menos formal|m[aá]s cercano|informal|c[aá]lido|humano|comunidad|pertenen|\bred\b|los tuyos|juntos|autoridad|prueba social|referencia|prestigio|carrera|crecer|profesional|futuro|ascen)/i;
-const DATA_Q=/\?|por qu[eé]|porque|cu[aá]l|cu[aá]nt|c[oó]mo|y si|conviene|roas|cac|ticket|pa[ií]s|per[uú]|m[eé]xico|eeuu|estados unidos|chile|colombia|bolivia|ecuador|honduras|facebook|instagram|\big\b|canal|pauta|ventas|atribuc|embudo|cartera|mora|forecast|tendencia|gasto|presupuesto/i;
+// Sustantivo de negocio = señal FUERTE de pregunta de datos. Corre ANTES que
+// DIRECTIVE para que "¿la urgencia sube el ROAS?" no se secuestre como mutación.
+const DATA_NOUN=/roas|cac|ticket|pa[ií]s|per[uú]|m[eé]xico|eeuu|estados unidos|chile|colombia|bolivia|ecuador|honduras|facebook|instagram|\big\b|canal|pauta|ventas|atribuc|embudo|cartera|mora|forecast|tendencia|gasto|presupuesto|conviene|convier|conversi[oó]n|rinde/i;
+// Interrogativo sin sustantivo fuerte: pregunta genérica -> también al motor.
+const DATA_Q=/\?|por qu[eé]|porque|cu[aá]l|cu[aá]nt|c[oó]mo|y si/i;
 
 function interpret(text, fromChat){
   const t=text.toLowerCase().trim();
@@ -756,23 +760,27 @@ async function askEngine(txt, useContexto){
     const data=await r.json(); t.remove();
     ivimsg(mdToHtml(data.response||"Sin respuesta del motor."), null, r.ok&&!!data.live);
   }catch(e){ t.remove();
-    ivimsg("No pude hablar con el motor de Ivi. ¿Está corriendo el engine? Detalle: "+String(e)); }
+    ivimsg(mdToHtml("No pude hablar con el motor de Ivi. ¿Está corriendo el engine? Detalle: "+String(e))); }
   paintSuggest();
 }
 
-/* ── El router del chat: 4 carriles (Fase B) ── */
+/* ── El router del chat: 5 carriles (Fase B) ── */
 function sendChat(txt, fromChip){ if(!txt)return; memsg(txt); B.notas.push({paso:B.step,texto:txt,via:"chat"});
   // Carril 1 — barrera de honestidad (Ley I): local, determinista, primero.
   if(CLAIM.test(txt)){ const res=interpret(txt,true);
     setTimeout(()=>{ivimsg(res.reply,res.applied);paintSuggest();},200); return; }
-  // Carril 2 — directiva de canvas: local, muta el Brief y hace flash (Fase A).
+  // Carril 2 — pregunta con sustantivo de negocio: al motor. Va ANTES que la
+  // directiva para que "¿la urgencia sube el ROAS?" no mute el canvas por error.
+  // Las chips (fromChip) van sin contexto (cache hit del warmer); el texto libre
+  // va con el contexto del Brief.
+  if(DATA_NOUN.test(txt)){ askEngine(txt, !fromChip); return; }
+  // Carril 3 — directiva de canvas: local, muta el Brief y hace flash (Fase A).
   if(DIRECTIVE.test(txt)){ const res=interpret(txt,true);
     if(res.changes)res.changes();
     setTimeout(()=>{ivimsg(res.reply,res.applied);paintSuggest();},220); return; }
-  // Carril 3 — pregunta de datos: al motor Ivi real. Las chips (fromChip) van sin
-  // contexto (cache hit del warmer); el texto libre va con el contexto del Brief.
+  // Carril 4 — pregunta genérica (interrogativo sin sustantivo fuerte): al motor.
   if(DATA_Q.test(txt)){ askEngine(txt, !fromChip); return; }
-  // Carril 4 — texto suelto: nudge local (Fase C lo interpretará con modelo).
+  // Carril 5 — texto suelto: nudge local (Fase C lo interpretará con modelo).
   const res=interpret(txt,true);
   setTimeout(()=>{ivimsg(res.reply,res.applied);paintSuggest();},200);
 }
