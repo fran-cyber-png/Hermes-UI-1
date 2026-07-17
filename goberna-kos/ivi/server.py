@@ -29,8 +29,11 @@ from .impact_engine import compute_impact
 from .memory import get_session, remember, is_followup, apply_followup_filters, Turn
 from .prompt_builder import build, formato_de_respuesta
 from .response_formatter import format_response
-from .config import OLLAMA_URL, MODEL, PORT, OLLAMA_CTX, OLLAMA_TEMP, OLLAMA_TIMEOUT
+from .config import (OLLAMA_URL, MODEL, PORT, OLLAMA_CTX, OLLAMA_TEMP, OLLAMA_TIMEOUT,
+                     PREGUNTAS_SUGERIDAS, ANSWERS_CACHE, WARM_INTERVAL, WARM_PAUSA)
 from . import cache
+from . import answer_cache
+from .warmer import arrancar_warmer
 
 log = logging.getLogger("ivi")
 
@@ -106,9 +109,7 @@ const SID = localStorage.sid || (localStorage.sid =
   (crypto.randomUUID ? crypto.randomUUID()
    : 'sid-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2)));
 
-const SUG = ["ventas por semana","tendencia de ventas","ventas por producto","ventas por sede",
-  "comparación mensual","qué se vende más","riesgos comerciales","embudo de estados",
-  "cartera y mora","lazo con Meta y pérdidas","ticket promedio","forecast de ventas"];
+const SUG = __SUG__;
 
 // Mini-markdown honesto: escapa TODO primero (el texto viene del modelo) y
 // después arma h2 CERRADOS, negritas, itálicas y tablas. El renderer anterior
@@ -174,6 +175,10 @@ renderSugs();
 </body>
 </html>"""
 
+# Las sugerencias viven en config (fuente única con el warmer); la UI las
+# recibe por inyección.
+HTML = HTML.replace("__SUG__", json.dumps(PREGUNTAS_SUGERIDAS, ensure_ascii=False))
+
 
 def call_ollama(prompt: str) -> str:
     payload = json.dumps({
@@ -230,7 +235,8 @@ def health() -> dict:
         "model": MODEL,
         "inflight": inflight,
         "frescura": last_frescura(),
-        "cache": cache.stats(),
+        "cache": cache.stats(),            # endpoints del backend (TTL 60s)
+        "respuestas": answer_cache.stats(),  # respuestas por huella (P1, sin TTL)
         "uptime_s": round(time.monotonic() - _START, 1),
     }
 
@@ -248,17 +254,11 @@ def handle_chat(message: str, sid: str = "default") -> dict:
             _inflight -= 1
 
 
-def _handle_chat(message: str, sid: str, t0: float, queued: int) -> dict:
-    sess = get_session(sid)
-    followup = is_followup(message, sid)
+def _investigar(message: str, scope_note: str = ""):
+    """El camino puro: pregunta → investigación del motor → prompt. Sin sesión
+    y sin remember() — lo comparten el chat (que agrega su scope_note) y el
+    warmer (que no tiene sesión)."""
     intent = analyze(message)
-    scope_note = ""
-    if followup and sess.last:
-        filters = apply_followup_filters(message, sid)
-        scope_note = f"reutilizar análisis previo ({sess.last.scope or intent.dominant()}) " \
-                     f"acotado por {filters}" if filters else \
-                     f"continuación del análisis previo sobre {sess.last.scope or intent.dominant()}"
-
     endpoints = plan(intent)
     t_collect = time.monotonic()
     raw = collect(endpoints)
@@ -269,16 +269,36 @@ def _handle_chat(message: str, sid: str, t0: float, queued: int) -> dict:
     actions = recommend(kpis, analysis, insights)
     impact = compute_impact(kpis)
     related = related_questions(intent.scores)
+    prompt = build(intent, kpis, analysis, insights, actions, related, impact, scope_note)
+    return intent, raw, collect_s, insights, related, impact, prompt
+
+
+def _handle_chat(message: str, sid: str, t0: float, queued: int) -> dict:
+    sess = get_session(sid)
+    followup = is_followup(message, sid)
+    scope_note = ""
+    if followup and sess.last:
+        filters = apply_followup_filters(message, sid)
+        previo = sess.last.scope or analyze(message).dominant()
+        scope_note = f"reutilizar análisis previo ({previo}) acotado por {filters}" \
+            if filters else f"continuación del análisis previo sobre {previo}"
+
+    # El scope_note entra al prompt → los follow-ups cachean por contexto
+    # propio; una misma pregunta con y sin contexto son claves distintas.
+    intent, raw, collect_s, insights, related, impact, prompt = _investigar(message, scope_note)
 
     # remember this turn
     remember(sid, Turn(intent=intent, scope=intent.dominant(), question=message))
 
     live = bool(raw.endpoints_hit)
-    prompt = build(intent, kpis, analysis, insights, actions, related, impact, scope_note)
 
     t_llm = time.monotonic()
     try:
-        llm = call_ollama(prompt)
+        llm, cache_meta = answer_cache.obtener_o_generar(
+            prompt, lambda: call_ollama(prompt), timeout=OLLAMA_TIMEOUT + 30)
+    except TimeoutError as e:
+        # el single-flight esperó a otra generación que nunca terminó
+        raise OllamaError(str(e)) from e
     except OllamaError as e:
         # Never dress a failure as an answer: the caller turns this into a 5xx.
         # Returning 200 with the error text inside `response` (as this did
@@ -289,13 +309,16 @@ def _handle_chat(message: str, sid: str, t0: float, queued: int) -> dict:
     llm_s = time.monotonic() - t_llm
 
     formato = formato_de_respuesta(message)
-    log.info("chat sid=%s ok intents=%s endpoints=%s formato=%s prompt=%dch inflight=%d "
+    cache_flag = "hit" if cache_meta["hit"] else "miss"
+    log.info("chat sid=%s ok intents=%s endpoints=%s formato=%s cache=%s prompt=%dch inflight=%d "
              "collect=%.1fs ollama=%.1fs total=%.1fs — %r",
-             sid, intent.intents, raw.endpoints_hit, formato, len(prompt), queued,
+             sid, intent.intents, raw.endpoints_hit, formato, cache_flag, len(prompt), queued,
              collect_s, llm_s, time.monotonic() - t0, message[:80])
     if raw.errors:
         log.warning("chat sid=%s endpoints con error: %s", sid, raw.errors)
-    return format_response(llm, insights, related, impact, live, formato=formato)
+    out = format_response(llm, insights, related, impact, live, formato=formato)
+    out["cache"] = cache_meta
+    return out
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -362,9 +385,23 @@ def main():
         format="%(asctime)s %(levelname)s %(message)s",
         datefmt="%Y-%m-%dT%H:%M:%S",
     )
+    # P1: la calidez sobrevive reinicios (systemd revive el proceso; el caché
+    # se recarga del disco).
+    answer_cache.cargar(ANSWERS_CACHE)
+    # P2: el warmer re-piensa las frecuentes en background cuando cambian los
+    # datos. Sin sesión: usa el camino puro.
+    arrancar_warmer(
+        preguntas=PREGUNTAS_SUGERIDAS,
+        armar_prompt=lambda q: _investigar(q)[-1],
+        generar=call_ollama,
+        intervalo=WARM_INTERVAL,
+        pausa=WARM_PAUSA,
+        timeout=OLLAMA_TIMEOUT + 30,
+    )
     with socketserver.ThreadingTCPServer(("0.0.0.0", PORT), Handler) as httpd:
-        log.info("Ivi Analytical Engine en http://0.0.0.0:%d — modelo=%s ctx=%d timeout=%ds",
-                 PORT, MODEL, OLLAMA_CTX, OLLAMA_TIMEOUT)
+        log.info("Ivi Analytical Engine en http://0.0.0.0:%d — modelo=%s ctx=%d timeout=%ds "
+                 "warmer=%ds preguntas=%d",
+                 PORT, MODEL, OLLAMA_CTX, OLLAMA_TIMEOUT, WARM_INTERVAL, len(PREGUNTAS_SUGERIDAS))
         httpd.serve_forever()
 
 

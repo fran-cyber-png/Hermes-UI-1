@@ -12,6 +12,13 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from .intent_analyzer import IntentResult
+from .config import PREGUNTAS_SUGERIDAS
+
+# Los botones de la UI mandan estas preguntas VERBATIM. Son temas nuevos
+# completos, jamás un acotamiento del turno anterior — sin esta lista, el
+# segundo botón de una sesión se marcaba follow-up (≤4 palabras), ganaba
+# scope_note, cambiaba el prompt y el caché del warmer no servía de nada.
+_CANONICAS = {q.lower().strip() for q in PREGUNTAS_SUGERIDAS}
 
 
 @dataclass
@@ -68,6 +75,8 @@ def is_followup(message: str, sid: str = "default") -> bool:
         if not s.last:
             return False
     m = message.lower().strip()
+    if m in _CANONICAS:
+        return False
     # short messages that are not a fresh full question
     if len(m.split()) <= 4 and not any(
         w in m for w in ["cuanto", "cuánto", "ventas totales", "resumen", "hola", "gracias"]

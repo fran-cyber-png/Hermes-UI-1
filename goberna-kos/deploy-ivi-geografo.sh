@@ -150,6 +150,20 @@ if not ok:
     sys.exit(1)
 print("  ✓ el impacto compara mismos días (fix desplegado)")
 EOF
+# P1: el mismo POST otra vez tiene que salir del caché de respuestas, no de la GPU.
+ssh ia bash -s <<'EOF'
+set -e
+curl -s -m 15 -X POST http://localhost:8080/api/chat -H "Content-Type: application/json" \
+  -d '{"message":"ventas de este mes"}' -o /tmp/ivi-smoke2.json -w "  re-POST idéntico: HTTP=%{http_code} en %{time_total}s\n"
+python3 - <<'PY'
+import json, sys
+d = json.load(open("/tmp/ivi-smoke2.json"))
+c = d.get("cache") or {}
+if not c.get("hit"):
+    print("  ✗ FALLO: el POST idéntico no salió del caché (P1)"); sys.exit(1)
+print(f"  ✓ P1 vivo: cache.hit=true (creado {c.get('creado')})")
+PY
+EOF
 
 echo "== 9/$TOTAL Verificando que la concurrencia dejó de serializarse =="
 # Antes: 4 requests concurrentes tardaban 25/50/75/100s (escalón de ~25s).
@@ -171,3 +185,5 @@ echo "Listo. UI: http://100.117.204.80:8080"
 echo "Health:   curl http://100.117.204.80:8080/api/health"
 echo "Logs (ahora sí escriben): ssh ia tail -f ia-local/ivi-server.log"
 echo "Servicio: ssh ia systemctl status ivi   (sobrevive reboots y kill -9)"
+echo "Warmer:   arranca solo; en ~4-6 min los 12 botones responden <1s"
+echo "          (verificar: health → respuestas.entries >= 12, y 'warm ok' en el log)"

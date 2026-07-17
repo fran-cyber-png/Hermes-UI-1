@@ -22,6 +22,7 @@ def test_health_cumple_el_contrato():
     assert h["model"], "el health debe decir qué modelo sirve"
     assert isinstance(h["inflight"], int) and h["inflight"] >= 0
     assert set(h["cache"]) == {"entries", "hits", "misses"}
+    assert set(h["respuestas"]) == {"entries", "hits", "misses"}  # P1
     assert isinstance(h["uptime_s"], float) and h["uptime_s"] >= 0
     assert set(h["frescura"]) == {"datos", "calculada"}
 
