@@ -16,6 +16,21 @@ from datetime import date
 
 from .data_collector import RawData
 
+# ── Materialidad de una fila de ROAS por país ──
+# El backend YA clasifica la señal por país (confianza alta/media/baja según
+# gasto y ventas); si un payload no la trae, umbral de gasto. Sin este filtro,
+# un país con USD 33 de gasto y ROAS 65 se volvía EL titular de la respuesta
+# (el caso Honduras, 2026-07-16) mientras Perú/México con miles de USD y
+# confianza alta no se contaban.
+GASTO_MATERIAL_USD = 150
+
+
+def roas_material(r: Dict) -> bool:
+    conf = r.get("confianza")
+    if conf is not None:
+        return conf in ("alta", "media")
+    return (r.get("gastoUsd") or 0) >= GASTO_MATERIAL_USD
+
 
 @dataclass
 class SeriePoint:

@@ -17,7 +17,7 @@ Every number is rounded (never a raw float).
 from dataclasses import dataclass
 from typing import List, Optional
 
-from .kpi_engine import KPIs
+from .kpi_engine import KPIs, roas_material
 
 # kinds
 HECHO = "HECHO"
@@ -87,17 +87,22 @@ def compute_impact(k: KPIs) -> List[ImpactItem]:
         ))
 
     # ── ROAS / CAC snapshot por país (HECHO) ──
+    # Solo países con señal (roas_material): sin el filtro, USD 33 en Honduras
+    # (ROAS 65) y USD 18 en PT (ROAS 0) eran el titular mientras Perú/México
+    # (miles de USD, confianza alta del backend) no se contaban.
     con_gasto = [r for r in (k.roas_por_pais or [])
                  if (r.get("gastoUsd") or 0) > 0 and r.get("roas") is not None]
-    if con_gasto:
-        best = max(con_gasto, key=lambda r: r.get("roas") or 0)
+    material = [r for r in con_gasto if roas_material(r)]
+    colas = [r for r in con_gasto if not roas_material(r)]
+    if material:
+        best = max(material, key=lambda r: r.get("roas") or 0)
         items.append(ImpactItem(
             label=f"ROAS mejor país ({best.get('pais', '?')})",
             kind=HECHO, value=round(best.get("roas"), 2), unit="ROAS",
             nota=f"gasto USD {_r(best.get('gastoUsd'))}",
         ))
-        if len(con_gasto) >= 2:
-            worst = min(con_gasto, key=lambda r: r.get("roas") or 0)
+        if len(material) >= 2:
+            worst = min(material, key=lambda r: r.get("roas") or 0)
             cac = worst.get("cacVenta")
             items.append(ImpactItem(
                 label=f"ROAS peor país ({worst.get('pais', '?')})",
@@ -110,6 +115,18 @@ def compute_impact(k: KPIs) -> List[ImpactItem]:
             label="Tendencia temporal de ROAS/CAC",
             kind=SIN_EVIDENCIA, confianza="alta",
             nota="no hay serie histórica de gasto por período para derivar tendencia",
+        ))
+    if colas:
+        # Los ratios de gasto chico se agregan en UNA línea desestimada, para
+        # que el modelo pueda contestar "¿y Honduras?" sin volverlo titular.
+        top = sorted(colas, key=lambda r: r.get("roas") or 0, reverse=True)[:2]
+        detalle = "; ".join(
+            f"{r.get('pais', '?')} {round(r.get('roas') or 0, 2)}× con USD {_r(r.get('gastoUsd'))}"
+            for r in top)
+        items.append(ImpactItem(
+            label=f"ROAS de {len(colas)} países con gasto de prueba",
+            kind=SIN_EVIDENCIA, confianza="alta",
+            nota=f"gasto sin materialidad, ratios no accionables — p.ej. {detalle}",
         ))
 
     # ── Impacto forecast próximos días (HECHO honesto) ──

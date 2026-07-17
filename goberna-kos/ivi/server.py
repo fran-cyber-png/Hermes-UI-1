@@ -74,6 +74,10 @@ HTML = r"""<!DOCTYPE html>
   .sug { display:flex; flex-wrap:wrap; gap:8px; padding:0 20px 14px; background:var(--panel); }
   .sug button { background:#222633; color:var(--txt); border:1px solid #2a2e3a; border-radius:999px; padding:6px 12px; font-size:12px; cursor:pointer; }
   h2 { font-size:14px; margin:.6em 0 .2em; color:#9db4ff; }
+  .msg table { border-collapse:collapse; margin:6px 0; font-size:12.5px; }
+  .msg th, .msg td { border:1px solid #3a4050; padding:4px 9px; text-align:left; }
+  .msg th { color:#9db4ff; background:#222633; font-weight:600; }
+  .msg b { color:#fff; }
 </style>
 </head>
 <body>
@@ -106,13 +110,39 @@ const SUG = ["ventas por semana","tendencia de ventas","ventas por producto","ve
   "comparación mensual","qué se vende más","riesgos comerciales","embudo de estados",
   "cartera y mora","lazo con Meta y pérdidas","ticket promedio","forecast de ventas"];
 
+// Mini-markdown honesto: escapa TODO primero (el texto viene del modelo) y
+// después arma h2 CERRADOS, negritas, itálicas y tablas. El renderer anterior
+// abría <h2> y nunca lo cerraba: cada sección entera quedaba dentro del título.
+function md(src){
+  const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const inline=s=>esc(s)
+    .replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>')
+    .replace(/\*([^*\s][^*]*)\*/g,'<i>$1</i>');
+  const lines=src.split('\n'); const out=[];
+  for(let i=0;i<lines.length;i++){
+    const l=lines[i];
+    if(/^## /.test(l)){ out.push('<h2>'+inline(l.slice(3))+'</h2>'); continue; }
+    if(/^\s*\|.*\|\s*$/.test(l)){
+      const rows=[];
+      while(i<lines.length && /^\s*\|.*\|\s*$/.test(lines[i])){ rows.push(lines[i]); i++; }
+      i--;
+      const cells=r=>r.trim().replace(/^\||\|$/g,'').split('|').map(c=>inline(c.trim()));
+      const body=rows.filter(r=>!/^\s*\|[\s\-:|]+\|\s*$/.test(r));
+      let t='<table>';
+      body.forEach((r,j)=>{ const tag=j===0?'th':'td';
+        t+='<tr>'+cells(r).map(c=>'<'+tag+'>'+c+'</'+tag+'>').join('')+'</tr>'; });
+      out.push(t+'</table>'); continue;
+    }
+    out.push(inline(l));
+  }
+  return out.join('\n');
+}
 function addMsg(role, content, live){
   const d=document.createElement('div'); d.className='msg '+role;
   const m=document.createElement('div'); m.className='meta';
   m.textContent= role==='me'?'Tú':'Ivi';
   const c=document.createElement('div');
-  // render markdown-ish: ## headers
-  c.innerHTML = content.replace(/^## /gm,'\n\n<h2>').replace(/<\/h2>/g,'</h2>');
+  c.innerHTML = md(content);
   d.appendChild(m); d.appendChild(c);
   if(live){ const l=document.createElement('div'); l.className='live';
     l.textContent='⦿ datos en vivo de Cerberus'; d.appendChild(l); }
@@ -131,7 +161,7 @@ async function send(){
     t.classList.remove('typing');
     // El server manda 503 cuando el modelo no contesta; el payload igual trae
     // `response` legible, pero no es un análisis: no se marca como dato en vivo.
-    t.innerHTML=(data.response||'Sin respuesta del servidor.').replace(/^## /gm,'\n\n<h2>').replace(/<\/h2>/g,'</h2>');
+    t.innerHTML=md(data.response||'Sin respuesta del servidor.');
     if(!r.ok){ t.style.color='#f59e0b'; }
     if(r.ok&&data.live){ const l=document.createElement('div'); l.className='live';
       l.textContent='⦿ datos en vivo de Cerberus'; t.parentElement.appendChild(l); }

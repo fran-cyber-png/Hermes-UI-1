@@ -18,7 +18,7 @@ consults data and never does a single calculation.
 from typing import List
 
 from .intent_analyzer import IntentResult
-from .kpi_engine import KPIs
+from .kpi_engine import KPIs, roas_material
 from .analytics_engine import Analysis
 from .insight_engine import Insight
 from .recommendation_engine import Action
@@ -202,14 +202,35 @@ def _fmt_rankings(a: Analysis) -> str:
                        ("por_producto", "Participación por producto"),
                        ("por_canal_accionable", "Participación por canal (accionable)")]:
         parts = a.participations.get(pkey)
-        if parts:
+        if not parts:
+            continue
+        if pkey == "por_pais":
+            # La cola de 0,x% (Croacia, Islandia, Angola…) no se lista con nombre:
+            # cada nombre en el prompt es un país que el modelo puede volver titular.
+            grandes = [p for p in parts if (p.get("share_pct") or 0) >= 0.5]
+            resto = [p for p in parts if (p.get("share_pct") or 0) < 0.5]
+            linea = ", ".join(f"{p['name']}={p['share_pct']}%" for p in grandes)
+            if resto:
+                resto_pct = round(sum(p.get("share_pct") or 0 for p in resto), 1)
+                linea += f", resto={resto_pct}% ({len(resto)} países)"
+            lines.append(f"- {lab}: {linea}")
+        else:
             lines.append(f"- {lab}: " + ", ".join(f"{p['name']}={p['share_pct']}%" for p in parts))
-    # ROAS por país (atribución)
-    roas = a.participations.get("roas_por_pais")
-    if roas:
-        lines.append("- ROAS por país: " + ", ".join(
+    # ROAS por país (atribución) — detalle solo de países con señal; las colas
+    # de gasto chico van agregadas en una línea (con los 29 países crudos el
+    # modelo narraba "escalar Honduras" con USD 33 de gasto).
+    roas = [r for r in a.participations.get("roas_por_pais") or []
+            if r.get("roas") is not None]
+    con_senal = [r for r in roas if roas_material(r)]
+    colas = [r for r in roas if not roas_material(r)]
+    if con_senal:
+        lines.append("- ROAS por país (con señal): " + ", ".join(
             f"{r['name']}=ROAS {r['roas']} (gasto USD {r['gastoUsd']}, {r['accion']})"
-            for r in roas if r.get("roas") is not None))
+            for r in con_senal))
+    if colas:
+        gasto_colas = round(sum(r.get("gastoUsd") or 0 for r in colas))
+        lines.append(f"- ROAS sin señal: {len(colas)} países con gasto de prueba "
+                     f"(USD {gasto_colas} en total) — ratios no accionables, no destacarlos.")
     return "\n".join(lines)
 
 

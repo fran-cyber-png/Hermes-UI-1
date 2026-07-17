@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Tuple
 from collections import defaultdict
 from datetime import date
 
-from .kpi_engine import KPIs, SeriePoint
+from .kpi_engine import KPIs, SeriePoint, roas_material
 
 
 @dataclass
@@ -275,11 +275,14 @@ def analyze(k: KPIs) -> Analysis:
             {"name": r.get("pais"), "roas": r.get("roas"),
              "gastoUsd": r.get("gastoUsd", 0) or 0,
              "budgetSharePct": r.get("budgetSharePct"),
-             "accion": r.get("accion")}
+             "accion": r.get("accion"),
+             "confianza": r.get("confianza")}
             for r in k.roas_por_pais
         ]
-        # país con mejor ROAS vs peor (con gasto)
-        con_gasto = [r for r in k.roas_por_pais if (r.get("gastoUsd") or 0) > 0]
+        # país con mejor ROAS vs peor — solo con señal material (caso Honduras:
+        # USD 33 de gasto no puede encabezar la anomalía que narra el modelo).
+        con_gasto = [r for r in k.roas_por_pais
+                     if (r.get("gastoUsd") or 0) > 0 and roas_material(r)]
         if con_gasto:
             best = max(con_gasto, key=lambda r: (r.get("roas") or 0))
             worst = min(con_gasto, key=lambda r: (r.get("roas") or 0))

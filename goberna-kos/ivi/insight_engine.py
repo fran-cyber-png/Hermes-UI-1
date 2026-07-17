@@ -17,7 +17,7 @@ is missing.
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from .kpi_engine import KPIs
+from .kpi_engine import KPIs, roas_material
 from .analytics_engine import Analysis, Anomaly
 
 
@@ -169,9 +169,12 @@ def detect(k: KPIs, a: Analysis) -> List[Insight]:
                 f"Forecast al alza: pendiente +{pend}/día (R²={r2}).",
                 confidence="media"))
 
-    # ROAS débil
+    # ROAS débil — solo países con señal material: con USD 18 de gasto nadie
+    # "pierde plata en pauta" (PT/Italia eran gasto de prueba y el modelo los
+    # narraba como riesgo en cada respuesta, caso 2026-07-16).
     if k.roas_por_pais:
-        con_gasto = [r for r in k.roas_por_pais if (r.get("gastoUsd") or 0) > 0]
+        con_gasto = [r for r in k.roas_por_pais
+                     if (r.get("gastoUsd") or 0) > 0 and roas_material(r)]
         debiles = [r for r in con_gasto if (r.get("roas") or 0) < 1]
         if debiles:
             out.append(Insight("warn", "⚠",
