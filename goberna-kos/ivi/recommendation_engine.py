@@ -8,7 +8,7 @@ and owner hint (which team should act).
 from dataclasses import dataclass, field
 from typing import List
 
-from .kpi_engine import KPIs
+from .kpi_engine import KPIs, roas_material
 from .analytics_engine import Analysis
 from .insight_engine import Insight
 
@@ -76,6 +76,31 @@ def recommend(k: KPIs, a: Analysis, insights: List[Insight]) -> List[Action]:
             "Optimizar por cliente valioso, no por 'una venta cualquiera', mejora el ROAS.",
             "Growth / Meta"))
         prio += 1
+
+    # País: jugada CONCRETA de reasignación de pauta (no la genérica de abajo)
+    # cuando hay ROAS por país con señal. Usa el `accion` que ya clasifica el
+    # backend (escalar/observar/recortar) y la confianza, no un ratio suelto: un
+    # ratio altísimo de base chica (EEUU) va a "test chico", no a "subí acá".
+    roas_pais = [r for r in (k.roas_por_pais or [])
+                 if (r.get("gastoUsd") or 0) > 0 and r.get("roas") is not None and roas_material(r)]
+    if roas_pais:
+        escalar = sorted((r for r in roas_pais
+                          if r.get("accion") == "escalar" and r.get("confianza") == "alta"),
+                         key=lambda r: r.get("roas") or 0, reverse=True)[:2]
+        ratio = max(roas_pais, key=lambda r: r.get("roas") or 0)
+        partes = []
+        if escalar:
+            partes.append("subí presupuesto en " + " y ".join(
+                f"{r['pais']} (ROAS {round(r['roas'], 1)}×)" for r in escalar))
+        if ratio.get("confianza") != "alta" and ratio.get("pais") not in [r["pais"] for r in escalar]:
+            partes.append(f"corré un test chico en {ratio['pais']} "
+                          f"(ratio {round(ratio['roas'], 1)}× pero base chica)")
+        if partes:
+            actions.append(Action(prio, "Reasignar pauta por país — " + "; ".join(partes),
+                "El backend ya clasifica cada país (escalar/observar/recortar) con su "
+                "confianza; mover el presupuesto a los de 'escalar' con volumen (confianza "
+                "alta) es la palanca más directa para crecer sin bajar el ROAS.", "Growth / Meta"))
+            prio += 1
 
     # Default fallback
     if not actions:

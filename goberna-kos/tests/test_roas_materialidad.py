@@ -79,6 +79,19 @@ def test_ratio_alto_de_base_chica_no_corona_pero_se_muestra_aparte():
     assert worst is not None and "Bolivia" in worst.label
 
 
+def test_la_jugada_por_pais_es_concreta_no_generica():
+    # "en qué país escalar" debe dar una acción concreta de reasignación de pauta,
+    # no la genérica "profundizar en el segmento con mejor momentum".
+    from ivi.recommendation_engine import recommend
+    from ivi.analytics_engine import analyze
+    k = _kpis(_roas_prod())
+    acts = recommend(k, analyze(k), [])
+    pais = next((x for x in acts if "pauta por país" in x.action.lower()), None)
+    assert pais is not None and "presupuesto" in pais.action.lower()
+    assert "Perú" in pais.action, f"la jugada fue {pais.action!r}"
+    assert not any("mejor momentum" in x.action for x in acts), "no debe caer al genérico"
+
+
 def test_las_colas_van_en_una_linea_desestimada():
     items = compute_impact(_kpis(_roas_prod()))
     colas = _by_label(items, "gasto de prueba")
