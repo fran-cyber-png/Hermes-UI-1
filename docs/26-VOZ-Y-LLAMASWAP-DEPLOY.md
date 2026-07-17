@@ -9,6 +9,12 @@
 
 ## 0. Estado: DESPLEGADO en geógrafo (2026-07-17) y verificado
 
+> **El estudio VIVE en la web (una sola URL, https, sin server local):**
+> **https://geografo.tailf59792.ts.net/studio** (solo tailnet).
+> El engine sirve el estudio en `GET /studio` y la API en el mismo origen; el
+> `/` de la URL es el chat directo de Ivi. Al ser https, el micrófono funciona.
+
+
 - **`think:false`** (commit `6a731ed`): en prod las respuestas bajan de ~14s a
   **~5,5s** (medido). Activo por default; `IVI_THINK=1` lo revierte.
 - **Voz VIVA en geógrafo**: `curl localhost:8080/api/health` -> `voz: {tts:piper,

@@ -719,9 +719,10 @@ function ivimsg(html,applied,live){const d=document.createElement('div');d.class
   $("#msgs").appendChild(d);$("#msgs").scrollTop=1e9;}
 function memsg(txt){const d=document.createElement('div');d.className="m me";d.textContent=txt;$("#msgs").appendChild(d);$("#msgs").scrollTop=1e9;}
 /* ── Motor Ivi real (Fase B): el carril de PREGUNTAR del chat ── */
-const IVI_ENDPOINT=(location.hostname==="127.0.0.1"||location.hostname==="localhost")
-  ? "http://127.0.0.1:8080/api/chat"          // dev: engine local
-  : "http://100.117.204.80:8080/api/chat";     // geógrafo por Tailscale
+// El engine sirve este estudio en /studio -> llamamos al MISMO origen (relativo),
+// que anda por http o https sin CORS ni mixed-content. Para dev con el estudio en
+// otro puerto que el engine, seteá window.IVI_ORIGIN = "http://127.0.0.1:8080".
+const IVI_ENDPOINT=(window.IVI_ORIGIN||"")+"/api/chat";
 const IVI_SID=localStorage.iviStudioSid||(localStorage.iviStudioSid=
   "studio-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2));
 // Markdown honesto: escapa TODO primero (viene del modelo) y recién arma h2,

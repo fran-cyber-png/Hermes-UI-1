@@ -181,6 +181,16 @@ renderSugs();
 # recibe por inyección.
 HTML = HTML.replace("__SUG__", json.dumps(PREGUNTAS_SUGERIDAS, ensure_ascii=False))
 
+# Ivi Studio: el engine sirve el estudio en /studio (mismo origen que la API, así
+# anda por http o https sin CORS ni mixed-content — clave para el mic por https).
+# El archivo se copia al lado del paquete (~/ia-local/studio.html); si no está,
+# /studio devuelve 404 y el resto del engine sigue igual.
+_STUDIO_PATH = Path(__file__).resolve().parent.parent / "studio.html"
+try:
+    STUDIO_HTML = _STUDIO_PATH.read_text(encoding="utf-8")
+except OSError:
+    STUDIO_HTML = None
+
 
 def call_ollama(prompt: str) -> str:
     payload = json.dumps({
@@ -339,6 +349,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path in ("/", "/index.html"):
             self._send(200, HTML, "text/html; charset=utf-8")
+        elif self.path in ("/studio", "/studio/"):
+            if STUDIO_HTML:
+                self._send(200, STUDIO_HTML, "text/html; charset=utf-8")
+            else:
+                self._send(404, "studio.html no está desplegado")
         elif self.path == "/api/health":
             self._send(200, json.dumps(health(), ensure_ascii=False))
         else:
@@ -463,7 +478,13 @@ def main():
         pausa=WARM_PAUSA,
         timeout=OLLAMA_TIMEOUT + 30,
     )
-    with socketserver.ThreadingTCPServer(("0.0.0.0", PORT), Handler) as httpd:
+    # Restart robusto: daemon_threads deja que el proceso muera en SIGTERM aunque
+    # haya un request lento en vuelo (si no, el proceso viejo retiene :8080 y el
+    # nuevo entra en crash-loop "Address already in use", visto en el deploy).
+    class _Server(socketserver.ThreadingTCPServer):
+        allow_reuse_address = True
+        daemon_threads = True
+    with _Server(("0.0.0.0", PORT), Handler) as httpd:
         log.info("Ivi Analytical Engine en http://0.0.0.0:%d — modelo=%s ctx=%d timeout=%ds "
                  "warmer=%ds preguntas=%d",
                  PORT, MODEL, OLLAMA_CTX, OLLAMA_TIMEOUT, WARM_INTERVAL,
