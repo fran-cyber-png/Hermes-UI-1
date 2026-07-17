@@ -14,6 +14,12 @@ import { db } from "../db/client.js";
 export type LazoDetalle = {
   /** ¿El último envío fue a Test Events (no afecta optimización) o a producción? */
   modo: "prueba" | "produccion" | "sin_correr";
+  /**
+   * El estado del RELOJ, que es lo que decide si va a haber envíos NUEVOS. `modo` habla del
+   * PASADO (el último envío); sin este campo, un "modo: produccion" con reloj apagado se leía
+   * como "está enviando en producción" — el susto del 2026-07-17.
+   */
+  reloj: "apagado" | "simulacion" | "on";
   totalVentas: number;
   enviadas: number;
   /** Desglose de por qué las demás no fueron. Cada motivo con su conteo y su plata. */
@@ -68,8 +74,13 @@ export async function lazoDetalle(): Promise<LazoDetalle> {
   const t = (totales as unknown as { total: number; enviadas: number }[])[0] ?? { total: 0, enviadas: 0 };
   const modoRaw = (modoFila as unknown as { es_prueba: boolean }[])[0];
 
+  const reloj = process.env.LAZO_RELOJ === "on" ? "on"
+    : process.env.LAZO_RELOJ === "simulacion" ? "simulacion"
+    : "apagado";
+
   return {
     modo: modoRaw == null ? "sin_correr" : modoRaw.es_prueba ? "prueba" : "produccion",
+    reloj,
     totalVentas: t.total,
     enviadas: t.enviadas,
     descartes: (descartes as unknown as { motivo: string; n: number }[]).map((d) => ({

@@ -19,6 +19,7 @@ Dashboard de pauta Meta Ads del negocio educativo (Goberna, escuela de formació
 
 ## Reglas de negocio / gotchas
 - **`DECISIONES_MODO=simulacion` es el default**: nada se escribe en Meta. Con `META_TEST_EVENT_CODE` seteado todo va a Test Events. No cambiar estos interruptores sin decisión humana.
+- **`LAZO_RELOJ` (ausente = apagado, fail-closed)** gobierna los envíos CAPI recurrentes: `simulacion` evalúa sin mandar, `on` manda cada 6h. APAGADO por decisión de Estephano (2026-07-17). Ojo: el `modo` del payload de lazo describe el ÚLTIMO envío histórico, no el estado del reloj — mirar el campo `reloj`.
 - **Esquema vía `drizzle-kit push`** (`npm run db:push` en `server/`): NO hay migraciones SQL versionadas. El `schemaFilter` de `server/drizzle.config.ts` debe incluir `fuentes` y `ontologia` — sin eso esos esquemas nunca se crean, en silencio.
 - Secretos solo en `server/.env` (nunca se commitea). Nada de credenciales en el repo.
 
