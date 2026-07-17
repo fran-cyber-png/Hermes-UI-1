@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ivi Studio · Producir un creativo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── Marca Goberna (design-system) + estándar taste-skill ──
+   Un solo acento por familia: azul interactivo + dorado FUNCIONAL (paso activo,
+   cifra héroe, victoria). Radios: tarjetas 16px, botones 12px, chips pill. Sin
+   em-dash en ningún texto visible. Light-mode, un solo tema. */
+:root{
+  --navy:#0E2A52; --blue:#2563EB; --blue-ink:#1D4ED8;
+  --gold:#FFC800; --gold-ink:#CAA106;
+  --bg:#F5F7FB; --card:#FFFFFF; --border:#E6EAF2;
+  --ink:#16213A; --muted:#5B6B86; --success:#16A34A;
+  --shadow:0 10px 30px -12px rgba(14,42,82,.18);
+  --shadow-sm:0 2px 8px -3px rgba(14,42,82,.14);
+  --r-card:16px; --r-btn:12px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  font-family:Inter,system-ui,-apple-system,sans-serif;
+  background:
+    radial-gradient(1200px 600px at 85% -10%, rgba(37,99,235,.06), transparent 60%),
+    var(--bg);
+  color:var(--ink); min-height:100dvh;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,.mont{font-family:Montserrat,sans-serif}
+.wrap{max-width:940px; margin:0 auto; padding:0 20px}
+
+/* ── Topbar ── */
+header{position:sticky; top:0; z-index:20; background:rgba(245,247,251,.82);
+  backdrop-filter:blur(10px); border-bottom:1px solid var(--border)}
+.bar{display:flex; align-items:center; gap:12px; height:62px}
+.emblem{width:34px; height:34px; flex:none; border-radius:50%;
+  background:radial-gradient(circle at 30% 25%, #143a6e, var(--navy));
+  display:grid; place-items:center; box-shadow:inset 0 0 0 1.5px var(--gold-ink)}
+.emblem svg{width:18px; height:18px}
+.brand{font-weight:800; letter-spacing:.2px; font-size:16px}
+.brand small{color:var(--muted); font-weight:600}
+.sim{margin-left:auto; display:flex; align-items:center; gap:7px;
+  font-size:12px; font-weight:600; color:var(--muted);
+  background:var(--card); border:1px solid var(--border);
+  padding:6px 11px; border-radius:999px}
+.sim .dot{width:7px; height:7px; border-radius:50%; background:var(--gold)}
+
+/* ── Stepper ── */
+.stepper{padding:20px 0 8px}
+.steps{display:flex; gap:8px; margin-bottom:10px}
+.seg{flex:1; height:6px; border-radius:999px; background:var(--border); overflow:hidden}
+.seg i{display:block; height:100%; width:0; border-radius:999px;
+  background:linear-gradient(90deg,var(--gold),var(--gold-ink));
+  transition:width .5s cubic-bezier(.16,1,.3,1)}
+.seg.done i{width:100%} .seg.now i{width:100%}
+.seg.now{box-shadow:0 0 0 3px rgba(255,200,0,.16)}
+.stepmeta{display:flex; justify-content:space-between; align-items:baseline}
+.stepmeta .k{font-size:12px; font-weight:700; color:var(--gold-ink);
+  text-transform:uppercase; letter-spacing:.14em}
+.stepmeta .t{font-size:13px; color:var(--muted)}
+
+/* ── Ivi dice ── */
+.ivi{display:flex; gap:12px; align-items:flex-start; margin:18px 0 4px}
+.ivi .av{width:38px; height:38px; flex:none; border-radius:50%;
+  background:radial-gradient(circle at 30% 25%, #143a6e, var(--navy));
+  display:grid; place-items:center; box-shadow:inset 0 0 0 1.5px var(--gold-ink), var(--shadow-sm)}
+.ivi .av svg{width:19px;height:19px}
+.ivi .say{background:var(--card); border:1px solid var(--border);
+  border-radius:4px 16px 16px 16px; padding:12px 15px; box-shadow:var(--shadow-sm);
+  font-size:14.5px; line-height:1.5; max-width:640px}
+.ivi .say b{color:var(--navy)}
+.tag{display:inline-block; font-size:11px; font-weight:700; letter-spacing:.02em;
+  color:var(--gold-ink); background:rgba(255,200,0,.14);
+  border-radius:6px; padding:1px 7px; vertical-align:middle}
+
+/* ── Panels ── */
+.panel{display:none; animation:in .45s cubic-bezier(.16,1,.3,1)}
+.panel.active{display:block}
+@keyframes in{from{opacity:0; transform:translateY(14px)} to{opacity:1; transform:none}}
+@media (prefers-reduced-motion:reduce){
+  .panel.active{animation:none}
+  .seg i{transition:none}
+}
+h2.step{font-size:26px; font-weight:800; margin:14px 0 4px; letter-spacing:-.01em}
+.lead{color:var(--muted); font-size:15px; margin:0 0 18px; max-width:60ch}
+
+/* ── Choice cards ── */
+.grid{display:grid; gap:14px}
+.grid.two{grid-template-columns:1fr 1fr}
+.grid.three{grid-template-columns:1fr 1fr 1fr}
+@media (max-width:720px){.grid.two,.grid.three{grid-template-columns:1fr}}
+.choice{position:relative; text-align:left; cursor:pointer; background:var(--card);
+  border:1.5px solid var(--border); border-radius:var(--r-card); padding:18px;
+  transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease}
+.choice:hover{transform:translateY(-3px); box-shadow:var(--shadow); border-color:#cdd8ee}
+.choice:active{transform:translateY(-1px)}
+.choice.sel{border-color:var(--blue); box-shadow:0 0 0 3px rgba(37,99,235,.14), var(--shadow)}
+.choice.sel::after{content:"✓"; position:absolute; top:14px; right:14px;
+  width:24px; height:24px; border-radius:50%; background:var(--blue); color:#fff;
+  display:grid; place-items:center; font-size:13px; font-weight:700}
+.choice h3{margin:0 0 4px; font-size:17px; font-weight:700}
+.choice p{margin:0; color:var(--muted); font-size:13.5px; line-height:1.5}
+.choice .why{margin-top:11px; font-size:12.5px; color:var(--gold-ink); font-weight:600}
+.badge{display:inline-block; font-size:11px; font-weight:700; color:#fff;
+  background:var(--navy); border-radius:6px; padding:2px 8px; margin-bottom:9px}
+.badge.star{background:linear-gradient(90deg,var(--gold-ink),#b4900a)}
+
+/* ── Chips (ángulo, CTA) ── */
+.chips{display:flex; flex-wrap:wrap; gap:10px}
+.chip{cursor:pointer; border:1.5px solid var(--border); background:var(--card);
+  border-radius:999px; padding:9px 16px; font-size:14px; font-weight:600; color:var(--ink);
+  transition:.16s}
+.chip:hover{border-color:#cdd8ee; transform:translateY(-1px)}
+.chip.sel{background:var(--navy); color:#fff; border-color:var(--navy)}
+
+/* ── Facts (brief) ── */
+.facts{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:6px 0 20px}
+@media (max-width:720px){.facts{grid-template-columns:1fr}}
+.fact{background:var(--card); border:1px solid var(--border); border-radius:var(--r-card);
+  padding:14px 16px; display:flex; gap:12px; align-items:center}
+.fact .n{font-family:Montserrat; font-weight:800; font-size:22px; color:var(--navy); line-height:1}
+.fact .l{font-size:13px; color:var(--muted); line-height:1.4}
+.fact .l b{color:var(--ink)}
+
+/* ── Image options ── */
+.imgs{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+@media (max-width:720px){.imgs{grid-template-columns:1fr}}
+.creative{position:relative; cursor:pointer; border-radius:var(--r-card); overflow:hidden;
+  aspect-ratio:1/1; border:1.5px solid var(--border); background:var(--navy);
+  transition:transform .18s ease, box-shadow .18s ease}
+.creative:hover{transform:translateY(-3px); box-shadow:var(--shadow)}
+.creative.sel{outline:3px solid var(--blue); outline-offset:2px}
+.creative img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+  filter:saturate(.9)}
+.creative .scrim{position:absolute; inset:0;
+  background:linear-gradient(180deg, rgba(14,42,82,.15) 0%, rgba(14,42,82,.55) 55%, rgba(14,42,82,.92) 100%)}
+.creative .ov{position:absolute; inset:0; padding:16px; display:flex; flex-direction:column;
+  justify-content:flex-end; color:#fff}
+.creative .ov .kick{font-size:10.5px; font-weight:700; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--gold); margin-bottom:6px}
+.creative .ov h4{font-family:Montserrat; font-weight:800; font-size:18px; line-height:1.15; margin:0}
+.creative .ov .cta{margin-top:10px; align-self:flex-start; font-size:11px; font-weight:700;
+  background:var(--gold); color:var(--navy); padding:5px 11px; border-radius:8px}
+.creative .crest{position:absolute; top:12px; left:12px; width:26px; height:26px;
+  border-radius:50%; background:rgba(14,42,82,.55); display:grid; place-items:center;
+  box-shadow:inset 0 0 0 1px var(--gold)}
+.creative .crest svg{width:14px; height:14px}
+.creative.sel .pick{position:absolute; top:12px; right:12px; width:26px; height:26px;
+  border-radius:50%; background:var(--blue); color:#fff; display:grid; place-items:center;
+  font-size:13px; font-weight:700}
+
+/* ── Text tuning ── */
+.tuner{background:var(--card); border:1px solid var(--border); border-radius:var(--r-card);
+  padding:18px; margin-bottom:16px}
+.tuner .h{font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--muted); margin-bottom:10px; display:flex; align-items:center; gap:8px}
+.opt{display:block; width:100%; text-align:left; cursor:pointer; margin-bottom:9px;
+  border:1.5px solid var(--border); background:#fbfcfe; border-radius:12px; padding:12px 14px;
+  font:inherit; color:var(--ink); font-size:14.5px; line-height:1.45; transition:.15s}
+.opt:last-child{margin-bottom:0}
+.opt:hover{border-color:#cdd8ee}
+.opt.sel{border-color:var(--blue); background:#fff; box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.opt small{display:block; color:var(--gold-ink); font-weight:600; font-size:11.5px; margin-top:3px}
+.editnote{font-size:12px; color:var(--muted); margin-top:2px}
+
+/* ── Live preview (Meta-style) ── */
+.preview{background:var(--card); border:1px solid var(--border); border-radius:var(--r-card);
+  overflow:hidden; box-shadow:var(--shadow-sm); max-width:360px; margin:0 auto}
+.preview .top{display:flex; align-items:center; gap:9px; padding:12px}
+.preview .pg{width:34px;height:34px;border-radius:50%;
+  background:radial-gradient(circle at 30% 25%, #143a6e, var(--navy));
+  display:grid;place-items:center; box-shadow:inset 0 0 0 1.2px var(--gold-ink)}
+.preview .pg svg{width:17px;height:17px}
+.preview .who b{font-size:13.5px} .preview .who span{font-size:11.5px; color:var(--muted)}
+.preview .body{padding:0 12px 12px; font-size:13.5px; line-height:1.5}
+.preview .pimg{aspect-ratio:1/1; position:relative; background:var(--navy)}
+.preview .pimg img{width:100%;height:100%;object-fit:cover; position:absolute; inset:0}
+.preview .pimg .scrim{position:absolute; inset:0;
+  background:linear-gradient(180deg, rgba(14,42,82,.12), rgba(14,42,82,.55) 60%, rgba(14,42,82,.9))}
+.preview .pimg .ov{position:absolute; inset:0; padding:16px; display:flex; flex-direction:column;
+  justify-content:flex-end; color:#fff}
+.preview .pimg .ov h4{font-family:Montserrat; font-weight:800; font-size:19px; line-height:1.15; margin:0}
+.preview .cta-row{display:flex; align-items:center; justify-content:space-between;
+  background:#eef2f9; padding:11px 12px}
+.preview .cta-row .t{font-size:11px; color:var(--muted)}
+.preview .cta-row .b{font-size:12.5px; font-weight:700; color:#fff; background:var(--blue);
+  padding:7px 13px; border-radius:8px}
+
+/* ── Dry-run / compuerta ── */
+.dryrun{background:var(--card); border:1px solid var(--border); border-radius:var(--r-card);
+  padding:18px; margin-top:6px}
+.dryrun .h{font-family:Montserrat; font-weight:700; font-size:15px; margin:0 0 4px}
+.dryrun ul{list-style:none; margin:12px 0 0; padding:0}
+.dryrun li{display:flex; gap:10px; align-items:baseline; padding:9px 0; border-top:1px solid var(--border);
+  font-size:14px}
+.dryrun li:first-child{border-top:0}
+.dryrun li .lab{color:var(--muted); min-width:150px; font-size:13px}
+.dryrun li .val{font-weight:600}
+.gate{display:flex; gap:9px; align-items:flex-start; margin-top:14px; padding:12px 14px;
+  background:rgba(255,200,0,.08); border:1px solid rgba(202,161,6,.28); border-radius:12px;
+  font-size:13px; color:var(--ink); line-height:1.5}
+.gate svg{flex:none; width:18px; height:18px; margin-top:1px; color:var(--gold-ink)}
+
+/* ── Victory ── */
+.win{text-align:center; padding:10px 0}
+.win .seal{width:74px; height:74px; margin:0 auto 14px; border-radius:50%;
+  background:radial-gradient(circle at 30% 25%, #143a6e, var(--navy));
+  display:grid; place-items:center; box-shadow:inset 0 0 0 2px var(--gold), var(--shadow);
+  animation:pop .5s cubic-bezier(.2,1.4,.3,1)}
+.win .seal svg{width:34px; height:34px; color:var(--gold)}
+@keyframes pop{from{transform:scale(.6); opacity:0} to{transform:scale(1); opacity:1}}
+.win h2{font-size:24px; margin:0 0 6px}
+.win p{color:var(--muted); margin:0 auto 18px; max-width:44ch}
+.receipt{text-align:left; max-width:440px; margin:0 auto; background:var(--card);
+  border:1px solid var(--border); border-radius:var(--r-card); padding:16px 18px; box-shadow:var(--shadow-sm)}
+.receipt .rh{font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--muted); margin-bottom:10px}
+.receipt div.row{display:flex; justify-content:space-between; gap:14px; padding:7px 0;
+  border-top:1px dashed var(--border); font-size:13.5px}
+.receipt div.row:first-of-type{border-top:0}
+.receipt .row .l{color:var(--muted)} .receipt .row .v{font-weight:600; text-align:right}
+
+/* ── Footer nav ── */
+.nav{display:flex; align-items:center; gap:12px; margin:26px 0 40px}
+.btn{font:inherit; font-weight:700; font-size:15px; cursor:pointer; border-radius:var(--r-btn);
+  padding:13px 22px; border:1.5px solid transparent; transition:.16s}
+.btn:disabled{opacity:.45; cursor:not-allowed}
+.btn.primary{background:var(--blue); color:#fff; box-shadow:0 6px 18px -8px rgba(37,99,235,.7)}
+.btn.primary:not(:disabled):hover{background:var(--blue-ink); transform:translateY(-1px)}
+.btn.primary:not(:disabled):active{transform:translateY(1px)}
+.btn.ghost{background:transparent; color:var(--muted); border-color:var(--border)}
+.btn.ghost:hover{color:var(--ink); border-color:#cdd8ee}
+.btn.gold{background:var(--gold); color:var(--navy); box-shadow:0 6px 18px -8px rgba(202,161,6,.7)}
+.btn.gold:hover{transform:translateY(-1px)}
+.spacer{flex:1}
+.mini{background:none; border:0; color:var(--blue-ink); font:inherit; font-weight:600;
+  font-size:13.5px; cursor:pointer; padding:8px 4px}
+.mini:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+
+<!-- emblema reutilizable: columnas institucionales (marca simple, no caricatura) -->
+<svg style="display:none">
+  <symbol id="crest" viewBox="0 0 24 24">
+    <g fill="none" stroke="#FFC800" stroke-width="1.6" stroke-linecap="round">
+      <path d="M4 9 L12 4 L20 9"/><path d="M4 9 H20"/>
+      <path d="M6.5 9 V17"/><path d="M12 9 V17"/><path d="M17.5 9 V17"/>
+      <path d="M4 17 H20"/><path d="M3 20 H21"/>
+    </g>
+  </symbol>
+</svg>
+
+<header>
+  <div class="wrap bar">
+    <div class="emblem"><svg><use href="#crest"/></svg></div>
+    <div class="brand">Ivi Studio <small>· producir creativo</small></div>
+    <div class="sim"><span class="dot"></span> Modo simulación</div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="stepper">
+    <div class="steps" id="steps">
+      <div class="seg"><i></i></div><div class="seg"><i></i></div>
+      <div class="seg"><i></i></div><div class="seg"><i></i></div>
+      <div class="seg"><i></i></div>
+    </div>
+    <div class="stepmeta">
+      <span class="k" id="stepK">Paso 1</span>
+      <span class="t" id="stepT">Qué promocionamos</span>
+    </div>
+  </div>
+
+  <div class="ivi">
+    <div class="av"><svg><use href="#crest"/></svg></div>
+    <div class="say" id="say"></div>
+  </div>
+
+  <!-- PASO 1 -->
+  <section class="panel" data-step="0">
+    <h2 class="step">¿Qué vamos a promocionar?</h2>
+    <p class="lead">Elegí el producto. Yo ya miré cuál rinde mejor y te lo marco.</p>
+    <div class="grid three">
+      <button class="choice" data-prod="Manual de Inteligencia y Contrainteligencia">
+        <span class="badge star">Tu estrella</span>
+        <h3>Manual de Inteligencia</h3>
+        <p>Contrainteligencia, Edición 2. Ticket accesible, alta rotación.</p>
+        <div class="why">648 ventas. El más vendido de tu catálogo.</div>
+      </button>
+      <button class="choice" data-prod="Diplomado en Gestión Pública">
+        <span class="badge">Ticket alto</span>
+        <h3>Diplomado en Gestión Pública</h3>
+        <p>Programa largo, back-end. Sostiene la facturación en USD.</p>
+        <div class="why">Menos volumen, mayor valor por venta.</div>
+      </button>
+      <button class="choice" data-prod="Certificado con Portadiploma">
+        <span class="badge">Medio</span>
+        <h3>Certificado con Portadiploma</h3>
+        <p>Cierre rápido, buen complemento de la escalera.</p>
+        <div class="why">480 ventas. Segundo más vendido.</div>
+      </button>
+    </div>
+  </section>
+
+  <!-- PASO 2 -->
+  <section class="panel" data-step="1">
+    <h2 class="step">El brief, con tus datos reales</h2>
+    <p class="lead">Esto no lo invento: sale de tu revisión de atribución (datos hasta el 2026-07-11).</p>
+    <div class="facts">
+      <div class="fact"><div class="n">7,25×</div><div class="l"><b>Perú</b> es tu mejor ROAS. País objetivo sugerido. <span class="tag">HECHO</span></div></div>
+      <div class="fact"><div class="n">66,7%</div><div class="l"><b>Facebook</b> concentra tus interacciones. Instagram queda flojo. <span class="tag">HECHO</span></div></div>
+      <div class="fact"><div class="n">7,1×</div><div class="l">ROAS blended vs objetivo de 4×. Hay margen para escalar. <span class="tag">HECHO</span></div></div>
+      <div class="fact"><div class="n">USD 115</div><div class="l">Ticket promedio por venta. Referencia para el mensaje. <span class="tag">HECHO</span></div></div>
+    </div>
+    <p class="lead" style="margin-bottom:10px">Elegí el <b>ángulo</b> del mensaje. Los tres funcionan; cada uno le habla a una motivación distinta.</p>
+    <div class="chips" id="angles">
+      <button class="chip" data-angle="autoridad">Autoridad y prueba social</button>
+      <button class="chip" data-angle="carrera">Impulso a la carrera</button>
+      <button class="chip" data-angle="urgencia">Cupos y urgencia</button>
+    </div>
+  </section>
+
+  <!-- PASO 3 -->
+  <section class="panel" data-step="2">
+    <h2 class="step">Elegí la imagen</h2>
+    <p class="lead">Generé cuatro conceptos con la marca ya aplicada. Elegí uno, o pedime más.</p>
+    <div class="imgs" id="imgs"></div>
+    <div style="margin-top:14px"><button class="mini" id="regen">↻ Generar cuatro más</button></div>
+  </section>
+
+  <!-- PASO 4 -->
+  <section class="panel" data-step="3">
+    <h2 class="step">Afiná el texto</h2>
+    <p class="lead">Alterná entre variantes hasta que suene tuyo. Podés editar cualquiera tocándola.</p>
+    <div class="tuner">
+      <div class="h">Titular <span class="tag">elegí uno</span></div>
+      <div id="heads"></div>
+    </div>
+    <div class="tuner">
+      <div class="h">Texto principal</div>
+      <div id="bodies"></div>
+    </div>
+    <div class="tuner">
+      <div class="h">Botón</div>
+      <div class="chips" id="ctas">
+        <button class="chip sel" data-cta="Quiero inscribirme">Quiero inscribirme</button>
+        <button class="chip" data-cta="Ver el programa">Ver el programa</button>
+        <button class="chip" data-cta="Reservar mi cupo">Reservar mi cupo</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- PASO 5 -->
+  <section class="panel" data-step="4">
+    <h2 class="step">Revisá y aprobá</h2>
+    <p class="lead">Así queda el creativo, y esto es exactamente lo que pasaría si lo aprobás. Nada sale sin tu OK.</p>
+    <div class="grid two" style="align-items:start">
+      <div class="preview" id="preview">
+        <div class="top">
+          <div class="pg"><svg><use href="#crest"/></svg></div>
+          <div class="who"><b>Goberna Escuela</b><br><span>Publicidad</span></div>
+        </div>
+        <div class="body" id="pvBody"></div>
+        <div class="pimg"><img id="pvImg" alt=""><div class="scrim"></div>
+          <div class="ov"><h4 id="pvHead"></h4></div></div>
+        <div class="cta-row"><span class="t">goberna.escuela</span><span class="b" id="pvCta">Quiero inscribirme</span></div>
+      </div>
+      <div class="dryrun">
+        <p class="h">Qué haría al aprobar</p>
+        <ul>
+          <li><span class="lab">País objetivo</span><span class="val">Perú <span class="tag">ROAS 7,25×</span></span></li>
+          <li><span class="lab">Canal</span><span class="val">Facebook <span class="tag">66,7%</span></span></li>
+          <li><span class="lab">Presupuesto</span><span class="val">+USD 1.200 / semana</span></li>
+          <li><span class="lab">Eventos pixel</span><span class="val">PageView, Lead</span></li>
+          <li><span class="lab">Publicación</span><span class="val">Queda preparada, no se sube</span></li>
+        </ul>
+        <div class="gate">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z"/><path d="M9 12l2 2 4-4"/></svg>
+          <span>El lazo con Meta está apagado y el modo es simulación. Este creativo se guarda con su procedencia (datos, modelo, quién aprobó). Publicar es una decisión aparte, tuya.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- VICTORIA -->
+  <section class="panel" data-step="5">
+    <div class="win">
+      <div class="seal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></div>
+      <h2>Creativo aprobado</h2>
+      <p>Quedó guardado con su procedencia. Cuando decidas publicar, sale con estos mismos datos detrás.</p>
+      <div class="receipt">
+        <div class="rh">Comprobante</div>
+        <div class="row"><span class="l">Producto</span><span class="v" id="rcProd">Manual de Inteligencia</span></div>
+        <div class="row"><span class="l">Ángulo</span><span class="v" id="rcAngle">Autoridad</span></div>
+        <div class="row"><span class="l">Titular</span><span class="v" id="rcHead">648 personas ya se formaron</span></div>
+        <div class="row"><span class="l">Objetivo</span><span class="v">Perú · Facebook</span></div>
+        <div class="row"><span class="l">Datos base</span><span class="v">Revisión 16/07 · frescura 11/07</span></div>
+        <div class="row"><span class="l">Aprobó</span><span class="v">Estephano · simulación</span></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="nav">
+    <button class="btn ghost" id="back">Atrás</button>
+    <span class="spacer"></span>
+    <button class="btn primary" id="next" disabled>Continuar</button>
+  </div>
+
+</div>
+
+<script>
+const S = {
+  step:0, prod:null, angle:null, img:null, imgSeed:0,
+  head:null, body:null, cta:"Quiero inscribirme",
+};
+
+const STEPS = [
+  {k:"Paso 1", t:"Qué promocionamos"},
+  {k:"Paso 2", t:"El brief y el ángulo"},
+  {k:"Paso 3", t:"La imagen"},
+  {k:"Paso 4", t:"El texto"},
+  {k:"Paso 5", t:"Revisar y aprobar"},
+];
+
+const SAY = [
+  ()=>"Hola, soy <b>Ivi</b>. Vamos a armar un creativo juntos, paso a paso. Arranquemos por lo primero: <b>qué querés promocionar</b>.",
+  ()=>`Buena elección. Para <b>${S.prod}</b>, tu propio historial ya me dice a quién apuntar y por dónde. Mirá los números y elegí el <b>ángulo</b>.`,
+  ()=>"Ahora lo visual. Te preparé cuatro conceptos sobre la marca. Ninguno es definitivo: si no te cierran, generamos otros cuatro.",
+  ()=>"El mensaje. Te doy variantes que respetan el ángulo que elegiste. Alterná, combiná, editá. Cuando suene tuyo, seguimos.",
+  ()=>"Último paso, y el más importante: <b>vos supervisás</b>. Te muestro cómo queda y exactamente qué pasaría. Nada se publica solo.",
+  ()=>"Listo. Cada decisión que tomaste quedó registrada con su procedencia. Cuando quieras, armamos otro.",
+];
+
+// Copys por ángulo (reales, anclados al producto estrella)
+const COPY = {
+  autoridad:{
+    kick:"Referencia",
+    heads:[
+      {t:"648 personas ya se formaron con el Manual", why:"prueba social, dato real"},
+      {t:"El material de referencia en inteligencia política", why:"autoridad de categoría"},
+      {t:"Inteligencia y Contrainteligencia, Edición 2", why:"directo, nombre del producto"},
+    ],
+    bodies:[
+      {t:"Formación práctica con certificado. Ya lo eligieron cientos de dirigentes en 6 países. Empezá hoy.", why:"prueba social + acción"},
+      {t:"Teoría y casos reales en un solo programa. Certificación al finalizar. Cupos abiertos.", why:"qué incluye"},
+    ],
+  },
+  carrera:{
+    kick:"Tu carrera",
+    heads:[
+      {t:"El paso que tu carrera política estaba esperando", why:"aspiracional"},
+      {t:"Formate donde se forman los que deciden", why:"pertenencia"},
+      {t:"De la teoría a la acción política real", why:"transformación"},
+    ],
+    bodies:[
+      {t:"Un programa pensado para dirigentes que quieren jugar en serio. Certificado incluido.", why:"identidad"},
+      {t:"Sumá una credencial que se nota. Práctico, aplicable, con certificación.", why:"beneficio concreto"},
+    ],
+  },
+  urgencia:{
+    kick:"Cupos",
+    heads:[
+      {t:"Últimos cupos para la Edición 2", why:"escasez"},
+      {t:"La Edición 2 abre inscripciones esta semana", why:"tiempo"},
+      {t:"Reservá tu lugar antes de que se llene", why:"acción inmediata"},
+    ],
+    bodies:[
+      {t:"Los cupos de la edición anterior se agotaron. Asegurá el tuyo ahora, con certificación incluida.", why:"escasez + prueba"},
+      {t:"Inscripciones abiertas por tiempo limitado. Certificado al finalizar. No lo dejes pasar.", why:"urgencia"},
+    ],
+  },
+};
+
+// seeds de fotografía seria (educación / institucional) para los conceptos
+const SEEDS = ["politica-aula","biblioteca-seria","conferencia-latam","estudio-nocturno",
+  "libros-derecho","auditorio-lleno","escritura-notas","debate-mesa","campus-tarde","archivo-docs"];
+
+const $ = s=>document.querySelector(s);
+const $$ = s=>[...document.querySelectorAll(s)];
+
+function render(){
+  // stepper
+  $$(".seg").forEach((el,i)=>{el.classList.toggle("done",i<S.step); el.classList.toggle("now",i===S.step);});
+  const meta = S.step<=4 ? STEPS[S.step] : {k:"Listo", t:"Creativo guardado"};
+  $("#stepK").textContent = meta.k; $("#stepT").textContent = meta.t;
+  $("#say").innerHTML = (SAY[Math.min(S.step,5)])();
+  $$(".panel").forEach(p=>p.classList.toggle("active", +p.dataset.step===S.step));
+  // nav
+  $("#back").style.visibility = S.step===0 ? "hidden" : "visible";
+  const n = $("#next");
+  if(S.step===4){ n.textContent="Aprobar y guardar"; n.className="btn gold"; n.disabled=false; }
+  else if(S.step===5){ n.textContent="Crear otro"; n.className="btn primary"; n.disabled=false; }
+  else { n.textContent="Continuar"; n.className="btn primary"; n.disabled=!canAdvance(); }
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+
+function canAdvance(){
+  return [ ()=>!!S.prod, ()=>!!S.angle, ()=>!!S.img, ()=>!!S.head&&!!S.body, ()=>true, ()=>true ][S.step]();
+}
+
+// Paso 1
+$$('.choice[data-prod]').forEach(b=>b.onclick=()=>{
+  $$('.choice[data-prod]').forEach(x=>x.classList.remove('sel')); b.classList.add('sel');
+  S.prod=b.dataset.prod; $("#next").disabled=false;
+});
+
+// Paso 2
+$("#angles").onclick=e=>{const b=e.target.closest('.chip'); if(!b)return;
+  $$('#angles .chip').forEach(x=>x.classList.remove('sel')); b.classList.add('sel');
+  S.angle=b.dataset.angle; $("#next").disabled=false;
+};
+
+// Paso 3
+function paintImgs(){
+  const c = COPY[S.angle]||COPY.autoridad;
+  const box = $("#imgs"); box.innerHTML="";
+  for(let i=0;i<4;i++){
+    const seed = SEEDS[(S.imgSeed*4+i)%SEEDS.length]+"-"+(S.imgSeed);
+    const head = c.heads[i%c.heads.length].t;
+    const el = document.createElement('div');
+    el.className="creative"; el.dataset.i=i;
+    el.innerHTML=`
+      <img src="https://picsum.photos/seed/${seed}/560/560" alt="Concepto ${i+1}">
+      <div class="scrim"></div>
+      <div class="crest"><svg><use href="#crest"/></svg></div>
+      <div class="pick">✓</div>
+      <div class="ov">
+        <div class="kick">${c.kick}</div>
+        <h4>${head}</h4>
+        <div class="cta">${S.cta}</div>
+      </div>`;
+    el.onclick=()=>{ $$('#imgs .creative').forEach(x=>x.classList.remove('sel'));
+      el.classList.add('sel'); S.img=seed; S.imgHead=head; $("#next").disabled=false; };
+    box.appendChild(el);
+  }
+  S.img=null; $("#next").disabled=true;
+}
+$("#regen").onclick=()=>{ S.imgSeed++; paintImgs(); };
+
+// Paso 4
+function paintText(){
+  const c = COPY[S.angle]||COPY.autoridad;
+  const H=$("#heads"), B=$("#bodies"); H.innerHTML=""; B.innerHTML="";
+  c.heads.forEach((h,i)=>{
+    const o=document.createElement('div'); o.className="opt"+(i===0?" sel":""); o.contentEditable=true;
+    o.innerHTML=`${h.t}<small>· ${h.why}</small>`;
+    o.onclick=()=>{ $$('#heads .opt').forEach(x=>x.classList.remove('sel')); o.classList.add('sel');
+      S.head=o.childNodes[0].textContent.trim(); syncNext(); };
+    o.oninput=()=>{ if(o.classList.contains('sel')) S.head=o.childNodes[0].textContent.trim(); };
+    H.appendChild(o);
+  });
+  c.bodies.forEach((b,i)=>{
+    const o=document.createElement('div'); o.className="opt"+(i===0?" sel":""); o.contentEditable=true;
+    o.innerHTML=`${b.t}<small>· ${b.why}</small>`;
+    o.onclick=()=>{ $$('#bodies .opt').forEach(x=>x.classList.remove('sel')); o.classList.add('sel');
+      S.body=o.childNodes[0].textContent.trim(); syncNext(); };
+    o.oninput=()=>{ if(o.classList.contains('sel')) S.body=o.childNodes[0].textContent.trim(); };
+    B.appendChild(o);
+  });
+  S.head=c.heads[0].t; S.body=c.bodies[0].t; syncNext();
+}
+$("#ctas").onclick=e=>{const b=e.target.closest('.chip'); if(!b)return;
+  $$('#ctas .chip').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); S.cta=b.dataset.cta;};
+function syncNext(){ if(S.step===3) $("#next").disabled=!(S.head&&S.body); }
+
+// Paso 5
+function paintPreview(){
+  $("#pvImg").src = `https://picsum.photos/seed/${S.img||'politica-aula-0'}/560/560`;
+  $("#pvHead").textContent = S.imgHead || S.head;
+  $("#pvBody").textContent = S.body;
+  $("#pvCta").textContent = S.cta;
+}
+
+// Victoria
+function paintWin(){
+  const names={autoridad:"Autoridad y prueba social",carrera:"Impulso a la carrera",urgencia:"Cupos y urgencia"};
+  $("#rcProd").textContent=S.prod; $("#rcAngle").textContent=names[S.angle]||"-";
+  $("#rcHead").textContent=S.head;
+}
+
+// navegación
+$("#next").onclick=()=>{
+  if(S.step<4 && !canAdvance()) return;
+  S.step++;
+  if(S.step===2) paintImgs();
+  if(S.step===3) paintText();
+  if(S.step===4) paintPreview();
+  if(S.step===5) paintWin();
+  if(S.step>5){ // "crear otro" reinicia
+    Object.assign(S,{step:0,prod:null,angle:null,img:null,imgSeed:0,head:null,body:null,cta:"Quiero inscribirme"});
+    $$('.choice.sel,.chip.sel').forEach(x=>x.classList.remove('sel'));
+    $$('#ctas .chip')[0].classList.add('sel');
+  }
+  render();
+};
+$("#back").onclick=()=>{ if(S.step>0){S.step--; render();} };
+
+render();
+</script>
+</body>
+</html>
