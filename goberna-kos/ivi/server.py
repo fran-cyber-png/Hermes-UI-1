@@ -30,7 +30,8 @@ from .memory import get_session, remember, is_followup, apply_followup_filters, 
 from .prompt_builder import build, formato_de_respuesta
 from .response_formatter import format_response
 from .config import (OLLAMA_URL, MODEL, PORT, OLLAMA_CTX, OLLAMA_TEMP, OLLAMA_TIMEOUT,
-                     PREGUNTAS_SUGERIDAS, PREGUNTAS_STUDIO, ANSWERS_CACHE, WARM_INTERVAL, WARM_PAUSA)
+                     OLLAMA_THINK, PREGUNTAS_SUGERIDAS, PREGUNTAS_STUDIO, ANSWERS_CACHE,
+                     WARM_INTERVAL, WARM_PAUSA)
 from . import cache
 from . import answer_cache
 from .warmer import arrancar_warmer
@@ -183,6 +184,9 @@ HTML = HTML.replace("__SUG__", json.dumps(PREGUNTAS_SUGERIDAS, ensure_ascii=Fals
 def call_ollama(prompt: str) -> str:
     payload = json.dumps({
         "model": MODEL, "prompt": prompt, "stream": False,
+        # think=False apaga el razonamiento de qwen3: la latencia baja ~3-4x y la
+        # calidad no sufre porque el modelo solo PRESENTA los HECHOS del prompt.
+        "think": OLLAMA_THINK,
         "options": {"temperature": OLLAMA_TEMP, "num_ctx": OLLAMA_CTX},
     }).encode()
     req = urllib.request.Request(OLLAMA_URL, data=payload, headers={"Content-Type": "application/json"})

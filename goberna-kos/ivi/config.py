@@ -22,6 +22,13 @@ CACHE_TTL = 60
 OLLAMA_CTX = 8192
 OLLAMA_TEMP = 0.3
 
+# qwen3 razona (thinking) antes de responder y ese razonamiento DOMINA la
+# latencia (medido en geógrafo: 8,0s con thinking -> 2,2s sin él). Ivi solo
+# PRESENTA datos ya calculados por el motor (no razona sobre números: la Ley I lo
+# prohíbe), así que el thinking agrega latencia sin valor. Se apaga por default;
+# IVI_THINK=1 lo reactiva para comparar.
+OLLAMA_THINK = os.environ.get("IVI_THINK", "0") == "1"
+
 # How long to wait for Ollama before giving up, in seconds.
 # Ollama serves OLLAMA_NUM_PARALLEL requests at a time and queues the rest, so
 # this budget covers queue wait + inference. One inference costs ~25s on the
