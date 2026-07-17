@@ -43,7 +43,7 @@ def _kpis(rows):
 
 
 def _by_label(items, needle):
-    return next((it for it in items if needle in it.label), None)
+    return next((it for it in items if needle.lower() in it.label.lower()), None)
 
 
 def test_honduras_con_33_dolares_no_es_el_mejor_pais():
@@ -58,6 +58,25 @@ def test_pt_con_18_dolares_no_es_el_peor_pais():
     worst = _by_label(items, "peor país")
     assert worst is not None
     assert "Bolivia" in worst.label, f"el peor país fue {worst.label!r} — PT (USD 18) no tiene señal"
+
+
+def test_ratio_alto_de_base_chica_no_corona_pero_se_muestra_aparte():
+    # Caso EEUU (2026-07-17): ratio altísimo (15.96) pero 26 ventas y confianza
+    # MEDIA -> NO es "el mejor para escalar" (ese es el de alta confianza con
+    # volumen: Perú), pero sí aparece aparte como test dedicado, no como titular.
+    rows = [
+        {"pais": "Perú", "roas": 6.83, "gastoUsd": 6022, "ventas": 378, "confianza": "alta", "cacVenta": 14},
+        {"pais": "México", "roas": 6.77, "gastoUsd": 4154, "ventas": 242, "confianza": "alta", "cacVenta": 15},
+        {"pais": "Estados Unidos", "roas": 15.96, "gastoUsd": 291, "ventas": 26, "confianza": "media", "cacVenta": 11},
+        {"pais": "Bolivia", "roas": 4.22, "gastoUsd": 1657, "ventas": 40, "confianza": "media", "cacVenta": 25},
+    ]
+    items = compute_impact(_kpis(rows))
+    best = _by_label(items, "para escalar")
+    assert best is not None and "Perú" in best.label, f"mejor para escalar fue {best and best.label!r}"
+    caveat = _by_label(items, "base chica")
+    assert caveat is not None and "Estados Unidos" in caveat.label and caveat.value == 15.96
+    worst = _by_label(items, "peor país")
+    assert worst is not None and "Bolivia" in worst.label
 
 
 def test_las_colas_van_en_una_linea_desestimada():

@@ -95,17 +95,34 @@ def compute_impact(k: KPIs) -> List[ImpactItem]:
     material = [r for r in con_gasto if roas_material(r)]
     colas = [r for r in con_gasto if not roas_material(r)]
     if material:
-        best = max(material, key=lambda r: r.get("roas") or 0)
+        # "Mejor país" con criterio de DECISIÓN, no ratio puro: un ROAS altísimo
+        # con 26 ventas y confianza media (EEUU) no es donde escalar. Coronamos el
+        # mejor de ALTA confianza (volumen real, "escalar"); el ratio alto de base
+        # chica se muestra APARTE como test, no como el titular.
+        alta = [r for r in material if r.get("confianza") == "alta"]
+        escalables = alta or material
+        best = max(escalables, key=lambda r: r.get("roas") or 0)
         items.append(ImpactItem(
-            label=f"ROAS mejor país ({best.get('pais', '?')})",
+            label=f"Mejor país para escalar ({best.get('pais', '?')})",
             kind=HECHO, value=round(best.get("roas"), 2), unit="ROAS",
-            nota=f"gasto USD {_r(best.get('gastoUsd'))}",
+            nota=f"gasto USD {_r(best.get('gastoUsd'))}, {best.get('ventas', '?')} ventas, "
+                 f"confianza {best.get('confianza', '?')} — donde cada dólar nuevo rinde con volumen",
         ))
+        # Ratio alto pero base chica: el máximo de TODO lo material, si supera al
+        # best y no es el mismo. Es un test dedicado, NO el país donde escalar.
+        ratio = max(material, key=lambda r: r.get("roas") or 0)
+        if ratio.get("pais") != best.get("pais") and (ratio.get("roas") or 0) > (best.get("roas") or 0):
+            items.append(ImpactItem(
+                label=f"Mejor ratio pero base chica ({ratio.get('pais', '?')})",
+                kind=HECHO, value=round(ratio.get("roas"), 2), unit="ROAS",
+                nota=f"solo {ratio.get('ventas', '?')} ventas (gasto USD {_r(ratio.get('gastoUsd'))}), "
+                     f"confianza {ratio.get('confianza', '?')} — vale un test dedicado, no mover el grueso ahí",
+            ))
         if len(material) >= 2:
             worst = min(material, key=lambda r: r.get("roas") or 0)
             cac = worst.get("cacVenta")
             items.append(ImpactItem(
-                label=f"ROAS peor país ({worst.get('pais', '?')})",
+                label=f"Peor país ({worst.get('pais', '?')})",
                 kind=HECHO, value=round(worst.get("roas"), 2), unit="ROAS",
                 nota=(f"gasto USD {_r(worst.get('gastoUsd'))}; "
                       f"CAC venta: {'USD ' + str(_r(cac)) if cac is not None else 's/d'}"),

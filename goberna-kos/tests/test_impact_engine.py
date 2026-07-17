@@ -38,7 +38,7 @@ def _kpis_full() -> KPIs:
 
 
 def _by_label(items, needle):
-    return next((it for it in items if needle in it.label), None)
+    return next((it for it in items if needle.lower() in it.label.lower()), None)
 
 
 def test_delta_revenue_is_fact_and_matches_series():
