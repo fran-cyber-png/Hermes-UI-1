@@ -2,62 +2,73 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # setup-voz-geografo.sh — instala la voz de Ivi en geógrafo (100.117.204.80).
 #
-#   TTS: Piper (local, CPU, 0 VRAM) + una voz español.
-#   STT: faster-whisper (small int8) en el venv del engine.
+#   TTS: Piper (binario standalone, CPU, 0 VRAM) + voz español es_MX.
+#   STT: faster-whisper (small int8) en un venv, importado por el engine vía
+#        PYTHONPATH (el engine sigue corriendo con el system python3.14).
 #
-# CORRELO EN GEÓGRAFO, no desde un agente (necesita el box y su red). Idempotente.
-# Después, en el service del engine (systemd), exportá:
-#   IVI_PIPER_BIN=/srv/ia-local/piper/piper
-#   IVI_PIPER_VOICE=/srv/ia-local/piper-voices/es_MX-claude-high.onnx
-#   IVI_WHISPER_MODEL=small   IVI_WHISPER_DEVICE=cpu   (o cuda si hay VRAM libre)
-# y reiniciá ivi.service. Probá con: curl -s localhost:8080/api/health | jq .voz
+# DESPLEGADO Y VERIFICADO el 2026-07-17 con estos mismos pasos (TTS Piper es_MX +
+# STT whisper small, loop cerrado OK). CORRELO EN GEÓGRAFO (shell del usuario =
+# fish, por eso el engine/deploy usan `bash`). Idempotente.
 #
-# NOTA (Ley I del deploy): las URLs/versiones de abajo hay que CONFIRMARLAS al
-# correr (Piper se movió de rhasspy a OHF-Voice; las voces viven en HF). No las
-# tomes como fijas: verificá el release vigente.
+# Notas reales del deploy:
+#   - geógrafo es EXTERNALLY-MANAGED (Arch/PEP 668) -> nada de pip al sistema;
+#     faster-whisper va en un venv. ctranslate2 4.8.1 SÍ tiene wheel para py3.14.
+#   - El engine NO cambia de intérprete (ExecStart intacto): se le pasa el
+#     site-packages del venv por PYTHONPATH en un drop-in de systemd.
+#   - La descarga de la voz (~63MB) puede cortarse; el script reintenta con -C -.
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-BASE=/srv/ia-local
+BASE=/home/geografo/ia-local
 PIPER_DIR="$BASE/piper"
 VOICES="$BASE/piper-voices"
-mkdir -p "$PIPER_DIR" "$VOICES"
+VENV="$BASE/venv"
+mkdir -p "$VOICES"
 
-# 1) Piper (binario standalone Linux x86_64; sin Python). CONFIRMÁ el release.
+# 1) Piper (binario standalone Linux x86_64; trae onnxruntime + espeak-ng-data).
 if [ ! -x "$PIPER_DIR/piper" ]; then
-  echo ">> Bajando Piper (confirmá la última release en github.com/OHF-Voice/piper1-gpl/releases)"
-  # Ejemplo (ajustá la versión):
-  # curl -fsSL -o /tmp/piper.tar.gz \
-  #   https://github.com/OHF-Voice/piper1-gpl/releases/download/<VER>/piper_linux_x86_64.tar.gz
-  # tar -xzf /tmp/piper.tar.gz -C "$PIPER_DIR" --strip-components=1
-  echo "!! Descomentá y ajustá la URL del release de Piper antes de correr." ; exit 2
+  echo ">> Piper"
+  curl -fsSL -o /tmp/piper.tar.gz \
+    https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz
+  tar -xzf /tmp/piper.tar.gz -C "$BASE"   # crea $BASE/piper/
 fi
 
-# 2) Voz español baseline (es_MX). Para probar la calidad, bajá varias y escuchá.
-#    (es-PE no existe en Piper; ver docs/26 para la voz peruana buena.)
-grab_voice () { # $1 = ruta relativa en HF piper-voices
-  local f; f="$(basename "$1")"
-  [ -f "$VOICES/$f" ] || curl -fsSL -o "$VOICES/$f" \
-    "https://huggingface.co/rhasspy/piper-voices/resolve/main/$1"
-  [ -f "$VOICES/$f.json" ] || curl -fsSL -o "$VOICES/$f.json" \
-    "https://huggingface.co/rhasspy/piper-voices/resolve/main/$1.json"
-}
-grab_voice "es/es_MX/claude/high/es_MX-claude-high.onnx"
-grab_voice "es/es_AR/daniela/high/es_AR-daniela-high.onnx"   # opción a escuchar
-echo ">> Voces en $VOICES. Probá: echo 'Hola, soy Ivi.' | $PIPER_DIR/piper -m $VOICES/es_MX-claude-high.onnx -f /tmp/ivi.wav"
+# 2) Voz español es_MX (baseline). Descarga robusta (resume) + verificación.
+VOICE="$VOICES/es_MX-claude-high.onnx"
+URL="https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/claude/high/es_MX-claude-high.onnx"
+for try in 1 2 3; do
+  [ -f "$VOICE.json" ] || curl -fsSL -o "$VOICE.json" "$URL.json"
+  curl -fsSL -C - -o "$VOICE" "$URL" || true
+  # valida que sea un ONNX parseable (si está truncado, piper aborta)
+  if echo "prueba" | "$PIPER_DIR/piper" --model "$VOICE" --output_file /tmp/_v.wav 2>/dev/null; then
+    echo ">> voz OK"; break
+  fi
+  echo ">> voz incompleta, reintento $try"
+done
 
-# 3) faster-whisper en el venv del engine (NO en el Python del sistema).
-#    En geógrafo hay Python de sobra; usá el mismo venv donde corre el engine.
-VENV="$BASE/venv"
+# 3) faster-whisper en un venv (NO al sistema).
 [ -d "$VENV" ] || python3 -m venv "$VENV"
 "$VENV/bin/pip" install -q --upgrade pip
 "$VENV/bin/pip" install -q faster-whisper
-# El modelo se baja solo la 1ª vez a ~/.cache/huggingface (small int8 ~1-2GB VRAM,
-# o CPU). Pre-cacheá:
 "$VENV/bin/python" - <<'PY'
 from faster_whisper import WhisperModel
-WhisperModel("small", device="cpu", compute_type="int8")
+WhisperModel("small", device="cpu", compute_type="int8")   # pre-cachea el modelo
 print("faster-whisper small OK")
 PY
 
-echo ">> Listo. Exportá las env vars en ivi.service y reiniciá. Probá /api/health."
+# 4) Drop-in de systemd: env de voz + el site-packages del venv por PYTHONPATH.
+SITE="$VENV/lib/python3.14/site-packages"
+sudo tee /etc/systemd/system/ivi.service.d/voz.conf >/dev/null <<CONF
+[Service]
+Environment=IVI_PIPER_BIN=$PIPER_DIR/piper
+Environment=IVI_PIPER_VOICE=$VOICE
+Environment=IVI_WHISPER_MODEL=small
+Environment=IVI_WHISPER_DEVICE=cpu
+Environment=PYTHONPATH=$SITE
+CONF
+sudo systemctl daemon-reload
+sudo systemctl restart ivi
+sleep 3
+echo ">> health.voz:"; curl -s -m 6 http://localhost:8080/api/health \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin).get("voz"))'
+echo ">> esperado: {'tts': 'piper', 'stt': True}"

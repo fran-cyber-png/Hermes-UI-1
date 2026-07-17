@@ -125,5 +125,11 @@ def stt(audio_bytes: bytes, ext: str = ".webm") -> str:
     with tempfile.NamedTemporaryFile(suffix=ext, delete=True) as f:
         f.write(audio_bytes)
         f.flush()
-        segs, _ = _whisper_model.transcribe(f.name, language="es", vad_filter=True)
+        # initial_prompt sesga a whisper hacia los nombres propios de la marca
+        # (si no, "Ivi" sale "Libid"). No inventa palabras: solo mejora el prior.
+        segs, _ = _whisper_model.transcribe(
+            f.name, language="es", vad_filter=True,
+            initial_prompt="Conversación con Ivi, la asistente de Goberna, sobre "
+                           "ventas, ROAS, CAC, pauta, Cerberus, Meta y países como "
+                           "Perú, México y Estados Unidos.")
         return " ".join(s.text for s in segs).strip()

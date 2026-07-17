@@ -7,17 +7,23 @@
 > Decisiones de Estephano (2026-07-17): Piper local, llama-swap ya, crédito AWS
 > al LLM creativo, voz peruana buena si se puede.
 
-## 0. Qué ya está hecho (en main, sin deployar)
+## 0. Estado: DESPLEGADO en geógrafo (2026-07-17) y verificado
 
-- **`think:false`** en el engine (commit `6a731ed`): las respuestas bajan de ~14s
-  a ~6s. Ya activo por default; `IVI_THINK=1` lo revierte para comparar.
-- **Endpoints de voz** (`/api/tts`, `/api/stt`) + módulo `ivi/voz.py`, con
-  degradación limpia (503 legible si falta el backend). `/api/health` reporta
-  `voz: {tts, stt}`.
+- **`think:false`** (commit `6a731ed`): en prod las respuestas bajan de ~14s a
+  **~5,5s** (medido). Activo por default; `IVI_THINK=1` lo revierte.
+- **Voz VIVA en geógrafo**: `curl localhost:8080/api/health` -> `voz: {tts:piper,
+  stt:true}`.
+  - **TTS**: Piper `es_MX-claude-high` (CPU, 0 VRAM, RTF ~0,06). `/api/tts` ->
+    WAV real. Verificado desde la Mac vía Tailscale.
+  - **STT**: faster-whisper `small` int8 en venv (vía PYTHONPATH; el engine sigue
+    con el system python3.14). Loop cerrado verificado: la voz de Ivi -> `/api/stt`
+    -> "Hola, soy Ivi, Estados Unidos lidera el ROAS con 17,4" en ~4s. El
+    `initial_prompt` de `voz.py` arregla los nombres propios ("Ivi", no "Libid").
 - **UI de voz** en el prototipo: toggle "Ivi habla" (auto-play del resumen
-  hablado) + push-to-talk. Se gatean por `/api/health`.
-- Todo verificado en dev (TTS por `say` de macOS). En geógrafo hay que instalar
-  Piper + faster-whisper (paso 1).
+  hablado) + push-to-talk, gateados por `/api/health`. El prototipo NO está
+  servido en geógrafo (es local); para usar el mic en el navegador falta servirlo
+  por **https** (getUserMedia, ver §1).
+- Reproducible con `deploy/setup-voz-geografo.sh` (refleja los pasos reales).
 
 ## 1. Instalar la voz (Piper + faster-whisper)
 
