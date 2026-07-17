@@ -57,4 +57,14 @@ describe("roasPorPais — cruzar gasto y ventas, decidir con volumen", () => {
     );
     assert.equal(r.find((x) => x.pais === "Sin país"), undefined);
   });
+
+  test("céntimos que redondean a 0 y cero ventas no producen fila (caso Bélgica USD 0,30)", () => {
+    const r = roasPorPais([{ pais: "Bélgica", gastoUsd: 0.3 }], []);
+    assert.equal(r.find((x) => x.pais === "Bélgica"), undefined);
+  });
+
+  test("ventas sin gasto SÍ queda aunque el gasto sea 0: demanda orgánica es información", () => {
+    const r = roasPorPais([], [{ pais: "Uruguay", ventasUsd: 300, ventas: 3 }]);
+    assert.notEqual(r.find((x) => x.pais === "Uruguay"), undefined);
+  });
 });

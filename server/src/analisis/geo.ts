@@ -21,6 +21,19 @@ export function normalizarPais(nombre: string): string {
 }
 
 /**
+ * Nombre presentable: "CROACIA" (Cerberus a veces guarda el país a los gritos) → "Croacia".
+ * Solo toca strings TODO-mayúsculas de más de 3 letras: "Perú" queda igual y un código
+ * crudo tipo "XX" sigue visible como código.
+ */
+export function nombreBonito(nombre: string): string {
+  const t = nombre.trim();
+  if (t.length > 3 && t === t.toUpperCase()) {
+    return t.toLowerCase().replace(/(^|[\s(])\p{L}/gu, (m) => m.toUpperCase());
+  }
+  return t;
+}
+
+/**
  * Convierte a USD con la tasa CONGELADA de la venta (Cerberus la guarda en `radio_multiplicador`).
  *
  * NO recalcula con la tasa de hoy: una venta vieja daría un monto distinto al que realmente entró.
@@ -47,7 +60,7 @@ export function cruzarPorPais(gasto: GastoPais[], ventas: VentaPais[]): Segmento
 
   for (const g of gasto) {
     const k = normalizarPais(g.pais);
-    const prev = porPais.get(k) ?? { nombre: g.pais, gastoUsd: 0, ventasUsd: 0, ventas: 0 };
+    const prev = porPais.get(k) ?? { nombre: nombreBonito(g.pais), gastoUsd: 0, ventasUsd: 0, ventas: 0 };
     prev.gastoUsd += g.gastoUsd;
     porPais.set(k, prev);
   }
@@ -55,7 +68,7 @@ export function cruzarPorPais(gasto: GastoPais[], ventas: VentaPais[]): Segmento
   for (const v of ventas) {
     const k = normalizarPais(v.pais);
     // El nombre "bonito" lo pone el lado del gasto (Meta) si existe; si no, el de la venta.
-    const prev = porPais.get(k) ?? { nombre: v.pais, gastoUsd: 0, ventasUsd: 0, ventas: 0 };
+    const prev = porPais.get(k) ?? { nombre: nombreBonito(v.pais), gastoUsd: 0, ventasUsd: 0, ventas: 0 };
     prev.ventasUsd += v.ventasUsd;
     prev.ventas += v.ventas;
     porPais.set(k, prev);

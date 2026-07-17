@@ -66,5 +66,9 @@ export function roasPorPais(gasto: GastoPais[], ventas: VentaPaisUsd[]): RoasPai
       ventasSharePct: pct(s.ventasUsd, ventasTotal),
       cacVenta: s.ventas > 0 ? Math.round((s.gastoUsd / s.ventas) * 100) / 100 : null,
     }))
+    // Céntimos de gasto que redondean a 0 y cero ventas (Bélgica USD 0,30, Canadá…):
+    // filas que no informan nada y engordan la lista que lee Ivi. Un país con ventas
+    // sin gasto (sin_gasto) o con gasto real sí se queda — eso ES información.
+    .filter((r) => r.gastoUsd > 0 || r.ventas > 0)
     .sort((a, b) => b.oportunidadUsd - a.oportunidadUsd);
 }

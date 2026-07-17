@@ -21,7 +21,20 @@ const ISO2_A_PAIS: Record<string, string> = {
   UY: "Uruguay", ES: "España", US: "Estados Unidos", GB: "Reino Unido", HN: "Honduras",
   AR: "Argentina", VE: "Venezuela", CR: "Costa Rica", SV: "El Salvador", NI: "Nicaragua",
   PR: "Puerto Rico", CA: "Canadá", IT: "Italia", FR: "Francia", DE: "Alemania",
+  PT: "Portugal", BE: "Bélgica", CH: "Suiza", NL: "Países Bajos", HR: "Croacia", PL: "Polonia",
 };
+
+/**
+ * Código de país de Meta → nombre. "UNKNOWN" (así lo manda Meta cuando no pudo geolocalizar)
+ * va al balde "Sin país" — el mismo que roasPais.ts ya excluye del ranking; antes pasaba crudo
+ * y aparecía un país llamado UNKNOWN en la respuesta de Ivi. Un código no mapeado se muestra
+ * crudo a propósito: visible para agregarlo al mapa, no escondido.
+ */
+export function paisDesdeIso(codigo: string): string {
+  const iso2 = String(codigo ?? "").trim().toUpperCase();
+  if (!iso2 || iso2 === "UNKNOWN") return "Sin país";
+  return ISO2_A_PAIS[iso2] ?? iso2;
+}
 
 const CUENTAS_EN_PARALELO = 4;
 
@@ -45,9 +58,7 @@ async function gastoDeCuenta(
 
   const porPais = new Map<string, number>();
   for (const f of filas as any[]) {
-    const iso2 = String(f.country ?? "").toUpperCase();
-    // País desconocido: se muestra con su código crudo, no se descarta a ciegas.
-    const pais = ISO2_A_PAIS[iso2] ?? (iso2 || "Sin país");
+    const pais = paisDesdeIso(String(f.country ?? ""));
     const usd = aUsd(Number(f.spend ?? 0), String(f.account_currency ?? "USD"), tasas);
     if (usd == null) continue; // moneda sin tasa: no se falsea el total
     porPais.set(pais, (porPais.get(pais) ?? 0) + usd);

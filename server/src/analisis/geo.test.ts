@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test, describe } from "node:test";
-import { aUsd, cruzarPorPais, normalizarPais, type GastoPais, type VentaPais } from "./geo.js";
+import { aUsd, cruzarPorPais, normalizarPais, nombreBonito, type GastoPais, type VentaPais } from "./geo.js";
 
 /**
  * Atribución geográfica, portada de `goberna-dashboard/core/services/geo_report.py`.
@@ -76,5 +76,16 @@ describe("cruzarPorPais — gasto (audiencia) vs ventas (cliente)", () => {
   test("no pierde plata: la suma de gasto se conserva", () => {
     const r = cruzarPorPais(gasto, ventas);
     assert.equal(r.reduce((s, x) => s + x.gastoUsd, 0), 1800);
+  });
+
+  test('los países a los gritos de Cerberus salen presentables: "CROACIA" → "Croacia"', () => {
+    const r = cruzarPorPais([], [{ pais: "CROACIA", ventasUsd: 200, ventas: 2 }]);
+    assert.equal(r[0].nombre, "Croacia");
+  });
+
+  test('nombreBonito no toca lo que ya está bien ni los códigos: "Perú" y "XX" quedan igual', () => {
+    assert.equal(nombreBonito("Perú"), "Perú");
+    assert.equal(nombreBonito("XX"), "XX");
+    assert.equal(nombreBonito("REPUBLICA DOMINICANA"), "Republica Dominicana");
   });
 });
