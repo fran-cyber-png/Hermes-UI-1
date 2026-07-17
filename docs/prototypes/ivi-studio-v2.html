@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ivi Studio v2 · estudio adaptativo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Fase A del plan docs/24. Marca Goberna + estándar taste-skill.
+   Un acento por familia (azul + dorado funcional). Radios: tarjetas 16, botones 12,
+   chips pill. Cero em-dash en texto visible. Light-mode, un solo tema. */
+:root{
+  --navy:#0E2A52; --blue:#2563EB; --blue-ink:#1D4ED8;
+  --gold:#FFC800; --gold-ink:#CAA106;
+  --bg:#F5F7FB; --card:#FFFFFF; --border:#E6EAF2;
+  --ink:#16213A; --muted:#5B6B86; --success:#16A34A;
+  --shadow:0 10px 30px -12px rgba(14,42,82,.18);
+  --shadow-sm:0 2px 8px -3px rgba(14,42,82,.14);
+  --r-card:16px; --r-btn:12px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:Inter,system-ui,-apple-system,sans-serif;
+  background:radial-gradient(1200px 600px at 85% -10%, rgba(37,99,235,.06), transparent 60%), var(--bg);
+  color:var(--ink); min-height:100dvh; -webkit-font-smoothing:antialiased}
+h1,h2,h3,.mont{font-family:Montserrat,sans-serif}
+.wrap{max-width:940px; margin:0 auto; padding:0 20px}
+
+header{position:sticky; top:0; z-index:20; background:rgba(245,247,251,.82);
+  backdrop-filter:blur(10px); border-bottom:1px solid var(--border)}
+.bar{display:flex; align-items:center; gap:12px; height:62px}
+.emblem{width:34px;height:34px;flex:none;border-radius:50%;
+  background:radial-gradient(circle at 30% 25%, #143a6e, var(--navy));
+  display:grid;place-items:center;box-shadow:inset 0 0 0 1.5px var(--gold-ink)}
+.emblem svg{width:18px;height:18px}
+.brand{font-weight:800;letter-spacing:.2px;font-size:16px}
+.brand small{color:var(--muted);font-weight:600}
+.sim{margin-left:auto;display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;
+  color:var(--muted);background:var(--card);border:1px solid var(--border);padding:6px 11px;border-radius:999px}
+.sim .dot{width:7px;height:7px;border-radius:50%;background:var(--gold)}
+
+.stepper{padding:20px 0 8px}
+.steps{display:flex;gap:8px;margin-bottom:10px}
+.seg{flex:1;height:6px;border-radius:999px;background:var(--border);overflow:hidden}
+.seg i{display:block;height:100%;width:0;border-radius:999px;
+  background:linear-gradient(90deg,var(--gold),var(--gold-ink));transition:width .5s cubic-bezier(.16,1,.3,1)}
+.seg.done i,.seg.now i{width:100%}
+.seg.now{box-shadow:0 0 0 3px rgba(255,200,0,.16)}
+.stepmeta{display:flex;justify-content:space-between;align-items:baseline}
+.stepmeta .k{font-size:12px;font-weight:700;color:var(--gold-ink);text-transform:uppercase;letter-spacing:.14em}
+.stepmeta .t{font-size:13px;color:var(--muted)}
+
+.ivi{display:flex;gap:12px;align-items:flex-start;margin:18px 0 4px}
+.ivi .av{width:38px;height:38px;flex:none;border-radius:50%;
+  background:radial-gradient(circle at 30% 25%, #143a6e, var(--navy));
+  display:grid;place-items:center;box-shadow:inset 0 0 0 1.5px var(--gold-ink), var(--shadow-sm)}
+.ivi .av svg{width:19px;height:19px}
+.ivi .say{background:var(--card);border:1px solid var(--border);border-radius:4px 16px 16px 16px;
+  padding:12px 15px;box-shadow:var(--shadow-sm);font-size:14.5px;line-height:1.5;max-width:640px}
+.ivi .say b{color:var(--navy)}
+.tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.02em;color:var(--gold-ink);
+  background:rgba(255,200,0,.14);border-radius:6px;padding:1px 7px;vertical-align:middle}
+
+.panel{display:none;animation:in .45s cubic-bezier(.16,1,.3,1)}
+.panel.active{display:block}
+@keyframes in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes flash{0%{box-shadow:0 0 0 0 rgba(37,99,235,.55)}100%{box-shadow:0 0 0 14px rgba(37,99,235,0)}}
+.flash{animation:flash .9s ease-out}
+@media (prefers-reduced-motion:reduce){.panel.active,.flash{animation:none}.seg i{transition:none}}
+h2.step{font-size:26px;font-weight:800;margin:14px 0 4px;letter-spacing:-.01em}
+.lead{color:var(--muted);font-size:15px;margin:0 0 18px;max-width:60ch}
+
+.grid{display:grid;gap:14px}
+.grid.two{grid-template-columns:1fr 1fr}
+.grid.three{grid-template-columns:1fr 1fr 1fr}
+@media (max-width:720px){.grid.two,.grid.three{grid-template-columns:1fr}}
+.choice{position:relative;text-align:left;cursor:pointer;background:var(--card);
+  border:1.5px solid var(--border);border-radius:var(--r-card);padding:18px;
+  transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease}
+.choice:hover{transform:translateY(-3px);box-shadow:var(--shadow);border-color:#cdd8ee}
+.choice.sel{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.14), var(--shadow)}
+.choice.sel::after{content:"✓";position:absolute;top:14px;right:14px;width:24px;height:24px;border-radius:50%;
+  background:var(--blue);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:700}
+.choice h3{margin:0 0 4px;font-size:17px;font-weight:700}
+.choice p{margin:0;color:var(--muted);font-size:13.5px;line-height:1.5}
+.choice .why{margin-top:11px;font-size:12.5px;color:var(--gold-ink);font-weight:600}
+.badge{display:inline-block;font-size:11px;font-weight:700;color:#fff;background:var(--navy);
+  border-radius:6px;padding:2px 8px;margin-bottom:9px}
+.badge.star{background:linear-gradient(90deg,var(--gold-ink),#b4900a)}
+
+.chips{display:flex;flex-wrap:wrap;gap:10px}
+.chip{cursor:pointer;border:1.5px solid var(--border);background:var(--card);border-radius:999px;
+  padding:9px 16px;font-size:14px;font-weight:600;color:var(--ink);transition:.16s}
+.chip:hover{border-color:#cdd8ee;transform:translateY(-1px)}
+.chip.sel{background:var(--navy);color:#fff;border-color:var(--navy)}
+.chip.ghost{border-style:dashed;color:var(--blue-ink);font-weight:700}
+
+.facts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:6px 0 20px}
+@media (max-width:720px){.facts{grid-template-columns:1fr}}
+.fact{background:var(--card);border:1px solid var(--border);border-radius:var(--r-card);
+  padding:14px 16px;display:flex;gap:12px;align-items:center}
+.fact .n{font-family:Montserrat;font-weight:800;font-size:22px;color:var(--navy);line-height:1}
+.fact .l{font-size:13px;color:var(--muted);line-height:1.4}
+.fact .l b{color:var(--ink)}
+
+.imgs{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:720px){.imgs{grid-template-columns:1fr}}
+.creative{position:relative;cursor:pointer;border-radius:var(--r-card);overflow:hidden;aspect-ratio:1/1;
+  border:1.5px solid var(--border);background:var(--navy);transition:transform .18s ease, box-shadow .18s ease}
+.creative:hover{transform:translateY(-3px);box-shadow:var(--shadow)}
+.creative.sel{outline:3px solid var(--blue);outline-offset:2px}
+.creative img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:saturate(.9)}
+.creative .scrim{position:absolute;inset:0;background:linear-gradient(180deg, rgba(14,42,82,.15), rgba(14,42,82,.55) 55%, rgba(14,42,82,.92))}
+.creative .ov{position:absolute;inset:0;padding:16px;display:flex;flex-direction:column;justify-content:flex-end;color:#fff}
+.creative .ov .kick{font-size:10.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin-bottom:6px}
+.creative .ov h4{font-family:Montserrat;font-weight:800;font-size:18px;line-height:1.15;margin:0}
+.creative .ov .cta{margin-top:10px;align-self:flex-start;font-size:11px;font-weight:700;background:var(--gold);color:var(--navy);padding:5px 11px;border-radius:8px}
+.creative .crest{position:absolute;top:12px;left:12px;width:26px;height:26px;border-radius:50%;
+  background:rgba(14,42,82,.55);display:grid;place-items:center;box-shadow:inset 0 0 0 1px var(--gold)}
+.creative .crest svg{width:14px;height:14px}
+
+.tuner{background:var(--card);border:1px solid var(--border);border-radius:var(--r-card);padding:18px;margin-bottom:16px}
+.tuner .h{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
+  margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.opt{display:block;width:100%;text-align:left;cursor:pointer;margin-bottom:9px;border:1.5px solid var(--border);
+  background:#fbfcfe;border-radius:12px;padding:12px 14px;font:inherit;color:var(--ink);font-size:14.5px;line-height:1.45;transition:.15s}
+.opt:last-child{margin-bottom:0}
+.opt:hover{border-color:#cdd8ee}
+.opt.sel{border-color:var(--blue);background:#fff;box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.opt small{display:block;color:var(--gold-ink);font-weight:600;font-size:11.5px;margin-top:3px}
+
+/* ── Texto libre por paso (lo nuevo de v2) ── */
+.free{margin-top:16px;background:linear-gradient(180deg,#fff,#fbfcfe);
+  border:1.5px dashed #cdd8ee;border-radius:var(--r-card);padding:14px 16px}
+.free label{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--navy);margin-bottom:9px}
+.free label svg{width:16px;height:16px;color:var(--blue)}
+.free .row{display:flex;gap:10px}
+.free input{flex:1;font:inherit;font-size:14.5px;border:1.5px solid var(--border);border-radius:10px;
+  padding:11px 13px;color:var(--ink);background:#fff}
+.free input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.free input::placeholder{color:#9aa7bd}
+.reaction{margin-top:11px;display:none;gap:9px;align-items:flex-start;font-size:13.5px;line-height:1.5;color:var(--ink)}
+.reaction.show{display:flex}
+.reaction .mini-av{width:24px;height:24px;flex:none;border-radius:50%;
+  background:radial-gradient(circle at 30% 25%, #143a6e, var(--navy));display:grid;place-items:center;box-shadow:inset 0 0 0 1px var(--gold-ink)}
+.reaction .mini-av svg{width:12px;height:12px}
+.reaction.warn{color:#8a5a00}
+
+/* ── Preview / dry-run / win (igual v1) ── */
+.preview{background:var(--card);border:1px solid var(--border);border-radius:var(--r-card);overflow:hidden;box-shadow:var(--shadow-sm);max-width:360px;margin:0 auto}
+.preview .top{display:flex;align-items:center;gap:9px;padding:12px}
+.preview .pg{width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 30% 25%, #143a6e, var(--navy));display:grid;place-items:center;box-shadow:inset 0 0 0 1.2px var(--gold-ink)}
+.preview .pg svg{width:17px;height:17px}
+.preview .who b{font-size:13.5px}.preview .who span{font-size:11.5px;color:var(--muted)}
+.preview .body{padding:0 12px 12px;font-size:13.5px;line-height:1.5}
+.preview .pimg{aspect-ratio:1/1;position:relative;background:var(--navy)}
+.preview .pimg img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+.preview .pimg .scrim{position:absolute;inset:0;background:linear-gradient(180deg, rgba(14,42,82,.12), rgba(14,42,82,.55) 60%, rgba(14,42,82,.9))}
+.preview .pimg .ov{position:absolute;inset:0;padding:16px;display:flex;flex-direction:column;justify-content:flex-end;color:#fff}
+.preview .pimg .ov h4{font-family:Montserrat;font-weight:800;font-size:19px;line-height:1.15;margin:0}
+.preview .cta-row{display:flex;align-items:center;justify-content:space-between;background:#eef2f9;padding:11px 12px}
+.preview .cta-row .t{font-size:11px;color:var(--muted)}
+.preview .cta-row .b{font-size:12.5px;font-weight:700;color:#fff;background:var(--blue);padding:7px 13px;border-radius:8px}
+.dryrun{background:var(--card);border:1px solid var(--border);border-radius:var(--r-card);padding:18px;margin-top:6px}
+.dryrun .h{font-family:Montserrat;font-weight:700;font-size:15px;margin:0 0 4px}
+.dryrun ul{list-style:none;margin:12px 0 0;padding:0}
+.dryrun li{display:flex;gap:10px;align-items:baseline;padding:9px 0;border-top:1px solid var(--border);font-size:14px}
+.dryrun li:first-child{border-top:0}
+.dryrun li .lab{color:var(--muted);min-width:150px;font-size:13px}
+.dryrun li .val{font-weight:600}
+.gate{display:flex;gap:9px;align-items:flex-start;margin-top:14px;padding:12px 14px;background:rgba(255,200,0,.08);
+  border:1px solid rgba(202,161,6,.28);border-radius:12px;font-size:13px;color:var(--ink);line-height:1.5}
+.gate svg{flex:none;width:18px;height:18px;margin-top:1px;color:var(--gold-ink)}
+.win{text-align:center;padding:10px 0}
+.win .seal{width:74px;height:74px;margin:0 auto 14px;border-radius:50%;background:radial-gradient(circle at 30% 25%, #143a6e, var(--navy));
+  display:grid;place-items:center;box-shadow:inset 0 0 0 2px var(--gold), var(--shadow);animation:pop .5s cubic-bezier(.2,1.4,.3,1)}
+.win .seal svg{width:34px;height:34px;color:var(--gold)}
+@keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+.win h2{font-size:24px;margin:0 0 6px}
+.win p{color:var(--muted);margin:0 auto 18px;max-width:44ch}
+.receipt{text-align:left;max-width:460px;margin:0 auto;background:var(--card);border:1px solid var(--border);border-radius:var(--r-card);padding:16px 18px;box-shadow:var(--shadow-sm)}
+.receipt .rh{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.receipt div.row{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-top:1px dashed var(--border);font-size:13.5px}
+.receipt div.row:first-of-type{border-top:0}
+.receipt .row .l{color:var(--muted)}.receipt .row .v{font-weight:600;text-align:right}
+
+.nav{display:flex;align-items:center;gap:12px;margin:26px 0 40px}
+.btn{font:inherit;font-weight:700;font-size:15px;cursor:pointer;border-radius:var(--r-btn);padding:13px 22px;border:1.5px solid transparent;transition:.16s}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--blue);color:#fff;box-shadow:0 6px 18px -8px rgba(37,99,235,.7)}
+.btn.primary:not(:disabled):hover{background:var(--blue-ink);transform:translateY(-1px)}
+.btn.ghost{background:transparent;color:var(--muted);border-color:var(--border)}
+.btn.ghost:hover{color:var(--ink);border-color:#cdd8ee}
+.btn.gold{background:var(--gold);color:var(--navy);box-shadow:0 6px 18px -8px rgba(202,161,6,.7)}
+.btn.gold:hover{transform:translateY(-1px)}
+.spacer{flex:1}
+.mini{background:none;border:0;color:var(--blue-ink);font:inherit;font-weight:600;font-size:13.5px;cursor:pointer;padding:8px 4px}
+.mini:hover{text-decoration:underline}
+
+/* ── Chat invocado (FAB + drawer) ── */
+.fab{position:fixed;bottom:22px;right:22px;z-index:40;display:flex;align-items:center;gap:9px;
+  background:var(--navy);color:#fff;border:0;border-radius:999px;padding:13px 18px;cursor:pointer;
+  font:inherit;font-weight:700;font-size:14px;box-shadow:0 12px 30px -10px rgba(14,42,82,.6);transition:.18s}
+.fab:hover{transform:translateY(-2px)}
+.fab svg{width:18px;height:18px;color:var(--gold)}
+.fab .badge-dot{position:absolute;top:8px;right:12px;width:9px;height:9px;border-radius:50%;background:var(--gold);border:2px solid var(--navy)}
+.drawer{position:fixed;top:0;right:0;height:100dvh;width:390px;max-width:92vw;z-index:50;background:var(--card);
+  border-left:1px solid var(--border);box-shadow:-20px 0 50px -20px rgba(14,42,82,.35);
+  display:flex;flex-direction:column;transform:translateX(100%);transition:transform .32s cubic-bezier(.16,1,.3,1)}
+.drawer.open{transform:none}
+@media (prefers-reduced-motion:reduce){.drawer{transition:none}}
+.drawer .dh{display:flex;align-items:center;gap:11px;padding:15px 16px;border-bottom:1px solid var(--border)}
+.drawer .dh .av{width:34px;height:34px;flex:none;border-radius:50%;background:radial-gradient(circle at 30% 25%, #143a6e, var(--navy));display:grid;place-items:center;box-shadow:inset 0 0 0 1.4px var(--gold-ink)}
+.drawer .dh .av svg{width:17px;height:17px}
+.drawer .dh b{font-size:15px;font-family:Montserrat;font-weight:700}
+.drawer .dh small{color:var(--muted);font-size:12px;display:block}
+.drawer .dh .x{margin-left:auto;background:none;border:0;cursor:pointer;color:var(--muted);font-size:22px;line-height:1;padding:4px 8px}
+.msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:11px}
+.m{max-width:88%;padding:10px 13px;border-radius:14px;font-size:14px;line-height:1.5}
+.m.ivi-m{align-self:flex-start;background:#f1f4f9;border-bottom-left-radius:4px}
+.m.me{align-self:flex-end;background:var(--blue);color:#fff;border-bottom-right-radius:4px}
+.m .applied{margin-top:8px;font-size:12px;font-weight:600;color:var(--gold-ink);
+  background:rgba(255,200,0,.16);border-radius:8px;padding:5px 9px;display:inline-flex;gap:6px;align-items:center}
+.m.ivi-m b{color:var(--navy)}
+.suggest{display:flex;flex-wrap:wrap;gap:7px;padding:0 16px 10px}
+.suggest button{font:inherit;font-size:12.5px;font-weight:600;color:var(--blue-ink);background:#eef3fc;
+  border:1px solid #dbe6fb;border-radius:999px;padding:6px 11px;cursor:pointer}
+.suggest button:hover{background:#e2ecfb}
+.dinput{display:flex;gap:9px;padding:12px 14px;border-top:1px solid var(--border);background:#fbfcfe}
+.dinput input{flex:1;font:inherit;font-size:14px;border:1.5px solid var(--border);border-radius:10px;padding:11px 13px;background:#fff}
+.dinput input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.dinput button{background:var(--blue);color:#fff;border:0;border-radius:10px;padding:0 15px;cursor:pointer;font-weight:700}
+.scrim-bg{position:fixed;inset:0;background:rgba(14,42,82,.28);z-index:45;opacity:0;pointer-events:none;transition:.3s}
+.scrim-bg.show{opacity:1;pointer-events:auto}
+</style>
+</head>
+<body>
+
+<svg style="display:none">
+  <symbol id="crest" viewBox="0 0 24 24">
+    <g fill="none" stroke="#FFC800" stroke-width="1.6" stroke-linecap="round">
+      <path d="M4 9 L12 4 L20 9"/><path d="M4 9 H20"/>
+      <path d="M6.5 9 V17"/><path d="M12 9 V17"/><path d="M17.5 9 V17"/>
+      <path d="M4 17 H20"/><path d="M3 20 H21"/>
+    </g>
+  </symbol>
+  <symbol id="pen" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></g></symbol>
+</svg>
+
+<header>
+  <div class="wrap bar">
+    <div class="emblem"><svg><use href="#crest"/></svg></div>
+    <div class="brand">Ivi Studio <small>· estudio adaptativo</small></div>
+    <div class="sim"><span class="dot"></span> Modo simulación</div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="stepper">
+    <div class="steps" id="steps">
+      <div class="seg"><i></i></div><div class="seg"><i></i></div><div class="seg"><i></i></div>
+      <div class="seg"><i></i></div><div class="seg"><i></i></div>
+    </div>
+    <div class="stepmeta"><span class="k" id="stepK">Paso 1</span><span class="t" id="stepT">Qué promocionamos</span></div>
+  </div>
+
+  <div class="ivi"><div class="av"><svg><use href="#crest"/></svg></div><div class="say" id="say"></div></div>
+
+  <!-- PASO 1 -->
+  <section class="panel" data-step="0">
+    <h2 class="step">¿Qué vamos a promocionar?</h2>
+    <p class="lead">Elegí el producto, o describime la campaña en tus palabras y yo la infiero.</p>
+    <div class="grid three" id="prods">
+      <button class="choice" data-prod="Manual de Inteligencia y Contrainteligencia">
+        <span class="badge star">Tu estrella</span><h3>Manual de Inteligencia</h3>
+        <p>Contrainteligencia, Edición 2. Ticket accesible, alta rotación.</p>
+        <div class="why">648 ventas. El más vendido de tu catálogo.</div></button>
+      <button class="choice" data-prod="Diplomado en Gestión Pública">
+        <span class="badge">Ticket alto</span><h3>Diplomado en Gestión Pública</h3>
+        <p>Programa largo, back-end. Sostiene la facturación en USD.</p>
+        <div class="why">Menos volumen, mayor valor por venta.</div></button>
+      <button class="choice" data-prod="Certificado con Portadiploma">
+        <span class="badge">Medio</span><h3>Certificado con Portadiploma</h3>
+        <p>Cierre rápido, buen complemento de la escalera.</p>
+        <div class="why">480 ventas. Segundo más vendido.</div></button>
+    </div>
+    <div class="free">
+      <label><svg><use href="#pen"/></svg> O escribilo vos</label>
+      <div class="row">
+        <input id="f0" placeholder="ej: quiero promocionar el diplomado apuntando a jóvenes dirigentes">
+        <button class="btn primary" data-apply="0">Aplicar</button>
+      </div>
+      <div class="reaction" id="r0"></div>
+    </div>
+  </section>
+
+  <!-- PASO 2 -->
+  <section class="panel" data-step="1">
+    <h2 class="step">El brief, con tus datos reales</h2>
+    <p class="lead">Sale de tu revisión de atribución (datos hasta el 2026-07-11). Elegí un ángulo o proponé el tuyo.</p>
+    <div class="facts">
+      <div class="fact"><div class="n">7,25×</div><div class="l"><b>Perú</b> es tu mejor ROAS. País objetivo sugerido. <span class="tag">HECHO</span></div></div>
+      <div class="fact"><div class="n">66,7%</div><div class="l"><b>Facebook</b> concentra tus interacciones. Instagram flojo. <span class="tag">HECHO</span></div></div>
+      <div class="fact"><div class="n">7,1×</div><div class="l">ROAS blended vs objetivo de 4×. Hay margen. <span class="tag">HECHO</span></div></div>
+      <div class="fact"><div class="n">USD 115</div><div class="l">Ticket promedio por venta. Referencia. <span class="tag">HECHO</span></div></div>
+    </div>
+    <p class="lead" style="margin-bottom:10px">Elegí el <b>ángulo</b> del mensaje.</p>
+    <div class="chips" id="angles">
+      <button class="chip" data-angle="autoridad">Autoridad y prueba social</button>
+      <button class="chip" data-angle="carrera">Impulso a la carrera</button>
+      <button class="chip" data-angle="urgencia">Cupos y urgencia</button>
+    </div>
+    <div class="free">
+      <label><svg><use href="#pen"/></svg> O describí el ángulo que tenés en la cabeza</label>
+      <div class="row">
+        <input id="f1" placeholder="ej: apelá a la comunidad, que se sientan parte de algo más grande">
+        <button class="btn primary" data-apply="1">Aplicar</button>
+      </div>
+      <div class="reaction" id="r1"></div>
+    </div>
+  </section>
+
+  <!-- PASO 3 -->
+  <section class="panel" data-step="2">
+    <h2 class="step">Elegí la imagen</h2>
+    <p class="lead">Cuatro conceptos con la marca aplicada. Elegí uno, pedí más, o describí la imagen que ves.</p>
+    <div class="imgs" id="imgs"></div>
+    <div style="margin-top:14px"><button class="mini" id="regen">↻ Generar cuatro más</button></div>
+    <div class="free">
+      <label><svg><use href="#pen"/></svg> O describí la imagen que imaginás</label>
+      <div class="row">
+        <input id="f2" placeholder="ej: una persona joven estudiando de noche, cálido, primer plano">
+        <button class="btn primary" data-apply="2">Aplicar</button>
+      </div>
+      <div class="reaction" id="r2"></div>
+    </div>
+  </section>
+
+  <!-- PASO 4 -->
+  <section class="panel" data-step="3">
+    <h2 class="step">Afiná el texto</h2>
+    <p class="lead">Alterná variantes, editá cualquiera tocándola, o escribí el tuyo y aprendo tu voz.</p>
+    <div class="tuner"><div class="h">Titular <span class="tag">elegí uno</span></div><div id="heads"></div></div>
+    <div class="tuner"><div class="h">Texto principal</div><div id="bodies"></div></div>
+    <div class="tuner"><div class="h">Botón</div>
+      <div class="chips" id="ctas">
+        <button class="chip sel" data-cta="Quiero inscribirme">Quiero inscribirme</button>
+        <button class="chip" data-cta="Ver el programa">Ver el programa</button>
+        <button class="chip" data-cta="Reservar mi cupo">Reservar mi cupo</button>
+      </div></div>
+    <div class="free">
+      <label><svg><use href="#pen"/></svg> Escribí tu propio titular y aprendo tu voz</label>
+      <div class="row">
+        <input id="f3" placeholder="ej: Formación política de verdad, sin vueltas">
+        <button class="btn primary" data-apply="3">Aplicar</button>
+      </div>
+      <div class="reaction" id="r3"></div>
+    </div>
+  </section>
+
+  <!-- PASO 5 -->
+  <section class="panel" data-step="4">
+    <h2 class="step">Revisá y aprobá</h2>
+    <p class="lead">Así queda, y esto es exactamente lo que pasaría. Nada sale sin tu OK. ¿Dudas? Preguntame en el chat.</p>
+    <div class="grid two" style="align-items:start">
+      <div class="preview" id="preview">
+        <div class="top"><div class="pg"><svg><use href="#crest"/></svg></div>
+          <div class="who"><b>Goberna Escuela</b><br><span>Publicidad</span></div></div>
+        <div class="body" id="pvBody"></div>
+        <div class="pimg"><img id="pvImg" alt=""><div class="scrim"></div><div class="ov"><h4 id="pvHead"></h4></div></div>
+        <div class="cta-row"><span class="t">goberna.escuela</span><span class="b" id="pvCta">Quiero inscribirme</span></div>
+      </div>
+      <div class="dryrun">
+        <p class="h">Qué haría al aprobar</p>
+        <ul>
+          <li><span class="lab">País objetivo</span><span class="val" id="dPais">Perú <span class="tag">ROAS 7,25×</span></span></li>
+          <li><span class="lab">Canal</span><span class="val">Facebook <span class="tag">66,7%</span></span></li>
+          <li><span class="lab">Presupuesto</span><span class="val">+USD 1.200 / semana</span></li>
+          <li><span class="lab">Eventos pixel</span><span class="val">PageView, Lead</span></li>
+          <li><span class="lab">Publicación</span><span class="val">Queda preparada, no se sube</span></li>
+        </ul>
+        <div class="gate">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z"/><path d="M9 12l2 2 4-4"/></svg>
+          <span>El lazo con Meta está apagado y el modo es simulación. Este creativo se guarda con su procedencia (datos, ángulo, quién aprobó). Publicar es una decisión aparte, tuya.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- VICTORIA -->
+  <section class="panel" data-step="5">
+    <div class="win">
+      <div class="seal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></div>
+      <h2>Creativo aprobado</h2>
+      <p>Quedó guardado con su procedencia. Cuando decidas publicar, sale con estos mismos datos detrás.</p>
+      <div class="receipt">
+        <div class="rh">Comprobante</div>
+        <div class="row"><span class="l">Producto</span><span class="v" id="rcProd"></span></div>
+        <div class="row"><span class="l">Ángulo</span><span class="v" id="rcAngle"></span></div>
+        <div class="row"><span class="l">Titular</span><span class="v" id="rcHead"></span></div>
+        <div class="row"><span class="l">Objetivo</span><span class="v">Perú · Facebook</span></div>
+        <div class="row"><span class="l">Tu aporte</span><span class="v" id="rcNotas">0 ajustes</span></div>
+        <div class="row"><span class="l">Datos base</span><span class="v">Revisión 16/07 · frescura 11/07</span></div>
+        <div class="row"><span class="l">Aprobó</span><span class="v">Estephano · simulación</span></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="nav">
+    <button class="btn ghost" id="back">Atrás</button>
+    <span class="spacer"></span>
+    <button class="btn primary" id="next" disabled>Continuar</button>
+  </div>
+</div>
+
+<!-- Chat invocado -->
+<button class="fab" id="fab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Hablar con Ivi<span class="badge-dot"></span></button>
+<div class="scrim-bg" id="scrimbg"></div>
+<aside class="drawer" id="drawer" aria-label="Chat con Ivi">
+  <div class="dh">
+    <div class="av"><svg><use href="#crest"/></svg></div>
+    <div><b>Ivi</b><small id="chatctx">Te acompaño en este paso</small></div>
+    <button class="x" id="closeChat" aria-label="Cerrar">×</button>
+  </div>
+  <div class="msgs" id="msgs"></div>
+  <div class="suggest" id="suggest"></div>
+  <div class="dinput">
+    <input id="chatIn" placeholder="Preguntame o pedime un cambio...">
+    <button id="chatSend">Enviar</button>
+  </div>
+</aside>
+
+<script>
+/* ── El BRIEF: estado vivo, única verdad que leen canvas y chat ── */
+const B = {
+  step:0, prod:null, angle:null, img:null, imgSeed:0, imgHead:null,
+  head:null, body:null, cta:"Quiero inscribirme",
+  tono:null, voz:null, notas:[],
+};
+
+const STEPS=[{k:"Paso 1",t:"Qué promocionamos"},{k:"Paso 2",t:"El brief y el ángulo"},
+  {k:"Paso 3",t:"La imagen"},{k:"Paso 4",t:"El texto"},{k:"Paso 5",t:"Revisar y aprobar"}];
+const SAY=[
+  ()=>"Hola, soy <b>Ivi</b>. Armamos el creativo juntos. Podés elegir, escribir lo tuyo en cada paso, o abrir el chat y pedirme lo que quieras. Empecemos: <b>qué promocionamos</b>.",
+  ()=>`Para <b>${B.prod}</b>, tus datos ya me dicen a quién apuntar. Elegí un ángulo o describime el tuyo y lo adapto.`,
+  ()=>"Ahora lo visual. Cuatro conceptos sobre la marca. Si ninguno te cierra, describime la imagen y la reencuadro.",
+  ()=>"El mensaje. Alterná, editá, o escribí el tuyo. Cuando escribís vos, <b>aprendo tu voz</b> y sigo en ese tono.",
+  ()=>"Último paso: <b>vos supervisás</b>. Te muestro cómo queda y qué pasaría. Cualquier duda, preguntame acá al lado.",
+  ()=>"Listo. Cada decisión tuya quedó registrada con su procedencia. Cuando quieras, armamos otro.",
+];
+
+const COPY={
+  autoridad:{kick:"Referencia",
+    heads:[{t:"648 personas ya se formaron con el Manual",why:"prueba social, dato real"},
+      {t:"El material de referencia en inteligencia política",why:"autoridad de categoría"},
+      {t:"Inteligencia y Contrainteligencia, Edición 2",why:"directo, nombre del producto"}],
+    bodies:[{t:"Formación práctica con certificado. Ya lo eligieron cientos de dirigentes en 6 países. Empezá hoy.",why:"prueba social + acción"},
+      {t:"Teoría y casos reales en un solo programa. Certificación al finalizar. Cupos abiertos.",why:"qué incluye"}]},
+  carrera:{kick:"Tu carrera",
+    heads:[{t:"El paso que tu carrera política estaba esperando",why:"aspiracional"},
+      {t:"Formate donde se forman los que deciden",why:"pertenencia"},
+      {t:"De la teoría a la acción política real",why:"transformación"}],
+    bodies:[{t:"Un programa para dirigentes que quieren jugar en serio. Certificado incluido.",why:"identidad"},
+      {t:"Sumá una credencial que se nota. Práctico, aplicable, con certificación.",why:"beneficio"}]},
+  urgencia:{kick:"Cupos",
+    heads:[{t:"Últimos cupos para la Edición 2",why:"escasez"},
+      {t:"La Edición 2 abre inscripciones esta semana",why:"tiempo"},
+      {t:"Reservá tu lugar antes de que se llene",why:"acción inmediata"}],
+    bodies:[{t:"Los cupos de la edición anterior se agotaron. Asegurá el tuyo, con certificación incluida.",why:"escasez + prueba"},
+      {t:"Inscripciones por tiempo limitado. Certificado al finalizar. No lo dejes pasar.",why:"urgencia"}]},
+  comunidad:{kick:"Comunidad",
+    heads:[{t:"Sumate a la red de dirigentes que ya se están formando",why:"pertenencia"},
+      {t:"No te formes solo. Formate con los tuyos",why:"comunidad"},
+      {t:"Una comunidad de formación política en 6 países",why:"escala + pertenencia"}],
+    bodies:[{t:"Más que un curso: una red de personas que empujan lo mismo que vos. Con certificación.",why:"comunidad"},
+      {t:"Aprendé rodeado de dirigentes de toda LATAM. Certificado al finalizar.",why:"pertenencia + hecho"}]},
+};
+const ANGLE_NAME={autoridad:"Autoridad y prueba social",carrera:"Impulso a la carrera",urgencia:"Cupos y urgencia",comunidad:"Comunidad y pertenencia"};
+const SEEDS=["politica-aula","biblioteca-seria","conferencia-latam","estudio-nocturno","libros-derecho","auditorio-lleno","escritura-notas","debate-mesa","campus-tarde","archivo-docs"];
+
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+function flash(el){ if(!el)return; el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+
+function render(){
+  $$(".seg").forEach((el,i)=>{el.classList.toggle("done",i<B.step);el.classList.toggle("now",i===B.step);});
+  const meta=B.step<=4?STEPS[B.step]:{k:"Listo",t:"Creativo guardado"};
+  $("#stepK").textContent=meta.k; $("#stepT").textContent=meta.t;
+  $("#say").innerHTML=(SAY[Math.min(B.step,5)])();
+  $$(".panel").forEach(p=>p.classList.toggle("active",+p.dataset.step===B.step));
+  $("#chatctx").textContent = B.step<=4 ? ["Elegí qué promocionar","Definí el ángulo","Elegí la imagen","Afiná el texto","Revisá y aprobá"][B.step] : "Creativo guardado";
+  $("#back").style.visibility=B.step===0?"hidden":"visible";
+  const n=$("#next");
+  if(B.step===4){n.textContent="Aprobar y guardar";n.className="btn gold";n.disabled=false;}
+  else if(B.step===5){n.textContent="Crear otro";n.className="btn primary";n.disabled=false;}
+  else{n.textContent="Continuar";n.className="btn primary";n.disabled=!canAdvance();}
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+function canAdvance(){return[()=>!!B.prod,()=>!!B.angle,()=>!!B.img,()=>!!B.head&&!!B.body,()=>true,()=>true][B.step]();}
+
+/* ── Paso 1 ── */
+$("#prods").onclick=e=>{const b=e.target.closest('.choice');if(!b)return;
+  $$('#prods .choice').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');
+  B.prod=b.dataset.prod;$("#next").disabled=false;};
+
+/* ── Paso 2 ── */
+$("#angles").onclick=e=>{const b=e.target.closest('.chip');if(!b)return;setAngle(b.dataset.angle);};
+function setAngle(a){
+  B.angle=a;
+  $$('#angles .chip').forEach(x=>x.classList.toggle('sel',x.dataset.angle===a));
+  // si es un ángulo nuevo (comunidad), agregar el chip
+  if(a==='comunidad' && !$('#angles [data-angle="comunidad"]')){
+    const c=document.createElement('button');c.className='chip sel';c.dataset.angle='comunidad';
+    c.textContent=ANGLE_NAME.comunidad;$("#angles").appendChild(c);
+    $$('#angles .chip').forEach(x=>x.classList.toggle('sel',x.dataset.angle===a));
+  }
+  $("#next").disabled=false;
+}
+
+/* ── Paso 3 ── */
+function paintImgs(){
+  const c=COPY[B.angle]||COPY.autoridad, box=$("#imgs"); box.innerHTML="";
+  const desc = B.notas.filter(n=>n.paso===2).slice(-1)[0];
+  for(let i=0;i<4;i++){
+    let seed=SEEDS[(B.imgSeed*4+i)%SEEDS.length]+"-"+B.imgSeed;
+    if(desc) seed = desc.seed+"-"+B.imgSeed+"-"+i; // si describiste una imagen, sesga los conceptos
+    const head=c.heads[i%c.heads.length].t;
+    const el=document.createElement('div');el.className="creative";el.dataset.i=i;
+    el.innerHTML=`<img src="https://picsum.photos/seed/${seed}/560/560" alt="Concepto ${i+1}">
+      <div class="scrim"></div><div class="crest"><svg><use href="#crest"/></svg></div>
+      <div class="ov"><div class="kick">${c.kick}</div><h4>${head}</h4><div class="cta">${B.cta}</div></div>`;
+    el.onclick=()=>{$$('#imgs .creative').forEach(x=>x.classList.remove('sel'));el.classList.add('sel');
+      B.img=seed;B.imgHead=head;$("#next").disabled=false;};
+    box.appendChild(el);
+  }
+  B.img=null; if(B.step===2)$("#next").disabled=true;
+}
+$("#regen").onclick=()=>{B.imgSeed++;paintImgs();};
+
+/* ── Paso 4 ── */
+function paintText(){
+  const c=COPY[B.angle]||COPY.autoridad, H=$("#heads"), Bo=$("#bodies");
+  H.innerHTML="";Bo.innerHTML="";
+  const heads = B.voz ? [{t:B.voz,why:"tu voz"}, ...c.heads] : c.heads;
+  heads.forEach((h,i)=>{
+    const o=document.createElement('div');o.className="opt"+((i===0)?" sel":"");o.contentEditable=true;
+    o.innerHTML=`${h.t}<small>· ${h.why}</small>`;
+    o.onclick=()=>{$$('#heads .opt').forEach(x=>x.classList.remove('sel'));o.classList.add('sel');B.head=o.childNodes[0].textContent.trim();syncNext();};
+    o.oninput=()=>{if(o.classList.contains('sel'))B.head=o.childNodes[0].textContent.trim();};
+    H.appendChild(o);
+  });
+  c.bodies.forEach((b,i)=>{
+    const o=document.createElement('div');o.className="opt"+((i===0)?" sel":"");o.contentEditable=true;
+    o.innerHTML=`${b.t}<small>· ${b.why}</small>`;
+    o.onclick=()=>{$$('#bodies .opt').forEach(x=>x.classList.remove('sel'));o.classList.add('sel');B.body=o.childNodes[0].textContent.trim();syncNext();};
+    o.oninput=()=>{if(o.classList.contains('sel'))B.body=o.childNodes[0].textContent.trim();};
+    Bo.appendChild(o);
+  });
+  B.head=heads[0].t; B.body=c.bodies[0].t; syncNext();
+}
+$("#ctas").onclick=e=>{const b=e.target.closest('.chip');if(!b)return;
+  $$('#ctas .chip').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');B.cta=b.dataset.cta;};
+function syncNext(){if(B.step===3)$("#next").disabled=!(B.head&&B.body);}
+
+/* ── Paso 5 / victoria ── */
+function paintPreview(){$("#pvImg").src=`https://picsum.photos/seed/${B.img||'politica-aula-0'}/560/560`;
+  $("#pvHead").textContent=B.imgHead||B.head;$("#pvBody").textContent=B.body;$("#pvCta").textContent=B.cta;}
+function paintWin(){$("#rcProd").textContent=B.prod;$("#rcAngle").textContent=ANGLE_NAME[B.angle]||"-";
+  $("#rcHead").textContent=B.head;$("#rcNotas").textContent=B.notas.length+" ajuste"+(B.notas.length===1?"":"s")+" tuyos";}
+
+/* ══════════════════════════════════════════════════════════════
+   EL MOTOR ADAPTATIVO (scripteado en Fase A: reglas, sin modelo).
+   Un solo interpret() para texto libre y chat. Devuelve:
+   {reply, applied?, changes?(fn), warn?, goStep?}
+   ══════════════════════════════════════════════════════════════ */
+const CLAIM=/(\bn[º°o]?\s?1\b|#\s?1|el mejor|la mejor|los mejores|l[íi]der(es)?|n[úu]mero uno|el m[aá]s grande|the best|garantiz\w+ que vas a ganar)/i;
+
+function interpret(text, fromChat){
+  const t=text.toLowerCase().trim();
+  // 1. Barrera de honestidad (Ley I): siempre primero, corta todo.
+  if(CLAIM.test(t)){
+    return {warn:true,
+      reply:"Ojo con esa promesa: no la puedo respaldar con tus datos, y en política una afirmación así te expone. Lo que <b>sí</b> es un HECHO: <b>648 personas ya se formaron</b> con el Manual. ¿La uso a esa?",
+      applied:"Marqué la promesa como no verificable"};
+  }
+  // 2. Si es texto libre DE UN PASO (no chat), el campo tiene un propósito
+  //    propio: se atiende antes que las reglas de exploración (evita que
+  //    "dirigentes" dispare la regla de Instagram, etc.).
+  if(!fromChat && B.step===2){
+    const seed=t.replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'').slice(0,40)||"idea";
+    B.notas.push({paso:2,texto:text,seed}); paintImgs(); flash($("#imgs"));
+    return {reply:"Reencuadré los cuatro conceptos sobre tu descripción. Elegí el que más te cierre.", applied:"Imagen reencuadrada"};
+  }
+  if(!fromChat && B.step===3){
+    B.voz=text.trim(); paintText(); selectHead(text.trim()); flash($("#heads"));
+    return {reply:"Me quedó tu voz. Puse tu titular arriba y las próximas variantes las genero en ese tono.", applied:"Aprendí tu voz"};
+  }
+  if(!fromChat && B.step===0){
+    let prod="Manual de Inteligencia y Contrainteligencia";
+    if(/diplomad|gesti[oó]n p[uú]blica/.test(t)) prod="Diplomado en Gestión Pública";
+    else if(/certificad|portadiploma/.test(t)) prod="Certificado con Portadiploma";
+    B.prod=prod;
+    $$('#prods .choice').forEach(x=>x.classList.toggle('sel',x.dataset.prod.startsWith(prod.split(' ')[0])));
+    $("#next").disabled=false;
+    let extra=/(joven|dirigent|juvenil)/.test(t)?" Anoté la audiencia (dirigentes jóvenes), la voy a tener en cuenta.":"";
+    return {reply:`Entendido: <b>${prod}</b>.${extra} Cuando quieras, seguimos al brief.`, applied:"Producto elegido"};
+  }
+  // 3. Dirigir: tono / largo (aplica desde chat y desde texto libre de otros pasos)
+  if(/(m[aá]s corto|acort|resum|breve)/.test(t)){
+    return {reply:"Listo, lo dejé más corto y directo.", applied:"Texto acortado",
+      changes:()=>{ if(COPY[B.angle]){ // elegir el body más corto
+        const bs=COPY[B.angle].bodies; const shortest=bs.reduce((a,b)=>b.t.length<a.t.length?b:a);
+        B.body=shortest.t; if(B.step===3){paintText(); selectBody(shortest.t); flash($("#bodies"));}}},
+      goStep:3};
+  }
+  if(/(m[aá]s urgente|urgencia|cupos?|se llena|\bya\b|apur)/.test(t)){
+    return {reply:"Le subí la urgencia. Cambié el ángulo a cupos y reacomodé titulares e imagen.", applied:"Ángulo → urgencia",
+      changes:()=>{ setAngle('urgencia'); B.cta="Reservar mi cupo"; syncCta(); rederive(); flashStepAll(); }};
+  }
+  if(/(m[aá]s formal|serio|institucional)/.test(t)){
+    B.tono="formal"; return {reply:"Anotado: tono más formal e institucional. Lo mantengo en todo lo que genere.", applied:"Tono → formal"};
+  }
+  if(/(menos formal|m[aá]s cercano|informal|c[aá]lido|humano)/.test(t)){
+    B.tono="cercano"; return {reply:"Perfecto, lo llevo a un tono más cercano y humano.", applied:"Tono → cercano"};
+  }
+  // ángulos por palabra
+  if(/(comunidad|pertenen|red|los tuyos|juntos)/.test(t)){
+    return {reply:"Buena. Armé un ángulo de <b>comunidad y pertenencia</b> y reacomodé los mensajes.", applied:"Ángulo → comunidad",
+      changes:()=>{ setAngle('comunidad'); rederive(); flashStepAll(); }, goStep:1};
+  }
+  if(/(autoridad|prueba social|referencia|prestigio)/.test(t)){
+    return {reply:"Voy con autoridad y prueba social, apoyado en las 648 ventas reales.", applied:"Ángulo → autoridad",
+      changes:()=>{ setAngle('autoridad'); rederive(); flashStepAll(); }, goStep:1};
+  }
+  if(/(carrera|crecer|profesional|futuro|ascen)/.test(t)){
+    return {reply:"Listo, ángulo de impulso a la carrera.", applied:"Ángulo → carrera",
+      changes:()=>{ setAngle('carrera'); rederive(); flashStepAll(); }, goStep:1};
+  }
+  // explorar datos
+  if(/(por qu[eé]|porque).*(per[uú])/.test(t) || (/per[uú]/.test(t)&&/por qu/.test(t))){
+    return {reply:"Porque <b>Perú rinde 7,25×</b> (tu mejor ROAS, confianza alta, 398 ventas con USD 5.920). Está en <b>escalar</b> con techo para +USD 4.665. Es donde cada dólar nuevo rinde más. <span class='tag'>HECHO</span>"};
+  }
+  if(/(eeuu|estados unidos|ee\.uu|gringos)/.test(t)){
+    return {reply:"EEUU tiene el <b>mejor ROAS de todos (17,46×)</b> pero con base chica (USD 274, 27 ventas). Vale un test dedicado, no mover el grueso ahí todavía. <span class='tag'>HECHO</span>"};
+  }
+  if(/(m[eé]xico)/.test(t)){
+    return {reply:"México rinde <b>7,07×</b>, casi como Perú, y con más volumen absoluto. Buen segundo objetivo si querés dos países. <span class='tag'>HECHO</span>"};
+  }
+  if(/(instagram|\big\b)/.test(t)){
+    return {reply:"Instagram está flojo: <b>33,3%</b> de tus interacciones vs 66,7% de Facebook. O sub-invertís ahí, o el creativo no es nativo de IG. Por eso sugiero Facebook primero. <span class='tag'>HECHO</span>"};
+  }
+  if(/(imagen|foto|visual)/.test(t) && B.step!==2){
+    return {reply:"La imagen la elegís en el paso 3. Si querés, describímela ahí y la reencuadro sobre tu idea.", goStep:2};
+  }
+  // fallback util según paso
+  const nudge=["Contame qué querés promocionar y lo infiero.","Describime el ángulo o la sensación que buscás.",
+    "Describime la imagen que ves y la reencuadro.","Escribí tu titular y aprendo tu voz.","¿Querés que revise algo antes de aprobar?","Podemos armar otro cuando quieras."][Math.min(B.step,5)];
+  return {reply:"Lo tomo como una nota. "+nudge};
+}
+function selectBody(txt){$$('#bodies .opt').forEach(o=>{const m=o.childNodes[0].textContent.trim()===txt;o.classList.toggle('sel',m);});}
+function selectHead(txt){$$('#heads .opt').forEach(o=>{const m=o.childNodes[0].textContent.trim()===txt;o.classList.toggle('sel',m);});}
+function syncCta(){$$('#ctas .chip').forEach(c=>c.classList.toggle('sel',c.dataset.cta===B.cta));}
+function rederive(){ if(B.step===2)paintImgs(); if(B.step===3)paintText(); }
+function flashStepAll(){flash($("#imgs"));flash($("#heads"));flash($("#bodies"));}
+
+/* ── texto libre por paso ── */
+$$('[data-apply]').forEach(btn=>btn.onclick=()=>{
+  const paso=+btn.dataset.apply, input=$("#f"+paso), text=input.value.trim(); if(!text)return;
+  B.notas.push({paso, texto:text});
+  const res=interpret(text,false);
+  if(res.changes)res.changes();
+  const r=$("#r"+paso); r.className="reaction show"+(res.warn?" warn":"");
+  r.innerHTML=`<span class="mini-av"><svg><use href="#crest"/></svg></span><span>${res.reply}</span>`;
+  input.value="";
+});
+
+/* ── chat invocado ── */
+const drawer=$("#drawer"), scrimbg=$("#scrimbg");
+function openChat(){drawer.classList.add('open');scrimbg.classList.add('show');paintSuggest();
+  if(!$("#msgs").children.length)ivimsg("Estoy con vos en este paso. Preguntame lo que quieras, o pedime un cambio y lo aplico al toque.");}
+function closeChat(){drawer.classList.remove('open');scrimbg.classList.remove('show');}
+$("#fab").onclick=openChat; $("#closeChat").onclick=closeChat; scrimbg.onclick=closeChat;
+function ivimsg(html,applied){const d=document.createElement('div');d.className="m ivi-m";
+  d.innerHTML=html+(applied?`<div class="applied">✓ ${applied}</div>`:"");
+  $("#msgs").appendChild(d);$("#msgs").scrollTop=1e9;}
+function memsg(txt){const d=document.createElement('div');d.className="m me";d.textContent=txt;$("#msgs").appendChild(d);$("#msgs").scrollTop=1e9;}
+function sendChat(txt){ if(!txt)return; memsg(txt); B.notas.push({paso:B.step,texto:txt,via:"chat"});
+  const res=interpret(txt,true);
+  if(res.goStep!=null && res.goStep!==B.step){ /* si el cambio aplica a otro paso, no saltamos, solo aplicamos */ }
+  if(res.changes)res.changes();
+  setTimeout(()=>{ivimsg(res.reply,res.applied);paintSuggest();},260);
+}
+$("#chatSend").onclick=()=>{const v=$("#chatIn").value.trim();$("#chatIn").value="";sendChat(v);};
+$("#chatIn").onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();$("#chatSend").click();}};
+function paintSuggest(){
+  const byStep=[["¿Qué me conviene promocionar?","Hacelo para dirigentes jóvenes"],
+    ["¿Por qué Perú?","Probá un ángulo de comunidad","¿Y si apunto a México?"],
+    ["Describí una imagen más cálida","¿Instagram o Facebook?"],
+    ["Hacelo más corto","Más urgente","Menos formal"],
+    ["¿Y si apunto a EEUU?","¿Por qué Facebook?"],["Crear otro"]];
+  const s=$("#suggest");s.innerHTML="";
+  (byStep[Math.min(B.step,5)]||[]).forEach(q=>{const b=document.createElement('button');b.textContent=q;
+    b.onclick=()=>sendChat(q);s.appendChild(b);});
+}
+
+/* ── navegación ── */
+$("#next").onclick=()=>{
+  if(B.step<4&&!canAdvance())return;
+  B.step++;
+  if(B.step===2)paintImgs(); if(B.step===3)paintText(); if(B.step===4)paintPreview(); if(B.step===5)paintWin();
+  if(B.step>5){Object.assign(B,{step:0,prod:null,angle:null,img:null,imgSeed:0,imgHead:null,head:null,body:null,cta:"Quiero inscribirme",tono:null,voz:null,notas:[]});
+    $$('.choice.sel,.chip.sel').forEach(x=>x.classList.remove('sel'));$$('#ctas .chip')[0].classList.add('sel');
+    $$('.reaction').forEach(r=>r.className="reaction");}
+  render(); paintSuggest();
+};
+$("#back").onclick=()=>{if(B.step>0){B.step--;render();paintSuggest();}};
+
+render();
+</script>
+</body>
+</html>

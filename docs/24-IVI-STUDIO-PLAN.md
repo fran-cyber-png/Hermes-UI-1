@@ -195,6 +195,19 @@ Cada fase agrega valor sola y de-risquea la siguiente. Fase A no toca prod.
    prototipo con estado + texto libre + chat scripteado), o vamos directo a
    cablear el chat real (Fase B) porque el motor ya está listo?
 
+## 9.bis Decisiones tomadas (2026-07-17)
+
+Los tres forks, resueltos por Estephano:
+
+1. **Primer corte: Fase A** — prototipo fusionado (Brief vivo + texto libre por
+   paso + chat scripteado), sin backend. Validar la UX antes de cablear.
+2. **Modelo: dos roles locales**, gestionados con **llama-swap** (llama.cpp
+   intercambia modelos en/out de la VRAM bajo demanda) para convivir con Flux
+   en la A4000 de 16GB. Aplica desde la Fase C (Fase A no usa modelo).
+3. **Layout: chat que se invoca** — el canvas guiado es el protagonista a
+   pantalla completa; el chat con Ivi aparece con un botón flotante. Pantalla
+   limpia y enfocada.
+
 ## 10. Riesgos honestos
 
 - **Latencia del texto libre**: si cada tecleo dispara al modelo, se siente
