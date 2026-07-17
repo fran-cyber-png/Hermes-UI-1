@@ -34,6 +34,7 @@ from .config import (OLLAMA_URL, MODEL, PORT, OLLAMA_CTX, OLLAMA_TEMP, OLLAMA_TI
                      WARM_INTERVAL, WARM_PAUSA)
 from . import cache
 from . import answer_cache
+from . import voz
 from .warmer import arrancar_warmer
 
 log = logging.getLogger("ivi")
@@ -241,6 +242,7 @@ def health() -> dict:
         "frescura": last_frescura(),
         "cache": cache.stats(),            # endpoints del backend (TTL 60s)
         "respuestas": answer_cache.stats(),  # respuestas por huella (P1, sin TTL)
+        "voz": voz.estado(),                 # qué backend de voz (TTS/STT) hay
         "uptime_s": round(time.monotonic() - _START, 1),
     }
 
@@ -356,6 +358,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        if self.path == "/api/tts":
+            self._handle_tts(); return
+        if self.path == "/api/stt":
+            self._handle_stt(); return
         if self.path != "/api/chat":
             self._send(404, "not found")
             return
@@ -391,6 +397,41 @@ class Handler(http.server.BaseHTTPRequestHandler):
             }, ensure_ascii=False))
             return
         self._send(200, json.dumps(out, ensure_ascii=False))
+
+    def _handle_tts(self):
+        # Ivi te habla: texto -> WAV. Piper en geógrafo, say en dev macOS.
+        length = int(self.headers.get("Content-Length", 0))
+        try:
+            data = json.loads(self.rfile.read(length).decode())
+        except Exception:
+            self._send(400, json.dumps({"error": "json inválido"}))
+            return
+        try:
+            wav = voz.tts(data.get("text", ""))
+        except voz.TTSNoDisponible as e:
+            self._send(503, json.dumps({"error": str(e)}, ensure_ascii=False))
+            return
+        except Exception as e:
+            log.exception("tts error")
+            self._send(500, json.dumps({"error": f"{type(e).__name__}: {e}"}, ensure_ascii=False))
+            return
+        self._send(200, wav, "audio/wav")
+
+    def _handle_stt(self):
+        # Vos le hablás a Ivi: audio -> texto. faster-whisper (geógrafo).
+        length = int(self.headers.get("Content-Length", 0))
+        audio = self.rfile.read(length)
+        ext = "." + self.headers.get("X-Audio-Ext", "webm").lstrip(".")
+        try:
+            texto = voz.stt(audio, ext=ext)
+        except voz.STTNoDisponible as e:
+            self._send(503, json.dumps({"error": str(e)}, ensure_ascii=False))
+            return
+        except Exception as e:
+            log.exception("stt error")
+            self._send(500, json.dumps({"error": f"{type(e).__name__}: {e}"}, ensure_ascii=False))
+            return
+        self._send(200, json.dumps({"text": texto}, ensure_ascii=False))
 
     def log_message(self, fmt, *args):
         # BaseHTTPRequestHandler writes its access log to stderr by hand; route

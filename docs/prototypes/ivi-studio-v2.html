@@ -246,6 +246,14 @@ h2.step{font-size:26px;font-weight:800;margin:14px 0 4px;letter-spacing:-.01em}
 .m.typing{color:var(--muted);font-style:italic}
 .m.typing .dots::after{content:"";animation:dots 1.2s steps(4,end) infinite}
 @keyframes dots{0%{content:""}25%{content:"."}50%{content:".."}75%{content:"..."}}
+
+/* ── Voz (Fase C V1): Ivi habla (TTS) + push-to-talk (STT) ── */
+.dh .voztgl{margin-left:auto;background:none;border:0;cursor:pointer;font-size:17px;padding:2px 6px;line-height:1;opacity:.9}
+.dh .voztgl:hover{opacity:1}
+.dinput .mic{flex:none;background:#eef3fc;border:1.5px solid #dbe6fb;color:var(--blue-ink);border-radius:10px;padding:0 12px;cursor:pointer;font-size:16px}
+.dinput .mic:disabled{opacity:.4;cursor:not-allowed}
+.dinput .mic.rec{background:#fde8e8;border-color:#f5b5b5;color:#c0392b;animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(192,57,43,.45)}50%{box-shadow:0 0 0 7px rgba(192,57,43,0)}}
 </style>
 </head>
 <body>
@@ -434,11 +442,13 @@ h2.step{font-size:26px;font-weight:800;margin:14px 0 4px;letter-spacing:-.01em}
   <div class="dh">
     <div class="av"><svg><use href="#crest"/></svg></div>
     <div><b>Ivi</b><small id="chatctx">Te acompaño en este paso</small></div>
+    <button class="voztgl" id="vozToggle" aria-label="Ivi habla en voz" title="Ivi habla en voz">🔊</button>
     <button class="x" id="closeChat" aria-label="Cerrar">×</button>
   </div>
   <div class="msgs" id="msgs"></div>
   <div class="suggest" id="suggest"></div>
   <div class="dinput">
+    <button id="micBtn" class="mic" aria-label="Mantené apretado para hablar" title="Mantené apretado para hablar">🎤</button>
     <input id="chatIn" placeholder="Preguntame o pedime un cambio...">
     <button id="chatSend">Enviar</button>
   </div>
@@ -759,6 +769,7 @@ async function askEngine(txt, useContexto){
       body:JSON.stringify(body)});
     const data=await r.json(); t.remove();
     ivimsg(mdToHtml(data.response||"Sin respuesta del motor."), null, r.ok&&!!data.live);
+    if(r.ok) hablar(data.response||"");
   }catch(e){ t.remove();
     ivimsg(mdToHtml("No pude hablar con el motor de Ivi. ¿Está corriendo el engine? Detalle: "+String(e))); }
   paintSuggest();
@@ -799,6 +810,62 @@ function paintSuggest(){
   (byStep[Math.min(B.step,5)]||[]).forEach(q=>{const b=document.createElement('button');b.textContent=q;
     b.onclick=()=>sendChat(q,true);s.appendChild(b);});
 }
+
+/* ── Voz (Fase C V1): Ivi habla (TTS) + push-to-talk (STT) ── */
+const IVI_BASE=IVI_ENDPOINT.replace("/api/chat","");
+let VOZ={tts:"no",stt:false}, hablando=true, audioActual=null, rec=null, chunks=[];
+fetch(IVI_BASE+"/api/health").then(r=>r.json()).then(d=>{
+  VOZ=d.voz||VOZ;
+  if(VOZ.tts==="no"){ $("#vozToggle").style.display="none"; hablando=false; }
+  const mic=$("#micBtn");
+  if(!VOZ.stt){ mic.disabled=true; mic.title="Voz a texto no disponible (instalá whisper en geógrafo)"; }
+}).catch(()=>{});
+$("#vozToggle").onclick=()=>{ hablando=!hablando; $("#vozToggle").textContent=hablando?"🔊":"🔇";
+  if(!hablando&&audioActual){audioActual.pause();} };
+// Resumen hablado: saca el Markdown y se queda con el lead (hasta "Los números").
+// Las tablas/bullets no se leen; el lead es la frase que responde. (docs/25 §2.4)
+function paraVoz(md){
+  let t=String(md).split(/los n[úu]meros:|los datos:/i)[0];
+  t=t.replace(/[#*|_>`]/g,"").replace(/^\s*lead:?\s*/i,"").replace(/\s+/g," ").trim();
+  return t.slice(0,600);
+}
+function hablar(md){
+  if(!hablando||VOZ.tts==="no")return;
+  const texto=paraVoz(md); if(!texto)return;
+  fetch(IVI_BASE+"/api/tts",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({text:texto})}).then(r=>r.ok?r.blob():null).then(b=>{
+    if(!b)return; if(audioActual)audioActual.pause();
+    audioActual=new Audio(URL.createObjectURL(b)); audioActual.play().catch(()=>{});
+  }).catch(()=>{});
+}
+// Push-to-talk: mantener apretado el mic graba; al soltar, transcribe y enruta.
+async function grabarInicio(){
+  if(!VOZ.stt||rec)return;
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    rec=new MediaRecorder(stream); chunks=[];
+    rec.ondataavailable=e=>chunks.push(e.data);
+    rec.onstop=()=>{
+      stream.getTracks().forEach(x=>x.stop());
+      const mime=rec.mimeType||"audio/webm"; const ext=mime.includes("ogg")?"ogg":"webm";
+      rec=null; $("#micBtn").classList.remove("rec");
+      const blob=new Blob(chunks,{type:mime}); const t=ivityping(); t.innerHTML="transcribiendo tu voz…";
+      fetch(IVI_BASE+"/api/stt",{method:"POST",
+        headers:{"Content-Type":"application/octet-stream","X-Audio-Ext":ext},body:blob})
+       .then(r=>r.json()).then(d=>{ t.remove();
+         if(d.text){ sendChat(d.text,false); } else { ivimsg("No te entendí, probá de nuevo."); }})
+       .catch(e=>{ t.remove(); ivimsg("Error de voz a texto: "+String(e)); });
+    };
+    rec.start(); $("#micBtn").classList.add("rec");
+  }catch(e){ rec=null; ivimsg("No pude acceder al micrófono: "+String(e)); }
+}
+function grabarFin(){ if(rec&&rec.state!=="inactive")rec.stop(); }
+(()=>{ const m=$("#micBtn");
+  m.addEventListener("mousedown",grabarInicio); m.addEventListener("mouseup",grabarFin);
+  m.addEventListener("mouseleave",grabarFin);
+  m.addEventListener("touchstart",e=>{e.preventDefault();grabarInicio();},{passive:false});
+  m.addEventListener("touchend",e=>{e.preventDefault();grabarFin();});
+})();
 
 /* ── navegación ── */
 $("#next").onclick=()=>{
