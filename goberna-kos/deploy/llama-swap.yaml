@@ -1,0 +1,52 @@
+# llama-swap — dos roles de modelo para Ivi, conviviendo con Flux en la A4000 16GB.
+# ─────────────────────────────────────────────────────────────────────────────
+# Decisión de Estephano (2026-07-17): "llama-swap ya" (en vez del MVP con Ollama
+# MAX_LOADED=1). llama-swap intercambia modelos GGUF en/out de la VRAM bajo demanda
+# sobre llama-server (llama.cpp). Expone una API OpenAI-compatible.
+#
+# CLAVE de VRAM (ver docs/25 §3): en 16GB NO caben dos LLM + Flux simultáneos.
+# El grupo `a4000` con swap+exclusive garantiza UN solo modelo LLM cargado a la
+# vez. Flux es un proceso APARTE (ComfyUI) que llama-swap NO gobierna -> hace
+# falta un mutex externo (ver docs/26) para que Flux y el LLM no colisionen.
+#
+# PENDIENTE de Estephano (no puedo verificarlo sin geógrafo):
+#   - Confirmar rutas de los .gguf y del binario llama-server.
+#   - Convertir/traer el GGUF de ivi-ventas (hoy es un modelo Ollama qwen3:8b).
+#   - Elegir el modelo creativo (docs/25 §3.3 / §6: 8-14B local; o el experimento
+#     32B en g6.xlarge spot con el crédito AWS).
+#   - Ajustar -ngl / -c según lo que deje libre Flux.
+
+healthCheckTimeout: 120
+logLevel: info
+
+models:
+  # Rol BI: presenta los HECHOS del motor. think OFF (qwen3 /no_think) para latencia.
+  "ivi-ventas":
+    cmd: |
+      /opt/llama.cpp/llama-server
+      -m /srv/ia-local/models/ivi-ventas-q4_k_m.gguf
+      --port ${PORT} -ngl 99 -c 8192 --temp 0.3 --host 127.0.0.1
+    proxy: "http://127.0.0.1:${PORT}"
+    ttl: 300          # se descarga tras 5 min ocioso -> libera VRAM para Flux/creativo
+
+  # Rol creativo: interpreta texto libre y redacta copy con matiz (Fase C).
+  "ivi-creativo":
+    cmd: |
+      /opt/llama.cpp/llama-server
+      -m /srv/ia-local/models/qwen-creativo-q4_k_m.gguf
+      --port ${PORT} -ngl 99 -c 8192 --temp 0.7 --host 127.0.0.1
+    proxy: "http://127.0.0.1:${PORT}"
+    ttl: 300
+
+groups:
+  a4000:
+    swap: true        # solo UN modelo del grupo en VRAM a la vez
+    exclusive: true   # cargar uno descarga al otro
+    members:
+      - "ivi-ventas"
+      - "ivi-creativo"
+
+# Arranque sugerido (systemd, en geógrafo):
+#   llama-swap --config /srv/ia-local/llama-swap.yaml --listen 127.0.0.1:8090
+# El engine Ivi hablaría a http://127.0.0.1:8090/v1/chat/completions (ver docs/26
+# para el cambio de gateway en server.py::call_ollama, a testear EN geógrafo).
