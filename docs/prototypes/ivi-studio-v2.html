@@ -607,6 +607,8 @@ const DIRECTIVE=/(m[aá]s corto|acort|resum|breve|m[aá]s urgente|urgencia|cupos
 const DATA_NOUN=/roas|cac|ticket|pa[ií]s|per[uú]|m[eé]xico|eeuu|estados unidos|chile|colombia|bolivia|ecuador|honduras|facebook|instagram|\big\b|canal|pauta|ventas|atribuc|embudo|cartera|mora|forecast|tendencia|gasto|presupuesto|conviene|convier|conversi[oó]n|rinde/i;
 // Interrogativo sin sustantivo fuerte: pregunta genérica -> también al motor.
 const DATA_Q=/\?|por qu[eé]|porque|cu[aá]l|cu[aá]nt|c[oó]mo|y si/i;
+// Saludo: se contesta cálido y local (no al motor: "hola" no es una consulta BI).
+const GREET=/^\s*(hola+|buenas|buen[oa]s?\s+(d[ií]as|tardes|noches)|hey|holi|qu[eé]\s+tal|c[oó]mo\s+(va|and[aá]s|est[aá]s)|saludos|hi|hello)\b/i;
 
 function interpret(text, fromChat){
   const t=text.toLowerCase().trim();
@@ -781,6 +783,10 @@ function sendChat(txt, fromChip){ if(!txt)return; memsg(txt); B.notas.push({paso
   // Carril 1 — barrera de honestidad (Ley I): local, determinista, primero.
   if(CLAIM.test(txt)){ const res=interpret(txt,true);
     setTimeout(()=>{ivimsg(res.reply,res.applied);paintSuggest();},200); return; }
+  // Saludo: cálido, útil y local (no al motor). Orienta a la acción.
+  if(GREET.test(txt)){
+    setTimeout(()=>{ivimsg("¡Hola! Soy <b>Ivi</b>. Armamos el creativo juntos, o te contesto con tus datos reales. Tocá una sugerencia acá abajo, o contame qué querés promocionar.");paintSuggest();},200);
+    return; }
   // Carril 2 — pregunta con sustantivo de negocio: al motor. Va ANTES que la
   // directiva para que "¿la urgencia sube el ROAS?" no mute el canvas por error.
   // Las chips (fromChip) van sin contexto (cache hit del warmer); el texto libre

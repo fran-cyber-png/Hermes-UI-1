@@ -72,6 +72,24 @@ def test_las_chips_del_estudio_no_son_followup():
     assert is_followup("¿y solo México?", "s") is True
 
 
+def test_frescura_cae_a_la_ultima_conocida_cuando_la_query_no_la_trae():
+    # "ROAS por país" solo pega a atribución (sin serie de ventas) -> antes abría
+    # con "sin frescura de corte" (confuso e inconsistente). Ahora reusa el último
+    # corte conocido, que es el mismo para todo el sistema.
+    import ivi.data_collector as dc
+    from ivi.data_collector import _frescura, RawData
+    prev = dc._LAST_FRESCURA
+    try:
+        dc._LAST_FRESCURA = ({"ventas": "datos de ventas hasta el 2026-07-11"},
+                             "2026-07-17T00:00:00")
+        assert _frescura(RawData()) == {"ventas": "datos de ventas hasta el 2026-07-11"}
+        # una query que SÍ trae ventas no se pisa con el fallback
+        raw = RawData(comercial={"diaria": [{"dia": "2026-07-11", "ventas": 5}]})
+        assert _frescura(raw)["ventas"] == "datos de ventas hasta el 2026-07-11"
+    finally:
+        dc._LAST_FRESCURA = prev
+
+
 if __name__ == "__main__":
     tests = [v for name, v in sorted(globals().items())
              if name.startswith("test_") and callable(v)]

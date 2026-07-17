@@ -85,6 +85,13 @@ def _frescura(raw: RawData) -> Dict[str, str]:
         clave = pieza.get("clave")
         if clave in ("cerberus", "meta_ingesta") and pieza.get("detalle"):
             out[clave] = pieza["detalle"]
+    # Fallback: si esta query no trajo serie de ventas (p.ej. "ROAS por país" solo
+    # pega a atribución), reusar el último corte conocido. El corte de datos es el
+    # mismo para todo el sistema; sin esto el modelo abre con "sin frescura de
+    # corte" — confuso, inconsistente con las queries que sí la traen, y suena mal
+    # en voz.
+    if not out and _LAST_FRESCURA is not None:
+        out = dict(_LAST_FRESCURA[0])
     return out
 
 
