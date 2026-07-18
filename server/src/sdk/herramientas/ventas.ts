@@ -138,6 +138,7 @@ registrar({
         const ua = Math.round(a?.usd ?? 0), up = Math.round(p?.usd ?? 0);
         return {
           pais, ventasActual: va, ventasPrevio: vp, usdActual: ua, usdPrevio: up,
+          ticketActual: va ? Math.round(ua / va) : null,
           deltaVentasPct: vp ? Math.round(((va - vp) / vp) * 100) : null,
           deltaUsdPct: up ? Math.round(((ua - up) / up) * 100) : null,
         };

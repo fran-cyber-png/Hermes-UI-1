@@ -69,11 +69,20 @@ def _formatear_hecho(fuente: str, s) -> str:
         corte = (s.get("revisadoAt") or "")[:10]
         return f"ROAS por país (top por ventas; dato del {corte}): " + "; ".join(partes) + "."
     if "ventas.porPaisMes" in fuente:
-        comp = (s.get("comparacion") or [])[:8]
-        partes = [f"{c['pais']}: {c['ventasActual']} ventas / {c['usdActual']} USD "
-                  f"(vs {c['ventasPrevio']} / {c['usdPrevio']} el mes previo)" for c in comp]
+        comp = s.get("comparacion") or []
+        partes = [f"{c['pais']}: {c['ventasActual']} ventas / {c['usdActual']} USD / ticket "
+                  f"{c.get('ticketActual')} USD (vs {c['ventasPrevio']} ventas / {c['usdPrevio']} USD "
+                  f"el mes previo)" for c in comp[:8]]
+        # El país con ticket promedio más alto, con su volumen (para que el redactor pueda avisar si
+        # es de pocas ventas y no confundir 'ticket alto' con 'país que más factura').
+        con_ticket = [c for c in comp if c.get("ticketActual")]
+        extra = ""
+        if con_ticket:
+            top = max(con_ticket, key=lambda c: c["ticketActual"])
+            extra = (f" El ticket promedio más alto lo tiene {top['pais']} con {top['ticketActual']} "
+                     f"USD, sobre solo {top['ventasActual']} ventas.")
         return (f"Ventas cobradas por país, {s.get('mesActual')} vs {s.get('mesPrevio')} "
-                f"(al mismo día del mes): " + "; ".join(partes) + f". {s.get('nota','')}")
+                f"(al mismo día del mes): " + "; ".join(partes) + f".{extra} {s.get('nota','')}")
     if "ventas.pulso" in fuente:
         pl = s.get("paisLider") or {}
         pr = s.get("productoLider") or {}

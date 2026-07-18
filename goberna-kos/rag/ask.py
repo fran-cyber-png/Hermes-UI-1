@@ -148,8 +148,13 @@ def _tool_por_keywords(pregunta: str) -> tuple[str, dict] | None:
     if pais and temporal and negocio:
         return ("governa.ventas.porPaisMes", {"meses": 3})
 
-    # 2b. TICKET PROMEDIO — "cuál es mi ticket promedio" (el pulso trae el ticket real del mes,
-    #     en vez del benchmark congelado de los docs).
+    # 2a. TICKET POR PAÍS — "qué país tiene el ticket más alto" (desglose por país, no el global).
+    #     ANTES del ticket global: si nombran país, quieren el ticket por país, no el promedio total.
+    if "ticket" in p and pais:
+        return ("governa.ventas.porPaisMes", {"meses": 3})
+
+    # 2b. TICKET PROMEDIO (global) — "cuál es mi ticket promedio" (el pulso trae el ticket real del
+    #     mes, en vez del benchmark congelado de los docs).
     if "ticket" in p or "valor promedio" in p or "promedio de venta" in p or "promedio por venta" in p:
         return ("governa.ventas.pulso", {})
 
