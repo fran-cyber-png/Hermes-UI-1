@@ -45,6 +45,12 @@ def embedder_para(sensible: bool) -> tuple[str, str]:
     return (EMBEDDER_BACKEND, TAG_LOCAL)
 
 
+# Hybrid search (vector + full-text español, RRF). OFF por default: con el golden set de n=18 no
+# mostró mejora de recall@3 y regresó recall@1 (RRF aplana la confianza del denso, que ya es fuerte).
+# El código + índice GIN quedan listos; re-evaluar y prender cuando el golden set sea grande (Tier 0).
+HIBRIDO = os.environ.get("RAG_HIBRIDO", "0") == "1"
+
+
 def tags_busqueda(incluir_sensibles: bool) -> list[tuple[str, str]]:
     """Los espacios (backend, tag) que buscar_docs consulta, según el modo."""
     if MODO_EMBEDDER == "split":

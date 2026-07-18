@@ -23,15 +23,14 @@ def buscar_docs(query: str, k: int = 5, *, incluir_sensibles: bool = True,
             for backend, tag in config.tags_busqueda(incluir_sensibles):
                 qvec = embed_uno(query, backend=backend, input_type="query")
                 filas.extend(store.buscar(
-                    cur, vector=qvec, k=k, embedder=tag,
-                    incluir_sensibles=incluir_sensibles, fuentes=fuentes,
+                    cur, vector=qvec, query=query, k=k, embedder=tag,
+                    incluir_sensibles=incluir_sensibles, fuentes=fuentes, hibrido=config.HIBRIDO,
                 ))
     finally:
         conn.close()
-    # Merge de espacios: ordenar por similitud y tomar k. Aprox — similitudes de embedders distintos
-    # no están calibradas entre sí, pero ordenan bien dentro de su espacio y público/sensible son
-    # conjuntos disjuntos, así que la mezcla casi no compite cabeza a cabeza.
-    filas.sort(key=lambda f: f["similitud"], reverse=True)
+    # Un solo espacio (default): ya viene fusionado (RRF) y ordenado. Multi (split): re-ordenar por
+    # el score RRF (o similitud si faltara). Público/sensible son disjuntos → casi no compiten.
+    filas.sort(key=lambda f: f.get("rrf", f.get("similitud") or 0.0), reverse=True)
     filas = filas[:k]
     for f in filas:
         heads = [h for h in ((f.get("metadata") or {}).get("headings") or []) if h]

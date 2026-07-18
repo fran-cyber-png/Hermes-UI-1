@@ -146,7 +146,8 @@ def ask(pregunta: str, usuario: str | None = None, *, k: int = 5,
     """El cerebro: rutea, junta evidencia, y devuelve un resultado tipado y CITADO."""
     ir, bi_score = _senal_estructurada(pregunta)
     docs = buscar_docs(pregunta, k, incluir_sensibles=incluir_sensibles)
-    sem_top = docs[0]["similitud"] if docs else 0.0
+    # sem_top = mejor similitud COSENO disponible (las filas solo-texto del hybrid no la tienen)
+    sem_top = max([d.get("similitud") or 0.0 for d in docs], default=0.0)
     modo = _rutar(bi_score, sem_top)
 
     evidencia: list[dict] = []
@@ -173,8 +174,9 @@ def ask(pregunta: str, usuario: str | None = None, *, k: int = 5,
     if modo in ("semantica", "mixta") and docs:
         for d in docs:
             evidencia.append({"tipo": "CONTEXTO", "fuente": d["cita"],
-                              "sensible": d["sensible"], "similitud": round(d["similitud"], 3),
-                              "extracto": d["chunk"][:400]})
+                              "sensible": d["sensible"],
+                              "similitud": round(d["similitud"], 3) if d.get("similitud") is not None else None,
+                              "rrf": d.get("rrf"), "extracto": d["chunk"][:400]})
             if d["cita"] not in fuentes:
                 fuentes.append(d["cita"])
 

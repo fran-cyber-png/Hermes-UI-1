@@ -198,7 +198,8 @@ async function preguntar(pregunta){
     const r=await fetch('/responder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pregunta})});
     const d=await r.json();
     if(d.error){ add('ivi','Uy, hubo un error: '+d.error); statusEl.textContent=''; return; }
-    add('ivi', d.texto, d.redactor+' · '+d.modo+'/'+d.tipo);
+    const g = d.grounding_ok===false ? ' · ⚠️ '+(d.numeros_no_verificados||[]).join(', ')+' sin verificar' : '';
+    add('ivi', d.texto, d.redactor+' · '+d.modo+'/'+d.tipo+g);
     hablar(d.texto);
   }catch(e){ add('ivi','Error de red: '+e.message); statusEl.textContent=''; }
 }

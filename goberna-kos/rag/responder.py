@@ -113,6 +113,22 @@ def _limpiar(t: str) -> str:
     return re.sub(r"\s{2,}", " ", t).strip()
 
 
+_NUM = re.compile(r"\d[\d.,]*")
+
+
+def _digitos(t: str) -> set[str]:
+    """Números de un texto, reducidos a solo sus dígitos: '6.8x'→'68', '6.727'→'6727', '31%'→'31'."""
+    return {re.sub(r"\D", "", m) for m in _NUM.findall(t)} - {""}
+
+
+def _no_verificados(texto: str, datos: str) -> list[str]:
+    """Números de ≥2 dígitos que Ivi dijo pero que NO aparecen en los DATOS que se le pasaron.
+    Red de seguridad de Ley I contra cifras inventadas (dominio financiero). Compara contra el
+    bloque DATOS ya redondeado (el mismo que vio el modelo), así el redondeo legítimo no dispara."""
+    ref = _digitos(datos)
+    return sorted(n for n in _digitos(texto) if len(n) >= 2 and n not in ref)
+
+
 def _qwen3(prompt: str, timeout: int = 60) -> str:
     payload = json.dumps({"model": REDACTOR_LOCAL, "prompt": prompt, "think": False,
                           "stream": False, "options": {"temperature": 0.2}}).encode()
@@ -165,7 +181,8 @@ def _nube(sistema: str, usuario: str) -> tuple[str, str]:
 
 def responder(pregunta: str, usuario: str | None = None) -> dict:
     r = ask(pregunta)
-    usuario_msg = f"DATOS:\n{_bloque_datos(r)}\n\nPregunta: {pregunta}\n\nRespondé natural, para hablar:"
+    datos = _bloque_datos(r)
+    usuario_msg = f"DATOS:\n{datos}\n\nPregunta: {pregunta}\n\nRespondé natural, para hablar:"
     usar_local = REDACTOR_MODO == "local" or (REDACTOR_MODO == "hibrido" and _es_sensible(r))
     if usar_local:
         texto = _qwen3(f"{SISTEMA}\n\n{usuario_msg}")
@@ -173,8 +190,11 @@ def responder(pregunta: str, usuario: str | None = None) -> dict:
     else:
         texto, modelo = _nube(SISTEMA, usuario_msg)
         redactor = f"bedrock ({modelo})"
-    return {"pregunta": pregunta, "texto": _limpiar(texto), "redactor": redactor,
-            "modo": r["modo"], "tipo": r["tipo"], "fuentes": r["fuentes"], "ask": r}
+    texto = _limpiar(texto)
+    no_verif = _no_verificados(texto, datos)   # grounding: cifras dichas que no están en los DATOS
+    return {"pregunta": pregunta, "texto": texto, "redactor": redactor,
+            "modo": r["modo"], "tipo": r["tipo"], "fuentes": r["fuentes"],
+            "grounding_ok": not no_verif, "numeros_no_verificados": no_verif, "ask": r}
 
 
 if __name__ == "__main__":
