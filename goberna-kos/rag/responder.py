@@ -21,9 +21,17 @@ import urllib.request
 from . import config
 from .ask import ask
 
-REDACTOR_LOCAL = os.environ.get("RAG_REDACTOR_LOCAL", "qwen3:8b")        # geografo (sensible)
-# Nova Lite anda sin formulario; Claude (us.anthropic.claude-haiku-4-5-...) cuando el use-case esté.
-REDACTOR_NUBE = os.environ.get("RAG_REDACTOR_NUBE", "amazon.nova-lite-v1:0")
+# La redacción NATURAL la hace un modelo en la NUBE (mejor prosa); geografo queda para embeddings +
+# voz (bge-m3, whisper, Piper). Preferencia de Estephano (2026-07-18): "geografo solo para embedding".
+#   nube     → SIEMPRE Bedrock (default). Las cifras agregadas van a Bedrock (no entrena, in-account).
+#   hibrido  → qwen3 local para lo sensible, Bedrock para lo público (Ley I estricta).
+#   local    → SIEMPRE qwen3 (offline, sin nube).
+REDACTOR_MODO = os.environ.get("RAG_REDACTOR_MODO", "nube")
+REDACTOR_LOCAL = os.environ.get("RAG_REDACTOR_LOCAL", "qwen3:8b")       # geografo (modo local/hibrido)
+# Haiku 4.5 = mejor prosa; requiere el use-case de Anthropic aprobado en Bedrock. Hasta entonces cae
+# a Nova Lite (anda sin formulario). Se auto-actualiza a Haiku al aprobarse el formulario.
+REDACTOR_NUBE = os.environ.get("RAG_REDACTOR_NUBE", "us.anthropic.claude-haiku-4-5-20251001-v1:0")
+REDACTOR_NUBE_FALLBACK = os.environ.get("RAG_REDACTOR_NUBE_FB", "amazon.nova-lite-v1:0")
 
 SISTEMA = (
     "Sos Ivi, la analista de datos de Goberna (escuela de formación política en LATAM). "
@@ -114,9 +122,9 @@ def _qwen3(prompt: str, timeout: int = 60) -> str:
         return json.loads(r.read().decode()).get("response", "").strip()
 
 
-def _nube(sistema: str, usuario: str, timeout: int = 60) -> str:
-    """Bedrock. Formato Nova (amazon.nova*) o Claude (anthropic*), según el modelo."""
-    es_nova = REDACTOR_NUBE.startswith("amazon.nova")
+def _invoke_bedrock(sistema: str, usuario: str, modelo: str, timeout: int = 60) -> str:
+    """Un modelo de Bedrock. Formato Nova (amazon.nova*) o Claude (anthropic*), según el modelo."""
+    es_nova = "nova" in modelo
     if es_nova:
         body = {"system": [{"text": sistema}],
                 "messages": [{"role": "user", "content": [{"text": usuario}]}],
@@ -130,10 +138,10 @@ def _nube(sistema: str, usuario: str, timeout: int = 60) -> str:
     try:
         r = subprocess.run(
             ["aws", "bedrock-runtime", "invoke-model", "--region", config.BEDROCK_REGION,
-             "--model-id", REDACTOR_NUBE, "--body", f"fileb://{bf.name}", out],
+             "--model-id", modelo, "--body", f"fileb://{bf.name}", out],
             capture_output=True, text=True, timeout=timeout)
         if r.returncode != 0:
-            raise RuntimeError(f"Bedrock falló: {r.stderr.strip()[:200]}")
+            raise RuntimeError(f"Bedrock ({modelo}) falló: {r.stderr.strip()[:200]}")
         data = json.load(open(out, encoding="utf-8"))
     finally:
         for p in (bf.name, out):
@@ -144,15 +152,27 @@ def _nube(sistema: str, usuario: str, timeout: int = 60) -> str:
     return "".join(c.get("text", "") for c in data.get("content", [])).strip()
 
 
+def _nube(sistema: str, usuario: str) -> tuple[str, str]:
+    """Redactor de nube: intenta REDACTOR_NUBE (Haiku); si está bloqueado (use-case sin aprobar)
+    cae a Nova. Devuelve (texto, modelo_usado)."""
+    try:
+        return _invoke_bedrock(sistema, usuario, REDACTOR_NUBE), REDACTOR_NUBE
+    except RuntimeError:
+        if REDACTOR_NUBE_FALLBACK == REDACTOR_NUBE:
+            raise
+        return _invoke_bedrock(sistema, usuario, REDACTOR_NUBE_FALLBACK), REDACTOR_NUBE_FALLBACK
+
+
 def responder(pregunta: str, usuario: str | None = None) -> dict:
     r = ask(pregunta)
     usuario_msg = f"DATOS:\n{_bloque_datos(r)}\n\nPregunta: {pregunta}\n\nRespondé natural, para hablar:"
-    if _es_sensible(r):
+    usar_local = REDACTOR_MODO == "local" or (REDACTOR_MODO == "hibrido" and _es_sensible(r))
+    if usar_local:
         texto = _qwen3(f"{SISTEMA}\n\n{usuario_msg}")
         redactor = f"qwen3-local ({REDACTOR_LOCAL})"
     else:
-        texto = _nube(SISTEMA, usuario_msg)
-        redactor = f"bedrock ({REDACTOR_NUBE})"
+        texto, modelo = _nube(SISTEMA, usuario_msg)
+        redactor = f"bedrock ({modelo})"
     return {"pregunta": pregunta, "texto": _limpiar(texto), "redactor": redactor,
             "modo": r["modo"], "tipo": r["tipo"], "fuentes": r["fuentes"], "ask": r}
 
