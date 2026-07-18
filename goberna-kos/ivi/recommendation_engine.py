@@ -11,6 +11,7 @@ from typing import List
 from .kpi_engine import KPIs, roas_material
 from .analytics_engine import Analysis
 from .insight_engine import Insight
+from .criterios import presupuesto_txt
 
 
 @dataclass
@@ -96,7 +97,9 @@ def recommend(k: KPIs, a: Analysis, insights: List[Insight]) -> List[Action]:
             partes.append(f"corré un test chico en {ratio['pais']} "
                           f"(ratio {round(ratio['roas'], 1)}× pero base chica)")
         if partes:
-            actions.append(Action(prio, "Reasignar pauta por país — " + "; ".join(partes),
+            actions.append(Action(prio,
+                f"Con tu presupuesto de {presupuesto_txt()}/mes, reasignar pauta por país — "
+                + "; ".join(partes),
                 "El backend ya clasifica cada país (escalar/observar/recortar) con su "
                 "confianza; mover el presupuesto a los de 'escalar' con volumen (confianza "
                 "alta) es la palanca más directa para crecer sin bajar el ROAS.", "Growth / Meta"))

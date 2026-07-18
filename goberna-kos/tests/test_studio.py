@@ -90,6 +90,20 @@ def test_frescura_cae_a_la_ultima_conocida_cuando_la_query_no_la_trae():
         dc._LAST_FRESCURA = prev
 
 
+def test_criterios_centralizados_semaforo_cac_y_presupuesto():
+    # docs/27 §3: la capa de criterios fundada. Semáforo de CAC + presupuesto conocido.
+    from ivi.criterios import (semaforo_cac, presupuesto_txt, PRESUPUESTO_MENSUAL_USD,
+                               CAC_TECHO, ROAS_PISO, VENTAS_RUIDO)
+    assert semaforo_cac(20) == "verde"      # ROAS >= 4x
+    assert semaforo_cac(35) == "amarillo"   # ROAS 3-4x
+    assert semaforo_cac(50) == "rojo"       # ROAS < 3x = CAC caro
+    assert semaforo_cac(CAC_TECHO + 1) == "techo"
+    assert semaforo_cac(None) is None
+    assert PRESUPUESTO_MENSUAL_USD == 3000.0
+    assert presupuesto_txt() == "USD 3.000"
+    assert ROAS_PISO == 3.0 and VENTAS_RUIDO == 25   # calibrado a info-product
+
+
 if __name__ == "__main__":
     tests = [v for name, v in sorted(globals().items())
              if name.startswith("test_") and callable(v)]
