@@ -179,10 +179,22 @@ def _nube(sistema: str, usuario: str) -> tuple[str, str]:
         return _invoke_bedrock(sistema, usuario, REDACTOR_NUBE_FALLBACK), REDACTOR_NUBE_FALLBACK
 
 
-def responder(pregunta: str, usuario: str | None = None) -> dict:
-    r = ask(pregunta)
+def responder(pregunta: str, usuario: str | None = None, historial: list | None = None) -> dict:
+    # Follow-up corto ("¿y en México?"): darle contexto al RETRIEVAL combinando con la pregunta previa.
+    consulta = pregunta
+    if historial and len(pregunta.split()) <= 6:
+        consulta = f"{(historial[-1] or {}).get('q', '')} {pregunta}".strip()
+    r = ask(consulta)
     datos = _bloque_datos(r)
-    usuario_msg = f"DATOS:\n{datos}\n\nPregunta: {pregunta}\n\nRespondé natural, para hablar:"
+
+    hist_txt = ""
+    if historial:
+        turnos = "\n".join(f"Usuario: {h.get('q','')}\nIvi: {h.get('a','')}" for h in historial[-3:])
+        hist_txt = ("CONVERSACIÓN PREVIA (usala para resolver referencias como 'y en México', "
+                    f"'¿por qué?', pero NO repitas cifras viejas como si fueran nuevas):\n{turnos}\n\n")
+    usuario_msg = (f"{hist_txt}DATOS:\n{datos}\n\nPregunta actual: {pregunta}\n\n"
+                   "Respondé natural, para hablar:")
+
     usar_local = REDACTOR_MODO == "local" or (REDACTOR_MODO == "hibrido" and _es_sensible(r))
     if usar_local:
         texto = _qwen3(f"{SISTEMA}\n\n{usuario_msg}")
@@ -191,10 +203,12 @@ def responder(pregunta: str, usuario: str | None = None) -> dict:
         texto, modelo = _nube(SISTEMA, usuario_msg)
         redactor = f"bedrock ({modelo})"
     texto = _limpiar(texto)
-    no_verif = _no_verificados(texto, datos)   # grounding: cifras dichas que no están en los DATOS
+    # grounding: las cifras deben estar en los DATOS actuales o en lo ya dicho en la conversación
+    no_verif = _no_verificados(texto, datos + " " + hist_txt)
     return {"pregunta": pregunta, "texto": texto, "redactor": redactor,
             "modo": r["modo"], "tipo": r["tipo"], "fuentes": r["fuentes"],
-            "grounding_ok": not no_verif, "numeros_no_verificados": no_verif, "ask": r}
+            "grounding_ok": not no_verif, "numeros_no_verificados": no_verif,
+            "consulta_retrieval": consulta if consulta != pregunta else None, "ask": r}
 
 
 if __name__ == "__main__":

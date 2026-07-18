@@ -183,6 +183,7 @@ function add(who, texto, meta){ const d=document.createElement('div'); d.classNa
   log.appendChild(d); log.scrollTop=log.scrollHeight; return d; }
 
 let audio=null;
+let conversacion=[];  // memoria multi-turno (se manda el historial reciente a /responder)
 async function hablar(texto){
   if(!auto.checked) return;
   try{ statusEl.textContent='Ivi hablando…';
@@ -195,11 +196,13 @@ async function hablar(texto){
 async function preguntar(pregunta){
   add('user', pregunta); statusEl.textContent='Ivi pensando…';
   try{
-    const r=await fetch('/responder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pregunta})});
+    const r=await fetch('/responder',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({pregunta, historial: conversacion.slice(-3)})});
     const d=await r.json();
     if(d.error){ add('ivi','Uy, hubo un error: '+d.error); statusEl.textContent=''; return; }
     const g = d.grounding_ok===false ? ' · ⚠️ '+(d.numeros_no_verificados||[]).join(', ')+' sin verificar' : '';
     add('ivi', d.texto, d.redactor+' · '+d.modo+'/'+d.tipo+g);
+    conversacion.push({q: pregunta, a: d.texto});
     hablar(d.texto);
   }catch(e){ add('ivi','Error de red: '+e.message); statusEl.textContent=''; }
 }
@@ -247,9 +250,12 @@ class Handler(BaseHTTPRequestHandler):
             pregunta = (body.get("pregunta") or "").strip()
             if not pregunta:
                 return self._send(400, json.dumps({"error": "falta la pregunta"}))
-            fn = responder if self.path == "/responder" else ask
             try:
-                self._send(200, json.dumps(fn(pregunta), ensure_ascii=False, default=str))
+                if self.path == "/responder":
+                    res = responder(pregunta, historial=body.get("historial") or None)
+                else:
+                    res = ask(pregunta)
+                self._send(200, json.dumps(res, ensure_ascii=False, default=str))
             except Exception as e:  # noqa: BLE001
                 self._send(500, json.dumps({"error": str(e)}))
         elif self.path == "/tts":
