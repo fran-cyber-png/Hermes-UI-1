@@ -128,7 +128,8 @@ def _norm(t: str) -> str:
 
 def _tool_por_keywords(pregunta: str) -> tuple[str, dict] | None:
     """Slot-filling-lite por keywords, ANTES del mapa de intents. Enruta preguntas específicas a la
-    tool correcta (p.ej. ventas por país por mes, que el intent 'ventas' mandaría a estados)."""
+    tool correcta (p.ej. ventas por país por mes, que el intent 'ventas' mandaría a estados).
+    Orden: de lo MÁS específico (producto, país×mes) a lo más general (pulso)."""
     p = _norm(pregunta)
     pais = "pais" in p or "paises" in p
     temporal = ("mes" in p or "mensual" in p or " vs " in p or "compar" in p or "pasado" in p
@@ -136,8 +137,34 @@ def _tool_por_keywords(pregunta: str) -> tuple[str, dict] | None:
     negocio = any(w in p for w in ("venta", "vendi", "vendimos", "facturac", "ingreso", "nos fue",
                                     "como va", "como nos", "como estamos", "rindi", "resultado",
                                     "negocio", "cerramos", "plata", "dolar", "factur"))
+
+    # 1. PRODUCTO — "qué producto vende más", "qué promocionar", "top de cursos/diplomas".
+    producto = any(w in p for w in ("producto", "curso", "diploma", "programa"))
+    if producto and any(w in p for w in ("vend", "promocion", "mas ", " mejor", "top", "ingreso",
+                                          "factur", "rankea", "ranking", "cual", "que ")):
+        return ("governa.ventas.porProducto", {"dias": 90, "limite": 8})
+
+    # 2. VENTAS POR PAÍS × MES — "cómo nos fue por país este mes vs el pasado".
     if pais and temporal and negocio:
         return ("governa.ventas.porPaisMes", {"meses": 3})
+
+    # 2b. TICKET PROMEDIO — "cuál es mi ticket promedio" (el pulso trae el ticket real del mes,
+    #     en vez del benchmark congelado de los docs).
+    if "ticket" in p or "valor promedio" in p or "promedio de venta" in p or "promedio por venta" in p:
+        return ("governa.ventas.pulso", {})
+
+    # 3. PULSO DEL NEGOCIO — la pregunta-paraguas del dueño: "cómo va el negocio / resumime cómo
+    #    estamos / panorama general / cómo vamos este mes" (sin desglose por país).
+    pulso = any(w in p for w in ("resum", "como estamos", "como vamos", "como va el negocio",
+                                 "como va todo", "como venimos", "parados", "pulso", "panorama",
+                                 "vista general", "situacion general", "estado del negocio",
+                                 "en general"))
+    if pulso and not pais:
+        return ("governa.ventas.pulso", {})
+    # "cómo va el negocio este mes" / "cómo vamos este mes" (negocio + temporal, sin país ni desglose)
+    if negocio and temporal and not pais and ("mes" in p):
+        return ("governa.ventas.pulso", {})
+
     return None
 
 

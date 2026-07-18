@@ -74,6 +74,24 @@ def _formatear_hecho(fuente: str, s) -> str:
                   f"(vs {c['ventasPrevio']} / {c['usdPrevio']} el mes previo)" for c in comp]
         return (f"Ventas cobradas por país, {s.get('mesActual')} vs {s.get('mesPrevio')} "
                 f"(al mismo día del mes): " + "; ".join(partes) + f". {s.get('nota','')}")
+    if "ventas.pulso" in fuente:
+        pl = s.get("paisLider") or {}
+        pr = s.get("productoLider") or {}
+        partes = [
+            f"Pulso del negocio ({s.get('mesActual')} vs {s.get('mesPrevio')}, al mismo día del mes): "
+            f"{s.get('ventasMes')} ventas cobradas por {s.get('ingresosUsd')} USD "
+            f"(el mes previo, a esta altura, {s.get('ventasMesPrevio')} ventas y "
+            f"{s.get('ingresosUsdPrevio')} USD).",
+            f"Ticket promedio {s.get('ticketPromedioUsd')} USD." if s.get("ticketPromedioUsd") else "",
+            f"País líder: {pl.get('pais')} con {pl.get('usd')} USD." if pl else "",
+            f"Producto líder: {pr.get('nombre')} ({pr.get('ventas')} ventas)." if pr else "",
+        ]
+        return " ".join(x for x in partes if x)
+    if "ventas.porProducto" in fuente:
+        prods = (s.get("productos") or [])[:6]
+        partes = [f"{p['nombre']} ({p['ventas']} ventas, {p['usd']} USD)" for p in prods]
+        return (f"Productos por ingresos, últimos {s.get('dias')} días (solo cobradas): "
+                + "; ".join(partes) + ".")
     if "ventas.estados" in fuente:
         est = s.get("estados") or []
         vivos = [f"{e.get('nombre')} {e.get('ventas')}" for e in est if e.get("ventas")]
@@ -153,12 +171,18 @@ def _no_verificados(texto: str, datos: str) -> list[str]:
     Red de seguridad Ley I (dominio financiero). Tolerancia 2% + magnitudes (mil/millones), así
     'casi 20 mil' no se marca cuando el dato es 19.988. Ignora números de 1 dígito (ruido)."""
     ref = _valores(datos)
+    # También son válidas las SUMAS de 2 valores verificados: si los DATOS traen "Perú 6.001" y
+    # "México 4.087", que Ivi diga el total "10.088" es aritmética correcta sobre datos verificados,
+    # no una cifra inventada. Solo pares (2% de tolerancia); no cubre todo el eje, así el neto Ley I
+    # sigue atrapando cifras fabricadas (un ROAS de 42x, un total que no cuadra con nada).
+    sumas = [a + b for i, a in enumerate(ref) for b in ref[i + 1:]]
+    ref_ext = ref + sumas
     out = []
     for m in _NUM_TOK.finditer(texto):
         if len(re.sub(r"\D", "", m.group(1))) < 2:
             continue
         v = _a_valor(m.group(1), m.group(2))
-        if v is None or any(abs(v - r) <= max(1.0, 0.02 * max(abs(v), abs(r))) for r in ref):
+        if v is None or any(abs(v - r) <= max(1.0, 0.02 * max(abs(v), abs(r))) for r in ref_ext):
             continue
         out.append(m.group(0).strip())
     return sorted(set(out))
