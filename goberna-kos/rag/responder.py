@@ -113,20 +113,49 @@ def _limpiar(t: str) -> str:
     return re.sub(r"\s{2,}", " ", t).strip()
 
 
-_NUM = re.compile(r"\d[\d.,]*")
+_NUM_TOK = re.compile(r"(\d[\d.,]*\d|\d)\s*(millones|millón|millon|mil(?:es)?|k)?", re.I)
 
 
-def _digitos(t: str) -> set[str]:
-    """Números de un texto, reducidos a solo sus dígitos: '6.8x'→'68', '6.727'→'6727', '31%'→'31'."""
-    return {re.sub(r"\D", "", m) for m in _NUM.findall(t)} - {""}
+def _a_valor(raw: str, mag: str | None) -> float | None:
+    """'19.988'→19988, '6,8'→6.8, '16.0'→16.0, '20 mil'→20000, '1,5 millones'→1500000.
+    Resuelve la ambigüedad de separadores es-AR (. miles, , decimal) vs en-US mirando el ÚLTIMO."""
+    s = raw.strip()
+    if "." in s and "," in s:
+        s = s.replace(".", "").replace(",", ".") if s.rfind(",") > s.rfind(".") else s.replace(",", "")
+    elif "," in s:
+        s = s.replace(",", ".") if (s.count(",") == 1 and len(s.split(",")[-1]) <= 2) else s.replace(",", "")
+    elif "." in s and not (s.count(".") == 1 and len(s.split(".")[-1]) <= 2):
+        s = s.replace(".", "")  # el punto es de miles (p.ej. 19.988), no decimal
+    try:
+        v = float(s)
+    except ValueError:
+        return None
+    m = (mag or "").lower()
+    if "millon" in m or "millón" in m:
+        v *= 1_000_000
+    elif m.startswith("mil") or m == "k":
+        v *= 1000
+    return v
+
+
+def _valores(t: str) -> list[float]:
+    return [v for m in _NUM_TOK.finditer(t) if (v := _a_valor(m.group(1), m.group(2))) is not None]
 
 
 def _no_verificados(texto: str, datos: str) -> list[str]:
-    """Números de ≥2 dígitos que Ivi dijo pero que NO aparecen en los DATOS que se le pasaron.
-    Red de seguridad de Ley I contra cifras inventadas (dominio financiero). Compara contra el
-    bloque DATOS ya redondeado (el mismo que vio el modelo), así el redondeo legítimo no dispara."""
-    ref = _digitos(datos)
-    return sorted(n for n in _digitos(texto) if len(n) >= 2 and n not in ref)
+    """Cifras que Ivi dijo pero que NO están en los DATOS ni son un REDONDEO de algo que sí está.
+    Red de seguridad Ley I (dominio financiero). Tolerancia 2% + magnitudes (mil/millones), así
+    'casi 20 mil' no se marca cuando el dato es 19.988. Ignora números de 1 dígito (ruido)."""
+    ref = _valores(datos)
+    out = []
+    for m in _NUM_TOK.finditer(texto):
+        if len(re.sub(r"\D", "", m.group(1))) < 2:
+            continue
+        v = _a_valor(m.group(1), m.group(2))
+        if v is None or any(abs(v - r) <= max(1.0, 0.02 * max(abs(v), abs(r))) for r in ref):
+            continue
+        out.append(m.group(0).strip())
+    return sorted(set(out))
 
 
 def _qwen3(prompt: str, timeout: int = 60) -> str:
