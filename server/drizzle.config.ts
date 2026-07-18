@@ -17,9 +17,9 @@ export default defineConfig({
   schema: "./src/db/*.ts",
   out: "./drizzle",
   dialect: "postgresql",
-  // Por defecto drizzle-kit solo gestiona `public`. Sin esto, los esquemas `fuentes` y
-  // `ontologia` se declaran en el código y nunca se crean en la base — en silencio.
-  schemaFilter: ["public", "fuentes", "ontologia"],
+  // Por defecto drizzle-kit solo gestiona `public`. Sin esto, los esquemas `fuentes`,
+  // `ontologia` y `rag` se declaran en el código y nunca se crean en la base — en silencio.
+  schemaFilter: ["public", "fuentes", "ontologia", "rag"],
   dbCredentials: {
     url: process.env.DATABASE_URL!,
   },

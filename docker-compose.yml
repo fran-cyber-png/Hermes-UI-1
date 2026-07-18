@@ -1,6 +1,9 @@
 services:
   db:
-    image: postgres:17-alpine
+    # pgvector/pgvector:pg17 = postgres:17 + la extensión `vector` precompilada (RAG de Ivi).
+    # Mismo major que postgres:17-alpine → el volumen `meta_escuela_pgdata` es compatible, no se
+    # pierde data al recrear. Es el mismo patrón que ya corren goberna_crm_db/leads_crm_db.
+    image: pgvector/pgvector:pg17
     container_name: meta_escuela_db
     restart: unless-stopped
     environment:
