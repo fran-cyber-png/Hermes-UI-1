@@ -15,12 +15,19 @@
 export const MIN_GASTO_USD = 50;
 export const MIN_VENTAS = 3;
 
-/** Los cortes de ROAS. Estos son los del CÓDIGO real (≥4 / <2), no los de la prosa (≥3 / <1). */
-export const ROAS_ESCALAR = 4;
-export const ROAS_RECORTAR = 2;
+/**
+ * Los cortes de ROAS. RECALIBRADOS (docs/27 §3) para un INFO-PRODUCT de margen ~90%:
+ * el break-even es ~1.2x (no el "2-4x bueno" de e-commerce físico, margen 30-50%), el
+ * piso operativo ~3x y el stop-loss 2x. Antes el código usaba ≥4 (heredado del dashboard,
+ * calibrado como si fuera e-commerce), lo que subestimaba cuántos mercados conviene
+ * escalar y contradecía la propia prosa (≥3). Env-overridable para ajustar sin tocar código.
+ */
+export const ROAS_ESCALAR = Number(process.env.IVI_ROAS_ESCALAR ?? 3);
+export const ROAS_RECORTAR = Number(process.env.IVI_ROAS_RECORTAR ?? 2);
 
-/** El ROAS objetivo, para calcular cuánta plata hay en juego en un segmento. */
-const ROAS_OBJETIVO = 4;
+/** El ROAS objetivo (piso operativo) para la plata en juego. A 3x y margen ~90% la
+ *  contribución neta es ~USD 1,55 por cada USD de pauta (docs/27 §3.1). */
+const ROAS_OBJETIVO = Number(process.env.IVI_ROAS_OBJETIVO ?? 3);
 
 export type Segmento = {
   /** País, producto, campaña… lo que se esté cortando. */
