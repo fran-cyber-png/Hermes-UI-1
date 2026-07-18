@@ -38,6 +38,10 @@ services:
     environment:
       DATABASE_URL: postgres://meta_escuela:${DB_PASSWORD}@db:5432/meta_escuela
       PORT: "4100"
+      # ESCRITURAS a Meta forzadas a SEGURO acá (override del env_file, pase lo que pase en el .env):
+      # este deploy es real-time de LECTURA, no de envío. Se activan a mano, a propósito, nunca solas.
+      DECISIONES_MODO: simulacion
+      LAZO_RELOJ: ""
     ports:
       # Solo tailnet: Ivi (geografo) y el front lo alcanzan por Tailscale, nunca público.
       - "100.85.119.49:4100:4100"
