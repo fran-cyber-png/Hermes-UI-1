@@ -50,6 +50,11 @@ def embedder_para(sensible: bool) -> tuple[str, str]:
 # El código + índice GIN quedan listos; re-evaluar y prender cuando el golden set sea grande (Tier 0).
 HIBRIDO = os.environ.get("RAG_HIBRIDO", "0") == "1"
 
+# Curación SOFT: penaliza (suma a la distancia coseno) los docs categoría 'dev'/meta (specs, prompts,
+# bitácoras, notas de ingeniería) para que no contaminen las respuestas de NEGOCIO, sin excluirlos.
+# 0.03 es una nudge suave (el rango relevante de distancia es ~0.35-0.55). 0 = sin penalización.
+PENALIZAR_DEV = float(os.environ.get("RAG_PENALIZAR_DEV", "0.03"))
+
 
 def tags_busqueda(incluir_sensibles: bool) -> list[tuple[str, str]]:
     """Los espacios (backend, tag) que buscar_docs consulta, según el modo."""

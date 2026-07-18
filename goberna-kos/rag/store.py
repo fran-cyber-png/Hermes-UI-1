@@ -13,8 +13,13 @@ def conectar():
     return psycopg2.connect(config.DATABASE_URL)
 
 
+def reset(cur):
+    """Vacía la tabla (para una re-ingesta limpia, p.ej. tras cambiar la curación del corpus)."""
+    cur.execute("TRUNCATE rag.documentos RESTART IDENTITY")
+
+
 def upsert_doc(cur, *, doc: str, fuente: str, sensible: bool, chunks: list[dict],
-               vectores: list[list[float]], embedder: str) -> int:
+               vectores: list[list[float]], embedder: str, categoria: str = "negocio") -> int:
     """Reemplaza TODOS los chunks de `doc` (bajo CUALQUIER embedder) y re-inserta bajo `embedder`.
     Idempotente por documento; garantiza que un doc vive bajo un solo embedder (el que le toca por
     su sensibilidad + modo), sin dejar chunks huérfanos de una corrida anterior. Devuelve cuántos
@@ -25,6 +30,7 @@ def upsert_doc(cur, *, doc: str, fuente: str, sensible: bool, chunks: list[dict]
         meta = {
             "fuente": fuente,
             "doc": doc,
+            "categoria": categoria,
             "headings": ch.get("headings", []),
             "chars": len(ch["texto"]),
         }
@@ -71,8 +77,10 @@ def _knn(cur, vector, n, embedder, incluir_sensibles, fuentes):
         SELECT id, doc, fuente, posicion, chunk, metadata, sensible,
                1 - (embedding <=> %s::vector) AS similitud
           FROM rag.documentos WHERE {where}
-      ORDER BY embedding <=> %s::vector LIMIT %s
-    """, [qv, *params, qv, n])
+      ORDER BY (embedding <=> %s::vector)
+               + CASE WHEN metadata->>'categoria' = 'dev' THEN %s ELSE 0 END
+         LIMIT %s
+    """, [qv, *params, qv, config.PENALIZAR_DEV, n])
     return _filas(cur)
 
 

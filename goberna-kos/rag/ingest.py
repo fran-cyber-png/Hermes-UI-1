@@ -11,11 +11,31 @@ y el Postgres local con pgvector (docker compose up).
 
 import json
 import os
+import re
 import sys
 
 from . import config, store
 from .chunker import chunk_markdown
 from .embedder import embed
+
+# ── Curación del corpus: conocimiento de NEGOCIO (Ivi cita) vs DEV/META (ruido para el objetivo) ──
+# El objetivo es que Ivi razone sobre el NEGOCIO. Se ingesta TODO tagueado (negocio/dev); la
+# curación es SOFT en query-time: buscar_docs penaliza suave a los dev (config.PENALIZAR_DEV) para
+# que no contaminen respuestas de negocio, sin excluirlos (así siguen disponibles). RAG_INCLUIR_DEV=0
+# los excluye de la ingesta por completo (curación dura), si algún día se quiere.
+INCLUIR_DEV = os.environ.get("RAG_INCLUIR_DEV", "1") == "1"
+_NEGOCIO_DIRS = ("docs/plataformas", "docs/loops")
+_NEGOCIO_NUMS = {"00", "01", "02", "04", "07", "08", "09", "10", "11", "22", "27", "28"}
+
+
+def _categoria(relpath: str) -> str:
+    d = os.path.dirname(relpath)
+    if d in _NEGOCIO_DIRS:
+        return "negocio"
+    if d == "docs":  # docs numerados en la raíz: negocio solo los del allowlist
+        m = re.match(r"(\d\d)-", os.path.basename(relpath))
+        return "negocio" if (m and m.group(1) in _NEGOCIO_NUMS) else "dev"
+    return "dev"  # specs/, prompts/, agents/, goberna-kos/*.md, etc.
 
 
 def _fuente_de(relpath: str) -> str:
@@ -66,12 +86,13 @@ def _chunks_de_catalogo() -> list[dict]:
     return chunks
 
 
-def _ingestar_chunks(cur, *, doc: str, fuente: str, sensible: bool, chunks: list[dict]) -> int:
+def _ingestar_chunks(cur, *, doc: str, fuente: str, sensible: bool, chunks: list[dict],
+                     categoria: str = "negocio") -> int:
     """Embebe con el backend que le toca al doc (split: público→Cohere, sensible→bge-m3) y upserta."""
     backend, tag = config.embedder_para(sensible)
     vectores = embed([c["texto"] for c in chunks], backend=backend, input_type="document")
-    return store.upsert_doc(cur, doc=doc, fuente=fuente, sensible=sensible,
-                            chunks=chunks, vectores=vectores, embedder=tag)
+    return store.upsert_doc(cur, doc=doc, fuente=fuente, sensible=sensible, chunks=chunks,
+                            vectores=vectores, embedder=tag, categoria=categoria)
 
 
 def _ingestar_doc(cur, relpath: str) -> int:
@@ -82,7 +103,8 @@ def _ingestar_doc(cur, relpath: str) -> int:
     if not chunks:
         return 0
     return _ingestar_chunks(cur, doc=relpath, fuente=_fuente_de(relpath),
-                            sensible=_es_sensible(relpath), chunks=chunks)
+                            sensible=_es_sensible(relpath), chunks=chunks,
+                            categoria=_categoria(relpath))
 
 
 def main(argv: list[str]) -> int:
@@ -102,12 +124,18 @@ def main(argv: list[str]) -> int:
                 print(json.dumps(store.stats_por_embedder(cur), ensure_ascii=False, indent=2))
                 return 0
 
-            print(f"modo={config.MODO_EMBEDDER}")
-            total_docs = total_chunks = 0
+            if "--reset" in argv:
+                store.reset(cur)
+                print("(tabla vaciada para re-ingesta limpia)")
+            print(f"modo={config.MODO_EMBEDDER} · dev={'incluido' if INCLUIR_DEV else 'EXCLUIDO (curado)'}")
+            total_docs = total_chunks = saltados = 0
 
             # 1) Markdown
             for relpath in _docs_markdown():
                 if solo and solo not in relpath:
+                    continue
+                if not INCLUIR_DEV and _categoria(relpath) == "dev":
+                    saltados += 1
                     continue
                 n = _ingestar_doc(cur, relpath)
                 if n:
@@ -130,7 +158,8 @@ def main(argv: list[str]) -> int:
         conn.commit()
         with conn.cursor() as cur:
             por = store.stats_por_embedder(cur)
-        print(f"\nOK — {total_docs} docs, {total_chunks} chunks (modo {config.MODO_EMBEDDER}).")
+        print(f"\nOK — {total_docs} docs de negocio, {total_chunks} chunks (modo {config.MODO_EMBEDDER}). "
+              f"{saltados} docs dev/meta saltados (curación).")
         for row in por:
             print(f"    {row['embedder']}: {row['chunks']} chunks / {row['docs']} docs")
         return 0
