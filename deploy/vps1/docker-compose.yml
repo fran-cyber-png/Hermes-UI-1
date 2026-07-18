@@ -1,0 +1,46 @@
+# meta-escuela backend + Postgres(pgvector) always-on en VPS1.
+# Convención de VPS1: una carpeta por app en /srv/<app> con su docker-compose.
+# Destino: /srv/meta-escuela (clonar el repo ahí; este compose vive en deploy/vps1/).
+#
+# Secretos por env_file (deploy/vps1/.env, NO versionado). Nombres esperados:
+#   DB_PASSWORD, META_ACCESS_TOKEN, META_APP_ID
+# Interruptores de ESCRITURA a Meta se dejan en su default seguro (NO setear):
+#   LAZO_RELOJ (ausente=apagado), DECISIONES_MODO (ausente=simulacion).
+# El reloj de LECTURA de pauta arranca solo (PAUTA_RELOJ ausente=on) → gasto fresco cada ~6h.
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    container_name: meta_escuela_prod_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: meta_escuela
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: meta_escuela
+    volumes:
+      - meta_escuela_prod_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meta_escuela -d meta_escuela"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  backend:
+    build:
+      context: ../../server
+    container_name: meta_escuela_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://meta_escuela:${DB_PASSWORD}@db:5432/meta_escuela
+      PORT: "4100"
+    ports:
+      # Solo tailnet: Ivi (geografo) y el front lo alcanzan por Tailscale, nunca público.
+      - "100.85.119.49:4100:4100"
+
+volumes:
+  meta_escuela_prod_pgdata:
