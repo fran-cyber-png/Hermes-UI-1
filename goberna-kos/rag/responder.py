@@ -101,6 +101,12 @@ def _formatear_hecho(fuente: str, s) -> str:
         partes = [f"{p['nombre']} ({p['ventas']} ventas, {p['usd']} USD)" for p in prods]
         return (f"Productos por ingresos, últimos {s.get('dias')} días (solo cobradas): "
                 + "; ".join(partes) + ".")
+    if "ventas.pipeline" in fuente:
+        pp = (s.get("porPais") or [])[:5]
+        det = "; ".join(f"{x['pais']} {x['ventas']} ({x['usd']} USD)" for x in pp)
+        return (f"Pipeline pendiente de cobro (ventas EN PROCESO, aún no cobradas): "
+                f"{s.get('ventasEnProceso')} ventas por {s.get('usdEnProceso')} USD. "
+                f"Por país: {det}. {s.get('nota','')}")
     if "ventas.estados" in fuente:
         est = s.get("estados") or []
         vivos = [f"{e.get('nombre')} {e.get('ventas')}" for e in est if e.get("ventas")]

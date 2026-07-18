@@ -158,6 +158,11 @@ def _tool_por_keywords(pregunta: str) -> tuple[str, dict] | None:
     if "ticket" in p or "valor promedio" in p or "promedio de venta" in p or "promedio por venta" in p:
         return ("governa.ventas.pulso", {})
 
+    # 2c. PIPELINE / POR COBRAR — ventas en proceso (registradas, aún no cobradas).
+    if any(w in p for w in ("en proceso", "sin cobrar", "sin confirmar", "por confirmar", "pipeline",
+                            "pendiente de cobro", "pendientes de cobro", "por cobrar")):
+        return ("governa.ventas.pipeline", {})
+
     # 3. PULSO DEL NEGOCIO — la pregunta-paraguas del dueño: "cómo va el negocio / resumime cómo
     #    estamos / panorama general / cómo vamos este mes" (sin desglose por país).
     pulso = any(w in p for w in ("resum", "como estamos", "como vamos", "como va el negocio",

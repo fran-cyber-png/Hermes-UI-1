@@ -302,3 +302,49 @@ registrar({
     };
   },
 });
+
+/**
+ * PIPELINE / POR COBRAR — para "¿cuántas ventas en proceso tengo?" / "¿cuánto tengo por cobrar?".
+ *
+ * Ventas registradas pero AÚN NO cobradas (estado_semantico='en_proceso'): el pipeline pendiente de
+ * confirmación. Salía de docs congelados en ambas rondas de fine-tuning. NO se mete con las cuotas en
+ * mora (cuota.estado es un integer sin mapa verificado — no lo adivinamos, ese fue justo el error de
+ * la CQ de estados). Este número es limpio: se deriva de estado_semantico, que sí está mapeado.
+ */
+registrar({
+  nombre: "governa.ventas.pipeline",
+  descripcion:
+    "Ventas EN PROCESO (registradas pero aún no cobradas): cuántas y por cuánto — el pipeline " +
+    "pendiente de cobro, con desglose por país. Para '¿cuántas ventas en proceso tengo?', " +
+    "'¿cuánto tengo por cobrar?', 'ventas sin confirmar'.",
+  entrada: z.object({}),
+  idempotente: true,
+  cqIds: [],
+  fuentes: ["dominio/estadosVenta.ts (semantica='en_proceso')", "db/canonico.ts:venta"],
+  ejecutar: async () => {
+    const filas = (await db.execute(sql`
+      SELECT coalesce(pais_cliente, 'Sin país')  AS pais,
+             count(*)::int                        AS ventas,
+             coalesce(sum(monto_usd), 0)::float   AS usd
+      FROM ontologia.venta
+      WHERE estado_semantico = 'en_proceso'
+      GROUP BY 1 ORDER BY 3 DESC
+    `)) as unknown as { pais: string; ventas: number; usd: number }[];
+
+    const total = filas.reduce(
+      (a, f) => ({ ventas: a.ventas + f.ventas, usd: a.usd + f.usd }),
+      { ventas: 0, usd: 0 },
+    );
+
+    return {
+      ventasEnProceso: total.ventas,
+      usdEnProceso: Math.round(total.usd),
+      porPais: filas.slice(0, 8).map((f) => ({
+        pais: f.pais, ventas: f.ventas, usd: Math.round(f.usd),
+      })),
+      nota:
+        "Ventas en proceso = registradas pero aún no confirmadas como cobradas; es el pipeline " +
+        "pendiente de cobro. No incluye cuotas en mora de ventas ya cobradas.",
+    };
+  },
+});
