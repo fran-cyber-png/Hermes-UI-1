@@ -48,3 +48,13 @@ services:
 
 volumes:
   meta_escuela_prod_pgdata:
+
+# Subred PINNEADA: VPS1 tiene FORWARD policy DROP + un allowlist en la cadena DOCKER-USER para el
+# puerto 5432 (patrón de seguridad de la casa). El backend solo alcanza su db si esta subred está
+# en el allowlist. Fijarla acá la hace estable ante recreados de red, así la regla de iptables
+# (10.0.27.0/24 → 5432 ACCEPT, comment "meta-escuela internal db") sigue valiendo. Ver deploy/vps1/README.md §firewall.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 10.0.27.0/24

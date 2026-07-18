@@ -42,6 +42,27 @@ docker exec meta_escuela_prod_db psql -U meta_escuela -d meta_escuela -c "CREATE
 docker compose exec backend npm run db:push    # crea schemas public/fuentes/ontologia/rag + tablas
 ```
 
+## 2.5 Firewall (REQUERIDO — patrón de seguridad de VPS1)
+
+VPS1 tiene `FORWARD policy DROP` y un allowlist en la cadena `DOCKER-USER` para el puerto 5432:
+solo subredes whitelisteadas alcanzan cualquier Postgres. La subred de este compose
+(`10.0.27.0/24`, pinneada en el compose) debe agregarse, o el backend NO alcanza su db (los
+paquetes se DROPean → `CONNECT_TIMEOUT db:5432`). Mismo patrón que `meta-partnert internal db`:
+
+```bash
+# Insertar ANTES del DROP genérico de 5432 (necesita sudo — decisión humana):
+sudo iptables -I DOCKER-USER 1 -s 10.0.27.0/24 -p tcp -m tcp --dport 5432 -j ACCEPT \
+  -m comment --comment "meta-escuela internal db"
+# Persistir (que sobreviva reboot). Según cómo persista VPS1 el resto de reglas:
+sudo netfilter-persistent save    # o iptables-save > /etc/iptables/rules.v4
+```
+Después de esta regla: `docker exec meta_escuela_backend node -e "..."` conecta y las herramientas
+SDK devuelven datos.
+
+> Nota post-carga: tras un `pg_dump`/carga masiva, correr `ANALYZE` y **reiniciar el backend**
+> (`docker compose restart backend`) — postgres.js cachea planes por conexión; sin stats +
+> reinicio, las queries pueden caer en el timeout de 30s con un plan viejo.
+
 ## 3. Cargar la data inicial
 
 ```bash
