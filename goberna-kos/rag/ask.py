@@ -115,10 +115,39 @@ def _senal_estructurada(pregunta: str):
     return ir, score
 
 
-def _elegir_tool(ir) -> tuple[str, dict] | None:
-    """El intent mejor rankeado que (a) tiene herramienta mapeada y (b) supera TOOL_MIN. El gate de
-    score evita invocar una herramienta BI por un intent secundario débil (substring espurio) y
-    presentar sus cifras como HECHO confiadamente equivocado."""
+_MESES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+          "septiembre", "setiembre", "octubre", "noviembre", "diciembre")
+
+
+def _norm(t: str) -> str:
+    t = t.lower()
+    for a, b in (("á", "a"), ("é", "e"), ("í", "i"), ("ó", "o"), ("ú", "u"), ("ñ", "n")):
+        t = t.replace(a, b)
+    return t
+
+
+def _tool_por_keywords(pregunta: str) -> tuple[str, dict] | None:
+    """Slot-filling-lite por keywords, ANTES del mapa de intents. Enruta preguntas específicas a la
+    tool correcta (p.ej. ventas por país por mes, que el intent 'ventas' mandaría a estados)."""
+    p = _norm(pregunta)
+    pais = "pais" in p or "paises" in p
+    temporal = ("mes" in p or "mensual" in p or " vs " in p or "compar" in p or "pasado" in p
+                or "anterior" in p or any(m in p for m in _MESES))
+    negocio = any(w in p for w in ("venta", "vendi", "vendimos", "facturac", "ingreso", "nos fue",
+                                    "como va", "como nos", "como estamos", "rindi", "resultado",
+                                    "negocio", "cerramos", "plata", "dolar", "factur"))
+    if pais and temporal and negocio:
+        return ("governa.ventas.porPaisMes", {"meses": 3})
+    return None
+
+
+def _elegir_tool(ir, pregunta: str = "") -> tuple[str, dict] | None:
+    """Keywords específicos primero (ventas por país×mes, etc.); si no, el intent mejor rankeado que
+    (a) tiene herramienta mapeada y (b) supera TOOL_MIN — el gate de score evita invocar una tool BI
+    por un intent secundario débil y presentar cifras como HECHO confiadamente equivocado."""
+    kw = _tool_por_keywords(pregunta)
+    if kw:
+        return kw
     if ir is None:
         return None
     for intent in ir.intents:  # ranked
@@ -149,13 +178,17 @@ def ask(pregunta: str, usuario: str | None = None, *, k: int = 5,
     # sem_top = mejor similitud COSENO disponible (las filas solo-texto del hybrid no la tienen)
     sem_top = max([d.get("similitud") or 0.0 for d in docs], default=0.0)
     modo = _rutar(bi_score, sem_top)
+    # Si hay una tool específica por keywords (p.ej. ventas por país×mes), es una pregunta de datos
+    # sí o sí → forzar la ruta estructurada aunque el scorer de intents no la haya prendido fuerte.
+    if _tool_por_keywords(pregunta) and modo == "semantica":
+        modo = "mixta"
 
     evidencia: list[dict] = []
     fuentes: list[str] = []
 
     # ── Ruta estructurada: consultar_bi (números = HECHO) ──
     if modo in ("estructurada", "mixta"):
-        elegido = _elegir_tool(ir)
+        elegido = _elegir_tool(ir, pregunta)
         if elegido:
             nombre, params = elegido
             r = consultar_bi(nombre, params)

@@ -68,6 +68,12 @@ def _formatear_hecho(fuente: str, s) -> str:
         partes = [f"{x.get('pais')} {_num(x.get('roas'))}x ({x.get('accion','')})" for x in top]
         corte = (s.get("revisadoAt") or "")[:10]
         return f"ROAS por país (top por ventas; dato del {corte}): " + "; ".join(partes) + "."
+    if "ventas.porPaisMes" in fuente:
+        comp = (s.get("comparacion") or [])[:8]
+        partes = [f"{c['pais']}: {c['ventasActual']} ventas / {c['usdActual']} USD "
+                  f"(vs {c['ventasPrevio']} / {c['usdPrevio']} el mes previo)" for c in comp]
+        return (f"Ventas cobradas por país, {s.get('mesActual')} vs {s.get('mesPrevio')} "
+                f"(al mismo día del mes): " + "; ".join(partes) + f". {s.get('nota','')}")
     if "ventas.estados" in fuente:
         est = s.get("estados") or []
         vivos = [f"{e.get('nombre')} {e.get('ventas')}" for e in est if e.get("ventas")]

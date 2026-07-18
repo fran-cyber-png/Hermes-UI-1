@@ -84,3 +84,73 @@ registrar({
     };
   },
 });
+
+/**
+ * VENTAS POR PAÍS × MES — para "¿cómo nos fue por país este mes vs el pasado?".
+ *
+ * Cierra un gap real: el SDK tenía ventas por ESTADO y ROAS por PAÍS, pero no ventas cobradas por
+ * país por mes. Compara al MISMO DÍA del mes (el mes en curso suele estar incompleto): todos los
+ * meses se recortan al día máximo con datos del mes actual, para que junio vs julio sea justo.
+ */
+registrar({
+  nombre: "governa.ventas.porPaisMes",
+  descripcion:
+    "Ventas COBRADAS por país y por mes (cantidad y USD) para comparar cómo rindió cada país mes a " +
+    "mes, ej. junio vs julio. Compara al MISMO día del mes (el mes en curso puede estar incompleto).",
+  entrada: z.object({
+    meses: z.number().int().min(2).max(24).default(3).describe("cuántos meses hacia atrás incluir"),
+  }),
+  idempotente: true,
+  cqIds: [],
+  fuentes: ["db/canonico.ts:venta (pais_cliente, fecha_venta, monto_usd, cobrada)"],
+  ejecutar: async ({ meses }) => {
+    const filas = (await db.execute(sql`
+      WITH corte AS (
+        SELECT coalesce(max(extract(day FROM fecha_venta))::int, 31) AS dia
+        FROM ontologia.venta
+        WHERE cobrada AND date_trunc('month', fecha_venta) = date_trunc('month', now())
+      )
+      SELECT coalesce(pais_cliente, 'Sin país')                   AS pais,
+             to_char(date_trunc('month', fecha_venta), 'YYYY-MM') AS mes,
+             count(*)::int                                        AS ventas,
+             coalesce(sum(monto_usd), 0)::float                   AS usd
+      FROM ontologia.venta, corte
+      WHERE cobrada
+        AND fecha_venta >= date_trunc('month', now()) - make_interval(months => ${meses - 1})
+        AND extract(day FROM fecha_venta) <= corte.dia
+      GROUP BY 1, 2
+      ORDER BY 2 DESC, 4 DESC
+    `)) as unknown as { pais: string; mes: string; ventas: number; usd: number }[];
+
+    const meses_ = [...new Set(filas.map((f) => f.mes))].sort().reverse();
+    const [mesActual, mesPrevio] = meses_;
+
+    const porPais: Record<string, { mes: string; ventas: number; usd: number }[]> = {};
+    for (const f of filas) {
+      (porPais[f.pais] ??= []).push({ mes: f.mes, ventas: f.ventas, usd: Math.round(f.usd) });
+    }
+
+    const comparacion = (mesActual && mesPrevio ? Object.keys(porPais) : [])
+      .map((pais) => {
+        const a = filas.find((f) => f.pais === pais && f.mes === mesActual);
+        const p = filas.find((f) => f.pais === pais && f.mes === mesPrevio);
+        const va = a?.ventas ?? 0, vp = p?.ventas ?? 0;
+        const ua = Math.round(a?.usd ?? 0), up = Math.round(p?.usd ?? 0);
+        return {
+          pais, ventasActual: va, ventasPrevio: vp, usdActual: ua, usdPrevio: up,
+          deltaVentasPct: vp ? Math.round(((va - vp) / vp) * 100) : null,
+          deltaUsdPct: up ? Math.round(((ua - up) / up) * 100) : null,
+        };
+      })
+      .filter((c) => c.ventasActual || c.ventasPrevio)
+      .sort((a, b) => b.usdActual - a.usdActual);
+
+    return {
+      mesActual: mesActual ?? null,
+      mesPrevio: mesPrevio ?? null,
+      nota: "Ventas cobradas, comparadas al mismo día del mes (el mes en curso puede estar incompleto).",
+      comparacion,
+      porPais,
+    };
+  },
+});
