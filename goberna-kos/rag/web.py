@@ -17,9 +17,17 @@ from . import config
 from .ask import ask
 from .responder import responder
 
+# Voz de Ivi (Piper) DIRECTA vía ivi.voz cuando está disponible (deploy en geografo) — así el chat
+# es autosuficiente y se puede retirar el motor viejo. Si no, cae al proxy TTS_URL (dev en la Mac).
+try:
+    from ivi import voz as _voz
+except Exception:  # noqa: BLE001
+    _voz = None
+
 PORT = int(os.environ.get("RAG_WEB_PORT", "8091"))
-# La voz de Ivi (Piper) vive en el engine de geografo; el chat de la Mac hace proxy a este /api/tts.
-TTS_URL = os.environ.get("RAG_TTS_URL", "http://100.117.204.80:8080/api/tts")
+# Fallback de TTS para el tester de la Mac (donde no hay Piper): pega al chat de geografo por HTTPS.
+# En geografo el chat usa _voz (Piper directo) y no toca esto.
+TTS_URL = os.environ.get("RAG_TTS_URL", "https://geografo.tailf59792.ts.net/tts")
 
 PAGE = """<!doctype html>
 <html lang="es"><head>
@@ -262,7 +270,12 @@ class Handler(BaseHTTPRequestHandler):
             texto = (body.get("text") or "").strip()
             if not texto:
                 return self._send(400, json.dumps({"error": "falta text"}))
-            try:
+            if _voz is not None:  # Piper directo (geografo)
+                try:
+                    return self._send(200, _voz.tts(texto), "audio/wav")
+                except Exception:  # noqa: BLE001 — cae al proxy
+                    pass
+            try:                  # proxy (dev en la Mac)
                 req = urllib.request.Request(TTS_URL, data=json.dumps({"text": texto}).encode(),
                                              headers={"Content-Type": "application/json"})
                 with urllib.request.urlopen(req, timeout=30) as r:
