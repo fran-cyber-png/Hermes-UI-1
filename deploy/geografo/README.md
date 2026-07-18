@@ -37,8 +37,17 @@ sudo tailscale serve --bg 8095
 - Re-ingestar tras cambiar docs: rsync `docs/` + `goberna-kos/rag/`, luego `python3 -m rag.ingest --reset`.
 - Reiniciar: `sudo systemctl restart ivi-chat.service`.
 
-## Pendiente: reranker
-`bge-reranker-v2-m3` en la A4000 necesita torch, que **no instala limpio en el Python 3.14 de
-geografo**. Camino: un contenedor Docker (python 3.11 + FlagEmbedding) exponiendo `/rerank`, o
-`llama.cpp` con el GGUF del reranker (`--reranking`). Además, el reranker solo se justifica con el
-**golden set grande** (hoy n=18 no mide) — hacer ambos juntos.
+## Reranker (bge-reranker-v2-m3 en la A4000) — HECHO
+Como torch no instala en el Python 3.14 de geografo, corre en un **venv Python 3.11 aparte** (`uv`,
+`~/reranker/.venv`) con torch CUDA + sentence-transformers, usando la GPU directo (sin docker-toolkit).
+
+- Servicio: `ivi-reranker.service` (systemd) → `~/reranker/.venv/bin/python -m rag.reranker_service`
+  en `127.0.0.1:8098`. `GET /health`, `POST /rerank {query, documents}` → `{scores}` (sigmoid 0-1).
+- Wiring: `RAG_RERANKER_URL=http://localhost:8098` en `rag.env`. `buscar_docs` recupera top-25 con
+  bge-m3 y reordena a k con el cross-encoder (degrada limpio si el servicio cae).
+- Medido: **recall@3 94% → 100%** (el miss "gasto sin serie temporal" quedó fixeado y verificado en
+  el chat). recall@1 baja un poco (dentro del ruido de n=18; el LLM ve el top-k, no solo el #1).
+- Setup: `uv venv --python 3.11 ~/reranker/.venv`; `uv pip install torch --index-url .../cu124`;
+  `uv pip install sentence-transformers`. Modelo (~2.3GB) se baja solo al arrancar.
+
+> Siguiente para afinar de verdad: **golden set a 50-100 queries** (con n=18 no se distingue).

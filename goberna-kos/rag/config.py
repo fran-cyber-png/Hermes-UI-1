@@ -55,6 +55,11 @@ HIBRIDO = os.environ.get("RAG_HIBRIDO", "0") == "1"
 # 0.03 es una nudge suave (el rango relevante de distancia es ~0.35-0.55). 0 = sin penalización.
 PENALIZAR_DEV = float(os.environ.get("RAG_PENALIZAR_DEV", "0.03"))
 
+# Reranker cross-encoder (bge-reranker-v2-m3) — corre en un venv aparte (GPU A4000, geografo). Si
+# hay URL, buscar_docs recupera RERANK_TOPN con bge-m3 y reordena a k con el cross-encoder.
+RERANKER_URL = os.environ.get("RAG_RERANKER_URL", "")           # "" = sin reranker
+RERANK_TOPN = int(os.environ.get("RAG_RERANK_TOPN", "25"))      # cuántos recuperar antes de rerankear
+
 
 def tags_busqueda(incluir_sensibles: bool) -> list[tuple[str, str]]:
     """Los espacios (backend, tag) que buscar_docs consulta, según el modo."""
