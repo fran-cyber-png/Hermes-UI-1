@@ -86,16 +86,36 @@ def _formatear_hecho(fuente: str, s) -> str:
     if "ventas.pulso" in fuente:
         pl = s.get("paisLider") or {}
         pr = s.get("productoLider") or {}
+        du, dv = s.get("deltaUsdPct"), s.get("deltaVentasPct")
+        # Los % ya vienen calculados por el tool (delta/base correcta). Se PAREA cada métrica con SU
+        # propio % inline para que el redactor no los cruce (Haiku daba "28% en ingresos" copiando el de
+        # ventas; el de ingresos es +47%). Nunca dejar que el LLM calcule el %.
+        ing = f"{s.get('ingresosUsd')} USD"
+        if du is not None:
+            ing += f" ({du:+d}% vs los {s.get('ingresosUsdPrevio')} USD del mes previo a esta altura)"
+        ven = f"{s.get('ventasMes')} ventas"
+        if dv is not None:
+            ven += f" ({dv:+d}% vs {s.get('ventasMesPrevio')})"
         partes = [
-            f"Pulso del negocio ({s.get('mesActual')} vs {s.get('mesPrevio')}, al mismo día del mes): "
-            f"{s.get('ventasMes')} ventas cobradas por {s.get('ingresosUsd')} USD "
-            f"(el mes previo, a esta altura, {s.get('ventasMesPrevio')} ventas y "
-            f"{s.get('ingresosUsdPrevio')} USD).",
+            f"Pulso del negocio, {s.get('mesActual')} vs {s.get('mesPrevio')} al mismo día del mes. "
+            f"Ingresos: {ing}. Ventas: {ven}. (Los porcentajes ya están calculados; usalos tal cual.)",
             f"Ticket promedio {s.get('ticketPromedioUsd')} USD." if s.get("ticketPromedioUsd") else "",
             f"País líder: {pl.get('pais')} con {pl.get('usd')} USD." if pl else "",
             f"Producto líder: {pr.get('nombre')} ({pr.get('ventas')} ventas)." if pr else "",
         ]
         return " ".join(x for x in partes if x)
+    if "ventas.porPais" in fuente:
+        pp = (s.get("porPais") or [])[:8]
+        det = "; ".join(f"{x['pais']} {x['usd']} USD ({x['ventas']} ventas, ticket {x['ticket']})"
+                        for x in pp)
+        tf, tt = s.get("topFacturacion") or {}, s.get("topTicket") or {}
+        extra = ""
+        if tf:
+            extra += f" El que MÁS FACTURA: {tf.get('pais')} con {tf.get('usd')} USD."
+        if tt:
+            extra += (f" El TICKET más alto (entre países con {s.get('minVentasTicket')}+ ventas): "
+                      f"{tt.get('pais')} con {tt.get('ticket')} USD.")
+        return f"Facturación cobrada por país ({s.get('rango')}): {det}.{extra} {s.get('nota','')}"
     if "ventas.porProducto" in fuente:
         prods = (s.get("productos") or [])[:6]
         partes = [f"{p['nombre']} ({p['ventas']} ventas, {p['usd']} USD)" for p in prods]
@@ -109,10 +129,13 @@ def _formatear_hecho(fuente: str, s) -> str:
                 f"Por país: {det}. {s.get('nota','')}")
     if "ventas.serieMensual" in fuente:
         mej = s.get("mejorMes") or {}
+        aa = s.get("anioActual") or {}
         serie = (s.get("serie") or [])[:6]
         det = "; ".join(f"{x['mes']} {x['ventas']} ventas/{x['usd']} USD" for x in serie)
+        anio = (f"En el año en curso van {aa.get('ventas')} ventas por {aa.get('usd')} USD. "
+                if aa else "")
         return (f"Mejor mes: {mej.get('mes')} con {mej.get('ventas')} ventas y {mej.get('usd')} USD. "
-                f"Meses recientes: {det}. {s.get('nota','')}")
+                f"{anio}Meses recientes: {det}. {s.get('nota','')}")
     if "ventas.clientesNuevos" in fuente:
         serie = (s.get("serie") or [])[:6]
         det = "; ".join(f"{x['mes']} {x['nuevos']}" for x in serie)

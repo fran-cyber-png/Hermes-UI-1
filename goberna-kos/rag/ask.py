@@ -135,6 +135,30 @@ def _mes_yyyymm(p: str) -> str | None:
     return None
 
 
+# Nombres de país (normalizados sin acentos) — para detectar "¿quién factura más México o Perú?",
+# donde no aparece la palabra "país" sino el nombre. Sin esto caía a retrieval semántico y respondía mal.
+_PAISES = ("peru", "mexico", "ecuador", "bolivia", "colombia", "chile", "argentina", "paraguay",
+           "uruguay", "venezuela", "guatemala", "honduras", "salvador", "nicaragua", "costa rica",
+           "panama", "dominicana", "estados unidos", "eeuu", " usa", "espana", "brasil")
+
+
+def _menciona_pais(p: str) -> bool:
+    return "pais" in p or "paises" in p or any(x in p for x in _PAISES)
+
+
+# Métricas que NO existen en los datos (hay ingresos, NO costos). Devolver honestidad, NUNCA un snippet
+# de pauta como sustituto (era el fallo grave que el crítico marcó en "margen neto").
+def _metrica_inexistente(p: str) -> str | None:
+    p = _norm(p)
+    if any(w in p for w in ("margen", "utilidad", "ganancia neta", "rentabilidad neta", "profit")):
+        return ("El sistema tiene INGRESOS y ventas, pero NO tiene los COSTOS cargados, así que no se "
+                "puede calcular margen ni utilidad neta. Puedo darte facturación, ticket y ROAS de pauta.")
+    if "ltv" in p or "valor de vida" in p or "lifetime" in p or "valor del cliente" in p:
+        return ("No tengo LTV calculado: haría falta modelar recompra y horizonte de vida del cliente, "
+                "que no está en los datos. Sí tengo clientes nuevos, ticket promedio y facturación.")
+    return None
+
+
 def _norm(t: str) -> str:
     t = t.lower()
     for a, b in (("á", "a"), ("é", "e"), ("í", "i"), ("ó", "o"), ("ú", "u"), ("ñ", "n")):
@@ -147,7 +171,7 @@ def _tool_por_keywords(pregunta: str) -> tuple[str, dict] | None:
     tool correcta (p.ej. ventas por país por mes, que el intent 'ventas' mandaría a estados).
     Orden: de lo MÁS específico (producto, país×mes) a lo más general (pulso)."""
     p = _norm(pregunta)
-    pais = "pais" in p or "paises" in p
+    pais = _menciona_pais(p)
     temporal = ("mes" in p or "mensual" in p or " vs " in p or "compar" in p or "pasado" in p
                 or "anterior" in p or any(m in p for m in _MESES))
     negocio = any(w in p for w in ("venta", "vendi", "vendimos", "facturac", "ingreso", "nos fue",
@@ -176,20 +200,32 @@ def _tool_por_keywords(pregunta: str) -> tuple[str, dict] | None:
                                          "por mes", "cada mes", "mensualmente", "mes mas fuerte")):
         return ("governa.ventas.serieMensual", {"meses": 12})
 
+    # 0e. FACTURACIÓN DEL AÑO — "¿cuánto facturé este año / en 2026 / acumulado?" (total determinista;
+    #     el crítico pescó un "240 mil" inventado cuando el real es ~273k).
+    if negocio and any(w in p for w in ("este ano", "del ano", "en el ano", "por ano", "anual", "2026",
+                                        "2025", "acumulado", "en total", "todo el ano", "en el 2026")):
+        return ("governa.ventas.serieMensual", {"meses": 12})
+
     # 1. PRODUCTO — "qué producto vende más", "qué promocionar", "top de cursos/diplomas".
     producto = any(w in p for w in ("producto", "curso", "diploma", "programa"))
     if producto and any(w in p for w in ("vend", "promocion", "mas ", " mejor", "top", "ingreso",
                                           "factur", "rankea", "ranking", "cual", "que ")):
         return ("governa.ventas.porProducto", {"dias": 90, "limite": 8})
 
-    # 2. VENTAS POR PAÍS × MES — "cómo nos fue por país este mes vs el pasado".
+    # 2. VENTAS POR PAÍS × MES — "cómo nos fue por país ESTE MES vs el pasado" (comparación de meses).
     if pais and temporal and negocio:
         return ("governa.ventas.porPaisMes", {"meses": 3})
 
-    # 2a. TICKET POR PAÍS — "qué país tiene el ticket más alto" (desglose por país, no el global).
-    #     ANTES del ticket global: si nombran país, quieren el ticket por país, no el promedio total.
+    # 2a. TICKET POR PAÍS — "qué país deja el ticket más alto" → porPais (agregado histórico con guarda
+    #     de n mínimo), NO porPaisMes (que daría la celda país×mes: un outlier de 4 ventas → $359 vs $146).
     if "ticket" in p and pais:
-        return ("governa.ventas.porPaisMes", {"meses": 3})
+        return ("governa.ventas.porPais", {"rango": "todo"})
+
+    # 2a-bis. QUIÉN FACTURA MÁS / FACTURACIÓN POR PAÍS (sin comparar meses) — "¿quién factura más, México
+    #     o Perú?", "qué país vende/factura más". Determinista: NUNCA por retrieval semántico (confundía
+    #     facturación con GASTO de pauta y respondía al revés, según verificó el crítico).
+    if pais and negocio:
+        return ("governa.ventas.porPais", {"rango": "anio"})
 
     # 2b. TICKET PROMEDIO (global) — "cuál es mi ticket promedio" (el pulso trae el ticket real del
     #     mes, en vez del benchmark congelado de los docs).
@@ -248,6 +284,16 @@ def _rutar(bi_score: float, sem_top: float) -> str:
 def ask(pregunta: str, usuario: str | None = None, *, k: int = 5,
         incluir_sensibles: bool = True) -> dict:
     """El cerebro: rutea, junta evidencia, y devuelve un resultado tipado y CITADO."""
+    # Métricas que NO existen en los datos (margen, LTV): cortar ANTES del retrieval, para no engancharse
+    # a un snippet de pauta y contestar otra cosa con seguridad. Honestidad directa, sin docs.
+    inexistente = _metrica_inexistente(pregunta)
+    if inexistente:
+        return {
+            "pregunta": pregunta, "usuario": usuario, "modo": "sin_evidencia",
+            "router": {"bi_score": 0.0, "intent": None, "sem_top": 0.0},
+            "evidencia": [{"tipo": "SIN_EVIDENCIA", "fuente": None, "motivo": inexistente}],
+            "fuentes": [], "tipo": "SIN_EVIDENCIA",
+        }
     ir, bi_score = _senal_estructurada(pregunta)
     docs = buscar_docs(pregunta, k, incluir_sensibles=incluir_sensibles)
     # sem_top = mejor similitud COSENO disponible (las filas solo-texto del hybrid no la tienen)

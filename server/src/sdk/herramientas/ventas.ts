@@ -157,6 +157,62 @@ registrar({
 });
 
 /**
+ * VENTAS POR PAÍS (agregado) — para "¿quién factura más, México o Perú?" / "¿qué país deja el ticket
+ * más alto?". Distinto de porPaisMes (que compara DOS meses): esto agrega TODO el rango (default: año
+ * en curso) por país. Cierra dos fallos que el crítico verificó por SQL:
+ *  - "quién factura más" caía en retrieval semántico y respondía al revés (Perú por Perú), confundiendo
+ *    facturación con GASTO de pauta. Acá la facturación por país es determinista.
+ *  - "ticket más alto" tomaba la celda país×mes (EE.UU. n=4 → $359, un outlier). Acá el ticket es sobre
+ *    todo el rango, con GUARDA de n mínimo (≥20), así el "más alto" es real ($146), no ruido de pocas ventas.
+ */
+registrar({
+  nombre: "governa.ventas.porPais",
+  descripcion:
+    "Ventas COBRADAS agregadas por país (facturación USD, cantidad y ticket promedio) en un rango. " +
+    "Para '¿quién factura más, México o Perú?', '¿qué país deja el ticket más alto?', 'facturación por " +
+    "país'. El ticket más alto respeta un mínimo de ventas (evita outliers de pocos casos). Default: año en curso.",
+  entrada: z.object({
+    rango: z.enum(["anio", "365d", "todo"]).default("anio")
+      .describe("anio = año calendario en curso; 365d = últimos 365 días; todo = histórico completo"),
+    minVentasTicket: z.number().int().min(1).max(200).default(20)
+      .describe("mínimo de ventas para que un país compita por 'ticket más alto' (anti-outlier)"),
+  }),
+  idempotente: true,
+  cqIds: [],
+  fuentes: ["db/canonico.ts:venta (cobrada, pais_cliente, monto_usd, fecha_venta)"],
+  ejecutar: async ({ rango, minVentasTicket }) => {
+    const filtro =
+      rango === "anio" ? sql`AND date_trunc('year', fecha_venta) = date_trunc('year', now())`
+      : rango === "365d" ? sql`AND fecha_venta >= now() - interval '365 days'`
+      : sql``;
+    const filas = (await db.execute(sql`
+      SELECT coalesce(pais_cliente, 'Sin país')  AS pais,
+             count(*)::int                        AS ventas,
+             round(sum(monto_usd))::int           AS usd,
+             round(avg(monto_usd))::int           AS ticket
+      FROM ontologia.venta
+      WHERE cobrada ${filtro}
+      GROUP BY 1 ORDER BY 3 DESC
+    `)) as unknown as { pais: string; ventas: number; usd: number; ticket: number }[];
+
+    const conN = filas.filter((f) => f.ventas >= minVentasTicket);
+    const topTicket = conN.reduce<(typeof conN)[number] | null>(
+      (b, f) => (!b || f.ticket > b.ticket ? f : b), null);
+
+    return {
+      rango,
+      minVentasTicket,
+      porPais: filas,
+      topFacturacion: filas[0] ?? null,
+      topTicket, // el país con mayor ticket ENTRE los que superan el mínimo de ventas
+      nota:
+        `Ventas cobradas agregadas por país (${rango === "anio" ? "año en curso" : rango}). El 'ticket ` +
+        `más alto' solo considera países con ${minVentasTicket}+ ventas, para no premiar outliers de pocos casos.`,
+    };
+  },
+});
+
+/**
  * VENTAS POR PRODUCTO — para "¿qué producto vende más?" / "¿qué debería promocionar?".
  *
  * Cierra un gap que Ivi vivía como SIN_EVIDENCIA ("no tengo ese dato, ¿conectamos tu base?") cuando
@@ -377,9 +433,18 @@ registrar({
     const mejor = serie.reduce<(typeof serie)[number] | null>(
       (b, f) => (!b || f.usd > b.usd ? f : b), null);
 
+    // Total del AÑO calendario en curso — para "¿cuánto facturé este año?" (número determinista, no
+    // que lo sume el LLM a ojo). El crítico pescó un "240 mil" inventado cuando el real es ~273k.
+    const anio = (await db.execute(sql`
+      SELECT count(*)::int AS ventas, coalesce(sum(monto_usd), 0)::float AS usd
+      FROM ontologia.venta
+      WHERE cobrada AND date_trunc('year', fecha_venta) = date_trunc('year', now())
+    `)) as unknown as { ventas: number; usd: number }[];
+
     return {
       meses,
       mejorMes: mejor,
+      anioActual: { ventas: anio[0]?.ventas ?? 0, usd: Math.round(anio[0]?.usd ?? 0) },
       serie,
       nota: "El mes en curso puede estar incompleto (comparar con cuidado contra meses cerrados).",
     };
