@@ -348,3 +348,170 @@ registrar({
     };
   },
 });
+
+/**
+ * SERIE MENSUAL — para "¿cuál fue mi mejor mes?" / "¿cómo viene la tendencia mensual?".
+ */
+registrar({
+  nombre: "governa.ventas.serieMensual",
+  descripcion:
+    "Serie de ventas COBRADAS por mes (cantidad y USD) de los últimos N meses, con el mejor mes " +
+    "marcado. Para '¿cuál fue mi mejor mes?', 'cómo viene la tendencia mes a mes'.",
+  entrada: z.object({
+    meses: z.number().int().min(3).max(36).default(12),
+  }),
+  idempotente: true,
+  cqIds: [],
+  fuentes: ["db/canonico.ts:venta (cobrada, fecha_venta, monto_usd)"],
+  ejecutar: async ({ meses }) => {
+    const filas = (await db.execute(sql`
+      SELECT to_char(date_trunc('month', fecha_venta), 'YYYY-MM') AS mes,
+             count(*)::int                                        AS ventas,
+             coalesce(sum(monto_usd), 0)::float                   AS usd
+      FROM ontologia.venta
+      WHERE cobrada AND fecha_venta >= date_trunc('month', now()) - make_interval(months => ${meses - 1})
+      GROUP BY 1 ORDER BY 1 DESC
+    `)) as unknown as { mes: string; ventas: number; usd: number }[];
+
+    const serie = filas.map((f) => ({ mes: f.mes, ventas: f.ventas, usd: Math.round(f.usd) }));
+    const mejor = serie.reduce<(typeof serie)[number] | null>(
+      (b, f) => (!b || f.usd > b.usd ? f : b), null);
+
+    return {
+      meses,
+      mejorMes: mejor,
+      serie,
+      nota: "El mes en curso puede estar incompleto (comparar con cuidado contra meses cerrados).",
+    };
+  },
+});
+
+/**
+ * CLIENTES NUEVOS — para "¿cuántos alumnos nuevos entraron este mes?".
+ * Nuevo = su PRIMERA venta cobrada cae en el mes. Serie de los últimos meses para dar tendencia.
+ */
+registrar({
+  nombre: "governa.ventas.clientesNuevos",
+  descripcion:
+    "Alumnos/clientes NUEVOS por mes (primera venta cobrada en ese mes), de los últimos meses. Para " +
+    "'¿cuántos alumnos nuevos entraron este mes?', 'clientes nuevos'.",
+  entrada: z.object({
+    meses: z.number().int().min(2).max(24).default(6),
+  }),
+  idempotente: true,
+  cqIds: [],
+  fuentes: ["db/canonico.ts:venta (cliente_codigo, fecha_venta, cobrada)"],
+  ejecutar: async ({ meses }) => {
+    const filas = (await db.execute(sql`
+      WITH primera AS (
+        SELECT cliente_codigo, min(fecha_venta) AS f
+        FROM ontologia.venta WHERE cobrada AND cliente_codigo IS NOT NULL
+        GROUP BY 1
+      )
+      SELECT to_char(date_trunc('month', f), 'YYYY-MM') AS mes, count(*)::int AS nuevos
+      FROM primera
+      WHERE f >= date_trunc('month', now()) - make_interval(months => ${meses - 1})
+      GROUP BY 1 ORDER BY 1 DESC
+    `)) as unknown as { mes: string; nuevos: number }[];
+
+    const totalClientes = (await db.execute(sql`
+      SELECT count(DISTINCT cliente_codigo)::int AS total
+      FROM ontologia.venta WHERE cobrada AND cliente_codigo IS NOT NULL
+    `)) as unknown as { total: number }[];
+
+    return {
+      nuevosEsteMes: filas[0]?.nuevos ?? 0,
+      totalClientes: totalClientes[0]?.total ?? 0,
+      serie: filas,
+      nota: "Nuevo = primera venta cobrada en ese mes. El mes en curso puede estar incompleto.",
+    };
+  },
+});
+
+/**
+ * EXPLICAR MES — para "¿por qué enero fue el mejor mes?" / "¿qué pasó en X mes?".
+ *
+ * Descompone un mes por CANAL (origen_venta), PAÍS y PRODUCTO, y lo pone contra el promedio mensual,
+ * para que Ivi pueda decir QUÉ compuso ese pico (no solo el total). No infiere causas fuera de los
+ * datos (una promo, un lanzamiento): muestra la composición real y deja el "por qué" de negocio al
+ * dueño. Recibe mes 'YYYY-MM'; vacío = el mejor mes histórico por ingresos.
+ */
+registrar({
+  nombre: "governa.ventas.explicarMes",
+  descripcion:
+    "Descompone un mes de ventas cobradas por CANAL, PAÍS y PRODUCTO y lo compara con el promedio " +
+    "mensual, para explicar QUÉ hizo que ese mes fuera alto o bajo. Para '¿por qué enero fue el " +
+    "mejor mes?', '¿qué pasó en enero?'. mes en 'YYYY-MM'; vacío = el mejor mes histórico.",
+  entrada: z.object({
+    mes: z.string().regex(/^\d{4}-\d{2}$/).optional().describe("mes a explicar, formato YYYY-MM"),
+  }),
+  idempotente: true,
+  cqIds: [],
+  fuentes: ["db/canonico.ts:venta (origen_venta, pais_cliente, monto_usd), detalle_venta, producto"],
+  ejecutar: async ({ mes }) => {
+    const objFila = mes
+      ? [{ m: mes }]
+      : ((await db.execute(sql`
+          SELECT to_char(date_trunc('month', fecha_venta), 'YYYY-MM') AS m
+          FROM ontologia.venta WHERE cobrada
+          GROUP BY 1 ORDER BY sum(monto_usd) DESC LIMIT 1
+        `)) as unknown as { m: string }[]);
+    const objetivo = objFila[0]?.m ?? null;
+    if (!objetivo) return { disponible: false, mensaje: "No hay meses con ventas cobradas." };
+
+    const ini = sql`to_date(${objetivo}, 'YYYY-MM')`;
+
+    const tot = (await db.execute(sql`
+      SELECT count(*)::int AS ventas, coalesce(sum(monto_usd), 0)::float AS usd
+      FROM ontologia.venta
+      WHERE cobrada AND date_trunc('month', fecha_venta) = ${ini}
+    `)) as unknown as { ventas: number; usd: number }[];
+
+    const prom = (await db.execute(sql`
+      SELECT coalesce(avg(u), 0)::float AS usd, coalesce(avg(v), 0)::float AS ventas FROM (
+        SELECT date_trunc('month', fecha_venta) m, sum(monto_usd) u, count(*) v
+        FROM ontologia.venta WHERE cobrada AND date_trunc('month', fecha_venta) <> date_trunc('month', now())
+        GROUP BY 1
+      ) x
+    `)) as unknown as { usd: number; ventas: number }[];
+
+    const canal = (await db.execute(sql`
+      SELECT coalesce(origen_venta, 'sin canal') AS k, count(*)::int AS v, round(sum(monto_usd))::int AS usd
+      FROM ontologia.venta WHERE cobrada AND date_trunc('month', fecha_venta) = ${ini}
+      GROUP BY 1 ORDER BY 2 DESC LIMIT 4
+    `)) as unknown as { k: string; v: number; usd: number }[];
+
+    const pais = (await db.execute(sql`
+      SELECT coalesce(pais_cliente, 'Sin país') AS k, count(*)::int AS v
+      FROM ontologia.venta WHERE cobrada AND date_trunc('month', fecha_venta) = ${ini}
+      GROUP BY 1 ORDER BY 2 DESC LIMIT 3
+    `)) as unknown as { k: string; v: number }[];
+
+    const producto = (await db.execute(sql`
+      SELECT min(regexp_replace(p.nombre, '\\s+\\d+\\s*$', '')) AS k, count(DISTINCT dv.venta_folio)::int AS v
+      FROM ontologia.detalle_venta dv
+      JOIN ontologia.venta v ON v.folio = dv.venta_folio AND v.cobrada
+        AND date_trunc('month', v.fecha_venta) = ${ini}
+      JOIN ontologia.producto p ON p.codigo = dv.producto_codigo
+      GROUP BY lower(regexp_replace(p.nombre, '\\s+\\d+\\s*$', ''))
+      ORDER BY 2 DESC LIMIT 3
+    `)) as unknown as { k: string; v: number }[];
+
+    const usdMes = Math.round(tot[0]?.usd ?? 0);
+    const promUsd = Math.round(prom[0]?.usd ?? 0);
+
+    return {
+      mes: objetivo,
+      ventas: tot[0]?.ventas ?? 0,
+      usd: usdMes,
+      promedioMensualUsd: promUsd,
+      vecesVsPromedio: promUsd ? Math.round((usdMes / promUsd) * 100) / 100 : null,
+      topCanal: canal.map((c) => ({ canal: c.k, ventas: c.v, usd: c.usd })),
+      topPais: pais.map((c) => ({ pais: c.k, ventas: c.v })),
+      topProducto: producto.map((c) => ({ nombre: c.k, ventas: c.v })),
+      nota:
+        "Composición real del mes (canal/país/producto). Muestra QUÉ pesó, no infiere causas de " +
+        "negocio (promos, lanzamientos) que no estén en los datos.",
+    };
+  },
+});

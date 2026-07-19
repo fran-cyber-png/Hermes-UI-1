@@ -73,10 +73,10 @@ dos `aUsd` con contratos distintos.
 
 ## Notas operativas (estado al 2026-07-16 ~18:00)
 
-- **Token de Meta**: expuesto en el transcript de ayer, NO rotado (sin señal de rotación: los
-  fallos del reloj son `fetch failed` = red, no OAuth; último uso exitoso 15/07 18:59). Esta
-  sesión no hizo NINGUNA llamada a Meta. El reloj de pauta llamará solo (~cada 6 h) con lo que
-  haya en `server/.env` — `PAUTA_RELOJ=off` para congelar durante la rotación.
+- **Token de Meta**: fue expuesto el 16/07 y quedó **ROTADO el 2026-07-19 (RESUELTO)** — ya no es un
+  riesgo abierto. (Historial: durante la exposición esta sesión no hizo ninguna llamada a Meta; los
+  fallos del reloj eran `fetch failed` = red, no OAuth.) El reloj de pauta llama solo (~cada 6 h) con
+  lo que haya en `server/.env`.
 - **La ingesta de interacciones lleva 5 días parada** (última: 11/07 18:08). La bandeja de la
   home muestra el mundo de la semana pasada.
 - **El dump de Cerberus es del 13/07** — ventas/cartera/comercial responden "al 13 de julio".

@@ -52,8 +52,8 @@ Decime cuando me equivoque.
   laptop :4100 vía Tailscale. Modelo ivi-ventas (qwen3:8b); hay qwen3:14b bajado.
 - Datos: Cerberus al 13/07 · serie diaria al 11/07 · interacciones PARADAS desde 11/07 ·
   pauta con snapshot limpio del 15/07 (fix 9b0bedf: solo se sirven recolectas limpias).
-- Token de Meta: expuesto el 16/07, sin señal de rotación. El reloj de pauta llama solo
-  cada 6 h con lo que haya en server/.env (PAUTA_RELOJ=off lo congela).
+- Token de Meta: expuesto el 16/07, **ROTADO el 2026-07-19 (RESUELTO)** — ya no es un riesgo abierto.
+  El reloj de pauta llama solo cada 6 h con lo que haya en server/.env.
 - Commits del 16/07: 9b0bedf (fix snapshots) · 9cac870 (docs §6 + corrección $16.587) ·
   85773e7 (docs/12 auditoría: 4 vivos, 8 cargados, 5 desmentidos) · 44aa6bf (docs/13
   pendientes) · (docs/14 y 15, este material).

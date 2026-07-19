@@ -107,6 +107,38 @@ def _formatear_hecho(fuente: str, s) -> str:
         return (f"Pipeline pendiente de cobro (ventas EN PROCESO, aún no cobradas): "
                 f"{s.get('ventasEnProceso')} ventas por {s.get('usdEnProceso')} USD. "
                 f"Por país: {det}. {s.get('nota','')}")
+    if "ventas.serieMensual" in fuente:
+        mej = s.get("mejorMes") or {}
+        serie = (s.get("serie") or [])[:6]
+        det = "; ".join(f"{x['mes']} {x['ventas']} ventas/{x['usd']} USD" for x in serie)
+        return (f"Mejor mes: {mej.get('mes')} con {mej.get('ventas')} ventas y {mej.get('usd')} USD. "
+                f"Meses recientes: {det}. {s.get('nota','')}")
+    if "ventas.clientesNuevos" in fuente:
+        serie = (s.get("serie") or [])[:6]
+        det = "; ".join(f"{x['mes']} {x['nuevos']}" for x in serie)
+        return (f"Alumnos nuevos este mes: {s.get('nuevosEsteMes')} (clientes con su primera compra "
+                f"este mes). Total histórico de clientes: {s.get('totalClientes')}. "
+                f"Nuevos por mes: {det}. {s.get('nota','')}")
+    if "ventas.explicarMes" in fuente:
+        if s.get("disponible") is False:
+            return s.get("mensaje", "No hay datos de ese mes.")
+        canal = "; ".join(f"{c['canal']} {c['ventas']}" for c in (s.get("topCanal") or [])[:3])
+        paises = "; ".join(f"{c['pais']} {c['ventas']}" for c in (s.get("topPais") or [])[:3])
+        prod = "; ".join(f"{c['nombre']} {c['ventas']}" for c in (s.get("topProducto") or [])[:3])
+        return (f"Composición del mes {s.get('mes')}: {s.get('ventas')} ventas por {s.get('usd')} USD "
+                f"(el promedio mensual es {s.get('promedioMensualUsd')} USD; este mes fue "
+                f"{s.get('vecesVsPromedio')} veces ese promedio). Canales: {canal}. Países: {paises}. "
+                f"Productos: {prod}. {s.get('nota','')}")
+    if "pauta.porCampana" in fuente:
+        if s.get("disponible") is False:
+            return s.get("mensaje", "Sin recolecta de pauta reciente.")
+        cs = (s.get("campanas") or [])[:6]
+        det = "; ".join(
+            f"{c['nombre']} gasto {c['gastoUsd']} USD"
+            + (f", {c['resultados']} resultados" if c.get("resultados") else "")
+            for c in cs)
+        return (f"Campañas de Meta por gasto (última recolecta, {s.get('totalCampanas')} en total): "
+                f"{det}. {s.get('nota','')}")
     if "ventas.estados" in fuente:
         est = s.get("estados") or []
         vivos = [f"{e.get('nombre')} {e.get('ventas')}" for e in est if e.get("ventas")]
@@ -274,8 +306,15 @@ def responder(pregunta: str, usuario: str | None = None, historial: list | None 
         texto = _qwen3(f"{SISTEMA}\n\n{usuario_msg}")
         redactor = f"qwen3-local ({REDACTOR_LOCAL})"
     else:
-        texto, modelo = _nube(SISTEMA, usuario_msg)
-        redactor = f"bedrock ({modelo})"
+        try:
+            texto, modelo = _nube(SISTEMA, usuario_msg)
+            redactor = f"bedrock ({modelo})"
+        except RuntimeError as e:
+            # Bedrock caído (creds expiradas, rate limit, red): DEGRADAR a local en vez de tumbar el
+            # chat con un 500. La Ley I queda intacta — los números vienen del SDK (deterministas) y el
+            # grounding sigue chequeando; solo la PROSA baja de calidad hasta que se restauren las creds.
+            texto = _qwen3(f"{SISTEMA}\n\n{usuario_msg}")
+            redactor = f"qwen3-local-fallback ({REDACTOR_LOCAL}) [bedrock caído: {str(e)[:70]}]"
     texto = _limpiar(texto)
     # grounding: las cifras deben estar en los DATOS actuales o en lo ya dicho en la conversación
     no_verif = _no_verificados(texto, datos + " " + hist_txt)

@@ -118,3 +118,54 @@ registrar({
   ],
   ejecutar: async ({ rango }) => atribucionPorPais(rango, await ultimoSnapshot(rango)),
 });
+
+/**
+ * PAUTA POR CAMPAÑA — para "¿qué campaña me rinde mejor?" / "¿en qué campaña gasto más?".
+ *
+ * Devuelve las campañas de Meta de la última recolecta, ordenadas por GASTO, con sus resultados y
+ * costo por resultado CUANDO Meta los reporta. HONESTIDAD DELIBERADA: esto NO es ROAS por campaña.
+ * Las ventas de Cerberus traen el CANAL (origen_venta: facebook/google/…), no la campaña, así que la
+ * facturación no se puede atribuir a una campaña concreta. Prometer ROAS por campaña sería inventar
+ * la atribución — justo lo que la Regla de Oro prohíbe. Se muestra gasto+resultados de Meta, y se dice.
+ */
+registrar({
+  nombre: "governa.pauta.porCampana",
+  descripcion:
+    "Campañas de Meta por GASTO (con resultados y costo por resultado cuando Meta los reporta), de " +
+    "la última recolecta de pauta. NO es ROAS por campaña: las ventas se atribuyen por CANAL, no por " +
+    "campaña, así que no hay facturación por campaña. Para '¿en qué campaña gasto más?', 'campañas activas'.",
+  entrada: z.object({
+    limite: z.number().int().min(1).max(20).default(8),
+  }),
+  idempotente: true,
+  fuentes: ["pauta/snapshot.ts:100 (campanas: CampaignInput[])"],
+  ejecutar: async ({ limite }) => {
+    const snap = await ultimoSnapshot();
+    if (!snap?.campanas?.length) {
+      return {
+        disponible: false,
+        mensaje: "Sin recolecta de pauta reciente: no hay campañas para mostrar. Corré /api/pauta/maestro.",
+      };
+    }
+    const campanas = [...snap.campanas]
+      .map((c) => ({
+        nombre: c.name,
+        estado: c.status,
+        gastoUsd: Math.round(c.spend || 0),
+        resultados: c.results,
+        costoPorResultadoUsd: c.costPerResult,
+      }))
+      .sort((a, b) => b.gastoUsd - a.gastoUsd)
+      .slice(0, limite);
+
+    return {
+      revisadoAt: snap.creadoAt,
+      edadMinutos: snap.edadMinutos,
+      totalCampanas: snap.campanas.length,
+      campanas,
+      nota:
+        "Gasto y resultados de Meta de la última recolecta. NO es ROAS: la facturación no se " +
+        "atribuye por campaña (las ventas traen canal, no campaña), solo se puede por país o canal.",
+    };
+  },
+});

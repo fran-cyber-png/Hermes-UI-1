@@ -14,6 +14,7 @@ Uso:  python3 -m rag.ask "¿cuál es el ROAS por país?"
       python3 -m rag.ask "¿por qué Cerberus no ve Meta?"      # semántica
 """
 
+import datetime
 import json
 import sys
 import urllib.error
@@ -118,6 +119,21 @@ def _senal_estructurada(pregunta: str):
 _MESES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
           "septiembre", "setiembre", "octubre", "noviembre", "diciembre")
 
+_MES_NUM = {"enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5, "junio": 6, "julio": 7,
+            "agosto": 8, "septiembre": 9, "setiembre": 9, "octubre": 10, "noviembre": 11,
+            "diciembre": 12}
+
+
+def _mes_yyyymm(p: str) -> str | None:
+    """Nombre de mes en la pregunta → 'YYYY-MM' de su ocurrencia MÁS RECIENTE (mes <= mes actual → año
+    actual; si no, año anterior). Para enrutar 'por qué enero...' al mes correcto."""
+    hoy = datetime.date.today()
+    for nombre, num in _MES_NUM.items():
+        if nombre in p:
+            anio = hoy.year if num <= hoy.month else hoy.year - 1
+            return f"{anio:04d}-{num:02d}"
+    return None
+
 
 def _norm(t: str) -> str:
     t = t.lower()
@@ -137,6 +153,28 @@ def _tool_por_keywords(pregunta: str) -> tuple[str, dict] | None:
     negocio = any(w in p for w in ("venta", "vendi", "vendimos", "facturac", "ingreso", "nos fue",
                                     "como va", "como nos", "como estamos", "rindi", "resultado",
                                     "negocio", "cerramos", "plata", "dolar", "factur"))
+
+    # 0. EXPLICAR MES — "por qué enero fue el mejor mes", "qué pasó en enero", "a qué se debe el pico".
+    #    Gate en una intención de CAUSA + un mes concreto (o "mejor/peor mes"), para no robar otras.
+    if any(w in p for w in ("por que", "porque", "que paso", "que hubo", "a que se debe",
+                            "explicame el mes", "a que se debio")) and \
+       (_mes_yyyymm(p) or "mejor mes" in p or "peor mes" in p or "pico" in p):
+        mm = _mes_yyyymm(p)
+        return ("governa.ventas.explicarMes", {"mes": mm} if mm else {})
+
+    # 0b. CLIENTES / ALUMNOS NUEVOS — "cuántos alumnos nuevos este mes".
+    if ("nuevos" in p or "nuevas" in p or "nuevo" in p) and \
+       any(w in p for w in ("alumno", "cliente", "estudiante", "matricul", "inscri", "gente")):
+        return ("governa.ventas.clientesNuevos", {"meses": 6})
+
+    # 0c. PAUTA POR CAMPAÑA — "en qué campaña gasto más", "qué campaña rinde" ('campaña'→'campana').
+    if "campana" in p or "campanas" in p:
+        return ("governa.pauta.porCampana", {"limite": 8})
+
+    # 0d. SERIE MENSUAL / MEJOR MES — "cuál fue mi mejor mes", "tendencia mes a mes" (sin país).
+    if not pais and any(w in p for w in ("mejor mes", "peor mes", "mes a mes", "tendencia mensual",
+                                         "por mes", "cada mes", "mensualmente", "mes mas fuerte")):
+        return ("governa.ventas.serieMensual", {"meses": 12})
 
     # 1. PRODUCTO — "qué producto vende más", "qué promocionar", "top de cursos/diplomas".
     producto = any(w in p for w in ("producto", "curso", "diploma", "programa"))
@@ -215,10 +253,16 @@ def ask(pregunta: str, usuario: str | None = None, *, k: int = 5,
     # sem_top = mejor similitud COSENO disponible (las filas solo-texto del hybrid no la tienen)
     sem_top = max([d.get("similitud") or 0.0 for d in docs], default=0.0)
     modo = _rutar(bi_score, sem_top)
-    # Si hay una tool específica por keywords (p.ej. ventas por país×mes), es una pregunta de datos
-    # sí o sí → forzar la ruta estructurada aunque el scorer de intents no la haya prendido fuerte.
-    if _tool_por_keywords(pregunta) and modo == "semantica":
-        modo = "mixta"
+    # Si hay una tool específica por keywords (p.ej. ventas por país×mes, "por qué enero"), es una
+    # pregunta de datos sí o sí → forzar la ruta estructurada aunque ni el scorer de intents ni la
+    # búsqueda semántica hayan prendido. OJO: cubrir también 'sin_evidencia' — preguntas como "por qué
+    # enero fue el mejor mes" no tienen doc que las respalde (sem_top < PISO) y caían en SIN_EVIDENCIA
+    # con la tool sin llamar; se van a 'estructurada' (tool sola, sin docs ruidosos de baja similitud).
+    if _tool_por_keywords(pregunta):
+        if modo == "semantica":
+            modo = "mixta"
+        elif modo == "sin_evidencia":
+            modo = "estructurada"
 
     evidencia: list[dict] = []
     fuentes: list[str] = []
