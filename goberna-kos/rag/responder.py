@@ -107,7 +107,10 @@ def _formatear_hecho(fuente: str, s) -> str:
         ]
         return " ".join(x for x in partes if x)
     if "ventas.porPais" in fuente:
-        pp = (s.get("porPais") or [])[:8]
+        # TODOS los países (no top-8): el crítico vio que si preguntaban un país fuera del top-8, el
+        # redactor le pegaba la fila de OTRO país (Chile→números de Bolivia). Con la lista completa, o
+        # está el país o no está — y si no está, la instrucción dura le prohíbe inventarlo.
+        pp = s.get("porPais") or []
         det = "; ".join(f"{x['pais']} {x['usd']} USD ({x['ventas']} ventas, ticket {x['ticket']})"
                         for x in pp)
         tf, tt = s.get("topFacturacion") or {}, s.get("topTicket") or {}
@@ -117,7 +120,9 @@ def _formatear_hecho(fuente: str, s) -> str:
         if tt:
             extra += (f" El TICKET más alto (entre países con {s.get('minVentasTicket')}+ ventas): "
                       f"{tt.get('pais')} con {tt.get('ticket')} USD.")
-        return f"Facturación cobrada por país ({s.get('rango')}): {det}.{extra} {s.get('nota','')}"
+        return (f"Facturación cobrada por país ({s.get('rango')}): {det}.{extra} "
+                f"REGLA DURA: si te preguntan por un país que NO figura en esta lista, decí que no lo "
+                f"tenés desglosado; NUNCA uses la fila de otro país. {s.get('nota','')}")
     if "ventas.porProducto" in fuente:
         prods = s.get("productos") or []
         partes = [f"{p['nombre']} ({p['ventas']} ventas, {p['usd']} USD)" for p in prods[:6]]

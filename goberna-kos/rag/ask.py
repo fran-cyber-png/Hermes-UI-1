@@ -159,15 +159,23 @@ def _metrica_inexistente(p: str) -> str | None:
     return None
 
 
+_CUE_MONTO = ("plata", "guita", "factur", "ingreso", "dolar", "recaud", "cobr", "vende", "vendio",
+              "dejo", "deja", "entro", "entra", "movio", "mueve", "saco", "saca", "puso", "pone",
+              "rindi", "rinde", "genera", "genero", "gane", "ganamos", "cerr", "vale", "cuesta")
+
+
 def _pregunta_de_plata(p: str) -> bool:
-    """¿Pide una CIFRA de negocio (facturación, ventas, ingresos, crecimiento, 'cuánto…')? Backstop: si
-    es de plata y NINGÚN tool enganchó, es mejor ser honesto que arriesgar un número de un doc de pauta.
-    Esto ataca la raíz que marcó el crítico: 'pasa gasto de pauta como facturación con grounding_ok=true'."""
+    """¿Pide una CIFRA de negocio? Backstop CATCH-ALL: si toca plata y NINGÚN tool enganchó, es mejor
+    honesto que arriesgar un número de un doc de pauta. NO depende de un whitelist de verbos exactos (esa
+    fue la fragilidad que el crítico rompió con 'cuánto me DEJÓ / cuánta guita MOVIÓ'): alcanza con que
+    haya un cue de monto O un 'cuánto/cuánta' con contexto de negocio. Sobre-disparar acá es SEGURO —
+    solo convierte preguntas de plata sin tool en un honesto, nunca fabrica."""
     p = _norm(p)
-    tiene_cuanto = any(w in p for w in ("cuanto", "cuantos", "cuantas"))
-    verbo_num = any(w in p for w in ("factur", "ingreso", "vend", "recaud", "cobr", "gane", "ganamos",
-                                     "cerr", "llevo", "hice", "vale", "cuesta", "recaud"))
-    return (tiene_cuanto and verbo_num) or "facturacion" in p or "crecimiento" in p or "voy a cerrar" in p
+    cuanto = any(w in p for w in ("cuanto", "cuanta", "cuantos", "cuantas"))
+    monto = any(w in p for w in _CUE_MONTO)
+    return monto or (cuanto and any(w in p for w in ("mes", "ano", "semana", "hoy", "ayer", "total",
+                                                     "llevo", "hice", "pais", "producto"))) \
+        or "crecimiento" in p or "voy a cerrar" in p
 
 
 def _norm(t: str) -> str:
@@ -237,7 +245,7 @@ def _tool_por_keywords(pregunta: str) -> tuple[str, dict] | None:
     # 2a-bis. QUIÉN FACTURA MÁS / FACTURACIÓN POR PAÍS (sin comparar meses) — "¿quién factura más, México
     #     o Perú?", "qué país vende/factura más". Determinista: NUNCA por retrieval semántico (confundía
     #     facturación con GASTO de pauta y respondía al revés, según verificó el crítico).
-    if pais and negocio:
+    if pais and (negocio or "cuanto" in p or "cuanta" in p or any(w in p for w in _CUE_MONTO)):
         return ("governa.ventas.porPais", {"rango": "anio"})
 
     # 2b. TICKET PROMEDIO (global) — "cuál es mi ticket promedio" (el pulso trae el ticket real del
@@ -257,7 +265,10 @@ def _tool_por_keywords(pregunta: str) -> tuple[str, dict] | None:
                                  "vista general", "situacion general", "estado del negocio",
                                  "en general", "como viene", "como va el mes", "vamos bien",
                                  "vamos mal", "estamos bien", "estamos mal", "como cerramos",
-                                 "voy a cerrar", "vamos a cerrar", "que tal el mes", "como venimos"))
+                                 "voy a cerrar", "vamos a cerrar", "que tal el mes", "que tal venimos",
+                                 "como pinta", "arriba o abajo", "estamos arriba", "estamos abajo",
+                                 "flojo o fuerte", "viene flojo", "viene fuerte", "viene el mes",
+                                 "que tal vamos", "como nos fue el mes", "como cerro el mes"))
     if pulso and not pais:
         return ("governa.ventas.pulso", {})
     # "cómo va el negocio este mes" / "cómo vamos este mes" (negocio + temporal, sin país ni desglose)
