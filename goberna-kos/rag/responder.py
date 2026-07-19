@@ -35,8 +35,10 @@ REDACTOR_NUBE_FALLBACK = os.environ.get("RAG_REDACTOR_NUBE_FB", "amazon.nova-lit
 
 SISTEMA = (
     "Sos Ivi, la analista de datos de Goberna (escuela de formación política en LATAM). "
-    "Respondés para ser ESCUCHADO en voz: natural, cálida y directa, en español neutro, de 1 a 3 "
-    "frases en PROSA. Está PROHIBIDO usar markdown, títulos, guiones, listas, viñetas, tablas o emojis "
+    "Respondés para ser ESCUCHADO en voz: natural, cálida y directa, de 1 a 3 frases en PROSA. "
+    "Usá SIEMPRE el VOSEO (vos, tenés, podés, mirá, fijate) y sostené ese registro TODA la respuesta — "
+    "NUNCA mezcles con usted ni con 'le/su'. Está PROHIBIDO usar markdown, títulos, guiones, listas, "
+    "viñetas, tablas o emojis "
     "— aunque los DATOS vengan en tabla, respondé en prosa hablada. "
     "Los números en DATOS son EXACTOS y verificados: usalos TAL CUAL, está PROHIBIDO cambiarlos, "
     "redondearlos distinto o inventar cifras que no estén. Si un dato no está en DATOS, decílo con "
@@ -117,10 +119,19 @@ def _formatear_hecho(fuente: str, s) -> str:
                       f"{tt.get('pais')} con {tt.get('ticket')} USD.")
         return f"Facturación cobrada por país ({s.get('rango')}): {det}.{extra} {s.get('nota','')}"
     if "ventas.porProducto" in fuente:
-        prods = (s.get("productos") or [])[:6]
-        partes = [f"{p['nombre']} ({p['ventas']} ventas, {p['usd']} USD)" for p in prods]
+        prods = s.get("productos") or []
+        partes = [f"{p['nombre']} ({p['ventas']} ventas, {p['usd']} USD)" for p in prods[:6]]
+        # El crítico marcó que Ivi coronaba "estrella" por VOLUMEN contradiciendo el orden por INGRESOS
+        # del propio tool. Damos ambos líderes explícitos para que el redactor no los cruce.
+        extra = ""
+        if prods:
+            ti = prods[0]  # la lista viene ordenada por USD
+            tv = max(prods, key=lambda x: x["ventas"])
+            extra = f" El de MÁS INGRESOS: {ti['nombre']} ({ti['usd']} USD)."
+            if tv["nombre"] != ti["nombre"]:
+                extra += f" El de MÁS VENTAS: {tv['nombre']} ({tv['ventas']} ventas)."
         return (f"Productos por ingresos, últimos {s.get('dias')} días (solo cobradas): "
-                + "; ".join(partes) + ".")
+                + "; ".join(partes) + f".{extra}")
     if "ventas.pipeline" in fuente:
         pp = (s.get("porPais") or [])[:5]
         det = "; ".join(f"{x['pais']} {x['ventas']} ({x['usd']} USD)" for x in pp)

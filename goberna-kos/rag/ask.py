@@ -159,6 +159,17 @@ def _metrica_inexistente(p: str) -> str | None:
     return None
 
 
+def _pregunta_de_plata(p: str) -> bool:
+    """¿Pide una CIFRA de negocio (facturación, ventas, ingresos, crecimiento, 'cuánto…')? Backstop: si
+    es de plata y NINGÚN tool enganchó, es mejor ser honesto que arriesgar un número de un doc de pauta.
+    Esto ataca la raíz que marcó el crítico: 'pasa gasto de pauta como facturación con grounding_ok=true'."""
+    p = _norm(p)
+    tiene_cuanto = any(w in p for w in ("cuanto", "cuantos", "cuantas"))
+    verbo_num = any(w in p for w in ("factur", "ingreso", "vend", "recaud", "cobr", "gane", "ganamos",
+                                     "cerr", "llevo", "hice", "vale", "cuesta", "recaud"))
+    return (tiene_cuanto and verbo_num) or "facturacion" in p or "crecimiento" in p or "voy a cerrar" in p
+
+
 def _norm(t: str) -> str:
     t = t.lower()
     for a, b in (("á", "a"), ("é", "e"), ("í", "i"), ("ó", "o"), ("ú", "u"), ("ñ", "n")):
@@ -200,10 +211,12 @@ def _tool_por_keywords(pregunta: str) -> tuple[str, dict] | None:
                                          "por mes", "cada mes", "mensualmente", "mes mas fuerte")):
         return ("governa.ventas.serieMensual", {"meses": 12})
 
-    # 0e. FACTURACIÓN DEL AÑO — "¿cuánto facturé este año / en 2026 / acumulado?" (total determinista;
-    #     el crítico pescó un "240 mil" inventado cuando el real es ~273k).
-    if negocio and any(w in p for w in ("este ano", "del ano", "en el ano", "por ano", "anual", "2026",
-                                        "2025", "acumulado", "en total", "todo el ano", "en el 2026")):
+    # 0e. FACTURACIÓN DEL AÑO — "¿cuánto facturé este año / en 2026 / acumulado?" (total determinista).
+    #     `not pais`: "cuánto facturó ECUADOR este año" NO es serie mensual — va a porPais (abajo). Sin
+    #     esto, el crítico vio que preguntas de país+año caían acá y Ivi negaba un dato que sí tiene.
+    if negocio and not pais and any(w in p for w in ("este ano", "del ano", "en el ano", "por ano",
+                                    "anual", "2026", "2025", "acumulado", "en total", "todo el ano",
+                                    "en el 2026")):
         return ("governa.ventas.serieMensual", {"meses": 12})
 
     # 1. PRODUCTO — "qué producto vende más", "qué promocionar", "top de cursos/diplomas".
@@ -242,7 +255,9 @@ def _tool_por_keywords(pregunta: str) -> tuple[str, dict] | None:
     pulso = any(w in p for w in ("resum", "como estamos", "como vamos", "como va el negocio",
                                  "como va todo", "como venimos", "parados", "pulso", "panorama",
                                  "vista general", "situacion general", "estado del negocio",
-                                 "en general"))
+                                 "en general", "como viene", "como va el mes", "vamos bien",
+                                 "vamos mal", "estamos bien", "estamos mal", "como cerramos",
+                                 "voy a cerrar", "vamos a cerrar", "que tal el mes", "como venimos"))
     if pulso and not pais:
         return ("governa.ventas.pulso", {})
     # "cómo va el negocio este mes" / "cómo vamos este mes" (negocio + temporal, sin país ni desglose)
@@ -340,9 +355,25 @@ def ask(pregunta: str, usuario: str | None = None, *, k: int = 5,
             if d["cita"] not in fuentes:
                 fuentes.append(d["cita"])
 
+    # ── BACKSTOP LEY I: pregunta de PLATA sin HECHO ──
+    # El crítico probó que, al reformular, las preguntas de facturación caen a la ruta semántica y el
+    # redactor contesta con NÚMEROS de un doc de pauta (gasto 6.001/4.087) como si fueran facturación,
+    # con grounding_ok=true. La cura de raíz: si es una pregunta de cifras de negocio y NINGÚN tool
+    # entregó un HECHO, se DESCARTA la evidencia documental (sus números no responden la pregunta) y se
+    # corta a honesto. Preferimos "pedímelo más preciso" antes que un número confiado y equivocado.
+    if _pregunta_de_plata(pregunta) and not any(e["tipo"] == "HECHO" for e in evidencia):
+        evidencia = [{"tipo": "SIN_EVIDENCIA", "fuente": None,
+                      "motivo": ("Es una pregunta de cifras de negocio y ningún tool exacto la cubrió. "
+                                 "NO uses números de documentos de pauta para responderla. Pedí que la "
+                                 "reformule (p.ej. 'facturación por país', 'cuánto facturé este año', "
+                                 "'pulso del mes') para dar el número real.")}]
+        fuentes = []
+        modo = "sin_evidencia"
+
     if not evidencia or modo == "sin_evidencia":
-        evidencia.append({"tipo": "SIN_EVIDENCIA", "fuente": None,
-                          "motivo": "ni señal estructurada ni documental suficiente"})
+        if not any(e["tipo"] == "SIN_EVIDENCIA" for e in evidencia):
+            evidencia.append({"tipo": "SIN_EVIDENCIA", "fuente": None,
+                              "motivo": "ni señal estructurada ni documental suficiente"})
 
     return {
         "pregunta": pregunta,
