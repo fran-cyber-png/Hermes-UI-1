@@ -210,6 +210,14 @@ def _tool_por_keywords(pregunta: str) -> tuple[str, dict] | None:
        any(w in p for w in ("alumno", "cliente", "estudiante", "matricul", "inscri", "gente")):
         return ("governa.ventas.clientesNuevos", {"meses": 6})
 
+    # 0b-bis. ATRIBUCIÓN POR IDENTIDAD — "¿de qué campaña vino esta venta?", "¿qué campaña me trae
+    #     ventas?", "atribución". VA ANTES de porCampana: esa es GASTO por campaña, no atribución.
+    if any(w in p for w in ("atribucion", "atribuir", "atribuye", "de que campana vino",
+                            "de que campana viene", "que campana trajo", "que campana me trae",
+                            "que campana genero", "que campana convierte", "de donde vino esa venta",
+                            "de donde vienen las ventas", "que campana vende")):
+        return ("governa.atribucion.porIdentidad", {})
+
     # 0c. PAUTA POR CAMPAÑA — "en qué campaña gasto más", "qué campaña rinde" ('campaña'→'campana').
     if "campana" in p or "campanas" in p:
         return ("governa.pauta.porCampana", {"limite": 8})

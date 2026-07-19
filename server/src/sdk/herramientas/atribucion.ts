@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { explicar } from "../../analisis/explicar.js";
+import { db } from "../../db/client.js";
 import { roasPorPais, type RoasPais } from "../../analisis/roasPais.js";
 import { ventasPorPais, type VentaPaisUsd } from "../../analisis/ventasPorPais.js";
 import { ultimoSnapshot, type Snapshot } from "../../pauta/snapshot.js";
@@ -166,6 +168,114 @@ registrar({
       nota:
         "Gasto y resultados de Meta de la última recolecta. NO es ROAS: la facturación no se " +
         "atribuye por campaña (las ventas traen canal, no campaña), solo se puede por país o canal.",
+    };
+  },
+});
+
+/**
+ * ATRIBUCIÓN POR IDENTIDAD (v1 en SQL, sin grafo) — Fase C de `docs/36`.
+ *
+ * Sigue la cadena que YA vive en Postgres: `leads` (campaña) → identidad fuerte (email) → persona →
+ * cliente → venta. Cuatro JOINs sobre tablas existentes; por eso NO necesita Neo4j a esta escala (32
+ * ventas, 2 campañas). Neo4j se gana el sueldo con multi-hop/GDS y volumen, cuando la atribución tenga
+ * masa — ver `docs/36` §5.
+ *
+ * HONESTIDAD, que acá es lo más importante:
+ *  1. Es atribución **por identidad**: la persona fue lead de la campaña y DESPUÉS compró. NO es
+ *     causal-por-click — no sabemos que ese anuncio causó la venta.
+ *  2. La **cobertura es baja (~0,5%)** y la tool la devuelve SIEMPRE, para que nadie lea "28 ventas de
+ *     OSINT" como si fuera el negocio entero. Los lead-forms pararon el 19-may-2026 y el gasto se movió
+ *     a campañas de WhatsApp, que no dejan lead record (`docs/36` §2).
+ */
+registrar({
+  nombre: "governa.atribucion.porIdentidad",
+  descripcion:
+    "Atribución de ventas a campañas de Meta POR IDENTIDAD (la persona fue lead de la campaña y después " +
+    "compró; NO es causal-por-click). Sin folio: agregado por campaña + COBERTURA (qué % de las ventas es " +
+    "atribuible hoy). Con {folio}: la cadena de esa venta. Para '¿de qué campaña vino esta venta?', " +
+    "'¿qué campañas me traen ventas?', 'atribución'.",
+  entrada: z.object({
+    folio: z.string().optional().describe("folio de una venta concreta; vacío = agregado + cobertura"),
+  }),
+  idempotente: true,
+  cqIds: [],
+  fuentes: [
+    "public.leads (campaign_name, email)",
+    "ontologia.identidades + vinculos_identidad (identidad fuerte, no revocada)",
+    "ontologia.cliente.persona_id → ontologia.venta.cliente_codigo",
+  ],
+  ejecutar: async ({ folio }) => {
+    const ETIQUETA =
+      "Atribución POR IDENTIDAD: la persona fue lead de esa campaña y después compró. NO es " +
+      "causal-por-click (no sabemos que el anuncio causó la venta).";
+
+    if (folio) {
+      const cadena = (await db.execute(sql`
+        SELECT DISTINCT l.campaign_name       AS campana,
+               l.platform                     AS plataforma,
+               l.created_time::date           AS "fechaLead"
+        FROM ontologia.venta v
+        JOIN ontologia.cliente c ON c.codigo = v.cliente_codigo
+        JOIN ontologia.vinculos_identidad vi
+          ON vi.persona_id = c.persona_id AND vi.revocado_at IS NULL
+        JOIN ontologia.identidades i ON i.id = vi.identidad_id AND i.tipo = 'email'
+        JOIN public.leads l ON lower(l.email) = lower(i.valor)
+        WHERE v.folio = ${folio}
+      `)) as unknown as { campana: string; plataforma: string; fechaLead: string }[];
+
+      return {
+        folio,
+        atribuible: cadena.length > 0,
+        campanas: cadena,
+        etiqueta: ETIQUETA,
+        nota: cadena.length
+          ? "La persona que compró figura como lead de esta(s) campaña(s)."
+          : "Esta venta no matchea ningún lead conocido: no es atribuible con los datos de hoy.",
+      };
+    }
+
+    const porCampana = (await db.execute(sql`
+      WITH atrib AS (
+        SELECT DISTINCT v.folio, v.monto_usd, l.campaign_name
+        FROM public.leads l
+        JOIN ontologia.identidades i ON i.tipo = 'email' AND lower(i.valor) = lower(l.email)
+        JOIN ontologia.vinculos_identidad vi ON vi.identidad_id = i.id AND vi.revocado_at IS NULL
+        JOIN ontologia.cliente c ON c.persona_id = vi.persona_id
+        JOIN ontologia.venta v ON v.cliente_codigo = c.codigo AND v.cobrada
+      )
+      SELECT campaign_name AS campana, count(DISTINCT folio)::int AS ventas,
+             round(sum(monto_usd))::int AS usd
+      FROM atrib GROUP BY 1 ORDER BY 3 DESC
+    `)) as unknown as { campana: string; ventas: number; usd: number }[];
+
+    const cob = (await db.execute(sql`
+      WITH atrib AS (
+        SELECT DISTINCT v.folio
+        FROM public.leads l
+        JOIN ontologia.identidades i ON i.tipo = 'email' AND lower(i.valor) = lower(l.email)
+        JOIN ontologia.vinculos_identidad vi ON vi.identidad_id = i.id AND vi.revocado_at IS NULL
+        JOIN ontologia.cliente c ON c.persona_id = vi.persona_id
+        JOIN ontologia.venta v ON v.cliente_codigo = c.codigo AND v.cobrada
+      )
+      SELECT (SELECT count(*) FROM atrib)::int                              AS atribuibles,
+             (SELECT count(*) FROM ontologia.venta WHERE cobrada)::int      AS "totalCobradas"
+    `)) as unknown as { atribuibles: number; totalCobradas: number }[];
+
+    const a = cob[0]?.atribuibles ?? 0;
+    const t = cob[0]?.totalCobradas ?? 0;
+
+    return {
+      porCampana,
+      cobertura: {
+        ventasAtribuibles: a,
+        totalCobradas: t,
+        pct: t ? Math.round((a / t) * 1000) / 10 : null,
+      },
+      etiqueta: ETIQUETA,
+      nota:
+        `Solo ${a} de ${t} ventas cobradas son atribuibles a una campaña. La cobertura es baja porque ` +
+        "las campañas de lead-form pararon el 19-may-2026 y el gasto se movió a WhatsApp, que no deja " +
+        "lead record. NO leer estos números como el total del negocio.",
     };
   },
 });

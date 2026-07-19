@@ -168,6 +168,24 @@ def _formatear_hecho(fuente: str, s) -> str:
                 f"(el promedio mensual es {s.get('promedioMensualUsd')} USD; este mes fue "
                 f"{s.get('vecesVsPromedio')} veces ese promedio). Canales: {canal}. Países: {paises}. "
                 f"Productos: {prod}. {s.get('nota','')}")
+    if "atribucion.porIdentidad" in fuente:
+        # La COBERTURA va siempre y bien fuerte: sin ella, "28 ventas de OSINT" se lee como el negocio
+        # entero cuando en realidad es el 0,5%. Y la etiqueta "por identidad, no causal" es obligatoria.
+        if s.get("folio"):
+            cs = s.get("campanas") or []
+            if not cs:
+                return (f"Venta {s.get('folio')}: NO es atribuible a ninguna campaña conocida. "
+                        f"{s.get('nota','')}")
+            det = "; ".join(f"{c['campana']} ({c.get('plataforma')}, fue lead el {c.get('fechaLead')})"
+                            for c in cs)
+            return f"Venta {s.get('folio')} atribuible a: {det}. {s.get('etiqueta','')}"
+        pc = s.get("porCampana") or []
+        cob = s.get("cobertura") or {}
+        det = "; ".join(f"{c['campana']}: {c['ventas']} ventas / {c['usd']} USD" for c in pc)
+        return (f"Atribución por identidad — ventas atribuibles a campañas: {det}. "
+                f"COBERTURA (decilo SIEMPRE): solo {cob.get('ventasAtribuibles')} de "
+                f"{cob.get('totalCobradas')} ventas cobradas ({cob.get('pct')}%) son atribuibles. "
+                f"{s.get('etiqueta','')} {s.get('nota','')}")
     if "pauta.porCampana" in fuente:
         if s.get("disponible") is False:
             return s.get("mensaje", "Sin recolecta de pauta reciente.")
