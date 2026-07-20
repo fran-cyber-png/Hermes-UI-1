@@ -6,8 +6,14 @@ import { webhooksRecibidos } from "../db/operacion.js";
 import { construirCompra } from "../lazo/evento.js";
 import { capiDesdeEnv } from "../lazo/capi.js";
 import { claveDeVenta, extraerVenta, tipoAceptado, tokenValido } from "./cerberus.js";
+import { recibirWhatsapp, verificarWhatsapp } from "./whatsapp.js";
 
 export const webhookRouter = Router();
+
+// WhatsApp Cloud API — captura del referral/ctwa_clid de click-to-WhatsApp (docs/36 §2). GET verifica
+// la suscripción; POST recibe los mensajes. Ruta pública: /webhook/whatsapp.
+webhookRouter.get("/whatsapp", verificarWhatsapp);
+webhookRouter.post("/whatsapp", recibirWhatsapp);
 
 /**
  * El receptor del webhook de Cerberus. Cada venta que se confirma en Cerberus llega acá, y de
