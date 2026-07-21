@@ -10,6 +10,7 @@ import { ConversacionActiva } from './features/canales/ConversacionActiva';
 import type { Conversacion } from './features/canales/conversaciones';
 import BarraFrescura from './features/canales/BarraFrescura';
 import { EstadoWhatsapp } from './features/whatsapp/EstadoWhatsapp';
+import { FichaContacto } from './features/cerberus/FichaContacto';
 import { Login } from './features/auth/Login';
 import { useSesion } from './features/auth/sesion';
 
@@ -79,6 +80,14 @@ export default function App() {
         <aside className="min-h-0 min-w-0 flex-1">
           <ConversacionActiva conversacion={abierta} onCerrar={() => setAbierta(null)} />
         </aside>
+
+        {/* La ficha del contacto, al lado del chat: quién es antes de escribir.
+            Por teléfono, así que solo para WhatsApp por ahora. */}
+        {abierta?.canal === 'whatsapp' && (
+          <aside className="min-h-0 w-72 shrink-0">
+            <FichaContacto conversacion={abierta} />
+          </aside>
+        )}
       </div>
     </div>
   );
