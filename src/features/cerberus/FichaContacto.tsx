@@ -180,7 +180,8 @@ export function FichaContacto({ conversacion }: { conversacion: Conversacion }) 
         <FormularioVenta
           clienteId={data.id}
           clienteNombre={data.nombre}
-          origenLead={null}
+          telefono={telefono ?? ''}
+          canal={conversacion.canal}
           onCerrar={() => setMostrarForm(false)}
         />
       )}

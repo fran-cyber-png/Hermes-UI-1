@@ -1,7 +1,15 @@
 import { useMemo, useState } from 'react';
-import { AlertTriangle, Check, Loader2, Plus, Search, ShoppingCart, Trash2, X } from 'lucide-react';
-import { ErrorApi } from '../../lib/datos/cliente';
+import { useQuery } from '@tanstack/react-query';
+import { AlertTriangle, Check, Loader2, Megaphone, Plus, Search, ShoppingCart, Trash2, X } from 'lucide-react';
+import { api, ErrorApi } from '../../lib/datos/cliente';
 import { useCrearVenta, useFormularioVenta, useProductos, type ProductoCurso } from './useVenta';
+
+/** Cerberus llama "Origen" al canal por donde llegó el lead. Se infiere, no se elige. */
+const ORIGEN_POR_CANAL: Record<string, { id: string; nombre: string }> = {
+  whatsapp: { id: 'whatsapp', nombre: 'WhatsApp' },
+  facebook: { id: 'facebook', nombre: 'Facebook' },
+  instagram: { id: 'instagram', nombre: 'Instagram' },
+};
 
 /**
  * EL FORMULARIO DE VENTA, DENTRO DE HERMES.
@@ -15,8 +23,10 @@ import { useCrearVenta, useFormularioVenta, useProductos, type ProductoCurso } f
 interface Props {
   clienteId: number;
   clienteNombre: string;
-  /** De dónde vino el lead, para autocompletar Medio/Origen. */
-  origenLead: 'anuncio' | 'landing' | null;
+  /** El teléfono del contacto — para leer de dónde vino el lead (origen/medio). */
+  telefono: string;
+  /** El canal de la conversación — de ahí se infiere el Origen. */
+  canal: string;
   onCerrar: () => void;
 }
 
@@ -25,16 +35,29 @@ interface Linea {
   cantidad: number;
 }
 
-export function FormularioVenta({ clienteId, clienteNombre, origenLead, onCerrar }: Props) {
+export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, onCerrar }: Props) {
   const { data: form, isPending: cargandoForm } = useFormularioVenta(true);
   const crear = useCrearVenta();
+
+  // El origen del lead (anuncio/landing) — misma query cacheada que el hilo, sin
+  // fetch extra. Sirve para inferir el MEDIO (pagado si vino de un anuncio).
+  const { data: conv } = useQuery({
+    queryKey: ['wa', 'conversacion', telefono],
+    queryFn: () => api<{ origen: { fuente?: string } | null }>(`/api/whatsapp/conversacion/${telefono}`),
+    enabled: Boolean(telefono),
+    staleTime: 60_000,
+  });
+
+  // NO se muestran ni se eligen: se INFIEREN de dónde vino el lead.
+  //  · Origen = el canal (WhatsApp / Facebook / Instagram).
+  //  · Medio  = pagado si llegó por un anuncio; si no, orgánico.
+  const origenInfo = ORIGEN_POR_CANAL[canal] ?? ORIGEN_POR_CANAL.whatsapp;
+  const medio = conv?.origen?.fuente === 'anuncio' ? 'pagado' : 'organico';
+  const medioNombre = medio === 'pagado' ? 'Pagado' : 'Orgánico';
 
   const [monedaId, setMonedaId] = useState('');
   const [paisId, setPaisId] = useState('');
   const [preventa, setPreventa] = useState(true);
-  // Auto-fill desde la atribución: vino por WhatsApp; si fue anuncio, es pagado.
-  const [medio, setMedio] = useState(origenLead === 'anuncio' ? 'pagado' : 'organico');
-  const [origen, setOrigen] = useState('whatsapp');
   const [lineas, setLineas] = useState<Linea[]>([]);
   const [busqueda, setBusqueda] = useState('');
   const [saved, setSaved] = useState<string | null>(null);
@@ -65,7 +88,7 @@ export function FormularioVenta({ clienteId, clienteNombre, origenLead, onCerrar
       paisId,
       preventa,
       medio,
-      origen,
+      origen: origenInfo.id,
       montoTotal: monto,
       productos: lineas.map((l) => ({
         productoId: l.producto.id,
@@ -133,13 +156,13 @@ export function FormularioVenta({ clienteId, clienteNombre, origenLead, onCerrar
                 Preventa (cursos sin stock: no exige local ni ubicación)
               </label>
 
-              <div className="grid grid-cols-2 gap-3">
-                <Campo label="Medio · auto">
-                  <Select value={medio} onChange={setMedio} placeholder="Medio" opciones={form.medios} />
-                </Campo>
-                <Campo label="Origen · auto">
-                  <Select value={origen} onChange={setOrigen} placeholder="Origen" opciones={form.origenes} />
-                </Campo>
+              {/* Origen y Medio NO se eligen: se infieren de dónde vino el lead. */}
+              <div className="flex items-center gap-2 rounded-lg bg-secondary/60 px-3 py-2 text-xs text-secondary-foreground">
+                <Megaphone size={13} className="shrink-0" />
+                <span>
+                  Origen <b>{origenInfo.nombre}</b> · Medio <b>{medioNombre}</b>
+                  <span className="text-muted-foreground"> — inferidos de por dónde vino el lead</span>
+                </span>
               </div>
 
               {/* Productos */}
