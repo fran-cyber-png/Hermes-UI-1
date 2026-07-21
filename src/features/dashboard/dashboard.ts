@@ -60,6 +60,10 @@ export interface DatosDashboard {
   etapas: Record<string, string>;
   etiquetas: Record<string, string[]>;
   porVendedora: StatsVendedora[];
+  /** Counts por etapa del embudo (normalizada). */
+  embudo: Record<string, number>;
+  /** Qué cursos pide la gente: el ranking de intereses. */
+  cursos: { curso: string; n: number }[];
 }
 
 export function useDashboard() {

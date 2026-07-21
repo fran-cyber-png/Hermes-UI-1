@@ -375,3 +375,29 @@ export const intereses = pgTable(
   },
   (t) => [unique().on(t.clave, t.curso), index("intereses_clave_idx").on(t.clave)],
 );
+
+/**
+ * CORREOS ENVIADOS — la auditoría del canal email.
+ *
+ * Un correo = UNA vendedora, UN destinatario, una acción humana — la misma
+ * filosofía que EnvioControlado. Acá queda quién mandó qué a quién y si salió,
+ * incluidos los intentos fallidos. Sin listas, sin campañas: eso es otra
+ * herramienta y otra política.
+ */
+export const correos = pgTable(
+  "correos",
+  {
+    id: bigserial({ mode: "number" }).primaryKey(),
+    vendedoraId: text("vendedora_id").notNull(),
+    para: text("para").notNull(),
+    asunto: text("asunto").notNull(),
+    cuerpo: text("cuerpo").notNull(),
+    /** La conversación de origen, si vino de un chat (ata el correo al lead). */
+    clave: text("clave"),
+    /** enviado | fallido. */
+    estado: text("estado").notNull(),
+    motivo: text("motivo"),
+    creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("correos_vendedora_idx").on(t.vendedoraId, t.creadoAt)],
+);

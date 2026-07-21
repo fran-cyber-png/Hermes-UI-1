@@ -17,6 +17,7 @@ import { agendaRouter } from "./routes/agenda.js";
 import { gestionesRouter } from "./routes/gestiones.js";
 import { dashboardRouter } from "./routes/dashboard.js";
 import { landingRouter } from "./webhook/landing.js";
+import { correosRouter } from "./routes/correos.js";
 import { ventaRouter } from "./routes/venta.js";
 import { leadsRouter } from "./routes/leads.js";
 import { metaAssetsRouter } from "./routes/metaAssets.js";
@@ -60,6 +61,7 @@ app.use("/api/agenda", agendaRouter); // los seguimientos agendados de cada vend
 app.use("/api/gestiones", gestionesRouter); // bitácora comercial: etapas, próximas acciones, etiquetas
 app.use("/api/dashboard", dashboardRouter); // el radar: leads cayendo + números por vendedora
 app.use("/webhook/landing", landingRouter); // los leads de las landings, reenviados por Bravo
+app.use("/api/correos", correosRouter); // email 1-a-1, auditado — sin listas, sin campañas
 app.use("/api/venta", ventaRouter); // el formulario de venta dentro de Hermes
 app.use("/api/interactions", interactionsRouter);
 app.use("/api/conversaciones", conversacionesRouter); // la cola unificada: una fila por conversación

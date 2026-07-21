@@ -22,11 +22,13 @@
     "backfill": "tsx src/scripts/backfill.ts"
   },
   "dependencies": {
+    "@types/nodemailer": "^8.0.1",
     "@whatsmeow-node/whatsmeow-node": "0.7.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.45.2",
     "express": "^4.21.2",
+    "nodemailer": "^9.0.3",
     "postgres": "^3.4.9",
     "qrcode": "1.5.4",
     "zod": "^4.4.3"

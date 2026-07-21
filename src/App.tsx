@@ -6,11 +6,11 @@ import '@fontsource/montserrat/800.css';
 import { useState, type CSSProperties } from 'react';
 import {
   AlarmClock,
-  BarChart3,
   Columns3,
-  Inbox,
   LayoutDashboard,
   LogOut,
+  Mail,
+  MessagesSquare,
   Users,
 } from 'lucide-react';
 import { Escudo } from './components/Marca';
@@ -24,8 +24,8 @@ import { FichaContacto } from './features/cerberus/FichaContacto';
 import { VistaDashboard } from './features/dashboard/VistaDashboard';
 import { VistaEmbudo } from './features/vistas/VistaEmbudo';
 import { VistaPersonas } from './features/vistas/VistaPersonas';
-import { VistaTablero } from './features/vistas/VistaTablero';
 import { VistaAgenda } from './features/agenda/VistaAgenda';
+import { VistaCorreos } from './features/correos/VistaCorreos';
 import { pendientesQueApuran, useAgenda } from './features/agenda/agenda';
 import { Login } from './features/auth/Login';
 import { useSesion } from './features/auth/sesion';
@@ -47,11 +47,11 @@ const NO_ARRASTRABLE = { WebkitAppRegion: 'no-drag' } as CSSProperties;
 
 const VISTAS = [
   { id: 'dashboard', label: 'Dashboard', icono: LayoutDashboard },
-  { id: 'bandeja', label: 'Bandeja', icono: Inbox },
-  { id: 'embudo', label: 'Embudo', icono: Columns3 },
+  { id: 'embudo', label: 'Pipeline', icono: Columns3 },
+  { id: 'personas', label: 'Contactos', icono: Users },
+  { id: 'bandeja', label: 'Mensajes', icono: MessagesSquare },
+  { id: 'correos', label: 'Correos', icono: Mail },
   { id: 'agenda', label: 'Agenda', icono: AlarmClock },
-  { id: 'personas', label: 'Personas', icono: Users },
-  { id: 'tablero', label: 'Tablero', icono: BarChart3 },
 ] as const;
 
 type Vista = (typeof VISTAS)[number]['id'];
@@ -170,7 +170,14 @@ export default function App() {
           </div>
         </header>
 
-        {vista === 'dashboard' && <VistaDashboard onAbrir={abrirConversacion} onBuscarPersona={buscarPersona} />}
+        {vista === 'dashboard' && (
+          <VistaDashboard
+            onAbrir={abrirConversacion}
+            onBuscarPersona={buscarPersona}
+            onIrAgenda={() => setVista('agenda')}
+            miVendedora={vendedora.id}
+          />
+        )}
 
         {vista === 'bandeja' && (
           <div className="flex min-h-0 flex-1 gap-3 p-3">
@@ -195,7 +202,7 @@ export default function App() {
         {vista === 'embudo' && <VistaEmbudo onAbrir={abrirConversacion} />}
         {vista === 'agenda' && <VistaAgenda onAbrir={abrirConversacion} />}
         {vista === 'personas' && <VistaPersonas telefonoInicial={telefonoPersonas} />}
-        {vista === 'tablero' && <VistaTablero />}
+        {vista === 'correos' && <VistaCorreos />}
       </div>
     </div>
   );
