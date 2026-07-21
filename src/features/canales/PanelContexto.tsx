@@ -4,6 +4,7 @@ import { API_URL } from '../../config';
 import type { Conversacion } from './conversaciones';
 import { BadgeCanal, nombreCanal } from './BadgeCanal';
 import HistorialPersona from './HistorialPersona';
+import { AgendarSeguimiento } from '../agenda/AgendarSeguimiento';
 
 /**
  * EL PANEL DE CONTEXTO — el lado derecho cuando la conversación es de Meta.
@@ -126,6 +127,9 @@ export function PanelContexto({ conversacion }: { conversacion: Conversacion }) 
           </>
         )}
       </div>
+
+      {/* "Lo llamo mañana" en dos toques: el seguimiento queda en la Agenda. */}
+      <AgendarSeguimiento conversacion={conversacion} />
     </div>
   );
 }

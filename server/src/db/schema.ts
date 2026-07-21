@@ -267,3 +267,34 @@ export const conversionesWa = pgTable(
     index("conversiones_wa_telefono_idx").on(t.telefono),
   ],
 );
+
+/**
+ * LA AGENDA DE LA VENDEDORA — seguimientos agendados a mano.
+ *
+ * "Lo llamo mañana", "le mando el temario el lunes". Cada fila es UNA promesa
+ * de la vendedora consigo misma, atada a una conversación. Un recordatorio
+ * JAMÁS envía nada solo (invariante de Hermes): cuando vence, aparece en la
+ * vista Agenda — el envío sigue siendo una acción humana.
+ */
+export const recordatorios = pgTable(
+  "recordatorios",
+  {
+    id: bigserial({ mode: "number" }).primaryKey(),
+    /** De quién es la promesa. Cada vendedora ve SU agenda. */
+    vendedoraId: text("vendedora_id").notNull(),
+    /** La conversación de referencia (la clave de la cola) + lo mínimo para reabrirla. */
+    clave: text("clave").notNull(),
+    canal: text("canal").notNull(),
+    personaId: text("persona_id"),
+    personaNombre: text("persona_nombre"),
+    numeroPropio: text("numero_propio"),
+    /** Qué prometió hacer: "llamarla", "mandarle el temario"… */
+    nota: text("nota").notNull(),
+    /** Cuándo. Con hora: la agenda es un calendario, no una lista de deseos. */
+    cuando: timestamp("cuando", { withTimezone: true }).notNull(),
+    /** pendiente | hecho. Se marca a mano, como todo lo que importa. */
+    estado: text("estado").notNull().default("pendiente"),
+    creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("recordatorios_agenda_idx").on(t.vendedoraId, t.estado, t.cuando)],
+);

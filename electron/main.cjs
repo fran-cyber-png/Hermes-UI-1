@@ -21,8 +21,11 @@ const { pathToFileURL } = require('node:url');
  * se cargaría como ESM y `require` no existiría.
  */
 
-// Vite en dev; el build estático en producción.
+// Vite en dev; en producción la UI se carga DESDE EL SERVER (OTA estilo EAS
+// Update): actualizar Hermes = actualizar el server, sin reinstalar la app.
+// Si no hay internet o el server no responde, cae al build local empaquetado.
 const URL_DEV = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
+const URL_PROD = process.env.HERMES_URL ?? 'https://hermes-api.goberna.us';
 const esDev = !app.isPackaged;
 
 /**
@@ -91,7 +94,11 @@ function crearVentana() {
   if (esDev) {
     void win.loadURL(URL_DEV);
   } else {
-    void win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+    // Primero la UI viva del server (siempre al día); si falla (sin internet,
+    // server caído), el build local que vino en el instalador.
+    win.loadURL(URL_PROD).catch(() => {
+      void win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+    });
   }
 
   return win;

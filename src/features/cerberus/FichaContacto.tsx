@@ -4,6 +4,7 @@ import { AlertTriangle, BadgeCheck, ExternalLink, Loader2, ShoppingBag, Shopping
 import { api } from '../../lib/datos/cliente';
 import type { Conversacion } from '../canales/conversaciones';
 import { FormularioVenta } from '../venta/FormularioVenta';
+import { AgendarSeguimiento } from '../agenda/AgendarSeguimiento';
 
 /**
  * LA FICHA DEL CONTACTO — la razón de ser de Hermes.
@@ -141,6 +142,9 @@ export function FichaContacto({ conversacion }: { conversacion: Conversacion }) 
           </div>
         ) : null}
       </div>
+
+      {/* "Lo llamo mañana" en dos toques: el seguimiento queda en la Agenda. */}
+      <AgendarSeguimiento conversacion={conversacion} />
 
       {/* Registrar venta — el formulario vive DENTRO de Hermes (la vendedora no
           entra a Cerberus). Para un cliente existente, abre el form; para un lead

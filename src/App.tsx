@@ -16,6 +16,8 @@ import { FichaContacto } from './features/cerberus/FichaContacto';
 import { VistaEmbudo } from './features/vistas/VistaEmbudo';
 import { VistaPersonas } from './features/vistas/VistaPersonas';
 import { VistaTablero } from './features/vistas/VistaTablero';
+import { VistaAgenda } from './features/agenda/VistaAgenda';
+import { pendientesQueApuran, useAgenda } from './features/agenda/agenda';
 import { Login } from './features/auth/Login';
 import { useSesion } from './features/auth/sesion';
 import { useTiempoReal } from './lib/datos/tiempoReal';
@@ -40,6 +42,7 @@ const NO_ARRASTRABLE = { WebkitAppRegion: 'no-drag' } as CSSProperties;
 const VISTAS = [
   { id: 'bandeja', label: 'Bandeja' },
   { id: 'embudo', label: 'Embudo' },
+  { id: 'agenda', label: 'Agenda' },
   { id: 'personas', label: 'Personas' },
   { id: 'tablero', label: 'Tablero' },
 ] as const;
@@ -60,6 +63,11 @@ export default function App() {
 
   // El nervio en vivo: escucha el stream del server e invalida lo que cambió.
   useTiempoReal();
+
+  // El badge de la Agenda: cuántas promesas apuran (vencidas + de hoy). Es
+  // dorado porque es TIEMPO — la única acepción del oro en Hermes.
+  const { agenda } = useAgenda();
+  const apuran = pendientesQueApuran(agenda.data?.recordatorios);
 
   // Sin sesión no hay bandeja: la vendedora entra con su cuenta de Cerberus, y de
   // esa identidad cuelga cada envío y cada venta que registre.
@@ -97,6 +105,11 @@ export default function App() {
                   }
                 >
                   {v.label}
+                  {v.id === 'agenda' && apuran > 0 && (
+                    <span className="ml-1.5 rounded-full bg-gold px-1.5 py-0.5 font-mono text-[10px] font-bold text-navy">
+                      {apuran}
+                    </span>
+                  )}
                 </button>
               ))}
             </nav>
@@ -154,6 +167,7 @@ export default function App() {
       )}
 
       {vista === 'embudo' && <VistaEmbudo onAbrir={abrirConversacion} />}
+      {vista === 'agenda' && <VistaAgenda onAbrir={abrirConversacion} />}
       {vista === 'personas' && <VistaPersonas />}
       {vista === 'tablero' && <VistaTablero />}
     </div>

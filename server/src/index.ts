@@ -1,4 +1,6 @@
 import "dotenv/config";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import cors from "cors";
 import express from "express";
 import { adsRouter } from "./routes/ads.js";
@@ -11,6 +13,7 @@ import { interactionsRouter } from "./routes/interactions.js";
 import { conversacionesRouter } from "./routes/conversaciones.js";
 import { authRouter } from "./routes/auth.js";
 import { contactosRouter } from "./routes/contactos.js";
+import { agendaRouter } from "./routes/agenda.js";
 import { ventaRouter } from "./routes/venta.js";
 import { leadsRouter } from "./routes/leads.js";
 import { metaAssetsRouter } from "./routes/metaAssets.js";
@@ -50,6 +53,7 @@ app.use("/api/ads", adsRouter); //            3. anuncio
 app.use("/api/leads", leadsRouter);
 app.use("/api/auth", authRouter); // login de vendedoras contra Cerberus
 app.use("/api/contactos", contactosRouter); // la ficha del contacto contra Cerberus
+app.use("/api/agenda", agendaRouter); // los seguimientos agendados de cada vendedora
 app.use("/api/venta", ventaRouter); // el formulario de venta dentro de Hermes
 app.use("/api/interactions", interactionsRouter);
 app.use("/api/conversaciones", conversacionesRouter); // la cola unificada: una fila por conversación
@@ -78,6 +82,20 @@ if (process.env.NODE_ENV !== "production") {
   app.use("/api/whatsapp/_sim", simularRouter); // simular detección de origen (dev)
 }
 if (falso) app.use("/api/whatsapp/_dev", rutaDevWhatsapp(falso));
+
+// LA UI SERVIDA DESDE ACÁ (actualización "over the air", estilo EAS Update):
+// si el build del front existe (dist/ en la raíz del repo), el server lo sirve.
+// La app de escritorio empaquetada CARGA esta URL — actualizar Hermes para
+// todas las vendedoras es `git pull + build + restart` en el server, sin
+// reinstalar nada en ninguna máquina. La cáscara de Electron casi no cambia.
+const DIST = new URL("../../dist/", import.meta.url).pathname;
+if (existsSync(join(DIST, "index.html"))) {
+  app.use(express.static(DIST));
+  // SPA fallback: cualquier ruta que no sea API/webhook devuelve la app.
+  app.get(/^\/(?!api\/|webhook\/|vincular).*/, (_req, res) => {
+    res.sendFile(join(DIST, "index.html"));
+  });
+}
 
 app.listen(port, () => {
   console.log(`hermes server listening on http://localhost:${port}`);

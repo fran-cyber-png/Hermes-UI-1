@@ -44,3 +44,10 @@ completo viven en `docs/prototypes/crm-definitivo/`.
   El dorado conserva su único significado (tiempo que se acaba) en todas las vistas.
 - Si al implementar H3 la evidencia dice que dos vistas alcanzan, se poda acá mismo con una
   revisión de esta ADR — la regla madre sigue siendo "restraint > features".
+
+## Enmienda 2026-07-21 — quinta vista: Agenda
+
+El mismo día del rediseño, Estephano pidió los seguimientos agendados ("lo llamo mañana") con su
+calendario. **Agenda** entra como quinta vista: es el único ángulo de los datos que es de la
+vendedora (sus promesas), no de la cola. Sigue la regla madre: un recordatorio JAMÁS envía nada —
+organiza a la humana, que es la que actúa. "4 vistas, ni una más" pasa a "5 vistas, ni una más".

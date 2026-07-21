@@ -10,7 +10,7 @@
     "electron": "electron .",
     "build": "tsc -b && vite build",
     "empaquetar:mac": "electron-builder --mac dmg",
-    "empaquetar:win": "electron-builder --win nsis",
+    "empaquetar:win": "electron-builder --win nsis --x64",
     "lint": "oxlint",
     "preview": "vite preview"
   },
