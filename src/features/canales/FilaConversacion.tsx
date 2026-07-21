@@ -35,6 +35,9 @@ export function FilaConversacion({
   const temp = TEMPERATURE_META[temperatureOf(c.referencia)];
   const restan = VENTANA_DIAS - c.dias;
   const nombre = c.persona_nombre ?? (c.canal === 'whatsapp' ? c.persona_id : 'Usuario');
+  // Horas reales desde la referencia — `c.dias` son días enteros, así que abajo
+  // de un día daba siempre 0 → "hace 1 min". Con las horas, "hace 3 horas" es cierto.
+  const horas = (Date.now() - new Date(c.referencia).getTime()) / 3_600_000;
 
   return (
     <button
@@ -68,7 +71,7 @@ export function FilaConversacion({
               {restan <= 1 ? 'último día' : `quedan ${restan}d`}
             </span>
           ) : (
-            <span className="shrink-0 text-xs text-muted-foreground">{hace(c.dias * 24)}</span>
+            <span className="shrink-0 text-xs text-muted-foreground">{hace(horas)}</span>
           )}
         </div>
 

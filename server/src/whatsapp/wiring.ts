@@ -1,41 +1,60 @@
 import { TransporteFalso } from './transporteFalso.js';
+import { TransporteWhatsmeow } from './transporteWhatsmeow.js';
 import { IngestaWhatsapp } from './ingesta.js';
+import { EnvioControlado } from './envioControlado.js';
 import { repositorioDrizzle } from './repositorioDrizzle.js';
+import { registroEnviosDrizzle } from './registroEnviosDrizzle.js';
 import type { TransporteWhatsapp } from './transporte.js';
 
 /**
- * El armado de WhatsApp al arrancar el server.
+ * EL ARMADO DE WHATSAPP AL ARRANCAR EL SERVER.
  *
- * Elige el transporte por env (`WHATSAPP_TRANSPORTE`), lo engancha a la ingesta
- * (que persiste cada mensaje en el event store) y lo inicia. Es el único lugar
- * que decide QUÉ transporte corre; todo lo demás habla con la interfaz.
+ * Elige el transporte por env (`WHATSAPP_TRANSPORTE`: `falso` o `whatsmeow`), lo
+ * engancha a la ingesta (persiste cada mensaje) y monta la única puerta de
+ * salida (`EnvioControlado`). Es el ÚNICO lugar que decide qué transporte corre;
+ * todo lo demás habla con la interfaz.
  *
- * Hoy solo existe el falso: el transporte whatsmeow lo escribe el equipo y se
- * enchufa acá cambiando este switch, sin tocar la ingesta ni la proyección.
+ *   · falso     → para desarrollo y demo, sin vincular nada.
+ *   · whatsmeow → el real. La sesión se vincula aparte (`npm run wa:vincular`,
+ *                 decisión D13); acá solo se conecta a la sesión ya guardada.
  */
-export function arrancarWhatsapp(): {
+export interface WhatsappArmado {
   transporte: TransporteWhatsapp;
-  /** El falso expuesto solo si es el que está corriendo — para la ruta de dev. */
+  envio: EnvioControlado;
+  /** Solo si corre el falso — para la ruta de dev que inyecta mensajes. */
   falso: TransporteFalso | null;
-} {
+}
+
+let armado: WhatsappArmado | null = null;
+
+export function arrancarWhatsapp(): WhatsappArmado {
   const cual = process.env.WHATSAPP_TRANSPORTE ?? 'falso';
 
-  if (cual !== 'falso') {
-    // Cuando exista `transporteWhatsmeow.ts` (lo escribe el equipo), se instancia
-    // acá. Hasta entonces, pedir otro transporte es un error de configuración
-    // explícito, no un arranque silencioso contra nada.
-    throw new Error(
-      `WHATSAPP_TRANSPORTE="${cual}" todavía no existe. Por ahora solo "falso". El transporte whatsmeow lo escribe el equipo (ver docs/plan-hermes-mvp.md S0).`,
-    );
+  let transporte: TransporteWhatsapp;
+  let falso: TransporteFalso | null = null;
+
+  if (cual === 'whatsmeow') {
+    const numero = process.env.WHATSAPP_NUMERO;
+    if (!numero) throw new Error('WHATSAPP_TRANSPORTE=whatsmeow necesita WHATSAPP_NUMERO (el número propio ya vinculado con wa:vincular).');
+    const dir = new URL('../../.wa-sessions/', import.meta.url).pathname;
+    transporte = new TransporteWhatsmeow(numero, dir);
+  } else {
+    falso = new TransporteFalso({ telefono: process.env.WHATSAPP_NUMERO_FALSO ?? '51987654321' });
+    transporte = falso;
   }
 
-  const falso = new TransporteFalso({
-    telefono: process.env.WHATSAPP_NUMERO_FALSO ?? '51987654321',
-  });
-
-  const ingesta = new IngestaWhatsapp(falso, repositorioDrizzle);
+  const ingesta = new IngestaWhatsapp(transporte, repositorioDrizzle);
   ingesta.iniciar();
-  void falso.iniciar();
+  void transporte.iniciar();
 
-  return { transporte: falso, falso };
+  const envio = new EnvioControlado(transporte, registroEnviosDrizzle);
+
+  armado = { transporte, envio, falso };
+  return armado;
+}
+
+/** El armado vivo, para las rutas. Lanza si se pide antes de arrancar. */
+export function whatsapp(): WhatsappArmado {
+  if (!armado) throw new Error('WhatsApp no está arrancado todavía.');
+  return armado;
 }

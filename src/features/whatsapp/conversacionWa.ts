@@ -1,0 +1,60 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { api } from '../../lib/datos/cliente';
+
+/** Un mensaje del hilo, tal como lo devuelve el backend. */
+export interface MensajeHilo {
+  id: number;
+  direccion: 'entrante' | 'saliente';
+  autor: string;
+  texto: string | null;
+  occurred_at: string;
+  external_id: string;
+}
+
+/** El estado de la sesión de WhatsApp (para el banner). Espeja `EstadoSesion` del server. */
+export type EstadoSesionWa =
+  | { estado: 'sin-vincular'; qr: string | null; codigo: string | null }
+  | { estado: 'conectando' }
+  | { estado: 'conectado'; telefono: string }
+  | { estado: 'desconectado'; motivo: string }
+  | { estado: 'cerrada'; motivo: string }
+  | { estado: 'baneado'; codigo: string; expira: string };
+
+export function useSesionWa() {
+  return useQuery({
+    queryKey: ['wa', 'sesion'],
+    queryFn: () => api<EstadoSesionWa>('/api/whatsapp/sesion'),
+    refetchInterval: 10_000, // el estado cambia solo (caídas, ban): se revisa seguido
+  });
+}
+
+export function useConversacionWa(telefono: string | null) {
+  const qc = useQueryClient();
+
+  const hilo = useQuery({
+    queryKey: ['wa', 'conversacion', telefono],
+    queryFn: () => api<{ telefono: string; mensajes: MensajeHilo[] }>(`/api/whatsapp/conversacion/${telefono}`),
+    enabled: Boolean(telefono),
+    refetchInterval: telefono ? 5_000 : false, // mientras está abierta, se refresca sola
+  });
+
+  // Marcar leído al abrir (ticks azules — decisión de Estephano). Sin bloquear la vista.
+  const marcarLeido = useMutation({
+    mutationFn: (tel: string) => api(`/api/whatsapp/leido/${tel}`, { method: 'POST', body: '{}' }),
+  });
+
+  const enviar = useMutation({
+    mutationFn: (vars: { numeroPropio: string; telefono: string; texto: string; referencia: string }) =>
+      api<{ ok: true; idExterno: string }>('/api/whatsapp/enviar', {
+        method: 'POST',
+        body: JSON.stringify(vars),
+      }),
+    // Al enviar, el hilo y la cola quedan viejos: se revalidan.
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['wa', 'conversacion', telefono] });
+      void qc.invalidateQueries({ queryKey: ['conversaciones'] });
+    },
+  });
+
+  return { hilo, enviar, marcarLeido };
+}

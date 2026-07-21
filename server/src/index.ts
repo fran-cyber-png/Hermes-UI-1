@@ -23,6 +23,7 @@ import { arrancarRelojDelLazo } from "./lazo/reloj.js";
 import { webhookRouter } from "./webhook/ruta.js";
 import { arrancarWhatsapp } from "./whatsapp/wiring.js";
 import { rutaDevWhatsapp } from "./whatsapp/rutaDev.js";
+import { whatsappRouter } from "./routes/whatsapp.js";
 
 const app = express();
 const port = process.env.PORT ? Number(process.env.PORT) : 4100;
@@ -63,6 +64,7 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 // mensaje en el mismo event store que Facebook/Instagram. La ruta de dev para
 // inyectar mensajes solo existe si corre el falso.
 const { falso } = arrancarWhatsapp();
+app.use("/api/whatsapp", whatsappRouter); // conversación nativa: hilo + enviar
 if (falso) app.use("/api/whatsapp/_dev", rutaDevWhatsapp(falso));
 
 app.listen(port, () => {

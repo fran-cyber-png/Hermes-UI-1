@@ -202,3 +202,39 @@ export const interactions = pgTable(
     index("interactions_ventana_idx").on(t.tipo, t.occurredAt),
   ],
 );
+
+/**
+ * AUDITORÍA DE ENVÍOS DE WHATSAPP.
+ *
+ * Cada intento de envío queda acá: quién (vendedora), desde qué número, a quién,
+ * qué, y cómo terminó (pendiente → enviado | fallido). Es lo que hace que una
+ * comisión sea atribuible y que un envío bloqueado (corta-corriente, ban) deje
+ * rastro. SEPARADO de la interacción saliente: la interacción es "qué se dijo en
+ * el hilo"; esto es "quién apretó enviar y qué pasó".
+ */
+export const enviosWa = pgTable(
+  "envios_wa",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    /** El username de Cerberus de la vendedora que mandó. Sin esto no hay envío. */
+    vendedoraId: text("vendedora_id").notNull(),
+    /** El número propio de Goberna desde el que salió. */
+    numeroPropio: text("numero_propio").notNull(),
+    telefono: text("telefono").notNull(),
+    texto: text("texto").notNull(),
+    /** La conversación de referencia: ata el envío a un contexto. */
+    referencia: text("referencia").notNull(),
+    /** pendiente → enviado | fallido. */
+    estado: text("estado").notNull().default("pendiente"),
+    /** El id que devolvió el transporte cuando el envío salió (null si falló). */
+    idExterno: text("id_externo"),
+    /** El motivo cuando falló o quedó bloqueado. */
+    motivo: text("motivo"),
+    creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().default(sql`now()`),
+    resueltoAt: timestamp("resuelto_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("envios_wa_vendedora_idx").on(t.vendedoraId),
+    index("envios_wa_telefono_idx").on(t.telefono),
+  ],
+);
