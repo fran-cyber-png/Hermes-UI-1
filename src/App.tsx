@@ -87,7 +87,7 @@ export default function App() {
 
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
-      <header className="shrink-0 border-b border-border bg-card/95 backdrop-blur" style={ARRASTRABLE}>
+      <header data-tauri-drag-region className="shrink-0 border-b border-border bg-card/95 backdrop-blur" style={ARRASTRABLE}>
         <div className="flex items-center justify-between gap-4 px-5 pb-3 pt-8">
           <div className="flex items-center gap-5" style={NO_ARRASTRABLE}>
             <Marca />

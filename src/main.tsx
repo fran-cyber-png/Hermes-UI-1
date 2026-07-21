@@ -4,6 +4,10 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import App from './App.tsx'
 import { queryClient } from './lib/datos/cliente'
+import { conectarEnlacesExternos } from './lib/enlacesExternos'
+
+// En la cáscara Tauri, los target=_blank van al navegador del sistema.
+conectarEnlacesExternos()
 
 /**
  * El caché del estado del SERVIDOR envuelve toda la app.

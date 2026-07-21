@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "remote-hermes",
+  "description": "La UI viva servida desde el server (OTA) puede abrir links en el navegador del sistema — y nada más.",
+  "remote": {
+    "urls": ["https://hermes-api.goberna.us"]
+  },
+  "windows": ["main"],
+  "permissions": ["opener:allow-open-url"]
+}

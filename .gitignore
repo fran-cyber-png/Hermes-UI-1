@@ -50,3 +50,5 @@ server/.wa-sessions/
 server/.wa-media/
 .wa-media/
 release/
+src-tauri/target/
+src-tauri/gen/
