@@ -1,7 +1,7 @@
 {
   "name": "hermes",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -9,8 +9,33 @@
     "dev:app": "concurrently -k -n vite,electron -c cyan,magenta \"vite\" \"wait-on tcp:5173 && electron .\"",
     "electron": "electron .",
     "build": "tsc -b && vite build",
+    "empaquetar:mac": "electron-builder --mac dmg",
+    "empaquetar:win": "electron-builder --win nsis",
     "lint": "oxlint",
     "preview": "vite preview"
+  },
+  "build": {
+    "appId": "us.goberna.hermes",
+    "productName": "Hermes",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "electron/**",
+      "package.json"
+    ],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.business"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true,
+      "artifactName": "Hermes-Setup-${version}.${ext}"
+    }
   },
   "dependencies": {
     "@fontsource/montserrat": "^5.2.8",
@@ -35,6 +60,7 @@
     "babel-plugin-react-compiler": "^1.0.0",
     "concurrently": "^9.1.2",
     "electron": "^34.0.0",
+    "electron-builder": "^26.15.3",
     "oxlint": "^1.71.0",
     "postcss": "^8.5.16",
     "tailwindcss": "^4.3.2",

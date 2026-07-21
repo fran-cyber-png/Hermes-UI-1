@@ -2,7 +2,15 @@
 
 > **Objetivo:** que el server de Hermes corra en **VPS1** (`deploy@161.132.39.165`), sobreviva reinicios,
 > sea alcanzable por las apps de las vendedoras, y que un operador **vincule el número de ventas** ahí.
-> **Estado:** runbook — todavía no ejecutado. Se puede correr paso a paso.
+> **Estado: EJECUTADO 2026-07-21.** Desvíos reales respecto del plan original:
+> `PORT=4110` (el 4100 lo usa meta_escuela_backend) · Postgres en `127.0.0.1:5438` como `hermes_db`
+> (5434-5437 estaban tomados; override en `docker-compose.override.yml` del VPS, con password propia
+> y `CREATE EXTENSION vector`) · clone vía **deploy key dedicada** (`~/.ssh/id_ed25519_hermes_deploy`
+> + alias `github.com-hermes`, agregada al repo como read-only) · vinculación por **QR** (el pair-code
+> daba 400) · cert por **dns-cloudflare** con el `/etc/letsencrypt/cloudflare.ini` que ya tenía el VPS
+> (el registro A `hermes-api` también se creó con esas credenciales) · nginx con bloque SSE
+> (`proxy_buffering off`, timeout 24 h) y `client_max_body_size 64m` para los adjuntos.
+> Actualizar código: `cd /srv/hermes && git pull && sudo systemctl restart hermes`.
 
 ## Lo que ya hay en VPS1 (verificado 2026-07-21)
 
@@ -137,11 +145,19 @@ sudo certbot --nginx -d hermes-api.goberna.us      # HTTPS
 
 En Cloudflare: registro `hermes-api` → IP de VPS1. Confirmá `curl https://hermes-api.goberna.us/health`.
 
-## 8. La app de las vendedoras
+## 8. La app de las vendedoras — HECHO
 
-El Electron de cada vendedora apunta a la API pública con `VITE_API_URL=https://hermes-api.goberna.us`
-al buildear. Empaquetado y distribución del `.dmg`/`.exe`: **pendiente** (electron-builder). Cada
-vendedora entra con **su usuario de Cerberus** (login), no vincula nada — solo ve y responde.
+Se empaqueta con electron-builder (config en `package.json`, salida gitignoreada en `release/`):
+
+```bash
+env VITE_API_URL=https://hermes-api.goberna.us npm run build   # el build queda apuntando a prod
+npm run empaquetar:mac    # → release/Hermes-<v>-arm64.dmg (firmado con la identidad de desarrollo)
+npm run empaquetar:win    # → release/Hermes-Setup-<v>.exe (NSIS un-clic)
+```
+
+Ese archivo es lo que se reparte: doble clic, login con **su usuario de Cerberus**, y la vendedora
+está en su mesa. No vincula nada, no clona nada. (En Macs ajenas, al no estar notarizado, la primera
+vez es clic derecho → Abrir.)
 
 ## Verificación final (regla dura #2)
 

@@ -60,9 +60,13 @@ atribuye a una vendedora.
 
 ## Deploy
 
-**VPS1** (`deploy@161.132.39.165`), patrón `/srv/hermes`. **No hay CI/CD todavía.** Runbook completo
-(instalar, Postgres, systemd, exponer, vincular el número): **`docs/deploy-vps1.md`**.
-Transporte en prod: `WHATSAPP_TRANSPORTE=whatsmeow` + `WHATSAPP_NUMERO=<número vinculado>`.
+**VPS1** (`deploy@161.132.39.165`), en `/srv/hermes` — **EJECUTADO 2026-07-21**: servicio systemd
+`hermes` (PORT=4110), Postgres propio `hermes_db` (127.0.0.1:5438), API pública
+**`https://hermes-api.goberna.us`** (nginx + certbot dns-cloudflare; el 4110 no se expone), número
+51986394450 vinculado ALLÁ. Actualizar: `ssh … 'cd /srv/hermes && git pull && sudo systemctl
+restart hermes'`. **No hay CI/CD todavía.** Runbook: **`docs/deploy-vps1.md`**.
+**La app de las vendedoras se EMPAQUETA**, no se clona: `env VITE_API_URL=https://hermes-api.goberna.us
+npm run build && npm run empaquetar:mac` (o `:win`) → `release/Hermes-*.dmg|.exe`.
 
 ## Secretos y config (env)
 

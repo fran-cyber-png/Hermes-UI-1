@@ -27,14 +27,15 @@ Suite: **262 tests verde**. Imágenes en `docs/img-*.png`.
 
 ## PENDIENTES (en orden para la próxima sesión)
 
-### 1. Deploy a VPS1 — LISTO PARA HACER (necesita al operador)
-Runbook completo: **`deploy-vps1.md`**. VPS1 tiene Node v22, Docker 26, patrón `/srv`.
-Lo que requiere la mano del operador (por eso no se hizo a ciegas):
-- Clonar el repo **privado** en VPS1 (auth de GitHub) + cargar los **secretos** en `server/.env`.
-- **RE-VINCULAR whatsmeow en VPS1**: la sesión local (`.wa-sessions/`) NO se transfiere;
-  hay que correr `npm run wa:vincular` en VPS1 y escanear el QR con el teléfono de ventas.
-- DNS en Cloudflare (`hermes-api.goberna.us`) + certbot HTTPS.
-- Empaquetar el Electron para las vendedoras (`VITE_API_URL` apuntando al VPS1).
+### 1. Deploy a VPS1 — ✅ HECHO (2026-07-21)
+Todo ejecutado: repo clonado con deploy key propia (`github.com-hermes`), Postgres `hermes_db`
+(127.0.0.1:5438 + extensión vector), `server/.env` con secretos nuevos, systemd `hermes`
+(PORT=4110) activo, **número 51986394450 RE-VINCULADO en el VPS** (QR vía consola), API pública
+**`https://hermes-api.goberna.us`** (nginx con SSE + client_max_body_size 64m; cert dns-cloudflare
+con el `cloudflare.ini` que ya tenía el VPS; el 4110 queda cerrado por ufw). **Electron
+empaquetado**: `release/Hermes-0.1.0-arm64.dmg` (firmado con la identidad de desarrollo de
+Estephano) + instalador Windows. Queda: cerrar la sesión vieja de la laptop desde el teléfono
+(hay dos dispositivos vinculados) y repartir el instalador a las vendedoras.
 
 ### 2. Verificar la atribución con un anuncio REAL (pendiente honesto)
 **La detección de "vino de un anuncio" está probada solo con un mensaje SIMULADO**
