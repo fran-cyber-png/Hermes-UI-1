@@ -111,6 +111,9 @@ describe('EnvioControlado', () => {
       async enviarTexto(): Promise<ResultadoEnvio> {
         throw new Error('el número se baneó en el envío');
       },
+      async enviarMedia(): Promise<ResultadoEnvio> {
+        throw new Error('el número se baneó en el envío');
+      },
       async marcarLeido() {},
       async detener() {},
     };
@@ -122,6 +125,57 @@ describe('EnvioControlado', () => {
     assert.equal(r.ok, false);
     // El intento quedó registrado como fallido — nunca como enviado.
     assert.equal(registro.enviados.length, 0, 'no hay saliente fantasma');
+    assert.equal(registro.fallidos.length, 1);
+  });
+});
+
+/**
+ * Los adjuntos salen por la MISMA puerta y con las MISMAS garantías. Estos tests
+ * fijan que enviarMedia no es un bypass: audita, exige vendedora y respeta el ban.
+ */
+describe('EnvioControlado — media', () => {
+  const media = { ruta: '/tmp/flyer.pdf', clase: 'documento' as const, mime: 'application/pdf', nombre: 'flyer.pdf', texto: null };
+
+  test('T-M1 — un adjunto = un envío, auditado con descripción del archivo', async () => {
+    const transporte = new TransporteFalso({ telefono: '51987654321' });
+    const registro = new RegistroFalso();
+    const envio = new EnvioControlado(transporte, registro);
+
+    const r = await envio.enviarMedia({ ...orden(), media });
+
+    assert.equal(r.ok, true);
+    assert.equal(transporte.enviadosMedia.length, 1);
+    assert.equal(transporte.enviadosMedia[0].media.nombre, 'flyer.pdf');
+    assert.equal(registro.intentos.length, 1);
+    assert.match(registro.intentos[0].texto, /flyer\.pdf/);
+    assert.equal(registro.enviados.length, 1);
+  });
+
+  test('T-M2 — sin archivo o sin vendedora, el transporte no recibe nada', async () => {
+    const transporte = new TransporteFalso({ telefono: '51987654321' });
+    const registro = new RegistroFalso();
+    const envio = new EnvioControlado(transporte, registro);
+
+    const sinArchivo = await envio.enviarMedia({ ...orden(), media: { ...media, ruta: '' } });
+    const sinVendedora = await envio.enviarMedia({ ...orden({ vendedoraId: '' }), media });
+
+    assert.equal(sinArchivo.ok, false);
+    assert.equal(sinVendedora.ok, false);
+    assert.equal(transporte.enviadosMedia.length, 0);
+    assert.equal(registro.intentos.length, 0);
+  });
+
+  test('T-M3 — sesión baneada: rechazo visible, cero llamadas al transporte', async () => {
+    const transporte = new TransporteFalso({ telefono: '51987654321' });
+    const registro = new RegistroFalso();
+    const envio = new EnvioControlado(transporte, registro);
+    transporte.simularBan('191', 'mañana');
+
+    const r = await envio.enviarMedia({ ...orden(), media });
+
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.match(r.motivo, /suspendido/);
+    assert.equal(transporte.enviadosMedia.length, 0);
     assert.equal(registro.fallidos.length, 1);
   });
 });

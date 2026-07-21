@@ -1,4 +1,4 @@
-import type { TransporteWhatsapp } from './transporte.js';
+import type { MediaSaliente, ResultadoEnvio, TransporteWhatsapp } from './transporte.js';
 
 /**
  * LA ÚNICA PUERTA DE SALIDA HACIA WHATSAPP.
@@ -29,6 +29,11 @@ export interface OrdenEnvio {
   texto: string;
   /** La conversación de referencia: ata el envío a un contexto, no es un disparo suelto. */
   referencia: string;
+}
+
+/** Una orden de adjunto: mismas exigencias que el texto + el archivo a mandar. */
+export interface OrdenEnvioMedia extends Omit<OrdenEnvio, 'texto'> {
+  media: MediaSaliente;
 }
 
 export type ResultadoControlado =
@@ -62,9 +67,29 @@ export class EnvioControlado {
     if (!orden.vendedoraId || !orden.numeroPropio || !orden.telefono || !orden.texto.trim() || !orden.referencia) {
       return { ok: false, motivo: 'faltan datos obligatorios del envío (vendedora, número, teléfono, texto o referencia)' };
     }
+    return this.conGuardas(orden, () => this.transporte.enviarTexto(orden.telefono, orden.texto));
+  }
 
+  /**
+   * Un adjunto (imagen, video, audio o documento) por la MISMA puerta: idénticas
+   * guardas, idéntica auditoría. En el registro, el "texto" del intento es el
+   * caption o una descripción del archivo — el quién/cuándo/qué no se pierde.
+   */
+  async enviarMedia(orden: OrdenEnvioMedia): Promise<ResultadoControlado> {
+    if (!orden.vendedoraId || !orden.numeroPropio || !orden.telefono || !orden.referencia || !orden.media?.ruta) {
+      return { ok: false, motivo: 'faltan datos obligatorios del envío (vendedora, número, teléfono, archivo o referencia)' };
+    }
+    const descripcion = orden.media.texto?.trim() || `[${orden.media.clase}] ${orden.media.nombre ?? orden.media.mime}`;
+    return this.conGuardas(
+      { ...orden, texto: descripcion },
+      () => this.transporte.enviarMedia(orden.telefono, orden.media),
+    );
+  }
+
+  /** El corazón compartido: auditar, frenar (corta-corriente, sesión) y ejecutar. */
+  private async conGuardas(ordenAuditada: OrdenEnvio, ejecutar: () => Promise<ResultadoEnvio>): Promise<ResultadoControlado> {
     // A partir de acá es un intento REAL: se audita, pase lo que pase.
-    const auditId = await this.registro.registrarIntento(orden);
+    const auditId = await this.registro.registrarIntento(ordenAuditada);
 
     // El corta-corriente gana sobre todo. El intento queda registrado como
     // bloqueado, pero el transporte no se toca.
@@ -90,7 +115,7 @@ export class EnvioControlado {
     // chequeo de arriba y esta línea (TOCTOU)— queda como intento fallido auditado,
     // nunca como un saliente fantasma.
     try {
-      const r = await this.transporte.enviarTexto(orden.telefono, orden.texto);
+      const r = await ejecutar();
       await this.registro.marcarEnviado(auditId, r.idExterno, r.ocurridoEn);
       return { ok: true, idExterno: r.idExterno, ocurridoEn: r.ocurridoEn };
     } catch (err) {

@@ -47,3 +47,5 @@ answers-cache.json*
 # Sesiones de WhatsApp (whatsmeow) — son credenciales de la cuenta, NUNCA se commitean
 server/.wa-sessions/
 .wa-sessions/
+server/.wa-media/
+.wa-media/

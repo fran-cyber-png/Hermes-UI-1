@@ -90,3 +90,27 @@ describe('proyectarMensaje', () => {
     assert.match(r.descarte, /propio|protocolo/i);
   });
 });
+
+test('T-M4 — un adjunto viaja al payload del evento y el caption es el texto de la interacción', () => {
+  const r = proyectarMensaje({
+    idExterno: 'IMG1',
+    numeroPropio: '51987654321',
+    telefono: '51961506674',
+    esMio: false,
+    esGrupo: false,
+    ocurridoEn: new Date('2026-07-21T12:00:00Z'),
+    nombreVisible: 'Jhoselyn',
+    texto: 'les llegó este flyer?',
+    clase: 'multimedia',
+    media: { clase: 'imagen', archivo: 'wa-IMG1.jpg', mime: 'image/jpeg', nombre: null },
+  });
+
+  assert.ok('evento' in r);
+  if ('evento' in r) {
+    const media = r.evento.payload.media as { clase: string; archivo: string };
+    assert.equal(media.clase, 'imagen');
+    assert.equal(media.archivo, 'wa-IMG1.jpg');
+    // El caption se muestra como texto del mensaje, igual que en WhatsApp.
+    assert.equal(r.interaccion.texto, 'les llegó este flyer?');
+  }
+});

@@ -1,5 +1,7 @@
+import { basename } from 'node:path';
 import type {
   EstadoSesion,
+  MediaSaliente,
   MensajeWhatsapp,
   ResultadoEnvio,
   TransporteWhatsapp,
@@ -37,6 +39,9 @@ export class TransporteFalso implements TransporteWhatsapp {
 
   /** Todo lo que se "envió", para que los tests verifiquen qué salió y en qué orden. */
   readonly enviados: { telefono: string; texto: string; idExterno: string }[] = [];
+
+  /** Los adjuntos "enviados", con la misma intención de auditoría de prueba. */
+  readonly enviadosMedia: { telefono: string; media: MediaSaliente; idExterno: string }[] = [];
 
   private contador = 0;
 
@@ -121,6 +126,37 @@ export class TransporteFalso implements TransporteWhatsapp {
       nombreVisible: null,
       texto,
       clase: 'texto',
+    });
+
+    return { idExterno, ocurridoEn };
+  }
+
+  async enviarMedia(telefono: string, media: MediaSaliente): Promise<ResultadoEnvio> {
+    if (this.sesion.estado !== 'conectado') {
+      throw new Error(`No se puede enviar: la sesión está "${this.sesion.estado}", no conectada.`);
+    }
+
+    const idExterno = this.nuevoId();
+    const ocurridoEn = this.reloj();
+    this.enviadosMedia.push({ telefono, media, idExterno });
+
+    // El eco, como en enviarTexto: el adjunto enviado aparece en el hilo.
+    this.emitirMensaje({
+      idExterno,
+      numeroPropio: this.numeroPropio,
+      telefono,
+      esMio: true,
+      esGrupo: false,
+      ocurridoEn,
+      nombreVisible: null,
+      texto: media.texto ?? null,
+      clase: 'multimedia',
+      media: {
+        clase: media.clase,
+        archivo: basename(media.ruta),
+        mime: media.mime,
+        nombre: media.nombre ?? null,
+      },
     });
 
     return { idExterno, ocurridoEn };

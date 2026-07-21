@@ -1,5 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../lib/datos/cliente';
+import { api, ErrorApi } from '../../lib/datos/cliente';
+import { API_URL } from '../../config';
+
+/** Un adjunto del hilo: el archivo ya vive en el server, esto es la referencia. */
+export interface MediaHilo {
+  clase: 'imagen' | 'video' | 'audio' | 'documento' | 'sticker';
+  archivo: string;
+  mime: string | null;
+  nombre?: string | null;
+}
 
 /** Un mensaje del hilo, tal como lo devuelve el backend. */
 export interface MensajeHilo {
@@ -9,6 +18,12 @@ export interface MensajeHilo {
   texto: string | null;
   occurred_at: string;
   external_id: string;
+  media?: MediaHilo | null;
+}
+
+/** La URL para ver/bajar un adjunto del hilo. */
+export function urlMedia(archivo: string): string {
+  return `${API_URL}/api/whatsapp/media/${encodeURIComponent(archivo)}`;
 }
 
 /** El estado de la sesión de WhatsApp (para el banner). Espeja `EstadoSesion` del server. */
@@ -63,5 +78,43 @@ export function useConversacionWa(telefono: string | null) {
     },
   });
 
-  return { hilo, enviar, marcarLeido };
+  // Adjuntos: el archivo viaja crudo (no JSON), por eso no pasa por `api()` —
+  // pero lleva el mismo Bearer y los mismos estados que cualquier envío.
+  const enviarMedia = useMutation({
+    mutationFn: async (vars: {
+      numeroPropio: string;
+      telefono: string;
+      referencia: string;
+      archivo: File;
+      caption: string;
+    }) => {
+      const token = localStorage.getItem('hermes.token');
+      const q = new URLSearchParams({
+        telefono: vars.telefono,
+        numeroPropio: vars.numeroPropio,
+        referencia: vars.referencia,
+        nombre: vars.archivo.name,
+        ...(vars.caption.trim() ? { caption: vars.caption.trim() } : {}),
+      });
+      const res = await fetch(`${API_URL}/api/whatsapp/enviar-media?${q}`, {
+        method: 'POST',
+        headers: {
+          'content-type': vars.archivo.type || 'application/octet-stream',
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: vars.archivo,
+      });
+      if (!res.ok) {
+        const cuerpo = await res.json().catch(() => ({}));
+        throw new ErrorApi(cuerpo.message ?? `Error ${res.status}`, res.status);
+      }
+      return res.json() as Promise<{ ok: true; idExterno: string }>;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['wa', 'conversacion', telefono] });
+      void qc.invalidateQueries({ queryKey: ['conversaciones'] });
+    },
+  });
+
+  return { hilo, enviar, enviarMedia, marcarLeido };
 }

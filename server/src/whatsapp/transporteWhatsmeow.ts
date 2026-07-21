@@ -1,7 +1,11 @@
 import { mkdirSync } from 'node:fs';
-import { createClient, type WhatsmeowClient } from '@whatsmeow-node/whatsmeow-node';
+import { copyFile, rm } from 'node:fs/promises';
+import { extname, join } from 'node:path';
+import { createClient, type WhatsmeowClient, type MediaType } from '@whatsmeow-node/whatsmeow-node';
 import type {
   EstadoSesion,
+  MediaSaliente,
+  MediaWhatsapp,
   MensajeWhatsapp,
   ResultadoEnvio,
   TransporteWhatsapp,
@@ -9,6 +13,31 @@ import type {
 import { normalizarTelefono, telefonoDeContacto, jidDeTelefono, esJidDeGrupo } from './identidadWa.js';
 import { detectarOrigen } from './origen.js';
 import { MapaLids } from './lidMap.js';
+import { RUTA_MEDIA, nombreSeguro } from './mediaDir.js';
+
+/** Las llaves del proto que traen un adjunto, y su clase canónica. */
+const CLAVES_MEDIA = {
+  imageMessage: 'imagen',
+  videoMessage: 'video',
+  audioMessage: 'audio',
+  documentMessage: 'documento',
+  stickerMessage: 'sticker',
+} as const;
+
+/** Extensión razonable a partir del mime, para que el archivo local se abra bien. */
+function extensionDeMime(mime: string | null, fallback: string): string {
+  const mapa: Record<string, string> = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp',
+    'video/mp4': '.mp4',
+    'audio/ogg; codecs=opus': '.ogg',
+    'audio/ogg': '.ogg',
+    'audio/mpeg': '.mp3',
+    'application/pdf': '.pdf',
+  };
+  return mapa[mime ?? ''] ?? fallback;
+}
 
 /**
  * EL TRANSPORTE REAL sobre whatsmeow — la implementación de `TransporteWhatsapp`
@@ -66,17 +95,53 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
       // entrega el entrante y con qué forma (chat/sender/tipos del proto).
       // eslint-disable-next-line no-console
       console.log(`[wa raw] chat=${info.chat} sender=${info.sender} mio=${info.isFromMe} grupo=${info.isGroup} tipos=${Object.keys(message ?? {}).join(',')}`);
-      const m = this.aMensaje(info, message);
-      if (m) for (const cb of this.susMensaje) cb(m);
-      else console.log('[wa raw] aMensaje devolvió null (no se derivó teléfono/contacto)');
+      void this.aMensaje(info, message).then((m) => {
+        if (m) for (const cb of this.susMensaje) cb(m);
+        else console.log('[wa raw] aMensaje devolvió null (no se derivó teléfono/contacto)');
+      });
     });
   }
 
+  /**
+   * Si el mensaje trae un adjunto, lo baja y lo deja en `.wa-media/` con nombre
+   * propio. Devuelve el adjunto canónico, o null si no hay o no se pudo bajar —
+   * en ese caso el mensaje sigue su camino como multimedia sin archivo (la UI
+   * muestra el aviso honesto, nunca un enlace roto).
+   */
+  private async bajarMedia(
+    idExterno: string,
+    message: Record<string, unknown>,
+  ): Promise<{ media: MediaWhatsapp | null; caption: string | null; esMedia: boolean }> {
+    const entrada = Object.entries(CLAVES_MEDIA).find(([k]) => message[k] != null);
+    if (!entrada) return { media: null, caption: null, esMedia: false };
+
+    const [clave, clase] = entrada as [keyof typeof CLAVES_MEDIA, MediaWhatsapp['clase']];
+    const proto = message[clave] as { caption?: string; mimetype?: string; fileName?: string };
+    const caption = proto.caption ?? null;
+
+    try {
+      const bajado = await this.client.downloadAny(message);
+      const ext = extname(bajado) || extensionDeMime(proto.mimetype ?? null, '.bin');
+      const archivo = nombreSeguro(`wa-${idExterno}${ext}`);
+      await copyFile(bajado, join(RUTA_MEDIA, archivo));
+      await rm(bajado, { force: true }).catch(() => {});
+      return {
+        media: { clase, archivo, mime: proto.mimetype ?? null, nombre: proto.fileName ?? null },
+        caption,
+        esMedia: true,
+      };
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.log(`[wa media] no se pudo bajar ${clave} de ${idExterno}: ${(err as Error).message}`);
+      return { media: null, caption, esMedia: true };
+    }
+  }
+
   /** whatsmeow → el mensaje canónico de Hermes. Acá muere el vocabulario JID. */
-  private aMensaje(
+  private async aMensaje(
     info: { id: string; chat: string; sender: string; isFromMe: boolean; isGroup: boolean; timestamp: number; pushName: string },
     message: Record<string, unknown>,
-  ): MensajeWhatsapp | null {
+  ): Promise<MensajeWhatsapp | null> {
     // Los grupos se descartan en la proyección, pero ni siquiera derivamos teléfono
     // de un JID de grupo: no es un contacto.
     if (info.isGroup || esJidDeGrupo(info.chat)) {
@@ -103,9 +168,14 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
     }
     if (!telefono) return null; // Ni teléfono ni lid mapeado: se descarta, no se inventa.
 
+    // El adjunto (si hay) se baja ANTES de emitir: el mensaje canónico sale
+    // completo, con su archivo local, o con el hueco declarado si falló.
+    const { media, caption, esMedia } = await this.bajarMedia(info.id, message);
+
     const texto =
       (message.conversation as string | undefined) ??
       ((message.extendedTextMessage as { text?: string } | undefined)?.text) ??
+      caption ??
       null;
 
     return {
@@ -117,10 +187,46 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
       ocurridoEn: new Date(info.timestamp * 1000),
       nombreVisible: info.pushName || null,
       texto,
-      clase: texto != null ? 'texto' : 'multimedia',
+      clase: esMedia ? 'multimedia' : texto != null ? 'texto' : 'multimedia',
+      media,
       // Captura del embudo: si vino de un anuncio (externalAdReply) o una landing.
       origen: info.isFromMe ? null : detectarOrigen(message, texto),
     };
+  }
+
+  async enviarMedia(telefono: string, media: MediaSaliente): Promise<ResultadoEnvio> {
+    if (this.sesion.estado !== 'conectado') {
+      throw new Error(`No se puede enviar: la sesión está "${this.sesion.estado}".`);
+    }
+
+    // 1. Subir (whatsmeow cifra y devuelve las claves del proto).
+    const tipo: MediaType = ({ imagen: 'image', video: 'video', audio: 'audio', documento: 'document' } as const)[
+      media.clase
+    ];
+    const subida = await this.client.uploadMedia(media.ruta, tipo);
+
+    // 2. Armar el proto por clase (la forma exacta viene del example oficial del wrapper).
+    const compartidos = {
+      URL: subida.URL,
+      directPath: subida.directPath,
+      mediaKey: subida.mediaKey,
+      fileEncSHA256: subida.fileEncSHA256,
+      fileSHA256: subida.fileSHA256,
+      fileLength: String(subida.fileLength),
+      mimetype: media.mime,
+    };
+    const caption = media.texto ? { caption: media.texto } : {};
+    const cuerpo: Record<string, unknown> =
+      media.clase === 'imagen'
+        ? { imageMessage: { ...compartidos, ...caption } }
+        : media.clase === 'video'
+          ? { videoMessage: { ...compartidos, ...caption } }
+          : media.clase === 'audio'
+            ? { audioMessage: { ...compartidos } }
+            : { documentMessage: { ...compartidos, fileName: media.nombre ?? 'documento', ...caption } };
+
+    const r = await this.client.sendRawMessage(jidDeTelefono(telefono), cuerpo);
+    return { idExterno: r.id, ocurridoEn: new Date((r.timestamp || Date.now() / 1000) * 1000) };
   }
 
   async iniciar(): Promise<void> {

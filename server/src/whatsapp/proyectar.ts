@@ -80,6 +80,9 @@ export function proyectarMensaje(m: MensajeWhatsapp): ResultadoProyeccion {
       nombreVisible: m.nombreVisible,
       texto: m.texto,
       clase: m.clase,
+      // El adjunto (imagen/video/documento) ya bajado a disco por el transporte:
+      // el hilo lo sirve desde acá con un JOIN, sin columna nueva.
+      media: m.media ?? null,
       // El origen del lead (anuncio/landing) queda en el crudo: es la captura del
       // embudo, y desde acá se puede reproyectar o enriquecer con Meta.
       origen: m.origen ?? null,
@@ -97,9 +100,9 @@ export function proyectarMensaje(m: MensajeWhatsapp): ResultadoProyeccion {
     personaId: m.telefono,
     // En un saliente, quien habla somos nosotros: el nombre del contacto no aplica.
     personaNombre: m.esMio ? null : m.nombreVisible,
-    // Multimedia todavía no se muestra: el texto va null, pero la clase quedó en el
-    // payload del evento para reproyectar el día que sepamos mostrarlo.
-    texto: m.clase === 'texto' ? m.texto : null,
+    // El texto viaja siempre: en un mensaje de texto es el mensaje; en un adjunto
+    // es el caption (lo que WhatsApp muestra debajo de la foto). Null si no hay.
+    texto: m.texto,
     occurredAt: m.ocurridoEn,
   };
 

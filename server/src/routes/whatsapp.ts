@@ -1,4 +1,7 @@
-import { Router } from 'express';
+import { existsSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import express, { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { requiereVendedora } from '../auth/sesion.js';
@@ -6,6 +9,8 @@ import { whatsapp } from '../whatsapp/wiring.js';
 import { proyectarMensaje } from '../whatsapp/proyectar.js';
 import { repositorioDrizzle } from '../whatsapp/repositorioDrizzle.js';
 import { resolverAnuncio } from '../meta/anuncio.js';
+import { RUTA_MEDIA, nombreSeguro } from '../whatsapp/mediaDir.js';
+import type { MediaSaliente } from '../whatsapp/transporte.js';
 
 /**
  * LA CONVERSACIÓN NATIVA DE WHATSAPP dentro de Hermes: ver el hilo y responder,
@@ -22,11 +27,15 @@ whatsappRouter.get('/sesion', (_req, res) => {
 /** El hilo completo de una conversación, en orden cronológico + de dónde vino el lead. */
 whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
   const telefono = req.params.telefono.replace(/\D/g, '');
+  // El adjunto vive en el crudo del evento (payload->media): el JOIN lo trae sin
+  // columna nueva — el event store haciendo su trabajo.
   const mensajes = await db.execute(sql`
-    SELECT id, direccion, autor, texto, occurred_at, external_id
-    FROM interactions
-    WHERE canal = 'whatsapp' AND persona_id = ${telefono}
-    ORDER BY occurred_at ASC
+    SELECT i.id, i.direccion, i.autor, i.texto, i.occurred_at, i.external_id,
+           e.payload->'media' AS media
+    FROM interactions i
+    LEFT JOIN events e ON e.id = i.event_id
+    WHERE i.canal = 'whatsapp' AND i.persona_id = ${telefono}
+    ORDER BY i.occurred_at ASC
     LIMIT 200
   `);
 
@@ -107,3 +116,91 @@ whatsappRouter.post('/enviar', requiereVendedora, async (req, res) => {
 
   res.json({ ok: true, idExterno: r.idExterno });
 });
+
+/**
+ * Servir un adjunto ya descargado. El nombre se valida contra una lista blanca
+ * de caracteres: nada de `..`, nada de rutas — un nombre de archivo o un 404.
+ */
+whatsappRouter.get('/media/:archivo', (req, res) => {
+  const archivo = req.params.archivo;
+  if (!/^[A-Za-z0-9._-]+$/.test(archivo) || archivo.includes('..')) {
+    res.status(400).json({ ok: false, message: 'nombre de archivo inválido' });
+    return;
+  }
+  const ruta = join(RUTA_MEDIA, archivo);
+  if (!existsSync(ruta)) {
+    res.status(404).json({ ok: false, message: 'ese archivo no está (¿media vieja de antes de los adjuntos?)' });
+    return;
+  }
+  res.sendFile(ruta);
+});
+
+/**
+ * Enviar un adjunto (imagen, video, audio o documento). El cuerpo es el archivo
+ * CRUDO (Content-Type = su mime); los metadatos van en la query. Pasa por la
+ * MISMA puerta que el texto: EnvioControlado, con vendedora y auditoría.
+ */
+whatsappRouter.post(
+  '/enviar-media',
+  requiereVendedora,
+  express.raw({ type: () => true, limit: '64mb' }),
+  async (req, res) => {
+    const { telefono, numeroPropio, referencia, caption, nombre } = req.query as Record<string, string | undefined>;
+    const mime = req.headers['content-type'] ?? 'application/octet-stream';
+    const bytes = req.body as Buffer;
+
+    if (!bytes?.length) {
+      res.status(400).json({ ok: false, message: 'el cuerpo tiene que ser el archivo crudo' });
+      return;
+    }
+
+    const clase: MediaSaliente['clase'] = mime.startsWith('image/')
+      ? 'imagen'
+      : mime.startsWith('video/')
+        ? 'video'
+        : mime.startsWith('audio/')
+          ? 'audio'
+          : 'documento';
+
+    // Se guarda primero: el archivo enviado también es parte de la conversación.
+    const archivo = nombreSeguro(`out-${Date.now()}-${nombre || 'archivo'}`);
+    await writeFile(join(RUTA_MEDIA, archivo), bytes);
+
+    const media: MediaSaliente = {
+      ruta: join(RUTA_MEDIA, archivo),
+      clase,
+      mime,
+      nombre: nombre || null,
+      texto: caption || null,
+    };
+
+    const r = await whatsapp().envio.enviarMedia({
+      vendedoraId: req.vendedoraId!,
+      numeroPropio: String(numeroPropio ?? ''),
+      telefono: String(telefono ?? ''),
+      referencia: String(referencia ?? ''),
+      media,
+    });
+
+    if (!r.ok) {
+      res.status(409).json({ ok: false, message: r.motivo });
+      return;
+    }
+
+    const proy = proyectarMensaje({
+      idExterno: r.idExterno,
+      numeroPropio: String(numeroPropio),
+      telefono: String(telefono),
+      esMio: true,
+      esGrupo: false,
+      ocurridoEn: r.ocurridoEn,
+      nombreVisible: null,
+      texto: caption || null,
+      clase: 'multimedia',
+      media: { clase, archivo, mime, nombre: nombre || null },
+    });
+    if ('evento' in proy) await repositorioDrizzle.persistir(proy.evento, proy.interaccion);
+
+    res.json({ ok: true, idExterno: r.idExterno });
+  },
+);

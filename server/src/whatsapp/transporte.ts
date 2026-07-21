@@ -21,6 +21,38 @@
  * salga gratis de un `for` sobre un método que ya estaba.
  */
 
+/**
+ * Un adjunto ENTRANTE ya bajado a disco por el transporte.
+ *
+ * Habla en vocabulario Hermes: `archivo` es un nombre de archivo LOCAL (dentro
+ * del directorio de media del server), nunca una URL ni una clave del proveedor.
+ * El transporte descarga y descifra ANTES de emitir el mensaje; si no pudo,
+ * emite el mensaje sin `media` y la UI muestra el aviso honesto de siempre.
+ */
+export interface MediaWhatsapp {
+  clase: 'imagen' | 'video' | 'audio' | 'documento' | 'sticker';
+  /** Nombre de archivo local (sanitizado), p.ej. `wa-3EB0...jpg`. */
+  archivo: string;
+  mime: string | null;
+  /** Nombre visible del documento (flyer.pdf). Solo documentos. */
+  nombre?: string | null;
+}
+
+/**
+ * Un adjunto SALIENTE: el archivo ya está guardado por el server y se manda a
+ * UN teléfono. Sin listas, como todo en esta interfaz.
+ */
+export interface MediaSaliente {
+  /** Ruta absoluta del archivo en disco (el server lo guardó antes de llamar). */
+  ruta: string;
+  clase: 'imagen' | 'video' | 'audio' | 'documento';
+  mime: string;
+  /** Nombre visible para documentos (flyer.pdf). */
+  nombre?: string | null;
+  /** Texto que acompaña al adjunto (caption). */
+  texto?: string | null;
+}
+
 /** Un mensaje tal como lo entiende Hermes, sin vocabulario de ningún proveedor. */
 export interface MensajeWhatsapp {
   /** El id que le da el proveedor. Clave de idempotencia. */
@@ -48,6 +80,11 @@ export interface MensajeWhatsapp {
   texto: string | null;
   /** El tipo crudo, para no perder información al normalizar. */
   clase: 'texto' | 'multimedia' | 'otro';
+  /**
+   * El adjunto, ya descargado a disco por el transporte. Null si el mensaje no
+   * trae media o si la descarga falló (en ese caso la UI lo dice, no lo inventa).
+   */
+  media?: MediaWhatsapp | null;
   /**
    * De dónde vino el lead, si el mensaje lo trae (click-to-WhatsApp o landing).
    * Solo el PRIMER mensaje de una conversación suele traerlo; el resto es null.
@@ -98,6 +135,12 @@ export interface TransporteWhatsapp {
    * esta interfaz que mande a una lista.
    */
   enviarTexto(telefono: string, texto: string): Promise<ResultadoEnvio>;
+
+  /**
+   * UN adjunto (imagen, video, audio o documento) a UN teléfono. Misma forma
+   * anti-masivo que `enviarTexto`: un archivo, un destinatario, una orden.
+   */
+  enviarMedia(telefono: string, media: MediaSaliente): Promise<ResultadoEnvio>;
 
   marcarLeido(telefono: string, idsExternos: string[]): Promise<void>;
 
