@@ -1,5 +1,6 @@
 import { db } from '../db/client.js';
 import { events, interactions } from '../db/schema.js';
+import { emitirRT } from '../realtime/bus.js';
 import type { RepositorioInteracciones } from './ingesta.js';
 import type { EventoProyectado, InteraccionProyectada } from './proyectar.js';
 
@@ -47,6 +48,11 @@ export const repositorioDrizzle: RepositorioInteracciones = {
         occurredAt: interaccion.occurredAt,
       })
       .onConflictDoNothing({ target: interactions.externalId });
+
+    // Push de tiempo real: CUALQUIER mensaje nuevo (entrante, saliente, simulado)
+    // pasa por acá, así que este es el único punto donde avisar "algo cambió".
+    // La cola y la conversación de esta persona se invalidan al instante en el front.
+    emitirRT({ tipo: 'mensaje', canal: interaccion.canal, telefono: interaccion.personaId });
 
     return true;
   },

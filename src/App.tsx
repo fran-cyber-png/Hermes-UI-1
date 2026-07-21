@@ -13,6 +13,7 @@ import { EstadoWhatsapp } from './features/whatsapp/EstadoWhatsapp';
 import { FichaContacto } from './features/cerberus/FichaContacto';
 import { Login } from './features/auth/Login';
 import { useSesion } from './features/auth/sesion';
+import { useTiempoReal } from './lib/datos/tiempoReal';
 
 /**
  * HERMES — la mesa de la vendedora.
@@ -33,6 +34,9 @@ const NO_ARRASTRABLE = { WebkitAppRegion: 'no-drag' } as CSSProperties;
 export default function App() {
   const { vendedora, cargando, entrar, salir } = useSesion();
   const [abierta, setAbierta] = useState<Conversacion | null>(null);
+
+  // El nervio en vivo: escucha el stream del server e invalida lo que cambió.
+  useTiempoReal();
 
   // Sin sesión no hay bandeja: la vendedora entra con su cuenta de Cerberus, y de
   // esa identidad cuelga cada envío y cada venta que registre.

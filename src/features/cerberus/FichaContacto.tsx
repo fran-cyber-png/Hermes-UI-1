@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, BadgeCheck, ExternalLink, ShoppingBag, UserPlus } from 'lucide-react';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { AlertTriangle, BadgeCheck, ExternalLink, Loader2, ShoppingBag, ShoppingCart, UserPlus } from 'lucide-react';
 import { api } from '../../lib/datos/cliente';
 import type { Conversacion } from '../canales/conversaciones';
 
@@ -45,6 +45,17 @@ export function FichaContacto({ conversacion }: { conversacion: Conversacion }) 
   const esTelefono = conversacion.canal === 'whatsapp';
   const telefono = conversacion.persona_id;
   const { data, isPending, isError } = useFicha(telefono, esTelefono);
+
+  // Registrar venta: captura la conversión (con el origen del lead) y abre el
+  // formulario real de Cerberus para completar la venta.
+  const registrarVenta = useMutation({
+    mutationFn: () =>
+      api<{ cerberusUrl: string }>('/api/contactos/registrar-venta', {
+        method: 'POST',
+        body: JSON.stringify({ telefono, nombre: conversacion.persona_nombre }),
+      }),
+    onSuccess: (r) => window.open(r.cerberusUrl, '_blank', 'noopener'),
+  });
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-panel">
@@ -128,6 +139,24 @@ export function FichaContacto({ conversacion }: { conversacion: Conversacion }) 
           </div>
         ) : null}
       </div>
+
+      {/* Registrar venta: para cliente o lead nuevo. Abre el form real de Cerberus. */}
+      {esTelefono && (data?.estado === 'cliente' || data?.estado === 'nuevo') && (
+        <footer className="shrink-0 border-t border-border p-3">
+          <button
+            type="button"
+            onClick={() => registrarVenta.mutate()}
+            disabled={registrarVenta.isPending}
+            className="group flex w-full items-center justify-center gap-2 rounded-xl bg-navy py-2.5 text-sm font-bold text-white shadow-[0_4px_16px_-4px_rgba(14,42,82,0.5)] transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-navy/90 active:scale-[0.98] disabled:opacity-50"
+          >
+            {registrarVenta.isPending ? <Loader2 size={15} className="animate-spin" /> : <ShoppingCart size={15} />}
+            Registrar venta
+          </button>
+          <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
+            Se abre el formulario de Cerberus. La conversión queda registrada con el origen del lead.
+          </p>
+        </footer>
+      )}
     </div>
   );
 }

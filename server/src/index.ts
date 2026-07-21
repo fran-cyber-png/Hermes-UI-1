@@ -25,6 +25,7 @@ import { webhookRouter } from "./webhook/ruta.js";
 import { arrancarWhatsapp } from "./whatsapp/wiring.js";
 import { rutaDevWhatsapp } from "./whatsapp/rutaDev.js";
 import { whatsappRouter } from "./routes/whatsapp.js";
+import { streamRouter } from "./routes/stream.js";
 import { vincularRouter } from "./routes/vincular.js";
 import { simularRouter } from "./routes/simular.js";
 
@@ -68,6 +69,7 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 // mensaje en el mismo event store que Facebook/Instagram. La ruta de dev para
 // inyectar mensajes solo existe si corre el falso.
 const { falso } = arrancarWhatsapp();
+app.use("/api/stream", streamRouter);     // tiempo real: push de cambios (SSE)
 app.use("/api/whatsapp", whatsappRouter); // conversación nativa: hilo + enviar
 app.use("/vincular", vincularRouter);     // consola de operador: enlazar un número (D13)
 if (process.env.NODE_ENV !== "production") {

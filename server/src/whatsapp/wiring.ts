@@ -4,6 +4,7 @@ import { IngestaWhatsapp } from './ingesta.js';
 import { EnvioControlado } from './envioControlado.js';
 import { repositorioDrizzle } from './repositorioDrizzle.js';
 import { registroEnviosDrizzle } from './registroEnviosDrizzle.js';
+import { emitirRT } from '../realtime/bus.js';
 import type { TransporteWhatsapp } from './transporte.js';
 
 /**
@@ -45,6 +46,15 @@ export function arrancarWhatsapp(): WhatsappArmado {
 
   const ingesta = new IngestaWhatsapp(transporte, repositorioDrizzle);
   ingesta.iniciar();
+
+  // Cada cambio de estado (conectado/desconectado/baneado) se empuja en vivo: el
+  // header y el banner de sesión se actualizan sin recargar.
+  transporte.onEstado((e) => {
+    // eslint-disable-next-line no-console
+    console.log(`[wa estado] ${e.estado}`);
+    emitirRT({ tipo: 'estado' });
+  });
+
   void transporte.iniciar();
 
   const envio = new EnvioControlado(transporte, registroEnviosDrizzle);

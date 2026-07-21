@@ -52,6 +52,11 @@ export function useConversaciones(intencion: Intencion, canal = '') {
     },
     getNextPageParam: (ultima, todas) =>
       ultima.hayMas ? todas.reduce((n, p) => n + p.conversaciones.length, 0) : undefined,
+    // El tiempo real lo maneja el SSE (invalida al instante). Esto es la red de
+    // seguridad: si el stream se cae, la cola igual se refresca al volver a la app
+    // y cada 25s. Con SSE vivo, esto casi nunca dispara.
+    refetchOnWindowFocus: true,
+    refetchInterval: 25_000,
   });
 
   return {

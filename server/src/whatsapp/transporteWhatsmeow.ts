@@ -58,8 +58,13 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
       this.cambiarEstado({ estado: 'baneado', codigo: String(code), expira: expire });
     });
     this.client.on('message', ({ info, message }) => {
+      // Log crudo: TODO evento de mensaje, antes de convertir. Deja ver si whatsmeow
+      // entrega el entrante y con qué forma (chat/sender/tipos del proto).
+      // eslint-disable-next-line no-console
+      console.log(`[wa raw] chat=${info.chat} sender=${info.sender} mio=${info.isFromMe} grupo=${info.isGroup} tipos=${Object.keys(message ?? {}).join(',')}`);
       const m = this.aMensaje(info, message);
       if (m) for (const cb of this.susMensaje) cb(m);
+      else console.log('[wa raw] aMensaje devolvió null (no se derivó teléfono/contacto)');
     });
   }
 

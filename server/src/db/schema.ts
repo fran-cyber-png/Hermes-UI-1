@@ -238,3 +238,32 @@ export const enviosWa = pgTable(
     index("envios_wa_telefono_idx").on(t.telefono),
   ],
 );
+
+/**
+ * CONVERSIÓN: un lead de WhatsApp que se volvió venta.
+ *
+ * Es la captura del embudo que hoy no existe en ningún lado: qué vendedora
+ * convirtió a quién, desde qué origen (el anuncio o la landing por donde llegó), y
+ * cuándo. La venta EN SÍ se crea en Cerberus (Hermes flaco / Cerberus gordo); acá
+ * queda el eslabón que ata el lead de WhatsApp con esa venta, para que Ivi pueda
+ * responder "cuánto convierte un lead de WhatsApp" y "qué vendedora cierra más".
+ */
+export const conversionesWa = pgTable(
+  "conversiones_wa",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    /** La vendedora que registró la venta (username de Cerberus). */
+    vendedoraId: text("vendedora_id").notNull(),
+    telefono: text("telefono").notNull(),
+    nombre: text("nombre"),
+    /** El id de cliente en Cerberus, si ya existía (match por teléfono). */
+    cerberusClienteId: bigint("cerberus_cliente_id", { mode: "number" }),
+    /** De dónde vino el lead (anuncio/landing), tal como se capturó. La atribución. */
+    origen: jsonb("origen"),
+    iniciadaAt: timestamp("iniciada_at", { withTimezone: true }).notNull().default(sql`now()`),
+  },
+  (t) => [
+    index("conversiones_wa_vendedora_idx").on(t.vendedoraId),
+    index("conversiones_wa_telefono_idx").on(t.telefono),
+  ],
+);

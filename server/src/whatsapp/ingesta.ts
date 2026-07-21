@@ -54,12 +54,21 @@ export class IngestaWhatsapp {
 
   /** Proyecta y persiste UN mensaje. Público para poder testearlo sin el stream. */
   async procesar(m: MensajeWhatsapp): Promise<void> {
+    // Log de diagnóstico: TODO mensaje que entra por el transporte pasa por acá.
+    // Deja ver en vivo si un entrante real llega (y por qué se descarta, si pasa).
+    // eslint-disable-next-line no-console
+    console.log(`[wa in] de=${m.telefono} mio=${m.esMio} grupo=${m.esGrupo} clase=${m.clase} texto=${JSON.stringify((m.texto ?? '').slice(0, 40))}`);
+
     const r = proyectarMensaje(m);
     if ('descarte' in r) {
       this.contadores.descartados += 1;
+      // eslint-disable-next-line no-console
+      console.log(`[wa in] DESCARTADO: ${r.descarte}`);
       return;
     }
     const nuevo = await this.repo.persistir(r.evento, r.interaccion);
+    // El push de tiempo real lo emite el repositorio (único punto de persistencia),
+    // así cubre también los salientes y los simulados, no solo la ingesta.
     if (nuevo) this.contadores.nuevos += 1;
     else this.contadores.duplicados += 1;
   }
