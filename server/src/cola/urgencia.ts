@@ -1,24 +1,23 @@
 /**
  * QUÉ ES "URGENTE" EN LA COLA DE LA VENDEDORA.
  *
- * La regla vieja (heredada de la bandeja de comentarios) ordenaba todo por una
- * sola cosa: la ventana de 7 días de Meta. Con WhatsApp en la misma cola eso se
- * rompe, porque mezcla dos relojes que NO son lo mismo:
+ * La regla vieja ordenaba todo por la ventana de 7 días de Meta. Con WhatsApp en
+ * la misma cola eso enterraba lo que más vende: un chat donde alguien está
+ * escribiendo AHORA "quiero comprar, pasame el link" quedaba debajo de miles de
+ * comentarios "👏" con la ventana abierta.
  *
- *   · La ventana de Meta es un deadline DURO: pasados 7 días no se puede mandar
- *     el privado NUNCA MÁS. Lo que no se contesta se pierde para siempre.
- *   · La espera de WhatsApp es una cortesía BLANDA: contestar hoy o mañana es
- *     peor atención, pero no cierra ninguna puerta.
+ * Goberna vende por WhatsApp: una conversación viva es lo más urgente que hay.
+ * Por eso la urgencia tiene cuatro niveles, y el vivo va arriba de todo:
  *
- * Meterlos en un solo número entierra lo que se pierde para siempre debajo de lo
- * que se puede contestar mañana. Por eso la urgencia tiene DOS NIVELES:
- *
- *   Nivel 0 — LO QUE EXPIRA: comentarios de Meta con la ventana abierta y sin
- *             responder. Adentro, el MÁS VIEJO primero (le quedan menos horas).
- *   Nivel 1 — LO QUE ESPERA: mensajes (WhatsApp/Messenger) sin responder.
- *             Adentro, el más viejo sin responder primero.
- *   Nivel 2 — EL RESTO: lo ya respondido y las ventanas cerradas. Lo reciente
- *             primero; nada de esto corre peligro.
+ *   Nivel 0 — VIVO: mensaje sin responder con un entrante RECIENTE (< 24 h).
+ *             Alguien está hablando ahora y esperando. El que espera hace más,
+ *             primero.
+ *   Nivel 1 — EXPIRA: comentario de Meta con la ventana abierta y sin responder.
+ *             El más viejo primero (le quedan menos horas antes de cerrarse).
+ *   Nivel 2 — ESPERA: mensaje sin responder pero ya viejo (> 24 h). Sigue siendo
+ *             trabajo pendiente; el más viejo primero.
+ *   Nivel 3 — EL RESTO: lo respondido y las ventanas cerradas. Reciente primero;
+ *             nada de esto corre peligro.
  */
 
 export interface ItemUrgencia {
@@ -35,27 +34,35 @@ export interface ItemUrgencia {
   referencia: Date;
 }
 
+/** Una conversación se considera VIVA si el entrante sin responder llegó hace menos de esto. */
+export const ACTIVO_MS = 24 * 60 * 60 * 1000;
+
 /** Nivel de urgencia; menor = más arriba en la cola. */
-export type Clave = { nivel: 0 | 1 | 2; orden: number };
+export type Clave = { nivel: 0 | 1 | 2 | 3; orden: number };
 
-export function claveUrgencia(item: ItemUrgencia): Clave {
+export function claveUrgencia(item: ItemUrgencia, ahora: Date): Clave {
   const t = item.referencia.getTime();
+  const edad = ahora.getTime() - t;
 
-  // Nivel 0 — lo que expira: comentario Meta con ventana abierta, sin responder.
-  // Ordena por el más viejo primero (menos horas de ventana) → orden ascendente.
-  if (item.tipo === 'comentario' && item.ventanaAbierta && !item.respondida) {
+  // Nivel 0 — VIVO: mensaje sin responder, con un entrante reciente. El que hace
+  // más que espera, primero → orden ascendente.
+  if (item.tipo === 'mensaje' && !item.respondida && edad < ACTIVO_MS) {
     return { nivel: 0, orden: t };
   }
 
-  // Nivel 1 — lo que espera: cualquier mensaje sin responder. El que hace más que
-  // espera primero → orden ascendente por antigüedad del entrante.
-  if (item.tipo === 'mensaje' && !item.respondida) {
+  // Nivel 1 — EXPIRA: comentario Meta con ventana abierta, sin responder. El más
+  // viejo primero (menos horas de ventana) → ascendente.
+  if (item.tipo === 'comentario' && item.ventanaAbierta && !item.respondida) {
     return { nivel: 1, orden: t };
   }
 
-  // Nivel 2 — el resto: respondido, o ventana ya cerrada. Nada corre peligro, así
-  // que lo reciente arriba → orden descendente (negamos el tiempo).
-  return { nivel: 2, orden: -t };
+  // Nivel 2 — ESPERA: mensaje sin responder pero ya viejo. Todavía es trabajo.
+  if (item.tipo === 'mensaje' && !item.respondida) {
+    return { nivel: 2, orden: t };
+  }
+
+  // Nivel 3 — EL RESTO: respondido o ventana cerrada. Reciente arriba (negamos).
+  return { nivel: 3, orden: -t };
 }
 
 /** Compara dos claves: primero el nivel, después el orden interno. Menor = más arriba. */
@@ -64,7 +71,7 @@ export function compararUrgencia(a: Clave, b: Clave): number {
   return a.orden - b.orden;
 }
 
-/** Ordena una lista de items por urgencia. No muta el arreglo original. */
-export function ordenarPorUrgencia<T extends ItemUrgencia>(items: T[]): T[] {
-  return [...items].sort((x, y) => compararUrgencia(claveUrgencia(x), claveUrgencia(y)));
+/** Ordena una lista por urgencia. No muta el arreglo original. */
+export function ordenarPorUrgencia<T extends ItemUrgencia>(items: T[], ahora: Date): T[] {
+  return [...items].sort((x, y) => compararUrgencia(claveUrgencia(x, ahora), claveUrgencia(y, ahora)));
 }

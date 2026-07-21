@@ -115,14 +115,17 @@ Se reusan: `BarraFrescura, temperature.ts, ResponderPanel, HistorialPersona, Que
 | **D10** | **Registro de envío con estado** (`pendiente → enviado \| fallido`). El saliente entra a `interactions` SOLO con el `idExterno` del `ResultadoEnvio`; el fallo queda como intento auditado + "Reintentar" manual. | Evita el saliente fantasma (registrado pero nunca salió) y el envío real sin auditoría. Cubre el TOCTOU del ban entre chequeo y send. |
 | **D11** | **Banner honesto de historial vacío.** "Esta conversación se ve desde el {fecha de vinculación}; lo anterior está en el teléfono." | whatsmeow no da historial: el hilo arranca vacío el día 1. Misma filosofía que la BarraFrescura, costo casi cero. |
 | **D12** | **La distinción de política va escrita al ADR de Hermes.** La regla 2026-07-03 prohíbe stacks no oficiales *para clientes*; Hermes es la Escuela (negocio propio, números propios, riesgo de ban aceptado y visible). | Cuando un cliente pida "lo mismo", tiene que haber un papel que diga por qué no. |
+| **D13** | **Vinculación SERVER-SIDE, en un entorno aparte.** La sesión de whatsmeow vive en VPS1, no en la app de cada vendedora. El QR/pair-code se hace UNA VEZ por número en una **consola de operador** (protegida, en el server). La app de la vendedora NO vincula: solo ve el estado del número (conectado/desconectado) y el hilo. El webview per-app se retira. | Resuelve el "preconfigurado" (Estephano): la vendedora abre y el número ya está. Escala a N vendedoras sin N escaneos, y las credenciales nunca tocan la máquina de la vendedora. |
+| **D6-bis** | **WhatsApp VIVO al tope.** La urgencia tiene 4 niveles: 0 vivo (mensaje sin responder con entrante < 24h), 1 expira (ventana Meta), 2 espera (mensaje viejo sin responder), 3 resto. | Goberna vende por WhatsApp: un chat activo es lo más urgente. Con ~60k comentarios de ventana abierta, "expira primero" enterraba al que está comprando ahora. |
 
 ---
 
-## 5. Decisiones abiertas para Estephano (no bloquean el arranque)
+## 5. Decisiones de Estephano (2026-07-21) — RESUELTAS
 
-1. **Topología / dónde corre el server.** Con WhatsApp como stream vivo, la laptop cerrada = agujeros en el hilo. N vendedoras en Electron necesitan UN server compartido (sesiones + Postgres) en un VPS. **Es un gate antes de S5/whatsmeow real**, no del arranque (S1–S4 se demuestran con el falso en local). Además: verificar con el equipo si `@whatsmeow-node` entrega el catch-up de mensajes offline al reconectar.
-2. **`marcarLeido` = ticks azules que ve el cliente.** ¿Se marcan al abrir la conversación, o nunca? Coherente con "cero automatismos" sería nunca-automático. Decidir antes de S5.
-3. **`tb_contacto_canal`: dueño y migración.** ¿Vive en el Postgres de Hermes o el MySQL de Cerberus? ¿La escribe Hermes o la consolidación de Andreecito? Hasta resolverlo, **el MVP hace match solo por teléfono** y la ficha no dibuja unificación cross-canal que no existe.
+1. **Topología → VPS1.** El server (hermes-server + whatsmeow + Postgres) corre en VPS1, no en la laptop. Gate antes del whatsmeow real. Pendiente técnico: verificar el catch-up de mensajes offline de `@whatsmeow-node` al reconectar.
+2. **`marcarLeido` → SÍ**, al abrir la conversación (ticks azules). Es la única automatización, y es la que un humano espera al abrir un chat.
+3. **Identidad → match SOLO por teléfono** por ahora. `tb_contacto_canal` (unificación cross-canal) queda para después; dueño/migración pendiente, no bloquea. La ficha no dibuja unificación que no existe.
+4. **Vinculación → server-side (D13).** La sesión vive en VPS1; se vincula en la consola del operador; la app de la vendedora solo ve.
 
 ---
 

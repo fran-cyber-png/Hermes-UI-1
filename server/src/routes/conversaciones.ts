@@ -105,12 +105,14 @@ conversacionesRouter.get('/', async (req, res) => {
     GROUP BY canal, persona_id, numero_propio
   `;
 
-  // Unimos las dos mitades y ordenamos por la urgencia de dos niveles.
+  // Unimos las dos mitades y ordenamos por la urgencia de cuatro niveles
+  // (espejo de cola/urgencia.ts): vivo, expira, espera, resto.
   const nivel = sql`
     CASE
-      WHEN tipo = 'comentario' AND ventana_abierta AND NOT respondida THEN 0
-      WHEN tipo = 'mensaje' AND NOT respondida THEN 1
-      ELSE 2
+      WHEN tipo = 'mensaje' AND NOT respondida AND referencia > now() - interval '24 hours' THEN 0
+      WHEN tipo = 'comentario' AND ventana_abierta AND NOT respondida THEN 1
+      WHEN tipo = 'mensaje' AND NOT respondida THEN 2
+      ELSE 3
     END`;
 
   // Filtro de intención aplicado sobre la unión (comentarios y conversaciones ya
@@ -136,7 +138,7 @@ conversacionesRouter.get('/', async (req, res) => {
     FROM todo
     ${filtroIntencion}
     ORDER BY (${nivel}) ASC,
-             CASE WHEN (${nivel}) < 2 THEN referencia END ASC,
+             CASE WHEN (${nivel}) < 3 THEN referencia END ASC,
              referencia DESC
     LIMIT ${limit} OFFSET ${offset}
   `);
