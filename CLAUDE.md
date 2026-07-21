@@ -1,38 +1,97 @@
-# meta-escuela — reglas para Claude
+# Hermes — reglas para Claude
 
-Dashboard de pauta Meta Ads del negocio educativo (Goberna, escuela de formación política en LATAM): ROAS, embudo, bandeja de leads y cierre del lazo con Meta (CAPI). Repo ANIDADO: la raíz git es `meta-escuela/meta-escuela`.
+**Hermes es la mesa de la vendedora**: una app de escritorio (Electron) donde una vendedora de Goberna
+atiende, desde una sola pantalla, a toda la gente que levantó la mano por **Facebook, Instagram,
+Messenger y WhatsApp** — con la ficha del contacto al lado del chat, y registrando la venta contra
+Cerberus. Negocio: la **Escuela** de Goberna (formación política, LATAM).
+
+Extraído de `meta-escuela` preservando historia git (ver `docs/adr/0001`). El **plan y las decisiones**
+viven en `docs/plan-hermes-mvp.md` (léelo antes de tocar arquitectura). El concepto en `docs/concepto.md`.
 
 ## Stack
-- **Front**: React 19 + Vite 8 (React Compiler vía `@rolldown/plugin-babel`), Tailwind 4, TanStack Query/Table, Recharts, react-router 7. Lint: oxlint.
-- **Server** (`server/`): Express 4 + Drizzle ORM + Postgres 17 con **pgvector** (imagen `pgvector/pgvector:pg17`, Docker local, puerto **5434** — el 5433 lo usa el LMS). Zod 4.
-- **`goberna-kos/`**: CQ Engine del Goberna Knowledge OS + el **RAG de Ivi** (`goberna-kos/rag/`, ruta semántica sobre `rag.documentos`/pgvector — ver `docs/29`). Sub-proyecto Python/TS dentro del mismo repo.
-- Doble lockfile en la raíz: `bun.lock` + `package-lock.json`, ambos versionados — si tocás deps, sincronizá ambos (TODO verificar cuál manda).
+
+- **Front** (`src/`): React 19 + Vite 8 (React Compiler), Tailwind 4, TanStack Query, lucide-react.
+  **Sin router** — una sola pantalla. Marca Goberna en `src/index.css` (azul + dorado, Montserrat; el
+  dorado significa **tiempo que se acaba**, nada más).
+- **Escritorio** (`electron/`): Electron 34. `main.cjs` + `preload.cjs`. El renderer corre en sandbox.
+- **Server** (`server/`): Express 4 + Drizzle ORM + Postgres 17 (imagen pgvector, puerto **5434** en
+  local) + Zod 4. Event store append-only + proyecciones.
+- **WhatsApp**: `@whatsmeow-node/whatsmeow-node` (cliente de protocolo no oficial, binario Go vía
+  subprocess). Ver §WhatsApp.
 
 ## Correr en local
-- `docker compose up -d --wait` — el `--wait` es obligatorio: espera el healthcheck de Postgres.
-- `npm run dev` → front en `:5173` · `cd server && npm run dev` → API en `:4100`. Atajo tmux: `ivi matriz`.
-- Tests: `cd server && npm test` (puros, sin DB). Typecheck: `npx tsc --noEmit` (server) y `npx tsc --noEmit -p tsconfig.app.json` (front). Trampas conocidas en `docs/06-ENTORNO.md`.
+
+```bash
+docker compose up -d --wait                       # Postgres (event store), en la raíz del repo
+cd server && npm install && npm run dev            # API en :4100 (necesita server/.env)
+npm install && npm run dev:app                     # Vite :5173 + la app de escritorio (Electron)
+```
+
+- `npm run dev` (sin `:app`) abre el front en el navegador: la cola y la conversación nativa funcionan;
+  solo el viejo webview no (y ese está retirado, ver §WhatsApp).
+- **Tests**: `cd server && npm test` (node:test, puros salvo checks en vivo). **Typecheck**: front
+  `npx tsc --noEmit -p tsconfig.app.json`, server `cd server && npx tsc --noEmit`.
+- **Refrescar datos de Meta**: `cd server && npm run ingest:interactions` (polling manual, read-only).
+  Captura comentarios FB/IG + DMs de Messenger de **todas las Páginas que el token puede ver** (`me/accounts`).
+
+## WhatsApp — la costura y la vinculación
+
+- **Todo pasa por la interfaz `TransporteWhatsapp`** (`server/src/whatsapp/transporte.ts`). Habla
+  **teléfonos, nunca JIDs**. Tres implementaciones: `falso` (dev/tests), `whatsmeow` (real), `cloud-api`
+  (futuro respaldo de Meta). Se elige por env `WHATSAPP_TRANSPORTE`. Si un JID aparece arriba de esa
+  línea, la costura falló (la conversión vive en `identidadWa.ts`).
+- **Vincular un número** = server-side, aparte de la app (decisión **D13**): `cd server && npm run
+  wa:vincular -- <numero>`. Da un código de 8 dígitos para poner en el teléfono (WhatsApp → Dispositivos
+  vinculados → Vincular con número). La sesión queda en `server/.wa-sessions/` (**gitignored: es la
+  credencial de la cuenta, NUNCA se commitea**). La app de la vendedora **no vincula, solo ve**.
+- **El webview viejo** (`src/features/whatsapp/PanelWhatsapp.tsx`) está **retirado** por D13. No se usa;
+  archivar con ADR cuando se limpie.
+- **Nada de automatización**: no envío masivo, no auto-respuesta, no warmup, no anti-ban. Un envío = una
+  acción humana, por `EnvioControlado` (la única puerta hacia `enviarTexto`). El `temporary_ban` **se
+  muestra siempre**, nunca se esconde.
+
+## Auth
+
+Login de vendedoras **contra Cerberus** (Django, sin API REST): `cerberus/auth.ts` hace el handshake
+CSRF + POST a `/ingresar/`. Éxito → Hermes emite un **token HMAC Bearer** (`auth/sesion.ts`). El
+`vendedoraId` = username de Cerberus. Middleware `requiereVendedora` delante de todo lo que envía o
+atribuye a una vendedora.
 
 ## Deploy
-- **No hay CI/CD ni workflows**: corre local en la máquina de trabajo, no está desplegado en los VPS (TODO verificar si habrá deploy). Los datos vienen del ERP Cerberus (VPS2 `:8001`) vía dump SQL + webhook.
-- **El engine Ivi** (`goberna-kos/ivi/`) sí está desplegado: corre en geógrafo (`100.117.204.80:8080`) como unidad **systemd** (`ivi.service`, sobrevive reboots y kill -9). Lo activa el operador con `goberna-kos/deploy-ivi-geografo.sh` (necesita TTY para sudo — no correrlo desde un agente). Probe: `GET /api/health`. Tests del engine: `python3 goberna-kos/tests/run.py` (sin pytest).
 
-## Reglas de negocio / gotchas
-- **`DECISIONES_MODO=simulacion` es el default**: nada se escribe en Meta. Con `META_TEST_EVENT_CODE` seteado todo va a Test Events. No cambiar estos interruptores sin decisión humana.
-- **`LAZO_RELOJ` (ausente = apagado, fail-closed)** gobierna los envíos CAPI recurrentes: `simulacion` evalúa sin mandar, `on` manda cada 6h. APAGADO por decisión de Estephano (2026-07-17). Ojo: el `modo` del payload de lazo describe el ÚLTIMO envío histórico, no el estado del reloj — mirar el campo `reloj`.
-- **Esquema vía `drizzle-kit push`** (`npm run db:push` en `server/`): NO hay migraciones SQL versionadas. El `schemaFilter` de `server/drizzle.config.ts` debe incluir `fuentes`, `ontologia` y `rag` — sin eso esos esquemas nunca se crean, en silencio. Ojo: `drizzle-kit push` NO corre `CREATE EXTENSION` — la extensión `vector` (RAG) se crea a mano una vez (`docker exec ... psql -c "CREATE EXTENSION IF NOT EXISTS vector"`).
-- Secretos solo en `server/.env` (nunca se commitea). Nada de credenciales en el repo.
+**VPS1** (`deploy@161.132.39.165`), patrón `/srv/hermes`. **No hay CI/CD todavía.** Runbook completo
+(instalar, Postgres, systemd, exponer, vincular el número): **`docs/deploy-vps1.md`**.
+Transporte en prod: `WHATSAPP_TRANSPORTE=whatsmeow` + `WHATSAPP_NUMERO=<número vinculado>`.
 
-## Agent skills
+## Secretos y config (env)
 
-### Issue tracker
+Solo en `server/.env` (gitignored). **Se referencian por nombre, jamás se pegan** (regla dura #1):
+`DATABASE_URL`, `META_ACCESS_TOKEN`, `CERBERUS_BASE_URL`, `HERMES_SESSION_SECRET`,
+`WHATSAPP_TRANSPORTE`, `WHATSAPP_NUMERO`. Ver `server/.env.example` (solo nombres).
 
-GitHub Issues del repo (via gh CLI). Ver `docs/agents/issue-tracker.md`.
+## Reglas duras (Goberna)
 
-### Triage labels
+1. **Secretos**: por nombre, nunca pegados en prompts/archivos/docs.
+2. **Verificación antes de "listo"**: ningún cambio de UI o deploy se reporta terminado sin screenshot
+   (Playwright/Electron) o `curl` a la URL viva.
+3. **Toda reescritura documenta qué reemplaza** (ADR en `docs/adr/`) y archiva al predecesor.
+4. **latin1 de Cerberus**: el enemigo son los **emojis**, no los acentos (á/é/ñ pasan; el emoji revienta
+   el INSERT en MySQL). Sanitizar en el borde.
 
-Los 5 labels canónicos por defecto. Ver `docs/agents/triage-labels.md`.
+## Gotchas
 
-### Domain docs
+- **Drizzle sin migraciones versionadas**: el schema se aplica con `npm run db:push` (drizzle-kit). Al
+  tocar `server/src/db/schema.ts`, push contra la DB.
+- **El transporte falso repite ids entre reinicios** (`falso-1`, `falso-2`…): reprocesar colisiona con la
+  idempotencia (`wa:falso-N` ya existe) y el mensaje no entra. Para demos limpias, borrar los
+  `external_id LIKE 'wa:falso-%'` primero. El transporte real usa ids reales de WhatsApp (únicos).
+- **whatsmeow trae binario Go por plataforma**: en el deploy linux, `npm install` baja el binario linux.
+- **La cola sirve conversaciones, no filas** (`/api/conversaciones`, no `/api/interactions`): los
+  mensajes se agrupan por `(canal, persona, número propio)`; los comentarios siguen individuales.
 
-Single-context: `CONTEXT.md` + `docs/adr/` en la raíz. Ver `docs/agents/domain.md`.
+## Estado (2026-07-21)
+
+Hecho: S1 proyección · S2 persistencia · S3 cola unificada · S4 EnvioControlado · S5 conversación nativa
++ envío · S0 transporte whatsmeow · S7 login Cerberus. **Falta**: S6 ficha del contacto por teléfono ·
+S6b registrar venta contra Cerberus · vincular un número real en VPS1 · empaquetar/distribuir el Electron
+a las vendedoras. Detalle y siguientes pasos en `docs/estado.md`.
