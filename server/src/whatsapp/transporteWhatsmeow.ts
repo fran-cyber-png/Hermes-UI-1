@@ -7,6 +7,7 @@ import type {
   TransporteWhatsapp,
 } from './transporte.js';
 import { normalizarTelefono, telefonoDeContacto, jidDeTelefono, esJidDeGrupo } from './identidadWa.js';
+import { detectarOrigen } from './origen.js';
 
 /**
  * EL TRANSPORTE REAL sobre whatsmeow — la implementación de `TransporteWhatsapp`
@@ -101,6 +102,8 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
       nombreVisible: info.pushName || null,
       texto,
       clase: texto != null ? 'texto' : 'multimedia',
+      // Captura del embudo: si vino de un anuncio (externalAdReply) o una landing.
+      origen: info.isFromMe ? null : detectarOrigen(message, texto),
     };
   }
 

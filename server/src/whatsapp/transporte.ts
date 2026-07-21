@@ -48,6 +48,11 @@ export interface MensajeWhatsapp {
   texto: string | null;
   /** El tipo crudo, para no perder información al normalizar. */
   clase: 'texto' | 'multimedia' | 'otro';
+  /**
+   * De dónde vino el lead, si el mensaje lo trae (click-to-WhatsApp o landing).
+   * Solo el PRIMER mensaje de una conversación suele traerlo; el resto es null.
+   */
+  origen?: import('./origen.js').Origen | null;
 }
 
 /**

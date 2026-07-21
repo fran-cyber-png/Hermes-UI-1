@@ -28,12 +28,19 @@ export function useSesionWa() {
   });
 }
 
+/** De dónde vino el lead, enriquecido con Meta si vino de un anuncio. */
+export type OrigenLead =
+  | { fuente: 'anuncio'; adId?: string; titulo?: string; anuncio?: string; campana?: string }
+  | { fuente: 'landing'; ref: string }
+  | null;
+
 export function useConversacionWa(telefono: string | null) {
   const qc = useQueryClient();
 
   const hilo = useQuery({
     queryKey: ['wa', 'conversacion', telefono],
-    queryFn: () => api<{ telefono: string; mensajes: MensajeHilo[] }>(`/api/whatsapp/conversacion/${telefono}`),
+    queryFn: () =>
+      api<{ telefono: string; mensajes: MensajeHilo[]; origen: OrigenLead }>(`/api/whatsapp/conversacion/${telefono}`),
     enabled: Boolean(telefono),
     refetchInterval: telefono ? 5_000 : false, // mientras está abierta, se refresca sola
   });

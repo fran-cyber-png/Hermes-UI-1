@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Loader2, Phone, QrCode, Send, WifiOff } from 'lucide-react';
+import { AlertTriangle, Loader2, Megaphone, Phone, QrCode, Send, Link2, WifiOff } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
 import type { Conversacion } from '../canales/conversaciones';
-import { useConversacionWa, useSesionWa, type EstadoSesionWa } from './conversacionWa';
+import { useConversacionWa, useSesionWa, type EstadoSesionWa, type OrigenLead } from './conversacionWa';
 
 /**
  * LA CONVERSACIÓN NATIVA DE WHATSAPP — ver el hilo y responder, desde Hermes.
@@ -62,6 +62,7 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
       </header>
 
       <BannerSesion sesion={sesion} />
+      <BadgeOrigen origen={hilo.data?.origen ?? null} />
 
       {/* El hilo */}
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-muted/30 p-4">
@@ -138,6 +139,32 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
           Se envía solo a esta persona, con tu nombre. Nada masivo, nada automático.
         </p>
       </footer>
+    </div>
+  );
+}
+
+/**
+ * De dónde vino el lead — la captura del embudo, hecha visible. Que la vendedora
+ * sepa "esta persona vino del anuncio X" cambia cómo le habla.
+ */
+function BadgeOrigen({ origen }: { origen: OrigenLead }) {
+  if (!origen) return null;
+
+  if (origen.fuente === 'anuncio') {
+    return (
+      <div className="flex items-center gap-2 border-b border-border bg-gold/10 px-4 py-2 text-xs text-gold-ink">
+        <Megaphone size={13} className="shrink-0" />
+        <span>
+          Vino del anuncio{origen.anuncio ? <b> “{origen.anuncio}”</b> : ''}
+          {origen.campana ? <> · campaña <b>{origen.campana}</b></> : ''}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2 border-b border-border bg-secondary px-4 py-2 text-xs text-secondary-foreground">
+      <Link2 size={13} className="shrink-0" />
+      <span>Vino de la landing <b>{origen.ref}</b></span>
     </div>
   );
 }

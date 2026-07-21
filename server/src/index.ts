@@ -25,6 +25,7 @@ import { arrancarWhatsapp } from "./whatsapp/wiring.js";
 import { rutaDevWhatsapp } from "./whatsapp/rutaDev.js";
 import { whatsappRouter } from "./routes/whatsapp.js";
 import { vincularRouter } from "./routes/vincular.js";
+import { simularRouter } from "./routes/simular.js";
 
 const app = express();
 const port = process.env.PORT ? Number(process.env.PORT) : 4100;
@@ -67,6 +68,9 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 const { falso } = arrancarWhatsapp();
 app.use("/api/whatsapp", whatsappRouter); // conversación nativa: hilo + enviar
 app.use("/vincular", vincularRouter);     // consola de operador: enlazar un número (D13)
+if (process.env.NODE_ENV !== "production") {
+  app.use("/api/whatsapp/_sim", simularRouter); // simular detección de origen (dev)
+}
 if (falso) app.use("/api/whatsapp/_dev", rutaDevWhatsapp(falso));
 
 app.listen(port, () => {

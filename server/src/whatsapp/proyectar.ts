@@ -80,6 +80,9 @@ export function proyectarMensaje(m: MensajeWhatsapp): ResultadoProyeccion {
       nombreVisible: m.nombreVisible,
       texto: m.texto,
       clase: m.clase,
+      // El origen del lead (anuncio/landing) queda en el crudo: es la captura del
+      // embudo, y desde acá se puede reproyectar o enriquecer con Meta.
+      origen: m.origen ?? null,
     },
   };
 

@@ -9,6 +9,7 @@ import { ColaUnificada } from './features/canales/ColaUnificada';
 import { ConversacionActiva } from './features/canales/ConversacionActiva';
 import type { Conversacion } from './features/canales/conversaciones';
 import BarraFrescura from './features/canales/BarraFrescura';
+import { EstadoWhatsapp } from './features/whatsapp/EstadoWhatsapp';
 import { Login } from './features/auth/Login';
 import { useSesion } from './features/auth/sesion';
 
@@ -52,6 +53,7 @@ export default function App() {
 
           <div className="flex items-center gap-3" style={NO_ARRASTRABLE}>
             <BarraFrescura />
+            <EstadoWhatsapp />
             <div className="flex items-center gap-1.5 border-l border-border pl-3">
               <span className="text-xs font-semibold text-navy">{vendedora.nombre}</span>
               <button

@@ -5,6 +5,7 @@ import { requiereVendedora } from '../auth/sesion.js';
 import { whatsapp } from '../whatsapp/wiring.js';
 import { proyectarMensaje } from '../whatsapp/proyectar.js';
 import { repositorioDrizzle } from '../whatsapp/repositorioDrizzle.js';
+import { resolverAnuncio } from '../meta/anuncio.js';
 
 /**
  * LA CONVERSACIÓN NATIVA DE WHATSAPP dentro de Hermes: ver el hilo y responder,
@@ -18,7 +19,7 @@ whatsappRouter.get('/sesion', (_req, res) => {
   res.json(whatsapp().transporte.estado());
 });
 
-/** El hilo completo de una conversación, en orden cronológico. */
+/** El hilo completo de una conversación, en orden cronológico + de dónde vino el lead. */
 whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
   const telefono = req.params.telefono.replace(/\D/g, '');
   const mensajes = await db.execute(sql`
@@ -28,7 +29,24 @@ whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
     ORDER BY occurred_at ASC
     LIMIT 200
   `);
-  res.json({ telefono, mensajes });
+
+  // La captura del embudo: si algún mensaje trajo el origen (anuncio/landing), se
+  // devuelve — enriquecido con el nombre del anuncio y la campaña si vino de Meta.
+  const [fila] = await db.execute<{ origen: { fuente: string; adId?: string; ref?: string } | null }>(sql`
+    SELECT e.payload->'origen' AS origen
+    FROM interactions i JOIN events e ON e.id = i.event_id
+    WHERE i.canal = 'whatsapp' AND i.persona_id = ${telefono}
+      AND e.payload->>'origen' IS NOT NULL AND e.payload->>'origen' <> 'null'
+    ORDER BY i.occurred_at ASC LIMIT 1
+  `);
+
+  let origen = fila?.origen ?? null;
+  if (origen?.fuente === 'anuncio' && origen.adId) {
+    const anuncio = await resolverAnuncio(origen.adId);
+    origen = { ...origen, ...(anuncio ? { anuncio: anuncio.anuncio, campana: anuncio.campana } : {}) };
+  }
+
+  res.json({ telefono, mensajes, origen });
 });
 
 /**
