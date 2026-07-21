@@ -10,8 +10,9 @@
  * Por eso la urgencia tiene cuatro niveles, y el vivo va arriba de todo:
  *
  *   Nivel 0 — VIVO: mensaje sin responder con un entrante RECIENTE (< 24 h).
- *             Alguien está hablando ahora y esperando. El que espera hace más,
- *             primero.
+ *             Alguien está hablando ahora. El MÁS RECIENTE primero: en ventas, un
+ *             lead que acaba de escribir se contesta al toque (velocidad = venta),
+ *             y tiene que estar arriba de todo, no enterrado bajo un chat de ayer.
  *   Nivel 1 — EXPIRA: comentario de Meta con la ventana abierta y sin responder.
  *             El más viejo primero (le quedan menos horas antes de cerrarse).
  *   Nivel 2 — ESPERA: mensaje sin responder pero ya viejo (> 24 h). Sigue siendo
@@ -44,10 +45,10 @@ export function claveUrgencia(item: ItemUrgencia, ahora: Date): Clave {
   const t = item.referencia.getTime();
   const edad = ahora.getTime() - t;
 
-  // Nivel 0 — VIVO: mensaje sin responder, con un entrante reciente. El que hace
-  // más que espera, primero → orden ascendente.
+  // Nivel 0 — VIVO: mensaje sin responder, con un entrante reciente. El MÁS
+  // RECIENTE primero (negamos el tiempo): velocidad de respuesta = conversión.
   if (item.tipo === 'mensaje' && !item.respondida && edad < ACTIVO_MS) {
-    return { nivel: 0, orden: t };
+    return { nivel: 0, orden: -t };
   }
 
   // Nivel 1 — EXPIRA: comentario Meta con ventana abierta, sin responder. El más

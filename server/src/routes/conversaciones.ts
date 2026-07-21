@@ -143,7 +143,9 @@ conversacionesRouter.get('/', async (req, res) => {
     FROM todo
     ${filtroIntencion}
     ORDER BY (${nivel}) ASC,
-             CASE WHEN (${nivel}) < 3 THEN referencia END ASC,
+             -- Vivo (0) y resto (3): lo más reciente arriba. Expira (1) y espera
+             -- (2): lo más viejo arriba (deadline / antigüedad). Espejo de urgencia.ts.
+             CASE WHEN (${nivel}) IN (1, 2) THEN referencia END ASC,
              referencia DESC
     LIMIT ${limit} OFFSET ${offset}
   `);

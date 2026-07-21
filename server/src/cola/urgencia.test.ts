@@ -53,6 +53,13 @@ describe('urgencia de la cola', () => {
     assert.equal(claveUrgencia(viejo, AHORA).nivel, 2);
   });
 
+  test('dentro de VIVO, el lead más RECIENTE va primero (velocidad de respuesta)', () => {
+    // Un lead que escribió hace 5 min tiene que estar arriba de uno de hace 20h.
+    const recienLlegado = msg({ referencia: hDe(0.1) });
+    const esperando = msg({ referencia: hDe(20) });
+    assert.deepEqual(ordenarPorUrgencia([esperando, recienLlegado], AHORA), [recienLlegado, esperando]);
+  });
+
   test('un comentario respondido cae al resto aunque tenga ventana abierta', () => {
     const pendiente = com({ referencia: hDe(5) });
     const respondido = com({ referencia: hDe(1), respondida: true });
