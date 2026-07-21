@@ -1,0 +1,65 @@
+import { useInfiniteQuery } from '@tanstack/react-query';
+import { api } from '../../lib/datos/cliente';
+import type { Intencion } from './types';
+
+/**
+ * Una fila de la cola unificada: o un comentario suelto (FB/IG) o una
+ * conversación de mensajes agrupada (WhatsApp/Messenger). El servidor ya la
+ * ordena por urgencia de dos niveles; el front no reordena nada.
+ */
+export interface Conversacion {
+  /** Clave estable: `int:<id>` para comentarios, `conv:<canal>:<persona>:<num>` para chats. */
+  clave: string;
+  canal: 'facebook' | 'instagram' | 'whatsapp';
+  tipo: 'comentario' | 'mensaje';
+  persona_id: string | null;
+  persona_nombre: string | null;
+  /** El número propio de Goberna por el que entró (solo mensajes). */
+  numero_propio: string | null;
+  texto: string | null;
+  contexto_texto: string | null;
+  /** Derivada: hay un saliente posterior al último entrante. Nunca estado de fila. */
+  respondida: boolean;
+  ventana_abierta: boolean;
+  pide_info: boolean;
+  /** Cuántos mensajes agrupa la conversación (1 en comentarios). */
+  n: number;
+  referencia: string;
+  ultimo_at: string;
+  dias: number;
+  /** 0 = expira (ventana Meta), 1 = espera (mensaje sin responder), 2 = el resto. */
+  nivel: 0 | 1 | 2;
+}
+
+type Pagina = { conversaciones: Conversacion[]; total?: number; hayMas: boolean };
+
+/**
+ * La cola unificada. Mismo patrón que `useInteracciones` (infinite query cacheada
+ * por filtros), pero contra `/api/conversaciones`: una fila por conversación, no
+ * por mensaje.
+ */
+export function useConversaciones(intencion: Intencion, canal = '') {
+  const filtros = { intencion, canal, porTanda: 30 };
+
+  const q = useInfiniteQuery({
+    queryKey: ['conversaciones', filtros],
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => {
+      const p = new URLSearchParams({ limit: '30', offset: String(pageParam) });
+      if (canal) p.set('canal', canal);
+      if (intencion) p.set('intencion', intencion);
+      return api<Pagina>(`/api/conversaciones?${p}`);
+    },
+    getNextPageParam: (ultima, todas) =>
+      ultima.hayMas ? todas.reduce((n, p) => n + p.conversaciones.length, 0) : undefined,
+  });
+
+  return {
+    items: q.data?.pages.flatMap((p) => p.conversaciones) ?? [],
+    total: q.data?.pages[0]?.total ?? 0,
+    hayMas: Boolean(q.hasNextPage),
+    cargando: q.isPending,
+    cargandoMas: q.isFetchingNextPage,
+    cargarMas: () => void q.fetchNextPage(),
+  };
+}

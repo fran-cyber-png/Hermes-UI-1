@@ -8,6 +8,7 @@ import { campaignsRouter } from "./routes/campaigns.js";
 import { configRouter } from "./routes/config.js";
 import { decisionsRouter } from "./routes/decisions.js";
 import { interactionsRouter } from "./routes/interactions.js";
+import { conversacionesRouter } from "./routes/conversaciones.js";
 import { leadsRouter } from "./routes/leads.js";
 import { metaAssetsRouter } from "./routes/metaAssets.js";
 import { overviewRouter } from "./routes/overview.js";
@@ -41,6 +42,7 @@ app.use("/api/ads", adsRouter); //            3. anuncio
 
 app.use("/api/leads", leadsRouter);
 app.use("/api/interactions", interactionsRouter);
+app.use("/api/conversaciones", conversacionesRouter); // la cola unificada: una fila por conversación
 app.use("/api/responder", responderRouter);
 app.use("/api/persona", personaRouter);
 app.use("/api/gente", genteRouter); // la persona canónica del grafo: su 360 y la búsqueda

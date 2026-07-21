@@ -3,31 +3,24 @@ import '@fontsource/montserrat/500.css';
 import '@fontsource/montserrat/600.css';
 import '@fontsource/montserrat/700.css';
 import '@fontsource/montserrat/800.css';
-import type { CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { MessageSquare, PanelRightClose, PanelRightOpen } from 'lucide-react';
-import Bandeja from './features/canales/Bandeja';
+import { ColaUnificada } from './features/canales/ColaUnificada';
+import type { Conversacion } from './features/canales/conversaciones';
 import BarraFrescura from './features/canales/BarraFrescura';
 import PanelWhatsapp from './features/whatsapp/PanelWhatsapp';
 import { useLocalStorage } from './lib/useLocalStorage';
 
 /**
- * HERMES — la mesa del vendedor.
+ * HERMES — la mesa de la vendedora.
  *
- * ── La idea de la pantalla ──
- * A la izquierda, la cola: los comentarios y mensajes que entraron por Facebook e
- * Instagram, ordenados por urgencia real. A la derecha, WhatsApp Web vivo. Un
- * vendedor no trabaja "en Facebook" o "en WhatsApp": trabaja atendiendo gente, y
- * hasta ahora eso lo obligaba a saltar entre dos ventanas y perder de vista una
- * mientras miraba la otra.
+ * A la izquierda, la cola unificada: comentarios de Facebook e Instagram, DMs de
+ * Messenger y chats de WhatsApp en UNA sola lista, ordenada por urgencia real. A
+ * la derecha, la conversación activa (hoy el panel de WhatsApp; la conversación
+ * nativa llega en S5). Un vendedor no trabaja "en Facebook" o "en WhatsApp":
+ * trabaja atendiendo gente, y hasta ahora eso lo obligaba a saltar entre ventanas.
  *
- * Los dos lados NO son simétricos, y eso es honesto: Facebook e Instagram entran
- * por la Graph API oficial (datos normalizados, en la base). WhatsApp entra
- * leyendo el DOM de la sesión real, porque su API todavía está en trámite. Cuando
- * salga la Cloud API, el panel de la derecha se reemplaza por más filas de la cola
- * de la izquierda — y el vendedor no se entera del cambio.
- *
- * Sin router: la app tiene una sola pantalla. Cuando exista la segunda se agrega;
- * un router para una ruta es andamiaje que hay que leer y no sostiene nada.
+ * Sin router: una sola pantalla. Cuando exista la segunda se agrega uno.
  */
 
 /** `WebkitAppRegion` no está en los tipos de CSSProperties; Electron sí lo lee. */
@@ -36,22 +29,17 @@ const NO_ARRASTRABLE = { WebkitAppRegion: 'no-drag' } as CSSProperties;
 
 export default function App() {
   const [conWhatsapp, setConWhatsapp] = useLocalStorage('hermes.panelWhatsapp', true);
+  const [abierta, setAbierta] = useState<Conversacion | null>(null);
 
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
-      {/* En macOS la ventana va sin barra de título (titleBarStyle 'hiddenInset'),
-          así que este header ES la barra: sin `app-region: drag` no se puede mover. */}
-      <header
-        className="shrink-0 border-b border-border bg-card/95 backdrop-blur"
-        style={ARRASTRABLE}
-      >
+      <header className="shrink-0 border-b border-border bg-card/95 backdrop-blur" style={ARRASTRABLE}>
         <div className="flex items-center justify-between gap-4 px-6 pb-3 pt-8">
           <div className="flex items-baseline gap-2.5">
             <span className="text-sm font-extrabold tracking-tight text-navy">HERMES</span>
             <span className="text-xs font-semibold text-muted-foreground">Bandeja</span>
           </div>
 
-          {/* Dentro de una región de arrastre nada es clickeable: hay que devolverlo. */}
           <div className="flex items-center gap-4" style={NO_ARRASTRABLE}>
             <BarraFrescura />
             <button
@@ -68,15 +56,8 @@ export default function App() {
       </header>
 
       <div className="flex min-h-0 flex-1 gap-4 p-4">
-        {/* La cola scrollea sola: el panel de WhatsApp de al lado tiene su propio
-            scroll interno y no deben arrastrarse entre sí. */}
-        <main
-          className={
-            'min-h-0 overflow-y-auto ' +
-            (conWhatsapp ? 'w-[26rem] shrink-0' : 'mx-auto w-full max-w-4xl')
-          }
-        >
-          <Bandeja />
+        <main className={conWhatsapp ? 'min-h-0 w-[26rem] shrink-0' : 'mx-auto min-h-0 w-full max-w-3xl'}>
+          <ColaUnificada seleccionada={abierta?.clave ?? null} onSeleccionar={setAbierta} />
         </main>
 
         {conWhatsapp && (
