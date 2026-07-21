@@ -149,3 +149,44 @@ interactionsRouter.get("/canales", async (req, res) => {
 
   res.json({ interacciones, formularios, porDia });
 });
+
+/**
+ * ¿Qué tan viejo es lo que estamos mostrando?
+ *
+ * Sin esto, una bandeja vacía es una MENTIRA. El filtro por defecto ("les puedo
+ * escribir") solo muestra comentarios de los últimos 7 días; si la ingesta lleva
+ * 10 días detenida, ese filtro devuelve cero y la pantalla dice "Estás al día"
+ * — cuando lo cierto es "no tengo idea, hace 10 días que no miro".
+ *
+ * Pasó de verdad, y por eso existe este endpoint: 94.371 interacciones en la
+ * base, 0 con la ventana abierta, porque el último dato capturado era del 11-jul
+ * y era 21-jul.
+ *
+ * Un estado vacío indistinguible de un pipeline muerto es peor que un error: el
+ * error te hace mirar, la calma falsa te hace irte tranquilo.
+ */
+interactionsRouter.get("/frescura", async (_req, res) => {
+  const [r] = await db.execute<{
+    ultimo_dato: string | null;
+    ultima_ingesta: string | null;
+    horas: string | null;
+    total: number;
+  }>(sql`
+    SELECT max(i.occurred_at)                                   AS ultimo_dato,
+           max(e.ingested_at)                                   AS ultima_ingesta,
+           extract(epoch from now() - max(e.ingested_at)) / 3600 AS horas,
+           count(*)::int                                        AS total
+    FROM interactions i JOIN events e ON e.id = i.event_id
+  `);
+
+  // 6h es el umbral. La ingesta hoy es manual, pero el compromiso con el vendedor
+  // es que lo que ve sea de esta jornada; más que eso y hay que avisarle en la cara.
+  const horas = r?.horas == null ? null : Number(r.horas);
+  res.json({
+    ultimoDato: r?.ultimo_dato ?? null,
+    ultimaIngesta: r?.ultima_ingesta ?? null,
+    horasDesdeIngesta: horas,
+    total: r?.total ?? 0,
+    fresca: horas != null && horas < 6,
+  });
+});

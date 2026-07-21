@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useLocalStorage } from '../../lib/useLocalStorage';
+import { hace, useFrescura } from '../../lib/datos/frescura';
 import type { Intencion, Interaccion } from './types';
 import { useBandeja } from './useBandeja';
 import { useInvalidarBandeja } from './useInteracciones';
@@ -46,6 +47,16 @@ export default function Bandeja() {
   const { items, total, hayMas, cargando, cargandoMas, cargarMas } = useBandeja(intencion);
   const filtro = FILTROS.find((f) => f.valor === intencion) ?? FILTROS[0];
 
+  /**
+   * El estado vacío NO puede decir "estás al día" si en realidad no estamos mirando.
+   *
+   * Cero interacciones significa una de dos cosas opuestas: no hay trabajo, o la
+   * captura está muerta. Sin este chequeo la pantalla elige siempre la buena, que
+   * es justo la que deja al vendedor tranquilo mientras pierde gente.
+   */
+  const { data: frescura } = useFrescura();
+  const vacioPorAtraso = frescura != null && !frescura.fresca && frescura.total > 0;
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -78,7 +89,22 @@ export default function Bandeja() {
         {cargando ? (
           <p className="px-5 py-12 text-center text-sm text-muted-foreground">Cargando...</p>
         ) : items.length === 0 ? (
-          <p className="px-5 py-12 text-center text-sm text-muted-foreground">{filtro.vacio}</p>
+          <div className="px-5 py-12 text-center">
+            {vacioPorAtraso ? (
+              <>
+                <p className="text-sm font-bold text-foreground">
+                  No hay nada acá, pero no es porque estés al día.
+                </p>
+                <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-muted-foreground">
+                  La última captura fue {hace(frescura.horasDesdeIngesta)}. Hay{' '}
+                  {frescura.total.toLocaleString('es')} interacciones guardadas, pero ninguna es lo
+                  bastante reciente como para entrar en este filtro.
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">{filtro.vacio}</p>
+            )}
+          </div>
         ) : (
           items.map((i) => (
             <FilaInteraccion
