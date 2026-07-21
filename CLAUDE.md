@@ -11,8 +11,9 @@ viven en `docs/plan-hermes-mvp.md` (léelo antes de tocar arquitectura). El conc
 ## Stack
 
 - **Front** (`src/`): React 19 + Vite 8 (React Compiler), Tailwind 4, TanStack Query, lucide-react.
-  **Sin router** — una sola pantalla. Marca Goberna en `src/index.css` (azul + dorado, Montserrat; el
-  dorado significa **tiempo que se acaba**, nada más).
+  **Sin router** — un espacio con vistas conmutadas por estado (ADR 0002; hoy solo existe la
+  Bandeja). Marca Goberna en `src/index.css` (azul + dorado, Montserrat; el dorado significa
+  **tiempo que se acaba**, nada más). El norte de producto: `docs/plan-crm-definitivo.md`.
 - **Escritorio** (`electron/`): Electron 34. `main.cjs` + `preload.cjs`. El renderer corre en sandbox.
 - **Server** (`server/`): Express 4 + Drizzle ORM + Postgres 17 (imagen pgvector, puerto **5434** en
   local) + Zod 4. Event store append-only + proyecciones.

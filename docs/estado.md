@@ -55,10 +55,12 @@ usa **`@lid`** (id de dispositivo) en vez del teléfono para algunos remitentes.
 **Fix:** resolver `@lid` → teléfono con el store de contactos de whatsmeow (o `getUserInfo`).
 Logs de diagnóstico activos: `[wa raw]` / `[wa in]` / `[wa estado]`.
 
-### 4. Info de comentarios/Messenger (pedido de Estephano)
-Para comentarios/DMs de Messenger, el panel de info debe mostrar **de qué publicación
-comentó / qué curso** (el `contexto_texto` ya está en `interactions`). Hoy el panel de
-Messenger es un dead-end ("responder no está conectado"). Mostrar el hilo + el post.
+### 4. Info de comentarios/Messenger — DISEÑADO, listo para implementar
+El diseño completo está en **`plan-panel-contexto.md`** (slices S8a-S8f con tests T15-T21):
+tabla `contexts`, ingesta ampliada (permalink/imagen/texto completo), curso inferido con fuente
+declarada (mensaje > anuncio > post), hilo Messenger read-only, `PanelDerecho` conmutador.
+Es el paso 2 del horizonte H1 del norte nuevo: **`plan-crm-definitivo.md`** (mapa completo de
+funcionalidades CRM + rediseño con mockups en `prototypes/crm-definitivo/` + ADR 0002).
 
 ### 5. Crear cliente para leads NUEVOS
 La venta hoy exige un cliente EXISTENTE (VentaForm.cliente = id). Para un lead nuevo,

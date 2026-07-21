@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hermes · Tablero — mockup CRM definitivo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilo.css">
+<style>
+  .contenido { min-height: 0; overflow-y: auto; }
+  .panelito { background: var(--carta); border: 1px solid var(--borde); border-radius: 14px; padding: 16px 18px; box-shadow: var(--sombra-1); height: 100%; }
+  .panelito .rotulo { display: block; margin-bottom: 10px; }
+  .fuente-fila { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 12.5px; border-bottom: 1px solid #F0F3F9; }
+  .fuente-fila:last-child { border-bottom: 0; }
+  .fuente-fila .punto { width: 8px; height: 8px; border-radius: 999px; flex: none; }
+  .fuente-fila .cuando { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--sutil); }
+  .embudo-fila { display: grid; grid-template-columns: 150px 1fr 110px; gap: 12px; align-items: center; padding: 8px 0; font-size: 13px; }
+  .embudo-fila .pista { height: 26px; border-radius: 8px; background: #EDF1F8; overflow: hidden; }
+  .embudo-fila .relleno { height: 100%; border-radius: 8px; background: linear-gradient(90deg, #0E2A52, #2563EB); display: flex; align-items: center; padding-left: 10px; color: #fff; font-family: var(--mono); font-size: 11.5px; min-width: 52px; }
+  .dias { display: flex; gap: 6px; align-items: flex-end; height: 74px; padding-top: 6px; }
+  .dias .dia { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 5px; }
+  .dias .vara { width: 100%; border-radius: 6px 6px 3px 3px; background: #DCE6F5; transition: background .2s var(--curva); }
+  .dias .dia:hover .vara { background: var(--azul); }
+  .dias .etiqueta-dia { font-family: var(--mono); font-size: 10px; color: var(--sutil); }
+</style>
+</head>
+<body>
+<div class="marco">
+
+  <header class="header">
+    <div class="marca">
+      <svg class="escudo" viewBox="0 0 26 26" fill="none" aria-label="escudo Goberna">
+        <circle cx="13" cy="13" r="11.5" stroke="#CAA106" stroke-width="1.6"/>
+        <path d="M6.5 10.4 13 6.8l6.5 3.6" stroke="#CAA106" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M8.4 12v6M11.5 12v6M14.6 12v6M17.7 12v6" stroke="#CAA106" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M7 19.4h12" stroke="#CAA106" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span class="division"></span>
+      <span class="palabra">HERMES</span>
+    </div>
+    <nav class="vistas">
+      <a href="bandeja.html">Bandeja</a>
+      <a href="embudo.html">Embudo</a>
+      <a href="personas.html">Personas</a>
+      <a class="activa" href="tablero.html">Tablero</a>
+    </nav>
+    <div class="derecha">
+      <span class="chip-frescura"><span class="punto ambar"></span> Instagram atrasado · <b>hace 9 h</b></span>
+      <span class="pastilla-numero"><span class="wa"></span> 51 986 394 450</span>
+      <span class="avatar-vendedora" title="Ana Lucía">AL</span>
+    </div>
+  </header>
+
+  <main class="contenido">
+    <div class="rejilla-tablero">
+
+      <!-- LA CIFRA HÉROE: es tiempo → el único dorado grande permitido -->
+      <div class="celda-8 aparece">
+        <div class="panelito" style="display:flex;flex-direction:column;justify-content:center;gap:6px">
+          <span class="rotulo">Esperando respuesta</span>
+          <div class="heroe heroe-tiempo">14 personas <span class="unidad">esperan hace más de un día</span></div>
+          <div style="font-size:13px;color:var(--sutil)">La más antigua: <b>@marisol.ttito</b> — su ventana de privado muere en <b class="mono">14 h</b>. <a class="enlace" href="bandeja.html">Ir a la cola →</a></div>
+        </div>
+      </div>
+
+      <!-- FRESCURA POR FUENTE (lo que nadie más muestra) -->
+      <div class="celda aparece d1">
+        <div class="panelito">
+          <span class="rotulo">Frescura por fuente</span>
+          <div class="fuente-fila"><span class="punto" style="background:var(--ok)"></span> WhatsApp · sesión conectada <span class="cuando">en vivo</span></div>
+          <div class="fuente-fila"><span class="punto" style="background:var(--ok)"></span> Facebook · última captura <span class="cuando">hace 2 min</span></div>
+          <div class="fuente-fila"><span class="punto" style="background:var(--oro-tinta)"></span> Instagram · captura atrasada <span class="cuando">hace 9 h</span></div>
+          <div class="fuente-fila"><span class="punto" style="background:var(--ok)"></span> Messenger · última captura <span class="cuando">hace 4 min</span></div>
+          <div style="margin-top:10px" class="aviso-honesto">Un cero acá puede ser «no hay trabajo» o «no estoy mirando». Esta caja dice cuál.</div>
+        </div>
+      </div>
+
+      <!-- 1RA RESPUESTA -->
+      <div class="celda aparece d1">
+        <div class="panelito">
+          <span class="rotulo">Primera respuesta (esta semana)</span>
+          <div class="barra-h"><span>Ana Lucía</span><div class="pista"><div class="relleno" style="width:34%"></div></div><span class="valor">26 min</span></div>
+          <div class="barra-h"><span>Caro</span><div class="pista"><div class="relleno" style="width:58%"></div></div><span class="valor">1 h 12</span></div>
+          <div class="barra-h"><span>Equipo</span><div class="pista"><div class="relleno" style="width:46%;background:#8FB0E8"></div></div><span class="valor">49 min</span></div>
+          <div style="margin-top:10px;font-size:11.5px;color:var(--sutil)">Se mide del primer entrante al primer envío humano. Los chats de madrugada no castigan.</div>
+        </div>
+      </div>
+
+      <!-- CONVERSIÓN POR VENDEDORA -->
+      <div class="celda aparece d2">
+        <div class="panelito">
+          <span class="rotulo">Conversión a venta (julio)</span>
+          <div class="barra-h"><span>Ana Lucía</span><div class="pista"><div class="relleno" style="width:66%"></div></div><span class="valor">8 / 61</span></div>
+          <div class="barra-h"><span>Caro</span><div class="pista"><div class="relleno" style="width:41%"></div></div><span class="valor">6 / 74</span></div>
+          <div style="margin-top:10px;font-size:11.5px;color:var(--sutil)">Conversaciones atendidas → ventas registradas en Cerberus. La comisión sale de acá, por eso cada envío lleva firma.</div>
+        </div>
+      </div>
+
+      <!-- VENTAS DE LA SEMANA -->
+      <div class="celda aparece d2">
+        <div class="panelito">
+          <span class="rotulo">Ventas registradas · semana</span>
+          <div class="heroe" style="font-size:30px">9 <span class="unidad">por BOB 4.320 + S/ 2.700</span></div>
+          <div class="dias">
+            <div class="dia"><div class="vara" style="height:22%"></div><span class="etiqueta-dia">lu</span></div>
+            <div class="dia"><div class="vara" style="height:44%"></div><span class="etiqueta-dia">ma</span></div>
+            <div class="dia"><div class="vara" style="height:15%"></div><span class="etiqueta-dia">mi</span></div>
+            <div class="dia"><div class="vara" style="height:66%"></div><span class="etiqueta-dia">ju</span></div>
+            <div class="dia"><div class="vara" style="height:88%;background:var(--azul)"></div><span class="etiqueta-dia">vi</span></div>
+            <div class="dia"><div class="vara" style="height:36%"></div><span class="etiqueta-dia">sá</span></div>
+            <div class="dia"><div class="vara" style="height:8%"></div><span class="etiqueta-dia">do</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- EMBUDO CANAL → VENTA -->
+      <div class="celda-8 aparece d3">
+        <div class="panelito">
+          <span class="rotulo">El camino del dinero (julio)</span>
+          <div class="embudo-fila"><span>Levantaron la mano</span><div class="pista"><div class="relleno" style="width:100%">1.204</div></div><span style="font-size:11.5px;color:var(--sutil)">comentarios + DMs</span></div>
+          <div class="embudo-fila"><span>Pasaron a WhatsApp</span><div class="pista"><div class="relleno" style="width:26%">312</div></div><span style="font-size:11.5px;color:var(--sutil)">26 %</span></div>
+          <div class="embudo-fila"><span>Conversación viva</span><div class="pista"><div class="relleno" style="width:11%">127</div></div><span style="font-size:11.5px;color:var(--sutil)">41 % de WA</span></div>
+          <div class="embudo-fila"><span>Venta registrada</span><div class="pista"><div class="relleno" style="width:4%;min-width:44px">19</div></div><span style="font-size:11.5px;color:var(--sutil)">6 % de WA</span></div>
+          <div style="margin-top:8px;font-size:12px;color:var(--sutil)">El <b>61 %</b> de los cierres pasa por WhatsApp — por eso el contexto y la atribución valen plata.</div>
+        </div>
+      </div>
+
+      <!-- COBERTURA HONESTA -->
+      <div class="celda aparece d4">
+        <div class="panelito">
+          <span class="rotulo">Cobertura de la atribución</span>
+          <div class="barra-h"><span>WhatsApp (CTWA)</span><div class="pista"><div class="relleno" style="width:72%"></div></div><span class="valor">72 %</span></div>
+          <div class="barra-h"><span>Comentarios FB</span><div class="pista"><div class="relleno" style="width:32%"></div></div><span class="valor">31,6 %</span></div>
+          <div class="barra-h"><span>Messenger</span><div class="pista"><div class="relleno" style="width:0%"></div></div><span class="valor">0 %</span></div>
+          <div style="margin-top:10px" class="aviso-honesto">Messenger no trae origen por captura — llega con el webhook (S11). Sobre pauta <b>con gasto</b>; los dark posts quedan fuera. Preferimos el hueco visible al invento.</div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hermes · Personas — mockup CRM definitivo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilo.css">
+<style>
+  .contenido { display: grid; grid-template-columns: 380px 1fr; gap: 10px; padding: 10px; min-height: 0; }
+  @media (max-width: 1180px) { .contenido { grid-template-columns: 330px 1fr; gap: 8px; padding: 8px; } }
+  .buscador-grande {
+    display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+    border-bottom: 1px solid var(--borde);
+  }
+  .buscador-grande input { border: 0; outline: 0; flex: 1; font: 14px Inter, sans-serif; background: transparent; }
+  .resultado { display: flex; gap: 11px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--borde); cursor: pointer; transition: background .15s var(--curva); }
+  .resultado:hover { background: #F7F9FD; }
+  .resultado.abierto { background: #EFF4FE; }
+  .resultado .datos { min-width: 0; flex: 1; }
+  .resultado .nombre { font-family: Montserrat, sans-serif; font-weight: 600; font-size: 13.5px; }
+  .resultado .sub { font-size: 11.5px; color: var(--sutil); }
+  .ficha { position: relative; overflow-y: auto; }
+  .marca-agua {
+    position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 1;
+    display: grid; place-items: center;
+  }
+  .marca-agua span {
+    font-family: var(--mono); font-size: 34px; color: var(--navy); opacity: .035;
+    transform: rotate(-24deg); white-space: nowrap; letter-spacing: .3em;
+  }
+  .cab-ficha { display: flex; gap: 14px; align-items: center; padding: 18px 20px; border-bottom: 1px solid var(--borde); position: relative; z-index: 2; }
+  .cab-ficha .retrato { width: 52px; height: 52px; font-size: 17px; border-radius: 16px; }
+  .dato-par { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; padding: 4px 0; }
+  .dato-par .k { color: var(--sutil); }
+  .compra { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 9px 12px; border: 1px solid var(--borde); border-radius: 10px; margin-bottom: 7px; background: #fff; }
+  .origen-linea { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; font-size: 12.5px; }
+  .origen-linea .cuando { font-family: var(--mono); font-size: 11px; color: var(--sutil); width: 52px; flex: none; padding-top: 2px; }
+  .dos-columnas { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; position: relative; z-index: 2; }
+  @media (max-width: 1180px) { .dos-columnas { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="marco">
+
+  <header class="header">
+    <div class="marca">
+      <svg class="escudo" viewBox="0 0 26 26" fill="none" aria-label="escudo Goberna">
+        <circle cx="13" cy="13" r="11.5" stroke="#CAA106" stroke-width="1.6"/>
+        <path d="M6.5 10.4 13 6.8l6.5 3.6" stroke="#CAA106" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M8.4 12v6M11.5 12v6M14.6 12v6M17.7 12v6" stroke="#CAA106" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M7 19.4h12" stroke="#CAA106" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span class="division"></span>
+      <span class="palabra">HERMES</span>
+    </div>
+    <nav class="vistas">
+      <a href="bandeja.html">Bandeja</a>
+      <a href="embudo.html">Embudo</a>
+      <a class="activa" href="personas.html">Personas</a>
+      <a href="tablero.html">Tablero</a>
+    </nav>
+    <div class="derecha">
+      <span class="chip-frescura"><span class="punto"></span> Datos al día · <b>hace 2 min</b></span>
+      <span class="pastilla-numero"><span class="wa"></span> 51 986 394 450</span>
+      <span class="avatar-vendedora" title="Ana Lucía">AL</span>
+    </div>
+  </header>
+
+  <main class="contenido">
+
+    <!-- ——— BÚSQUEDA + RESULTADOS ——— -->
+    <section class="bisel aparece"><div class="nucleo">
+      <div class="buscador-grande">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5B6B86" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.3-3.3"/></svg>
+        <input value="mura" placeholder="Nombre, teléfono o código de cliente…">
+      </div>
+
+      <div style="overflow-y:auto;flex:1">
+        <article class="resultado abierto">
+          <span class="retrato">MO<span class="canal canal-wa">w</span></span>
+          <div class="datos">
+            <div class="nombre">Moises Muraña Quispe</div>
+            <div class="sub"><span class="mono">591 007 239 2902</span> · Bolivia</div>
+          </div>
+          <span class="chip chip-ok">Cliente</span>
+        </article>
+        <article class="resultado">
+          <span class="retrato">RM<span class="canal canal-wa">w</span></span>
+          <div class="datos">
+            <div class="nombre">Rosa Muralles</div>
+            <div class="sub"><span class="mono">502 441 872 09</span> · Guatemala</div>
+          </div>
+          <span class="chip chip-gris">Lead</span>
+        </article>
+        <article class="resultado">
+          <span class="retrato">JM<span class="canal canal-fb">f</span></span>
+          <div class="datos">
+            <div class="nombre">Jorge Murakami</div>
+            <div class="sub">Solo comentarios · sin teléfono aún</div>
+          </div>
+          <span class="chip chip-gris">Lead</span>
+        </article>
+      </div>
+
+      <div style="padding:10px 16px;border-top:1px solid var(--borde)" class="aviso-honesto">
+        La búsqueda matchea por <b>teléfono</b>. La unificación entre canales llega con la identidad
+        cross-canal (H4) — hasta entonces no se dibuja lo que no existe.
+      </div>
+    </div></section>
+
+    <!-- ——— FICHA 360 ——— -->
+    <section class="bisel aparece d1"><div class="nucleo ficha">
+      <div class="marca-agua"><span>ana.lucia · ana.lucia · ana.lucia</span></div>
+
+      <div class="cab-ficha">
+        <span class="retrato">MO<span class="canal canal-wa">w</span></span>
+        <div>
+          <h1 class="montserrat" style="font-size:19px;font-weight:800">Moises Muraña Quispe</h1>
+          <div style="font-size:12.5px;color:var(--sutil)"><span class="mono">CLI-00062</span> · Bolivia · cliente desde mar 2024</div>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+          <span class="chip chip-ok">✓ Cliente</span>
+          <button class="boton boton-navy">Registrar venta<span class="circulito">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"><path d="M5 12h13M13 6l6 6-6 6"/></svg>
+          </span></button>
+        </div>
+      </div>
+
+      <div class="dos-columnas">
+        <div>
+          <div class="bloque">
+            <span class="rotulo">Datos (Cerberus)</span>
+            <div class="dato-par"><span class="k">Teléfono</span><span class="mono">591 007 239 2902</span></div>
+            <div class="dato-par"><span class="k">Documento</span><span class="mono">6 837 214</span></div>
+            <div class="dato-par"><span class="k">Correo</span><span>moises.mq@gmail.com</span></div>
+            <div class="dato-par"><span class="k">País</span><span>Bolivia</span></div>
+            <div style="margin-top:6px"><a class="enlace" href="#">Ver en Cerberus ↗</a></div>
+          </div>
+
+          <div class="bloque">
+            <span class="rotulo">Compras (2)</span>
+            <div class="compra">
+              <span class="mono" style="font-weight:600">GOB-13942</span><span class="mono" style="font-weight:700">BOB 135.00</span>
+              <span style="font-size:11.5px;color:var(--sutil)">Cotización · Curso OSINT</span><span style="font-size:11.5px;color:var(--sutil);text-align:right">22/07/2026</span>
+            </div>
+            <div class="compra">
+              <span class="mono" style="font-weight:600">GOB-00066</span><span class="mono" style="font-weight:700">BOB 750.00</span>
+              <span style="font-size:11.5px;color:#157A3C">Pagado · Diplomado DIPCPOL</span><span style="font-size:11.5px;color:var(--sutil);text-align:right">06/03/2024</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="bloque">
+            <span class="rotulo">Por dónde llegó</span>
+            <div class="origen-linea"><span class="cuando">18 jul</span><span>Clic en el anuncio <b>«Temario»</b> · campaña <span class="mono">[ABR] OSINT Y SOCMINT</span> → escribió por WhatsApp</span></div>
+            <div class="origen-linea"><span class="cuando">21 jul</span><span>«Hola, quiero info del próximo curso» — WhatsApp</span></div>
+            <div class="origen-linea"><span class="cuando">hoy</span><span>Cotización registrada desde Hermes · <span class="mono">GOB-13942</span></span></div>
+          </div>
+
+          <div class="bloque">
+            <span class="rotulo">Notas del equipo</span>
+            <div class="nota-interna" style="max-width:none;margin:0 0 8px">
+              <b>Caro · 21 jul:</b> prefiere pagar por Tigo Money; mandarle el QR, no el link.
+            </div>
+            <div class="etiqueta" style="border-style:dashed;cursor:pointer">+ agregar nota</div>
+          </div>
+
+          <div class="bloque">
+            <span class="rotulo">Recordatorio</span>
+            <div style="display:flex;align-items:center;gap:8px;font-size:12.5px">
+              <span class="chip chip-tiempo">⏰ lunes 27</span> confirmar el pago de la cotización
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bloque" style="position:relative;z-index:2">
+        <div class="aviso-honesto">Cada consulta de ficha queda registrada con tu nombre. Solo ves el contacto del chat abierto — no hay listados ni export.</div>
+      </div>
+    </div></section>
+
+  </main>
+</div>
+</body>
+</html>

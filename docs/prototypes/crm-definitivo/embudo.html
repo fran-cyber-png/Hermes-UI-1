@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hermes · Embudo — mockup CRM definitivo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilo.css">
+<style>
+  .contenido { display: grid; grid-template-rows: auto 1fr; min-height: 0; padding: 10px; gap: 10px; }
+  .barra-vista { display: flex; align-items: center; gap: 10px; padding: 0 4px; }
+  .barra-vista h1 { font-size: 16px; font-weight: 700; }
+  .conmutador { display: flex; border: 1px solid var(--borde); border-radius: 999px; overflow: hidden; background: #fff; }
+  .conmutador button { border: 0; background: transparent; padding: 6px 14px; font: 500 12.5px Inter, sans-serif; color: var(--sutil); cursor: pointer; }
+  .conmutador button.activo { background: var(--navy); color: #fff; font-weight: 600; }
+  .kanban { padding: 6px 2px 2px; }
+</style>
+</head>
+<body>
+<div class="marco">
+
+  <header class="header">
+    <div class="marca">
+      <svg class="escudo" viewBox="0 0 26 26" fill="none" aria-label="escudo Goberna">
+        <circle cx="13" cy="13" r="11.5" stroke="#CAA106" stroke-width="1.6"/>
+        <path d="M6.5 10.4 13 6.8l6.5 3.6" stroke="#CAA106" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M8.4 12v6M11.5 12v6M14.6 12v6M17.7 12v6" stroke="#CAA106" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M7 19.4h12" stroke="#CAA106" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span class="division"></span>
+      <span class="palabra">HERMES</span>
+    </div>
+    <nav class="vistas">
+      <a href="bandeja.html">Bandeja</a>
+      <a class="activa" href="embudo.html">Embudo</a>
+      <a href="personas.html">Personas</a>
+      <a href="tablero.html">Tablero</a>
+    </nav>
+    <div class="derecha">
+      <span class="chip-frescura"><span class="punto"></span> Datos al día · <b>hace 2 min</b></span>
+      <span class="pastilla-numero"><span class="wa"></span> 51 986 394 450</span>
+      <span class="avatar-vendedora" title="Ana Lucía">AL</span>
+    </div>
+  </header>
+
+  <main class="contenido">
+    <div class="barra-vista aparece">
+      <h1 class="montserrat">Embudo — julio</h1>
+      <div class="conmutador">
+        <button class="activo">Mis conversaciones</button>
+        <button>Todo el equipo</button>
+      </div>
+      <span style="margin-left:auto" class="aviso-honesto">Las etapas avanzan <b>solo por acción humana</b> — nada se mueve solo.</span>
+    </div>
+
+    <section class="bisel aparece d1"><div class="nucleo">
+      <div class="kanban">
+
+        <!-- NUEVO -->
+        <div class="columna-k">
+          <div class="cabeza"><h3 class="montserrat">Nuevo</h3><span class="cuenta">214</span><span class="tasa">—</span></div>
+          <div class="pila">
+            <div class="tarjeta-k">
+              <div class="arriba"><span class="retrato" style="width:28px;height:28px;font-size:10px">MT<span class="canal canal-ig">ig</span></span><span class="nombre">@marisol.ttito</span><span style="margin-left:auto" class="hora mono">5 h</span></div>
+              <div class="extracto" style="font-size:12px;color:var(--sutil)">precio del diplomado porfa</div>
+              <div class="abajo"><span class="chip chip-navy" style="font-size:10.5px">DIPCPOL</span><span class="chip chip-tiempo" style="font-size:10.5px">⏳ 14 h</span></div>
+            </div>
+            <div class="tarjeta-k">
+              <div class="arriba"><span class="retrato" style="width:28px;height:28px;font-size:10px">OL<span class="canal canal-ms">m</span></span><span class="nombre">Olga López B.</span><span style="margin-left:auto" class="hora mono">21 h</span></div>
+              <div class="extracto" style="font-size:12px;color:var(--sutil)">¿Sigue abierta la inscripción?</div>
+              <div class="abajo"><span class="etiqueta"><i style="background:#2563EB"></i>sin curso aún</span></div>
+            </div>
+            <div class="tarjeta-k">
+              <div class="arriba"><span class="retrato" style="width:28px;height:28px;font-size:10px">LH<span class="canal canal-fb">f</span></span><span class="nombre">Logan Heyes</span><span style="margin-left:auto" class="hora mono">2 d</span></div>
+              <div class="extracto" style="font-size:12px;color:var(--sutil)">(comentó con una foto)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RESPONDIDO -->
+        <div class="columna-k">
+          <div class="cabeza"><h3 class="montserrat">Respondido</h3><span class="cuenta">96</span><span class="tasa">45 %</span></div>
+          <div class="pila">
+            <div class="tarjeta-k">
+              <div class="arriba"><span class="retrato" style="width:28px;height:28px;font-size:10px">BR<span class="canal canal-fb">f</span></span><span class="nombre">Bladimir Ramon</span><span style="margin-left:auto" class="hora mono">26 min</span></div>
+              <div class="extracto" style="font-size:12px;color:var(--sutil)">Guía enviada por privado</div>
+              <div class="abajo"><span class="chip chip-navy" style="font-size:10.5px">Libros</span><span class="atendiendo"><span class="mini">AL</span> vos</span></div>
+            </div>
+            <div class="tarjeta-k">
+              <div class="arriba"><span class="retrato" style="width:28px;height:28px;font-size:10px">RF<span class="canal canal-wa">w</span></span><span class="nombre">Rolando Fernández</span><span style="margin-left:auto" class="hora mono">18 h</span></div>
+              <div class="extracto" style="font-size:12px;color:var(--sutil)">Certificado a Guatemala: sí llega</div>
+              <div class="abajo"><span class="chip chip-navy" style="font-size:10.5px">Consultor</span><span class="atendiendo"><span class="mini">CR</span> Caro</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- INTERESADO -->
+        <div class="columna-k">
+          <div class="cabeza"><h3 class="montserrat">Interesado</h3><span class="cuenta">31</span><span class="tasa">32 %</span></div>
+          <div class="pila">
+            <div class="tarjeta-k" style="box-shadow:var(--sombra-2);transform:rotate(-1.2deg)">
+              <div class="arriba"><span class="retrato" style="width:28px;height:28px;font-size:10px">JC<span class="canal canal-wa">w</span></span><span class="nombre">Jhoselyn Cari</span><span style="margin-left:auto" class="hora mono">1 min</span></div>
+              <div class="extracto" style="font-size:12px;color:var(--sutil)">Pidió pagar en dos cuotas — voucher listo</div>
+              <div class="abajo"><span class="chip chip-navy" style="font-size:10.5px">DIPCPOL</span><span class="chip chip-ok" style="font-size:10.5px">viva ahora</span><span class="atendiendo"><span class="mini">AL</span></span></div>
+            </div>
+            <div class="hueco">Soltá la tarjeta acá para moverla a Interesado</div>
+            <div class="tarjeta-k">
+              <div class="arriba"><span class="retrato" style="width:28px;height:28px;font-size:10px">PV<span class="canal canal-wa">w</span></span><span class="nombre">Patricia Vílchez</span><span style="margin-left:auto" class="hora mono">3 h</span></div>
+              <div class="extracto" style="font-size:12px;color:var(--sutil)">Espera el link de pago del seminario</div>
+              <div class="abajo"><span class="chip chip-navy" style="font-size:10.5px">Seminario</span><span class="etiqueta"><i style="background:#CAA106"></i>recordar lunes</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- VENTA REGISTRADA -->
+        <div class="columna-k">
+          <div class="cabeza"><h3 class="montserrat">Venta registrada</h3><span class="cuenta">9</span><span class="tasa">29 %</span></div>
+          <div class="pila">
+            <div class="tarjeta-k" style="border-color:#BFE3CD">
+              <div class="arriba"><span class="retrato" style="width:28px;height:28px;font-size:10px">MO<span class="canal canal-wa">w</span></span><span class="nombre">Moises Muraña</span><span style="margin-left:auto" class="hora mono">hoy</span></div>
+              <div class="extracto" style="font-size:12px;color:var(--sutil)">Cotización <span class="mono">GOB-13942</span></div>
+              <div class="abajo"><span class="chip chip-ok" style="font-size:10.5px">BOB 135.00</span><span class="chip chip-navy" style="font-size:10.5px">OSINT</span></div>
+            </div>
+            <div class="tarjeta-k" style="border-color:#BFE3CD">
+              <div class="arriba"><span class="retrato" style="width:28px;height:28px;font-size:10px">DQ<span class="canal canal-wa">w</span></span><span class="nombre">Delia Quispe</span><span style="margin-left:auto" class="hora mono">ayer</span></div>
+              <div class="extracto" style="font-size:12px;color:var(--sutil)">Pagado <span class="mono">GOB-13921</span></div>
+              <div class="abajo"><span class="chip chip-ok" style="font-size:10.5px">S/ 1.350.00</span><span class="chip chip-navy" style="font-size:10.5px">Consultoría</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SE ENFRÍA -->
+        <div class="columna-k">
+          <div class="cabeza"><h3 class="montserrat">Se enfría</h3><span class="cuenta">57</span><span class="tasa">—</span></div>
+          <div class="pila">
+            <div class="tarjeta-k" style="opacity:.75">
+              <div class="arriba"><span class="retrato" style="width:28px;height:28px;font-size:10px">VM<span class="canal canal-wa">w</span></span><span class="nombre">VC Marco</span><span style="margin-left:auto" class="hora mono">6 d</span></div>
+              <div class="extracto" style="font-size:12px;color:var(--sutil)">«Gracias, quedo atento» — sin señales desde el martes</div>
+              <div class="abajo"><span class="etiqueta"><i style="background:#B9C6DB"></i>retomar</span></div>
+            </div>
+            <div class="tarjeta-k" style="opacity:.75">
+              <div class="arriba"><span class="retrato" style="width:28px;height:28px;font-size:10px">AL<span class="canal canal-ig">ig</span></span><span class="nombre">@aldo.linarez</span><span style="margin-left:auto" class="hora mono">9 d</span></div>
+              <div class="extracto" style="font-size:12px;color:var(--sutil)">Nunca respondió al temario</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div></section>
+  </main>
+</div>
+</body>
+</html>

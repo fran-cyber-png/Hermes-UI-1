@@ -1,0 +1,367 @@
+/* ============================================================
+   HERMES · CRM definitivo — sistema visual de los mockups
+   Tokens de goberna-design-system (la marca manda) + acabado taste.
+   Regla de oro: el dorado significa UNA cosa — tiempo que se acaba.
+   ============================================================ */
+
+:root {
+  --navy: #0E2A52;
+  --azul: #2563EB;
+  --azul-hover: #1D4ED8;
+  --oro: #FFC800;        /* solo tiempo/urgencia */
+  --oro-tinta: #CAA106;  /* oro legible sobre claro */
+  --oro-suave: #FFF7DB;
+  --fondo: #F5F7FB;
+  --carta: #FFFFFF;
+  --borde: #E6EAF2;
+  --tinta: #16213A;
+  --sutil: #5B6B86;
+  --ok: #16A34A;
+  --ok-suave: #E9F7EE;
+  --rojo: #DC2626;
+  --celeste: #EAF1FF;    /* burbuja saliente: navy sobre celeste */
+  --sombra-1: 0 1px 2px rgba(14, 42, 82, .05);
+  --sombra-2: 0 1px 2px rgba(14, 42, 82, .05), 0 10px 30px -12px rgba(14, 42, 82, .14);
+  --curva: cubic-bezier(.32, .72, 0, 1);
+  --mono: "SF Mono", ui-monospace, "Cascadia Mono", Menlo, monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  font: 14px/1.5 Inter, -apple-system, "Segoe UI", system-ui, sans-serif;
+  background: var(--fondo);
+  color: var(--tinta);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .montserrat { font-family: Montserrat, Inter, sans-serif; }
+
+/* grano sutil: rompe la chatura digital sin ensuciar el institucional */
+body::after {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 90; opacity: .35;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .015 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ---------- el marco de la app ---------- */
+
+.marco {
+  display: grid;
+  grid-template-rows: 56px 1fr;
+  height: 100dvh;
+  max-width: 1720px;
+  margin: 0 auto;
+}
+
+/* ---------- header ---------- */
+
+.header {
+  display: flex; align-items: center; gap: 20px;
+  padding: 0 20px;
+  background: var(--carta);
+  border-bottom: 1px solid var(--borde);
+}
+
+.marca { display: flex; align-items: center; gap: 10px; }
+.marca .escudo { width: 26px; height: 26px; flex: none; }
+.marca .division { width: 1px; height: 20px; background: var(--borde); }
+.marca .palabra {
+  font-family: Montserrat, sans-serif; font-weight: 800; font-size: 15px;
+  letter-spacing: .04em; color: var(--navy);
+}
+
+.vistas { display: flex; gap: 2px; margin-left: 8px; }
+.vistas a {
+  padding: 7px 13px; border-radius: 999px; text-decoration: none;
+  color: var(--sutil); font-weight: 500; font-size: 13.5px; position: relative;
+  transition: color .2s var(--curva), background .2s var(--curva);
+}
+.vistas a:hover { color: var(--tinta); background: #EEF2F9; }
+.vistas a.activa { color: #fff; background: var(--navy); font-weight: 600; }
+.vistas a:focus-visible { outline: 2px solid var(--azul); outline-offset: 2px; }
+
+.header .derecha { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+
+.chip-frescura {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12.5px; color: var(--sutil);
+}
+.chip-frescura .punto { width: 7px; height: 7px; border-radius: 999px; background: var(--ok); }
+.chip-frescura .punto.ambar { background: var(--oro-tinta); }
+.chip-frescura b { color: var(--tinta); font-weight: 600; }
+
+.pastilla-numero {
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 1px solid var(--borde); border-radius: 999px; padding: 5px 12px;
+  font-family: var(--mono); font-size: 12px; color: var(--tinta); background: var(--carta);
+}
+.pastilla-numero .wa { width: 7px; height: 7px; border-radius: 999px; background: var(--ok); }
+
+.avatar-vendedora {
+  width: 30px; height: 30px; border-radius: 10px; background: var(--navy); color: #fff;
+  display: grid; place-items: center; font-family: Montserrat, sans-serif;
+  font-weight: 700; font-size: 12px;
+}
+
+/* ---------- capas / doble bisel sobrio ---------- */
+
+.bisel {
+  background: rgba(14, 42, 82, .035);
+  border: 1px solid rgba(14, 42, 82, .05);
+  border-radius: 18px;
+  padding: 5px;
+}
+.bisel > .nucleo {
+  background: var(--carta);
+  border: 1px solid var(--borde);
+  border-radius: 13px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8), var(--sombra-1);
+  height: 100%;
+  overflow: hidden;
+  display: flex; flex-direction: column;
+}
+
+/* ---------- tipos de texto ---------- */
+
+.rotulo {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--sutil);
+}
+
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* ---------- chips ---------- */
+
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  border-radius: 999px; padding: 2.5px 9px; font-size: 11.5px; font-weight: 600;
+}
+.chip-navy   { background: var(--navy); color: #fff; }
+.chip-ok     { background: var(--ok-suave); color: #157A3C; }
+.chip-tiempo { background: var(--oro-suave); color: #8A6D00; }        /* SOLO tiempo */
+.chip-gris   { background: #EEF2F9; color: var(--sutil); }
+.chip-info   { background: #E8EFFF; color: var(--azul-hover); }
+.chip-rojo   { background: #FDECEC; color: #B42318; }
+
+.etiqueta { /* etiquetas de conversación (H2): finas, con puntito */
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 500; color: var(--sutil);
+  border: 1px solid var(--borde); border-radius: 6px; padding: 1.5px 7px; background: #fff;
+}
+.etiqueta i { width: 6px; height: 6px; border-radius: 2px; display: inline-block; }
+
+/* ---------- botones ---------- */
+
+.boton {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 0; cursor: pointer; text-decoration: none;
+  border-radius: 999px; padding: 9px 18px;
+  font: 600 13.5px Inter, sans-serif;
+  transition: transform .18s var(--curva), background .18s var(--curva), box-shadow .18s var(--curva);
+}
+.boton:active { transform: scale(.98); }
+.boton:focus-visible { outline: 2px solid var(--azul); outline-offset: 2px; }
+
+.boton-azul { background: var(--azul); color: #fff; box-shadow: 0 6px 16px -8px rgba(37, 99, 235, .5); }
+.boton-azul:hover { background: var(--azul-hover); }
+
+.boton-navy { background: var(--navy); color: #fff; }
+.boton-navy:hover { background: #123564; }
+
+.boton-fantasma { background: transparent; color: var(--sutil); border: 1px solid var(--borde); }
+.boton-fantasma:hover { color: var(--tinta); background: #F2F5FA; }
+
+.boton .circulito {  /* icono anidado en su propio disco */
+  width: 22px; height: 22px; border-radius: 999px; background: rgba(255, 255, 255, .18);
+  display: grid; place-items: center; margin-right: -6px;
+  transition: transform .18s var(--curva);
+}
+.boton:hover .circulito { transform: translateX(2px); }
+
+/* ---------- la cola (bandeja) ---------- */
+
+.fila {
+  display: grid; grid-template-columns: 3px 40px 1fr auto; gap: 10px; align-items: center;
+  padding: 11px 14px 11px 8px;
+  border-bottom: 1px solid var(--borde);
+  cursor: pointer; position: relative;
+  transition: background .15s var(--curva);
+}
+.fila:hover { background: #F7F9FD; }
+.fila.abierta { background: #EFF4FE; }
+.fila.abierta::after {
+  content: ""; position: absolute; right: 0; top: 10px; bottom: 10px; width: 2.5px;
+  border-radius: 2px; background: var(--azul);
+}
+
+.banda { align-self: stretch; border-radius: 3px; }
+.banda-vivo   { background: var(--ok); }        /* está comprando AHORA */
+.banda-expira { background: var(--oro); }       /* ventana que se acaba */
+.banda-espera { background: #B9C6DB; }
+.banda-resto  { background: transparent; }
+
+.retrato {
+  width: 40px; height: 40px; border-radius: 13px; position: relative;
+  display: grid; place-items: center;
+  font-family: Montserrat, sans-serif; font-weight: 700; font-size: 13px;
+  background: #EDF1F8; color: var(--navy);
+}
+.retrato .canal {
+  position: absolute; right: -3px; bottom: -3px; width: 15px; height: 15px;
+  border-radius: 999px; border: 2px solid #fff;
+  display: grid; place-items: center; font-size: 7.5px; font-weight: 800; color: #fff;
+}
+.canal-fb { background: #1877F2; } .canal-ig { background: #C13584; }
+.canal-wa { background: #25D366; } .canal-ms { background: #0084FF; }
+
+.fila .quien { min-width: 0; }
+.fila .nombre { font-family: Montserrat, sans-serif; font-weight: 600; font-size: 13.5px; }
+.fila .extracto {
+  color: var(--sutil); font-size: 12.5px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; margin-top: 1px;
+}
+.fila .metadatos { display: flex; gap: 6px; align-items: center; margin-top: 4px; flex-wrap: wrap; }
+.fila .borde-der { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+.fila .hora { font-family: var(--mono); font-size: 11px; color: var(--sutil); }
+
+.atendiendo { /* claim (D5): quién la tiene */
+  display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--sutil);
+}
+.atendiendo .mini {
+  width: 16px; height: 16px; border-radius: 6px; background: var(--celeste); color: var(--azul-hover);
+  display: grid; place-items: center; font-size: 8.5px; font-weight: 800;
+}
+
+/* ---------- conversación ---------- */
+
+.burbuja {
+  max-width: 72%; padding: 9px 13px; border-radius: 14px; font-size: 13.5px;
+  box-shadow: var(--sombra-1); width: fit-content;
+}
+.burbuja.entrante { background: var(--carta); border: 1px solid var(--borde); border-bottom-left-radius: 5px; }
+.burbuja.saliente {
+  background: var(--celeste); color: var(--navy); margin-left: auto;
+  border-bottom-right-radius: 5px;
+}
+.burbuja .sello { display: block; text-align: right; font-family: var(--mono); font-size: 10px; color: var(--sutil); margin-top: 3px; }
+
+.nota-interna { /* nota del equipo: visible solo adentro */
+  background: var(--oro-suave); border: 1px dashed #E8D48A; border-radius: 10px;
+  padding: 8px 12px; font-size: 12.5px; color: #6b5a10; max-width: 78%; margin: 2px auto;
+}
+
+.separador-dia {
+  display: flex; align-items: center; gap: 10px; color: var(--sutil); font-size: 11px;
+  margin: 6px 0;
+}
+.separador-dia::before, .separador-dia::after { content: ""; flex: 1; height: 1px; background: var(--borde); }
+
+/* ---------- panel derecho (contexto / ficha) ---------- */
+
+.bloque { padding: 14px 16px; border-bottom: 1px solid var(--borde); }
+.bloque:last-child { border-bottom: 0; }
+.bloque .rotulo { display: block; margin-bottom: 9px; }
+
+.tarjeta-post {
+  border: 1px solid var(--borde); border-radius: 12px; overflow: hidden; background: #fff;
+  box-shadow: var(--sombra-1);
+}
+.tarjeta-post .imagen {
+  height: 110px; display: grid; place-items: center; color: #fff;
+  background: linear-gradient(135deg, #0E2A52 0%, #1D4ED8 60%, #3B82F6 100%);
+  font-family: Montserrat, sans-serif; font-weight: 700; letter-spacing: .06em; font-size: 12px;
+}
+.tarjeta-post .cuerpo { padding: 10px 12px; font-size: 12.5px; color: var(--tinta); }
+.tarjeta-post .cuerpo.recorte { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+
+.enlace { color: var(--azul); text-decoration: none; font-weight: 600; font-size: 12.5px; }
+.enlace:hover { text-decoration: underline; }
+
+.fuente-inferencia { font-size: 11.5px; color: var(--sutil); margin-top: 7px; line-height: 1.45; }
+
+.linea-historial { display: flex; gap: 9px; font-size: 12.5px; padding: 5px 0; }
+.linea-historial .cuando { font-family: var(--mono); font-size: 11px; color: var(--sutil); flex: none; width: 52px; }
+
+/* ---------- caja de envío ---------- */
+
+.caja-envio { border-top: 1px solid var(--borde); padding: 12px 14px; background: var(--carta); }
+.caja-envio .campo {
+  display: flex; align-items: center; gap: 10px;
+  border: 1px solid var(--borde); border-radius: 999px; padding: 4px 6px 4px 16px;
+  transition: border-color .18s var(--curva), box-shadow .18s var(--curva);
+}
+.caja-envio .campo:focus-within { border-color: var(--azul); box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
+.caja-envio input { flex: 1; border: 0; outline: 0; font: 13.5px Inter, sans-serif; background: transparent; color: var(--tinta); }
+.caja-envio .letra-chica { font-size: 11px; color: var(--sutil); margin-top: 7px; }
+.atajo-pista { font-family: var(--mono); font-size: 11px; color: var(--sutil); background: #EEF2F9; border-radius: 6px; padding: 2px 7px; }
+
+.caja-deshabilitada {
+  border-top: 1px solid var(--borde); padding: 13px 16px; background: #F7F9FC;
+  font-size: 12.5px; color: var(--sutil);
+}
+
+/* ---------- kanban (embudo) ---------- */
+
+.kanban { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(240px, 1fr); gap: 12px; padding: 16px; overflow-x: auto; height: 100%; }
+.columna-k { display: flex; flex-direction: column; min-width: 0; }
+.columna-k .cabeza { display: flex; align-items: baseline; gap: 8px; padding: 4px 6px 10px; }
+.columna-k .cabeza h3 { font-size: 13px; font-weight: 700; }
+.columna-k .cabeza .cuenta { font-family: var(--mono); font-size: 11.5px; color: var(--sutil); }
+.columna-k .cabeza .tasa { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--sutil); }
+.columna-k .pila { display: flex; flex-direction: column; gap: 9px; overflow-y: auto; padding: 2px; }
+
+.tarjeta-k {
+  background: var(--carta); border: 1px solid var(--borde); border-radius: 12px;
+  padding: 11px 12px; box-shadow: var(--sombra-1); cursor: grab; position: relative;
+  transition: transform .18s var(--curva), box-shadow .18s var(--curva);
+}
+.tarjeta-k:hover { transform: translateY(-2px); box-shadow: var(--sombra-2); }
+.tarjeta-k .arriba { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.tarjeta-k .nombre { font-family: Montserrat, sans-serif; font-weight: 600; font-size: 13px; }
+.tarjeta-k .abajo { display: flex; align-items: center; gap: 7px; margin-top: 8px; flex-wrap: wrap; }
+.hueco {
+  border: 1.5px dashed #C6D2E4; border-radius: 12px; padding: 14px;
+  color: var(--sutil); font-size: 12px; text-align: center; background: rgba(255,255,255,.4);
+}
+
+/* ---------- tablero ---------- */
+
+.rejilla-tablero { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; padding: 18px; overflow-y: auto; }
+.celda { grid-column: span 4; }
+.celda-6 { grid-column: span 6; }
+.celda-8 { grid-column: span 8; }
+.celda-12 { grid-column: span 12; }
+
+.heroe { font-family: Montserrat, sans-serif; font-weight: 800; font-size: 42px; line-height: 1.05; letter-spacing: -.01em; }
+.heroe .unidad { font-size: 15px; font-weight: 600; color: var(--sutil); letter-spacing: 0; }
+.heroe-tiempo { color: var(--oro-tinta); }  /* la cifra héroe ES tiempo: el único dorado grande permitido */
+
+.barra-h { display: grid; grid-template-columns: 118px 1fr 64px; align-items: center; gap: 10px; padding: 6px 0; font-size: 12.5px; }
+.barra-h .pista { height: 8px; border-radius: 999px; background: #EDF1F8; overflow: hidden; }
+.barra-h .relleno { height: 100%; border-radius: 999px; background: var(--azul); }
+.barra-h .valor { font-family: var(--mono); font-size: 12px; text-align: right; color: var(--tinta); }
+
+.aviso-honesto {
+  font-size: 11.5px; color: var(--sutil); background: #F2F5FA; border: 1px solid var(--borde);
+  border-radius: 9px; padding: 7px 11px;
+}
+
+/* ---------- animación de entrada (una vez, sobria) ---------- */
+
+@keyframes aparecer { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.aparece { animation: aparecer .5s var(--curva) both; }
+.aparece.d1 { animation-delay: .05s; } .aparece.d2 { animation-delay: .1s; }
+.aparece.d3 { animation-delay: .15s; } .aparece.d4 { animation-delay: .2s; }
+
+@media (prefers-reduced-motion: reduce) { .aparece { animation: none; } }
+
+/* ---------- responsivo angosto (laptop chica) ---------- */
+
+@media (max-width: 1180px) {
+  .col-panel-oculta-angosto { display: none; }
+  .heroe { font-size: 34px; }
+  .celda { grid-column: span 6; }
+  .celda-8 { grid-column: span 12; }
+}
