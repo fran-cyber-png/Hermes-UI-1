@@ -8,6 +8,7 @@ import type {
 } from './transporte.js';
 import { normalizarTelefono, telefonoDeContacto, jidDeTelefono, esJidDeGrupo } from './identidadWa.js';
 import { detectarOrigen } from './origen.js';
+import { MapaLids } from './lidMap.js';
 
 /**
  * EL TRANSPORTE REAL sobre whatsmeow — la implementación de `TransporteWhatsapp`
@@ -27,6 +28,7 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
   readonly nombre = 'whatsmeow' as const;
 
   private client: WhatsmeowClient;
+  private lids: MapaLids;
   private sesion: EstadoSesion = { estado: 'conectando' };
   private susMensaje: ((m: MensajeWhatsapp) => void)[] = [];
   private susEstado: ((e: EstadoSesion) => void)[] = [];
@@ -37,7 +39,9 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
     this.numeroPropio = numero;
 
     mkdirSync(storeDir, { recursive: true });
-    this.client = createClient({ store: `${storeDir.replace(/\/$/, '')}/${numero}.db` });
+    const rutaStore = `${storeDir.replace(/\/$/, '')}/${numero}.db`;
+    this.client = createClient({ store: rutaStore });
+    this.lids = new MapaLids(rutaStore);
 
     this.cablearEventos();
   }
@@ -89,8 +93,15 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
       };
     }
 
-    const telefono = telefonoDeContacto(info.chat);
-    if (!telefono) return null; // JID sin teléfono derivable (ej. @lid): se descarta, no se inventa.
+    // Primero el camino directo (JID con teléfono); si el chat vino como @lid,
+    // el mapa que whatsmeow sincroniza en su store baja el lid al teléfono real.
+    let telefono = telefonoDeContacto(info.chat);
+    if (!telefono) {
+      telefono = this.lids.telefonoDeLid(info.chat);
+      // eslint-disable-next-line no-console
+      if (telefono) console.log(`[wa lid] ${info.chat} → ${telefono}`);
+    }
+    if (!telefono) return null; // Ni teléfono ni lid mapeado: se descarta, no se inventa.
 
     const texto =
       (message.conversation as string | undefined) ??
@@ -151,6 +162,7 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
   async detener(): Promise<void> {
     await this.client.disconnect();
     this.client.close();
+    this.lids.cerrar();
   }
 
   private cambiarEstado(e: EstadoSesion): void {
