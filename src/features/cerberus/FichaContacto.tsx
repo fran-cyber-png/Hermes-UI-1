@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { AlertTriangle, BadgeCheck, ExternalLink, Loader2, ShoppingBag, ShoppingCart, UserPlus } from 'lucide-react';
 import { api } from '../../lib/datos/cliente';
 import type { Conversacion } from '../canales/conversaciones';
+import { FormularioVenta } from '../venta/FormularioVenta';
 
 /**
  * LA FICHA DEL CONTACTO — la razón de ser de Hermes.
@@ -45,16 +47,16 @@ export function FichaContacto({ conversacion }: { conversacion: Conversacion }) 
   const esTelefono = conversacion.canal === 'whatsapp';
   const telefono = conversacion.persona_id;
   const { data, isPending, isError } = useFicha(telefono, esTelefono);
+  const [mostrarForm, setMostrarForm] = useState(false);
 
-  // Registrar venta: captura la conversión (con el origen del lead) y abre el
-  // formulario real de Cerberus para completar la venta.
-  const registrarVenta = useMutation({
+  // Para un lead NUEVO (todavía no cliente) registramos la conversión (el dato de
+  // embudo) — la venta necesita primero crear el cliente en Cerberus.
+  const registrarConversion = useMutation({
     mutationFn: () =>
-      api<{ cerberusUrl: string }>('/api/contactos/registrar-venta', {
+      api('/api/contactos/registrar-venta', {
         method: 'POST',
         body: JSON.stringify({ telefono, nombre: conversacion.persona_nombre }),
       }),
-    onSuccess: (r) => window.open(r.cerberusUrl, '_blank', 'noopener'),
   });
 
   return (
@@ -140,22 +142,47 @@ export function FichaContacto({ conversacion }: { conversacion: Conversacion }) 
         ) : null}
       </div>
 
-      {/* Registrar venta: para cliente o lead nuevo. Abre el form real de Cerberus. */}
-      {esTelefono && (data?.estado === 'cliente' || data?.estado === 'nuevo') && (
+      {/* Registrar venta — el formulario vive DENTRO de Hermes (la vendedora no
+          entra a Cerberus). Para un cliente existente, abre el form; para un lead
+          nuevo, registra la conversión (crear el cliente es el paso previo). */}
+      {esTelefono && data?.estado === 'cliente' && (
         <footer className="shrink-0 border-t border-border p-3">
           <button
             type="button"
-            onClick={() => registrarVenta.mutate()}
-            disabled={registrarVenta.isPending}
-            className="group flex w-full items-center justify-center gap-2 rounded-xl bg-navy py-2.5 text-sm font-bold text-white shadow-[0_4px_16px_-4px_rgba(14,42,82,0.5)] transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-navy/90 active:scale-[0.98] disabled:opacity-50"
+            onClick={() => setMostrarForm(true)}
+            className="group flex w-full items-center justify-center gap-2 rounded-xl bg-navy py-2.5 text-sm font-bold text-white shadow-[0_4px_16px_-4px_rgba(14,42,82,0.5)] transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-navy/90 active:scale-[0.98]"
           >
-            {registrarVenta.isPending ? <Loader2 size={15} className="animate-spin" /> : <ShoppingCart size={15} />}
-            Registrar venta
+            <ShoppingCart size={15} /> Registrar venta
           </button>
           <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
-            Se abre el formulario de Cerberus. La conversión queda registrada con el origen del lead.
+            El formulario se llena acá. Medio y Origen salen solos de por dónde vino el lead.
           </p>
         </footer>
+      )}
+      {esTelefono && data?.estado === 'nuevo' && (
+        <footer className="shrink-0 border-t border-border p-3">
+          <button
+            type="button"
+            onClick={() => registrarConversion.mutate()}
+            disabled={registrarConversion.isPending || registrarConversion.isSuccess}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-border py-2.5 text-sm font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+          >
+            {registrarConversion.isPending ? <Loader2 size={15} className="animate-spin" /> : <ShoppingCart size={15} />}
+            {registrarConversion.isSuccess ? 'Conversión registrada' : 'Marcar como interesado'}
+          </button>
+          <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
+            Todavía no es cliente en Cerberus. Se guarda la conversión con el origen del lead.
+          </p>
+        </footer>
+      )}
+
+      {mostrarForm && data?.estado === 'cliente' && (
+        <FormularioVenta
+          clienteId={data.id}
+          clienteNombre={data.nombre}
+          origenLead={null}
+          onCerrar={() => setMostrarForm(false)}
+        />
       )}
     </div>
   );
