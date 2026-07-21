@@ -11,6 +11,7 @@ import { interactionsRouter } from "./routes/interactions.js";
 import { conversacionesRouter } from "./routes/conversaciones.js";
 import { authRouter } from "./routes/auth.js";
 import { contactosRouter } from "./routes/contactos.js";
+import { ventaRouter } from "./routes/venta.js";
 import { leadsRouter } from "./routes/leads.js";
 import { metaAssetsRouter } from "./routes/metaAssets.js";
 import { overviewRouter } from "./routes/overview.js";
@@ -49,6 +50,7 @@ app.use("/api/ads", adsRouter); //            3. anuncio
 app.use("/api/leads", leadsRouter);
 app.use("/api/auth", authRouter); // login de vendedoras contra Cerberus
 app.use("/api/contactos", contactosRouter); // la ficha del contacto contra Cerberus
+app.use("/api/venta", ventaRouter); // el formulario de venta dentro de Hermes
 app.use("/api/interactions", interactionsRouter);
 app.use("/api/conversaciones", conversacionesRouter); // la cola unificada: una fila por conversación
 app.use("/api/responder", responderRouter);

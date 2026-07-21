@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { autenticarEnCerberus } from '../cerberus/auth.js';
+import { guardarSesionCerberus } from '../cerberus/sesionStore.js';
 import { firmarSesion, requiereVendedora } from '../auth/sesion.js';
 
 /**
@@ -23,6 +24,9 @@ authRouter.post('/login', async (req, res) => {
     res.status(401).json({ ok: false, message: r.motivo });
     return;
   }
+
+  // Guardamos la sesión de Cerberus para poder crear ventas como ella (S6b).
+  guardarSesionCerberus(r.vendedora.id, r.sesion);
 
   const token = firmarSesion(r.vendedora.id);
   res.json({ ok: true, token, vendedora: r.vendedora });

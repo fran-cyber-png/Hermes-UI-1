@@ -1,0 +1,74 @@
+import { Router } from 'express';
+import { requiereVendedora } from '../auth/sesion.js';
+import { cargarFormulario, crearVenta, type OrdenVenta } from '../cerberus/venta.js';
+
+/**
+ * REGISTRAR VENTA — el formulario de venta, dentro de Hermes.
+ *
+ * La vendedora nunca abre Cerberus: llena el form acá, y Hermes lo POSTea a
+ * Cerberus con su sesión. Medio y Origen se llenan solos desde la atribución que
+ * ya capturamos (vino por WhatsApp, de un anuncio o una landing).
+ */
+export const ventaRouter = Router();
+
+const BASE = (process.env.CERBERUS_BASE_URL ?? 'https://app.goberna.us').replace(/\/$/, '');
+
+/** Las opciones del formulario (monedas, países) + los choices de medio/origen. */
+ventaRouter.get('/formulario', requiereVendedora, async (req, res) => {
+  const f = await cargarFormulario(req.vendedoraId!);
+  if (!f) {
+    res.status(409).json({ ok: false, message: 'La sesión de Cerberus expiró — volvé a entrar a Hermes.' });
+    return;
+  }
+  res.json(f);
+});
+
+/** Buscador de cursos (API pública de Cerberus, solo lectura). */
+ventaRouter.get('/productos', requiereVendedora, async (req, res) => {
+  const q = typeof req.query.q === 'string' ? req.query.q : '';
+  try {
+    const r = await fetch(
+      `${BASE}/productos/api/public/productos-cursos/?estado=1${q ? `&q=${encodeURIComponent(q)}` : ''}`,
+      { signal: AbortSignal.timeout(15_000) },
+    );
+    const d = (await r.json()) as { results?: Array<Record<string, unknown>> };
+    const productos = (d.results ?? []).map((p) => ({
+      id: String(p.codigo_producto),
+      sku: String(p.sku_producto ?? ''),
+      nombre: String(p.nombre_producto ?? ''),
+      precioNormal: Number(p.precio_normal ?? 0),
+      precioPromocion: Number(p.precio_promocion ?? p.precio_normal ?? 0),
+    }));
+    res.json({ productos });
+  } catch (err) {
+    res.status(502).json({ ok: false, message: (err as Error).message });
+  }
+});
+
+/** Crea la venta (o cotización) en Cerberus con la sesión de la vendedora. */
+ventaRouter.post('/crear', requiereVendedora, async (req, res) => {
+  const b = req.body ?? {};
+  const orden: OrdenVenta = {
+    clienteId: Number(b.clienteId),
+    monedaId: String(b.monedaId ?? ''),
+    paisId: String(b.paisId ?? ''),
+    preventa: b.preventa !== false, // por defecto preventa (cursos sin stock)
+    medio: String(b.medio ?? 'organico'),
+    origen: String(b.origen ?? 'whatsapp'),
+    montoTotal: Number(b.montoTotal ?? 0),
+    productos: Array.isArray(b.productos) ? b.productos : [],
+    saveMode: b.saveMode === 'venta' ? 'venta' : 'cotizacion',
+  };
+
+  if (!orden.clienteId || !orden.monedaId || !orden.paisId || orden.productos.length === 0) {
+    res.status(400).json({ ok: false, message: 'Faltan cliente, moneda, país o productos.' });
+    return;
+  }
+
+  const r = await crearVenta(req.vendedoraId!, orden);
+  if (!r.ok) {
+    res.status(409).json({ ok: false, message: r.motivo });
+    return;
+  }
+  res.json({ ok: true, folio: r.folio, mensaje: r.mensaje });
+});

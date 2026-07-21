@@ -26,8 +26,19 @@ export interface Vendedora {
   nombre: string;
 }
 
+/**
+ * La sesión de Cerberus de la vendedora. Con esto Hermes puede ACTUAR como ella
+ * (crear una venta) sin que ella entre nunca a Cerberus: el POST del formulario
+ * de venta lleva esta cookie, y Cerberus lo procesa como si lo hubiera hecho ella
+ * desde su navegador. Se guarda server-side, nunca llega al cliente.
+ */
+export interface SesionCerberus {
+  sessionid: string;
+  csrftoken: string;
+}
+
 export type ResultadoAuth =
-  | { ok: true; vendedora: Vendedora }
+  | { ok: true; vendedora: Vendedora; sesion: SesionCerberus }
   | { ok: false; motivo: string };
 
 /** Saca el valor de una cookie de la lista de Set-Cookie. */
@@ -65,14 +76,21 @@ export async function autenticarEnCerberus(username: string, password: string): 
       body: new URLSearchParams({ csrfmiddlewaretoken: token, username, password }),
     });
 
-    const sessionid = valorCookie(r2.headers.getSetCookie(), 'sessionid');
+    const cookiesPost = r2.headers.getSetCookie();
+    const sessionid = valorCookie(cookiesPost, 'sessionid');
+    // Django suele rotar el csrftoken al loguear; si viene uno nuevo, ese vale.
+    const csrfPost = valorCookie(cookiesPost, 'csrftoken') ?? csrfCookie;
     const location = r2.headers.get('location') ?? '';
     const redirige = r2.status >= 300 && r2.status < 400;
 
     // Éxito: redirigió fuera del login Y entregó sesión. Cualquier otra cosa
     // (200 con el form de nuevo) es credenciales inválidas.
     if (redirige && sessionid && !location.includes('/ingresar')) {
-      return { ok: true, vendedora: { id: username, nombre: username } };
+      return {
+        ok: true,
+        vendedora: { id: username, nombre: username },
+        sesion: { sessionid, csrftoken: csrfPost },
+      };
     }
     return { ok: false, motivo: 'usuario o contraseña incorrectos' };
   } catch (err) {
