@@ -4,6 +4,7 @@ import type { Conversacion } from './conversaciones';
 import { HiloWhatsapp } from '../whatsapp/HiloWhatsapp';
 import { HiloMessenger } from './HiloMessenger';
 import ResponderPanel from './ResponderPanel';
+import { BarraGestion } from '../gestion/BarraGestion';
 import type { Interaccion } from './types';
 
 /**
@@ -38,9 +39,18 @@ export function ConversacionActiva({
     );
   }
 
+  // El embudo entero, manejable desde el chat: etapa, etiquetas, intereses,
+  // agendar — arriba de CUALQUIER conversación, sin soltar el hilo.
+  const conBarra = (contenido: React.ReactNode) => (
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <BarraGestion conversacion={conversacion} />
+      <div className="min-h-0 flex-1">{contenido}</div>
+    </div>
+  );
+
   // WhatsApp: el hilo nativo. La razón de ser de este panel.
   if (conversacion.canal === 'whatsapp') {
-    return <HiloWhatsapp conversacion={conversacion} />;
+    return conBarra(<HiloWhatsapp conversacion={conversacion} />);
   }
 
   // Comentario de Facebook/Instagram: el flujo de respuesta pública + privada, que
@@ -59,15 +69,15 @@ export function ConversacionActiva({
       ventana_abierta: conversacion.ventana_abierta,
       dias: conversacion.dias,
     };
-    return (
+    return conBarra(
       <ResponderPanel
         interaccion={inter}
         onCerrar={onCerrar}
         onRespondido={() => void qc.invalidateQueries({ queryKey: ['conversaciones'] })}
-      />
+      />,
     );
   }
 
   // Messenger (canal Meta, tipo mensaje): el hilo completo, en lectura.
-  return <HiloMessenger conversacion={conversacion} />;
+  return conBarra(<HiloMessenger conversacion={conversacion} />);
 }

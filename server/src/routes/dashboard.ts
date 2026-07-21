@@ -157,11 +157,23 @@ dashboardRouter.get('/', async (_req, res) => {
     ORDER BY mensajes_7d DESC
   `);
 
+  // ── El embudo de un vistazo: cuántos hay en cada etapa (normalizada). ──
+  const norm = (e: string) => (e === 'nuevo' ? 'interesado' : e === 'venta' ? 'cierre' : e);
+  const embudo: Record<string, number> = {};
+  for (const e of etapas) embudo[norm(e.etapa)] = (embudo[norm(e.etapa)] ?? 0) + 1;
+
+  // ── Qué cursos pide la gente: el ranking de intereses. Señal de negocio pura. ──
+  const cursos = await db.execute<{ curso: string; n: number }>(sql`
+    SELECT curso, count(*)::int AS n FROM intereses GROUP BY curso ORDER BY n DESC, curso LIMIT 6
+  `);
+
   res.json({
     chats,
     formularios,
-    etapas: Object.fromEntries(etapas.map((e) => [e.clave, e.etapa])),
+    etapas: Object.fromEntries(etapas.map((e) => [e.clave, norm(e.etapa)])),
     etiquetas: etiquetasPorClave,
     porVendedora,
+    embudo,
+    cursos,
   });
 });
