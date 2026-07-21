@@ -13,9 +13,10 @@ import { requiereVendedora } from '../auth/sesion.js';
 export const agendaRouter = Router();
 agendaRouter.use(requiereVendedora);
 
-/** Los pendientes (todos, vencidos incluidos) + los hechos de los últimos 7 días. */
+/** Los pendientes (todos, vencidos incluidos) + los hechos de los últimos 35 días
+ *  (una grilla mensual completa, con margen). */
 agendaRouter.get('/', async (req, res) => {
-  const hace7d = new Date(Date.now() - 7 * 24 * 3600 * 1000);
+  const hace7d = new Date(Date.now() - 35 * 24 * 3600 * 1000);
   const filas = await db
     .select()
     .from(recordatorios)
