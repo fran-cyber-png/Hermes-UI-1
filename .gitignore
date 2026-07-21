@@ -43,3 +43,7 @@ __pycache__/
 # versiona; los benchmarks se derivan de ella con `kos cq export` y llevan timestamp en el nombre.
 goberna-kos/cqs/benchmarks/
 answers-cache.json*
+
+# Sesiones de WhatsApp (whatsmeow) — son credenciales de la cuenta, NUNCA se commitean
+server/.wa-sessions/
+.wa-sessions/

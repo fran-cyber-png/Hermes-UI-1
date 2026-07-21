@@ -14,6 +14,7 @@
     "cleanup:test": "tsx src/scripts/cleanupTest.ts",
     "test": "tsx --test src/**/*.test.ts",
     "ingest:interactions": "tsx src/scripts/ingestInteractions.ts",
+    "wa:vincular": "tsx src/whatsapp/vincular.ts",
     "cerberus:ingestar": "tsx src/scripts/cerberus.ts ingestar",
     "cerberus:proyectar": "tsx src/scripts/cerberus.ts proyectar",
     "cerberus:hechos": "tsx src/scripts/cerberus.ts hechos",
