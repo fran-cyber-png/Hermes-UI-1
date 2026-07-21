@@ -4,11 +4,13 @@ import '@fontsource/montserrat/600.css';
 import '@fontsource/montserrat/700.css';
 import '@fontsource/montserrat/800.css';
 import { useState, type CSSProperties } from 'react';
-import { MessageSquare, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { LogOut, MessageSquare, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { ColaUnificada } from './features/canales/ColaUnificada';
 import type { Conversacion } from './features/canales/conversaciones';
 import BarraFrescura from './features/canales/BarraFrescura';
 import PanelWhatsapp from './features/whatsapp/PanelWhatsapp';
+import { Login } from './features/auth/Login';
+import { useSesion } from './features/auth/sesion';
 import { useLocalStorage } from './lib/useLocalStorage';
 
 /**
@@ -28,8 +30,18 @@ const ARRASTRABLE = { WebkitAppRegion: 'drag' } as CSSProperties;
 const NO_ARRASTRABLE = { WebkitAppRegion: 'no-drag' } as CSSProperties;
 
 export default function App() {
+  const { vendedora, cargando, entrar, salir } = useSesion();
   const [conWhatsapp, setConWhatsapp] = useLocalStorage('hermes.panelWhatsapp', true);
   const [abierta, setAbierta] = useState<Conversacion | null>(null);
+
+  // Sin sesión no hay bandeja: la vendedora entra con su cuenta de Cerberus, y de
+  // esa identidad cuelga cada envío y cada venta que registre.
+  if (cargando) {
+    return <div className="flex h-dvh items-center justify-center bg-background text-sm text-muted-foreground">Cargando…</div>;
+  }
+  if (!vendedora) {
+    return <Login entrar={entrar} />;
+  }
 
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
@@ -40,7 +52,7 @@ export default function App() {
             <span className="text-xs font-semibold text-muted-foreground">Bandeja</span>
           </div>
 
-          <div className="flex items-center gap-4" style={NO_ARRASTRABLE}>
+          <div className="flex items-center gap-3" style={NO_ARRASTRABLE}>
             <BarraFrescura />
             <button
               type="button"
@@ -51,6 +63,17 @@ export default function App() {
               {conWhatsapp ? <PanelRightClose size={13} /> : <PanelRightOpen size={13} />}
               <MessageSquare size={13} />
             </button>
+            <div className="flex items-center gap-1.5 border-l border-border pl-3">
+              <span className="text-xs font-semibold text-navy">{vendedora.nombre}</span>
+              <button
+                type="button"
+                onClick={salir}
+                title="Salir"
+                className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <LogOut size={13} />
+              </button>
+            </div>
           </div>
         </div>
       </header>

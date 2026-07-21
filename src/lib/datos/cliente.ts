@@ -64,9 +64,16 @@ export class ErrorApi extends Error {
  * parámetros es automática — que es lo que mata las races que teníamos.
  */
 export async function api<T>(ruta: string, init?: RequestInit): Promise<T> {
+  // El token de la vendedora (si inició sesión) va en cada request. Un Bearer en
+  // el header, no una cookie: la app de escritorio habla con su propio backend.
+  const token = localStorage.getItem('hermes.token');
   const res = await fetch(`${API_URL}${ruta}`, {
     ...init,
-    headers: { 'content-type': 'application/json', ...init?.headers },
+    headers: {
+      'content-type': 'application/json',
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...init?.headers,
+    },
   });
 
   if (!res.ok) {

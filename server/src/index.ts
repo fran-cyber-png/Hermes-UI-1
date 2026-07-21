@@ -9,6 +9,7 @@ import { configRouter } from "./routes/config.js";
 import { decisionsRouter } from "./routes/decisions.js";
 import { interactionsRouter } from "./routes/interactions.js";
 import { conversacionesRouter } from "./routes/conversaciones.js";
+import { authRouter } from "./routes/auth.js";
 import { leadsRouter } from "./routes/leads.js";
 import { metaAssetsRouter } from "./routes/metaAssets.js";
 import { overviewRouter } from "./routes/overview.js";
@@ -41,6 +42,7 @@ app.use("/api/adsets", adsetsRouter); //      2. conjunto de anuncios
 app.use("/api/ads", adsRouter); //            3. anuncio
 
 app.use("/api/leads", leadsRouter);
+app.use("/api/auth", authRouter); // login de vendedoras contra Cerberus
 app.use("/api/interactions", interactionsRouter);
 app.use("/api/conversaciones", conversacionesRouter); // la cola unificada: una fila por conversación
 app.use("/api/responder", responderRouter);
