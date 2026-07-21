@@ -19,6 +19,8 @@ import { structureRouter } from "./routes/structure.js";
 import { arrancarReloj } from "./pauta/reloj.js";
 import { arrancarRelojDelLazo } from "./lazo/reloj.js";
 import { webhookRouter } from "./webhook/ruta.js";
+import { arrancarWhatsapp } from "./whatsapp/wiring.js";
+import { rutaDevWhatsapp } from "./whatsapp/rutaDev.js";
 
 const app = express();
 const port = process.env.PORT ? Number(process.env.PORT) : 4100;
@@ -53,8 +55,14 @@ app.use("/api/sdk", sdkRouter);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
+// WhatsApp: engancha el transporte (hoy el falso) a la ingesta, que persiste cada
+// mensaje en el mismo event store que Facebook/Instagram. La ruta de dev para
+// inyectar mensajes solo existe si corre el falso.
+const { falso } = arrancarWhatsapp();
+if (falso) app.use("/api/whatsapp/_dev", rutaDevWhatsapp(falso));
+
 app.listen(port, () => {
-  console.log(`meta-escuela server listening on http://localhost:${port}`);
+  console.log(`hermes server listening on http://localhost:${port}`);
   // Lo único que LEE de Meta sin que nadie lo pida. Las pantallas leen Postgres.
   arrancarReloj();
   // Lo único que le ESCRIBE a Meta sin que nadie lo pida — y por eso arranca apagado.
