@@ -354,3 +354,24 @@ export const etiquetas = pgTable(
   },
   (t) => [unique().on(t.clave, t.etiqueta), index("etiquetas_clave_idx").on(t.clave)],
 );
+
+/**
+ * INTERESES — qué curso(s) quiere esta persona. Puede tener varios.
+ *
+ * Es la compuerta honesta del embudo: a "cotizado" no se llega sin saber QUÉ
+ * se está cotizando. Se registran a mano (la vendedora lo escuchó) o solos al
+ * registrar una cotización/venta (los productos de la orden SON el interés).
+ */
+export const intereses = pgTable(
+  "intereses",
+  {
+    id: bigserial({ mode: "number" }).primaryKey(),
+    /** La conversación (clave de la cola). */
+    clave: text("clave").notNull(),
+    /** El nombre del producto/curso tal como está en Cerberus. */
+    curso: text("curso").notNull(),
+    vendedoraId: text("vendedora_id").notNull(),
+    creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique().on(t.clave, t.curso), index("intereses_clave_idx").on(t.clave)],
+);

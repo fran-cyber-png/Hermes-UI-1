@@ -186,6 +186,9 @@ export function FichaContacto({ conversacion }: { conversacion: Conversacion }) 
           clienteNombre={data.nombre}
           telefono={telefono ?? ''}
           canal={conversacion.canal}
+          clave={conversacion.clave}
+          personaNombre={conversacion.persona_nombre}
+          numeroPropio={conversacion.numero_propio}
           onCerrar={() => setMostrarForm(false)}
         />
       )}

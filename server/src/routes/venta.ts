@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requiereVendedora } from '../auth/sesion.js';
+import { asentarVentaEnEmbudo } from './gestiones.js';
 import { cargarFormulario, crearVenta, type OrdenVenta } from '../cerberus/venta.js';
 
 /**
@@ -70,5 +71,27 @@ ventaRouter.post('/crear', requiereVendedora, async (req, res) => {
     res.status(409).json({ ok: false, message: r.motivo });
     return;
   }
+
+  // La venta mueve el embudo sola: cotización → intereses + "cotizado";
+  // venta → conversión + "cierre". Best-effort: si esto falla, la venta en
+  // Cerberus YA existe y no se rompe la respuesta.
+  try {
+    await asentarVentaEnEmbudo({
+      vendedoraId: req.vendedoraId!,
+      saveMode: orden.saveMode,
+      folio: r.folio ?? null,
+      clave: b.clave ? String(b.clave) : null,
+      canal: b.canal ? String(b.canal) : null,
+      telefono: b.telefono ? String(b.telefono).replace(/\D/g, '') : null,
+      personaNombre: b.personaNombre ? String(b.personaNombre) : null,
+      numeroPropio: b.numeroPropio ? String(b.numeroPropio) : null,
+      productos: (Array.isArray(b.productos) ? b.productos : [])
+        .map((p: { nombre?: string }) => String(p.nombre ?? ''))
+        .filter(Boolean),
+    });
+  } catch (err) {
+    console.error('[venta] no se pudo asentar en el embudo:', (err as Error).message);
+  }
+
   res.json({ ok: true, folio: r.folio, mensaje: r.mensaje });
 });

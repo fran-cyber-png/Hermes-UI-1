@@ -4,6 +4,7 @@ import { Check, ClipboardList, Loader2 } from 'lucide-react';
 import { api } from '../../lib/datos/cliente';
 import type { Conversacion } from '../canales/conversaciones';
 import { opcionesRapidas } from '../agenda/agenda';
+import { Intereses } from './Intereses';
 
 /**
  * REGISTRAR GESTIÓN — la bitácora comercial en el panel derecho.
@@ -16,11 +17,10 @@ import { opcionesRapidas } from '../agenda/agenda';
  */
 
 const ETAPAS = [
-  { id: 'nuevo', label: 'Nuevo' },
-  { id: 'contactado', label: 'Contactado' },
   { id: 'interesado', label: 'Interesado' },
+  { id: 'contactado', label: 'Contactado' },
   { id: 'cotizado', label: 'Cotizado' },
-  { id: 'venta', label: 'Venta' },
+  { id: 'cierre', label: 'Cierre' },
   { id: 'perdido', label: 'Perdido' },
 ] as const;
 
@@ -59,11 +59,15 @@ export function RegistrarGestion({ conversacion }: { conversacion: Conversacion 
   const etapaActual = historial.data?.etapa ?? null;
   const ultima = historial.data?.gestiones[0] ?? null;
 
+  const [errorCompuerta, setErrorCompuerta] = useState<string | null>(null);
   const crear = useMutation({
     mutationFn: (g: Record<string, unknown>) =>
       api('/api/gestiones', { method: 'POST', body: JSON.stringify(g) }),
+    onError: (err) => setErrorCompuerta(err instanceof Error ? err.message : 'No se pudo registrar.'),
     onSuccess: () => {
+      setErrorCompuerta(null);
       void qc.invalidateQueries({ queryKey: ['gestiones', conversacion.clave] });
+      void qc.invalidateQueries({ queryKey: ['embudo'] });
       void qc.invalidateQueries({ queryKey: ['dashboard'] });
       void qc.invalidateQueries({ queryKey: ['agenda'] });
       setGuardado(true);
@@ -78,6 +82,8 @@ export function RegistrarGestion({ conversacion }: { conversacion: Conversacion 
 
   function guardar() {
     const e = etapa ?? etapaActual ?? 'contactado';
+    // Las compuertas (cotizado exige interés; cierre exige venta) las valida el
+    // server: si frenan, el error se muestra tal cual.
     const fecha = personalizada ? new Date(personalizada) : cuando;
     crear.mutate({
       clave: conversacion.clave,
@@ -136,6 +142,9 @@ export function RegistrarGestion({ conversacion }: { conversacion: Conversacion 
             ))}
           </div>
 
+          <div className="mt-3 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Cursos de interés</div>
+          <div className="mt-1.5"><Intereses clave={conversacion.clave} /></div>
+
           <div className="mt-3 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Próxima acción</div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {ACCIONES.map((a) => (
@@ -180,6 +189,9 @@ export function RegistrarGestion({ conversacion }: { conversacion: Conversacion 
             className="mt-1.5 w-full resize-none rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs outline-none focus:border-primary"
           />
 
+          {errorCompuerta && (
+            <p className="mt-2 rounded-lg bg-gold/10 px-2.5 py-1.5 text-[11px] font-medium text-gold-ink">{errorCompuerta}</p>
+          )}
           <div className="mt-2 flex gap-2">
             <button
               type="button"

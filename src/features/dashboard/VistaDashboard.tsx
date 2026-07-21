@@ -33,6 +33,7 @@ const ETAPA_CHIP: Record<string, string> = {
   interesado: 'bg-primary/10 text-primary',
   cotizado: 'bg-navy text-white',
   venta: 'bg-success/10 text-success',
+  cierre: 'bg-success/10 text-success',
   convertido: 'bg-success/10 text-success',
   perdido: 'bg-destructive/10 text-destructive',
   descartado: 'bg-destructive/10 text-destructive',

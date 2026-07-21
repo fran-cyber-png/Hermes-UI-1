@@ -1,25 +1,34 @@
 import { Router } from 'express';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { gestiones, recordatorios, etiquetas } from '../db/schema.js';
+import { gestiones, recordatorios, etiquetas, intereses, conversionesWa } from '../db/schema.js';
 import { requiereVendedora } from '../auth/sesion.js';
 
 /**
- * EL REGISTRO DE GESTIÓN + LAS ETIQUETAS — la bitácora comercial.
+ * EL REGISTRO DE GESTIÓN + ETIQUETAS + INTERESES — la bitácora comercial.
  *
- * Registrar una gestión = declarar en qué ETAPA quedó el lead, cuál es la
- * PRÓXIMA ACCIÓN (wsp de seguimiento / llamada / correo / reunión) y las NOTAS
- * de acuerdos. Si la próxima acción tiene fecha, cae SOLA en la Agenda de la
- * vendedora — una promesa, un lugar. Nada de esto envía nada: organiza.
+ * La etapa ACTUAL de una conversación es la de su última gestión (append-only).
+ * El embudo tiene DOS compuertas honestas, validadas ACÁ (no en la UI):
  *
- * La etapa ACTUAL de una conversación es la de su última gestión (append-only:
- * el historial completo es la auditoría de cómo se trabajó el lead).
+ *   · a COTIZADO no se llega sin al menos un INTERÉS registrado — no se cotiza
+ *     lo que no se sabe qué es;
+ *   · a CIERRE no se llega sin VENTA REGISTRADA — el cierre no se declara, se
+ *     gana. (La ruta de venta lo declara sola al crear la venta.)
+ *
+ * Si la próxima acción trae fecha, cae sola en la Agenda. Nada envía nada.
  */
 export const gestionesRouter = Router();
 gestionesRouter.use(requiereVendedora);
 
-export const ETAPAS = ['nuevo', 'contactado', 'interesado', 'cotizado', 'venta', 'perdido'] as const;
+export const ETAPAS = ['interesado', 'contactado', 'cotizado', 'cierre', 'perdido'] as const;
 export const ACCIONES = ['wsp', 'llamada', 'correo', 'reunion'] as const;
+
+/** Los valores viejos siguen siendo válidos al leer: se normalizan, no se rompen. */
+function normalizarEtapa(e: string): string {
+  if (e === 'nuevo') return 'interesado';
+  if (e === 'venta') return 'cierre';
+  return e;
+}
 
 const NOMBRE_ACCION: Record<string, string> = {
   wsp: 'Wsp de seguimiento',
@@ -28,13 +37,22 @@ const NOMBRE_ACCION: Record<string, string> = {
   reunion: 'Reunión',
 };
 
-/** Registrar una gestión. Si trae próxima acción con fecha, agenda el recordatorio. */
-gestionesRouter.post('/', async (req, res) => {
-  const { clave, canal, personaId, personaNombre, numeroPropio, etapa, proximaAccion, proximaFecha, notas } =
-    req.body ?? {};
+/** El teléfono de una conversación de WhatsApp, para la compuerta del cierre. */
+function telefonoDeClave(clave: string, personaId?: string | null): string | null {
+  const m = /^conv:whatsapp:(\d+):/.exec(clave);
+  if (m) return m[1];
+  if (personaId && /^\d{8,}$/.test(personaId)) return personaId;
+  return null;
+}
 
-  if (!clave || !canal || !ETAPAS.includes(etapa)) {
-    res.status(400).json({ ok: false, message: 'faltan datos: conversación o etapa inválida' });
+/** Registrar una gestión. Las compuertas del embudo viven acá. */
+gestionesRouter.post('/', async (req, res) => {
+  const { clave, canal, personaId, personaNombre, numeroPropio, proximaAccion, proximaFecha, notas } =
+    req.body ?? {};
+  const etapa = normalizarEtapa(String(req.body?.etapa ?? ''));
+
+  if (!clave || !canal || !ETAPAS.includes(etapa as (typeof ETAPAS)[number])) {
+    res.status(400).json({ ok: false, message: `etapa inválida (${ETAPAS.join(' | ')})` });
     return;
   }
   if (proximaAccion && !ACCIONES.includes(proximaAccion)) {
@@ -47,6 +65,37 @@ gestionesRouter.post('/', async (req, res) => {
     return;
   }
 
+  // ── COMPUERTA 1: cotizado exige saber QUÉ curso quiere. ──
+  if (etapa === 'cotizado') {
+    const [n] = await db.execute<{ n: number }>(
+      sql`SELECT count(*)::int AS n FROM intereses WHERE clave = ${String(clave)}`,
+    );
+    if (!n?.n) {
+      res.status(400).json({
+        ok: false,
+        message: 'Para pasar a Cotizado hay que saber qué curso le interesa: registrá al menos un interés (puede tener varios).',
+      });
+      return;
+    }
+  }
+
+  // ── COMPUERTA 2: el cierre no se declara — se gana registrando la venta. ──
+  if (etapa === 'cierre') {
+    const telefono = telefonoDeClave(String(clave), personaId ? String(personaId) : null);
+    const [venta] = telefono
+      ? await db.execute<{ n: number }>(
+          sql`SELECT count(*)::int AS n FROM conversiones_wa WHERE telefono = ${telefono}`,
+        )
+      : [{ n: 0 }];
+    if (!venta?.n) {
+      res.status(400).json({
+        ok: false,
+        message: 'A Cierre se llega registrando la venta (botón "Registrar venta" en la ficha). Al crearla, el lead pasa solo.',
+      });
+      return;
+    }
+  }
+
   const [gestion] = await db
     .insert(gestiones)
     .values({
@@ -56,7 +105,7 @@ gestionesRouter.post('/', async (req, res) => {
       personaId: personaId ? String(personaId) : null,
       personaNombre: personaNombre ? String(personaNombre) : null,
       numeroPropio: numeroPropio ? String(numeroPropio) : null,
-      etapa: String(etapa),
+      etapa,
       proximaAccion: proximaAccion ? String(proximaAccion) : null,
       proximaFecha: fecha,
       notas: String(notas ?? '').trim() || null,
@@ -88,17 +137,53 @@ gestionesRouter.get('/de/:clave', async (req, res) => {
     .where(eq(gestiones.clave, req.params.clave))
     .orderBy(desc(gestiones.creadoAt))
     .limit(10);
-  res.json({ gestiones: filas, etapa: filas[0]?.etapa ?? null });
+  res.json({ gestiones: filas, etapa: filas[0] ? normalizarEtapa(filas[0].etapa) : null });
 });
 
-/** El mapa clave → etapa actual (la última declarada), para el Embudo y el Dashboard. */
+/** El mapa clave → etapa actual (normalizada), para el Embudo y el Dashboard. */
 gestionesRouter.get('/etapas', async (_req, res) => {
   const filas = await db.execute<{ clave: string; etapa: string }>(sql`
     SELECT DISTINCT ON (clave) clave, etapa
     FROM gestiones
     ORDER BY clave, creado_at DESC
   `);
-  res.json({ etapas: Object.fromEntries(filas.map((f) => [f.clave, f.etapa])) });
+  res.json({ etapas: Object.fromEntries(filas.map((f) => [f.clave, normalizarEtapa(f.etapa)])) });
+});
+
+// ── Intereses: qué curso(s) quiere. La compuerta de "cotizado". ────────────
+
+gestionesRouter.get('/intereses', async (req, res) => {
+  const claves = String(req.query.claves ?? '')
+    .split(',')
+    .filter(Boolean);
+  const filas = claves.length
+    ? await db.select().from(intereses).where(inArray(intereses.clave, claves))
+    : await db.select().from(intereses);
+  const porClave: Record<string, string[]> = {};
+  for (const f of filas) (porClave[f.clave] ??= []).push(f.curso);
+  res.json({ intereses: porClave });
+});
+
+gestionesRouter.post('/intereses', async (req, res) => {
+  const { clave, curso } = req.body ?? {};
+  const limpio = String(curso ?? '').trim().slice(0, 120);
+  if (!clave || !limpio) {
+    res.status(400).json({ ok: false, message: 'faltan la conversación o el curso' });
+    return;
+  }
+  await db
+    .insert(intereses)
+    .values({ clave: String(clave), curso: limpio, vendedoraId: req.vendedoraId! })
+    .onConflictDoNothing();
+  res.json({ ok: true });
+});
+
+gestionesRouter.delete('/intereses', async (req, res) => {
+  const { clave, curso } = req.body ?? {};
+  await db
+    .delete(intereses)
+    .where(and(eq(intereses.clave, String(clave ?? '')), eq(intereses.curso, String(curso ?? ''))));
+  res.json({ ok: true });
 });
 
 // ── Etiquetas (compartidas por el equipo) ──────────────────────────────────
@@ -136,3 +221,51 @@ gestionesRouter.delete('/etiquetas', async (req, res) => {
     .where(and(eq(etiquetas.clave, String(clave ?? '')), eq(etiquetas.etiqueta, String(etiqueta ?? ''))));
   res.json({ ok: true });
 });
+
+/**
+ * LA VENTA MUEVE EL EMBUDO SOLA (lo llama la ruta de venta, no la UI):
+ * cotización → intereses (los productos SON el interés) + etapa "cotizado";
+ * venta → conversión + etapa "cierre". La acción humana fue registrar la
+ * venta; esto solo asienta sus consecuencias.
+ */
+export async function asentarVentaEnEmbudo(v: {
+  vendedoraId: string;
+  saveMode: 'venta' | 'cotizacion';
+  folio: string | null;
+  clave?: string | null;
+  canal?: string | null;
+  telefono?: string | null;
+  personaNombre?: string | null;
+  numeroPropio?: string | null;
+  productos: string[];
+}): Promise<void> {
+  const clave = v.clave?.trim();
+  if (!clave) return;
+
+  for (const curso of v.productos.filter(Boolean)) {
+    await db
+      .insert(intereses)
+      .values({ clave, curso: curso.slice(0, 120), vendedoraId: v.vendedoraId })
+      .onConflictDoNothing();
+  }
+
+  if (v.saveMode === 'venta' && v.telefono) {
+    await db.insert(conversionesWa).values({
+      vendedoraId: v.vendedoraId,
+      telefono: v.telefono,
+      nombre: v.personaNombre ?? null,
+      origen: null,
+    });
+  }
+
+  await db.insert(gestiones).values({
+    vendedoraId: v.vendedoraId,
+    clave,
+    canal: v.canal ?? 'whatsapp',
+    personaId: v.telefono ?? null,
+    personaNombre: v.personaNombre ?? null,
+    numeroPropio: v.numeroPropio ?? null,
+    etapa: v.saveMode === 'venta' ? 'cierre' : 'cotizado',
+    notas: v.folio ? `${v.saveMode === 'venta' ? 'Venta' : 'Cotización'} ${v.folio}` : null,
+  });
+}

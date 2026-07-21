@@ -46,6 +46,7 @@ export function useProductos(q: string, activo: boolean) {
 
 export interface ItemVenta {
   productoId: string;
+  nombre?: string;
   cantidad: number;
   precioRegular: number;
   precioVenta: number;
@@ -64,10 +65,19 @@ export function useCrearVenta() {
       montoTotal: number;
       productos: ItemVenta[];
       saveMode: 'cotizacion' | 'venta';
+      telefono?: string | null;
+      canal?: string | null;
+      clave?: string | null;
+      personaNombre?: string | null;
+      numeroPropio?: string | null;
     }) => api<{ ok: true; folio?: string; mensaje?: string }>('/api/venta/crear', { method: 'POST', body: JSON.stringify(v) }),
     onSuccess: () => {
-      // La ficha (compras) quedó vieja: se acaba de agregar una venta.
+      // La ficha (compras) quedó vieja, y la venta movió el embudo: cotización →
+      // cotizado, venta → cierre. Todo lo que lo muestra se refresca.
       void qc.invalidateQueries({ queryKey: ['ficha'] });
+      void qc.invalidateQueries({ queryKey: ['gestiones'] });
+      void qc.invalidateQueries({ queryKey: ['embudo'] });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
 }

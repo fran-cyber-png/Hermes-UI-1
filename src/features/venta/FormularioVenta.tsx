@@ -28,6 +28,10 @@ interface Props {
   /** El canal de la conversación — de ahí se infiere el Origen. */
   canal: string;
   onCerrar: () => void;
+  /** La conversación de origen: con esto la venta mueve el embudo sola. */
+  clave?: string | null;
+  personaNombre?: string | null;
+  numeroPropio?: string | null;
 }
 
 interface Linea {
@@ -35,7 +39,7 @@ interface Linea {
   cantidad: number;
 }
 
-export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, onCerrar }: Props) {
+export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, clave, personaNombre, numeroPropio, onCerrar }: Props) {
   const { data: form, isPending: cargandoForm } = useFormularioVenta(true);
   const crear = useCrearVenta();
 
@@ -92,11 +96,19 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, onC
       montoTotal: monto,
       productos: lineas.map((l) => ({
         productoId: l.producto.id,
+        nombre: l.producto.nombre,
         cantidad: l.cantidad,
         precioRegular: l.producto.precioNormal,
         precioVenta: l.producto.precioPromocion,
       })),
       saveMode,
+      // El contexto de la conversación: con esto el server asienta intereses,
+      // conversión y etapa (cotizado/cierre) — el embudo se mueve solo.
+      telefono,
+      canal,
+      clave: clave ?? null,
+      personaNombre: personaNombre ?? null,
+      numeroPropio: numeroPropio ?? null,
     });
     setSaved(saveMode === 'venta' ? 'Venta registrada en Cerberus.' : 'Cotización registrada en Cerberus.' + (r.folio ? ` (${r.folio})` : ''));
   }
