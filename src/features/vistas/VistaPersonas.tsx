@@ -34,9 +34,11 @@ type Ficha =
 
 const CERBERUS = import.meta.env.VITE_CERBERUS_URL ?? 'https://app.goberna.us';
 
-export function VistaPersonas() {
-  const [entrada, setEntrada] = useState('');
-  const [telefono, setTelefono] = useState<string | null>(null);
+export function VistaPersonas({ telefonoInicial }: { telefonoInicial?: string | null }) {
+  const [entrada, setEntrada] = useState(telefonoInicial ?? '');
+  const [telefono, setTelefono] = useState<string | null>(
+    telefonoInicial && telefonoInicial.replace(/\D/g, '').length >= 8 ? telefonoInicial.replace(/\D/g, '') : null,
+  );
 
   const { data, isPending, isError, isFetching } = useQuery({
     queryKey: ['ficha', telefono],

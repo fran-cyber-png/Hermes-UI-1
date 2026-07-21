@@ -298,3 +298,59 @@ export const recordatorios = pgTable(
   },
   (t) => [index("recordatorios_agenda_idx").on(t.vendedoraId, t.estado, t.cuando)],
 );
+
+/**
+ * EL REGISTRO DE GESTIÓN — la bitácora comercial de cada conversación.
+ *
+ * Cada vez que la vendedora trabaja un contacto, registra: en qué ETAPA del
+ * embudo quedó, cuál es la PRÓXIMA ACCIÓN (wsp de seguimiento, llamada, correo,
+ * reunión) y las NOTAS de acuerdos. Append-only como todo lo que importa: la
+ * etapa actual de una conversación es la de su ÚLTIMA gestión — el historial
+ * completo queda como auditoría de cómo se trabajó el lead.
+ */
+export const gestiones = pgTable(
+  "gestiones",
+  {
+    id: bigserial({ mode: "number" }).primaryKey(),
+    vendedoraId: text("vendedora_id").notNull(),
+    /** La conversación (clave de la cola) + lo mínimo para reabrirla. */
+    clave: text("clave").notNull(),
+    canal: text("canal").notNull(),
+    personaId: text("persona_id"),
+    personaNombre: text("persona_nombre"),
+    numeroPropio: text("numero_propio"),
+    /** nuevo | contactado | interesado | cotizado | venta | perdido. */
+    etapa: text("etapa").notNull(),
+    /** wsp | llamada | correo | reunion — null si no hay próxima acción. */
+    proximaAccion: text("proxima_accion"),
+    proximaFecha: timestamp("proxima_fecha", { withTimezone: true }),
+    /** Acuerdos y comentarios de esta gestión. */
+    notas: text("notas"),
+    creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("gestiones_conversacion_idx").on(t.clave, t.creadoAt),
+    index("gestiones_vendedora_idx").on(t.vendedoraId, t.creadoAt),
+  ],
+);
+
+/**
+ * ETIQUETAS DE CONVERSACIÓN — compartidas por el equipo.
+ *
+ * Pocas, de colores, para marcar lo que importa ("interesada", "precio",
+ * "reclamo"). Viven por conversación (la clave de la cola) y las ve todo el
+ * equipo: son coordinación, no notas privadas.
+ */
+export const etiquetas = pgTable(
+  "etiquetas",
+  {
+    id: bigserial({ mode: "number" }).primaryKey(),
+    /** La conversación etiquetada (clave de la cola). */
+    clave: text("clave").notNull(),
+    etiqueta: text("etiqueta").notNull(),
+    /** Quién la puso — para saber a quién preguntarle. */
+    vendedoraId: text("vendedora_id").notNull(),
+    creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique().on(t.clave, t.etiqueta), index("etiquetas_clave_idx").on(t.clave)],
+);

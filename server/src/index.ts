@@ -14,6 +14,9 @@ import { conversacionesRouter } from "./routes/conversaciones.js";
 import { authRouter } from "./routes/auth.js";
 import { contactosRouter } from "./routes/contactos.js";
 import { agendaRouter } from "./routes/agenda.js";
+import { gestionesRouter } from "./routes/gestiones.js";
+import { dashboardRouter } from "./routes/dashboard.js";
+import { landingRouter } from "./webhook/landing.js";
 import { ventaRouter } from "./routes/venta.js";
 import { leadsRouter } from "./routes/leads.js";
 import { metaAssetsRouter } from "./routes/metaAssets.js";
@@ -54,6 +57,9 @@ app.use("/api/leads", leadsRouter);
 app.use("/api/auth", authRouter); // login de vendedoras contra Cerberus
 app.use("/api/contactos", contactosRouter); // la ficha del contacto contra Cerberus
 app.use("/api/agenda", agendaRouter); // los seguimientos agendados de cada vendedora
+app.use("/api/gestiones", gestionesRouter); // bitácora comercial: etapas, próximas acciones, etiquetas
+app.use("/api/dashboard", dashboardRouter); // el radar: leads cayendo + números por vendedora
+app.use("/webhook/landing", landingRouter); // los leads de las landings, reenviados por Bravo
 app.use("/api/venta", ventaRouter); // el formulario de venta dentro de Hermes
 app.use("/api/interactions", interactionsRouter);
 app.use("/api/conversaciones", conversacionesRouter); // la cola unificada: una fila por conversación

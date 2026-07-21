@@ -33,10 +33,14 @@ export function useTiempoReal() {
         // La cola cambió (fila nueva o reordenada) y la frescura también.
         void qc.invalidateQueries({ queryKey: ['conversaciones'] });
         void qc.invalidateQueries({ queryKey: ['frescura'] });
+        // El radar del dashboard también: un mensaje ES un lead cayendo.
+        void qc.invalidateQueries({ queryKey: ['dashboard'] });
         // Y el hilo de esa persona, si está abierto.
         if (e.telefono) void qc.invalidateQueries({ queryKey: ['wa', 'conversacion', e.telefono] });
       } else if (e.tipo === 'estado') {
         void qc.invalidateQueries({ queryKey: ['wa', 'sesion'] });
+        // El webhook de landing emite 'estado' al persistir: el radar se refresca.
+        void qc.invalidateQueries({ queryKey: ['dashboard'] });
       }
     };
 

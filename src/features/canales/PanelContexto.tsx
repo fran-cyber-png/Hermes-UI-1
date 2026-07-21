@@ -4,7 +4,7 @@ import { API_URL } from '../../config';
 import type { Conversacion } from './conversaciones';
 import { BadgeCanal, nombreCanal } from './BadgeCanal';
 import HistorialPersona from './HistorialPersona';
-import { AgendarSeguimiento } from '../agenda/AgendarSeguimiento';
+import { RegistrarGestion } from '../gestion/RegistrarGestion';
 
 /**
  * EL PANEL DE CONTEXTO — el lado derecho cuando la conversación es de Meta.
@@ -128,8 +128,8 @@ export function PanelContexto({ conversacion }: { conversacion: Conversacion }) 
         )}
       </div>
 
-      {/* "Lo llamo mañana" en dos toques: el seguimiento queda en la Agenda. */}
-      <AgendarSeguimiento conversacion={conversacion} />
+      {/* La bitácora comercial: etapa + próxima acción (cae en la Agenda) + notas. */}
+      <RegistrarGestion conversacion={conversacion} />
     </div>
   );
 }

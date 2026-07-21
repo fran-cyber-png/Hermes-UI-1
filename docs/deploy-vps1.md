@@ -173,3 +173,13 @@ vez es clic derecho → Abrir.)
 - **Un número por sesión**: para varios números, un `TransporteWhatsmeow` por número + un gestor. El MVP
   arranca con uno (`WHATSAPP_NUMERO`).
 - **Migrar `npm run dev` → build+start** para prod real.
+
+## 9. El webhook de las landings (leads del "excel" en vivo)
+
+Los formularios de landing caen a Bravo (fuente oficial) además del Sheet. Bravo reenvía cada lead
+a la URL configurada en `portal.tenant_sites.contact_webhook_url` (por tenant). Para que caigan en
+Hermes: apuntar ese campo a `https://hermes-api.goberna.us/webhook/landing/<LANDING_WEBHOOK_TOKEN>`
+— la URL completa con el token vive en `/srv/hermes/.landing-webhook-url` (600) en VPS1; el token
+es el env `LANDING_WEBHOOK_TOKEN` del `server/.env`. Idempotente por (tenant, momento, contacto);
+sin token configurado la ruta rechaza todo (fail-closed). Configurarlo por tenant es tarea del
+operador de Bravo (Estephano/Andreecito).
