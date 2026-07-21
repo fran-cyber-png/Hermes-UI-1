@@ -4,7 +4,6 @@ import { API_URL } from '../../config';
 import type { Interaccion } from './types';
 import { TIPO_META, tipoDe } from './tipos';
 import { daysSince } from '../leads/temperature';
-import HistorialPersona from './HistorialPersona';
 import QuePuedoHacer, { type Capacidades } from './QuePuedoHacer';
 
 /**
@@ -113,11 +112,10 @@ export default function ResponderPanel({ interaccion, onCerrar, onRespondido }: 
     }
   }
 
+  // Vive en la columna central (des-modalizado): la cola y el panel de contexto
+  // siguen visibles mientras se responde — la mesa no se tapa a sí misma.
   return (
-    <>
-      <div className="fixed inset-0 z-40 bg-navy/30 backdrop-blur-[2px]" onClick={onCerrar} aria-hidden="true" />
-
-      <aside className="fixed right-0 top-0 z-50 flex h-dvh w-full max-w-lg flex-col border-l border-border bg-card shadow-2xl">
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-panel">
         <header className="flex shrink-0 items-start justify-between gap-3 border-b border-border p-5">
           <div className="min-w-0">
             <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${meta.chip}`}>
@@ -159,8 +157,6 @@ export default function ResponderPanel({ interaccion, onCerrar, onRespondido }: 
               <ExternalLink size={11} />
             </a>
           )}
-
-          <HistorialPersona interactionId={interaccion.id} />
 
           {esComentario ? (
             <>
@@ -248,7 +244,6 @@ export default function ResponderPanel({ interaccion, onCerrar, onRespondido }: 
             </p>
           </footer>
         )}
-      </aside>
-    </>
+    </div>
   );
 }

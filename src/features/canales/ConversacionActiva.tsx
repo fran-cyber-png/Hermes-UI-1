@@ -2,16 +2,19 @@ import { useQueryClient } from '@tanstack/react-query';
 import { MessageSquareText } from 'lucide-react';
 import type { Conversacion } from './conversaciones';
 import { HiloWhatsapp } from '../whatsapp/HiloWhatsapp';
+import { HiloMessenger } from './HiloMessenger';
 import ResponderPanel from './ResponderPanel';
 import type { Interaccion } from './types';
 
 /**
- * EL PANEL DE LA DERECHA: la conversación abierta.
+ * LA COLUMNA CENTRAL: la conversación abierta.
  *
  * Es un conmutador según qué se eligió en la cola:
  *   · WhatsApp  → el hilo nativo (`HiloWhatsapp`): ver y responder desde Hermes.
- *   · Comentario FB/IG → el flujo de respuesta pública + privada (`ResponderPanel`).
- *   · Messenger → lectura (responder DMs de Messenger todavía no está conectado).
+ *   · Comentario FB/IG → el flujo de respuesta pública + privada (`ResponderPanel`,
+ *     que vive EN esta columna — dejó de ser un modal que tapaba la mesa).
+ *   · Messenger → el hilo completo en lectura (`HiloMessenger`), con la caja
+ *     deshabilitada honesta.
  *   · Nada      → un vacío que invita a elegir.
  */
 export function ConversacionActiva({
@@ -65,14 +68,6 @@ export function ConversacionActiva({
     );
   }
 
-  // Messenger (canal Meta, tipo mensaje): lectura honesta.
-  return (
-    <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-border bg-card p-8 text-center">
-      <p className="text-sm font-semibold text-foreground">{conversacion.persona_nombre ?? 'Conversación'}</p>
-      <p className="mt-2 max-w-xs text-xs text-muted-foreground">
-        Responder DMs de Messenger todavía no está conectado desde Hermes. Por ahora, abrilo en Meta
-        Business Suite.
-      </p>
-    </div>
-  );
+  // Messenger (canal Meta, tipo mensaje): el hilo completo, en lectura.
+  return <HiloMessenger conversacion={conversacion} />;
 }

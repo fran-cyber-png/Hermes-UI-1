@@ -19,6 +19,38 @@ export const personaRouter = Router();
  * dentro de un mismo canal. Hay 1.312 personas que ya escribieron más de una
  * vez y hoy se ven como mensajes sueltos.
  */
+/**
+ * El hilo COMPLETO de una persona en un canal, en orden de conversación (ASC).
+ *
+ * Existe para el hilo de Messenger: la cola agrupa esos DMs por
+ * (canal, persona_id) sin un interactionId único, así que `/:interactionId` no
+ * alcanza para abrirlos. Mismos datos, otra llave. Va ANTES de `/:interactionId`
+ * para que "conv" no caiga en el Number() de esa ruta.
+ */
+personaRouter.get("/conv/:canal/:personaId", async (req, res) => {
+  const { canal, personaId } = req.params;
+
+  const historial = await db.execute<{
+    id: number;
+    tipo: string;
+    direccion: string;
+    autor: string;
+    persona_nombre: string | null;
+    texto: string | null;
+    occurred_at: string;
+    status: string;
+  }>(sql`
+    SELECT id, tipo, direccion, autor, persona_nombre, texto, occurred_at, status
+    FROM interactions
+    WHERE canal = ${canal} AND persona_id = ${personaId}
+    ORDER BY occurred_at ASC
+    LIMIT 100
+  `);
+
+  const nombre = historial.find((h) => h.persona_nombre)?.persona_nombre ?? null;
+  res.json({ historial, canal, nombre, total: historial.length });
+});
+
 personaRouter.get("/:interactionId", async (req, res) => {
   const id = Number(req.params.interactionId);
 

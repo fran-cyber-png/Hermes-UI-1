@@ -148,3 +148,15 @@ body {
       0 14px 34px -18px rgba(14, 42, 82, 0.12);
   }
 }
+
+/* Accesibilidad: quien pidió menos movimiento, recibe menos movimiento. Las
+   transiciones se vuelven instantáneas; nada queda oculto ni roto. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

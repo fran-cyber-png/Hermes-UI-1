@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { AlertTriangle, Loader2, LogIn } from 'lucide-react';
+import { Escudo } from '../../components/Marca';
 import { ErrorApi } from '../../lib/datos/cliente';
 
 /**
@@ -30,8 +31,9 @@ export function Login({ entrar }: { entrar: (u: string, p: string) => Promise<vo
   return (
     <div className="flex h-dvh items-center justify-center bg-background px-6">
       <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <div className="text-2xl font-extrabold tracking-tight text-navy">HERMES</div>
+        <div className="mb-8 flex flex-col items-center text-center">
+          <Escudo size={44} />
+          <div className="mt-3 font-heading text-2xl font-extrabold tracking-[0.06em] text-navy">HERMES</div>
           <p className="mt-1 text-sm text-muted-foreground">La mesa de la vendedora</p>
         </div>
 
