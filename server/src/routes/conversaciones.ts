@@ -119,7 +119,12 @@ conversacionesRouter.get('/', async (req, res) => {
   // traen pide_info / ventana_abierta calculados).
   let filtroIntencion: SQL = sql``;
   if (intencion === 'pide-info') filtroIntencion = sql`WHERE pide_info`;
-  if (intencion === 'puedo-escribirle') filtroIntencion = sql`WHERE ventana_abierta`;
+  // "Les puedo escribir" = a quién puedo contactar AHORA. Un comentario, si la
+  // ventana de 7 días de Meta sigue abierta; un mensaje (WhatsApp/Messenger),
+  // SIEMPRE — no tiene ventana que se cierre. Sin esto, los chats de WhatsApp
+  // quedaban escondidos bajo el filtro por defecto, que es justo el canal que
+  // más importa.
+  if (intencion === 'puedo-escribirle') filtroIntencion = sql`WHERE (ventana_abierta OR tipo = 'mensaje')`;
 
   const filas = await db.execute(sql`
     WITH msg AS (
