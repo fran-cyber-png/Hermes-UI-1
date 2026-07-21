@@ -33,7 +33,7 @@ export function ColaUnificada({
   const filtro = FILTROS.find((f) => f.valor === intencion) ?? FILTROS[0];
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-panel">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border p-2">
         <div className="flex gap-0.5 rounded-lg bg-muted/60 p-0.5">
           {FILTROS.map((f) => (

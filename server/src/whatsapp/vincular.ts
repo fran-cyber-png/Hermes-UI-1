@@ -1,6 +1,12 @@
 import "dotenv/config";
 import { mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createClient } from "@whatsmeow-node/whatsmeow-node";
+import QRCode from "qrcode";
+
+/** Dónde se escribe el QR como imagen escaneable. */
+const RUTA_QR = join(tmpdir(), "hermes-wa-qr.png");
 
 /**
  * CONSOLA DE VINCULACIÓN — para enlazar un número de ventas y probar.
@@ -37,6 +43,21 @@ console.log(`   Sesión: ${store}\n`);
 
 const client = createClient({ store });
 
+// Vinculación por QR: cada vez que WhatsApp emite un código, lo renderizamos como
+// PNG para escanear con la cámara del teléfono. El QR se rota cada ~20s hasta que
+// se escanea. (El pairCode por número devolvía 400 en este número; el QR es el
+// camino robusto.)
+client.on("qr", async ({ code }) => {
+  try {
+    await QRCode.toFile(RUTA_QR, code, { width: 400, margin: 2 });
+    console.log(`\n📷 QR listo: ${RUTA_QR}`);
+    console.log("En el teléfono: WhatsApp → Ajustes → Dispositivos vinculados →");
+    console.log("Vincular un dispositivo → escaneá el QR.\n");
+  } catch (err) {
+    console.error("No pude generar el QR:", (err as Error).message);
+  }
+});
+
 // Cada mensaje que entra: el corazón de "ir probando". Mostramos de quién y qué,
 // sin guardar nada todavía — esto es solo para ver que el stream llega.
 client.on("message", ({ info, message }) => {
@@ -68,18 +89,14 @@ async function main() {
   if (jid) {
     // Ya estaba vinculado: solo reconectar.
     console.log(`Ya estaba vinculado como ${jid}. Reconectando…`);
-  } else {
-    // Vinculación por código de 8 dígitos (más simple que el QR).
-    const codigo = await client.pairCode(numero);
-    console.log("=================================================");
-    console.log(`   Código para vincular:   ${codigo}`);
-    console.log("=================================================");
-    console.log("En el teléfono de ese número, en WhatsApp:");
-    console.log("  Ajustes -> Dispositivos vinculados -> Vincular un");
-    console.log("  dispositivo -> Vincular con numero de telefono ->");
-    console.log("  escribí el código de arriba.\n");
+    await client.connect();
+    return;
   }
 
+  // Vinculación por QR: se activa el canal, y al conectar WhatsApp emite el
+  // código, que el handler de arriba convierte en imagen.
+  console.log("Conectando con WhatsApp… (esperá el QR)");
+  await client.getQRChannel();
   await client.connect();
 }
 

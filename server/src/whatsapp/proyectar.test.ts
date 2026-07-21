@@ -83,4 +83,10 @@ describe('proyectarMensaje', () => {
     const r = proyectarMensaje(mensaje({ telefono: '' }));
     assert.ok('descarte' in r);
   });
+
+  test('un mensaje al propio número se descarta (ruido de protocolo)', () => {
+    const r = proyectarMensaje(mensaje({ telefono: '51987654321', numeroPropio: '51987654321' }));
+    assert.ok('descarte' in r);
+    assert.match(r.descarte, /propio|protocolo/i);
+  });
 });

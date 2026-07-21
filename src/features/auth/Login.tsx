@@ -35,7 +35,7 @@ export function Login({ entrar }: { entrar: (u: string, p: string) => Promise<vo
           <p className="mt-1 text-sm text-muted-foreground">La mesa de la vendedora</p>
         </div>
 
-        <form onSubmit={onSubmit} className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <form onSubmit={onSubmit} className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-6 shadow-panel">
           <label className="flex flex-col gap-1.5">
             <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Usuario</span>
             <input
@@ -70,9 +70,13 @@ export function Login({ entrar }: { entrar: (u: string, p: string) => Promise<vo
           <button
             type="submit"
             disabled={enviando || !username.trim() || !password}
-            className="mt-1 flex items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary-hover disabled:opacity-40"
+            className="group mt-1 flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground shadow-[0_4px_16px_-4px_rgba(37,99,235,0.5)] transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-primary-hover hover:shadow-[0_6px_22px_-4px_rgba(37,99,235,0.55)] active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
           >
-            {enviando ? <Loader2 size={15} className="animate-spin" /> : <LogIn size={15} />}
+            {enviando ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : (
+              <LogIn size={15} className="transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-0.5" />
+            )}
             {enviando ? 'Entrando…' : 'Entrar'}
           </button>
 

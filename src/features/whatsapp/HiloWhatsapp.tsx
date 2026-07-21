@@ -45,7 +45,7 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-panel">
       {/* Cabecera del contacto */}
       <header className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
         <span className="flex size-8 items-center justify-center rounded-full bg-secondary text-xs font-bold text-navy">
@@ -72,13 +72,19 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
           <p className="py-8 text-center text-sm text-muted-foreground">Cargando…</p>
         ) : (
           hilo.data?.mensajes.map((m) => (
-            <div key={m.id} className={m.direccion === 'saliente' ? 'flex justify-end' : 'flex justify-start'}>
+            <div
+              key={m.id}
+              className={
+                'flex duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] animate-in fade-in slide-in-from-bottom-1 ' +
+                (m.direccion === 'saliente' ? 'justify-end' : 'justify-start')
+              }
+            >
               <div
                 className={
-                  'max-w-[75%] rounded-xl px-3 py-2 text-sm ' +
+                  'max-w-[75%] rounded-2xl px-3.5 py-2 text-sm shadow-[0_1px_2px_rgba(14,42,82,0.06)] ' +
                   (m.direccion === 'saliente'
-                    ? 'rounded-br-sm bg-secondary text-navy'
-                    : 'rounded-bl-sm border border-border bg-card text-foreground')
+                    ? 'rounded-br-md bg-secondary text-navy'
+                    : 'rounded-bl-md bg-card text-foreground ring-1 ring-border')
                 }
               >
                 {m.texto ?? <span className="italic text-muted-foreground">(no es texto — velo en el teléfono)</span>}
@@ -119,9 +125,13 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
             type="button"
             onClick={() => void onEnviar()}
             disabled={!conectado || !texto.trim() || enviar.isPending}
-            className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition-colors hover:bg-primary-hover disabled:opacity-40"
+            className="group flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_2px_10px_-2px_rgba(37,99,235,0.5)] transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-primary-hover hover:shadow-[0_4px_16px_-2px_rgba(37,99,235,0.55)] active:scale-[0.94] disabled:opacity-40 disabled:shadow-none"
           >
-            {enviar.isPending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+            {enviar.isPending ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Send size={16} className="transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+            )}
           </button>
         </div>
         <p className="mt-1.5 text-center text-[11px] text-muted-foreground">

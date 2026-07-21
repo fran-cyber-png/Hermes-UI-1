@@ -24,6 +24,7 @@ import { webhookRouter } from "./webhook/ruta.js";
 import { arrancarWhatsapp } from "./whatsapp/wiring.js";
 import { rutaDevWhatsapp } from "./whatsapp/rutaDev.js";
 import { whatsappRouter } from "./routes/whatsapp.js";
+import { vincularRouter } from "./routes/vincular.js";
 
 const app = express();
 const port = process.env.PORT ? Number(process.env.PORT) : 4100;
@@ -65,6 +66,7 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 // inyectar mensajes solo existe si corre el falso.
 const { falso } = arrancarWhatsapp();
 app.use("/api/whatsapp", whatsappRouter); // conversación nativa: hilo + enviar
+app.use("/vincular", vincularRouter);     // consola de operador: enlazar un número (D13)
 if (falso) app.use("/api/whatsapp/_dev", rutaDevWhatsapp(falso));
 
 app.listen(port, () => {

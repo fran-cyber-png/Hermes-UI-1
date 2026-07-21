@@ -56,6 +56,13 @@ export function proyectarMensaje(m: MensajeWhatsapp): ResultadoProyeccion {
     return { descarte: 'sin teléfono derivable del contacto' };
   }
 
+  // Un mensaje a tu PROPIO número no es una conversación con un lead: es ruido de
+  // protocolo (sincronización de estado, mensajes a "yo mismo") que whatsmeow
+  // emite, sobre todo al conectar. No va a la cola.
+  if (m.telefono === m.numeroPropio) {
+    return { descarte: 'mensaje al propio número (protocolo/sincronización)' };
+  }
+
   const externalId = `wa:${m.idExterno}`;
 
   const evento: EventoProyectado = {
