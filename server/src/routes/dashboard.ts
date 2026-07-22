@@ -167,6 +167,69 @@ dashboardRouter.get('/', async (_req, res) => {
     SELECT curso, count(*)::int AS n FROM intereses GROUP BY curso ORDER BY n DESC, curso LIMIT 6
   `);
 
+  // ── Las series de 14 días para las gráficas del riel. Siempre 14 puntos:
+  //    los días sin datos van en 0 desde acá (el front no inventa continuidad).
+  //    El corte de día usa la fecha del server, igual que el resto del archivo.
+  const leadsDia = await db.execute<{ dia: string; chats: number; comentarios: number; formularios: number }>(sql`
+    WITH dias AS (
+      SELECT generate_series(now()::date - 13, now()::date, interval '1 day')::date AS dia
+    ),
+    c AS (
+      SELECT occurred_at::date AS dia, count(DISTINCT (canal, persona_id))::int AS n
+      FROM interactions
+      WHERE tipo = 'mensaje' AND direccion = 'entrante' AND persona_id IS NOT NULL
+        AND occurred_at > now()::date - 13
+      GROUP BY 1
+    ),
+    co AS (
+      SELECT occurred_at::date AS dia, count(*)::int AS n
+      FROM interactions
+      WHERE tipo = 'comentario' AND occurred_at > now()::date - 13
+      GROUP BY 1
+    ),
+    f AS (
+      SELECT created_time::date AS dia, count(*)::int AS n
+      FROM leads
+      WHERE created_time > now()::date - 13
+      GROUP BY 1
+    )
+    SELECT d.dia::text AS dia,
+           COALESCE(c.n, 0) AS chats,
+           COALESCE(co.n, 0) AS comentarios,
+           COALESCE(f.n, 0) AS formularios
+    FROM dias d
+    LEFT JOIN c ON c.dia = d.dia
+    LEFT JOIN co ON co.dia = d.dia
+    LEFT JOIN f ON f.dia = d.dia
+    ORDER BY d.dia
+  `);
+  const enviosDia = await db.execute<{ dia: string; n: number }>(sql`
+    WITH dias AS (
+      SELECT generate_series(now()::date - 13, now()::date, interval '1 day')::date AS dia
+    )
+    SELECT d.dia::text AS dia, COALESCE(e.n, 0) AS n
+    FROM dias d
+    LEFT JOIN (
+      SELECT creado_at::date AS dia, count(*)::int AS n
+      FROM envios_wa WHERE estado = 'enviado' AND creado_at > now()::date - 13
+      GROUP BY 1
+    ) e ON e.dia = d.dia
+    ORDER BY d.dia
+  `);
+  const ventasDia = await db.execute<{ dia: string; n: number }>(sql`
+    WITH dias AS (
+      SELECT generate_series(now()::date - 13, now()::date, interval '1 day')::date AS dia
+    )
+    SELECT d.dia::text AS dia, COALESCE(v.n, 0) AS n
+    FROM dias d
+    LEFT JOIN (
+      SELECT iniciada_at::date AS dia, count(*)::int AS n
+      FROM conversiones_wa WHERE iniciada_at > now()::date - 13
+      GROUP BY 1
+    ) v ON v.dia = d.dia
+    ORDER BY d.dia
+  `);
+
   res.json({
     chats,
     formularios,
@@ -175,5 +238,6 @@ dashboardRouter.get('/', async (_req, res) => {
     porVendedora,
     embudo,
     cursos,
+    series: { leads_dia: leadsDia, envios_dia: enviosDia, ventas_dia: ventasDia },
   });
 });
