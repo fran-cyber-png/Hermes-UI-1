@@ -66,7 +66,11 @@ atribuye a una vendedora.
 `hermes` (PORT=4110), Postgres propio `hermes_db` (127.0.0.1:5438), API pública
 **`https://hermes-api.goberna.us`** (nginx + certbot dns-cloudflare; el 4110 no se expone), número
 51986394450 vinculado ALLÁ. Actualizar: `ssh … 'cd /srv/hermes && git pull && sudo systemctl
-restart hermes'`. **No hay CI/CD todavía.** Runbook: **`docs/deploy-vps1.md`**.
+restart hermes'`. **El deploy sigue siendo manual** (no hay CD). Runbook: **`docs/deploy-vps1.md`**.
+**CI sí hay**: `.github/workflows/ci.yml` corre lint · typecheck · build del front · tests del server
+en cada PR y en cada push a `main`, sobre el **runner self-hosted de VPS1** (label `vps1-hermes`,
+servicio `actions.runner.Goberna-Lab-hermes.vps1-hermes`, dir `~deploy/actions-runner-hermes`) —
+así no gasta minutos de GitHub. `tauri-windows.yml` es la excepción: necesita host Windows.
 **La app de las vendedoras se EMPAQUETA**, no se clona: `env VITE_API_URL=https://hermes-api.goberna.us
 npm run build && npm run empaquetar:mac` (o `:win`) → `release/Hermes-*.dmg|.exe`.
 

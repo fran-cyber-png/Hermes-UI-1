@@ -1,0 +1,48 @@
+name: CI
+
+# Corre en el runner self-hosted de VPS1 (label `vps1-hermes`, servicio
+# actions.runner.Goberna-Lab-hermes.vps1-hermes): no gasta minutos de GitHub.
+# El instalador de Windows sigue aparte porque necesita un host Windows.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Un push nuevo a la misma rama cancela la corrida vieja: hay un solo runner.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Typecheck · build · tests
+    runs-on: [self-hosted, vps1-hermes]
+    env:
+      # El binario de Electron son ~100 MB que CI nunca usa: el empaquetado de
+      # la app de las vendedoras se hace aparte, no acá.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependencias del front
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck + build del front
+        run: npm run build
+
+      - name: Dependencias del server
+        run: npm ci
+        working-directory: server
+
+      - name: Typecheck del server
+        run: npx tsc --noEmit
+        working-directory: server
+
+      - name: Tests del server
+        run: npm test
+        working-directory: server
