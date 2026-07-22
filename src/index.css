@@ -115,6 +115,21 @@
   --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
 }
 
+/* La curva de la casa y la entrada estándar: una sola física de movimiento.
+   @theme (no inline) emite --ease-house como var real, así sirve tanto la
+   utility `ease-house` como `var(--ease-house)` en valores arbitrarios. */
+@theme {
+  --ease-house: cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-entrar: entrar 240ms var(--ease-house) both;
+
+  @keyframes entrar {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+}
+
 * {
   border-color: var(--border);
 }
@@ -193,9 +208,9 @@ body {
   color: var(--navy);
 }
 
-/* El foco de teclado, uno solo y visible, en toda la app. */
+/* El foco de teclado, uno solo y visible, en toda la app. El outline sigue el
+   radio propio de cada elemento — no se fuerza ninguna forma. */
 :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
-  border-radius: 4px;
 }
