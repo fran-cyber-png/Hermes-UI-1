@@ -48,7 +48,7 @@ export function VistaTablero() {
       <div className="mx-auto grid max-w-5xl grid-cols-1 gap-3 md:grid-cols-3">
         {/* LA CIFRA HÉROE: gente esperando = tiempo = el único oro grande. */}
         <section className="rounded-2xl border border-border bg-card p-5 shadow-panel md:col-span-2">
-          <div className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Esperando respuesta
           </div>
           {isPending ? (
@@ -71,7 +71,7 @@ export function VistaTablero() {
 
         {/* FRESCURA POR FUENTE (D3): WhatsApp = sesión; Meta = edad de la captura. */}
         <section className="rounded-2xl border border-border bg-card p-5 shadow-panel">
-          <div className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Frescura por fuente
           </div>
           <ul className="mt-3 space-y-2.5 text-xs">
@@ -102,7 +102,7 @@ export function VistaTablero() {
 
         {/* POR CANAL: los números crudos, en mono. */}
         <section className="rounded-2xl border border-border bg-card p-5 shadow-panel md:col-span-2">
-          <div className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Por canal</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Por canal</div>
           {isPending ? (
             <div className="mt-3 h-24 animate-pulse rounded bg-muted" />
           ) : (
@@ -131,7 +131,7 @@ export function VistaTablero() {
 
         {/* LO QUE TODAVÍA NO SE MIDE: hueco declarado, no gráfico inventado. */}
         <section className="rounded-2xl border border-dashed border-border bg-card/50 p-5">
-          <div className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Lo que falta medir
           </div>
           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">

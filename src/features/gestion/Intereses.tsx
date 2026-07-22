@@ -58,7 +58,7 @@ export function Intereses({ clave, compacto = false }: { clave: string; compacto
         {lista.map((c) => (
           <span
             key={c}
-            className="group/int inline-flex max-w-full items-center gap-1 rounded-md bg-secondary px-1.5 py-0.5 text-[10.5px] font-semibold text-secondary-foreground"
+            className="group/int inline-flex max-w-full items-center gap-1 rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-semibold text-secondary-foreground"
             title={c}
           >
             <GraduationCap size={10} className="shrink-0" />
@@ -82,7 +82,7 @@ export function Intereses({ clave, compacto = false }: { clave: string; compacto
             setAbierto((v) => !v);
           }}
           title="Agregar curso de interés"
-          className="rounded-md border border-dashed border-border px-1.5 py-0.5 text-[10.5px] text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+          className="rounded-md border border-dashed border-border px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
         >
           <Plus size={10} className="inline" />
           {lista.length === 0 && <span className="ml-0.5">interés</span>}
@@ -103,7 +103,7 @@ export function Intereses({ clave, compacto = false }: { clave: string; compacto
             className="w-full rounded-lg border border-primary bg-card px-2 py-1 text-[11px] outline-none"
           />
           {(sugerencias.data?.length ?? 0) > 0 && (
-            <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-border bg-card shadow-panel">
+            <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg bg-card shadow-panel">
               {sugerencias.data!.map((p) => (
                 <button
                   key={p.id}

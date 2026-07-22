@@ -49,9 +49,9 @@ export function PanelContexto({ conversacion }: { conversacion: Conversacion }) 
   const esComentario = conversacion.tipo === 'comentario';
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-panel">
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
       <header className="shrink-0 border-b border-border px-4 py-3">
-        <div className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Contexto</div>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Contexto</div>
         <div className="mt-2 flex items-center gap-2.5">
           <span className="relative shrink-0">
             <span className="flex size-9 items-center justify-center rounded-[12px] bg-secondary font-heading text-xs font-bold text-navy">
@@ -76,7 +76,7 @@ export function PanelContexto({ conversacion }: { conversacion: Conversacion }) 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {esComentario ? (
           <>
-            <div className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Comentó en</div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Comentó en</div>
             {conversacion.contexto_texto ? (
               <div className="mt-2 rounded-xl border border-border bg-muted/40 p-3">
                 <p className="flex items-start gap-2 text-xs leading-relaxed text-foreground">
@@ -106,14 +106,14 @@ export function PanelContexto({ conversacion }: { conversacion: Conversacion }) 
           </>
         ) : (
           <>
-            <div className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">De dónde vino</div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">De dónde vino</div>
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
               Messenger no dice de qué publicación o anuncio vino este chat con la captura actual. El
               origen real llega con el webhook de Messenger; hasta entonces, este espacio queda vacío
               a propósito: preferimos el hueco visible al invento.
             </p>
 
-            <div className="mt-5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Ficha de Cerberus</div>
+            <div className="mt-5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Ficha de Cerberus</div>
             <div className="mt-2 rounded-xl border border-border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
               <p className="flex items-start gap-2">
                 <Search size={13} className="mt-0.5 shrink-0" />

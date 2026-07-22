@@ -56,11 +56,6 @@ export function VistaPersonas({ telefonoInicial }: { telefonoInicial?: string | 
   return (
     <div className="flex min-h-0 flex-1 justify-center overflow-y-auto p-6">
       <div className="w-full max-w-2xl">
-        <h1 className="font-heading text-base font-bold text-foreground">Personas</h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Buscá por teléfono y mirá su ficha de Cerberus sin salir de Hermes.
-        </p>
-
         <form onSubmit={onBuscar} className="mt-4 flex gap-2">
           <div className="flex flex-1 items-center gap-2.5 rounded-full border border-border bg-card px-4 py-2.5 transition-all duration-200 focus-within:border-primary focus-within:shadow-[0_0_0_3px_rgba(37,99,235,0.12)]">
             <Search size={15} className="shrink-0 text-muted-foreground" />
@@ -135,7 +130,7 @@ export function VistaPersonas({ telefonoInicial }: { telefonoInicial?: string | 
               </div>
 
               <div className="mt-5">
-                <div className="mb-2 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   <ShoppingBag size={12} /> Compras ({data.ventasCount})
                 </div>
                 {data.ventas.length === 0 ? (

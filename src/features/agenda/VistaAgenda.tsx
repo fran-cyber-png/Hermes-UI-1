@@ -74,7 +74,7 @@ function Chip({ r, vencido, onVer }: { r: Recordatorio; vencido: boolean; onVer:
         estiloDeNota(r.nota, vencido, r.estado === 'hecho')
       }
     >
-      <span className="shrink-0 font-mono text-[9.5px] opacity-80">{horaDe(r)}</span>
+      <span className="shrink-0 font-mono text-[10px] opacity-80">{horaDe(r)}</span>
       <span className="truncate">{r.nota}</span>
     </button>
   );
@@ -112,7 +112,7 @@ function Detalle({
 
       <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
         <span className="relative shrink-0">
-          <span className="flex size-7 items-center justify-center rounded-[9px] bg-secondary font-heading text-[10px] font-bold text-navy">
+          <span className="flex size-7 items-center justify-center rounded-[9px] bg-secondary font-heading text-[11px] font-bold text-navy">
             {(r.personaNombre ?? r.personaId ?? '·').replace(/^@/, '').slice(0, 2).toUpperCase()}
           </span>
           <span className="absolute -bottom-0.5 -right-0.5">
@@ -231,7 +231,7 @@ function Crear({ fechaInicial, onCerrar }: { fechaInicial: Date | null; onCerrar
         {crear.isPending ? <Loader2 size={13} className="animate-spin" /> : <CalendarPlus size={13} />}
         Agendar
       </button>
-      <p className="mt-1.5 text-center text-[10.5px] text-muted-foreground">Nada se envía solo: la agenda te avisa, vos hacés.</p>
+      <p className="mt-1.5 text-center text-[11px] text-muted-foreground">Nada se envía solo: la agenda te avisa, vos hacés.</p>
     </div>
   );
 }
@@ -351,7 +351,7 @@ export function VistaAgenda({ onAbrir }: { onAbrir: (c: Conversacion) => void })
       </div>
 
       {/* ── El calendario ── */}
-      <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-border bg-card shadow-panel">
+      <div className="min-h-0 flex-1 overflow-hidden rounded-2xl bg-card shadow-panel">
         {agenda.isPending ? (
           <p className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
             <Loader2 size={15} className="animate-spin" /> Cargando tu agenda…
@@ -360,7 +360,7 @@ export function VistaAgenda({ onAbrir }: { onAbrir: (c: Conversacion) => void })
           <div className="grid h-full grid-rows-[auto_repeat(6,1fr)]">
             <div className="grid grid-cols-7 border-b border-border">
               {DIAS_SEMANA.map((d) => (
-                <div key={d} className="px-2 py-1.5 text-center font-mono text-[10px] font-semibold tracking-wider text-muted-foreground">
+                <div key={d} className="px-2 py-1.5 text-center font-mono text-[11px] font-semibold tracking-wider text-muted-foreground">
                   {d}
                 </div>
               ))}
@@ -403,7 +403,7 @@ export function VistaAgenda({ onAbrir }: { onAbrir: (c: Conversacion) => void })
                             setFoco(fecha);
                             setModo('dia');
                           }}
-                          className="px-1 text-[10px] font-semibold text-muted-foreground hover:text-primary"
+                          className="px-1 text-[11px] font-semibold text-muted-foreground hover:text-primary"
                         >
                           +{delDia.length - 3} más
                         </span>
@@ -429,7 +429,7 @@ export function VistaAgenda({ onAbrir }: { onAbrir: (c: Conversacion) => void })
                     }}
                     className={'border-b border-border px-2 py-2 text-center transition-colors hover:bg-secondary/30 ' + (esHoy ? 'bg-secondary/50' : '')}
                   >
-                    <div className="font-mono text-[10px] tracking-wider text-muted-foreground">{DIAS_SEMANA[(fecha.getDay() + 6) % 7]}</div>
+                    <div className="font-mono text-[11px] tracking-wider text-muted-foreground">{DIAS_SEMANA[(fecha.getDay() + 6) % 7]}</div>
                     <div className={'mx-auto mt-0.5 flex size-6 items-center justify-center rounded-full text-sm tabular-nums ' + (esHoy ? 'bg-navy font-bold text-white' : 'text-foreground')}>
                       {fecha.getDate()}
                     </div>
@@ -448,7 +448,7 @@ export function VistaAgenda({ onAbrir }: { onAbrir: (c: Conversacion) => void })
           <div className="h-full overflow-y-auto p-4">
             {vencidos.length > 0 && mismaFecha(foco, hoy) && (
               <div className="mb-4">
-                <h3 className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-destructive">Vencidos</h3>
+                <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-destructive">Vencidos</h3>
                 <div className="flex max-w-xl flex-col gap-1.5">
                   {vencidos.map((r) => (
                     <Chip key={r.id} r={r} vencido onVer={setDetalle} />

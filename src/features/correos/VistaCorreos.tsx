@@ -138,7 +138,7 @@ export function VistaCorreos() {
 
         {/* ── Los últimos enviados del equipo ── */}
         <section className="mt-4">
-          <h2 className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Últimos enviados
           </h2>
           {(enviados.data?.correos.length ?? 0) === 0 ? (
@@ -158,7 +158,7 @@ export function VistaCorreos() {
                   <span className="w-24 shrink-0 truncate font-semibold text-foreground">{c.vendedoraId}</span>
                   <span className="w-48 shrink-0 truncate font-mono text-muted-foreground">{c.para}</span>
                   <span className="min-w-0 flex-1 truncate text-foreground">{c.asunto}</span>
-                  <span className="shrink-0 font-mono text-[10.5px] text-muted-foreground">
+                  <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
                     {new Date(c.creadoAt).toLocaleDateString('es', { day: '2-digit', month: 'short' })}{' '}
                     {new Date(c.creadoAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
                   </span>

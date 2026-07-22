@@ -3,8 +3,30 @@
   "identifier": "remote-hermes",
   "description": "La UI viva servida desde el server (OTA) puede abrir links en el navegador del sistema — y nada más.",
   "remote": {
-    "urls": ["https://hermes-api.goberna.us"]
+    "urls": [
+      "https://hermes-api.goberna.us"
+    ]
   },
-  "windows": ["main"],
-  "permissions": ["opener:allow-open-url"]
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://*"
+        },
+        {
+          "url": "http://*"
+        },
+        {
+          "url": "tel:*"
+        },
+        {
+          "url": "mailto:*"
+        }
+      ]
+    }
+  ]
 }

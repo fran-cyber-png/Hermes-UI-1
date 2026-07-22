@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowRight, MessageSquareText, Phone, Search, X } from 'lucide-react';
+import { ArrowRight, MessageSquareText, Search, X } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/datos/cliente';
 import { hace } from '../../lib/datos/frescura';
@@ -14,7 +14,7 @@ import {
   type LeadChat,
   type LeadFormulario,
 } from './dashboard';
-import { llamar } from '../../lib/enlacesExternos';
+import { BotonLlamar } from '../gestion/BotonLlamar';
 
 /**
  * EL DASHBOARD — la página de las 9am (veredicto del panel de diseño:
@@ -80,7 +80,7 @@ function EtiquetaInline({ clave }: { clave: string }) {
           setAbierto(true);
         }}
         title="Etiquetar"
-        className="rounded-md border border-dashed border-border px-1.5 text-[10px] leading-4 text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+        className="rounded-md border border-dashed border-border px-1.5 text-[11px] leading-4 text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
       >
         +
       </button>
@@ -98,7 +98,7 @@ function EtiquetaInline({ clave }: { clave: string }) {
       onBlur={() => setAbierto(false)}
       autoFocus
       placeholder="etiqueta…"
-      className="w-20 rounded-md border border-primary bg-card px-1.5 text-[10.5px] leading-4 outline-none"
+      className="w-20 rounded-md border border-primary bg-card px-1.5 text-[11px] leading-4 outline-none"
     />
   );
 }
@@ -213,7 +213,7 @@ export function VistaDashboard({
                   onClick={() => onAbrir(conversacionDeRecordatorio(r))}
                   title={r.nota}
                   className={
-                    'max-w-52 truncate rounded-full px-3 py-1.5 text-[11.5px] font-semibold transition-transform hover:scale-[1.02] ' +
+                    'max-w-52 truncate rounded-full px-3 py-1.5 text-xs font-semibold transition-transform hover:scale-[1.02] ' +
                     (vencida ? 'bg-destructive/10 text-destructive' : 'bg-gold/20 text-gold-ink')
                   }
                 >
@@ -224,7 +224,7 @@ export function VistaDashboard({
                 </button>
               ))}
               {masEnAgenda > 0 && (
-                <button type="button" onClick={onIrAgenda} className="shrink-0 text-[11.5px] font-semibold text-primary hover:underline">
+                <button type="button" onClick={onIrAgenda} className="shrink-0 text-xs font-semibold text-primary hover:underline">
                   +{masEnAgenda} más →
                 </button>
               )}
@@ -233,7 +233,7 @@ export function VistaDashboard({
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
-          <span className="flex items-center gap-1.5 font-mono text-[11.5px] tabular-nums text-muted-foreground">
+          <span className="flex items-center gap-1.5 font-mono text-xs tabular-nums text-muted-foreground">
             <span className="size-1.5 rounded-full bg-gold-ink" /> {nCalientes} calientes
           </span>
           {atender && (
@@ -254,7 +254,7 @@ export function VistaDashboard({
         {/* ── B · EL RADAR ── */}
         <section className="flex min-h-0 min-w-0 flex-1 flex-col rounded-2xl bg-card shadow-panel">
           <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
-            <h2 className="font-heading text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+            <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
               El radar
             </h2>
             <span className="font-mono text-[11px] tabular-nums text-muted-foreground">· {filas.length}</span>
@@ -262,13 +262,13 @@ export function VistaDashboard({
               <span className="absolute inline-flex size-1.5 animate-ping rounded-full bg-success opacity-60" />
               <span className="relative inline-flex size-1.5 rounded-full bg-success" />
             </span>
-            <span className="text-[10.5px] text-muted-foreground">en vivo</span>
+            <span className="text-[11px] text-muted-foreground">en vivo</span>
 
             {etapaFiltro && (
               <button
                 type="button"
                 onClick={() => setEtapaFiltro(null)}
-                className="flex items-center gap-1 rounded-full bg-navy px-2.5 py-0.5 text-[10.5px] font-semibold capitalize text-white"
+                className="flex items-center gap-1 rounded-full bg-navy px-2.5 py-0.5 text-[11px] font-semibold capitalize text-white"
               >
                 {etapaFiltro} <X size={10} />
               </button>
@@ -283,7 +283,7 @@ export function VistaDashboard({
                     type="button"
                     onClick={() => setFuente(f.id)}
                     className={
-                      'rounded-full px-2.5 py-1 text-[10.5px] font-semibold transition-colors ' +
+                      'rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ' +
                       (fuente === f.id ? 'bg-navy text-white' : 'text-muted-foreground hover:bg-secondary hover:text-foreground')
                     }
                   >
@@ -296,7 +296,7 @@ export function VistaDashboard({
                 type="button"
                 onClick={() => setSoloCalientes((v) => !v)}
                 className={
-                  'ml-1 flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10.5px] font-semibold transition-colors ' +
+                  'ml-1 flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ' +
                   (soloCalientes ? 'border-gold-ink bg-gold/15 text-gold-ink' : 'border-border text-muted-foreground hover:text-foreground')
                 }
               >
@@ -362,7 +362,7 @@ export function VistaDashboard({
                           ? `${fila.fuente === 'comentario' ? 'Comentario' : nombreCanal(fila.chat.canal)}${fila.chat.contexto_texto ? ` · “${fila.chat.contexto_texto.slice(0, 48)}”` : ''}`
                           : `${fila.fuente === 'landing' ? 'Landing' : 'Lead Ad'} · ${fila.form.producto ?? fila.form.campana ?? 'sin campaña'}${fila.form.flyer && fila.form.flyer !== 'ORGANICO' ? ` · ${fila.form.flyer}` : ''}`}
                       </span>
-                      <span className={'ml-auto shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold capitalize ' + (ETAPA_CHIP[etapa] ?? ETAPA_CHIP.interesado)}>
+                      <span className={'ml-auto shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ' + (ETAPA_CHIP[etapa] ?? ETAPA_CHIP.interesado)}>
                         {etapa}
                       </span>
                     </div>
@@ -375,9 +375,9 @@ export function VistaDashboard({
                           </span>
                         )}
                       </span>
-                      {pais && <span className="shrink-0 font-mono text-[10.5px] text-muted-foreground" title={pais}>{pais}</span>}
+                      {pais && <span className="shrink-0 font-mono text-[11px] text-muted-foreground" title={pais}>{pais}</span>}
                       {tags.map((t) => (
-                        <span key={t} className="shrink-0 rounded-md border border-border px-1.5 text-[10px] leading-4 text-muted-foreground">
+                        <span key={t} className="shrink-0 rounded-md border border-border px-1.5 text-[11px] leading-4 text-muted-foreground">
                           {t}
                         </span>
                       ))}
@@ -388,15 +388,7 @@ export function VistaDashboard({
                         </span>
                         <span className="flex items-center gap-1.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
                           {(esChat ? fila.chat.telefono : fila.form.telefono) && (
-                            <Phone
-                              size={13}
-                              className="cursor-pointer text-success"
-                              aria-label="Llamar"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                llamar((esChat ? fila.chat.telefono : fila.form.telefono)!);
-                              }}
-                            />
+                            <BotonLlamar telefono={(esChat ? fila.chat.telefono : fila.form.telefono)!} compacto />
                           )}
                           {esChat ? (
                             <MessageSquareText size={13} className="text-navy" />
@@ -424,7 +416,7 @@ export function VistaDashboard({
         <aside className="flex w-80 shrink-0 flex-col gap-2.5 overflow-y-auto">
           {/* C1 · Embudo: UNA barra, click filtra */}
           <section className="rounded-2xl bg-card p-4 shadow-panel">
-            <h3 className="font-heading text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+            <h3 className="font-heading text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
               Embudo <span className="font-mono normal-case tracking-normal">· {totalEmbudo}</span>
             </h3>
             {totalEmbudo === 0 ? (
@@ -456,7 +448,7 @@ export function VistaDashboard({
                       key={e}
                       type="button"
                       onClick={() => setEtapaFiltro(etapaFiltro === e ? null : e)}
-                      className={'font-mono text-[10.5px] tabular-nums transition-colors ' + (etapaFiltro === e ? 'font-bold text-navy' : 'text-muted-foreground hover:text-foreground')}
+                      className={'font-mono text-[11px] tabular-nums transition-colors ' + (etapaFiltro === e ? 'font-bold text-navy' : 'text-muted-foreground hover:text-foreground')}
                     >
                       {data?.embudo[e] ?? 0} {e.slice(0, 3)}
                     </button>
@@ -468,7 +460,7 @@ export function VistaDashboard({
 
           {/* C2 · Qué piden */}
           <section className="rounded-2xl bg-card p-4 shadow-panel">
-            <h3 className="font-heading text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Qué piden</h3>
+            <h3 className="font-heading text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Qué piden</h3>
             {(data?.cursos.length ?? 0) === 0 ? (
               <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
                 Nadie mencionó un curso todavía — los intereses se registran desde el chat o al cotizar.
@@ -476,15 +468,15 @@ export function VistaDashboard({
             ) : (
               <div className="mt-2 flex flex-col gap-1.5">
                 {data!.cursos.slice(0, 5).map((c, i) => (
-                  <div key={c.curso} className="flex items-center gap-2 text-[11.5px]">
-                    <span className="w-3 shrink-0 font-mono text-[10px] text-muted-foreground">{i + 1}</span>
+                  <div key={c.curso} className="flex items-center gap-2 text-xs">
+                    <span className="w-3 shrink-0 font-mono text-[11px] text-muted-foreground">{i + 1}</span>
                     <span className={'min-w-0 flex-1 truncate ' + (i === 0 ? 'font-semibold text-foreground' : 'text-foreground')} title={c.curso}>
                       {c.curso}
                     </span>
                     <span className="h-1 w-14 shrink-0 overflow-hidden rounded-full bg-muted">
                       <span className="block h-full rounded-full bg-secondary-foreground/50" style={{ width: `${(c.n / maxCurso) * 100}%` }} />
                     </span>
-                    <span className="w-5 shrink-0 text-right font-mono text-[10.5px] tabular-nums text-muted-foreground">{c.n}</span>
+                    <span className="w-5 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted-foreground">{c.n}</span>
                   </div>
                 ))}
               </div>
@@ -494,14 +486,14 @@ export function VistaDashboard({
           {/* C3 · Equipo */}
           <section className="rounded-2xl bg-card p-4 shadow-panel">
             <div className="flex items-center justify-between">
-              <h3 className="font-heading text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Equipo</h3>
+              <h3 className="font-heading text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Equipo</h3>
               <div className="flex rounded-full border border-border p-0.5">
                 {(['hoy', '7d'] as const).map((p) => (
                   <button
                     key={p}
                     type="button"
                     onClick={() => setPeriodo(p)}
-                    className={'rounded-full px-2 py-0.5 text-[10px] font-semibold ' + (periodo === p ? 'bg-navy text-white' : 'text-muted-foreground')}
+                    className={'rounded-full px-2 py-0.5 text-[11px] font-semibold ' + (periodo === p ? 'bg-navy text-white' : 'text-muted-foreground')}
                   >
                     {p === 'hoy' ? 'Hoy' : '7d'}
                   </button>
@@ -514,7 +506,7 @@ export function VistaDashboard({
               </p>
             ) : (
               <div className="mt-2">
-                <div className="mb-1 flex items-center gap-2 text-[9.5px] uppercase tracking-wider text-muted-foreground">
+                <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
                   <span className="flex-1" />
                   <span className="w-9 text-right">conv</span>
                   <span className="w-9 text-right">msj</span>
@@ -527,7 +519,7 @@ export function VistaDashboard({
                       ? [v.conversaciones_hoy, v.mensajes_hoy, v.ventas_hoy]
                       : [v.conversaciones_7d, v.mensajes_7d, v.ventas_7d];
                   return (
-                    <div key={v.vendedora} className="flex items-center gap-2 border-t border-border/60 py-1.5 text-[11.5px]">
+                    <div key={v.vendedora} className="flex items-center gap-2 border-t border-border/60 py-1.5 text-xs">
                       <span className="flex size-6 shrink-0 items-center justify-center rounded-[8px] bg-secondary font-heading text-[9px] font-bold text-navy">
                         {inicialesDe(v.vendedora)}
                       </span>

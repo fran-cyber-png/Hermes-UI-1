@@ -54,7 +54,7 @@ function MediaEnBurbuja({ media }: { media: MediaHilo }) {
       <FileText size={18} className="shrink-0 text-navy" />
       <span className="min-w-0">
         <span className="block truncate text-xs font-semibold text-foreground">{media.nombre ?? 'Documento'}</span>
-        <span className="block text-[10.5px] text-muted-foreground">{media.mime ?? 'archivo'} · tocá para abrir</span>
+        <span className="block text-[11px] text-muted-foreground">{media.mime ?? 'archivo'} · tocá para abrir</span>
       </span>
     </a>
   );
@@ -111,7 +111,7 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-panel">
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
       {/* Cabecera del contacto */}
       <header className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
         <span className="flex size-8 items-center justify-center rounded-full bg-secondary text-xs font-bold text-navy">
@@ -161,7 +161,7 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
                 ) : m.media ? null : (
                   <span className="italic text-muted-foreground">(no es texto — velo en el teléfono)</span>
                 )}
-                <div className={'mt-0.5 text-right font-mono text-[10px] text-muted-foreground ' + (m.media ? 'px-2 pb-1' : '')}>
+                <div className={'mt-0.5 text-right font-mono text-[11px] text-muted-foreground ' + (m.media ? 'px-2 pb-1' : '')}>
                   {new Date(m.occurred_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
@@ -192,7 +192,7 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
             )}
             <div className="min-w-0 flex-1">
               <div className="truncate text-xs font-semibold text-foreground">{adjunto.name}</div>
-              <div className="text-[10.5px] text-muted-foreground">
+              <div className="text-[11px] text-muted-foreground">
                 {(adjunto.size / 1024 / 1024).toFixed(1)} MB · el texto de abajo va como leyenda
               </div>
             </div>

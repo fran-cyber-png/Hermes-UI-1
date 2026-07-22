@@ -119,7 +119,7 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
     <>
       <div className="fixed inset-0 z-40 bg-navy/30 backdrop-blur-[2px]" onClick={onCerrar} aria-hidden="true" />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-panel">
+        <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
           <header className="flex shrink-0 items-center justify-between border-b border-border bg-navy px-5 py-3 text-white">
             <div className="flex items-center gap-2 text-sm font-bold">
               <ShoppingCart size={16} /> Registrar venta
@@ -188,7 +188,7 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
                     className="w-full rounded-lg border border-border bg-muted py-2 pl-8 pr-3 text-sm outline-none focus:border-primary"
                   />
                   {prods && busqueda.length >= 2 && prods.productos.length > 0 && (
-                    <div className="absolute z-10 mt-1 max-h-44 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-panel">
+                    <div className="absolute z-10 mt-1 max-h-44 w-full overflow-y-auto rounded-lg bg-card shadow-panel">
                       {prods.productos.map((p) => (
                         <button
                           key={p.id}

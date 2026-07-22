@@ -100,7 +100,7 @@ export function RegistrarGestion({ conversacion }: { conversacion: Conversacion 
 
   const rapidas = opcionesRapidas();
   const chip = (activo: boolean) =>
-    'rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition-colors ' +
+    'rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ' +
     (activo ? 'bg-navy text-white' : 'border border-border bg-card text-muted-foreground hover:text-foreground');
 
   return (
@@ -133,7 +133,7 @@ export function RegistrarGestion({ conversacion }: { conversacion: Conversacion 
         </button>
       ) : (
         <div className="rounded-xl border border-border bg-muted/30 p-2.5">
-          <div className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Etapa del embudo</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Etapa del embudo</div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {ETAPAS.map((e) => (
               <button key={e.id} type="button" onClick={() => setEtapa(e.id)} className={chip((etapa ?? etapaActual) === e.id)}>
@@ -142,10 +142,10 @@ export function RegistrarGestion({ conversacion }: { conversacion: Conversacion 
             ))}
           </div>
 
-          <div className="mt-3 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Cursos de interés</div>
+          <div className="mt-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Cursos de interés</div>
           <div className="mt-1.5"><Intereses clave={conversacion.clave} /></div>
 
-          <div className="mt-3 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Próxima acción</div>
+          <div className="mt-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Próxima acción</div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {ACCIONES.map((a) => (
               <button key={a.id} type="button" onClick={() => setAccion(accion === a.id ? null : a.id)} className={chip(accion === a.id)}>
@@ -180,7 +180,7 @@ export function RegistrarGestion({ conversacion }: { conversacion: Conversacion 
             </div>
           )}
 
-          <div className="mt-3 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Notas de acuerdos</div>
+          <div className="mt-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Notas de acuerdos</div>
           <textarea
             value={notas}
             onChange={(e) => setNotas(e.target.value)}

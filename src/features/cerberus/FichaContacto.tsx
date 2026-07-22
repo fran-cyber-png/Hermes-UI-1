@@ -61,7 +61,7 @@ export function FichaContacto({ conversacion }: { conversacion: Conversacion }) 
   });
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-panel">
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
       <header className="shrink-0 border-b border-border px-4 py-3">
         <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Ficha del contacto</div>
         <div className="mt-1 truncate text-sm font-bold text-foreground">

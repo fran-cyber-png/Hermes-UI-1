@@ -160,3 +160,42 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── OFICIO DE ESCRITORIO: los detalles que separan una app de una página ── */
+
+/* Scrollbars de la casa: finas, calladas, navy al agarrarlas. Nada delata
+   "web genérica" más rápido que la scrollbar cruda del navegador. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #C9D4E5 transparent;
+}
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: #C9D4E5;
+  border-radius: 999px;
+  border: 2.5px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--navy);
+  background-clip: content-box;
+}
+
+/* Seleccionar texto también es de la marca. */
+::selection {
+  background: var(--secondary);
+  color: var(--navy);
+}
+
+/* El foco de teclado, uno solo y visible, en toda la app. */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

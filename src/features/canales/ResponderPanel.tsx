@@ -115,7 +115,7 @@ export default function ResponderPanel({ interaccion, onCerrar, onRespondido }: 
   // Vive en la columna central (des-modalizado): la cola y el panel de contexto
   // siguen visibles mientras se responde — la mesa no se tapa a sí misma.
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-panel">
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
         <header className="flex shrink-0 items-start justify-between gap-3 border-b border-border p-5">
           <div className="min-w-0">
             <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${meta.chip}`}>

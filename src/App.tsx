@@ -170,6 +170,10 @@ export default function App() {
           </div>
         </header>
 
+        <div
+          key={vista}
+          className="flex min-h-0 flex-1 flex-col duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] animate-in fade-in slide-in-from-bottom-1"
+        >
         {vista === 'dashboard' && (
           <VistaDashboard
             onAbrir={abrirConversacion}
@@ -203,6 +207,7 @@ export default function App() {
         {vista === 'agenda' && <VistaAgenda onAbrir={abrirConversacion} />}
         {vista === 'personas' && <VistaPersonas telefonoInicial={telefonoPersonas} />}
         {vista === 'correos' && <VistaCorreos />}
+        </div>
       </div>
     </div>
   );

@@ -83,7 +83,7 @@ export function ColaUnificada({
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-panel">
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
       <div className="shrink-0 border-b border-border p-2">
         <div className="flex items-center gap-2">
           <div className="flex flex-1 items-center gap-2 rounded-full border border-border bg-muted/50 px-3 py-1.5 transition-all focus-within:border-primary focus-within:bg-card">
@@ -139,7 +139,7 @@ export function ColaUnificada({
                 Abrir
               </button>
             </div>
-            <p className="mt-1.5 text-[10.5px] text-muted-foreground">
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
               Abre el hilo vacío. El mensaje lo escribís vos — nada sale solo.
             </p>
           </div>

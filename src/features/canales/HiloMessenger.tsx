@@ -47,7 +47,7 @@ export function HiloMessenger({ conversacion }: { conversacion: Conversacion }) 
   const nombre = conversacion.persona_nombre ?? data?.nombre ?? 'Conversación';
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-panel">
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
       <header className="flex shrink-0 items-center gap-2.5 border-b border-border px-4 py-3">
         <span className="flex size-8 items-center justify-center rounded-[11px] bg-secondary font-heading text-xs font-bold text-navy">
           {nombre.slice(0, 2).toUpperCase()}
@@ -79,7 +79,7 @@ export function HiloMessenger({ conversacion }: { conversacion: Conversacion }) 
                 }
               >
                 {m.texto ?? <span className="italic text-muted-foreground">(sin texto)</span>}
-                <div className="mt-0.5 text-right font-mono text-[10px] text-muted-foreground">
+                <div className="mt-0.5 text-right font-mono text-[11px] text-muted-foreground">
                   {new Date(m.occurred_at).toLocaleDateString('es', { day: '2-digit', month: 'short' })}{' '}
                   {new Date(m.occurred_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
                 </div>

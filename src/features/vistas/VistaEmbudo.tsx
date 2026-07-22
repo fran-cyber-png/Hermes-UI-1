@@ -53,7 +53,7 @@ function TarjetaEmbudo({
         <span className="min-w-0 truncate font-heading text-[13px] font-semibold text-foreground">
           {c.persona_nombre ?? c.persona_id ?? 'Sin nombre'}
         </span>
-        <span className="ml-auto shrink-0 font-mono text-[10.5px] text-muted-foreground">{hace(horas)}</span>
+        <span className="ml-auto shrink-0 font-mono text-[11px] text-muted-foreground">{hace(horas)}</span>
         <button
           type="button"
           title="Abrir en la Bandeja"
@@ -128,7 +128,6 @@ export function VistaEmbudo({ onAbrir }: { onAbrir: (c: Conversacion) => void })
   return (
     <div className="flex min-h-0 flex-1 flex-col p-3">
       <div className="mb-2.5 flex shrink-0 items-center gap-3 px-1">
-        <h2 className="font-heading text-base font-bold tracking-tight text-foreground">Embudo</h2>
         <p className="text-xs text-muted-foreground">
           Arrastrá para mover. A <b>Cotizados</b> con curso de interés; a <b>Cierre</b>, registrando la venta.
         </p>
@@ -183,7 +182,7 @@ export function VistaEmbudo({ onAbrir }: { onAbrir: (c: Conversacion) => void })
                     <h3 className="font-heading text-[13px] font-bold text-foreground">{etapa.titulo}</h3>
                     <span className="font-mono text-[11px] text-muted-foreground">{enEtapa.length}</span>
                   </div>
-                  <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">{etapa.pista}</p>
+                  <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">{etapa.pista}</p>
                 </header>
                 <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-0.5">
                   {enEtapa.length === 0 ? (
