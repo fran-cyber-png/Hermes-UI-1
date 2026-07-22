@@ -159,6 +159,76 @@ Ese archivo es lo que se reparte: doble clic, login con **su usuario de Cerberus
 está en su mesa. No vincula nada, no clona nada. (En Macs ajenas, al no estar notarizado, la primera
 vez es clic derecho → Abrir.)
 
+## 8b. Actualizar SIN rebuild en el VPS (y las más veces, sin restart)
+
+El server **lee el `dist/` del disco en cada request** — `express.static(DIST)` y el `sendFile` del
+fallback SPA (`server/src/index.ts:99-106`). Lo único que se evalúa al arrancar es que
+`dist/index.html` **exista**, y en producción ya existe.
+
+**Consecuencia**: reemplazar los archivos de `/srv/hermes/dist/` actualiza la UI **al instante**, sin
+`npm run build` en el VPS y **sin `systemctl restart`**. Cero downtime: no se corta el SSE, no se
+reconecta whatsmeow, y —esto importa— **no se pierden las sesiones de Cerberus**, que viven en un
+`Map` de proceso y un restart las tira (el síntoma es un 409 «la sesión de Cerberus expiró» al abrir
+el formulario de venta).
+
+### A · Cambió SOLO el front → sin rebuild y sin restart
+
+Se buildea en tu máquina y se manda el resultado:
+
+```bash
+# 1 · en tu máquina, apuntando a producción
+env VITE_API_URL=https://hermes-api.goberna.us npm run build
+
+# 2 · mandar el dist ya construido. --delete limpia los assets viejos (los nombres
+#     llevan hash, así que sin --delete se acumulan para siempre).
+rsync -avz --delete dist/ deploy@161.132.39.165:/srv/hermes/dist/
+```
+
+Listo. **No hay paso 3.** La próxima vez que alguien abra la app —o recargue— ve lo nuevo.
+
+Por qué es seguro: Vite pone un hash en el nombre de cada asset y `index.html` los referencia; como
+`express.static` va sin opciones de caché, el navegador revalida `index.html` en cada carga y se trae
+los assets nuevos. El `--delete` es lo único que hay que respetar, o `dist/` crece sin techo.
+
+### B · Cambió el server (rutas, SQL, deps) → hace falta restart
+
+No hay forma de evitarlo: el código del server está en memoria.
+
+```bash
+ssh deploy@161.132.39.165 'cd /srv/hermes && git pull && \
+  ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci && \
+  env VITE_API_URL=https://hermes-api.goberna.us npm run build && \
+  sudo systemctl restart hermes'
+```
+
+- `npm ci` **solo si cambiaron dependencias** (`git diff --stat <sha-viejo>..main -- package.json`).
+- `ELECTRON_SKIP_BINARY_DOWNLOAD=1` evita bajar ~100 MB que el VPS nunca usa.
+- `cd server && npm run db:push` **solo si cambió `server/src/db/schema.ts`**.
+- Si querés ahorrarte el build en el VPS también acá, hacé el paso A **después** del restart (el
+  `git pull` deja el `dist/` viejo hasta que alguien lo reemplace).
+
+### Cuál de las dos me toca
+
+```bash
+git diff --stat <sha-de-produccion>..main -- server/ package.json
+```
+
+Sin salida → es **A**. Con salida → es **B**.
+
+> ⚠️ **No partas un cambio entre A y B.** Si el front nuevo espera campos que el server viejo no
+> manda (o al revés), la app se rompe en manos de la vendedora. Front y server se despliegan juntos
+> salvo que hayas verificado que el cambio es compatible en las dos direcciones.
+
+### Rollback
+
+- **A**: volvé a buildear desde el commit anterior y `rsync` de nuevo. Segundos.
+- **B**: `cd /srv/hermes && git checkout <sha-anterior> && npm ci && npm run build && sudo systemctl restart hermes`.
+
+### Lo que NUNCA hace falta para actualizar
+
+**Reinstalar la app.** La cáscara Tauri solo abre `https://hermes-api.goberna.us`; el instalador se
+regenera únicamente para máquinas nuevas o para refrescar el respaldo offline. Ver ADR 0003 y 0007.
+
 ## Verificación final (regla dura #2)
 
 - `systemctl status hermes` → active.
