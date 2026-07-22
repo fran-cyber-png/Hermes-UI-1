@@ -59,9 +59,13 @@ _(Agregado local. Lo de arriba es la plantilla del skill; esto es lo que aplica 
 **Layout: single-context.** Un solo producto, un solo lenguaje. `src/` (front) y `server/` son dos
 paquetes del mismo contexto, no dos contextos: comparten el vocabulario entero.
 
-**Todavía no hay `CONTEXT.md`, y está bien** — se crea cuando `/domain-modeling` resuelva términos
-de verdad. Mientras tanto el vocabulario real de Hermes vive repartido, y estos son los que hay que
-leer antes de nombrar cualquier cosa:
+**`CONTEXT.md` existe desde el 2026-07-22** — lo abrió el grilling del rediseño del Dashboard con
+los primeros términos ganados (Deuda, Silencio, Ventana, Enfriamiento, Vencido, Persona,
+Conversación, Comentario). Es un glosario y nada más: se lee **antes** de nombrar cualquier cosa,
+y crece de a un término resuelto por vez.
+
+El resto del vocabulario sigue repartido en los docs vivos, que son los que hay que leer para
+entender el negocio detrás de esas palabras:
 
 | Dónde | Qué vocabulario define |
 |---|---|
