@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ExternalLink, Lock } from 'lucide-react';
 import { api } from '../../lib/datos/cliente';
+import { agruparPorDia, SeparadorDia, SkeletonHilo, tintaSeparador } from '../whatsapp/HiloWhatsapp';
 import type { Conversacion } from './conversaciones';
 
 /**
@@ -37,7 +38,7 @@ function useHiloMessenger(canal: string, personaId: string | null) {
 }
 
 export function HiloMessenger({ conversacion }: { conversacion: Conversacion }) {
-  const { data, isPending } = useHiloMessenger(conversacion.canal, conversacion.persona_id);
+  const { data, isPending, isError, refetch } = useHiloMessenger(conversacion.canal, conversacion.persona_id);
   const finRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -45,6 +46,7 @@ export function HiloMessenger({ conversacion }: { conversacion: Conversacion }) 
   }, [data?.historial.length]);
 
   const nombre = conversacion.persona_nombre ?? data?.nombre ?? 'Conversación';
+  const grupos = agruparPorDia(data?.historial ?? []);
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
@@ -62,28 +64,58 @@ export function HiloMessenger({ conversacion }: { conversacion: Conversacion }) 
 
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-muted/30 p-4">
         {isPending ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">Cargando…</p>
+          <SkeletonHilo />
+        ) : isError ? (
+          <div className="py-8 text-center">
+            <p className="text-sm text-muted-foreground">
+              No se pudo cargar el hilo — no es que no haya mensajes.
+            </p>
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="mt-2 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1"
+            >
+              Reintentar
+            </button>
+          </div>
         ) : !data || data.historial.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            No hay mensajes capturados de esta conversación.
-          </p>
+          <div className="py-8 text-center">
+            <p className="text-sm text-muted-foreground">
+              Todavía no capturamos mensajes de esta conversación.
+            </p>
+            <p className="mx-auto mt-1 max-w-xs text-xs text-muted-foreground">
+              La captura trae lo que Meta nos deja ver — el hilo completo vive en Business Suite.
+            </p>
+            <a
+              href="https://business.facebook.com/latest/inbox/all"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline"
+            >
+              Verlo en Business Suite <ExternalLink size={10} />
+            </a>
+          </div>
         ) : (
-          data.historial.map((m) => (
-            <div key={m.id} className={'flex ' + (m.direccion === 'saliente' ? 'justify-end' : 'justify-start')}>
-              <div
-                className={
-                  'max-w-[75%] rounded-2xl px-3.5 py-2 text-sm shadow-[0_1px_2px_rgba(14,42,82,0.06)] ' +
-                  (m.direccion === 'saliente'
-                    ? 'rounded-br-md bg-secondary text-navy'
-                    : 'rounded-bl-md bg-card text-foreground ring-1 ring-border')
-                }
-              >
-                {m.texto ?? <span className="italic text-muted-foreground">(sin texto)</span>}
-                <div className="mt-0.5 text-right font-mono text-[11px] text-muted-foreground">
-                  {new Date(m.occurred_at).toLocaleDateString('es', { day: '2-digit', month: 'short' })}{' '}
-                  {new Date(m.occurred_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+          grupos.map((g, gi) => (
+            <div key={g.clave} className="space-y-2">
+              <SeparadorDia etiqueta={g.etiqueta} tinta={tintaSeparador(gi === grupos.length - 1, g.ultimo)} />
+              {g.items.map((m) => (
+                <div key={m.id} className={'flex ' + (m.direccion === 'saliente' ? 'justify-end' : 'justify-start')}>
+                  <div
+                    className={
+                      'max-w-[75%] rounded-2xl px-3.5 py-2 text-sm ' +
+                      (m.direccion === 'saliente'
+                        ? 'rounded-br-md bg-secondary text-navy shadow-[0_1px_2px_rgba(14,42,82,0.06)]'
+                        : 'rounded-bl-md bg-card text-foreground ring-1 ring-border')
+                    }
+                  >
+                    {m.texto ?? <span className="italic text-muted-foreground">(sin texto)</span>}
+                    <div className="mt-0.5 text-right font-mono text-[11px] text-muted-foreground">
+                      {new Date(m.occurred_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ))}
             </div>
           ))
         )}

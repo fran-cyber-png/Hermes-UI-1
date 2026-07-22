@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Check, Clock, Lock, MessageCircle, Trash2, X } from 'lucide-react';
 import { API_URL } from '../../config';
+import { kicker } from '../../lib/styles';
 
 export interface Capacidades {
   puedePrivado: boolean;
   motivo: 'ventana-cerrada' | 'privacidad' | 'instagram' | 'error' | null;
   dias?: number;
 }
+
+/** La ventana de Meta para escribirle en privado a quien comenta. */
+const VENTANA_PRIVADO_DIAS = 7;
 
 /**
  * Qué se puede hacer con este comentario, ANTES de escribir una palabra.
@@ -46,12 +50,16 @@ export default function QuePuedoHacer({
 
   const explicacionPrivado =
     cap.motivo === 'ventana-cerrada'
-      ? `Meta lo permite solo durante 7 días. Este comentario tiene ${cap.dias}.`
+      ? `Meta lo permite solo durante 7 días. Este comentario ya tiene ${cap.dias} días.`
       : cap.motivo === 'privacidad'
         ? 'Esta persona no acepta mensajes de páginas.'
         : cap.motivo === 'instagram'
           ? 'En Instagram, Meta lo tiene detrás de una revisión de app.'
           : 'Meta no lo permite en este comentario.';
+
+  // La cuenta regresiva: oro ANTES de que sea tarde, no después.
+  const quedan =
+    cap.puedePrivado && typeof cap.dias === 'number' ? VENTANA_PRIVADO_DIAS - cap.dias : null;
 
   const Fila = ({
     ok,
@@ -85,8 +93,8 @@ export default function QuePuedoHacer({
 
   return (
     <div className="mt-5 overflow-hidden rounded-xl border border-border">
-      <div className="border-b border-border bg-muted px-3.5 py-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-        Qué puedes hacer con esto
+      <div className={`border-b border-border bg-muted px-3.5 py-2 ${kicker}`}>
+        Qué podés hacer con esto
       </div>
 
       <div className="divide-y divide-border bg-card">
@@ -99,7 +107,7 @@ export default function QuePuedoHacer({
         <Fila
           ok={cap.puedePrivado}
           icono={Lock}
-          titulo="Mandarle un mensaje privado"
+          titulo="Mandale un mensaje privado"
           detalle={
             cap.puedePrivado
               ? 'Le llega por Messenger aunque nunca te haya escrito. Solo una vez por comentario.'
@@ -114,10 +122,23 @@ export default function QuePuedoHacer({
         />
       </div>
 
+      {quedan != null && quedan <= 2 && (
+        <div className="flex items-start gap-2 border-t border-border bg-gold/10 px-3.5 py-2.5">
+          <Clock size={13} className="mt-0.5 shrink-0 text-gold-ink" />
+          <p className="text-xs font-semibold leading-relaxed text-gold-ink">
+            {quedan <= 0
+              ? 'Hoy es el último día para poder escribirle en privado.'
+              : quedan === 1
+                ? 'Te queda 1 día para poder escribirle en privado.'
+                : `Te quedan ${quedan} días para poder escribirle en privado.`}
+          </p>
+        </div>
+      )}
+
       {!cap.puedePrivado && cap.motivo === 'ventana-cerrada' && (
         <div className="flex items-start gap-2 border-t border-warning/30 bg-warning/10 px-3.5 py-2.5">
-          <Clock size={13} className="mt-0.5 shrink-0 text-warning" />
-          <p className="text-xs leading-relaxed text-warning">
+          <Clock size={13} className="mt-0.5 shrink-0 text-gold-ink" />
+          <p className="text-xs leading-relaxed text-gold-ink">
             <strong>La ventana se cerró.</strong> Meta deja escribirle por privado a quien comenta solo durante 7
             días. Después, solo queda el comentario público. Por eso responder rápido no es una preferencia: es la
             diferencia entre poder hablarle o no.

@@ -15,13 +15,15 @@ const CANAL = {
 export function BadgeCanal({ canal, size = 14 }: { canal: string; size?: number }) {
   const meta = CANAL[canal as keyof typeof CANAL];
   if (!meta) return null;
+  // Bajo 18px la inicial sería ruido ilegible: el disco de color alcanza.
+  const conInicial = size >= 18;
   return (
     <span
       title={meta.nombre}
       className="inline-flex items-center justify-center rounded-full font-bold text-white ring-2 ring-card"
-      style={{ backgroundColor: meta.color, width: size, height: size, fontSize: size * 0.5 }}
+      style={{ backgroundColor: meta.color, width: size, height: size, ...(conInicial ? { fontSize: Math.max(9, size * 0.5) } : {}) }}
     >
-      {meta.inicial}
+      {conInicial ? meta.inicial : null}
     </span>
   );
 }

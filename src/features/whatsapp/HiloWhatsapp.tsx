@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, FileText, Loader2, Megaphone, Paperclip, Phone, QrCode, Send, Link2, WifiOff, X } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
+import { formatoTelefono, tempClass } from '../../lib/formato';
 import type { Conversacion } from '../canales/conversaciones';
 import {
   urlMedia,
@@ -10,6 +11,82 @@ import {
   type MediaHilo,
   type OrigenLead,
 } from './conversacionWa';
+
+/** Etiqueta editorial del día: «hoy», «ayer» o «lun 14 jul». */
+function etiquetaDia(fecha: Date): string {
+  const hoy = new Date();
+  if (fecha.toDateString() === hoy.toDateString()) return 'hoy';
+  const ayer = new Date(hoy);
+  ayer.setDate(hoy.getDate() - 1);
+  if (fecha.toDateString() === ayer.toDateString()) return 'ayer';
+  return fecha
+    .toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' })
+    .replace(/[.,]/g, '');
+}
+
+/** Agrupa mensajes por día calendario, respetando el orden del hilo. */
+export function agruparPorDia<T extends { occurred_at: string }>(
+  mensajes: T[],
+): { clave: string; etiqueta: string; ultimo: string; items: T[] }[] {
+  const grupos: { clave: string; etiqueta: string; ultimo: string; items: T[] }[] = [];
+  for (const m of mensajes) {
+    const fecha = new Date(m.occurred_at);
+    const clave = fecha.toDateString();
+    const actual = grupos[grupos.length - 1];
+    if (actual && actual.clave === clave) {
+      actual.items.push(m);
+      actual.ultimo = m.occurred_at;
+    } else {
+      grupos.push({ clave, etiqueta: etiquetaDia(fecha), ultimo: m.occurred_at, items: [m] });
+    }
+  }
+  return grupos;
+}
+
+/**
+ * La tinta del dateline: solo el del último grupo cuenta el enfriamiento del
+ * hilo. Entre 1 y 3 días toma oro (la ventana yéndose — el único oro del
+ * separador); más allá habla la rampa: ladrillo, acero. Fresco calla.
+ */
+export function tintaSeparador(esUltimoGrupo: boolean, ultimaFecha: string): string {
+  if (!esUltimoGrupo) return 'text-muted-foreground';
+  const h = (Date.now() - new Date(ultimaFecha).getTime()) / 3_600_000;
+  if (h < 24) return 'text-muted-foreground';
+  if (h < 72) return 'text-gold-ink';
+  return tempClass(ultimaFecha);
+}
+
+/** El dateline del hilo: chip centrado en voz de imprenta. */
+export function SeparadorDia({ etiqueta, tinta }: { etiqueta: string; tinta: string }) {
+  return (
+    <div className={`mx-auto w-fit rounded-full bg-muted px-2.5 py-0.5 font-mono text-[11px] ${tinta}`}>
+      {etiqueta}
+    </div>
+  );
+}
+
+/** Burbujas fantasma mientras carga el hilo: la anatomía real, no un spinner. */
+export function SkeletonHilo() {
+  return (
+    <div className="space-y-2" aria-hidden="true">
+      <div className="flex justify-start">
+        <div className="h-10 w-40 animate-pulse rounded-2xl rounded-bl-md bg-muted" />
+      </div>
+      <div className="flex justify-start">
+        <div className="h-10 w-64 animate-pulse rounded-2xl rounded-bl-md bg-muted" />
+      </div>
+      <div className="flex justify-end">
+        <div className="h-10 w-56 animate-pulse rounded-2xl rounded-br-md bg-muted" />
+      </div>
+      <div className="flex justify-start">
+        <div className="h-10 w-56 animate-pulse rounded-2xl rounded-bl-md bg-muted" />
+      </div>
+      <div className="flex justify-end">
+        <div className="h-10 w-40 animate-pulse rounded-2xl rounded-br-md bg-muted" />
+      </div>
+    </div>
+  );
+}
 
 /**
  * El adjunto dentro de la burbuja, como en WhatsApp Web: la imagen se ve, el
@@ -76,7 +153,16 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
   const [texto, setTexto] = useState('');
   const [adjunto, setAdjunto] = useState<File | null>(null);
   const archivoRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const finRef = useRef<HTMLDivElement>(null);
+  // Solo lo NUEVO se anima: ids ya vistos por hilo (se resetea al cambiar de teléfono).
+  const vistosRef = useRef<Set<number>>(new Set());
+  const hiloVistoRef = useRef(telefono);
+
+  const conectado = sesion?.estado === 'conectado';
+  const enviando = enviar.isPending || enviarMedia.isPending;
+  const mensajes = hilo.data?.mensajes ?? [];
+  const grupos = agruparPorDia(mensajes);
 
   // Al abrir la conversación: marcar leído (una vez por teléfono).
   useEffect(() => {
@@ -84,13 +170,24 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [telefono]);
 
+  // Composer con foco: al cambiar de conversación, la caja queda lista para tipear.
+  useEffect(() => {
+    if (conectado) textareaRef.current?.focus();
+  }, [telefono, conectado]);
+
   // Autoscroll al último mensaje cuando llega algo.
   useEffect(() => {
     finRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [hilo.data?.mensajes.length]);
 
-  const conectado = sesion?.estado === 'conectado';
-  const enviando = enviar.isPending || enviarMedia.isPending;
+  // Tras cada render: sincronizar los ids vistos (y resetear al cambiar de hilo).
+  useEffect(() => {
+    if (hiloVistoRef.current !== telefono) {
+      vistosRef.current = new Set();
+      hiloVistoRef.current = telefono;
+    }
+    for (const m of mensajes) vistosRef.current.add(m.id);
+  });
 
   async function onEnviar() {
     const t = texto.trim();
@@ -112,17 +209,17 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
-      {/* Cabecera del contacto */}
-      <header className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
-        <span className="flex size-8 items-center justify-center rounded-full bg-secondary text-xs font-bold text-navy">
+      {/* Cabecera del contacto — la misma anatomía en los tres canales */}
+      <header className="flex shrink-0 items-center gap-2.5 border-b border-border px-4 py-3">
+        <span className="flex size-8 items-center justify-center rounded-[11px] bg-secondary font-heading text-xs font-bold text-navy">
           {(conversacion.persona_nombre ?? telefono ?? '·').slice(0, 2).toUpperCase()}
         </span>
         <div className="min-w-0">
-          <div className="truncate text-sm font-bold text-foreground">
-            {conversacion.persona_nombre ?? telefono}
+          <div className="truncate font-heading text-sm font-bold text-foreground">
+            {conversacion.persona_nombre ?? formatoTelefono(telefono)}
           </div>
-          <div className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
-            <Phone size={10} /> {telefono}
+          <div className="flex items-center gap-1 font-mono text-[11px] tabular-nums text-muted-foreground">
+            <Phone size={10} /> {formatoTelefono(telefono)}
           </div>
         </div>
       </header>
@@ -132,41 +229,70 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
 
       {/* El hilo */}
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-muted/30 p-4">
-        <p className="mb-3 rounded-lg bg-secondary/60 px-3 py-2 text-center text-xs text-secondary-foreground">
-          Esta conversación se ve desde que se vinculó el número. Lo anterior está en el teléfono.
-        </p>
         {hilo.isPending ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">Cargando…</p>
-        ) : (
-          hilo.data?.mensajes.map((m) => (
-            <div
-              key={m.id}
-              className={
-                'flex duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] animate-in fade-in slide-in-from-bottom-1 ' +
-                (m.direccion === 'saliente' ? 'justify-end' : 'justify-start')
-              }
+          <SkeletonHilo />
+        ) : hilo.isError ? (
+          <div className="py-8 text-center">
+            <p className="text-sm text-muted-foreground">
+              No se pudo cargar el hilo — no es que no haya mensajes.
+            </p>
+            <button
+              type="button"
+              onClick={() => void hilo.refetch()}
+              className="mt-2 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1"
             >
-              <div
-                className={
-                  'max-w-[75%] rounded-2xl text-sm shadow-[0_1px_2px_rgba(14,42,82,0.06)] ' +
-                  (m.media && (m.media.clase === 'imagen' || m.media.clase === 'video') ? 'p-1.5 ' : 'px-3.5 py-2 ') +
-                  (m.direccion === 'saliente'
-                    ? 'rounded-br-md bg-secondary text-navy'
-                    : 'rounded-bl-md bg-card text-foreground ring-1 ring-border')
-                }
-              >
-                {m.media && <MediaEnBurbuja media={m.media} />}
-                {m.texto ? (
-                  <div className={m.media ? 'px-2 pt-1.5' : ''}>{m.texto}</div>
-                ) : m.media ? null : (
-                  <span className="italic text-muted-foreground">(no es texto — velo en el teléfono)</span>
-                )}
-                <div className={'mt-0.5 text-right font-mono text-[11px] text-muted-foreground ' + (m.media ? 'px-2 pb-1' : '')}>
-                  {new Date(m.occurred_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
-                </div>
+              Reintentar
+            </button>
+          </div>
+        ) : (
+          <>
+            {mensajes.length < 5 && (
+              <p className="mb-3 text-center text-[11px] text-muted-foreground">
+                Esta conversación se ve desde que se vinculó el número. Lo anterior está en el teléfono.
+              </p>
+            )}
+            {grupos.map((g, gi) => (
+              <div key={g.clave} className="space-y-2">
+                <SeparadorDia etiqueta={g.etiqueta} tinta={tintaSeparador(gi === grupos.length - 1, g.ultimo)} />
+                {g.items.map((m) => {
+                  const esNuevo =
+                    hiloVistoRef.current === telefono &&
+                    vistosRef.current.size > 0 &&
+                    !vistosRef.current.has(m.id);
+                  return (
+                    <div
+                      key={m.id}
+                      className={
+                        'flex ' +
+                        (esNuevo ? 'duration-300 ease-house animate-in fade-in slide-in-from-bottom-1 ' : '') +
+                        (m.direccion === 'saliente' ? 'justify-end' : 'justify-start')
+                      }
+                    >
+                      <div
+                        className={
+                          'max-w-[75%] rounded-2xl text-sm ' +
+                          (m.media && (m.media.clase === 'imagen' || m.media.clase === 'video') ? 'p-1.5 ' : 'px-3.5 py-2 ') +
+                          (m.direccion === 'saliente'
+                            ? 'rounded-br-md bg-secondary text-navy shadow-[0_1px_2px_rgba(14,42,82,0.06)]'
+                            : 'rounded-bl-md bg-card text-foreground ring-1 ring-border')
+                        }
+                      >
+                        {m.media && <MediaEnBurbuja media={m.media} />}
+                        {m.texto ? (
+                          <div className={m.media ? 'px-2 pt-1.5' : ''}>{m.texto}</div>
+                        ) : m.media ? null : (
+                          <span className="italic text-muted-foreground">(no es texto — velo en el teléfono)</span>
+                        )}
+                        <div className={'mt-0.5 text-right font-mono text-[11px] text-muted-foreground ' + (m.media ? 'px-2 pb-1' : '')}>
+                          {new Date(m.occurred_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            </div>
-          ))
+            ))}
+          </>
         )}
         <div ref={finRef} />
       </div>
@@ -200,7 +326,7 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
               type="button"
               onClick={() => setAdjunto(null)}
               title="Quitar adjunto"
-              className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1"
             >
               <X size={14} />
             </button>
@@ -224,11 +350,12 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
             onClick={() => archivoRef.current?.click()}
             disabled={!conectado}
             title="Adjuntar imagen, video o documento"
-            className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+            className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 disabled:opacity-40"
           >
             <Paperclip size={16} />
           </button>
           <textarea
+            ref={textareaRef}
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
             onKeyDown={(e) => {
@@ -252,12 +379,12 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
             type="button"
             onClick={() => void onEnviar()}
             disabled={!conectado || (!texto.trim() && !adjunto) || enviando}
-            className="group flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_2px_10px_-2px_rgba(37,99,235,0.5)] transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:bg-primary-hover hover:shadow-[0_4px_16px_-2px_rgba(37,99,235,0.55)] active:scale-[0.94] disabled:opacity-40 disabled:shadow-none"
+            className="group flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_2px_10px_-2px_rgba(37,99,235,0.5)] transition-[background-color,box-shadow,transform] duration-200 ease-house hover:bg-primary-hover hover:shadow-[0_4px_16px_-2px_rgba(37,99,235,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 active:scale-[0.94] disabled:opacity-40 disabled:shadow-none"
           >
             {enviando ? (
               <Loader2 size={16} className="animate-spin" />
             ) : (
-              <Send size={16} className="transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              <Send size={16} className="transition-transform duration-200 ease-house group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
             )}
           </button>
         </div>
@@ -271,15 +398,16 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
 
 /**
  * De dónde vino el lead — la captura del embudo, hecha visible. Que la vendedora
- * sepa "esta persona vino del anuncio X" cambia cómo le habla.
+ * sepa "esta persona vino del anuncio X" cambia cómo le habla. Sin oro: el
+ * origen es contexto, no tiempo que se acaba.
  */
 function BadgeOrigen({ origen }: { origen: OrigenLead }) {
   if (!origen) return null;
 
   if (origen.fuente === 'anuncio') {
     return (
-      <div className="flex items-center gap-2 border-b border-border bg-gold/10 px-4 py-2 text-xs text-gold-ink">
-        <Megaphone size={13} className="shrink-0" />
+      <div className="flex items-center gap-2 border-b border-border bg-secondary px-4 py-2 text-xs text-secondary-foreground">
+        <Megaphone size={13} className="shrink-0 text-navy" />
         <span>
           Vino del anuncio{origen.anuncio ? <b> “{origen.anuncio}”</b> : ''}
           {origen.campana ? <> · campaña <b>{origen.campana}</b></> : ''}
@@ -315,15 +443,23 @@ function BannerSesion({ sesion }: { sesion: EstadoSesionWa | undefined }) {
       <div className="flex items-start gap-2 border-b border-border bg-secondary px-4 py-2.5 text-xs text-secondary-foreground">
         <QrCode size={14} className="mt-0.5 shrink-0" />
         <span>
-          <b>Número sin vincular.</b> Vinculalo desde la consola del operador (<code className="font-mono">wa:vincular</code>). Acá no se vincula.
+          <b>Número sin vincular.</b> Acá no se vincula: avisá a sistemas para que lo conecten.
+          <span className="mt-0.5 block font-mono text-[11px] text-muted-foreground">
+            para sistemas: npm run wa:vincular (en server/)
+          </span>
         </span>
       </div>
     );
   }
   const motivo = 'motivo' in sesion ? sesion.motivo : '';
+  const TEXTO_ESTADO: Record<string, string> = {
+    conectando: 'WhatsApp se está conectando…',
+    desconectado: 'WhatsApp está desconectado.',
+    cerrada: 'La sesión de WhatsApp se cerró.',
+  };
   return (
-    <div className="flex items-center gap-2 border-b border-border bg-warning/10 px-4 py-2.5 text-xs text-gold-ink">
-      <WifiOff size={14} className="shrink-0" /> WhatsApp {sesion.estado}. {motivo}
+    <div className="flex items-center gap-2 border-b border-border bg-warning/10 px-4 py-2.5 text-xs text-warning-foreground">
+      <WifiOff size={14} className="shrink-0" /> {TEXTO_ESTADO[sesion.estado] ?? `WhatsApp ${sesion.estado}.`} {motivo}
     </div>
   );
 }
