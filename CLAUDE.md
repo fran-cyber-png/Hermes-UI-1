@@ -49,6 +49,12 @@ npm install && npm run dev:app                     # Vite :5173 + la app de escr
 - **Tests**: server `cd server && npm test` (node:test, puros salvo checks en vivo); front `npm test`
   (vitest, entorno `node` — módulos puros, sin DOM). **Typecheck**: front
   `npx tsc --noEmit -p tsconfig.app.json`, server `cd server && npx tsc --noEmit`.
+- **Tests con base (SQL)** (ADR 0008): para el SQL de la cola/radar/proyecciones, contra una Postgres
+  efímera. `docker compose -f docker-compose.test.yml up -d --wait`, luego `cd server && npm run
+  test:db`. Para escribir uno: archivo `*.test.db.ts` (el glob puro no lo toma), `const db = await
+  baseDePrueba(t)` (`src/pruebas/base.ts`) te da una base aislada por test; sembrás con
+  `src/pruebas/sembrar.ts` y le pasás **ese `db`** al seam (`consultarRadar(db)`…), nunca al singleton.
+  Ejemplo vivo: `src/pruebas/humo.test.db.ts`. Guardia hard-fail anti-prod (5439, nunca 5438/5434).
 - **Refrescar datos de Meta**: `cd server && npm run ingest:interactions` (polling manual, read-only).
   Captura comentarios FB/IG + DMs de Messenger de **todas las Páginas que el token puede ver** (`me/accounts`).
 

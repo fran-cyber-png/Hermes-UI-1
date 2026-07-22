@@ -13,6 +13,7 @@
     "ingest:leads": "tsx src/scripts/ingestLeads.ts",
     "cleanup:test": "tsx src/scripts/cleanupTest.ts",
     "test": "tsx --test src/**/*.test.ts",
+    "test:db": "tsx src/pruebas/montarBase.ts && tsx --test src/**/*.test.db.ts",
     "ingest:interactions": "tsx src/scripts/ingestInteractions.ts",
     "wa:vincular": "tsx src/whatsapp/vincular.ts",
     "cerberus:ingestar": "tsx src/scripts/cerberus.ts ingestar",

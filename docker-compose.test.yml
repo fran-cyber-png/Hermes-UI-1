@@ -1,0 +1,31 @@
+# Postgres SOLO para los tests con base (SQL de la cola, el radar, las proyecciones).
+#
+# Aparte del dev (`docker-compose.yml`, meta_escuela en 5434) y ABISMO aparte de
+# producción (VPS1: meta_escuela en 5438). Acá el puerto es 5439 y el nombre
+# `hermes_test` — la guardia hard-fail de `server/src/pruebas/base.ts` aborta si
+# la URL de test llega a mencionar 5438/5434/meta_escuela/hermes_db.
+#
+# `tmpfs` en el datadir: la base vive en RAM y muere con el contenedor. No hay
+# volumen, no hay estado que sobreviva, no hay basura que quede en el runner de
+# VPS1 (que es compartido con producción). Ver ADR 0008 y el issue #33.
+services:
+  db-test:
+    # pgvector/pgvector:pg17 = mismo major que dev/prod + la extensión `vector`,
+    # que el schema necesita (rag.documentos) o `db:push` muere.
+    image: pgvector/pgvector:pg17
+    container_name: hermes_test_db
+    environment:
+      POSTGRES_USER: hermes_test
+      POSTGRES_PASSWORD: hermes_test
+      POSTGRES_DB: hermes_test
+    ports:
+      # Solo loopback y en 5439 — nunca 5438 (prod) ni 5434 (dev).
+      - "127.0.0.1:5439:5432"
+    tmpfs:
+      # El datadir en RAM: efímero por diseño. Sin volumen = sin estado.
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hermes_test -d hermes_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
