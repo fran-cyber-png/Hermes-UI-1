@@ -27,6 +27,12 @@ export function useAgenda() {
   const qc = useQueryClient();
   const invalidar = () => void qc.invalidateQueries({ queryKey: ['agenda'] });
 
+  const invalidarEmbudo = () => {
+    void qc.invalidateQueries({ queryKey: ['gestiones'] });
+    void qc.invalidateQueries({ queryKey: ['embudo'] });
+    void qc.invalidateQueries({ queryKey: ['dashboard'] });
+  };
+
   const agenda = useQuery({
     queryKey: ['agenda'],
     queryFn: () => api<{ recordatorios: Recordatorio[] }>('/api/agenda'),
@@ -43,7 +49,11 @@ export function useAgenda() {
       nota: string;
       cuando: string;
     }) => api<{ ok: true; recordatorio: Recordatorio }>('/api/agenda', { method: 'POST', body: JSON.stringify(r) }),
-    onSuccess: invalidar,
+    // Agendar puede mover la etapa a 'contactado' (server): el embudo también se refresca.
+    onSuccess: () => {
+      invalidar();
+      invalidarEmbudo();
+    },
   });
 
   const cambiarEstado = useMutation({

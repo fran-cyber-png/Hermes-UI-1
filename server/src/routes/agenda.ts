@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { and, asc, eq, gte, or } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, or } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { recordatorios } from '../db/schema.js';
+import { gestiones, recordatorios } from '../db/schema.js';
 import { requiereVendedora } from '../auth/sesion.js';
 
 /**
@@ -50,6 +50,32 @@ agendaRouter.post('/', async (req, res) => {
       cuando: fecha,
     })
     .returning();
+
+  // Agendar un seguimiento ES contactar: si el lead seguía en "interesado" (o
+  // sin gestión), pasa a "contactado" solo. La acción humana fue agendar; esto
+  // asienta su consecuencia en el embudo. Los 'general' (sin conversación) no.
+  if (fila.clave !== 'general') {
+    const [ultima] = await db
+      .select({ etapa: gestiones.etapa })
+      .from(gestiones)
+      .where(eq(gestiones.clave, fila.clave))
+      .orderBy(desc(gestiones.creadoAt))
+      .limit(1);
+    const actual = ultima ? (ultima.etapa === 'nuevo' ? 'interesado' : ultima.etapa) : null;
+    if (!actual || actual === 'interesado') {
+      await db.insert(gestiones).values({
+        vendedoraId: req.vendedoraId!,
+        clave: fila.clave,
+        canal: fila.canal,
+        personaId: fila.personaId,
+        personaNombre: fila.personaNombre,
+        numeroPropio: fila.numeroPropio,
+        etapa: 'contactado',
+        notas: `Agendó: ${fila.nota.slice(0, 80)}`,
+      });
+    }
+  }
+
   res.json({ ok: true, recordatorio: fila });
 });
 

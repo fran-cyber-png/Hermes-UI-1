@@ -29,3 +29,20 @@ export function conectarEnlacesExternos(): void {
     });
   });
 }
+
+
+/** Abre una URL con la app del sistema: en Tauri vía opener, en navegador nativo. */
+export function abrirExterno(url: string): void {
+  const tauri = (window as ConTauri).__TAURI_INTERNALS__;
+  if (tauri) {
+    void tauri.invoke('plugin:opener|open_url', { url, with: null }).catch(() => {});
+    return;
+  }
+  window.location.href = url;
+}
+
+/** Llamar por teléfono: abre el marcador del sistema (FaceTime / Phone Link). */
+export function llamar(telefono: string): void {
+  const digitos = telefono.replace(/\D/g, '');
+  if (digitos.length >= 8) abrirExterno(`tel:+${digitos}`);
+}

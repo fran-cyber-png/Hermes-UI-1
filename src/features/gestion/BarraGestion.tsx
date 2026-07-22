@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlarmClock, Check, Loader2, Tag, X } from 'lucide-react';
+import { AlarmClock, Check, Loader2, Phone, Tag, X } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import type { Conversacion } from '../canales/conversaciones';
 import { opcionesRapidas, useAgenda } from '../agenda/agenda';
+import { llamar } from '../../lib/enlacesExternos';
 import { Intereses } from './Intereses';
 
 /**
@@ -227,7 +228,17 @@ export function BarraGestion({ conversacion }: { conversacion: Conversacion }) {
         <span className="hidden h-4 w-px bg-border sm:block" />
         <Intereses clave={conversacion.clave} compacto />
 
-        <span className="ml-auto">
+        <span className="ml-auto flex items-center gap-1.5">
+          {conversacion.canal === 'whatsapp' && conversacion.persona_id && (
+            <button
+              type="button"
+              title={`Llamar al +${conversacion.persona_id}`}
+              onClick={() => llamar(conversacion.persona_id!)}
+              className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10.5px] font-semibold text-muted-foreground transition-colors hover:border-success hover:text-success"
+            >
+              <Phone size={11} /> Llamar
+            </button>
+          )}
           <AgendarRapido conversacion={conversacion} />
         </span>
       </div>

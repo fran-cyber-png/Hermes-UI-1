@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowRight, MessageSquareText, Search, X } from 'lucide-react';
+import { ArrowRight, MessageSquareText, Phone, Search, X } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/datos/cliente';
 import { hace } from '../../lib/datos/frescura';
@@ -14,6 +14,7 @@ import {
   type LeadChat,
   type LeadFormulario,
 } from './dashboard';
+import { llamar } from '../../lib/enlacesExternos';
 
 /**
  * EL DASHBOARD — la página de las 9am (veredicto del panel de diseño:
@@ -385,13 +386,24 @@ export function VistaDashboard({
                         <span className={'font-mono text-[11px] tabular-nums ' + (esChat && horas > 20 && horas < 24 ? 'text-gold-ink' : 'text-muted-foreground')} title={new Date(base.cayo_at).toLocaleString('es')}>
                           {hace(horas)}
                         </span>
-                        <span className="flex opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                        <span className="flex items-center gap-1.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                          {(esChat ? fila.chat.telefono : fila.form.telefono) && (
+                            <Phone
+                              size={13}
+                              className="cursor-pointer text-success"
+                              aria-label="Llamar"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                llamar((esChat ? fila.chat.telefono : fila.form.telefono)!);
+                              }}
+                            />
+                          )}
                           {esChat ? (
                             <MessageSquareText size={13} className="text-navy" />
                           ) : fila.form.telefono ? (
                             <Search
                               size={13}
-                              className="text-navy"
+                              className="cursor-pointer text-navy"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 onBuscarPersona(fila.form.telefono!);
