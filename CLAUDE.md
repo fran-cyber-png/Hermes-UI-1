@@ -11,8 +11,8 @@ viven en `docs/plan-hermes-mvp.md` (léelo antes de tocar arquitectura). El conc
 ## Stack
 
 - **Front** (`src/`): React 19 + Vite 8 (React Compiler), Tailwind 4, TanStack Query, lucide-react.
-  **Sin router** — un espacio con vistas conmutadas por estado (ADR 0002; hoy solo existe la
-  Bandeja). Marca Goberna en `src/index.css` (azul + dorado, Montserrat; el dorado significa
+  **Sin router** — un espacio con vistas conmutadas por estado (ADR 0002): Dashboard · Pipeline ·
+  Contactos · Mensajes · Correos · Agenda. Marca Goberna en `src/index.css` (azul + dorado, Montserrat; el dorado significa
   **tiempo que se acaba**, nada más). El norte de producto: `docs/plan-crm-definitivo.md`.
 - **Escritorio** (`src-tauri/`): **Tauri v2** — la cáscara solo abre `https://hermes-api.goberna.us`
   (OTA; fallback al dist local). Windows se compila en Actions (`tauri-windows.yml`), no cross-compila.
