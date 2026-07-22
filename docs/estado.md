@@ -23,6 +23,7 @@ el VPS, nadie reinstala).
 | **Correos** | Composer 1-a-1 auditado + enviados del equipo. **Fail-closed**: falta el SMTP (ver pendientes) |
 | **Agenda** | Calendario estilo GCal (mes/semana/día, chips por tipo, crear en día vacío, detalle flotante). Agendar mueve interesado→**contactado** solo. Badge dorado en el riel |
 | **Infra** | API pública HTTPS + SSE + UI servida (OTA) · WhatsApp vinculado EN el VPS (51986394450, fix `@lid` con 14.7k mapeos) · webhook de landings listo (Bravo→Hermes) · cáscara **Tauri** 3-5 MB (mac+win, permiso tel:) · Electron convive hasta paridad (ADR 0003) |
+| **Rendimiento** | Track «Rendimiento 2026-07» (spec #29): la cola con **ventana de 30 días** (3,8 s → 30 ms, #30) · el **caché de consultas sobrevive al cierre** — IndexedDB, restaurado antes del primer render, con sello «hace 14 horas» hasta que llega lo fresco (#31, ADR 0007) |
 
 Suite: **271 tests verdes**. Sidebar: Dashboard · Pipeline · Contactos · Mensajes · Correos · Agenda
 (Tablero fuera por decisión; componente conservado).
@@ -66,8 +67,13 @@ Suite: **271 tests verdes**. Sidebar: Dashboard · Pipeline · Contactos · Mens
   `Hermes-Windows.zip` (Tauri x64 + permiso tel:) · `Hermes_0.2.0_aarch64.dmg` · los Electron
   viejos conviven. Rebuild win: `gh workflow run tauri-windows.yml` (mac: `npx tauri build`).
 - **Local:** `docker start meta_escuela_db` · `cd server && npm run dev` (:4100) · `npm run dev`
-  (:5173). Tests `cd server && npm test`. **Ojo cwd**: el shell persiste el directorio entre
-  comandos.
+  (:5173). Tests: server `cd server && npm test`, front `npm test` (vitest). **Ojo cwd**: el shell
+  persiste el directorio entre comandos.
+- **Caché persistente** (ADR 0007): vive en IndexedDB, base `hermes` → tienda `cache` → clave
+  `consultas`. Guarda SOLO el radar y la cola, dura 24 h, y el buster es la identidad del build
+  (cada build tira lo viejo — con OTA, la forma del payload puede cambiar bajo los pies). Para
+  depurar un arranque raro: borrar la base desde DevTools equivale a volver al comportamiento
+  anterior. Evidencia: `docs/rendimiento-2026-07/cache-*.png`.
 - **Datos clave:** etapa actual de una conversación = última fila de `gestiones` (append-only,
   legacy nuevo/venta se normalizan) · la clave de conversación es LA identidad transversal
   (`conv:canal:persona:numero` / `int:<id>` / `lead:<id>` / `'general'`) — etiquetas, intereses,

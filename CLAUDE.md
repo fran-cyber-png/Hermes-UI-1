@@ -14,6 +14,8 @@ viven en `docs/plan-hermes-mvp.md` (léelo antes de tocar arquitectura). El conc
   **Sin router** — un espacio con vistas conmutadas por estado (ADR 0002): Dashboard · Pipeline ·
   Contactos · Mensajes · Correos · Agenda. Marca Goberna en `src/index.css` (azul + dorado, Montserrat; el dorado significa
   **tiempo que se acaba**, nada más). El norte de producto: `docs/plan-crm-definitivo.md`.
+  El **caché de consultas se persiste en IndexedDB** y se restaura antes del primer render, así la
+  app abre con el último estado conocido en vez de un spinner (ADR 0007, `src/lib/datos/`).
 - **Escritorio** (`src-tauri/`): **Tauri v2** — la cáscara solo abre `https://hermes-api.goberna.us`
   (OTA; fallback al dist local). Windows se compila en Actions (`tauri-windows.yml`), no cross-compila.
   `electron/` convive hasta paridad verificada y después se archiva (ADR 0003).
@@ -32,7 +34,8 @@ npm install && npm run dev:app                     # Vite :5173 + la app de escr
 
 - `npm run dev` (sin `:app`) abre el front en el navegador: la cola y la conversación nativa funcionan;
   solo el viejo webview no (y ese está retirado, ver §WhatsApp).
-- **Tests**: `cd server && npm test` (node:test, puros salvo checks en vivo). **Typecheck**: front
+- **Tests**: server `cd server && npm test` (node:test, puros salvo checks en vivo); front `npm test`
+  (vitest, entorno `node` — módulos puros, sin DOM). **Typecheck**: front
   `npx tsc --noEmit -p tsconfig.app.json`, server `cd server && npx tsc --noEmit`.
 - **Refrescar datos de Meta**: `cd server && npm run ingest:interactions` (polling manual, read-only).
   Captura comentarios FB/IG + DMs de Messenger de **todas las Páginas que el token puede ver** (`me/accounts`).
@@ -67,8 +70,8 @@ atribuye a una vendedora.
 **`https://hermes-api.goberna.us`** (nginx + certbot dns-cloudflare; el 4110 no se expone), número
 51986394450 vinculado ALLÁ. Actualizar: `ssh … 'cd /srv/hermes && git pull && sudo systemctl
 restart hermes'`. **El deploy sigue siendo manual** (no hay CD). Runbook: **`docs/deploy-vps1.md`**.
-**CI sí hay**: `.github/workflows/ci.yml` corre lint · typecheck · build del front · tests del server
-en cada PR y en cada push a `main`, sobre el **runner self-hosted de VPS1** (label `vps1-hermes`,
+**CI sí hay**: `.github/workflows/ci.yml` corre lint · typecheck · build del front · tests del front ·
+tests del server en cada PR y en cada push a `main`, sobre el **runner self-hosted de VPS1** (label `vps1-hermes`,
 servicio `actions.runner.Goberna-Lab-hermes.vps1-hermes`, dir `~deploy/actions-runner-hermes`) —
 así no gasta minutos de GitHub. `tauri-windows.yml` es la excepción: necesita host Windows.
 **La app de las vendedoras se EMPAQUETA**, no se clona: `env VITE_API_URL=https://hermes-api.goberna.us
