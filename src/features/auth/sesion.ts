@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
+import { olvidarCacheDeHermes } from '../../lib/datos/cacheDeHermes';
 
 /**
  * LA SESIÓN DE LA VENDEDORA, del lado del cliente.
@@ -66,6 +67,9 @@ export function useSesion() {
   const salir = useCallback(() => {
     localStorage.removeItem(CLAVE);
     setVendedora(null);
+    // El caché persistido también: con dos vendedoras en la misma máquina, la
+    // que entra no puede ver el radar de la que se fue.
+    void olvidarCacheDeHermes();
   }, []);
 
   return { vendedora, cargando, sinServer, reintentar, entrar, salir };

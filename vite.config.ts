@@ -18,4 +18,13 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  define: {
+    // La identidad del build, que el caché persistido usa de buster: cada build
+    // tira lo guardado por el anterior. Con OTA la UI se actualiza sin instalar
+    // nada, así que una vendedora puede tener guardado el `/api/dashboard` de la
+    // forma vieja y abrir la UI nueva un minuto después — rehidratar eso revienta
+    // al pintar. Cuesta un spinner por deploy y lo vuelve imposible.
+    // Ver `src/lib/datos/persistencia.ts`.
+    'import.meta.env.VITE_BUILD_ID': JSON.stringify(String(Date.now())),
+  },
 })

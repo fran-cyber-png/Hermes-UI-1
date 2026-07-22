@@ -35,6 +35,9 @@ jobs:
       - name: Typecheck + build del front
         run: npm run build
 
+      - name: Tests del front
+        run: npm test
+
       - name: Dependencias del server
         run: npm ci
         working-directory: server
