@@ -19,30 +19,29 @@ export function tipoDe(i: Interaccion): TipoVisual {
   return i.pide_info ? 'info' : 'comentario';
 }
 
-export const TIPO_META: Record<
-  TipoVisual,
-  { label: string; icon: LucideIcon; chip: string; borde: string; punto: string }
-> = {
+/**
+ * El chip que nombra el tipo. Solo eso: `borde` y `punto` vivieron acá sin que
+ * nadie los leyera nunca, y cargaban el oro que ya no corresponde.
+ *
+ * «Pide info» NO va en dorado. El oro significa una sola cosa en Hermes —
+ * tiempo que se acaba (la ventana de Meta, lo vencido, la línea del ahora) — y
+ * una oportunidad no es un reloj. Va en el azul de atención de la casa, el
+ * mismo literal que ya usa `FilaConversacion`: una señal, un color.
+ */
+export const TIPO_META: Record<TipoVisual, { label: string; icon: LucideIcon; chip: string }> = {
   info: {
     label: 'Pide info',
     icon: Sparkles,
-    // El dorado es la señal funcional de Goberna: aquí marca la oportunidad.
-    chip: 'bg-gold/20 text-gold-ink',
-    borde: 'border-l-gold',
-    punto: 'bg-gold',
+    chip: 'bg-primary/10 text-primary',
   },
   comentario: {
     label: 'Comentario',
     icon: MessageCircle,
     chip: 'bg-muted text-muted-foreground',
-    borde: 'border-l-border',
-    punto: 'bg-muted-foreground/40',
   },
   chat: {
     label: 'Chat',
     icon: MessageSquare,
     chip: 'bg-accent text-accent-foreground',
-    borde: 'border-l-primary',
-    punto: 'bg-primary',
   },
 };

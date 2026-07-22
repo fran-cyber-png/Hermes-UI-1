@@ -15,6 +15,27 @@ import { CLAVE_ULTIMO_USUARIO } from './sesion';
 const CLASE_INPUT =
   'rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25';
 
+/**
+ * Tres causas distintas, tres mensajes — y ninguno es el error crudo.
+ *
+ * Ramificar por status solo (401 vs. "todo lo demás") le echaba a Cerberus la
+ * culpa de un 500 de Hermes, del CORS o del wifi de la vendedora, y la mandaba
+ * a esperar a que se recupere un sistema que nunca estuvo caído. Por eso el
+ * server marca su 503 con `type: 'cerberus_caido'` (`routes/auth.ts`) y acá se
+ * lee: sin esta lectura, ese campo no servía para nada.
+ *
+ * Cada mensaje termina en el próximo paso, no en el diagnóstico.
+ */
+function mensajeDeError(err: unknown): string {
+  if (err instanceof ErrorApi && err.status === 401) {
+    return 'Usuario o contraseña incorrectos. Revisá y volvé a intentar.';
+  }
+  if (err instanceof ErrorApi && err.tipo === 'cerberus_caido') {
+    return 'Cerberus no responde. Esperá un minuto y probá de nuevo; si sigue, avisá a sistemas.';
+  }
+  return 'No pude conectar con Hermes. Revisá tu internet y probá de nuevo; si sigue, avisá a sistemas.';
+}
+
 /* La firma de apertura: el trazo del escudo se dibuja al montar (~600 ms).
    Los dasharray son los largos reales de cada trazo (con margen); el fill `both`
    deja el escudo completo al terminar — y con prefers-reduced-motion el global
@@ -55,13 +76,7 @@ export function Login({
     try {
       await entrar(username.trim(), password);
     } catch (err) {
-      // 401 = clave mala; todo lo demás (503 de Cerberus, red caída) = el sistema
-      // no está. Nunca el mensaje crudo del error: siempre con el próximo paso.
-      setError(
-        err instanceof ErrorApi && err.status === 401
-          ? 'Usuario o contraseña incorrectos. Revisá y volvé a intentar.'
-          : 'Cerberus no responde. Esperá un minuto y probá de nuevo; si sigue, avisá a sistemas.',
-      );
+      setError(mensajeDeError(err));
       setEnviando(false);
     }
   }
