@@ -74,6 +74,21 @@ así no gasta minutos de GitHub. `tauri-windows.yml` es la excepción: necesita 
 **La app de las vendedoras se EMPAQUETA**, no se clona: `env VITE_API_URL=https://hermes-api.goberna.us
 npm run build && npm run empaquetar:mac` (o `:win`) → `release/Hermes-*.dmg|.exe`.
 
+## Flujo de trabajo
+
+`main` es **producción**: no se commitea ni se pushea directo. El camino es **rama + PR + CI verde**,
+y el merge va con **rebase** (historia lineal, se preservan los commits del PR).
+
+- **Ramas**: `feat/`, `fix/`, `chore/`, `docs/` + descripción corta.
+- **Commits por unidad de trabajo**: cada uno se lee solo y explica *por qué*, no *qué*.
+- **Tracker**: GitHub Issues de `Goberna-Lab/hermes`. Labels `vista:*` (dashboard · pipeline ·
+  contactos · mensajes · correos · agenda), `transversal`, `rediseño`, `infra`, `datos`, más los de
+  triage (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`).
+- **`git push` a `main` está bloqueado** por `.githooks/pre-push`. No es protección de rama: la org
+  está en plan **free** y el repo es privado, así que los rulesets de GitHub dan 403. El hook se
+  instala solo (`npm install` corre `prepare`, que fija `core.hooksPath`); es una red local, no una
+  garantía del servidor. Emergencia real: `git push --no-verify`.
+
 ## Secretos y config (env)
 
 Solo en `server/.env` (gitignored). **Se referencian por nombre, jamás se pegan** (regla dura #1):

@@ -1,0 +1,39 @@
+#!/bin/sh
+#
+# Bloquea el push directo a main.
+#
+# Por qué un hook y no protección de rama: Goberna-Lab está en plan free y hermes
+# es privado, así que la API de rulesets de GitHub responde 403 ("Upgrade to
+# GitHub Pro"). No hay forma de exigir PR ni CI verde del lado del servidor, así
+# que el gate vive acá. Es una red local, no una garantía: protege esta máquina,
+# no la web de GitHub ni otro clon.
+#
+# Se instala solo: `npm install` corre el script `prepare`, que fija
+# core.hooksPath a .githooks. Para verificar: git config core.hooksPath
+#
+# Emergencia real (y solo esa): git push --no-verify
+
+protegidas='refs/heads/main refs/heads/master'
+
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  for protegida in $protegidas; do
+    if [ "$remote_ref" = "$protegida" ]; then
+      rama=${remote_ref#refs/heads/}
+      echo ""
+      echo "  ✋ Push directo a '$rama' bloqueado."
+      echo ""
+      echo "     main es producción (VPS1, OTA). Se toca por PR:"
+      echo ""
+      echo "       git checkout -b feat/lo-que-sea"
+      echo "       git push -u origin feat/lo-que-sea"
+      echo "       gh pr create"
+      echo ""
+      echo "     El PR corre CI en el runner de VPS1 (vps1-hermes) y no gasta"
+      echo "     minutos de GitHub. Emergencia real: git push --no-verify"
+      echo ""
+      exit 1
+    fi
+  done
+done
+
+exit 0
