@@ -30,7 +30,13 @@ dist-ssr
 
 # Salidas de herramientas locales
 .playwright-mcp/
+# Los PNG sueltos son basura de Playwright y capturas de paso: se ignoran.
+# PERO los de docs/ NO son basura: son la evidencia que exige la regla dura #2
+# («nada se reporta listo sin screenshot»). Sin esta excepción, `git add docs/`
+# los descarta en silencio y la evidencia se queda solo en la máquina de quien
+# la sacó — que es exactamente lo que pasó con el rediseño «Cierre de edición».
 *.png
+!docs/**/*.png
 
 # Artefactos de build de TS
 *.tsbuildinfo
