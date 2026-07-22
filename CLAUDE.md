@@ -1,6 +1,6 @@
 # Hermes — reglas para Claude
 
-**Hermes es la mesa de la vendedora**: una app de escritorio (Electron) donde una vendedora de Goberna
+**Hermes es el CRM de la Escuela**: una app de escritorio (Tauri; la UI vive en el server — OTA) donde una vendedora de Goberna
 atiende, desde una sola pantalla, a toda la gente que levantó la mano por **Facebook, Instagram,
 Messenger y WhatsApp** — con la ficha del contacto al lado del chat, y registrando la venta contra
 Cerberus. Negocio: la **Escuela** de Goberna (formación política, LATAM).
@@ -14,7 +14,9 @@ viven en `docs/plan-hermes-mvp.md` (léelo antes de tocar arquitectura). El conc
   **Sin router** — un espacio con vistas conmutadas por estado (ADR 0002; hoy solo existe la
   Bandeja). Marca Goberna en `src/index.css` (azul + dorado, Montserrat; el dorado significa
   **tiempo que se acaba**, nada más). El norte de producto: `docs/plan-crm-definitivo.md`.
-- **Escritorio** (`electron/`): Electron 34. `main.cjs` + `preload.cjs`. El renderer corre en sandbox.
+- **Escritorio** (`src-tauri/`): **Tauri v2** — la cáscara solo abre `https://hermes-api.goberna.us`
+  (OTA; fallback al dist local). Windows se compila en Actions (`tauri-windows.yml`), no cross-compila.
+  `electron/` convive hasta paridad verificada y después se archiva (ADR 0003).
 - **Server** (`server/`): Express 4 + Drizzle ORM + Postgres 17 (imagen pgvector, puerto **5434** en
   local) + Zod 4. Event store append-only + proyecciones.
 - **WhatsApp**: `@whatsmeow-node/whatsmeow-node` (cliente de protocolo no oficial, binario Go vía
@@ -94,9 +96,10 @@ Solo en `server/.env` (gitignored). **Se referencian por nombre, jamás se pegan
 - **La cola sirve conversaciones, no filas** (`/api/conversaciones`, no `/api/interactions`): los
   mensajes se agrupan por `(canal, persona, número propio)`; los comentarios siguen individuales.
 
-## Estado (2026-07-21)
+## Estado (2026-07-22)
 
-Hecho: S1 proyección · S2 persistencia · S3 cola unificada · S4 EnvioControlado · S5 conversación nativa
-+ envío · S0 transporte whatsmeow · S7 login Cerberus. **Falta**: S6 ficha del contacto por teléfono ·
-S6b registrar venta contra Cerberus · vincular un número real en VPS1 · empaquetar/distribuir el Electron
-a las vendedoras. Detalle y siguientes pasos en `docs/estado.md`.
+Hermes es un CRM completo EN PRODUCCIÓN (VPS1, OTA): Dashboard radar · Pipeline con compuertas
+(cotizado exige interés; cierre solo vía venta) · chat multicanal con media completa y BarraGestion ·
+Contactos · Correos (falta SMTP) · Agenda-calendario. Sidebar: Dashboard · Pipeline · Contactos ·
+Mensajes · Correos · Agenda. **La foto completa, los pendientes y el contexto: `docs/estado.md`**;
+la bitácora de cómo se llegó: `docs/sesion-2026-07-21-crm-definitivo.md`.

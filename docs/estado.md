@@ -1,89 +1,77 @@
-# Estado de Hermes — para retomar (2026-07-21)
+# Estado de Hermes — para retomar (2026-07-22, tras la sesión "crm-definitivo")
 
-> **Empezá por acá.** Este doc es la foto completa: qué funciona, qué falta, y el
-> contexto técnico para seguir sin re-descubrir nada. Repo: **github.com/Goberna-Lab/hermes**
-> (privado, `main`). El diseño y las decisiones están en `plan-hermes-mvp.md`.
+> **Empezá por acá.** La foto completa: qué funciona, qué falta, y el contexto para seguir sin
+> re-descubrir nada. Repo: **github.com/Goberna-Lab/hermes** (privado, `main`). El norte de producto
+> es **`plan-crm-definitivo.md`**; la bitácora de cómo se llegó acá:
+> **`sesion-2026-07-21-crm-definitivo.md`** (14 features en un día, con sus commits).
 
 ## Qué es Hermes (1 frase)
 
-App de escritorio (Electron) donde una vendedora atiende, en UNA pantalla, todo lo
-que llega por Facebook, Instagram, Messenger y WhatsApp — con la ficha del contacto
-(¿cliente? ¿compró?) al lado del chat, registrando la venta contra Cerberus **sin
-entrar nunca a Cerberus**.
+El **CRM de la Escuela de Goberna**: la vendedora atiende todos los canales (WhatsApp, comentarios
+FB/IG, Messenger), gestiona el embudo, agenda, llama, manda correos y registra la venta contra
+Cerberus — desde UNA app (Tauri/web) cuya UI vive en el server (**OTA**: actualizar = actualizar
+el VPS, nadie reinstala).
 
-## Qué funciona hoy (hecho, probado, commiteado y pusheado)
+## Qué funciona hoy — EN PRODUCCIÓN (VPS1, `https://hermes-api.goberna.us`)
 
 | Área | Estado |
 |---|---|
-| **Cola unificada** | FB/IG/Messenger/WhatsApp en una lista, agrupada por conversación, orden por urgencia (vivo→expira→espera→resto), leads recientes arriba |
-| **WhatsApp real** | Número **51986394450 vinculado** (whatsmeow) vía consola `/vincular` (QR en vivo). Transporte conectado. Enviar/recibir por la conversación nativa |
-| **Tiempo real (SSE)** | Los mensajes aparecen SOLOS (`/api/stream` + `useTiempoReal`). Verificado |
-| **Login** | Vendedoras contra Cerberus (`/ingresar/`), token HMAC Bearer |
-| **Ficha del contacto** | Por teléfono contra Cerberus: cliente/compras/nuevo/error. Verificado (Moises → GOB-00066) |
-| **Atribución (embudo)** | Detecta origen del lead: anuncio (externalAdReply → ad_id + campaña vía Meta API) o landing ([código]). Badge en la conversación |
-| **Registrar venta (S6b)** | **Form completo DENTRO de Hermes** → POST a `crear_venta` de Cerberus con la sesión de la vendedora. **Probado en vivo: creó GOB-13942**. Medio/Origen **inferidos** (no editables): Origen=canal, Medio=pagado si vino de anuncio |
+| **Dashboard** (página principal) | Diseño por panel 3-lentes+juez: banda "Tu mañana" (vencidos/hoy + "Atender a {nombre} →"), radar en vivo (filas 2 líneas, calientes con borde oro, filtros que delatan fuentes muertas), riel (embudo-barra clickeable, top cursos pedidos, equipo Hoy\|7d) |
+| **Pipeline** | Kanban con las 5 etapas del dueño (Interesados→Contactados→Cotizados→Cierre·Perdidos), arrastre, y **compuertas server-side**: a Cotizados con ≥1 curso de interés; a Cierre SOLO registrando la venta (la venta lo mueve sola: cotización→cotizado+intereses, venta→cierre+conversión) |
+| **Mensajes** (chat) | Cola unificada 4 canales + búsqueda + **chat nuevo** · hilo WhatsApp **con media completa** (ver/mandar imágenes, videos, audios, flyers — clip con leyenda) · Messenger read-only · comentarios privado-antes-que-público · **BarraGestion arriba de todo chat**: etapa 1-clic, etiquetas, intereses, Agendar, **Llamar** (tel: + Copiar de respaldo) |
+| **Contactos** | Búsqueda por teléfono → ficha Cerberus 4 estados |
+| **Correos** | Composer 1-a-1 auditado + enviados del equipo. **Fail-closed**: falta el SMTP (ver pendientes) |
+| **Agenda** | Calendario estilo GCal (mes/semana/día, chips por tipo, crear en día vacío, detalle flotante). Agendar mueve interesado→**contactado** solo. Badge dorado en el riel |
+| **Infra** | API pública HTTPS + SSE + UI servida (OTA) · WhatsApp vinculado EN el VPS (51986394450, fix `@lid` con 14.7k mapeos) · webhook de landings listo (Bravo→Hermes) · cáscara **Tauri** 3-5 MB (mac+win, permiso tel:) · Electron convive hasta paridad (ADR 0003) |
 
-Suite: **262 tests verde**. Imágenes en `docs/img-*.png`.
+Suite: **271 tests verdes**. Sidebar: Dashboard · Pipeline · Contactos · Mensajes · Correos · Agenda
+(Tablero fuera por decisión; componente conservado).
 
-## PENDIENTES (en orden para la próxima sesión)
+## PENDIENTES
 
-### 1. Deploy a VPS1 — ✅ HECHO (2026-07-21)
-Todo ejecutado: repo clonado con deploy key propia (`github.com-hermes`), Postgres `hermes_db`
-(127.0.0.1:5438 + extensión vector), `server/.env` con secretos nuevos, systemd `hermes`
-(PORT=4110) activo, **número 51986394450 RE-VINCULADO en el VPS** (QR vía consola), API pública
-**`https://hermes-api.goberna.us`** (nginx con SSE + client_max_body_size 64m; cert dns-cloudflare
-con el `cloudflare.ini` que ya tenía el VPS; el 4110 queda cerrado por ufw). **Electron
-empaquetado**: `release/Hermes-0.1.0-arm64.dmg` (firmado con la identidad de desarrollo de
-Estephano) + instalador Windows. Queda: cerrar la sesión vieja de la laptop desde el teléfono
-(hay dos dispositivos vinculados) y repartir el instalador a las vendedoras.
+### Del operador (minutos, destraban features ya construidas)
+1. **SMTP para Correos**: cargar `SMTP_HOST/PORT/USER/PASS/FROM` en `server/.env` del VPS (la
+   cuenta sale de mail.goberna.us / VPS2) + `systemctl restart hermes`. La UI se enciende sola.
+2. **Landings al Dashboard**: en Bravo, poner `contact_webhook_url` de cada tenant con la URL de
+   `ssh deploy@161.132.39.165 'cat /srv/hermes/.landing-webhook-url'` (runbook §9).
+3. **Cerrar la sesión de WhatsApp de la laptop** (el teléfono tiene 2 dispositivos vinculados;
+   debe atender solo el VPS). Dev local: `WHATSAPP_TRANSPORTE=falso`.
+4. **Certificado de code signing Windows** (OV ~US$100-300/año) para matar el aviso de SmartScreen.
 
-### 2. Verificar la atribución con un anuncio REAL (pendiente honesto)
-**La detección de "vino de un anuncio" está probada solo con un mensaje SIMULADO**
-(proto armado a mano), NO con un click real. Falta:
-- Que Estephano haga clic en un anuncio de Click-to-WhatsApp real y escriba al número.
-- Mirar el log `[wa raw]` para confirmar que whatsmeow entrega el `externalAdReply` con
-  esa forma. Si no, la atribución por campaña espera la **Cloud API** (el `ctwa_clid`
-  oficial, que meta-escuela ya tiene medio armado en `server/src/webhook/whatsapp.ts`).
-- **Límites conocidos y honestos:** solo detectamos leads de **anuncios pagos** (CTWA).
-  Lo **orgánico** (vio un reel/post y escribió) NO se detecta — WhatsApp no manda referencia.
-  **FB vs IG específico es difuso** (un anuncio corre en ambos); por eso Origen=whatsapp (el
-  canal), no facebook/instagram. La captura orgánica confiable = código en la landing.
-
-### 3. El "hola" real no entra — resolver @lid
-whatsmeow SÍ recibe (el log mostró un mensaje de grupo llegando), pero WhatsApp moderno
-usa **`@lid`** (id de dispositivo) en vez del teléfono para algunos remitentes.
-`telefonoDeContacto` devuelve null para `@lid` → el mensaje se descarta.
-**Fix:** resolver `@lid` → teléfono con el store de contactos de whatsmeow (o `getUserInfo`).
-Logs de diagnóstico activos: `[wa raw]` / `[wa in]` / `[wa estado]`.
-
-### 4. Info de comentarios/Messenger — DISEÑADO, listo para implementar
-El diseño completo está en **`plan-panel-contexto.md`** (slices S8a-S8f con tests T15-T21):
-tabla `contexts`, ingesta ampliada (permalink/imagen/texto completo), curso inferido con fuente
-declarada (mensaje > anuncio > post), hilo Messenger read-only, `PanelDerecho` conmutador.
-Es el paso 2 del horizonte H1 del norte nuevo: **`plan-crm-definitivo.md`** (mapa completo de
-funcionalidades CRM + rediseño con mockups en `prototypes/crm-definitivo/` + ADR 0002).
-
-### 5. Crear cliente para leads NUEVOS
-La venta hoy exige un cliente EXISTENTE (VentaForm.cliente = id). Para un lead nuevo,
-falta crear el cliente en Cerberus primero (ClienteForm + formset de teléfono) antes de
-la venta. Hoy un lead nuevo solo registra la "conversión" (funnel).
+### De código (en orden sugerido)
+1. **Fase 2 del oficio taste** — la artesanal, CON Estephano mirando: ritmo de espaciado por vista,
+   momentos tipográficos, racionar los 33 kickers, pulir Bandeja fila a fila. (Fase 1 hecha:
+   commit `494f9b4`.)
+2. **Crear cliente en Cerberus para lead nuevo** (H1): hoy la venta exige cliente existente.
+3. **S8 — contexto completo** (`plan-panel-contexto.md`): tabla `contexts`, ingesta ampliada,
+   curso inferido del anuncio (join local ya posible), imagen de la publicación.
+4. Verificación humana pendiente: **foto real entrante** al número, **envío de flyer** desde la UI,
+   screenshots de las vistas logueadas (regla dura #2 — falta una sesión para Playwright).
+5. Archivar Electron cuando la paridad Tauri esté confirmada en máquinas reales (ADR 0003).
 
 ## Contexto técnico para no re-descubrir
 
-- **Correr:** `docker compose up -d --wait` (Postgres 5434) · `cd server && npm run dev`
-  (:4100) · `npm run dev:app` (Vite :5173 + Electron). Tests: `cd server && npm test`.
-- **whatsmeow:** sesión en `server/.wa-sessions/<numero>.db` (gitignored, es la credencial).
-  `WHATSAPP_TRANSPORTE=whatsmeow` + `WHATSAPP_NUMERO=51986394450` en `server/.env`.
-- **Sesión de Cerberus (para crear ventas):** se captura en el login y vive **en memoria**
-  (`cerberus/sesionStore.ts`), por `vendedoraId`. GOTCHA: el `vendedoraId` es el username
-  tal cual se tipeó (case-sensitive). Si el server reinicia, la vendedora re-loguea.
-- **Cerberus endpoints usados:** `/clientes/buscar/?q=`, `/clientes/<id>/json/`,
-  `/productos/api/public/productos-cursos/` (públicos) · `/ventas/crearVenta/` (con sesión).
-- **Meta API:** `META_ACCESS_TOKEN` (el de goberna-dashboard) resuelve ad_id → anuncio+campaña.
-- **Datos de prueba en la DB:** hay leads simulados (`wa:sim-*`, `wa:falso-*`) y una cotización
-  de prueba (GOB-13942 en Moises). Se pueden limpiar con `DELETE ... WHERE external_id LIKE 'wa:sim-%'`.
+- **Actualizar prod (OTA):** `ssh deploy@161.132.39.165 'cd /srv/hermes && git pull && env
+  VITE_API_URL=https://hermes-api.goberna.us npm run build && sudo systemctl restart hermes'`
+  (+ `cd server && npm run db:push` si cambió el schema; `npm ci` si cambiaron deps).
+- **VPS1:** systemd `hermes` (PORT=4110) · Postgres `hermes_db` 127.0.0.1:5438 · nginx
+  `hermes-api` (SSE sin buffering, 64 MB adjuntos) · deploy key `github.com-hermes` · sesión WA en
+  `/srv/hermes/server/.wa-sessions/` · media en `.wa-media/` · **la app abre también en navegador**.
+- **Instaladores** (`/srv/hermes-descargas/` = `https://hermes-api.goberna.us/descargas/`):
+  `Hermes-Windows.zip` (Tauri x64 + permiso tel:) · `Hermes_0.2.0_aarch64.dmg` · los Electron
+  viejos conviven. Rebuild win: `gh workflow run tauri-windows.yml` (mac: `npx tauri build`).
+- **Local:** `docker start meta_escuela_db` · `cd server && npm run dev` (:4100) · `npm run dev`
+  (:5173). Tests `cd server && npm test`. **Ojo cwd**: el shell persiste el directorio entre
+  comandos.
+- **Datos clave:** etapa actual de una conversación = última fila de `gestiones` (append-only,
+  legacy nuevo/venta se normalizan) · la clave de conversación es LA identidad transversal
+  (`conv:canal:persona:numero` / `int:<id>` / `lead:<id>` / `'general'`) — etiquetas, intereses,
+  gestiones, recordatorios y correos cuelgan de ella.
 
-## Decisiones ya tomadas (no re-discutir)
-`plan-hermes-mvp.md §4-5`. Las clave: Cerberus gordo / Hermes flaco (no reimplementar el
-ERP — la venta la crea `crear_venta`); la vendedora NUNCA entra a Cerberus; Origen/Medio se
-infieren, no se eligen; multi-número desde el modelo; vinculación server-side (D13).
+## Decisiones (no re-discutir)
+
+`plan-hermes-mvp.md` §4-5 (D1-D13) + `plan-crm-definitivo.md` + ADR 0002 (espacio con vistas,
+enmienda: 5→6 con Agenda; Tablero pausado) + ADR 0003 (Tauri) + de esta sesión: OTA como modelo de
+updates · compuertas del embudo server-side · un envío/correo = una acción humana · dorado = tiempo
+(vencido = rojo) · sombra O borde, nunca ambos · acciones de sistema (tel:) siempre con respaldo
+visible (Copiar).
