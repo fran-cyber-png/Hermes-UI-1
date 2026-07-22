@@ -49,3 +49,123 @@ jobs:
       - name: Tests del server
         run: npm test
         working-directory: server
+
+  # ── DESPLIEGUE AUTOMÁTICO DEL FRONT ────────────────────────────────────────
+  # Solo cuando el rango sin desplegar NO toca `server/`. Ver `docs/despliegue-continuo.md`.
+  #
+  # Por qué esto puede ser automático: el server lee `dist/` del disco en cada request
+  # (`server/src/index.ts:99-106`), así que reemplazarlo actualiza la UI sin `systemctl
+  # restart` — sin cortar el SSE, sin reconectar whatsmeow y, sobre todo, sin tirar las
+  # sesiones de Cerberus (viven en un Map de proceso; un restart le cuesta a cada
+  # vendedora un 409 «la sesión expiró» al abrir el formulario de venta).
+  desplegar-front:
+    name: Desplegar front (sin restart)
+    needs: verificar
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, vps1-hermes]
+    # A diferencia de CI, un despliegue a medio camino NO se cancela.
+    concurrency:
+      group: desplegar-produccion
+      cancel-in-progress: false
+    steps:
+      - name: Clasificar el cambio y desplegar si es solo front
+        env:
+          SRV: /srv/hermes
+          NUEVO: ${{ github.sha }}
+          API: https://hermes-api.goberna.us
+        run: |
+          set -euo pipefail
+          ESTADO="$HOME/.hermes-despliegue"   # fuera del checkout: no lo ensucia
+          mkdir -p "$ESTADO"
+
+          # 0 · Regla dura #6: ante drift prod≠git, avisar antes de tocar.
+          #     `-uno` a propósito: los artefactos sin trackear no son drift.
+          if [ -n "$(git -C "$SRV" status --porcelain -uno)" ]; then
+            echo "::error::/srv/hermes tiene cambios locales sin commitear. No toco nada."
+            git -C "$SRV" status --short -uno
+            exit 1
+          fi
+          git -C "$SRV" fetch --quiet origin main
+
+          # 1 · De qué SHA es el server que está CORRIENDO. No es el del checkout:
+          #     el proceso se quedó con el código que había al último restart.
+          if [ -f "$ESTADO/server" ]; then
+            VIEJO="$(cat "$ESTADO/server")"
+          else
+            VIEJO="$(git -C "$SRV" rev-parse HEAD)"   # primera corrida
+          fi
+          echo "server corriendo: $VIEJO"
+          echo "a desplegar:      $NUEVO"
+
+          if [ "$VIEJO" = "$NUEVO" ]; then
+            echo "Ya estaba desplegado." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # 2 · Clasificar sobre TODO el rango sin desplegar, nunca commit por commit:
+          #     así el front no puede quedar adelante del server.
+          TOCADOS="$(git -C "$SRV" diff --name-only "$VIEJO".."$NUEVO" || true)"
+          CAMBIO_SERVER="$(printf '%s\n' "$TOCADOS" | grep -E '^server/' || true)"
+          CAMBIO_SCHEMA="$(printf '%s\n' "$TOCADOS" | grep -E '^server/src/db/schema\.ts$' || true)"
+          CAMBIO_DEPS="$(printf '%s\n' "$TOCADOS" | grep -E '^(package\.json|package-lock\.json)$' || true)"
+
+          if [ -n "$CAMBIO_SERVER" ]; then
+            {
+              echo "## ⏸ Necesita restart — no se desplegó"
+              echo
+              echo "El rango \`${VIEJO:0:8}..${NUEVO:0:8}\` toca \`server/\`, así que hay que reiniciar"
+              echo "el proceso. Eso le cuesta a cada vendedora logueada su sesión de Cerberus, así que"
+              echo "**lo decidís vos**: Actions → **Desplegar server (con restart)**."
+              echo
+              if [ -n "$CAMBIO_SCHEMA" ]; then
+                echo "> ⚠️ **Además cambió \`server/src/db/schema.ts\`.** Drizzle no tiene migraciones"
+                echo "> versionadas: \`db:push\` compara contra la base viva y aplica lo que le parece."
+                echo "> Corré \`npm run db:push\` a mano, mirando lo que propone, antes de reiniciar."
+                echo
+              fi
+              echo "Archivos de server tocados:"
+              echo '```'
+              printf '%s\n' "$CAMBIO_SERVER"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice::Cambió el server — hace falta el despliegue con restart (botón en Actions)."
+            exit 0
+          fi
+
+          # 3 · Es solo front: se puede desplegar sin tocar el proceso.
+          git -C "$SRV" checkout --quiet --force "$NUEVO"
+          cd "$SRV"
+          if [ -n "$CAMBIO_DEPS" ]; then
+            echo "Cambiaron dependencias del front → npm ci"
+            ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci
+          fi
+
+          # Se construye APARTE y se cambia de lugar al final: `vite build` vacía el
+          # directorio de salida antes de escribir, y hacerlo sobre `dist/` dejaría a la
+          # app sirviendo 404 durante todo el build.
+          rm -rf dist.nuevo
+          env VITE_API_URL="$API" npx vite build --outDir dist.nuevo --emptyOutDir
+          test -f dist.nuevo/index.html
+          rm -rf dist.anterior
+          mv dist dist.anterior
+          mv dist.nuevo dist          # el cambio real: microsegundos
+
+          echo "$NUEVO" > "$ESTADO/server"   # el código de server/ es idéntico: la marca es honesta
+          echo "$NUEVO" > "$ESTADO/front"
+
+          # 4 · Regla dura #2: no se dice "listo" sin verificar contra la URL viva.
+          SERVIDO="$(curl -fsS --max-time 20 "$API/" | grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' | head -1)"
+          LOCAL="$(ls dist/assets/index-*.js | head -1 | sed 's|dist/||')"
+          echo "servido: $SERVIDO · construido: $LOCAL"
+          if [ "$SERVIDO" != "$LOCAL" ]; then
+            echo "::error::El sitio vivo no sirve el build nuevo. Rollback: mv dist dist.roto && mv dist.anterior dist"
+            exit 1
+          fi
+
+          {
+            echo "## ✅ Front desplegado sin restart"
+            echo
+            echo "\`${VIEJO:0:8}\` → \`${NUEVO:0:8}\` · sirviendo \`$SERVIDO\` · **cero downtime**."
+            echo
+            echo "Rollback (segundos): \`cd /srv/hermes && mv dist dist.roto && mv dist.anterior dist\`"
+          } >> "$GITHUB_STEP_SUMMARY"

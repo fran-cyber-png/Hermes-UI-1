@@ -1,0 +1,150 @@
+name: Desplegar server (con restart)
+
+# El despliegue que CUESTA algo, y por eso lo dispara un humano.
+#
+# Reiniciar `hermes` corta el SSE, obliga a whatsmeow a reconectar y —lo que más duele—
+# tira las sesiones de Cerberus, que viven en un Map de proceso: cada vendedora logueada
+# se encuentra un 409 «la sesión de Cerberus expiró» la próxima vez que abra el formulario
+# de venta. Por eso el momento lo elegís vos, idealmente fuera del horario de atención.
+#
+# El front solo se despliega automático al mergear a `main` (ver `ci.yml` → desplegar-front).
+# Contexto y decisiones: `docs/despliegue-continuo.md`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmar:
+        description: 'Escribí "reiniciar" para confirmar que las vendedoras pueden perder su sesión de Cerberus'
+        required: true
+        type: string
+      sha:
+        description: 'SHA a desplegar (vacío = el HEAD de main)'
+        required: false
+        type: string
+
+jobs:
+  desplegar:
+    name: Desplegar server
+    runs-on: [self-hosted, vps1-hermes]
+    concurrency:
+      group: desplegar-produccion
+      cancel-in-progress: false
+    steps:
+      - name: Verificar la confirmación
+        if: inputs.confirmar != 'reiniciar'
+        run: |
+          echo "::error::Hay que escribir exactamente 'reiniciar' para confirmar."
+          exit 1
+
+      - name: Desplegar y reiniciar
+        env:
+          SRV: /srv/hermes
+          PEDIDO: ${{ inputs.sha }}
+          API: https://hermes-api.goberna.us
+        run: |
+          set -euo pipefail
+          ESTADO="$HOME/.hermes-despliegue"
+          mkdir -p "$ESTADO"
+
+          # Regla dura #6: ante drift prod≠git, avisar antes de tocar.
+          if [ -n "$(git -C "$SRV" status --porcelain -uno)" ]; then
+            echo "::error::/srv/hermes tiene cambios locales sin commitear. No toco nada."
+            git -C "$SRV" status --short -uno
+            exit 1
+          fi
+          git -C "$SRV" fetch --quiet origin main
+
+          NUEVO="${PEDIDO:-$(git -C "$SRV" rev-parse origin/main)}"
+          if [ -f "$ESTADO/server" ]; then VIEJO="$(cat "$ESTADO/server")"; else VIEJO="$(git -C "$SRV" rev-parse HEAD)"; fi
+          echo "$VIEJO → $NUEVO"
+          echo "ROLLBACK=$VIEJO" >> "$GITHUB_ENV"
+
+          TOCADOS="$(git -C "$SRV" diff --name-only "$VIEJO".."$NUEVO" || true)"
+
+          # El schema NO se migra solo. Drizzle no tiene migraciones versionadas: `db:push`
+          # compara contra la base viva y aplica lo que le parece, sin plan y sin backup.
+          # Es la deuda declarada en ADR 0001 y el CD no la resuelve — la haría peligrosa.
+          if printf '%s\n' "$TOCADOS" | grep -qE '^server/src/db/schema\.ts$'; then
+            {
+              echo "## 🛑 Cambió el schema — frené"
+              echo
+              echo "\`server/src/db/schema.ts\` cambió entre \`${VIEJO:0:8}\` y \`${NUEVO:0:8}\`."
+              echo "Drizzle no tiene migraciones versionadas, así que esto no se automatiza:"
+              echo
+              echo '```bash'
+              echo "ssh deploy@161.132.39.165 'cd /srv/hermes/server && npm run db:push'   # mirá lo que propone"
+              echo '```'
+              echo
+              echo "Cuando la base esté al día, volvé a disparar este workflow."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Cambió el schema: corré db:push a mano y volvé a disparar."
+            exit 1
+          fi
+
+          git -C "$SRV" checkout --quiet --force "$NUEVO"
+          cd "$SRV"
+
+          if printf '%s\n' "$TOCADOS" | grep -qE '^(package\.json|package-lock\.json)$'; then
+            ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci
+          fi
+          if printf '%s\n' "$TOCADOS" | grep -qE '^server/(package\.json|package-lock\.json)$'; then
+            (cd server && npm ci)
+          fi
+
+          # Mismo swap que el despliegue de front: `vite build` vacía la salida antes de
+          # escribir, y hacerlo sobre `dist/` dejaría 404 durante todo el build.
+          rm -rf dist.nuevo
+          env VITE_API_URL="$API" npx vite build --outDir dist.nuevo --emptyOutDir
+          test -f dist.nuevo/index.html
+          rm -rf dist.anterior
+          mv dist dist.anterior
+          mv dist.nuevo dist
+
+          sudo systemctl restart hermes
+          echo "$NUEVO" > "$ESTADO/server"
+          echo "$NUEVO" > "$ESTADO/front"
+
+      - name: Verificar que quedó vivo (regla dura #2)
+        env:
+          API: https://hermes-api.goberna.us
+        run: |
+          set -euo pipefail
+          # El proceso arranca, se conecta a Postgres y levanta whatsmeow: se le da tiempo.
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 5 "$API/health" >/dev/null 2>&1; then LISTO=1; break; fi
+            sleep 2
+          done
+          if [ "${LISTO:-0}" != "1" ]; then
+            echo "::error::El server no contesta /health después de 60s."
+            systemctl status hermes --no-pager --lines=30 || true
+            exit 1
+          fi
+          systemctl is-active hermes
+          echo "sesión de WhatsApp: $(curl -fsS --max-time 10 "$API/api/whatsapp/sesion" || echo 'sin respuesta')"
+
+          {
+            echo "## ✅ Server desplegado y vivo"
+            echo
+            echo "\`/health\` responde y \`hermes\` está activo."
+            echo
+            echo "Si algo salió mal:"
+            echo '```bash'
+            echo "ssh deploy@161.132.39.165 'cd /srv/hermes && git checkout --force ${ROLLBACK:-<sha-anterior>} && \\"
+            echo "  npm ci && npm run build && sudo systemctl restart hermes'"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Avisar si quedó caído
+        if: failure()
+        run: |
+          {
+            echo "## 🔴 El despliegue falló"
+            echo
+            echo "Revisá \`systemctl status hermes\` en VPS1. Rollback al SHA anterior:"
+            echo '```bash'
+            echo "ssh deploy@161.132.39.165 'cd /srv/hermes && git checkout --force ${ROLLBACK:-<sha-anterior>} && \\"
+            echo "  npm ci && npm run build && sudo systemctl restart hermes'"
+            echo '```'
+            echo
+            echo "Si solo el front quedó mal, es más rápido: \`mv dist dist.roto && mv dist.anterior dist\`."
+          } >> "$GITHUB_STEP_SUMMARY"
