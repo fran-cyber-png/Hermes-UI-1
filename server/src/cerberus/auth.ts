@@ -39,7 +39,8 @@ export interface SesionCerberus {
 
 export type ResultadoAuth =
   | { ok: true; vendedora: Vendedora; sesion: SesionCerberus }
-  | { ok: false; motivo: string };
+  /** `caido: true` = Cerberus no contestó (no es culpa de la vendedora) → el route responde 503, no 401. */
+  | { ok: false; motivo: string; caido?: boolean };
 
 /** Saca el valor de una cookie de la lista de Set-Cookie. */
 function valorCookie(setCookies: string[], nombre: string): string | null {
@@ -59,7 +60,9 @@ export async function autenticarEnCerberus(username: string, password: string): 
     const token = html.match(/name="csrfmiddlewaretoken"\s+value="([^"]+)"/)?.[1];
 
     if (!csrfCookie || !token) {
-      return { ok: false, motivo: 'no pude iniciar sesión con Cerberus (handshake CSRF falló)' };
+      // Cerberus contestó pero sin el formulario esperado: ¿cambió la página de login?
+      console.error('cerberus: el handshake CSRF no entregó cookie o token');
+      return { ok: false, motivo: 'Cerberus no respondió como se esperaba.', caido: true };
     }
 
     // 2. Las credenciales. El Referer es obligatorio para el CSRF de Django en HTTPS.
@@ -94,6 +97,9 @@ export async function autenticarEnCerberus(username: string, password: string): 
     }
     return { ok: false, motivo: 'usuario o contraseña incorrectos' };
   } catch (err) {
-    return { ok: false, motivo: `no se pudo contactar a Cerberus: ${(err as Error).message}` };
+    // El detalle técnico va al log del server; a la vendedora le llega un motivo
+    // humano fijo (rediseño 2026-07, §3.2.5) y el route lo convierte en 503.
+    console.error('cerberus: no responde', err);
+    return { ok: false, motivo: 'Cerberus no responde en este momento.', caido: true };
   }
 }

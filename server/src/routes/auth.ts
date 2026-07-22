@@ -19,8 +19,12 @@ authRouter.post('/login', async (req, res) => {
 
   const r = await autenticarEnCerberus(username, password);
   if (!r.ok) {
-    // 401 para credenciales, pero el motivo distingue "clave mala" de "Cerberus no
-    // responde" — son problemas distintos y la vendedora tiene que saber cuál es.
+    // Son problemas distintos y el front tiene que poder distinguirlos: 401 =
+    // clave mala; 503 tipado = Cerberus no contesta (no es culpa de la vendedora).
+    if (r.caido) {
+      res.status(503).json({ ok: false, type: 'cerberus_caido', message: r.motivo });
+      return;
+    }
     res.status(401).json({ ok: false, message: r.motivo });
     return;
   }
