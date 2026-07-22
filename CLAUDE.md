@@ -89,6 +89,23 @@ y el merge va con **rebase** (historia lineal, se preservan los commits del PR).
   instala solo (`npm install` corre `prepare`, que fija `core.hooksPath`); es una red local, no una
   garantía del servidor. Emergencia real: `git push --no-verify`.
 
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues de `Goberna-Lab/hermes`, vía la CLI `gh`; los issues se escriben en español y los
+cierra el PR con `Closes #N`. Ver `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Los cinco roles canónicos con sus nombres por defecto — ya existen los cinco en el repo, no hay
+que crearlos. Ver `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` en la raíz (todavía no existe, se crea cuando `/domain-modeling` lo
+gane) + `docs/adr/` con los ADR 0001–0005. Ver `docs/agents/domain.md`.
+
 ## Secretos y config (env)
 
 Solo en `server/.env` (gitignored). **Se referencian por nombre, jamás se pegan** (regla dura #1):
