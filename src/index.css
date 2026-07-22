@@ -130,28 +130,51 @@
   }
 }
 
-* {
-  border-color: var(--border);
-}
+/* LOS RESETS VAN EN `base`, Y NO ES UN DETALLE DE ORDEN.
+ *
+ * En el modelo de capas de CSS, lo que está FUERA de toda capa le gana a todo lo
+ * que está adentro de una — sin importar la especificidad. `@import "tailwindcss"`
+ * declara `theme, base, components, utilities`, así que estas reglas, sueltas,
+ * le ganaban a TODAS las utilities de Tailwind.
+ *
+ * Lo que eso rompía, medido en el navegador con `getComputedStyle`:
+ *   · `border-primary`, `border-destructive`, `border-l-temp-frio` → todas
+ *     devolvían `#E6EAF2`, el gris de `--border`. **Cada borde de color de la app
+ *     se pintaba gris**: el filete de temperatura del kanban, el borde navy de la
+ *     fila fijada, las cajas de error en rojo, el banner de baneo. Escritos y
+ *     nunca vistos: 57 utilities de borde muertas.
+ *   · `.outline-none` no hacía nada, porque `:focus-visible` de abajo le ganaba.
+ *     Cada input dibujaba al enfocarse un rectángulo de 2px con esquinas vivas
+ *     ADENTRO de la píldora redondeada. Eso es lo que se sentía barato.
+ *
+ * Adentro de `base`, las utilities vuelven a ganar — que es lo que el código ya
+ * decía querer. Si alguna vez ves un borde de color que no aparece, mirá acá
+ * primero.
+ */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
 
-html {
-  color-scheme: light;
-}
+  html {
+    color-scheme: light;
+  }
 
-body {
-  margin: 0;
-  min-height: 100dvh;
-  font-family: var(--font-sans);
-  color: var(--foreground);
-  background: var(--background);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    font-family: var(--font-sans);
+    color: var(--foreground);
+    background: var(--background);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-#root {
-  min-height: 100dvh;
+  #root {
+    min-height: 100dvh;
+  }
 }
 
 @layer utilities {
@@ -202,15 +225,20 @@ body {
   background-clip: content-box;
 }
 
-/* Seleccionar texto también es de la marca. */
-::selection {
-  background: var(--secondary);
-  color: var(--navy);
-}
+@layer base {
+  /* Seleccionar texto también es de la marca. */
+  ::selection {
+    background: var(--secondary);
+    color: var(--navy);
+  }
 
-/* El foco de teclado, uno solo y visible, en toda la app. El outline sigue el
-   radio propio de cada elemento — no se fuerza ninguna forma. */
-:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
+  /* El foco de teclado, uno solo y visible, en toda la app. El outline sigue el
+     radio propio de cada elemento — no se fuerza ninguna forma.
+     En `base` a propósito: suelto le ganaba a `outline-none`, y los campos que
+     dibujan su propio foco (un anillo que sí respeta el radio) quedaban con este
+     rectángulo encima. Acá abajo, el que declara `outline-none` manda. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
 }
