@@ -6,7 +6,19 @@ Messenger y WhatsApp** — con la ficha del contacto al lado del chat, y registr
 Cerberus. Negocio: la **Escuela** de Goberna (formación política, LATAM).
 
 Extraído de `meta-escuela` preservando historia git (ver `docs/adr/0001`). El **plan y las decisiones**
-viven en `docs/plan-hermes-mvp.md` (léelo antes de tocar arquitectura). El concepto en `docs/concepto.md`.
+viven en `docs/plan-hermes-mvp.md`. El concepto en `docs/concepto.md`.
+
+**Antes de tocar arquitectura, leé `docs/arquitectura.md`** — el mapa: cómo está hecho, los patrones
+de la casa, los bordes externos y la deuda. Los cuatro documentos y para qué sirve cada uno:
+`CONTEXT.md` glosario del negocio · `docs/arquitectura.md` el mapa · `docs/estado.md` la foto de hoy ·
+`docs/adr/` las decisiones con su fundamento.
+
+> ⚠️ **Este repo tiene DOS MITADES.** La extracción se trajo el árbol entero de meta-escuela, así que
+> conviven el CRM que se usa (~39 archivos: `whatsapp` `auth` `cerberus` `cola` `realtime`, 13 de 27
+> routers) y el dashboard de pauta del que salió (~45 archivos: `analisis` `canales` `decisions`
+> `pauta` `ontologia` `fuentes` `sdk`, 14 routers). **Ninguna acción de la vendedora alcanza la
+> segunda mitad.** No está rota, está desconectada — y los comentarios de `server/src/index.ts`
+> describen la arquitectura vieja, así que engañan. Ver `docs/arquitectura.md` §2.
 
 ## Stack
 
@@ -142,8 +154,27 @@ Solo en `server/.env` (gitignored). **Se referencian por nombre, jamás se pegan
 
 ## Estado (2026-07-22)
 
-Hermes es un CRM completo EN PRODUCCIÓN (VPS1, OTA): Dashboard radar · Pipeline con compuertas
-(cotizado exige interés; cierre solo vía venta) · chat multicanal con media completa y BarraGestion ·
-Contactos · Correos (falta SMTP) · Agenda-calendario. Sidebar: Dashboard · Pipeline · Contactos ·
-Mensajes · Correos · Agenda. **La foto completa, los pendientes y el contexto: `docs/estado.md`**;
-la bitácora de cómo se llegó: `docs/sesion-2026-07-21-crm-definitivo.md`.
+En `main`, Hermes es un CRM completo: Dashboard radar · Pipeline con compuertas (cotizado exige
+interés; cierre solo vía venta) · chat multicanal con media completa y BarraGestion · Contactos ·
+Correos (falta SMTP) · Agenda-calendario.
+
+> ⚠️ **`main` ≠ producción.** Verificado el 22-jul: VPS1 está en `17648e4`, **26 commits atrás**. Lo
+> que las vendedoras usan NO incluye el rediseño «Cierre de edición», la urgencia de 6 niveles, la
+> ventana de 30 días de la cola ni el caché persistente. El deploy es manual y no hay CD, así que
+> **leer este código como «lo que corre» es incorrecto**. El comando de deploy y el rollback están
+> en `docs/estado.md`.
+
+**La foto completa, los pendientes y el contexto: `docs/estado.md`**; la bitácora de cómo se llegó:
+`docs/sesion-2026-07-21-crm-definitivo.md`.
+
+### Tres cosas rotas que conviene saber antes de tocar nada
+
+1. **Auth partida por la mitad**: `/api/conversaciones`, `/api/whatsapp/conversacion/:telefono`,
+   `/api/whatsapp/media/*` y `/api/responder` (que publica en Facebook) **no piden token**, y la API
+   es pública por HTTPS. Lo mismo `/api/sdk`.
+2. **El orden de la cola está implementado dos veces y divergió**: 6 niveles en `cola/urgencia.ts`,
+   4 en el SQL de `routes/conversaciones.ts`. Mensajes y Dashboard ordenan distinto lo mismo.
+3. **El nivel VENCIDO no se dispara nunca**: nadie setea `seguimientoEn`, así que la agenda no
+   influye en el orden de nada.
+
+Detalle y evidencia en `docs/arquitectura.md` §8.

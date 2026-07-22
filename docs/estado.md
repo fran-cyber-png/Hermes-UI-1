@@ -12,7 +12,34 @@ FB/IG, Messenger), gestiona el embudo, agenda, llama, manda correos y registra l
 Cerberus — desde UNA app (Tauri/web) cuya UI vive en el server (**OTA**: actualizar = actualizar
 el VPS, nadie reinstala).
 
-## Qué funciona hoy — EN PRODUCCIÓN (VPS1, `https://hermes-api.goberna.us`)
+## ⚠️ Producción está 26 commits atrás de `main` (verificado 2026-07-22)
+
+**Lo de abajo describe `main`, NO lo que las vendedoras están usando.** VPS1 quedó en `17648e4`
+(«docs: CLAUDE.md — las 6 vistas ya existen») y nunca se actualizó desde entonces. Verificado por
+dos vías: `git rev-parse HEAD` en `/srv/hermes`, y el build servido en vivo
+(`assets/index-2_UFlZcN.js`, que no es el que produce `main`).
+
+**Lo que NO está en producción**: el rediseño «Cierre de edición» entero (8 pantallas, riel, teclado
+global) · la urgencia de 6 niveles · el radar ordenado en el server · el techo de scan (#19) · la
+ventana de 30 días de la cola (#30) · el caché persistente (#31) · el login que distingue «clave
+mala» de «Cerberus no contesta».
+
+No es drift: `17648e4` es ancestro de `main`, así que un `git pull` lo pone al día sin conflictos.
+**El schema no cambió** en esos 26 commits → no hace falta `db:push`. Sí cambió el `package.json` de
+la raíz → hace falta `npm ci`.
+
+Deploy (fuera del horario de las vendedoras — son 26 commits de cambio visual y conviene avisarles):
+
+```bash
+ssh deploy@161.132.39.165 'cd /srv/hermes && git pull && \
+  ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci && \
+  env VITE_API_URL=https://hermes-api.goberna.us npm run build && \
+  sudo systemctl restart hermes'
+```
+
+Rollback: `cd /srv/hermes && git checkout 17648e4 && npm ci && npm run build && sudo systemctl restart hermes`.
+
+## Qué hay en `main` (≠ lo que corre en producción)
 
 | Área | Estado |
 |---|---|
@@ -28,15 +55,13 @@ el VPS, nadie reinstala).
 Suite: **285 tests del server + 18 del front**. Sidebar: Dashboard · Pipeline · Contactos · Mensajes ·
 Correos · Agenda (Tablero fuera por decisión; componente conservado).
 
-### En vuelo — NO está en producción
+### El mapa: `docs/arquitectura.md`
 
-- **Rama `feat/cache-persistente`** (4 commits, ticket #31, ADR 0007): el caché de consultas
-  sobrevive al cierre de la app (IndexedDB, restaurado **antes** del primer render), lo viejo se
-  marca «hace 14 horas» hasta que llega lo fresco, y la sesión se cree el token para no tapar el
-  caché con el skeleton del login. **Falta**: `git push -u origin feat/cache-persistente`, PR con
-  `Closes #31`, CI verde, merge con rebase y deploy OTA.
-- Ojo: `main` está pusheado, pero **si VPS1 tiene lo de `main` no se verificó en esta sesión** — el
-  deploy es manual y no hay CD.
+Cómo está hecho, los patrones de la casa, los bordes externos y la deuda. **Léelo antes de tocar
+arquitectura.** Lo más importante que dice: **este repo tiene dos mitades** —el CRM vivo y el
+dashboard de pauta heredado de meta-escuela, que está montado pero desconectado— y hay **tres cosas
+rotas** (auth partida, el orden de la cola implementado dos veces y ya divergido, y el nivel VENCIDO
+que no se dispara nunca).
 
 ## PENDIENTES
 
@@ -79,6 +104,16 @@ Correos · Agenda (Tablero fuera por decisión; componente conservado).
      categoría (Curso Online 84 · Virtual 22 · Pack 5). Negocio es «Escuela» en los 111.
    - La lista **ya** se ve en Hermes dos veces (buscador de Intereses y de la venta, mismo
      endpoint): el problema no es acceso.
+   - **PERO existe un segundo endpoint que nadie había cableado** y que sí tiene contexto:
+     `GET /productos/api/escuela/cursos-docentes/` (**pide sesión de Cerberus**, da 403 sin ella).
+     Trae, para **18 ediciones programadas** (2026-02-01 → 2026-08-07): `fecha_inicio`, `fecha_fin`,
+     `dias_semana`, `horas_academicas` (120/200), `cantidad_modulos` (7-11) y **`modulos[]` con 155
+     módulos**, cada uno con nombre, horario exacto y **docente** (26 distintos, con nombre).
+     O sea: **temario, duración, cronograma y docentes YA EXISTEN** — lo que hay que escribir a mano
+     se achica a la parte editorial («para quién es», «qué se lleva», objeciones).
+   - ⚠️ **Ese endpoint trae dos campos que NO pueden salir de ahí**: `precio_docente_usd` (lo que
+     Goberna le paga a cada docente por módulo — USD 11.021 en total) y `correo_docente` (4 correos
+     personales). Si se ingesta, **se sanitiza en el borde**: no se copian nunca.
    - **Decisión tomada en el grilling**: el problema real es *«qué le digo a quien pregunta de qué
      trata el curso»*. Consecuencia: la fuente del contexto **no puede ser Cerberus** — alguien de
      Goberna lo escribe una vez por curso y Hermes lo guarda. El trabajo grande es contenido, no
