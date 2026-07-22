@@ -7,6 +7,7 @@ import { ETAPAS, colorSegmento } from '../../lib/etapas';
 import { BarraSegmentada } from '../../components/graficos/BarraSegmentada';
 import { useDashboard } from '../dashboard/dashboard';
 import { useCrearVenta, useFormularioVenta, useProductos, type ProductoCurso } from './useVenta';
+import { VentaSinCerberus } from '../auth/AvisoCerberus';
 
 /** Cerberus llama "Origen" al canal por donde llegó el lead. Se infiere, no se elige. */
 const ORIGEN_POR_CANAL: Record<string, { id: string; nombre: string }> = {
@@ -276,9 +277,10 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
               <div className="h-9 animate-pulse rounded-lg bg-muted" />
             </div>
           ) : !form ? (
-            <div className="p-10 text-center text-sm text-destructive">
-              No se pudo cargar el formulario. La sesión de Cerberus pudo expirar — volvé a entrar.
-            </div>
+            /* Antes acá había un texto que decía «volvé a entrar» y no daba por
+               dónde: la vendedora tenía que adivinar que la salida era «Salir» en
+               el riel, con el cliente esperando. Ahora el botón está donde falla. */
+            <VentaSinCerberus onReconectar={onCerrar} />
           ) : (
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
               {/* Cliente (ya identificado por teléfono) */}

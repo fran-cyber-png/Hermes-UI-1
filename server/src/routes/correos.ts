@@ -20,10 +20,18 @@ correosRouter.use(requiereVendedora);
 function transporte() {
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return null;
+  const puerto = Number(SMTP_PORT ?? 587);
   return nodemailer.createTransport({
     host: SMTP_HOST,
-    port: Number(SMTP_PORT ?? 587),
-    secure: Number(SMTP_PORT ?? 587) === 465,
+    port: puerto,
+    // 465 es TLS desde el saludo; 587 arranca en claro y sube con STARTTLS.
+    secure: puerto === 465,
+    // Fail-closed: sin esto, en el 587 el STARTTLS es OPORTUNISTA — si el
+    // servidor no lo anuncia (o alguien se mete en el medio y lo saca del
+    // saludo), nodemailer sigue igual y manda usuario y contraseña en claro,
+    // sin un solo error. Con esto, ahí falla, que es lo correcto: preferimos un
+    // correo que no sale a una credencial que sí.
+    requireTLS: puerto !== 465,
     auth: { user: SMTP_USER, pass: SMTP_PASS },
   });
 }

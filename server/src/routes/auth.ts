@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { autenticarEnCerberus } from '../cerberus/auth.js';
-import { guardarSesionCerberus } from '../cerberus/sesionStore.js';
+import { guardarSesionCerberus, obtenerSesionCerberus } from '../cerberus/sesionStore.js';
 import { firmarSesion, requiereVendedora } from '../auth/sesion.js';
 
 /**
@@ -36,7 +36,24 @@ authRouter.post('/login', async (req, res) => {
   res.json({ ok: true, token, vendedora: r.vendedora });
 });
 
-/** Quién soy: valida el token y devuelve la vendedora. Sirve de "¿sigo logueada?". */
+/**
+ * Quién soy: valida el token y devuelve la vendedora. Sirve de "¿sigo logueada?".
+ *
+ * Devuelve además **si Hermes todavía tiene su sesión de Cerberus**, y eso no es
+ * un detalle: son dos vidas distintas. El token de Hermes dura 14 días y sobrevive
+ * un reinicio; la cookie de Cerberus vive en memoria del proceso
+ * (`cerberus/sesionStore.ts`) y muere con él, a propósito.
+ *
+ * Sin este campo, la vendedora seguía trabajando como si nada y se enteraba
+ * recién al intentar registrar una venta, con un 409 en la cara. El módulo de
+ * sesiones decía «si el server reinicia, la vendedora vuelve a entrar» — pero eso
+ * no estaba implementado en ningún lado. Ahora la app puede avisarle ANTES, que
+ * es la diferencia entre una molestia y una venta perdida.
+ */
 authRouter.get('/yo', requiereVendedora, (req, res) => {
-  res.json({ ok: true, vendedora: { id: req.vendedoraId, nombre: req.vendedoraId } });
+  res.json({
+    ok: true,
+    vendedora: { id: req.vendedoraId, nombre: req.vendedoraId },
+    cerberus: Boolean(obtenerSesionCerberus(req.vendedoraId!)),
+  });
 });

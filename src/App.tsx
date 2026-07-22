@@ -29,6 +29,7 @@ import { VistaCorreos } from './features/correos/VistaCorreos';
 import { pendientesQueApuran, useAgenda } from './features/agenda/agenda';
 import { Login } from './features/auth/Login';
 import { useSesion } from './features/auth/sesion';
+import { AvisoCerberus } from './features/auth/AvisoCerberus';
 import { useSesionWa } from './features/whatsapp/conversacionWa';
 import { useDashboard } from './features/dashboard/dashboard';
 import { useTiempoReal } from './lib/datos/tiempoReal';
@@ -106,7 +107,7 @@ function Cabina({ onCerrar }: { onCerrar: () => void }) {
 }
 
 export default function App() {
-  const { vendedora, cargando, sinServer, reintentar, entrar, salir } = useSesion();
+  const { vendedora, cargando, sinServer, reintentar, entrar, salir, cerberusVivo } = useSesion();
   const [abierta, setAbierta] = useState<Conversacion | null>(null);
   const [vista, setVista] = useState<Vista>('dashboard');
   const [direccion, setDireccion] = useState<'abajo' | 'arriba'>('abajo');
@@ -332,6 +333,9 @@ export default function App() {
         >
           <h1 className="font-heading text-sm font-bold tracking-tight text-navy">{vistaActiva.label}</h1>
           <div className="ml-auto flex items-center gap-2" style={NO_ARRASTRABLE}>
+            {/* Primero lo que le impide COBRAR: es lo único de esta barra que
+                bloquea plata, así que va antes que la salud de los datos. */}
+            {cerberusVivo === false && <AvisoCerberus usuario={vendedora.id} entrar={entrar} />}
             <BarraFrescura />
             <EstadoWhatsapp />
           </div>

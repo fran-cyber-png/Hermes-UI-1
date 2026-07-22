@@ -59,6 +59,15 @@ export function useSesion() {
   const [cargando, setCargando] = useState(true);
   const [sinServer, setSinServer] = useState(false);
   const [intento, setIntento] = useState(0);
+  /**
+   * ¿Hermes todavía tiene su cookie de Cerberus? `null` = no se sabe (server viejo
+   * o todavía no contestó). `false` es la única que hay que denunciar.
+   *
+   * Son dos vidas distintas: el token de Hermes dura 14 días y sobrevive un
+   * reinicio; la cookie de Cerberus vive en memoria del proceso y muere con él.
+   * Sin esto, la vendedora se enteraba recién al registrar una venta, con un 409.
+   */
+  const [cerberusVivo, setCerberusVivo] = useState<boolean | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem(CLAVE);
@@ -75,8 +84,12 @@ export function useSesion() {
       setCargando(true);
     }
     setSinServer(false);
-    api<{ vendedora: Vendedora }>('/api/auth/yo')
-      .then((r) => setVendedora(r.vendedora))
+    api<{ vendedora: Vendedora; cerberus?: boolean }>('/api/auth/yo')
+      .then((r) => {
+        setVendedora(r.vendedora);
+        // El server viejo no manda el campo; ahí no hay nada que denunciar.
+        setCerberusVivo(r.cerberus ?? null);
+      })
       .catch((err) => {
         if (err instanceof ErrorApi && err.status === 401) {
           // Token muerto de verdad: afuera, y sin dejarle el radar a la que entre.
@@ -104,15 +117,19 @@ export function useSesion() {
     localStorage.setItem(CLAVE_ULTIMO_USUARIO, username);
     setSinServer(false);
     setVendedora(r.vendedora);
+    // Entrar es, por definición, tener sesión de Cerberus recién hecha: el login
+    // pasó por ahí. Es también el ÚNICO camino que la repone.
+    setCerberusVivo(true);
   }, []);
 
   const salir = useCallback(() => {
     localStorage.removeItem(CLAVE);
     setVendedora(null);
+    setCerberusVivo(null);
     // El caché persistido también: con dos vendedoras en la misma máquina, la
     // que entra no puede ver el radar de la que se fue.
     void olvidarCacheDeHermes();
   }, []);
 
-  return { vendedora, cargando, sinServer, reintentar, entrar, salir };
+  return { vendedora, cargando, sinServer, reintentar, entrar, salir, cerberusVivo };
 }
