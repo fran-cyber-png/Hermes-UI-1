@@ -4,6 +4,8 @@ import { MessageSquarePlus, Search, X } from 'lucide-react';
 import { useLocalStorage } from '../../lib/useLocalStorage';
 import { api } from '../../lib/datos/cliente';
 import { hace, useFrescura } from '../../lib/datos/frescura';
+import { selloDeViejo } from '../../lib/datos/persistencia';
+import { SelloDeAntes } from '../../lib/datos/SelloDeAntes';
 import { useSesionWa } from '../whatsapp/conversacionWa';
 import { pendientesQueApuran, useAgenda } from '../agenda/agenda';
 import type { DatosDashboard } from '../dashboard/dashboard';
@@ -57,7 +59,11 @@ export function ColaUnificada({
   inputRef?: Ref<HTMLInputElement>;
 }) {
   const [intencion, setIntencion] = useLocalStorage<Intencion>('hermes.colaFiltro', 'puedo-escribirle');
-  const { items, total, hayMas, cargando, cargandoMas, cargarMas } = useConversaciones(intencion);
+  const { items, total, hayMas, cargando, cargandoMas, cargarMas, traidoEn, actualizando } =
+    useConversaciones(intencion);
+  // Al abrir la app la cola viene del caché persistido: hasta que llegue lo
+  // fresco hay que decir de cuándo es lo que se está mirando.
+  const deAntes = selloDeViejo(traidoEn, Date.now());
   const filtro = FILTROS.find((f) => f.valor === intencion) ?? FILTROS[0];
 
   // Búsqueda: filtra lo YA cargado (nombre, teléfono, texto). Si no aparece,
@@ -258,7 +264,8 @@ export function ColaUnificada({
         )}
 
         <div className="flex items-center justify-between gap-2">
-          <div className="flex gap-0.5 rounded-lg bg-muted/60 p-0.5">
+          {/* Los filtros no se encogen nunca: son el control principal de la cola. */}
+          <div className="flex shrink-0 gap-0.5 rounded-lg bg-muted/60 p-0.5">
             {FILTROS.map((f) => (
               <button
                 key={f.valor}
@@ -273,10 +280,15 @@ export function ColaUnificada({
               </button>
             ))}
           </div>
-          {!cargando && total > 0 && (
-            <span className="pr-1 font-mono text-[11px] tabular-nums text-muted-foreground">
-              {total.toLocaleString('es')} en cola
-            </span>
+          {deAntes ? (
+            <SelloDeAntes texto={deAntes} actualizando={actualizando} />
+          ) : (
+            !cargando &&
+            total > 0 && (
+              <span className="pr-1 font-mono text-[11px] tabular-nums text-muted-foreground">
+                {total.toLocaleString('es')} en cola
+              </span>
+            )
           )}
         </div>
       </div>

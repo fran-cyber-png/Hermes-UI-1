@@ -66,5 +66,12 @@ export function useConversaciones(intencion: Intencion, canal = '') {
     cargando: q.isPending,
     cargandoMas: q.isFetchingNextPage,
     cargarMas: () => void q.fetchNextPage(),
+    /**
+     * Cuándo se trajo esto. Al abrir la app la cola se pinta desde el caché
+     * persistido, y hasta que llegue lo fresco hay que decir de cuándo es
+     * (ver `lib/datos/persistencia.ts`).
+     */
+    traidoEn: q.dataUpdatedAt,
+    actualizando: q.isFetching,
   };
 }

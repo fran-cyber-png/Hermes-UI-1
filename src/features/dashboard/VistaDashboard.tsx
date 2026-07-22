@@ -3,6 +3,8 @@ import { ArrowRight, MessageSquareText, Search, X } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/datos/cliente';
 import { hace } from '../../lib/datos/frescura';
+import { selloDeViejo } from '../../lib/datos/persistencia';
+import { SelloDeAntes } from '../../lib/datos/SelloDeAntes';
 import { tempBorde, tempClass } from '../../lib/formato';
 import { kicker, sectionLabel } from '../../lib/styles';
 import { ETAPAS, ETAPA_CHIP, colorSegmento } from '../../lib/etapas';
@@ -155,7 +157,11 @@ export function VistaDashboard({
   /** Puente a Correos (§2.9): prellena el Para. Opcional hasta que App lo cablee (Fase 3). */
   onMandarCorreo?: (para: string) => void;
 }) {
-  const { data, isPending } = useDashboard();
+  const { data, isPending, dataUpdatedAt, isFetching } = useDashboard();
+  // Al abrir la app el radar viene del caché persistido. Mientras eso sea lo que
+  // se ve, «en vivo» sería mentira: el sello dice de cuándo es hasta que llega
+  // lo fresco (ver `lib/datos/persistencia.ts`).
+  const deAntes = selloDeViejo(dataUpdatedAt, Date.now());
   const { agenda } = useAgenda();
   const [fuente, setFuente] = useState<(typeof FUENTES)[number]['id']>('');
   const [etapaFiltro, setEtapaFiltro] = useState<string | null>(null);
@@ -377,11 +383,17 @@ export function VistaDashboard({
         <section aria-label="El radar" className="flex min-h-0 min-w-0 flex-1 flex-col rounded-2xl bg-card shadow-panel">
           <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
             <span className="font-mono text-[11px] tabular-nums text-muted-foreground">{filas.length}</span>
-            <span className="relative flex size-1.5">
-              <span className="absolute inline-flex size-1.5 animate-ping rounded-full bg-success opacity-60" />
-              <span className="relative inline-flex size-1.5 rounded-full bg-success" />
-            </span>
-            <span className="text-[11px] text-muted-foreground">en vivo</span>
+            {deAntes ? (
+              <SelloDeAntes texto={deAntes} actualizando={isFetching} />
+            ) : (
+              <>
+                <span className="relative flex size-1.5">
+                  <span className="absolute inline-flex size-1.5 animate-ping rounded-full bg-success opacity-60" />
+                  <span className="relative inline-flex size-1.5 rounded-full bg-success" />
+                </span>
+                <span className="text-[11px] text-muted-foreground">en vivo</span>
+              </>
+            )}
 
             {etapaFiltro && (
               <button
