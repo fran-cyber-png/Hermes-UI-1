@@ -54,6 +54,14 @@ export interface StatsVendedora {
   ventas_7d: number;
 }
 
+export interface PuntoLeadsDia {
+  /** YYYY-MM-DD (fecha del server). */
+  dia: string;
+  chats: number;
+  comentarios: number;
+  formularios: number;
+}
+
 export interface DatosDashboard {
   chats: LeadChat[];
   formularios: LeadFormulario[];
@@ -64,6 +72,12 @@ export interface DatosDashboard {
   embudo: Record<string, number>;
   /** Qué cursos pide la gente: el ranking de intereses. */
   cursos: { curso: string; n: number }[];
+  /** Series de 14 días para las gráficas del riel — siempre 14 puntos, ceros incluidos. */
+  series: {
+    leads_dia: PuntoLeadsDia[];
+    envios_dia: { dia: string; n: number }[];
+    ventas_dia: { dia: string; n: number }[];
+  };
 }
 
 export function useDashboard() {
