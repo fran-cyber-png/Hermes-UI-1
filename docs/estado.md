@@ -39,9 +39,14 @@ Suite: **271 tests verdes**. Sidebar: Dashboard · Pipeline · Contactos · Mens
 4. **Certificado de code signing Windows** (OV ~US$100-300/año) para matar el aviso de SmartScreen.
 
 ### De código (en orden sugerido)
-1. **Fase 2 del oficio taste** — la artesanal, CON Estephano mirando: ritmo de espaciado por vista,
-   momentos tipográficos, racionar los 33 kickers, pulir Bandeja fila a fila. (Fase 1 hecha:
-   commit `494f9b4`.)
+1. ~~**Fase 2 del oficio taste**~~ — **EJECUTADA (2026-07-22)** como rediseño «Cierre de edición»:
+   auditoría multi-agente (185 hallazgos) → dirección editorial → implementación completa de las 8
+   pantallas + teclado global + puente entre vistas + capa de gráficas (series de 14 días en
+   `/api/dashboard`). Spec, auditorías y screenshots antes/después: **`docs/rediseno-2026-07/`**.
+   Kickers 33→6 · piso 11px en cero · presupuesto del oro aplicado. Predecesores `Bandeja`/
+   `FilaInteraccion`/`useBandeja` archivados (ADR 0004). Pendiente de esa dirección: cablear el
+   «modo racha» (`onSiguiente` en ResponderPanel, tono a validar con la vendedora real) y el
+   flujo venta-precargada del drop en Cierre (`onRegistrarVenta` del kanban).
 2. **Crear cliente en Cerberus para lead nuevo** (H1): hoy la venta exige cliente existente.
 3. **S8 — contexto completo** (`plan-panel-contexto.md`): tabla `contexts`, ingesta ampliada,
    curso inferido del anuncio (join local ya posible), imagen de la publicación.

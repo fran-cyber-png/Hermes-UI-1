@@ -1,0 +1,516 @@
+[
+  {
+    "nombre": "Puente de mando: el tiempo, calibrado",
+    "tesis": "Hermes se calibra como puente de mando: un instrumento donde el tiempo — el material del negocio — se ve, se mide y se tiñe igual en todas partes. Tres voces tipográficas con roles fijos ordenan cada pantalla: Montserrat titula la única cifra que manda por vista, la sans conversa, la mono mide (timestamps, teléfonos, folios, teclas). La rampa de temperatura que ya vive en index.css pasa de detalle a sistema transversal: toda edad de dato — en radar, cola, kanban, hilo y agenda — se lee con la misma tinta, y el dorado queda quirúrgicamente reservado a 'tiempo que se acaba'. El cromo se calla (un marco por plano, kickers de ~33 a ~6, silencio cuando todo está bien) para que cada color que aparezca sea señal, nunca decoración. Y el teclado encadena el día — abrir, responder, siguiente — convirtiendo a la vendedora en operadora: todo con Tailwind, markup y estado local, cero API nueva, cero token nuevo.",
+    "momentos_firma": [
+      "El titular de las 9am — la banda del Dashboard abre el dia con la unica cifra heroe de la vista: '14' en Montserrat text-2xl tabular-nums + 'esperan · el mas viejo hace 6 horas'; en modo racha ese contador baja en vivo con cada respuesta enviada. Es el metronomo del dia, no un widget.",
+      "El gradiente de enfriamiento — la rampa temp-* existente tine cada 'hace X' en radar, cola, kanban y separadores de dia del hilo: escanear cualquier lista de arriba a abajo muestra el pipeline virando de neutro a ladrillo a acero, como fenomeno fisico. El oro queda intacto y exclusivo para la ventana que se cierra.",
+      "La linea del ahora — en Agenda semana/dia, una regla dorada de 2px con punto marca la hora actual atravesando la grilla: el unico dorado estructural de la app, porque es literalmente tiempo pasando. En el mes, 'hoy' gana un subrayado dorado fino solo si hay pendientes.",
+      "El error que te lleva de la mano — la compuerta de Cotizado no regana: el aviso (en familia warning, nunca oro) ilumina con ring-2 el control de Intereses que vive en la MISMA barra y le da foco al buscador; soltar una tarjeta en Cierre abre directamente Registrar venta precargada. Los frenos del server se vuelven el siguiente paso.",
+      "La cabina — mantener '?' despliega el mapa de teclas en font-mono estilo tabla de cabina (card con shadow-panel): ⌘1-6 vistas, '/' busqueda, ↑↓+Enter la cola, Esc cierra; y tras cada envio, 'Siguiente: {nombre} · espera hace 3 h →' con Enter. Responder→siguiente→responder sin tocar el mouse."
+    ],
+    "por_vista": [
+      {
+        "vista": "Sistema compartido (src/lib/styles.ts · src/index.css)",
+        "cambios": [
+          "cardClass pierde shadow-sm: 'rounded-2xl border border-border bg-card overflow-hidden' (borde solo, la eleccion institucional sobre #F5F7FB); las cards que deban flotar usan shadow-panel SIN borde, caso por caso — la fabrica deja de producir dobles-marcos y media app se corrige en una linea.",
+          "cardHeaderClass muere como slab navy: 'flex items-center justify-between border-b border-border px-5 py-3 font-heading text-sm font-bold text-navy' — el fill navy pleno queda reservado al unico elemento dominante de cada vista (como el estado activo del riel).",
+          "sectionLabel baja a 'text-xs font-semibold text-muted-foreground' (sin uppercase ni tracking); nuevo export kicker = 'text-[11px] font-bold uppercase tracking-wide text-muted-foreground' solo para los 4-6 usos ganados — un cambio que raciona los ~33 kickers de toda la app.",
+          "Borrar 'border-radius: 4px' del :focus-visible global (index.css:200) — el outline ya sigue el radio propio de cada elemento; se acaba el salto de forma al enfocar.",
+          "Definir --ease-house: cubic-bezier(0.32,0.72,0,1) una sola vez y erradicar transition-all: toda transicion queda acotada a transform/opacity/color, 200-300ms — se corrigen los duration-500 de Login, FichaContacto y HiloWhatsapp.",
+          "Nuevo helper compartido tempClass(fecha) que mapea edad → text-temp-fresco/tibio/frio/helado: el sistema de temperatura que radar, cola, kanban e hilo consumen identico; y formatoTelefono ('51 986 394 450') + '…' real + voseo unico + font-mono tabular-nums para todo timestamp/cifra de metadato.",
+          "Extraer ETAPA_CHIP (hoy duplicado en VistaDashboard) a modulo compartido para que cola y radar hablen el mismo idioma de etapa."
+        ]
+      },
+      {
+        "vista": "Shell y navegación",
+        "cambios": [
+          "Riel w-16 con icono + label text-[11px] en columna (Pipeline y Agenda dejan de ser adivinanza); atajo publicado en title ('Agenda · ⌘5'); data-tauri-drag-region en el nav (paridad con Electron); active:scale-[0.96] con transicion acotada.",
+          "Dos badges, dos significados: Agenda en dorado (tiempo, pill de 18px con text-[11px] — se corrige el 9px) y un segundo contador navy sobre Mensajes con conversaciones sin responder — el contraste ensena que el oro es solo de la Agenda.",
+          "Linea de salud unificada: BarraFrescura + EstadoWhatsapp fusionados en una linea font-mono a la derecha del header ('datos hace 2 h · WA conectado') que en verde se contrae a su minima expresion y solo crece y toma color al fallar; nunca null — isPending → chip esqueleto, isError → 'sin señal del server'.",
+          "Copy de sistema traducido: 'Captura detenida hace N dias — avisá a sistemas' como chip de una linea; la instruccion npm va en popover al click, marcada 'para sistemas:' en font-mono text-[11px]. La vendedora nunca recibe ordenes de terminal.",
+          "'Conectando' en azul (bg-primary animate-pulse), jamas dorado; 'baneado' con contenedor border-destructive/40 bg-destructive/10 — el estado mas grave del canal con el peso que la regla del ban exige.",
+          "Carga inicial = skeleton con la anatomia del shell (riel + header + 3 bloques pulse), no 'Cargando…'; la Bandeja queda SIEMPRE montada (hidden cuando no activa) — scroll y borradores sobreviven al cambio de vista; header bg-card solido sin backdrop-blur y gutter unificado con el contenido; transicion direccional entre vistas segun el orden del riel (slide-from-bottom al bajar, from-top al subir, solo transform/opacity)."
+        ]
+      },
+      {
+        "vista": "Login",
+        "cambios": [
+          "El unico momento navy-de-fondo de la app: banda superior navy #0E2A52 con el escudo en gold-ink y HERMES en Montserrat text-4xl extrabold + 'La mesa de la vendedora'; el form queda sobre bg claro en card con shadow-panel SIN borde (se resuelve el doble marco fugado del barrido).",
+          "Momento firma de apertura: el trazo del escudo se dibuja al montar (stroke-dasharray/dashoffset, ~600ms, --ease-house, una sola vez) — la unica animacion de marca; prefers-reduced-motion ya la neutraliza.",
+          "Memoria diaria: ultimo username en localStorage (nunca la contraseña), autoFocus directo en contraseña, titulo 'Hola de nuevo'; detector de CapsLock con getModifierState → 'Mayúsculas activadas' en font-mono text-[11px].",
+          "Errores por status y con proximo paso: 401 → 'Usuario o contraseña incorrectos. Revisá y volvé a intentar.'; resto → 'Cerberus no responde. Esperá un minuto y probá de nuevo; si sigue, avisá a sistemas.' — el fetch failed crudo de cerberus/auth.ts va al log del server, nunca a pantalla; role='alert' en el bloque.",
+          "sesion.ts deja de borrar el token ante fallo de red: solo ante 401 real — un parpadeo de la API ya no desloguea a la vendedora.",
+          "Foco unificado (focus-visible:ring-2 ring-primary/25 en inputs y boton), aria-busy con opacity-90 mientras envia (el 40% queda solo para campos vacios), labels sentence-case (−2 kickers), una sola mencion a Cerberus, transiciones a 200ms."
+        ]
+      },
+      {
+        "vista": "Dashboard (radar)",
+        "cambios": [
+          "El titular de las 9am: la banda A abre con la cifra heroe — nCalientes en font-heading text-2xl font-bold tabular-nums + 'esperan · el mas viejo hace 6 h' en text-xs muted (cabe en el h-16, el punto dorado se queda); nCalientes calculado sobre la MISMA union chats+formularios que el toggle — el numero siempre cuadra con las filas.",
+          "Gradiente de enfriamiento: el hace() de cada fila teñido con tempClass (frio ladrillo, helado acero; muted para fresco/tibio; gold-ink intacto en la ventana 20-24h) — la columna derecha del radar se vuelve un mapa de enfriamiento escaneable sin un solo chip nuevo.",
+          "Riel honesto: isPending corta ANTES de evaluar vacios — skeletons con forma (barra de embudo, 5 lineas desiguales de cursos, 3 filas de equipo); jamas los tres empty-states como reales durante la carga; vacio de landings en voz humana ('falta que Sistemas conecte Bravo — no es que no caigan').",
+          "Radar operable sin mouse: onKeyDown Enter/Espacio en las filas, acciones visible-atenuadas (text-muted-foreground group-hover:text-navy + focus-within, fuera el opacity-0 puro), Llamar y Buscar como <button> reales; filas sin telefono pierden el cursor-pointer falso y ofrecen el correo con accion.",
+          "Jerarquia de zonas: fuera el h2 'El radar' (el punto vivo + contador identifican la zona), riel rounded-xl p-3.5 que retrocede, banda A y radar conservan rounded-2xl; kickers de 5 a 1-2 ('Equipo' se queda, 'Embudo · 38' pasa a '38 en el embudo', 'Qué piden' a sentence-case).",
+          "Micro-honestidades: pills vencidas con hace() ('hace 10 dias', no '· lun'), leyenda del embudo sin amputar ('12 cotizado' completo), aviso al cortar en 80 filas ('Mostrando los 80 mas recientes de N'), EtiquetaInline guarda en blur (Escape descarta), todos los 9-10px suben al piso de 11px, fila nueva del SSE entra con translate-y+fade y fondo que decae ~2s — el 'en vivo' se ve caer."
+        ]
+      },
+      {
+        "vista": "Pipeline (kanban)",
+        "cambios": [
+          "Un solo plano de profundidad: columna = bandeja hundida (rounded-2xl bg-secondary/50 p-2, sin borde ni sombra; destino = ring-1 ring-primary/40) y tarjeta = unica placa (bg-card + sombra, sin borde) — se resuelven las dos violaciones sombra-O-borde y el tablero gana jerarquia contenedor/contenido.",
+          "Header de columna como instrumento: contador en font-heading text-xl font-bold tabular-nums (muted en Perdidos) + titulo 13px al lado; con hayMas el contador dice '{n}+' o '9 de 34' usando el total del embudo que el Dashboard ya consume — el kanban deja de mentir y cuadra entre vistas.",
+          "Cierre deja de ser drop condenado: soltar en Cierre abre Registrar venta con la conversacion precargada; durante el arrastre su header dice 'Soltá para registrar la venta'; el aviso de compuerta pasa a voz de bloqueo neutra (border-border bg-secondary/70, AlertTriangle en temp-frio), sin autodestruccion a los 8s, con ring temporal en la tarjeta rebotada y copy que apunta al remedio ('agregalo en la tarjeta, acá abajo').",
+          "El embudo como mapa termico: filete izquierdo border-l-2 con tempClass por edad en cada tarjeta + 'hace X' teñido con la rampa — posicion en el embudo y enfriamiento en una sola lectura.",
+          "Perdidos como cajon: columna 0.75fr atenuada con border-dashed y header muted; Cierre con acento (h3 text-navy, tick verde cuando >0) — cuatro columnas vivas + un archivo + una meta se leen solas; grilla con minmax(190px,1fr) y overflow-x-auto para ventanas angostas.",
+          "Fisica del arrastre: onDragEnd limpia el estado colgado, la tarjeta levantada queda opacity-40 scale-[0.98] (deja hueco), placeholder 'Soltá acá' tambien en columnas con tarjetas, actualizacion optimista con rollback en onError (el rechazo de compuerta se ve volver), skeleton con la grilla real de 5 columnas, 'Abrir en la Bandeja' con focus-visible:opacity-100, active:scale en botones, la instruccion permanente de la barra solo aparece durante un arrastre activo."
+        ]
+      },
+      {
+        "vista": "Mensajes — la cola (ColaUnificada)",
+        "cambios": [
+          "Fila de 2 renglones con el peso invertido a favor de lo pendiente: fuera los rellenos 'Mensaje'/'Comentario'; preview en text-foreground cuando !respondida (respondida baja a font-medium muted); contador N en burbuja navy tabular a la derecha solo si espera respuesta; el chip dorado de ventana NUNCA reemplaza al tiempo — columna derecha de dos lineas: chip arriba, timestamp font-mono text-[11px] debajo.",
+          "Canon unificado de la banda izquierda: temperatura SIEMPRE (misma rampa que radar y kanban); fila seleccionada con filo derecho navy (shadow inset) apuntando al chat abierto; chip de etapa compartido via ETAPA_CHIP extraido — el mismo lead se lee igual en todas las listas.",
+          "Vacios honestos: portar vacioPorAtraso de Bandeja ('No hay nada acá, pero no es porque estés al día — la última captura fue hace N…'); el boton de mas historia visible tambien bajo el vacio de busqueda como 'Buscar en más historia' (muere el dead-end); copy sin 'matchea'; y archivar Bandeja + FilaInteraccion + useBandeja con ADR una vez migrado ese vacio.",
+          "Momento firma de cola despachada: 'Les puedo escribir' en cero CON frescura viva → 'Respondiste a 14 personas hoy' en font-heading text-3xl navy sobre 'Estás al día' + la siguiente jugada calculada ('Ver los 5 que piden info →' o 'Revisá tu Agenda') — cierre honesto sin confeti.",
+          "Modo despacho por teclado: '/' enfoca la busqueda, Escape la limpia, ↑↓+Enter recorren la cola con roving tabindex; la fila nueva del SSE entra con slide-in-from-top-1 300ms --ease-house — la cola respira sin badge ni sonido.",
+          "Cromo calmado: un solo header (busqueda mb-2 + fila filtros/total, un solo border-b), total humano en voz instrumento ('128 en cola', font-mono text-[11px] tabular-nums), skeleton con anatomia de fila real, kicker 'Pide info' baja a chip sin uppercase y se oculta cuando el filtro activo ya es pide-info, telefono-como-nombre en font-mono con formatoTelefono, VENTANA_DIAS importada de types (fuera la const duplicada), fila pin cuando la conversacion abierta no matchea el filtro ('Abierta desde Dashboard — Ver en Todo')."
+        ]
+      },
+      {
+        "vista": "Mensajes — la conversación",
+        "cambios": [
+          "Separadores de dia como firma del hilo: chips centrados font-mono text-[11px] ('hoy', 'ayer', 'lun 14 jul') agrupando mensajes; cuando el ultimo mensaje de la persona se enfrio, el separador toma la tinta de la rampa — el hilo mismo cuenta cuanto se enfrio la conversacion, que es lo que Hermes vende.",
+          "Burbujas con un solo marco: entrante bg-card ring-1 ring-border SIN sombra, saliente bg-secondary CON la sombra (mismo fix en HiloMessenger); el BadgeOrigen de anuncio pasa a bg-secondary con Megaphone en text-navy — el dorado decorativo se libera y los banners legitimos de ventana recuperan su peso.",
+          "Una sola cabecera de conversacion para los tres canales: nombre en font-heading text-sm bold, avatar rounded-[11px], px-4 py-3 — la columna deja de cambiar de piel al saltar de WhatsApp a Messenger a comentario.",
+          "La cuenta regresiva viva: QuePuedoHacer ya sabe cap.dias — cuando quedan 1-2 dias para que cierre el privado, 'Te quedan 2 días para poder escribirle en privado' en dorado (el oro ANTES de que sea tarde); ventana cerrada con Clock y parrafo en text-gold-ink (contraste correcto); 'Este comentario ya tiene 12 días.' con unidad.",
+          "Ritmo de despacho: el composer toma foco al abrir la conversacion (cierra el gesto que el placeholder promete); tras enviar en ResponderPanel, la tarjeta de exito ofrece 'Siguiente de la cola' (Enter salta) — responder→siguiente→responder; entrada animada SOLO para mensajes nuevos (ref de ids vistos), 300ms con stagger.",
+          "Pulido de voz e higiene: voseo unificado ('Qué podés hacer'), plural humano ('hoy'/'ayer', nunca 'hace 1 días'), fallback por canal ('Alguien en Instagram'), '…' real, plantilla publica humana sin triple exclamacion, el aviso 'se ve desde que se vinculó' solo en hilos de <5 mensajes, skeletons de burbujas fantasma en ambos hilos, focus-visible en los 4 botones + focus:border-primary en los textareas de ResponderPanel, HistorialPersona con skeleton y error visible ('No pudimos cargar su historial'), el comentario de la persona como cita heroe en font-heading text-lg con comilla navy y borde del canal, kickers de 4 a 1."
+        ]
+      },
+      {
+        "vista": "Gestión y panel derecho",
+        "cambios": [
+          "Valor de vida como cifra heroe de la ficha: al resolver 'cliente', abrir con 'S/ 1.850' en font-heading text-2xl font-bold tabular-nums text-navy + 'en 3 compras' — la pregunta que la ficha promete ('¿cuánto compró?') respondida al primer golpe; folios como detalle con fecha font-mono corta y estado semantico (pagado verde, anulado rojo).",
+          "Una sola primaria en la columna: 'Registrar venta' queda navy; 'Registrar gestión' baja a secundario (border bg-card text-navy) y se especializa en 'Notas y próxima acción' — pierde el selector de etapa y los intereses duplicados (quedan solo en BarraGestion, que es 1 clic); Guardar deshabilitado hasta que haya algo que guardar y sin el fallback silencioso a 'contactado'.",
+          "La compuerta que guia: el freno 'cotizado exige interés' pasa a familia warning (nunca oro) + ring-2 ring-primary al control de Intereses de la MISMA barra con foco en su buscador; el error no se autodestruye — se limpia en el proximo intento o con X; Enter en Intereses agrega la sugerencia real de Cerberus (con ↑↓), texto libre solo sin resultados.",
+          "Feedback que no falla en silencio: fix del bug de precedencia — la VENTA muestra su folio, en font-mono text-lg con boton 'Copiar folio' (la vendedora lo pega en el chat como recibo); onError inline en etiquetas ('No se guardó la etiqueta'), intereses ('sin esto, Cotizado no abre') y conversion; ' — la próxima acción está en tu Agenda' leyendo crear.variables (hoy nunca renderiza); 'Agendado · Mañana 9:00' confirmando el dato; spinner solo en el chip presionado.",
+          "Perdido fuera del segmented: separador + chip muted hover:text-destructive + confirmacion inline '¿Perdido? Sí / No' — un misclic ya no mata el lead; popovers con un solo marco (shadow-panel, sin ring ni border), cierre por Escape y click-afuera en Agendar y Llamar; el popover de Llamar espera a la humana (fuera el timeout de 6s); BotonLlamar compacto como <button> real.",
+          "Racion de kickers 14 → 2-3 y oficio del modal: fuera 'Contexto' (el avatar-header ES el titulo), labels internos a sentence-case; FormularioVenta con Escape + role='dialog' + foco inicial, monto total con moneda en font-heading text-2xl tabular-nums navy, 'Elegí moneda' (voseo), botones +/− a size-6 con borde y active; 'Cerberus caído' en text-warning-foreground (el gold-ink se libera); X de etiquetas con focus-visible y opacity-40 base en touch."
+        ]
+      },
+      {
+        "vista": "Contactos (VistaPersonas)",
+        "cambios": [
+          "Spotlight de busqueda: sin resultado, la barra centrada verticalmente y generosa (input text-base) con el caso de uso contado — '¿Te dictaron un número o llegó por Messenger sin teléfono? Pegalo: te digo si ya es cliente de la Escuela.'; al buscar se acopla arriba con transform 250ms — el null inicial muere.",
+          "Ficha con cifra heroe: nombre en font-heading text-2xl + '2 compras · USD 1.250' en font-heading text-xl tabular-nums navy; fechas humanas ('12 mar 2026'), estado de venta con color semantico; entrada unica animate 240ms (solo transform/opacity).",
+          "La ficha ACTUA — se cierra el dead-end landing→venta: fila de acciones bajo el header — 'Escribirle' (primaria, reusa la fabrica abrirChatNuevo via puente de estado en App), BotonLlamar, y 'Registrar venta' si es cliente (reusa FormularioVenta).",
+          "Lead nuevo con continuidad: 'No figura en Cerberus. Cuando le registres una venta, la ficha va a aparecer sola acá.' + accion 'Buscarlo en Mensajes' (el mecanismo telefonoInicial ya existe) + link honesto 'Crear cliente en Cerberus →' mientras el alta no exista en Hermes.",
+          "Estados con oficio: sombra sola en las tres tarjetas (fuera el triple doble-marco), skeleton con la forma de la ficha (badge + nombre + fila mono + grid de compras), aviso de sistema caido en text-warning-foreground, hint de submit invalido ('Faltan dígitos — incluí el código de país, 51…'), copy sin 'matchea', focus-visible en Buscar y 'Ver en Cerberus', fuera el mt-4 vestigial.",
+          "Busquedas recientes como chips font-mono bajo la barra (ultimos 3 telefonos, estado local, sin backend) — 'me lo dictaron y lo vuelvo a necesitar en cinco minutos'."
+        ]
+      },
+      {
+        "vista": "Correos (VistaCorreos)",
+        "cambios": [
+          "Estados que no mienten: isPending → 3 filas skeleton con la forma de la lista; isError → 'No se pudo cargar la lista — no es que no haya correos.'; estado.isError separado del aviso SMTP ('No se pudo consultar el estado del canal — reintentá'), que solo aparece con conectado === false.",
+          "El aviso SMTP habla primero humano: 'El canal de correo todavía no está conectado. Es un paso de sistemas — dos minutos — y esta pantalla se enciende sola cuando esté.'; la linea tecnica al final en font-mono text-[11px] marcada 'para sistemas:'; tinta en text-warning-foreground, nunca gold-ink.",
+          "El fallo visible: correo fallido con chip 'falló · {motivo}' en bg-destructive/10 dentro de la fila — nunca mas en el title de un punto de 6px; el dot queda solo para enviados.",
+          "Momento de encendido: cuando conectado pasa a true, 'desde mail.goberna.us' entra con una transicion unica de opacity/translate — el estado honesto no solo se declara, se ve cambiar.",
+          "Composer con oficio: h1 a font-heading text-lg bold, aria-labels en los tres campos, foco con el ring de la casa, ⌘↵ para enviar (publicado en el microcopy: '⌘↵ para enviar'), transicion del boton igualada a la de Buscar; lista con fechas relativas humanas ('hace 2 h') agrupadas por dia y columnas flexibles (basis-48 min-w-0; vendedora hidden sm:block).",
+          "Puente desde la ficha: FichaContacto renderiza data.correo (el tipo ya lo trae) con accion 'Mandar correo' que sube correoInicial a App — mismo patron que telefonoPersonas — y VistaCorreos lo recibe como prop para prellenar el Para; la 'próxima acción: Correo' deja de costar 4 pasos manuales."
+        ]
+      },
+      {
+        "vista": "Agenda (calendario)",
+        "cambios": [
+          "La linea del ahora: regla dorada de 2px con punto a la izquierda marcando la hora actual en semana y dia — EL uso legitimo del dorado (tiempo pasando) que convierte la grilla cruda en instrumento; en el mes, el anillo de hoy suma subrayado dorado fino solo si hay pendientes hoy.",
+          "El mes como heroe tipografico: 'julio' en font-heading text-2xl font-bold + '2026' en font-mono text-xs muted — el unico momento grande que la vista necesita y que jerarquiza toda la toolbar de un golpe.",
+          "Honestidad total: rama isError con 'No se pudo cargar tu agenda.' + Reintentar (jamas agenda vacia falsa), skeleton con la grilla real de 7 columnas, y aviso visible cuando el telefono no se puede atar ('WhatsApp desconectado: se guarda sin atar al chat' — o numero incompleto) con segundo clic para confirmar — nada se descarta en silencio.",
+          "Chips corregidos: fallback de estiloDeNota a bg-secondary text-navy (fuera el dorado 'categoría otros'), hora a font-mono text-[11px] tabular-nums (fuera el 10px), hover por profundizacion de color (fuera el scale que tiembla), '3 promesas vencidas' como BOTON que salta a la vista dia de hoy, pill 'esta semana' solo si >0 y sin contar vencidos — en cero, silencio.",
+          "Vista dia con oficio propio: componente FilaDia (hora mono w-12 + barrita vertical del tipo + nota semibold + persona muted) en vez del chip del mes estirado; en el mes, 1-3 puntitos de 3px con el color del tipo dominante bajo el numero de cada dia — la carga se lee a un metro, mapa de calor honesto sin gamificacion.",
+          "Crear en dos toques: chips de opcionesRapidas arriba del datetime (activo en bg-navy text-white) + linea viva font-mono que traduce lo elegido ('mañana jueves 23, 9:00'); form real con submit y Enter, Escape cierra, Detalle y Crear mutuamente excluyentes, borrar en dos pasos ('¿Borrar?' que revierte a los 3s), popovers con un solo marco, celdas como div role='gridcell' con Chips como unicos botones reales (fuera el HTML invalido), vacio inicial con guia ('Clic en cualquier día para tu primer seguimiento — nada se envía solo')."
+        ]
+      },
+      {
+        "vista": "Flujos transversales y teclado",
+        "cambios": [
+          "La cabina: keydown global en App — ⌘1-6 (y 1-6 fuera de inputs) conmutan vistas, Escape cierra conversacion/popover/modal SIEMPRE chequeando e.target.closest('input, textarea, select') (fix del Escape destructivo de ResponderPanel, + stopPropagation en los Escape locales de BarraGestion), '?' mantiene el mapa de teclas en font-mono estilo tabla de cabina sobre card shadow-panel.",
+          "Modo racha — el bucle que faltaba: al enviar una respuesta o marcar hecho, la Bandeja ofrece en el borde superior 'Siguiente: {nombre} · espera hace 3 h →' (Enter lo abre), con el contador de calientes bajando en vivo — la banda A del Dashboard se vuelve el metronomo del dia; progreso real en cifras, cero caricatura.",
+          "El cierre que se ve: la confirmacion de venta muestra la mini-barra del embudo con el segmento Cierre creciendo +1 en verde, el folio en font-mono copiable, y una unica accion calculada — 'Agendar bienvenida al curso' (2 clics, cae en la Agenda) — el bucle venta→postventa cierra dentro del modal.",
+          "Puentes de datos — un solo estado 'puente' en App generalizando telefonoPersonas: Contactos→chat con el numero puesto, ficha→Correos con el Para lleno, radar→Contactos con el telefono; tres dead-ends se vuelven un sistema y la vendedora no re-tipea jamas.",
+          "Los conteos cuadran entre vistas: columnas del kanban '9 de 34' contra el mismo embudo total que consume el Dashboard; el vacio de 'puedo-escribirle' ofrece la siguiente jugada ('Ver los 5 que piden info →' / 'Revisá tu Agenda'); la fila pin en la cola explica la conversacion abierta que no matchea el filtro; las gramaticas visuales se unifican (banda izquierda = temperatura en TODAS las listas; la relevancia del radar la marca su punto dorado de calientes)."
+        ]
+      }
+    ],
+    "riesgos": [
+      "Tocar las 4 lineas de styles.ts corrige media app de un golpe pero puede descolocar vistas que compensaban el doble-marco o el slab navy a mano: exige un barrido visual completo con screenshots (regla dura #2, desktop + ventana angosta) antes de reportar listo, vista por vista.",
+      "El teclado global puede colisionar con atajos del sistema y de las dos cascaras (⌘1-6 en macOS, Ctrl en Windows, Tauri vs Electron aun conviviendo): filtrar e.target siempre, probar en ambas cascaras, y aceptar degradar a 1-6 sin modificador si ⌘ esta tomado.",
+      "Mantener la Bandeja siempre montada (hidden) cambia el ciclo de vida de queries y SSE: verificar que TanStack Query no refetchee de mas, que el stream no se duplique y que el borrador por conversacion no filtre memoria — es el cambio estructural mas delicado de la direccion.",
+      "La rampa de temperatura transversal satura si se aplica a fondos o bordes en masa: la disciplina es teñir SOLO la marca de tiempo (y el filete de 2px del kanban); si ladrillo/acero empiezan a leerse como 'error', falta silencio alrededor, no mas color — auditar tras implementar.",
+      "El modo racha y 'Siguiente de la cola' rozan la gamificacion prohibida si el copy celebra: mantenerlos como metronomo sobrio (cifras y nombres, jamas elogios ni streaks con fuego) — el limite es 'Respondiste a 14 personas hoy', nunca '¡Racha de 14!'.",
+      "Varios fixes tocan copy del server (motivos de auth, status 503 de Cerberus caido) y el archivo de Bandeja exige migrar primero el vacio honesto + ADR: correr los 271 tests y ambos typechecks tras cada tanda, y no archivar nada antes de la paridad verificada."
+    ]
+  },
+  {
+    "nombre": "Cierre de edición — Hermes como redacción de diario político",
+    "tesis": "Hermes se diagrama como la redacción de un diario político: cada vista es una página con UN titular — la cifra héroe en Montserrat que responde la pregunta del momento (\"¿cuántos esperan?\", \"¿cuánto compró?\", \"¿qué mes es?\") — y todo lo demás baja a cuerpo de texto y byline. Los metadatos (horas, folios, teléfonos, totales) hablan siempre en la voz mono de imprenta: datelines con tabular-nums, nunca decoración. Los kickers se racionan como cintillos de sección — uno por página, ganado, demoliendo el default uppercase de styles.ts que hoy fabrica los 33 — y el dorado es la hora del cierre: solo aparece donde el tiempo se está acabando de verdad (ventana, vencidos, la línea del ahora), retirándolo de compuertas, conectores y fallbacks. Esta jerarquía editorial hace al CRM más entendible porque la página decide qué se lee primero (urgencia arriba, archivo al margen, lo pendiente en tinta plena y lo resuelto en gris), y más útil porque cada acción encadena a la siguiente: la vendedora opera como mesa de cierre — responder, Enter, siguiente — no como quien pasea entre pestañas.",
+    "momentos_firma": [
+      "El titular de las 9am: la banda A del Dashboard deja de susurrar — el conteo de calientes pasa a font-heading text-2xl font-bold tabular-nums con bajada en text-xs muted ('14 personas esperan · la más vieja hace 6 horas'), calculado sobre la MISMA base que el filtro. La portada del día en un golpe de vista, sin mover el h-16 ni gastar oro.",
+      "Los datelines del hilo: separadores de día como chips centrados font-mono text-[11px] ('hoy' / 'ayer' / 'lun 14 jul') que toman la tinta de la rampa temp-* cuando el último mensaje de la persona envejeció — la conversación cuenta su propio enfriamiento, que es exactamente lo que Hermes vende. Y ANTES del cierre de la ventana, la cuenta regresiva en dorado legítimo: 'Te quedan 2 días para escribirle en privado'.",
+      "La manchette del Pipeline: el contador de cada columna en font-heading text-xl font-bold tabular-nums (honesto: 'N+' o 'N de M' cuando hay paginación) sobre columnas-bandeja hundidas sin marco, con un filete izquierdo de 2px de temperatura en cada tarjeta — posición y enfriamiento en una sola lectura, el tablero legible desde el otro lado del escritorio.",
+      "La hora del cierre en la Agenda: 'julio' como titular Montserrat text-2xl bold con '2026' en mono text-xs al lado, y en semana/día una regla dorada de 2px con puntito marcando el ahora — el único oro vivo de toda la app, el tiempo pasando literalmente por la grilla.",
+      "El recibo de imprenta: al registrar la venta (con el bug de precedencia del folio arreglado), la confirmación muestra el folio en font-mono text-lg con botón 'Copiar folio', el mini-embudo con el segmento Cierre creciendo +1 en verde, y una sola acción siguiente: 'Agendar bienvenida'. La edición cerrada, verificable y encadenada."
+    ],
+    "por_vista": [
+      {
+        "vista": "Shell y navegación",
+        "cambios": [
+          "Reparar la fábrica en src/lib/styles.ts (corrige media app de un golpe): cardClass = 'rounded-2xl border border-border bg-card overflow-hidden' (borde solo; quien necesite flotar usa .shadow-panel SIN borde, caso por caso); cardHeaderClass = card blanca con hairline y título navy ('flex items-center justify-between border-b border-border px-5 py-3 font-heading text-sm font-bold text-navy') — el fill navy queda reservado al único dominante por vista; sectionLabel pierde uppercase/tracking ('text-xs font-semibold text-muted-foreground') y nace export kicker aparte para los 4-6 cintillos ganados.",
+          "Cabecera de diario: h1 de vista en font-heading font-bold, bg-card sólido sin backdrop-blur, gutter unificado con el contenido (header px-3 o Bandeja p-4 — un solo eje izquierdo).",
+          "Línea de salud unificada a la derecha del header: fusionar BarraFrescura + EstadoWhatsapp en una tira font-mono text-[11px] ('datos hace 2 h · WA conectado') que en verde se contrae y solo crece y toma color al fallar. BarraFrescura pasa a chip de una línea ('Captura detenida hace N días', border-warning/40 bg-warning/10) con popover: copy humano para la vendedora ('Los mensajes nuevos de FB/IG no están entrando. Avisá a sistemas.') y la línea npm en font-mono marcada 'para sistemas:'.",
+          "EstadoWhatsapp nunca desaparece: isPending → chip esqueleto (h-7 w-32 rounded-lg bg-muted animate-pulse), isError → punto bg-muted-foreground + 'sin señal del server' en mono; 'conectando' con punto bg-primary (el oro se retira: conectar no es tiempo que se acaba); ban con contenedor border-destructive/40 bg-destructive/10; tooltip con meta.texto humanizado, no el enum.",
+          "Riel legible: w-16 con label text-[11px] font-medium bajo cada ícono; badge de Agenda a text-[11px] en pill de 18px (fuera el 9px); segundo badge NAVY sobre Mensajes con las conversaciones sin responder — dos badges, dos significados (oro = Agenda, navy = cola), cero ambigüedad; data-tauri-drag-region en el nav; avatar rounded-lg; transition acotada a color/background/transform + active:scale-[0.96].",
+          "Borrar 'border-radius: 4px' del :focus-visible global en index.css:200 (hoy deforma cada rounded-xl/full al recibir foco).",
+          "Carga inicial como skeleton con la anatomía del shell (riel w-16 + header h-14 + 3 placas pulsando), no 'Cargando…' centrado.",
+          "Quitar key={vista}: la Bandeja queda montada siempre (hidden cuando no está activa) para no perder scroll ni borradores; la animación entre vistas se dispara por clase en useEffect y es DIRECCIONAL — el índice destino vs origen elige slide-in-from-bottom-1 o -top-1, el mismo eje del riel vertical (memoria espacial).",
+          "⌘/Ctrl+1-6 conmutan vistas (guarda de e.target en input/textarea/select), publicado en el title del riel: `${v.label} · ⌘${i+1}`."
+        ]
+      },
+      {
+        "vista": "Login",
+        "cambios": [
+          "Momento héroe institucional: banda/panel navy #0E2A52 protagonista con el escudo en gold-ink y HERMES en Montserrat text-4xl extrabold + lema 'La mesa de la vendedora' como bajada — el único lugar donde el navy puede ser fondo sin robarle a los datos. El form queda sobre el bg claro con SOLO shadow-panel (quitar border border-border: fix del doble marco que se escapó del barrido).",
+          "Firma de apertura: el escudo se dibuja al montar (stroke-dasharray/dashoffset, ~600ms, una vez; prefers-reduced-motion ya lo neutraliza).",
+          "Memoria diaria: último username en localStorage (jamás la contraseña), autoFocus directo en contraseña, título 'Hola de nuevo' cuando hay memoria.",
+          "Errores editoriales con próximo paso, mapeados en el front sin tocar API: err.status 401 → 'Usuario o contraseña incorrectos. Revisá y volvé a intentar.'; cualquier otro fallo → 'Cerberus no responde. Esperá un minuto y probá de nuevo; si sigue, avisá a sistemas.' — nunca err.message crudo (los 'fetch failed' del server van a log, no a la cara de la vendedora). role='alert' en el bloque de error.",
+          "sesion.ts deja de desloguear por un parpadeo de red: borrar el token solo ante 401 real (err instanceof ErrorApi && status === 401); ante red caída, estado 'no pude conectar con el server' con botón reintentar.",
+          "Un solo lenguaje de foco: inputs con focus-visible:border-primary + ring-2 ring-primary/25; botón con focus-visible:ring-2 ring-primary/40 ring-offset-2.",
+          "Botón a 200ms con la curva de la casa (transition-[background-color,transform], fuera el duration-500 y el transition-all); aria-busy={enviando} con aria-busy:opacity-90 aria-busy:cursor-wait — trabajando ≠ deshabilitado.",
+          "Labels en sentence case text-xs font-semibold text-muted-foreground (−2 kickers); una sola mención de Cerberus (muere el placeholder redundante); detector de CapsLock con getModifierState → renglón font-mono text-[11px] 'Mayúsculas activadas'."
+        ]
+      },
+      {
+        "vista": "Dashboard (radar)",
+        "cambios": [
+          "El titular de las 9am: nCalientes en font-heading text-2xl font-bold tabular-nums + 'personas esperan · la más vieja hace 6 h' en text-xs muted, calculado sobre la MISMA unión chats+formularios que usa el filtro (o decir explícitamente 'chats calientes') — el número y lo que se ve siempre cuadran.",
+          "Gradiente de enfriamiento: teñir el hace() de cada fila con la rampa existente (temperatureOf + TEMPERATURE_META.text — frio ladrillo, helado acero; muted para fresco/tibio; gold-ink intacto para la ventana 20-24h). La columna derecha del radar se vuelve un termómetro escaneable sin un solo chip nuevo.",
+          "Datelines con voz de imprenta: todo hace()/timestamp del radar en font-mono text-[11px] tabular-nums.",
+          "Ración de kickers 5→1: eliminar el h2 'El radar' (el punto vivo + contador YA identifican la zona; aria-label en la section); 'Embudo · 38' pasa a frase de dato ('38 en el embudo', text-xs font-medium normal-case); 'Qué piden' a sentence case; solo 'Equipo' conserva el cintillo.",
+          "Riel honesto: cortar por isPending ANTES de evaluar vacíos — skeletons con forma (barra h-2, 5 líneas de anchos desiguales, 3 filas h-6) en vez de los tres empty-states falsos ('calma falsa' fuera).",
+          "Jerarquía física del riel: cards secundarias a rounded-xl p-3.5 (retroceden); rounded-2xl solo en banda A y radar.",
+          "Teclado en el radar: onKeyDown Enter/Espacio en la fila; acciones visibles-atenuadas (quitar opacity-0: text-muted-foreground group-hover:text-navy + focus-within) y Llamar/Buscar como <button> reales; filas sin teléfono pierden cursor-pointer y hover, y muestran el correo con 'Copiar' o 'Mandar correo'.",
+          "Copys de página: landings sin jerga ('falta que Sistemas conecte Bravo. No es que no caigan.' — el runbook al comentario del código); pills vencidas con hace() ('· hace 10 días', no '· lun'); leyenda del embudo con palabra completa (fuera el slice(0,3)); micro-tipos del Equipo a text-[11px] y 'vos' como ring-2 ring-navy en el avatar; cierre honesto de lista: 'Mostrando los 80 más recientes de N — afiná los filtros'.",
+          "El radar que se siente radar: fila nueva del SSE entra con translate-y-1+fade (200ms, curva de la casa) y bg-secondary que decae ~2s — el 'en vivo' se ve caer.",
+          "Skeleton del radar con anatomía de fila (2 líneas, border-b, anchos variados), no bloques genéricos; CTA con transition acotada y curva de la casa; pills con active:scale-[0.98]; EtiquetaInline guarda en blur (Escape queda como único descarte)."
+        ]
+      },
+      {
+        "vista": "Pipeline (kanban)",
+        "cambios": [
+          "Manchette por columna: contador en font-heading text-xl font-bold tabular-nums (muted en Perdidos) con el título en 13px al lado; HONESTO — con hayMas renderizar 'N+' (aria-label 'al menos N') o 'N de M' usando el mismo dato de embudo que ya alimenta al Dashboard (query local, sin API nueva): se acaba el jefe-ve-34/vendedora-ve-9.",
+          "Profundidad de un solo nivel: columna = bandeja hundida 'rounded-2xl bg-secondary/50 p-2' SIN borde ni sombra (destino: bg-secondary + ring-1 ring-primary/40); tarjeta = única placa, solo sombra ('bg-card shadow-[0_1px_2px_rgba(14,42,82,0.06)] hover:shadow-panel', fuera el border). Dos violaciones de sombra-O-borde resueltas jerarquizando.",
+          "Mapa térmico: filete izquierdo border-l-2 con el color temp-* según edad en cada tarjeta + hace() teñido con la misma rampa (helper compartido con la Cola) — posición y enfriamiento en una sola lectura.",
+          "Cierre deja de ser drop condenado: en soltar(), etapa==='cierre' → abrir Registrar venta con la conversación precargada (no mover.mutate); durante el arrastre el header de Cierre dice 'Soltá para registrar la venta'. Cierre con acento (h3 text-navy, tick verde cuando >0).",
+          "Aviso de compuerta en voz de bloqueo, no de tiempo: border-border bg-secondary/70 con AlertTriangle text-temp-frio (fuera el dorado), SIN autodestrucción a los 8s (se limpia al próximo arrastre o con X), aria-live='polite', y ring-1 ring-temp-frio temporal en la tarjeta rebotada + copy '— agregalo en la tarjeta, acá abajo' apuntando al Intereses inline.",
+          "Perdidos como cajón de archivo: columna 0.75fr, border-dashed atenuada, header muted — cuatro columnas vivas + un archivo + una meta se leen solos.",
+          "Física del arrastre: onDragEnd limpia el estado colgado; la tarjeta arrastrada con opacity-40 scale-[0.98] (deja hueco); placeholder punteado 'Soltá acá' también al final de columnas CON tarjetas; actualización optimista en onMutate con rollback en onError (la compuerta rechaza y la tarjeta vuelve sola).",
+          "Skeleton con la grilla real (5 secciones, bloques h-16 pulsando); grid-cols-[repeat(5,minmax(190px,1fr))] con overflow-x-auto; focus-visible:opacity-100 en 'Abrir en la Bandeja'; active:scale-[0.98] en botones; fuera la instrucción permanente de la barra (solo visible durante arrastre) y el letrero 'Vacía' repetido."
+        ]
+      },
+      {
+        "vista": "Mensajes — cola unificada",
+        "cambios": [
+          "La fila como cable de agencia, 2 renglones: fuera 'Mensaje'/'Comentario' (BadgeCanal y el 'en «…»' ya lo dicen); contador de mensajes como burbuja bg-primary text-[11px] tabular-nums a la derecha SOLO si !respondida; el check de respondida junto al timestamp.",
+          "Peso invertido — lo pendiente en tinta: preview de !respondida en text-foreground (font-medium solo con pide_info); nombre de respondida baja a font-medium text-muted-foreground; el tinte bg-success/5 queda como descanso.",
+          "Columna derecha de dos líneas: chip dorado de ventana arriba + timestamp font-mono text-[11px] tabular-nums debajo (flex-col items-end) — nunca más urgencia sin saber cuándo escribió; unificar copy a 'quedan 5 días'.",
+          "Vacíos honestos: portar vacioPorAtraso de Bandeja (useFrescura → 'No hay nada acá, pero no es porque estés al día. La última captura fue hace N…'); el dead-end de búsqueda se resuelve renderizando 'Buscar en más historia' como botón real bajo el vacío (cargarMas, w-full); copy sin 'matchea' («Ninguna conversación cargada coincide con \"{busqueda}\"»).",
+          "Cierre de edición despachada (momento firma menor): cola de 'Les puedo escribir' en cero CON frescura viva → 'Respondiste a 14 personas hoy' en font-heading text-3xl navy + la siguiente jugada calculada ('Ver los N que piden info →' o 'Revisá tu Agenda').",
+          "Header fusionado en un solo bloque con una división: búsqueda (mb-2) + fila de filtros con '128 en cola' en font-mono text-[11px] tabular-nums (cifra con sustantivo y voz instrumento).",
+          "Kicker 'Pide info' → chip sentence-case bg-primary/10 text-[11px], oculto cuando el filtro activo ya es pide-info (prop mostrarPideInfo).",
+          "Teclado de despacho: '/' enfoca búsqueda, Escape la limpia, ↑↓+Enter recorren la cola (roving tabindex) — bajar la cola sin mouse ES atender una cola.",
+          "Seleccionada con filo derecho: bg-secondary + shadow-[inset_-3px_0_0_var(--color-primary)] (apunta a la conversación abierta; no choca con la banda de temperatura izquierda) + active:bg-muted.",
+          "Skeleton de 6 filas con anatomía real (avatar + 2 barras); fila nueva del SSE entra con slide-in-from-top-1 (300ms curva de la casa); fila pin cuando la conversación abierta no matchea el filtro ('Abierta desde Dashboard — no coincide con «{filtro}»' + 'Ver en Todo'); teléfono-como-nombre en font-mono con espacios ('51 986 394 450', helper compartido); VENTANA_DIAS importada de types (fuera la const local); transition-all acotadas; archivar Bandeja/FilaInteraccion/useBandeja con ADR (regla dura #3) tras migrar el vacío honesto."
+        ]
+      },
+      {
+        "vista": "Mensajes — conversación",
+        "cambios": [
+          "Datelines (momento firma): separadores de día entre grupos — chip centrado mx-auto rounded-full bg-muted font-mono text-[11px] con 'hoy'/'ayer'/'lun 14 jul'; cuando el último mensaje de la persona tiene más de un día, el separador toma la tinta de la rampa (tibio dorado, frío ladrillo) — el hilo cuenta su enfriamiento.",
+          "La cuenta regresiva viva en QuePuedoHacer: con cap.dias a 1-2 días del cierre, línea dorada legítima 'Te quedan 2 días para poder escribirle en privado' — el oro llega ANTES de que sea tarde; y el aviso de ventana ya cerrada pasa a text-gold-ink (tinta legible, mismo patrón que BannerSesion).",
+          "Depuración del oro: BadgeOrigen de anuncio a bg-secondary text-secondary-foreground (como landing); si necesita distinguirse, el Megaphone en text-navy — el origen no es tiempo.",
+          "Fix doble marco de burbujas (también en HiloMessenger): entrante = bg-card ring-1 ring-border SIN sombra; la sombra queda solo en la saliente.",
+          "Una sola cabecera de conversación para los tres canales: nombre en font-heading text-sm font-bold, avatar rounded-[11px] (el de la casa), px-4 py-3 — la columna deja de cambiar de piel al cambiar de canal.",
+          "El comentario como cita editorial en ResponderPanel: font-heading text-lg con comilla de apertura grande en navy y filete izquierdo del color del canal — 'esto dijo, así respondo' en un golpe de vista.",
+          "Mesa de despacho: tras enviar, la tarjeta 'Respondido' suma 'Siguiente de la cola' (Enter) — responder → siguiente → responder sin volver al mouse.",
+          "Composer toma foco al abrir la conversación (useEffect sobre telefono, solo si conectado) — cierra el gesto que el placeholder promete.",
+          "Foco e input parejos: focus-visible:ring en los 4 botones (enviar, adjuntar, quitar adjunto, X); textareas de ResponderPanel con focus:border-primary como el composer.",
+          "Animación con criterio: entrada solo para mensajes nuevos (set de ids en un ref) o los últimos 3 con stagger de 40ms, duration-300; skeleton de burbujas fantasma alternadas (anchos w-40/56/64) en ambos hilos.",
+          "Copys de imprenta: plural humano en ResponderPanel (hoy/ayer/hace N días); fallback por canal ('Alguien en Instagram'); '${cap.dias} días' con unidad; voseo unificado ('Qué podés hacer', 'Mandale', 'Podés borrarlo'); '…' tipográfico en las 4 apariciones; plantilla pública humana sin triple exclamación; kickers 4→1 (solo el título de QuePuedoHacer); el aviso 'se ve desde que se vinculó' baja a texto suelto text-[11px] o solo con <5 mensajes; HistorialPersona con skeleton + catch visible ('No pudimos cargar su historial…'); vacío de Messenger con porqué y link a Business Suite."
+        ]
+      },
+      {
+        "vista": "Gestión y panel derecho",
+        "cambios": [
+          "La cifra héroe de la ficha (momento tipográfico que falta): al resolver cliente, abrir con la suma — 'S/ 1.850' en font-heading text-2xl font-bold tabular-nums text-navy + 'en 3 compras' text-[11px] muted; los folios pasan a detalle con fecha font-mono corta ('12 mar 2026') y estado con color semántico (success/destructive/muted).",
+          "Una sola primaria en la columna: 'Registrar venta' queda como única navy; 'Registrar gestión' baja a secundario (border border-border bg-card text-navy hover:bg-muted).",
+          "Especializar los dos mandos duplicados: RegistrarGestion pierde etapa e intereses (viven en BarraGestion, 1 clic) y se renombra a su valor real — 'Notas y próxima acción'; Guardar deshabilitado hasta que haya algo (fuera el default silencioso a 'contactado'); sus 5 kickers pasan a labels sentence case.",
+          "El recibo de imprenta: fix del bug de precedencia (envolver el ternario para que el folio salga TAMBIÉN en venta) y pantalla de éxito con folio en font-mono text-lg + 'Copiar folio'; el sufijo '— la próxima acción está en tu Agenda' se lee de crear.variables (no del estado ya reseteado).",
+          "La compuerta que guía: error en familia warning (fuera el dorado, en BarraGestion y RegistrarGestion), sin autodestrucción a los 8s, + ring-2 ring-primary temporal al control de Intereses con foco en su buscador — el freno se convierte en el siguiente paso.",
+          "Errores visibles en lo que importa: onError en etiquetas ('No se guardó la etiqueta — probá de nuevo.'), en intereses ('No se guardó el interés — sin esto, Cotizado no abre.') y en Marcar como interesado — nada muta en silencio.",
+          "Intereses con teclado honesto: con sugerencias visibles, Enter agrega la primera (o la resaltada con ↑↓); texto libre solo sin resultados — fin de los duplicados 'diplomado lider'.",
+          "BotonLlamar con red real: el modo compacto envuelto en <button> con aria-label; el popover de copiar SIN timeout de 6s (cierra por click afuera/Escape) y sin doble marco (solo shadow-panel). Ídem popover de Agendar: fuera el border, Escape y click afuera cierran, spinner solo en el chip clickeado, y el éxito confirma el DATO ('Agendado · Mañana 9:00' en bg-success/10).",
+          "'Perdido' fuera del segmented: separador ml-1 border-l, chip en text-muted-foreground hover:text-destructive, confirmación inline '¿Perdido? Sí / No' — un misclic ya no mata el lead.",
+          "Modal de venta con oficio: Escape cierra + role='dialog' aria-modal + foco inicial; país precargado de la ficha y moneda de localStorage('hermes.ultimaMoneda') con copy 'precargado de la ficha — cambialo si hace falta'; monto total en font-heading text-2xl tabular-nums text-navy CON la moneda al lado; 'Elegí moneda' (voseo, fuera el 'Seleccione').",
+          "Ración de kickers 9→2 en 288px: fuera 'Contexto' (el avatar-header ES el título), 'Ficha de Cerberus' a sentence case; quedan solo 'Comentó en'/'De dónde vino'.",
+          "Micro-oficio: X de etiquetas/intereses con focus-visible:opacity-100 (y opacity-40 base en touch); Cerberus-caído con text-warning-foreground (no gold-ink); skeleton de la ficha con forma (badge+nombre+fila mono+2 compras); duration-200 en Registrar venta; +/− de cantidad a size-6 con borde y active:scale-95; capitalize fuera ('Sin gestión' literal); BadgeCanal sin inicial bajo 18px; jerga 'tb_contacto_canal' reescrita humana."
+        ]
+      },
+      {
+        "vista": "Contactos (VistaPersonas)",
+        "cambios": [
+          "Spotlight editorial: sin búsqueda activa, la barra centrada verticalmente y generosa (input text-base) con el caso de uso contado debajo ('¿Te dictaron un número o llegó por Messenger sin teléfono? Pegalo: te digo si ya es cliente de la Escuela.'); al buscar, se acopla arriba con transform de 250ms — fin del vacío inicial null.",
+          "Ficha con titular: nombre a font-heading text-2xl font-bold + cifra héroe '2 compras · USD 1.250' en font-heading text-xl tabular-nums text-navy — la pregunta de la vendedora respondida en el primer golpe.",
+          "Fin del dead-end (el hallazgo de flujo más caro): fila de acciones bajo el header — 'Escribirle' primario (levanta onAbrirChat(telefono) a App reusando la fábrica de chat nuevo de ColaUnificada) + BotonLlamar + 'Registrar venta' si cliente (reusa FormularioVenta); el lead nuevo gana continuidad: 'Cuando le registres una venta, la ficha aparece sola acá.' + link 'Buscarlo en Mensajes'.",
+          "Fix doble marco ×3: quitar border border-border de skeleton, 'nuevo' y ficha — queda bg-card shadow-panel como en Correos.",
+          "Skeleton con la forma de la ficha (pill de badge + barra de nombre + fila de meta + grid de 2 compras) y entrada única del resultado con animate-[entrar_240ms] (opacity+translateY 4px).",
+          "Fechas y estados humanos: v.fecha con toLocaleDateString('es', {day,month,year}) y fallback al crudo; v.estado en font-medium con color semántico si el set es conocido.",
+          "Hint al submit inválido: 'Faltan dígitos — incluí el código de país (51 …)' en text-[11px] bajo el input (el Enter mudo muere).",
+          "Búsquedas recientes como chips font-mono bajo la barra (últimos 3 teléfonos, estado local) — 'me lo dictaron y lo vuelvo a necesitar en cinco minutos'.",
+          "Micro: aviso de sistema caído con text-warning-foreground (el gold-ink vuelve a ser solo tiempo); copy sin 'matchea' ('Busca solo por teléfono. El nombre o el usuario de Instagram llegan con la identidad entre canales.'); focus-visible en Buscar y 'Ver en Cerberus'; fuera el mt-4 vestigial."
+        ]
+      },
+      {
+        "vista": "Correos (VistaCorreos)",
+        "cambios": [
+          "Estados honestos primero: enviados.isPending → 3 filas skeleton con la forma de la lista (dot + barras); enviados.isError → 'No se pudo cargar la lista — no es que no haya correos.'; estado.isError se ramifica ANTES del aviso SMTP ('No se pudo consultar el estado del canal — reintentá'): el 'falta SMTP' solo cuando el server lo confirma.",
+          "El fallido a la vista: chip visible en la fila 'falló · {motivo}' (bg-destructive/10 text-destructive text-[11px]) — fuera el title escondido en un punto de 6px; el dot queda para los enviados.",
+          "Aviso fail-closed con la audiencia ordenada: primero la parte humana ('El canal de correo todavía no está conectado. Es un paso de sistemas — esta pantalla se enciende sola cuando esté.'), la línea técnica al final en font-mono text-[11px] 'para sistemas: SMTP_HOST · SMTP_USER · SMTP_PASS en el .env'; <b> → span font-semibold; tinta text-warning-foreground (no gold-ink).",
+          "Jerarquía editorial: h1 'Nuevo correo' a font-heading text-lg font-bold; 'Últimos enviados' con fechas relativas humanas ('hace 2 h') agrupadas por día — la coordinación del equipo como sección de agenda del diario.",
+          "⌘↵ envía desde el textarea (con las guardas del disabled) + microcopy '⌘↵ para enviar'; aria-labels en Para/Asunto/Cuerpo y el foco de la casa (focus:shadow ring suave) igualando a Personas.",
+          "El encendido visible: cuando conectado pasa a true, 'desde mail.goberna.us' entra con una única transición opacity/translate — el estado honesto se VE cambiar.",
+          "Puente desde la ficha: aceptar correoInicial como prop (mismo patrón telefonoPersonas → App) para llegar con el Para lleno.",
+          "Micro: transición del botón Enviar con duration-200 y la curva de la casa; lista con basis-48 shrink min-w-0 truncate (el asunto nunca colapsa a cero) y columna vendedora hidden sm:block."
+        ]
+      },
+      {
+        "vista": "Agenda (calendario)",
+        "cambios": [
+          "El mes como titular (momento firma): 'julio' en font-heading text-2xl font-bold tracking-tight + '2026' en font-mono text-xs muted al lado — un solo cambio jerarquiza toda la toolbar; text-xl en modo día.",
+          "La línea del ahora (momento firma): en semana y día, regla horizontal de 2px bg-gold con puntito a la izquierda marcando la hora actual — EL uso legítimo del oro; en el mes, el anillo de hoy suma subrayado dorado fino solo si hay pendientes hoy.",
+          "Presupuesto del oro saneado: fallback de estiloDeNota a neutro (bg-secondary text-navy — nunca oro para 'sin tipo'); pill 'esta semana' solo si >0 y sin contar vencidos; hora del chip a font-mono text-[11px] tabular-nums (fuera el 10px).",
+          "Vencidos accionables: '3 promesas vencidas' como botón (hover:bg-destructive/20) que salta a la vista día de hoy — el grito del docstring gana su camino de un clic.",
+          "Estados honestos: rama isError con 'No se pudo cargar tu agenda.' + Reintentar (fin del mes-vacío-mentiroso); loading como skeleton con la grilla real de 7 columnas; vacío total con guía encajada bajo la cabecera ('Clic en cualquier día para tu primer seguimiento — nada se envía solo.').",
+          "HTML sano: la celda del día pasa a div role='gridcell' con onClick (los Chips quedan como únicos <button>); '+N más' como botón real — teclado y lector de pantalla vuelven a funcionar.",
+          "FilaDia propia para el modo día (fuera el chip reciclado): hora en font-mono w-12 + barrita vertical de 1px×8 con el color del tipo + nota text-sm font-semibold + persona en text-[11px] muted — densidad de fila con oficio en el lienzo grande.",
+          "Densidad legible a un metro: bajo el número de cada día del mes, 1-3 puntitos de 3px con el color del tipo dominante — mapa de calor honesto sin gamificación.",
+          "Crear con oficio: fila de chips de opcionesRapidas arriba del datetime (activo en bg-navy text-white; el datetime queda como ajuste fino); línea viva font-mono que traduce lo elegido ('mañana jueves 23, 9:00'); form real con submit (Enter agenda), Escape cierra, Detalle y Crear mutuamente excluyentes.",
+          "Dato nunca descartado en silencio: teléfono tipeado con WhatsApp caído o incompleto → aviso text-[11px] con el motivo real ('WhatsApp desconectado: se guarda sin atar al chat') y segundo clic para confirmar sin atar.",
+          "Borrar con red: primer clic arma '¿Borrar?' en destructive (revierte solo a los 3s), el segundo borra — coherente con la red de Llamar.",
+          "Micro: fuera el doble marco de los popovers Detalle y Crear (solo la sombra en capas, subida a 0.10 si falta definición); hover del chip por color (brightness/ring), no scale que borronea texto truncado."
+        ]
+      },
+      {
+        "vista": "Flujos transversales y teclado",
+        "cambios": [
+          "Teclado global en App (la cáscara se vuelve instrumento): ⌘/Ctrl+1-6 conmutan vistas, Escape cierra la conversación SOLO en bandeja y SOLO si e.target no está en input/textarea/select (fix del Escape destructor de borradores: stopPropagation además en los handlers internos de BarraGestion/EtiquetasInline); '/' enfoca la búsqueda de la cola; ↑↓+Enter la recorren.",
+          "Overlay '?' con el mapa de teclas en font-mono estilo tabla de cabina (card con shadow-panel: 1-6 vistas · / buscar · ↑↓ cola · Enter abrir · Esc cerrar) — los atajos como parte del instrumento, no feature pegada.",
+          "MODO RACHA — el metrónomo del cierre: al enviar una respuesta o marcar hecho, la Bandeja ofrece en el borde superior 'Siguiente: {nombre} · espera hace 3 h →' (Enter lo abre) con el contador de calientes bajando en vivo — la vendedora liquida la mañana sin volver al Dashboard; progreso real, cero caricatura.",
+          "EL CIERRE QUE SE VE: la confirmación de venta muestra el mini-embudo con Cierre creciendo +1 en verde + folio font-mono copiable + única acción siguiente 'Agendar bienvenida' (2 clics, cae en la Agenda) — el bucle venta→postventa cierra dentro del modal.",
+          "LOS DATOS VIAJAN: generalizar telefonoPersonas a un único estado `puente` en App — 'Escribirle' desde Contactos abre chat nuevo con el número puesto; 'Mandar correo' desde la ficha llega a Correos con el Para lleno (la ficha por fin renderiza data.correo en la fila mono); tres dead-ends se vuelven un sistema.",
+          "Un solo canon visual entre listas: la banda izquierda = TEMPERATURA en todas (cola, radar, kanban); la relevancia 'alta' del radar la marca el punto dorado que ya usa; ETAPA_CHIP extraído a módulo compartido y sumado a FilaConversacion — el mismo lead se lee igual en todas partes.",
+          "Coherencia de cifras entre vistas: el kanban muestra 'N de M' con el mismo total que el embudo del Dashboard; la cola muestra fila pin cuando la conversación abierta no matchea el filtro persistido — nadie queda huérfano de contexto al saltar de vista.",
+          "El lead nuevo gana camino a la venta: bajo 'Marcar como interesado', link honesto 'Crear cliente en Cerberus →' (target _blank) con copy 'al volver, refrescá la ficha' — la promesa se sincera mientras no exista el alta proxy."
+        ]
+      }
+    ],
+    "riesgos": [
+      "La metáfora editorial tienta a agrandar de más: cada vista tolera UN solo titular — si la banda A, el radar y el riel ganan cifras héroe a la vez, vuelve el ruido. Auditar cada vista terminada contra 'un dominante por pantalla' antes de pasar a la siguiente.",
+      "El presupuesto del oro es frágil durante la transición: la línea del ahora y la cuenta regresiva SUMAN oro, así que los retiros (compuertas, 'conectando', fallback de agenda, badge de anuncio, avisos de sistema caído) deben salir en el MISMO PR — un estado intermedio con oro viejo y nuevo diluye el significado que la dirección entera defiende.",
+      "Tocar styles.ts (cardClass/cardHeaderClass/sectionLabel) corrige media app de un golpe pero también la cambia de golpe: cualquier vista que compensaba el doble marco o dependía del slab navy puede quedar rara. Exige barrido visual con screenshots por vista (regla dura #2) en el mismo PR, no después.",
+      "Quitar key={vista} y mantener la Bandeja montada con hidden cambia el ciclo de vida de queries y del SSE: riesgo de refetch fantasma o listeners duplicados. Probar con el transporte falso, verificar que el borrador sobrevive al ida-y-vuelta de vistas, y tener el fallback (persistir borrador por conversación fuera del componente) listo.",
+      "El teclado global convive con inputs por toda la app: sin la guarda de e.target rigurosa y el stopPropagation en los Escape internos, los atajos 1-6 y Esc se vuelven destructores de borradores (el bug del Escape de ResponderPanel ya lo demostró). Testear el mapa de teclas con foco en cada tipo de campo.",
+      "Riesgo de alcance e hibridez: son 11 superficies; implementar por vista suelta deja semanas de app con dos gramáticas. Orden obligado: (1) styles.ts + index.css + presupuesto del oro, (2) momentos firma por vista, (3) teclado y puentes — cada fase entregable y verificada con screenshot antes de la siguiente."
+    ]
+  },
+  {
+    "nombre": "Todo sobre la mesa",
+    "tesis": "Hermes deja de ser un tablero de administración y se convierte en la mesa de trabajo de una persona que atiende personas: cada superficie pone a la persona sobre la mesa (nombre grande en Montserrat, su tiempo visible en la rampa de temperatura) y responde siempre la pregunta \"¿y ahora qué?\" con la siguiente jugada calculada. La mesa se despeja por sustracción: los ~33 kickers bajan a ~6 arreglando la fábrica (styles.ts), el navy pleno y el dorado se vuelven escasos, y el silencio en verde compra señal cuando algo falla — los estados honestos se cumplen hasta en la carga (skeleton con forma, nunca un vacío que miente). La app conversa en una sola voz: voseo cálido para guiar, font-mono instrumento para metadatos, y cero jerga de developer frente a la vendedora (lo técnico vive en popovers \"para sistemas\"). Y sobre todo, la mesa encadena: responder ofrece el siguiente, la venta ofrece la bienvenida, el teléfono viaja entre vistas sin re-tipearse — Hermes pasa de traerte al trabajo a pasarte al siguiente.",
+    "momentos_firma": [
+      "EL SALUDO DE LA MAÑANA — el Login recuerda: banda navy protagonista con HERMES en Montserrat text-4xl, el escudo dorado se dibuja una vez al montar (stroke-dasharray ~600ms, respeta reduced-motion), el último usuario precargado de localStorage, título 'Hola de nuevo' y foco directo en la contraseña. El primer contacto del día es un ritual de 3 segundos, no un form.",
+      "EL TITULAR DE LAS 9AM — la banda A del Dashboard habla como diario: '14 personas esperan' en font-heading text-2xl tabular-nums + '· la más antigua hace 6 horas' en text-xs muted, con el CTA 'Atender a la primera' como única primaria. La cifra que gobierna el día por fin titula, sin mover el layout ni gastar oro.",
+      "EL GRADIENTE DE ENFRIAMIENTO — la rampa temp-* existente tiñe el tiempo en TODA la app con una sola gramática: el hace() de cada fila del radar y la cola, un filete izquierdo de 2px en cada tarjeta del kanban, y los separadores de día del hilo ('hoy'/'ayer'/'lun 14 jul' en chips font-mono que toman tinta tibia/fría según el gap). El enfriamiento del lead se ve como fenómeno físico al escanear; el dorado queda intacto solo para la ventana que se cierra.",
+      "SIGUIENTE: {NOMBRE} — el modo racha: al enviar una respuesta o marcar hecho, una banda superior ofrece 'Siguiente: Rosa · espera hace 3 h →' (Enter la abre) y el contador de calientes baja en vivo; cuando la cola queda despachada con frescura viva, el vacío se gana la única cifra héroe de la vista: 'Respondiste a 14 personas hoy' en font-heading text-3xl navy. Progreso real, celebración sobria, cero confeti.",
+      "EL RECIBO DEL CIERRE — registrar la venta termina en un recibo, no en un check: el folio en font-mono text-lg con botón 'Copiar folio' (para pegarlo al cliente en el chat), el mini-embudo con el segmento Cierre creciendo +1 en verde, y una sola acción calculada debajo: 'Agendar bienvenida al curso' que cae en la Agenda en dos clics. El bucle venta→postventa cierra dentro del mismo modal."
+    ],
+    "por_vista": [
+      {
+        "vista": "Shell y navegación",
+        "cambios": [
+          "Demoler la fábrica de slop en src/lib/styles.ts (arregla media app en 3 líneas): cardClass = 'rounded-2xl border border-border bg-card overflow-hidden' (borde solo; quien necesite flotar usa .shadow-panel SIN borde, caso por caso); cardHeaderClass = 'flex items-center justify-between border-b border-border px-5 py-3 font-heading text-sm font-bold text-navy' (adiós slab navy de admin-template); sectionLabel = 'text-xs font-semibold text-muted-foreground' sin uppercase, y un export nuevo kicker = 'text-[11px] font-bold uppercase tracking-wide text-muted-foreground' solo para los 4-6 usos ganados.",
+          "Riel w-16 con etiqueta: ícono + <span className='mt-1 text-[11px] font-medium leading-none'>{v.label}</span> en columna — la vendedora nueva navega leyendo, no adivinando; title={`${v.label} · ⌘${i+1}`} publica el atajo.",
+          "Dos badges, dos significados: el de Agenda sube al piso (pill 18px, font-mono text-[11px] font-bold, ring-2 ring-card — nunca más 9px) y Mensajes gana un contador NAVY con las conversaciones sin responder — el oro queda solo para la Agenda por contraste, cero ambigüedad.",
+          "Línea de salud unificada: fusionar BarraFrescura + EstadoWhatsapp en una sola línea font-mono a la derecha del header ('datos hace 2 h · WA conectado') que en verde se contrae a su mínima expresión y solo crece y toma color al fallar; nunca null — isPending muestra chip esqueleto (h-5 rounded-md bg-muted animate-pulse), isError muestra 'sin señal del server' con punto muted; ban con contenedor border-destructive/40 bg-destructive/10 (el estado grave pesa como grave).",
+          "Copy en el idioma de la vendedora: 'Captura detenida hace N días — los mensajes de Facebook e Instagram no están entrando. Avisá a sistemas.' como chip de una línea; la instrucción npm vive en un popover al click, marcada 'para sistemas:' en font-mono text-[11px].",
+          "El dorado deja de conectar: punto de 'conectando…' a bg-primary animate-pulse (azul = actividad del sistema); 'desconectado' con texto text-foreground font-semibold y punto bg-warning (ámbar semántico ≠ oro de marca); tooltip con meta.texto humanizado, no el enum 'sin-vincular'.",
+          "⌘/Ctrl 1–6 conmutan vistas (keydown global ignorando inputs) y la transición entre vistas es direccional: el índice destino vs origen elige slide-in-from-bottom-1 o -top-1 — el riel vertical gana memoria espacial, solo transform/opacity con la curva de la casa.",
+          "La Bandeja queda SIEMPRE montada (hidden cuando vista!=='bandeja') en vez del key={vista} que remonta todo: el borrador de la vendedora y el scroll sobreviven al mirar la Agenda; las vistas que 'miran' sí pueden remontar.",
+          "Skeleton del shell al arrancar con su anatomía (riel w-16 + header h-14 + 3 bloques rounded-2xl pulsando) en vez del 'Cargando…' con flash blanco.",
+          "Higiene: borrar el border-radius:4px del :focus-visible global (las esquinas dejan de saltar con teclado), data-tauri-drag-region en el nav (paridad Tauri/Electron), bg-card sólido sin backdrop-blur, gutter unificado header/Bandeja (un solo eje izquierdo), transition-[color,background-color,box-shadow,transform] + active:scale-[0.96] en botones del riel, avatar a rounded-lg (token, no arbitrario)."
+        ]
+      },
+      {
+        "vista": "Login",
+        "cambios": [
+          "Momento héroe institucional: banda superior navy #0E2A52 con HERMES en font-heading text-4xl extrabold y el escudo encima — el único lugar de la app donde el navy puede ser fondo protagonista sin robarle a los datos; el form queda en card sobre el bg claro con shadow-panel SOLO (quitar border border-border: era el doble marco que se escapó del barrido).",
+          "El escudo se dibuja al montar: stroke-dasharray/dashoffset ~600ms una sola vez, curva de la casa — la única animación de marca de la app, en la única pantalla donde el escudo es protagonista; prefers-reduced-motion ya la apaga.",
+          "Login con memoria diaria: último username en localStorage (jamás la contraseña), campo precargado, autoFocus en contraseña, título 'Hola de nuevo' — le ahorra la mitad del form el 99% de las veces.",
+          "Errores que dicen qué hacer, mapeados en el front por status (no por texto): err.status===401 → 'Usuario o contraseña incorrectos. Revisá y volvé a intentar.'; cualquier otro fallo → 'Cerberus no responde en este momento. Esperá un minuto y volvé a intentar; si sigue, avisá a sistemas.' — nunca más 'fetch failed' en la cara de la vendedora (el detalle técnico a console.error).",
+          "sesion.ts deja de desloguear por un parpadeo de red: el token se borra solo ante 401 real (err instanceof ErrorApi && status===401); ante error de red, estado 'no pude conectar' con botón reintentar.",
+          "Detector de CapsLock: getModifierState('CapsLock') → renglón 'Mayúsculas activadas' en font-mono text-[11px] bajo la contraseña — mata la causa #1 del error antes de que pase, en la voz instrumento.",
+          "Un solo idioma de foco: inputs con focus-visible:border-primary + ring-2 ring-primary/25; botón con ring-2 ring-primary/40 ring-offset-2 — se acaba el ring nativo mezclado.",
+          "Estado 'trabajando' distinto de 'apagado': aria-busy={enviando} con aria-busy:opacity-90 aria-busy:cursor-wait; el opacity-40 queda solo para campos vacíos; role='alert' en el bloque de error.",
+          "Sustracción: labels a sentence-case text-xs font-semibold (−2 kickers), una sola mención de Cerberus (muere el placeholder redundante), transiciones a duration-200 con la curva de la casa limitadas a background-color/transform."
+        ]
+      },
+      {
+        "vista": "Dashboard (radar)",
+        "cambios": [
+          "El titular de las 9am: la banda A abre con '14 personas esperan' en font-heading text-2xl font-bold tabular-nums + '· la más antigua hace 6 horas' en text-xs muted (dato de `atender` ya calculado) — Montserrat por fin titula algo; el punto dorado de calientes se queda, y el contador se calcula sobre LA MISMA base que el filtro 'Solo calientes' (chats+forms) para que el número siempre cuadre con las filas.",
+          "El gradiente de enfriamiento en el radar: teñir el hace() de cada fila con la rampa existente (temperatureOf → TEMPERATURE_META[t].text para frío ladrillo y helado acero; muted para fresco/tibio; gold-ink intacto en la ventanita 20-24h) — la columna derecha se vuelve un mapa de enfriamiento escaneable sin un solo chip nuevo.",
+          "El riel deja de mentir en la carga: cortar por isPending ANTES de evaluar vacíos — skeletons con forma (barra de embudo h-2, 5 líneas desiguales de cursos, 3 filas de equipo) y recién después el vacío real; el skeleton del radar pasa a 8-10 filas con la anatomía de la fila (2 líneas, borde inferior, anchos variados).",
+          "Operable sin mouse: onKeyDown Enter/Espacio abre la fila (hoy role=button muerto); las acciones dejan la trampa de opacity-0 → visibles-atenuadas (text-muted-foreground group-hover:text-navy + focus-within); Llamar y Buscar como <button> reales.",
+          "Ración de kickers de 5 a 1: muere el h2 'El radar' (el punto vivo + contador YA identifican la zona; aria-label en la section), 'Embudo · 38' → frase de dato '38 en el embudo' en text-xs font-medium, 'Qué piden' a sentence-case; solo 'Equipo' conserva el estilo kicker.",
+          "Cifras en lenguaje humano hasta el final: pills vencidas con hace() ('· hace 10 días', no '· lun'), leyenda del embudo con palabra completa (nunca 'cie · per'), y el corte de 80 declarado ('Mostrando los 80 más recientes de 120 — afiná los filtros').",
+          "El vacío de landings en voz de producto: 'Las landings todavía no llegan a Hermes — falta que Sistemas conecte Bravo. No es que no caigan.' (el runbook §9 a un comentario del código).",
+          "Piso micro-tipográfico cumplido: header de Equipo, iniciales y 'vos' suben a text-[11px]; el 'vos' puede volverse ring-2 ring-navy en el avatar propio (señal no tipográfica).",
+          "Jerarquía por respiración: el riel baja a rounded-xl p-3.5 (placa menor que retrocede) y solo banda A + radar conservan rounded-2xl — el ojo sabe qué es protagonista sin leer nada.",
+          "El radar que se siente radar: cuando el SSE trae una fila, entra con translate-y-1+opacity → 0/1 (200ms, curva de la casa) y un bg-secondary que decae ~2s — el 'en vivo' se ve caer; el embudo reemplaza el title nativo por una línea fija de 16px que al hover del segmento dice '12 personas cotizadas — tocá para filtrar'.",
+          "Red de seguridad chica: EtiquetaInline guarda en blur si hay texto (Escape queda como único descarte); CTA con transition-[transform,background-color] duration-200 y curva de la casa; pills con active:scale-[0.98]."
+        ]
+      },
+      {
+        "vista": "Pipeline (kanban)",
+        "cambios": [
+          "Un solo nivel de profundidad: la columna se hunde (rounded-2xl bg-secondary/50 p-2, SIN borde ni sombra — fix del doble marco) y la tarjeta queda como única placa viviendo solo de sombra (bg-card shadow suave → hover:shadow-panel, sin border) — contenedor y contenido dejan de competir.",
+          "Header de columna como instrumento: el contador en font-heading text-xl font-bold tabular-nums (muted en Perdidos) con el título en 13px al lado — el tablero se lee desde el otro lado del escritorio; cuando hayMas, el contador dice '9 de 34' usando la MISMA query del embudo que ya alimenta el Dashboard (jefa y vendedora ven el mismo número; el 'Traer más' de columna dice 'hay 25 más').",
+          "Soltar en Cierre = registrar la venta: interceptar el drop (etapa==='cierre' → abrir FormularioVenta con la conversación precargada, no mover.mutate) y durante el arrastre el header de Cierre dice 'Soltá para registrar la venta' — muere el drop condenado que el server iba a rechazar.",
+          "La compuerta guía en vez de regañar: el aviso pasa de dorado a familia warning/neutra (border-border bg-secondary/70 con AlertTriangle text-temp-frio), NO se autodestruye (queda hasta descarte o próximo arrastre, aria-live=polite), la tarjeta rebotada recibe ring-1 ring-temp-frio temporal y el copy remata '— agregalo en la tarjeta, acá abajo' apuntando al Intereses inline.",
+          "Mapa térmico: filete izquierdo border-l-2 en cada tarjeta con su color temp-* según edad + el hace() coloreado con la misma rampa — posición en el embudo y enfriamiento en una sola lectura, que es exactamente lo que el negocio vende.",
+          "Perdidos como cajón, Cierre como meta: grid-cols-[1fr_1fr_1fr_1fr_0.75fr], Perdidos atenuada con border-dashed y header muted; Cierre con h3 text-navy y tick verde cuando >0 — cuatro columnas vivas + un archivo + una meta se leen solas.",
+          "Física del arrastre: la tarjeta levantada queda opacity-40 scale-[0.98] (dejó un hueco), onDragEnd limpia el estado colgado, y el placeholder punteado 'Soltá acá' aparece también al final de columnas CON tarjetas; movimiento optimista con onMutate + rollback (la compuerta rechaza y la tarjeta vuelve sola, reforzando el mensaje).",
+          "Skeleton con la forma del tablero (5 columnas × 2-3 bloques h-16 pulsando + barra de header) en vez del párrafo 'Cargando…'; grid con minmax(190px,1fr) y overflow-x-auto para ventanas angostas.",
+          "Sustracción: la instrucción fija 'Arrastrá para mover…' solo se muestra durante un arrastre activo; el letrero 'Vacía' muere (la columna vacía ya se ve; el punteado queda solo en esDestino); focus-visible:opacity-100 en 'Abrir en la Bandeja'; active:scale-[0.98] en botones."
+        ]
+      },
+      {
+        "vista": "Mensajes — la cola",
+        "cambios": [
+          "La fila baja a 2 renglones y habla de la persona: mueren 'Mensaje'/'Comentario' (BadgeCanal + 'en «…»' ya lo dicen); el contador de mensajes se vuelve burbuja navy (bg-primary, text-[11px] tabular-nums) a la derecha SOLO si !respondida; el check de respondida pasa junto al timestamp.",
+          "Peso invertido a favor de lo pendiente: preview de !respondida en text-foreground plena (sin depender de pide_info), nombre de respondida baja a font-medium muted — lo que espera domina, el tinte bg-success/5 pasa a leerse como descanso.",
+          "La columna derecha cuenta el tiempo completo: chip dorado de ventana ARRIBA y debajo el timestamp font-mono text-[11px] tabular-nums (flex-col items-end) — nunca más urgencia sin saber cuándo escribió; copy unificado 'quedan 5 días' y VENTANA_DIAS importada de types.ts (una sola fuente del reloj).",
+          "Vacío honesto restaurado: portar vacioPorAtraso de Bandeja (frescura muerta → 'No hay nada acá, pero no es porque estés al día. La última captura fue hace N…') — y archivar Bandeja+FilaInteraccion+useBandeja con ADR una vez migrado.",
+          "El dead-end de búsqueda se vuelve acción: el botón hayMas se renderiza también bajo el vacío como 'Buscar en más historia' (w-full, border, py-2) y el copy pierde el anglicismo ('Ninguna conversación cargada coincide con «{busqueda}»').",
+          "Momento firma de cola despachada: 'Les puedo escribir' en cero CON frescura viva → 'Respondiste a 14 personas hoy' en font-heading text-3xl navy sobre el 'Estás al día', y debajo la siguiente jugada calculada ('Ver los 3 que piden info →' o 'Revisá tu Agenda') — cierre honesto que orienta.",
+          "Modo despacho por teclado: '/' enfoca la búsqueda, Escape la limpia, ↑↓ recorren la cola con roving tabindex y Enter abre — bajar la cola sin tocar el mouse ES el gesto de atender una cola.",
+          "Cromo fusionado: un solo header (búsqueda mb-2 + fila filtros/total, UNA división) en vez de dos franjas idénticas; el total con sustantivo y voz instrumento ('128 en cola', font-mono text-[11px]).",
+          "Seleccionada con filo: bg-secondary + shadow-[inset_-3px_0_0_var(--color-primary)] apuntando a la conversación abierta (no choca con la banda de temperatura del filo izquierdo); active:bg-muted al presionar.",
+          "Skeleton de 6 filas con anatomía real (avatar + 2 barras); la fila nueva del SSE entra con slide-in-from-top-1 300ms (aviso periférico, sin sonido); chip 'Pide info' sin uppercase y oculto cuando el filtro activo ya es pide-info; teléfono sin nombre como dato (font-mono, '51 986 394 450' con helper formatoTelefono compartido); banda izquierda = TEMPERATURA como canon de todas las listas + chip de etapa reusando ETAPA_CHIP extraído a módulo compartido.",
+          "Fila pin de orientación: cuando la conversación abierta no matchea el filtro persistido, una fila fijada arriba (border-l-[3px] border-l-navy) dice 'Abierta desde el Dashboard — no coincide con «{filtro}»' con acción 'Ver en Todo' — el chat abierto nunca queda huérfano de su cola."
+        ]
+      },
+      {
+        "vista": "Mensajes — la conversación",
+        "cambios": [
+          "Separadores de día como firma del hilo: chips centrados font-mono text-[11px] ('hoy' / 'ayer' / 'lun 14 jul') agrupando mensajes por fecha — y el separador del último gap toma la tinta de la rampa (tibio dorado, frío ladrillo): el hilo mismo cuenta cuánto se enfrió la conversación, que es lo que Hermes vende.",
+          "La ventana como cuenta regresiva viva: QuePuedoHacer ya sabe cap.dias — cuando quedan 1-2 días muestra en gold-ink 'Te quedan 2 días para escribirle en privado' (el único momento donde el oro aparece ANTES de que sea tarde); el aviso de ventana YA cerrada corrige su tinta a text-gold-ink (legítimo: tiempo que se acabó) en vez del warning flojo.",
+          "El comentario como pieza héroe en ResponderPanel: la cita en font-heading text-lg con comilla de apertura grande en navy y filete izquierdo del color del canal — la vista se lee en un golpe: esto dijo, así respondo.",
+          "Matar el dead-end del 'Respondido': la tarjeta verde suma 'Siguiente de la cola →' (Enter salta) — responder→siguiente→responder, la mesa de despacho de ritmo continuo que alimenta el modo racha.",
+          "Higiene de marca: BadgeOrigen de anuncio pierde el dorado decorativo (bg-secondary + Megaphone text-navy — como la variante landing que ya está bien); burbuja entrante pierde la sombra y vive solo de ring-1 ring-border, la saliente vive solo de sombra (fix doble marco, también en HiloMessenger).",
+          "Una sola piel para la columna: cabecera única en los 3 canales (font-heading text-sm bold, avatar rounded-[11px] — el de Messenger es más de la casa que el círculo —, px-4 py-3) — cambiar de conversación deja de cambiar de app.",
+          "El composer cierra el gesto que promete: textareaRef.focus() al cambiar de teléfono (si conectado) — clic en la cola → escribir, sin clic extra; focus-visible en los 4 botones (enviar, adjuntar, quitar adjunto, X) y focus:border-primary en los textareas de ResponderPanel.",
+          "Solo lo nuevo se anima: set de ids vistos en un ref — únicamente los mensajes recién llegados entran con fade+slide a duration-300 (muere el historial entero animándose a 500ms).",
+          "Copy de persona, no de sistema: fallback por canal ('Alguien en Instagram', nunca 'Usuario de Facebook' en IG), plural humano (hoy/ayer/'hace N días', muere 'hace 1 días'), 'Este comentario ya tiene 12 días' con unidad, voseo unificado en toda la columna ('Qué podés hacer', 'Mandale'), plantilla default humana con una sola exclamación, elipsis tipográfica … en las 4 apariciones.",
+          "Estados con forma: skeleton de burbujas fantasma alternadas (anchos w-40/w-56/w-64) en ambos hilos; el aviso 'se ve desde la vinculación' baja a texto suelto y solo en hilos de <5 mensajes; vacío de Messenger con porqué + link a Business Suite; HistorialPersona con skeleton y .catch visible ('No pudimos cargar su historial…') — nunca null silencioso."
+        ]
+      },
+      {
+        "vista": "Gestión y panel derecho",
+        "cambios": [
+          "La cifra héroe que la ficha promete: al resolver 'cliente', abrir con la suma de compras — 'S/ 1.850' en font-heading text-2xl font-bold tabular-nums text-navy + 'en 3 compras' en text-[11px] muted; los folios pasan a detalle con fecha font-mono corta ('12 mar 2026') y estado semántico (success pagado / destructive anulado).",
+          "Una sola primaria en la columna: 'Registrar venta' queda como la única navy; 'Registrar gestión' se demuele a secundario (border bg-card text-navy), pierde el selector de etapa y los intereses duplicados (quedan SOLO en BarraGestion, que cuesta 1 clic) y se renombra a su valor real: 'Notas y próxima acción'; la etapa siempre visible como texto lector, no como segundo mando.",
+          "El recibo del cierre: fix del bug de precedencia (el folio no se muestra en ventas — envolver el ternario) y el éxito muestra el folio en font-mono text-lg con 'Copiar folio' + el mini-embudo con Cierre +1 en verde + la única acción siguiente 'Agendar bienvenida al curso'.",
+          "La compuerta que lleva de la mano: el error 'cotizado exige interés' pasa de dorado a familia warning (bg-warning/10 text-warning-foreground), NO se autodestruye a los 8s, y además da ring-2 ring-primary (2s) al control de Intereses de la MISMA barra abriendo su buscador con foco — el freno se convierte en el siguiente paso.",
+          "Nada falla en silencio: onError visible en etiquetas ('No se guardó la etiqueta — probá de nuevo.'), en intereses ('No se guardó el interés — sin esto, Cotizado no abre.') y en Marcar como interesado; el sufijo '— la próxima acción está en tu Agenda' se lee de crear.variables (hoy nunca renderiza por el reset).",
+          "Popovers con oficio: Llamar y Agendar pierden el doble marco (shadow-panel solo), cierran por click-afuera y Escape, y NUNCA por reloj (muere el autodestruir de 6s del número copiable — el popover espera a la humana); el spinner de agendar solo en el chip apretado; 'Agendado' confirma el DATO ('Mañana 9:00' en bg-success/10), no solo el gesto.",
+          "'Perdido' deja de ser un peer a 3px de 'Cierre': separador vertical dentro del pill, chip en muted hover:text-destructive, y confirmación inline '¿Perdido? Sí / No' antes de mutar — dos terminales nunca más pegados.",
+          "Guardar honesto: deshabilitado hasta que haya al menos una cosa (etapa≠actual, acción o notas) y muere el fallback silencioso ?? 'contactado' — nadie se mueve de etapa sin que la vendedora lo decida.",
+          "Ración de kickers de 9 a 2 en 288px: muere 'Contexto' (el avatar-header ES el título), 'Ficha de Cerberus' y los labels internos a sentence-case font-medium; quedan solo 'Comentó en' / 'De dónde vino' que sí seccionan.",
+          "Modal de venta como instrumento: Escape cierra + role=dialog aria-modal + foco inicial en el primer select; monto total en font-heading text-2xl tabular-nums text-navy CON la moneda pegada ('USD 1.850.00'); país precargado de la ficha + última moneda de localStorage ('precargado de la ficha — cambialo si hace falta'); Enter con sugerencias elige la sugerencia resaltada (flechas), texto libre solo sin resultados.",
+          "Micro-oficio: BotonLlamar compacto como <button> real (foco+teclado+área de toque), X de etiquetas con focus-visible:opacity-100 y opacity-40 base en touch, 'Elegí moneda' (muere el único usted), 'Sin gestión' sin title-case, duration-200 en Registrar venta, +/− a size-6 con borde y active:scale-95, Cerberus caído con text-warning-foreground (el gold-ink vuelve a ser solo tiempo), copy de ficha cruzada sin nombres de tabla."
+        ]
+      },
+      {
+        "vista": "Contactos (VistaPersonas)",
+        "cambios": [
+          "Spotlight de búsqueda: sin búsqueda activa, la barra centrada verticalmente y generosa (input text-base) con el caso de uso contado debajo — '¿Te dictaron un número o llegó por Messenger sin teléfono? Pegalo acá: te digo si ya es cliente de la Escuela.' (muere el null); al buscar, se acopla arriba con un transform de 250ms — la vista pasa de form perdido a instrumento de consulta.",
+          "La ficha ACTÚA (muere el dead-end del recorrido landing→venta): bajo el header, fila de acciones — 'Escribirle' como primaria (levanta onAbrirChat(telefono) a App reusando la fábrica de chat nuevo de ColaUnificada), BotonLlamar, y 'Registrar venta' si es cliente (reusa FormularioVenta) — la misma ficha que vende desde el chat, vende desde acá.",
+          "Cifra héroe: nombre a font-heading text-2xl font-bold y debajo '2 compras · USD 1.250' en font-heading text-xl tabular-nums text-navy — la respuesta dominante a la pregunta que la vendedora contesta en voz alta.",
+          "El lead nuevo con continuidad: '{telefono} no figura en Cerberus. Es un lead nuevo.' + 'Cuando le registres una venta, la ficha va a aparecer sola acá.' + el botón 'Escribirle' — descubrir algo accionable nunca más deja parada a la vendedora.",
+          "Búsquedas recientes como chips font-mono bajo la barra (últimos 3 teléfonos, estado local puro) — el caso real es 'me lo dictaron y lo vuelvo a necesitar en cinco minutos'.",
+          "Fix doble marco en las 3 tarjetas (bg-card shadow-panel, sin border) y skeleton con la forma real de la ficha (pill de badge + barra de nombre + fila de meta + 2 bloques de compras en grid).",
+          "Datos en lenguaje humano: fecha de venta formateada ('12 mar 2026', fallback al crudo si no parsea), estado con peso y color semántico (pagada success / anulada destructive), aviso de sistema caído con text-warning-foreground (no gold-ink), copy sin 'matchea' ('Busca solo por teléfono. El nombre o el usuario de Instagram llegan con la identidad entre canales.').",
+          "Oficio: focus-visible en Buscar y 'Ver en Cerberus', hint al submit inválido ('Faltan dígitos — incluí el código de país (51 …)'), entrada del resultado con transform/opacity 240ms, muere el mt-4 vestigial."
+        ]
+      },
+      {
+        "vista": "Correos (VistaCorreos)",
+        "cambios": [
+          "Estados honestos de punta a punta: isPending → 3 filas skeleton con forma (nunca más 'Todavía no salió ningún correo' mientras carga); isError de la lista → 'No se pudo cargar la lista — no es que no haya correos.'; isError del estado → 'No se pudo consultar el canal de correo — reintentá en un momento.'; el aviso SMTP SOLO cuando data.conectado===false.",
+          "El aviso fail-closed con la parte humana primero: 'El canal de correo todavía no está conectado. Es un paso de sistemas — dos minutos — y esta pantalla se enciende sola cuando esté.' + la línea técnica al final en font-mono text-[11px] ('para sistemas: SMTP_HOST · SMTP_USER · SMTP_PASS en el .env'); tinta text-warning-foreground (no gold-ink).",
+          "El fallo visible en la fila: chip 'falló · {motivo}' en bg-destructive/10 text-destructive text-[11px] (muere el title en un punto de 6px); el dot queda solo para enviados.",
+          "Puente desde la ficha: la ficha de Cerberus por fin renderiza data.correo (fila font-mono) con acción 'Mandar correo' que sube correoInicial a App (mismo patrón telefonoPersonas) y VistaCorreos lo recibe para prellenar el Para — 4 pasos manuales se vuelven 1 clic.",
+          "Jerarquía: h1 'Nuevo correo' a font-heading text-lg font-bold (Enviar sigue siendo la única primaria, que ya está bien); enviados con fechas relativas humanas ('hace 2 h') agrupadas por día — la coordinación del equipo de un vistazo.",
+          "⌘↵ envía desde el textarea (con las guardas del disabled) y el microcopy lo publica ('⌘↵ para enviar'); cuando conectado pasa a true, el 'desde mail.goberna.us' entra con una única transición opacity/translate — el estado honesto se VE cambiar.",
+          "Oficio: aria-labels en los 3 campos + el focus ring de la casa (shadow 3px primary/12), anchos flexibles (basis-48 min-w-0 truncate; vendedora hidden sm:block) para que el asunto nunca colapse, botón Enviar con duration-200 y la curva de la casa."
+        ]
+      },
+      {
+        "vista": "Agenda (calendario)",
+        "cambios": [
+          "La línea del ahora — momento firma: en semana y día, regla horizontal de 2px bg-gold con puntito a la izquierda marcando la hora actual (EL uso legítimo del dorado: tiempo pasando); en el mes, el anillo de hoy suma un subrayado dorado fino solo si quedan pendientes hoy.",
+          "El mes como héroe tipográfico: 'julio' en font-heading text-2xl font-bold + '2026' en font-mono text-xs muted al lado — el único momento grande que jerarquiza toda la toolbar sin tocar nada más (text-xl en modo día para el weekday largo).",
+          "FilaDia propia para la vista día (muere el chip de mes reciclado en lienzo gigante): hora en font-mono w-12 + barrita vertical del color del tipo + nota en text-sm font-semibold + persona ('sin conversación atada' si no hay) — densidad de agenda real, no de celda.",
+          "Vencidos con camino: '3 promesas vencidas' se vuelve BOTÓN (cae en la vista día de hoy, que ya los lista arriba) con hover:bg-destructive/20 — el docstring 'los vencidos gritan primero' por fin tiene un clic detrás.",
+          "Purga del dorado decorativo: fallback de estiloDeNota a bg-secondary text-navy (nunca más oro para 'sin tipo'); el pill 'esta semana' solo se renderiza >0 y sin contar vencidos — en cero, el silencio también informa.",
+          "Estados honestos: rama isError con 'No se pudo cargar tu agenda.' + Reintentar (muere el mes vacío que miente); skeleton con la grilla real (cabecera 7 columnas + 6 filas pulsando); si el teléfono tipeado no puede atarse (incompleto o WA desconectado), el porqué visible bajo el input ('WhatsApp está desconectado: se guarda sin atar al chat') y segundo clic para confirmar — nunca descarte silencioso.",
+          "Agendar en dos toques de verdad: fila de chips de opcionesRapidas ('Hoy 16:00' / 'Mañana 9:00'…) arriba del datetime-local (que queda como ajuste fino), y debajo una línea viva font-mono text-[11px] traduciendo lo elegido — 'mañana jueves 23, 9:00' — confirmación con los ojos.",
+          "HTML sano y teclado: la celda pasa a div role=gridcell con onClick (los Chips quedan como únicos <button>; muere el botón anidado), '+N más' como botón real, Detalle y Crear mutuamente excluyentes + Escape cierra + form con submit real; borrar con red: primer clic arma '¿Borrar?' (destructive, revierte solo a los 3s), el segundo borra.",
+          "Densidad legible a un metro: 1-3 puntitos de 3px bajo el número de cada día con el color del tipo dominante — el mapa de carga del mes sin depender de chips truncados; hora del chip a font-mono text-[11px] tabular-nums (muere el 10px en el elemento más repetido).",
+          "Oficio: doble marco fuera de los dos popovers (sombra sola, subiendo la primera capa si falta definición), hover del chip por color (hover:brightness-95, muere el scale que hace temblar el texto truncado — y definir --ease-house en index.css de una vez), vacío de primer uso con guía encajada entre cabecera y grilla ('Todavía no agendaste nada. Clic en cualquier día para tu primer seguimiento — nada se envía solo.')."
+        ]
+      },
+      {
+        "vista": "Flujos transversales y teclado",
+        "cambios": [
+          "EL PUENTE — un solo mecanismo de viaje de datos en App (generalizar el patrón telefonoPersonas que ya existe): abrirChat(telefono) desde Contactos/Dashboard, correoInicial hacia Correos desde la ficha, teléfono reciente como chip en Personas — tres dead-ends se vuelven un sistema; la vendedora nunca re-tipea lo que la app ya sabe.",
+          "MODO RACHA — la app encadena: al enviar respuesta o marcar hecho, banda superior 'Siguiente: {nombre} · espera hace 3 h →' (Enter abre) reusando el cálculo del CTA del Dashboard; el contador de calientes baja en vivo — la banda de las 9am se vuelve el metrónomo del día, sin volver nunca al Dashboard y sin gamificación (el número baja, jamás acusa).",
+          "Teclado global de operadora: 1-6 (y ⌘1-6) conmutan vistas ignorando e.target en input/textarea/select; Escape cierra la conversación SOLO fuera de inputs — fix del Escape destructivo: guard closest('input, textarea, select') en el listener de ResponderPanel + stopPropagation en los handlers locales de BarraGestion (nunca más perder los borradores por cerrar un inline); overlay al mantener '?' con el mapa de teclas en font-mono estilo tabla de cabina (card shadow-panel, sin tutoriales).",
+          "UNA GRAMÁTICA ENTRE VISTAS: banda izquierda = temperatura en TODAS las listas (el radar marca relevancia con su punto dorado, no con la banda); ETAPA_CHIP extraído a módulo compartido y presente también en la fila de la cola; los contadores del kanban muestran 'N de M' con la query del embudo del Dashboard — el mismo lead se lee igual en todas partes y jefa y vendedora ven el mismo número.",
+          "Clics muertos eliminados: leads de landing sin teléfono pierden cursor-pointer y hover, y ganan la acción real ('Copiar correo' / 'Mandar correo' vía el puente); toda fila con onClick responde a Enter.",
+          "El lead nuevo tiene salida honesta: mientras no exista alta de cliente en Hermes, link declarado 'Crear cliente en Cerberus →' (target _blank) con copy 'al volver, refrescá la ficha' — la promesa 'ella nunca abre Cerberus' se rompe una sola vez, dicha en voz alta, no en un hueco.",
+          "FormularioVenta sin fricción repetida: país precargado de la ficha + última moneda de localStorage + Escape cierra — 2 selects redundantes menos POR VENTA; y el éxito desemboca en el recibo del cierre ('Copiar folio' + embudo +1 + 'Agendar bienvenida').",
+          "Los vacíos orientan la siguiente jugada: el 'Estás al día' de la cola ofrece 'Ver los {n} que piden info →' o 'Revisá tu Agenda' con el conteo — el bucle de la mañana nunca corta; el piso de 11px se cumple en el 100% de la app (auditar con grep text-\\[9px\\]|text-\\[10px\\] antes del cierre)."
+        ]
+      }
+    ],
+    "riesgos": [
+      "El modo racha ('Siguiente: {nombre}' + contador bajando) bordea la presión de productividad si el copy se desvía un milímetro: debe ofrecer, nunca apurar — sin rachas contadas, sin récords, sin comparación con el equipo; validar el tono con la vendedora real antes de fijarlo.",
+      "Demoler styles.ts (cardClass/cardHeaderClass/sectionLabel) corrige media app de un golpe pero también puede ROMPER media app de un golpe: cards que dependían del slab navy o del shadow-sm pueden quedar sin límite visual sobre fondos claros — exige barrida vista por vista con screenshots (regla dura #2) el mismo día del cambio, no después.",
+      "Mantener la Bandeja siempre montada (hidden) cambia el ciclo de vida de queries y del SSE: riesgo de refetches y memoria creciendo en jornadas de 8 horas — medir con la app abierta un día entero y verificar que TanStack no repolle de más con la vista oculta.",
+      "El gradiente de enfriamiento multiplica color en listas densas: si la cola está mayormente fría, la vista puede leerse 'en alarma permanente' y el ladrillo competir con destructive — calibrar umbrales con datos reales y reservar temp-frio/helado a la tinta del timestamp (nunca fondos) para que siga siendo lectura de reojo.",
+      "Los contadores 'N de M' del kanban dependen de que la query del embudo del Dashboard y la paginación de conversaciones cuenten con la MISMA definición de etapa: si difieren, el fix de honestidad expone una inconsistencia nueva en vez de resolverla — verificar paridad de definiciones antes de mostrar ambos números juntos.",
+      "Atajos globales (1-6, /, Escape, ?) en dos cáscaras (Tauri y Electron) con comportamientos distintos ya documentados (drag-region): riesgo de colisión con atajos del sistema y de Escape destructivo residual — QA de teclado en ambas cáscaras y en Windows (donde se compila en Actions) antes de publicar los atajos en tooltips."
+    ]
+  }
+]

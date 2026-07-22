@@ -1,0 +1,1427 @@
+[
+  {
+    "vista": "Login",
+    "resumen": "El Login está por encima del form genérico promedio — lema propio (\"La mesa de la vendedora\"), escudo como única pieza dorada, una sola acción primaria clara y errores que distinguen clave mala de Cerberus caído — pero es correcto, no memorable: composición centrada estándar sin ningún momento de marca que diga \"esto es Goberna\". Su problema número uno es el estado de error: el texto llega crudo del server (con excepciones en inglés tipo \"fetch failed\" concatenadas, minúscula inicial) y nunca dice qué hacer después. Y la única card de la pantalla comete el doble-marco borde+sombra que ya se barrió en el resto de la app.",
+    "hallazgos": [
+      {
+        "archivo": "src/features/auth/Login.tsx",
+        "linea": 40,
+        "problema": "Doble marco en la card del form: `border border-border` + `shadow-panel` a la vez. Viola la decisión cerrada \"sombra O borde, nunca ambos\" — este se escapó del barrido de los 10 dobles-marcos, y justo en la primera pantalla que ve la vendedora.",
+        "severidad": "alta",
+        "sugerencia": "Quitar `border border-border` y dejar solo `shadow-panel` (la sombra ya está diseñada como \"placa apoyada\" sobre el bg #F5F7FB): `className=\"flex flex-col gap-4 rounded-2xl bg-card p-6 shadow-panel\"`."
+      },
+      {
+        "archivo": "src/features/auth/sesion.ts",
+        "linea": 32,
+        "problema": "El `.catch(() => localStorage.removeItem(CLAVE))` borra el token ante CUALQUIER error, incluido un fallo de red o la API reiniciándose. Si hermes-api parpadea al abrir la app, la vendedora queda deslogueada sin motivo real: su sesión era válida.",
+        "severidad": "media",
+        "sugerencia": "Borrar el token solo cuando el server lo rechazó de verdad: `.catch((err) => { if (err instanceof ErrorApi && err.status === 401) localStorage.removeItem(CLAVE); })`. Ante error de red, dejar el token y mostrar un estado \"no pude conectar con el server\" con botón reintentar."
+      },
+      {
+        "archivo": "server/src/cerberus/auth.ts",
+        "linea": 97,
+        "problema": "El motivo `no se pudo contactar a Cerberus: ${(err as Error).message}` concatena la excepción cruda de Node (en inglés: \"fetch failed\", \"ECONNREFUSED...\") y ese texto llega tal cual a la pantalla del login. Jerga técnica en inglés frente a la vendedora, con minúscula inicial y sin punto.",
+        "severidad": "media",
+        "sugerencia": "Mensaje humano fijo: `motivo: 'Cerberus no responde en este momento. Esperá un minuto y volvé a intentar.'` — el detalle técnico va a un `console.error`/log del server, no a la cara de la vendedora. Lo mismo en la línea 62 (handshake CSRF): \"no pude iniciar sesión con Cerberus (handshake CSRF falló)\" es diagnóstico de dev, no copy de producto."
+      },
+      {
+        "archivo": "src/features/auth/Login.tsx",
+        "linea": 26,
+        "problema": "El front muestra `err.message` sin mapear y ningún error dice qué hacer después (\"¿y ahora qué?\"): \"usuario o contraseña incorrectos\" llega en minúscula y sin próximo paso; el fallback \"No se pudo iniciar sesión.\" tampoco guía. Además el server devuelve 401 para ambos casos (routes/auth.ts:24), así que el front solo puede distinguir por texto, nunca por status.",
+        "severidad": "media",
+        "sugerencia": "Mapear en el front: si `err.status === 401` → \"Usuario o contraseña incorrectos. Revisá y volvé a intentar.\"; otro error → \"Cerberus no responde. Esperá un minuto y probá de nuevo; si sigue, avisá a sistemas.\". Y en routes/auth.ts:24 devolver 503 con `tipo: 'cerberus_caido'` cuando Cerberus no contesta, para que la distinción sea por status y no por comparar strings."
+      },
+      {
+        "archivo": "src/features/auth/Login.tsx",
+        "linea": 48,
+        "problema": "Los inputs (48 y 60) usan `outline-none` y el único feedback de foco es el cambio de border-color de 1px — casi invisible sobre bg-muted. Sin `focus-visible:ring`, y encima inconsistente con el botón, que no anula el outline y muestra el ring nativo del navegador: dos lenguajes de foco en la misma card.",
+        "severidad": "media",
+        "sugerencia": "En ambos inputs: `focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25` (manteniendo `outline-none`). En el botón, el mismo lenguaje: `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2`."
+      },
+      {
+        "archivo": "src/features/auth/Login.tsx",
+        "linea": 75,
+        "problema": "`transition-all duration-500` en el botón (y `duration-500` en el ícono, línea 80): el doble del estándar cerrado (200-300ms) — el hover se siente lento, no lujoso — y `transition-all` anima box-shadow, que es paint-caro; la regla es solo transform/opacity (y color).",
+        "severidad": "media",
+        "sugerencia": "`transition-[background-color,transform] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]` y dejar la sombra estática (o cambiarla sin transición). En el ícono, `duration-200` con la misma curva."
+      },
+      {
+        "archivo": "src/features/auth/Login.tsx",
+        "linea": 75,
+        "problema": "`disabled:opacity-40` se aplica también mientras `enviando`: en pleno login el botón se apaga al 40% como si estuviera roto o inhabilitado, cuando en realidad está trabajando. El estado \"esperá, estoy en eso\" se ve igual que \"no podés tocar esto\".",
+        "severidad": "baja",
+        "sugerencia": "Agregar `aria-busy={enviando}` al botón y diferenciar: `aria-busy:opacity-90 aria-busy:cursor-wait` (Tailwind 4: variante `aria-busy:`), dejando el opacity-40 solo para el caso campos-vacíos."
+      },
+      {
+        "archivo": "src/features/auth/Login.tsx",
+        "linea": 66,
+        "problema": "El bloque de error no tiene `role=\"alert\"` ni `aria-live`: un lector de pantalla no anuncia que el login falló — la vendedora con teclado/lector se queda esperando sin señal.",
+        "severidad": "baja",
+        "sugerencia": "Agregar `role=\"alert\"` al div del error (con eso alcanza: es región live implícita)."
+      },
+      {
+        "archivo": "src/features/auth/Login.tsx",
+        "linea": 42,
+        "problema": "Dos kickers uppercase (`text-xs font-bold uppercase tracking-wide` en líneas 42 y 54) para un form de solo 2 campos: es el patrón form-genérico que la fase de ración de kickers busca bajar, y acá el uppercase no jerarquiza nada porque no hay secciones que separar.",
+        "severidad": "baja",
+        "sugerencia": "Labels en caja normal con peso medio: `text-xs font-semibold text-muted-foreground` (\"Usuario\", \"Contraseña\") — el contraste de peso hace el trabajo sin gritar. Restan 2 kickers al conteo global de ~33."
+      },
+      {
+        "archivo": "src/features/auth/Login.tsx",
+        "linea": 86,
+        "problema": "\"Cerberus\" aparece dos veces en la misma card: placeholder \"tu usuario de Cerberus\" (línea 49) + nota al pie \"Se valida con tu cuenta de Cerberus.\" — redundante, y el placeholder desaparece al tipear, dejando la explicación duplicada como único rastro.",
+        "severidad": "baja",
+        "sugerencia": "Placeholder neutro (`placeholder=\"tu usuario\"`) y dejar que la nota al pie cargue con la explicación; o al revés, matar la nota y dejar solo el placeholder. Una sola mención."
+      }
+    ],
+    "kickers": 2,
+    "oportunidades": [
+      "Momento firma de apertura: el escudo se dibuja al montar — animar el trazo del SVG (stroke-dasharray/dashoffset, ~600ms, curva de la casa) una sola vez al abrir la app. Es la única pantalla donde el escudo es protagonista y la única animación de marca que no pisa la regla del dorado (el escudo YA es la pieza dorada permanente). El prefers-reduced-motion global ya la neutraliza para quien pidió menos movimiento.",
+      "Login con memoria para el uso diario: recordar el último username en localStorage (nunca la contraseña), pre-llenar el campo y poner el autoFocus directo en la contraseña, con el título cambiado a un saludo (\"Hola de nuevo\"). La vendedora entra todos los días: le ahorra la mitad del form el 99% de las veces.",
+      "Momento tipográfico héroe que hoy falta: HERMES a text-4xl Montserrat extrabold (hoy text-2xl es tímido para la única pantalla sin datos que compitan) sobre una banda o panel navy #0E2A52 con el escudo en gold-ink encima — el único lugar de la app donde el navy institucional puede ser protagonista de fondo sin robarle a los datos. El form queda sobre el bg claro: contraste institucional inmediato, cero tokens nuevos.",
+      "Detector de mayúsculas en la contraseña: escuchar getModifierState('CapsLock') y mostrar un renglón text-[11px] font-mono \"Mayúsculas activadas\" bajo el campo — mata la causa número uno del \"usuario o contraseña incorrectos\" antes de que pase, en la voz instrumento que ya existe para metadatos."
+    ]
+  },
+  {
+    "vista": "Agenda (calendario)",
+    "resumen": "La Agenda tiene el esqueleto correcto (grilla GCal que manda, chips por tipo, crear en un clic, copy con voz propia) pero está a media distancia del estándar premium: la grilla es funcional pero tipográficamente cruda — título del mes tímido, horas a 10px, vista día que recicla los chips del mes en un lienzo enorme. Su problema número uno es que traiciona sus propias reglas cerradas: dorado decorativo en el chip por defecto y en un contador que puede decir \"0\", borde+sombra en los dos popovers, y estados deshonestos (el error de carga se ve idéntico a una agenda vacía; el teléfono tipeado se descarta en silencio si WhatsApp está caído).",
+    "kickers": 1,
+    "hallazgos": [
+      {
+        "archivo": "src/features/agenda/VistaAgenda.tsx",
+        "linea": 44,
+        "problema": "Dorado decorativo: el fallback de estiloDeNota pinta de gold cualquier nota sin prefijo conocido. El dorado pasa a significar 'categoría otros', no tiempo — violación directa del token de marca.",
+        "severidad": "alta",
+        "sugerencia": "Cambiar el fallback a neutro: `return 'bg-secondary text-navy'` (o `bg-muted text-foreground`). El dorado en chips queda reservado para un futuro estado de urgencia temporal (p. ej. vence hoy), no para 'sin tipo'."
+      },
+      {
+        "archivo": "src/features/agenda/VistaAgenda.tsx",
+        "linea": 100,
+        "problema": "Borde + sombra a la vez en el popover Detalle (`border border-border` junto a shadow-[…]) — decisión cerrada ya barrida en 10 lugares, acá quedaron dos (también en Crear, línea 198).",
+        "severidad": "alta",
+        "sugerencia": "Quitar `border border-border` en las líneas 100 y 198 y dejar solo la sombra en capas, que ya define el plano flotante sola. Si falta definición en fondos claros, subir la primera capa a `0 1px 3px rgba(14,42,82,0.10)`."
+      },
+      {
+        "archivo": "src/features/agenda/VistaAgenda.tsx",
+        "linea": 355,
+        "problema": "Sin estado de error: si `agenda.isError`, `rs = []` y el mes se dibuja vacío — la vendedora ve 'no debo nada' cuando en realidad la API falló. Viola 'estados honestos'. Además el loading es spinner centrado, no skeleton con la forma del layout (decisión cerrada).",
+        "severidad": "alta",
+        "sugerencia": "Rama `agenda.isError` antes del render: `<div className=\"flex h-full flex-col items-center justify-center gap-2\"><p className=\"text-sm text-foreground\">No se pudo cargar tu agenda.</p><button onClick={() => agenda.refetch()} className=\"rounded-lg border border-border px-3 py-1.5 text-xs font-semibold\">Reintentar</button></div>`. Y reemplazar el spinner por un skeleton: cabecera de 7 columnas + 6 filas de celdas `animate-pulse bg-muted/40` con la misma grilla `grid-cols-7`."
+      },
+      {
+        "archivo": "src/features/agenda/VistaAgenda.tsx",
+        "linea": 318,
+        "problema": "El contador '3 vencidos' es un span inerte, y en vista mes los vencidos de meses anteriores directamente no se ven. El docstring promete 'los vencidos gritan primero' pero no hay camino de un clic hacia ellos — ¿y ahora qué?",
+        "severidad": "alta",
+        "sugerencia": "Convertir el span en botón: `onClick={() => { setFoco(new Date()); setModo('dia'); }}` con `hover:bg-destructive/20 transition-colors cursor-pointer` — cae en la vista día de hoy, que ya lista los vencidos arriba. Copy más humano: `3 promesas vencidas`."
+      },
+      {
+        "archivo": "src/features/agenda/VistaAgenda.tsx",
+        "linea": 77,
+        "problema": "La hora del chip usa `text-[10px]` — el piso cerrado es text-[11px], nada de 10px. Está en el elemento más repetido de la vista (cada chip, en los tres modos).",
+        "severidad": "alta",
+        "sugerencia": "Cambiar a `font-mono text-[11px] tabular-nums opacity-80`. Si el chip queda apretado en la celda del mes, compensar bajando el padding a `px-1`."
+      },
+      {
+        "archivo": "src/features/agenda/VistaAgenda.tsx",
+        "linea": 376,
+        "problema": "Botones anidados: la celda del día es un `<button>` que contiene los Chips (también `<button>`) y el '+N más' (span con role=button sin onKeyDown, así que Enter/Espacio no hacen nada). HTML inválido, orden de tabulación y semántica de lector de pantalla rotos.",
+        "severidad": "media",
+        "sugerencia": "Hacer la celda un `<div role=\"gridcell\" onClick={…} className=\"cursor-pointer …\">` y dejar los Chips como los únicos `<button>` reales; el '+N más' pasa a `<button type=\"button\">` (gana teclado gratis). El clic-para-crear sigue funcionando por el onClick del div."
+      },
+      {
+        "archivo": "src/features/agenda/VistaAgenda.tsx",
+        "linea": 184,
+        "problema": "Dato descartado en silencio: si la vendedora tipea un teléfono pero la sesión de WhatsApp no está conectada, el recordatorio se crea como 'general' sin avisar — ella cree que quedó atado a un chat y no. Viola 'estados honestos'.",
+        "severidad": "media",
+        "sugerencia": "Debajo del input de teléfono, cuando `telefono.trim() && sesion?.estado !== 'conectado'`: `<p className=\"mt-1 text-[11px] text-destructive\">WhatsApp está desconectado: se guarda sin atar al chat.</p>`. Alternativa: deshabilitar el input con ese porqué como placeholder."
+      },
+      {
+        "archivo": "src/features/agenda/VistaAgenda.tsx",
+        "linea": 179,
+        "problema": "`opcionesRapidas()` existe para agendar 'en dos toques' (su propio comentario en agenda.ts) pero el panel Crear solo la usa como default oculto: la vendedora tiene que pelear con un datetime-local crudo para cualquier otra fecha.",
+        "severidad": "media",
+        "sugerencia": "Fila de 3 chips arriba del datetime: `{opcionesRapidas().map(o => <button className=\"rounded-full border border-border px-2.5 py-1 text-[11px] font-semibold hover:border-primary\" onClick={() => setCuando(aLocal(o.cuando))}>{o.etiqueta}</button>)}` — el chip activo con `bg-navy text-white`. El datetime-local queda como ajuste fino."
+      },
+      {
+        "archivo": "src/features/agenda/VistaAgenda.tsx",
+        "linea": 474,
+        "problema": "Detalle y Crear pueden estar abiertos a la vez: ambos fixed bottom-5 right-5 z-40, se apilan en el mismo lugar; al cerrar Crear 'reaparece' el Detalle olvidado detrás. Además ninguno cierra con Escape y en Crear el Enter en los inputs no agenda (no hay form).",
+        "severidad": "media",
+        "sugerencia": "Abrir uno cierra el otro: en `setCrearEn(…)` hacer también `setDetalle(null)` y viceversa. Envolver los inputs de Crear en `<form onSubmit={(e) => { e.preventDefault(); void guardar(); }}>` con el botón `type=\"submit\"`. Un `useEffect` con keydown global: Escape → cerrar el panel abierto."
+      },
+      {
+        "archivo": "src/features/agenda/VistaAgenda.tsx",
+        "linea": 155,
+        "problema": "Borrar es irreversible sin red: un misclic en el tacho (pegado al botón Hecho) elimina la promesa para siempre, sin confirmar ni deshacer — inconsistente con la casa, que ya puso red de seguridad en Llamar.",
+        "severidad": "media",
+        "sugerencia": "Deshacer barato sin toast-framework: primer clic arma el estado `confirmando` y el botón se convierte en `<button className=\"rounded-lg bg-destructive px-2 py-2 text-[11px] font-bold text-white\">¿Borrar?</button>` que revierte solo a los 3s; el segundo clic borra."
+      },
+      {
+        "archivo": "src/features/agenda/VistaAgenda.tsx",
+        "linea": 314,
+        "problema": "Falta el momento tipográfico de la vista: el título del mes (el dato que orienta todo el calendario) es `text-base`, casi del mismo peso visual que los pills y botones de la toolbar — siete elementos susurrando parejo, nada domina.",
+        "severidad": "media",
+        "sugerencia": "El mes como héroe: `<h2 className=\"font-heading text-2xl font-bold capitalize tracking-tight text-foreground\">julio <span className=\"ml-1 align-baseline font-mono text-xs font-normal text-muted-foreground\">2026</span></h2>` (separar mes y año en el render: `foco.toLocaleDateString('es', { month: 'long' })` + año en mono). En modo día mantener `text-xl` para que el weekday largo no desborde."
+      },
+      {
+        "archivo": "src/features/agenda/VistaAgenda.tsx",
+        "linea": 322,
+        "problema": "El pill dorado '0 esta semana' se muestra siempre, incluso en cero: el dorado queda puesto de decoración permanente cuando no hay ningún tiempo acabándose. Además su cuenta se superpone con la de vencidos (un vencido del martes cuenta en ambos pills).",
+        "severidad": "media",
+        "sugerencia": "Renderizar solo si `estaSemana.length > 0`, y excluir vencidos del conteo (`d >= inicioHoy`). Copy: `5 esta semana` está bien; en cero, nada — el silencio también informa."
+      },
+      {
+        "archivo": "src/features/agenda/VistaAgenda.tsx",
+        "linea": 465,
+        "problema": "La vista Día recicla el Chip del mes (11px, truncado, hora diminuta) a ancho completo en un lienzo gigante: densidad de celda de calendario donde hay espacio para una fila con oficio. No muestra persona ni canal sin abrir el detalle.",
+        "severidad": "media",
+        "sugerencia": "Componente FilaDia propio para modo día: `<button className=\"flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-secondary/30\"><span className=\"w-12 shrink-0 font-mono text-xs tabular-nums text-muted-foreground\">{horaDe(r)}</span><span className=\"h-8 w-1 shrink-0 rounded-full\" style de tipo /><span className=\"min-w-0\"><span className=\"block truncate text-sm font-semibold text-foreground\">{r.nota}</span><span className=\"block truncate text-[11px] text-muted-foreground\">{r.personaNombre ?? 'sin conversación atada'}</span></span></button>` — la barrita vertical hereda el color de estiloDeNota."
+      },
+      {
+        "archivo": "src/features/agenda/VistaAgenda.tsx",
+        "linea": 73,
+        "problema": "`hover:scale-[1.02]` en un chip full-width con texto truncado: el texto tiembla/borronea al escalar, y la transición usa el easing default de Tailwind, no la curva de la casa. Es el único hover-transform de la vista y se siente ajeno.",
+        "severidad": "baja",
+        "sugerencia": "Reemplazar por profundización de color: quitar `transition-transform hover:scale-[1.02]` y agregar `transition-colors hover:brightness-95` o un `hover:ring-1 hover:ring-current/20`. Si se quiere transform en la app, definir una vez `--ease-house: cubic-bezier(0.32,0.72,0,1)` en index.css y usarla, no caso por caso."
+      },
+      {
+        "archivo": "src/features/agenda/VistaAgenda.tsx",
+        "linea": 360,
+        "problema": "Primer uso sin guía: si la agenda está completamente vacía, el mes es una grilla de celdas mudas — ningún vacío declara su porqué ni el gesto de crear (el hint solo existe en el title-attribute y en la vista día).",
+        "severidad": "baja",
+        "sugerencia": "Cuando `!agenda.isPending && rs.length === 0`, una línea flotante sobre la grilla (no un overlay que tape): `<p className=\"border-b border-border bg-secondary/30 px-4 py-2 text-center text-xs text-muted-foreground\">Todavía no agendaste nada. Clic en cualquier día para tu primer seguimiento — nada se envía solo.</p>` encajada entre la cabecera de días y las filas."
+      }
+    ],
+    "oportunidades": [
+      "La línea del ahora: en las vistas semana y día, una regla horizontal de 2px dorada (`bg-gold`) con un puntito a la izquierda marcando la hora actual — es EL uso legítimo del dorado (tiempo pasando) y el momento firma que convierte la grilla cruda en un instrumento; en el mes, el anillo del día de hoy podría pasar de navy a navy con un subrayado dorado fino cuando quedan pendientes hoy.",
+      "El mes como cifra héroe: separar 'julio' (Montserrat text-2xl bold) del '2026' (mono text-xs muted) crea el único momento tipográfico grande que la vista necesita, y de paso jerarquiza toda la toolbar sin tocar nada más.",
+      "La carga del día legible de un vistazo: bajo el número de cada día del mes, 1-3 puntitos de 3px con el color del tipo dominante (los mismos de estiloDeNota) en vez de depender solo de los chips truncados — el patrón de densidad del mes se lee a un metro de distancia, como un mapa de calor honesto sin gamificación.",
+      "Fecha en lenguaje humano en el Crear: debajo del datetime-local, una línea viva `font-mono text-[11px]` que traduce lo elegido — 'mañana jueves 23, 9:00' — usando la misma voz de opcionesRapidas; la vendedora confirma con los ojos sin decodificar el formato del input nativo."
+    ]
+  },
+  {
+    "vista": "Pipeline (kanban) — VistaEmbudo",
+    "resumen": "El embudo tiene la estructura conceptual correcta (compuertas server-side, pistas por columna, cubic-bezier en el hover de tarjeta) pero el acabado está a media distancia del estándar: columnas y tarjetas violan la decisión cerrada de sombra-O-borde, las cinco columnas pesan idéntico sin que nada domine, y el dato más mirado de un embudo (cuánta gente hay en cada etapa) es el texto más chico de la vista y encima miente cuando hay paginación pendiente. Su problema número uno es de flujo: la columna Cierre se ilumina como destino válido de arrastre cuando el server la va a rechazar casi siempre — un drop condenado que termina en un aviso dorado (color que en esta marca significa tiempo, no bloqueo) que se autodestruye a los 8 segundos.",
+    "kickers": 0,
+    "hallazgos": [
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/vistas/VistaEmbudo.tsx",
+        "linea": 176,
+        "problema": "La columna lleva borde Y sombra a la vez ('border … shadow-panel' + 'border-border' en la 177): viola la decisión cerrada sombra-O-borde. Además columna y tarjeta usan el mismo tratamiento (borde+card+sombra+radio grande), así que contenedor y contenido compiten en vez de jerarquizarse.",
+        "severidad": "alta",
+        "sugerencia": "Hacer la columna bandeja hundida sin marco: quitar 'shadow-panel' y 'border'/'border-border', usar 'rounded-2xl bg-secondary/50 p-2 transition-colors' (destino: 'bg-secondary ring-1 ring-primary/40' con ring en vez de border para el highlight). La tarjeta queda como única placa y el tablero gana profundidad de un solo nivel."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/vistas/VistaEmbudo.tsx",
+        "linea": 49,
+        "problema": "La tarjeta también tiene borde + sombra ('border border-border … shadow-[0_1px_2px…]', y en hover suma 'hover:shadow-panel' manteniendo el borde): segunda violación de sombra-O-borde en la misma vista.",
+        "severidad": "alta",
+        "sugerencia": "Elegir una: si la columna queda hundida (hallazgo anterior), la tarjeta vive solo de sombra — quitar 'border border-border' y dejar 'bg-card shadow-[0_1px_2px_rgba(14,42,82,0.06)] hover:shadow-panel'. Si se prefiere borde, quitar ambas sombras."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/vistas/VistaEmbudo.tsx",
+        "linea": 162,
+        "problema": "Cierre se ilumina como destino válido de arrastre ('esDestino' no distingue etapa), pero la compuerta 2 del server (server/src/routes/gestiones.ts:83-96) rechaza el drop salvo que ya exista venta registrada para ese teléfono. Es un dead-end ofrecido: la UI invita a un gesto que casi siempre termina en error.",
+        "severidad": "alta",
+        "sugerencia": "Interceptar el drop en 'cierre': en soltar(), si etapa === 'cierre', en vez de mover.mutate abrir el flujo de Registrar venta con la conversación precargada (onAbrir + señal). Mientras se arrastra, el header de Cierre muestra la pista con peso ('Soltá para registrar la venta') en vez del highlight azul genérico."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/vistas/VistaEmbudo.tsx",
+        "linea": 183,
+        "problema": "El contador de columna ({enEtapa.length}) cuenta solo las conversaciones ya paginadas (páginas de 30 en conversaciones.ts:48). Con hayMas=true, 'Interesados 27' puede ser 400: el comentario del archivo dice 'el embudo no miente' pero sus cifras sí. Va contra la decisión de estados honestos.",
+        "severidad": "alta",
+        "sugerencia": "Cuando hayMas: renderizar `{enEtapa.length}+` y aria-label 'al menos N'. Mejor: el tipo Pagina ya trae total? — pedir el total al server y mostrar 'N de M cargadas' junto a Traer más. Nunca un número cerrado sobre datos incompletos."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/vistas/VistaEmbudo.tsx",
+        "linea": 147,
+        "problema": "El aviso de compuerta usa dorado (border-gold/50 bg-gold/10 text-gold-ink) para un bloqueo de validación: en esta marca el dorado significa una sola cosa (tiempo que se acaba), no 'la compuerta frenó'. Y el aviso se autodestruye a los 8s (línea 106) apareciendo arriba del tablero, lejos del gesto que lo causó.",
+        "severidad": "alta",
+        "sugerencia": "Cambiar a voz de bloqueo neutra: 'border-border bg-secondary/70 text-foreground' con el AlertTriangle en 'text-temp-frio'. Quitar el setTimeout: el motivo queda hasta que la vendedora lo cierre o inicie otro arrastre. Sumar aria-live=\"polite\" y, si se puede, un ring-1 ring-temp-frio de 1.5s en la tarjeta rechazada para conectar causa y efecto."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/vistas/VistaEmbudo.tsx",
+        "linea": 159,
+        "problema": "grid-cols-5 con las cinco columnas idénticas, incluida Perdidos: patrón genérico de columnas iguales. Perdidos es archivo, no etapa de trabajo; Cierre es la meta; nada domina y no hay respuesta a '¿qué miro primero?'.",
+        "severidad": "media",
+        "sugerencia": "Diferenciar semánticamente: Perdidos angosta y atenuada ('grid-cols-[1fr_1fr_1fr_1fr_0.75fr]', su sección con 'bg-transparent border border-dashed border-border' y header en muted); Cierre con acento (h3 'text-navy', contador con tick verde cuando >0). Cuatro columnas vivas + un archivo + una meta se leen solas."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/vistas/VistaEmbudo.tsx",
+        "linea": 183,
+        "problema": "Momento tipográfico ausente: el contador por etapa —el dato más glanceable de un embudo— es font-mono 11px muted, lo más chico de la vista, mientras el título de columna apenas llega a 13px. La vista entera carece de una cifra con jerarquía.",
+        "severidad": "media",
+        "sugerencia": "Invertir el peso en el header de columna: contador en 'font-heading text-xl font-bold tabular-nums text-foreground' (en Perdidos, muted) con el título al lado en 13px. El tablero pasa a leerse como instrumento desde lejos sin agregar un solo elemento."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/vistas/VistaEmbudo.tsx",
+        "linea": 56,
+        "problema": "La edad de la tarjeta ('hace 3 días') se muestra siempre en muted-foreground: la rampa de temperatura de la marca (temp-fresco/tibio/frio/helado, ya definida en index.css:64-67) no se usa justo en la vista donde el enfriamiento del lead es la señal de negocio.",
+        "severidad": "media",
+        "sugerencia": "Colorear el span según horas: <24 'text-temp-fresco', <72 'text-temp-tibio', <336 'text-temp-frio', resto 'text-temp-helado' (helper compartible con la Bandeja). El dorado-tibio queda semánticamente correcto: tiempo que se está yendo."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/vistas/VistaEmbudo.tsx",
+        "linea": 45,
+        "problema": "El arrastre no da feedback físico propio: la tarjeta original no se atenúa mientras viaja (solo el ghost del navegador) y no hay onDragEnd, así que si el drop se cancela (Esc o soltar fuera del tablero) el estado 'arrastrada' queda colgado hasta el próximo gesto.",
+        "severidad": "media",
+        "sugerencia": "En el div de TarjetaEmbudo: onDragEnd que limpie arrastrada/sobre (pasar un onFin desde el padre), y clase condicional cuando es la arrastrada: 'opacity-40 scale-[0.98]' (solo transform/opacity). El tablero se siente físico: lo que levantaste dejó un hueco."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/vistas/VistaEmbudo.tsx",
+        "linea": 187,
+        "problema": "En columnas CON tarjetas, el destino de drop solo tiñe el fondo: el placeholder 'Soltá acá' (línea 195) existe únicamente en columnas vacías. No hay indicación de dónde va a caer la tarjeta en el caso más frecuente.",
+        "severidad": "media",
+        "sugerencia": "Cuando esDestino y enEtapa.length > 0, agregar al final de la lista el mismo bloque punteado: 'rounded-xl border border-dashed border-primary/60 p-3 text-center text-[11px] text-primary' con 'Soltá acá'. Reutiliza el patrón que ya existe."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/vistas/VistaEmbudo.tsx",
+        "linea": 157,
+        "problema": "El loading es un '<p>Cargando…</p>' centrado, no un skeleton con la forma del layout (decisión de la auditoría). El tablero aparece de golpe después de un texto flotante.",
+        "severidad": "media",
+        "sugerencia": "Skeleton con la misma grilla: 'grid grid-cols-5 gap-2.5' con 5 secciones y 2-3 bloques 'h-16 animate-pulse rounded-xl bg-secondary/60' cada una, más una barra de 11px para el header. La vendedora ve el tablero antes de ver los datos."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/vistas/VistaEmbudo.tsx",
+        "linea": 84,
+        "problema": "mover no hace actualización optimista ni muestra estado pending: al soltar, la tarjeta se queda en la columna vieja hasta que el server responde e invalida tres queries. En una red lenta el drop parece haber fallado en silencio.",
+        "severidad": "media",
+        "sugerencia": "onMutate: setQueryData de ['embudo','etapas'] moviendo la clave a la etapa nueva, con rollback en onError (las compuertas rechazan y la tarjeta vuelve sola, reforzando el mensaje). Alternativa mínima: mientras mover.isPending, la tarjeta afectada con 'opacity-50 pointer-events-none'."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/vistas/VistaEmbudo.tsx",
+        "linea": 61,
+        "problema": "El botón 'Abrir en la Bandeja' vive en opacity-0 y solo aparece con group-hover: para teclado es invisible aunque reciba foco. Y no existe ninguna vía de teclado para mover un lead de etapa — el kanban es 100% mouse.",
+        "severidad": "media",
+        "sugerencia": "Mínimo de una clase: agregar 'focus-visible:opacity-100' al botón. Para el movimiento, un menú contextual en la tarjeta (Enter abre, tecla M cicla etapas) puede venir en una fase posterior, pero el botón invisible con foco se arregla hoy."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/vistas/VistaEmbudo.tsx",
+        "linea": 195,
+        "problema": "El vacío de columna dice solo 'Vacía': no declara porqué ni qué hacer (decisión: cada vacío declara su porqué). Con el tablero recién abierto son cinco cajitas punteadas repitiendo 'Vacía'.",
+        "severidad": "baja",
+        "sugerencia": "Quitar el letrero cuando no hay arrastre activo (la columna vacía ya se ve vacía; la pista del header explica la etapa) y conservar el bloque punteado solo en esDestino con 'Soltá acá'. Si se quiere copy, uno por etapa: en Interesados 'Nada nuevo por ahora — lo que levante la mano cae acá'."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/vistas/VistaEmbudo.tsx",
+        "linea": 131,
+        "problema": "La instrucción permanente de la barra superior ('Arrastrá para mover. A Cotizados con curso de interés…') repite lo que las pistas de columna (líneas 25-26) ya dicen, y se lee siempre aunque nadie esté arrastrando: ruido de entrenamiento fijo.",
+        "severidad": "baja",
+        "sugerencia": "Quitar la línea o mostrarla solo mientras hay arrastre activo (arrastrada != null), donde sí es contextual. La explicación de compuerta en el momento del gesto (hallazgo de Cierre) la reemplaza mejor."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/vistas/VistaEmbudo.tsx",
+        "linea": 159,
+        "problema": "grid-cols-5 sin ancho mínimo: en una ventana angosta (la app de escritorio se redimensiona) las cinco columnas se aplastan y los nombres truncan hasta lo ilegible.",
+        "severidad": "baja",
+        "sugerencia": "'grid min-h-0 flex-1 grid-cols-[repeat(5,minmax(190px,1fr))] gap-2.5 overflow-x-auto' — el tablero scrollea horizontal dentro de su contenedor antes que degradarse."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/vistas/VistaEmbudo.tsx",
+        "linea": 139,
+        "problema": "Sin feedback al presionar en los botones de la vista: 'Traer más' y el botón de abrir en Bandeja solo tienen hover, ningún active.",
+        "severidad": "baja",
+        "sugerencia": "Agregar 'active:scale-[0.98]' (y en Traer más 'transition-[colors,transform]') a ambos botones."
+      }
+    ],
+    "oportunidades": [
+      "Compuertas que se explican en el gesto, no en el error: el cache de intereses ya existe por tarjeta (useIntereses), así que al arrastrar hacia Cotizados una tarjeta sin interés, la columna puede mostrar la traba en su header ('Falta el curso de interés') con borde temp-frio en vez de iluminarse azul — y soltar en Cierre abre directamente el formulario de Registrar venta con la conversación precargada. El kanban deja de tener drops condenados y se vuelve el atajo hacia la venta.",
+      "El embudo como mapa térmico: cada tarjeta con un filete izquierdo de 2px en su color de temperatura (border-l-2 + temp-fresco→helado según edad). De un vistazo la vendedora ve no solo dónde está cada lead sino cuáles columnas se están enfriando — posición + tiempo en una sola lectura, que es exactamente lo que el dorado de la marca significa.",
+      "Header de columna como instrumento: contador Montserrat grande tabular arriba, título en 13px al lado, y la pista solo en un title/tooltip — el tablero se lee desde el otro lado del escritorio como un panel de mando; Cierre celebra sobrio (navy + tick) porque a esa columna solo se llega ganando.",
+      "Perdidos como cajón lateral: columna angosta, gris, punteada, colapsada a ~90px que se expande solo al arrastrar sobre ella. Declara visualmente que es archivo y no etapa de trabajo, y devuelve el aire ganado a las cuatro columnas donde se juega la venta."
+    ]
+  },
+  {
+    "vista": "Dashboard (radar)",
+    "resumen": "La estructura está muy bien pensada — orden vertical por urgencia, un solo CTA primario, oro presupuestado y declarado, densidad deliberada, vacíos con porqué — pero el acabado se queda a medio camino del estándar premium: toda la vista vive entre 9 y 13 píxeles sin un solo momento tipográfico, y el riel muestra sus empty-states como reales mientras carga. Su problema número uno es que la cifra que gobierna el día (los calientes) está susurrada en mono text-xs en vez de ser el titular de las 9am; el segundo, que la temperatura del dato es binaria en el radar (oro o nada): un lead de 3 días y uno de 30 se ven idénticos, con la rampa temp-* ya definida y sin usar.",
+    "kickers": 5,
+    "hallazgos": [
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/dashboard/VistaDashboard.tsx",
+        "linea": 236,
+        "problema": "Cero momento tipográfico en toda la vista: el texto más grande es el nombre del lead a text-[13px] (L371) y la cifra que manda — cuántos calientes esperan — está en font-mono text-xs al lado de un puntito. Montserrat (font-heading) solo aparece en kickers de 11px y en iniciales de 9px: la fuente de títulos nunca titula nada. Todo grita igual de bajito.",
+        "severidad": "alta",
+        "sugerencia": "Convertir el contador en la cifra héroe de la banda A: `<span class=\"font-heading text-2xl font-bold tabular-nums text-foreground\">{nCalientes}</span>` con `calientes` en text-[11px] text-muted-foreground al lado (cabe en h-16). El punto dorado se queda. La banda pasa de tira de estado a titular del día sin mover el layout."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/dashboard/VistaDashboard.tsx",
+        "linea": 422,
+        "problema": "El riel miente durante la carga: con isPending, data es undefined, entonces totalEmbudo === 0 y se renderizan los TRES empty-states como si fueran reales — 'El embudo se arma cuando…' (L423), 'Nadie mencionó un curso todavía' (L465), 'Nadie registró actividad todavía' (L504). Es exactamente la 'calma falsa' que frescura.ts documenta como peor que un error, violando la decisión de estados honestos.",
+        "severidad": "alta",
+        "sugerencia": "Cortar por isPending antes de evaluar los vacíos: en cada card del riel, `isPending ? <skeleton> : total === 0 ? <vacío> : <dato>`. Skeletons con la forma: barra `h-2 rounded-full animate-pulse bg-muted` + 5 líneas w-desiguales para cursos + 3 filas h-6 para equipo."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/dashboard/VistaDashboard.tsx",
+        "linea": 347,
+        "problema": "Las filas del radar tienen role=\"button\" y tabIndex={0} pero ningún onKeyDown: Enter/Espacio no abren nada — el foco llega (outline global) y muere ahí. Encima las acciones de la fila solo existen en hover (L389: opacity-0 group-hover:opacity-100), así que con teclado jamás aparecen, y Llamar/Buscar son íconos con onClick, no botones enfocables. La acción más frecuente de la vendedora es inoperable sin mouse.",
+        "severidad": "alta",
+        "sugerencia": "Agregar `onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(); } }}` a la fila; cambiar la clase de las acciones a `opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100`; y en BotonLlamar compacto y el Search, envolver el ícono en `<button type=\"button\">` real (hoy son SVG con onClick)."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/dashboard/VistaDashboard.tsx",
+        "linea": 386,
+        "problema": "La temperatura del dato NO se lee de un vistazo en el radar: la codificación es binaria (borde oro para 'alta', nada para el resto). Un lead de 3 días y uno de 30 se ven idénticos — hace() sale en muted salvo la ventanita 20-24h. La rampa temp-fresco/tibio/frio/helado ya existe con tokens y meta (temperature.ts L20-25, index.css L64-67) y esta vista ni la importa.",
+        "severidad": "alta",
+        "sugerencia": "Teñir el hace() con la rampa existente: `const t = temperatureOf(base.cayo_at)` y en la clase del span usar `TEMPERATURE_META[t].text` para frio (ladrillo) y helado (acero), dejando muted para fresco/tibio y conservando el gold-ink de 20-24h. La columna derecha del radar se vuelve un gradiente de enfriamiento escaneable sin agregar un solo chip."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/dashboard/VistaDashboard.tsx",
+        "linea": 509,
+        "problema": "Tres violaciones de la decisión cerrada de micro-tipografía (piso 11px): el header de columnas del Equipo a text-[10px] (L509), las iniciales del avatar a text-[9px] (L523) y el badge 'vos' a text-[9px] (L528). En pantallas 1x, 9px es ruido ilegible.",
+        "severidad": "media",
+        "sugerencia": "L509 → `text-[11px]`; L523 → `text-[11px]` (el avatar size-6 lo aguanta); L528 → reemplazar el badge de texto por señal no tipográfica: `ring-2 ring-navy` en el avatar propio, o subir 'vos' a text-[11px] sin fondo."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/dashboard/VistaDashboard.tsx",
+        "linea": 173,
+        "problema": "El contador '{n} calientes' cuenta solo chats (data?.chats), pero el toggle 'Solo calientes' filtra chats Y formularios (L159-163, donde un form de <24h también da 'alta'). Con formularios calientes presentes, la banda dice '3 calientes' y el filtro muestra 5 filas: el número no cuadra con lo que la vendedora ve.",
+        "severidad": "media",
+        "sugerencia": "Unificar la base: calcular nCalientes sobre la misma unión chats+formularios que usa el filtro (`[...chats, ...forms].filter(x => relevanciaDe(...) === 'alta').length`), o si la intención es contar solo conversables, decirlo: '3 chats calientes'."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/dashboard/VistaDashboard.tsx",
+        "linea": 317,
+        "problema": "El vacío de landings le habla a un dev, no a la vendedora: 'falta apuntar el webhook de Bravo a Hermes (runbook §9)'. La honestidad está perfecta; la jerga no — 'webhook' y 'runbook §9' no le dan a la vendedora nada que hacer.",
+        "severidad": "media",
+        "sugerencia": "Mismo fondo, otra voz: 'Las landings todavía no llegan a Hermes — falta que Sistemas conecte Bravo. No es que no caigan.' (la referencia al runbook va en un comentario del código, no en pantalla)."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/dashboard/VistaDashboard.tsx",
+        "linea": 222,
+        "problema": "Las pills vencidas muestran solo el día de semana corto ('· lun'): para algo vencido hace 10 días, '¿cuál lunes?' es ambiguo. Va contra la decisión de fechas en lenguaje humano — y el propio repo ya tiene hace() para esto.",
+        "severidad": "media",
+        "sugerencia": "Reemplazar toLocaleDateString por `hace((Date.now() - new Date(r.cuando).getTime()) / 3_600_000)` → '· hace 10 días'. El rojo ya dice 'vencida'; el hace() dice cuánto duele."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/dashboard/VistaDashboard.tsx",
+        "linea": 453,
+        "problema": "La leyenda del embudo trunca a 3 letras con e.slice(0, 3): 'int · con · cot · cie · per'. 'cie' y 'per' no se decodifican solas, y la fila tiene flex-wrap con espacio de sobra — el ahorro no compra nada.",
+        "severidad": "media",
+        "sugerencia": "Palabra completa: `{data?.embudo[e] ?? 0} {e}` con `capitalize` (o sin él, minúscula está bien en esta voz). Si algún día no cabe, envolver es más legible que amputar."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/dashboard/VistaDashboard.tsx",
+        "linea": 257,
+        "problema": "Cinco labels uppercase en una sola vista, cuatro con el patrón idéntico (font-heading 11px uppercase tracking-[0.1em]): 'El radar' (L257), 'Embudo' (L419), 'Qué piden' (L463), 'Equipo' (L489), más el header de columnas (L509). 'El radar' es el más prescindible: la vista ES el radar, y el punto vivo + '· 47 · en vivo' ya identifican la zona. El ritmo mecánico de kickers iguales hace que las cuatro esquinas susurren con la misma voz.",
+        "severidad": "media",
+        "sugerencia": "Eliminar el h2 'El radar' (dejar contador + punto vivo como identidad de la zona, con un aria-label en la section) y en el riel conservar el estilo kicker solo en 'Equipo'; 'Embudo · 38' puede volverse frase de dato ('38 en el embudo' en text-xs font-medium normal-case) y 'Qué piden' bajar a text-xs font-semibold sin uppercase. De 5 a 1-2 kickers."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/dashboard/VistaDashboard.tsx",
+        "linea": 310,
+        "problema": "El skeleton del radar son 4 bloques genéricos h-11 rounded-lg con animate-pulse: no tiene la forma de la fila real (2 líneas, borde inferior, sin radios) y deja el 80% del viewport vacío mientras carga una lista que lo llena entero.",
+        "severidad": "media",
+        "sugerencia": "8-10 filas con la anatomía real: `<div class=\"border-b border-border/70 px-4 py-2\"><div class=\"h-3 w-2/5 animate-pulse rounded bg-muted\"/><div class=\"mt-1.5 h-3.5 w-3/5 animate-pulse rounded bg-muted\"/></div>`, variando los anchos (2/5, 3/5, 1/3…) para que respire como datos y no como placeholder."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/dashboard/VistaDashboard.tsx",
+        "linea": 243,
+        "problema": "El CTA primario usa transition-all (anima también box-shadow y color de fondo con la curva ease default), y ninguna transición de la vista usa la curva estándar cubic-bezier(0.32,0.72,0,1); las pills de agenda tienen hover:scale pero ningún estado active al presionar (L216).",
+        "severidad": "baja",
+        "sugerencia": "En el CTA: `transition-[transform,background-color] duration-200 [transition-timing-function:cubic-bezier(0.32,0.72,0,1)]` (el active:scale-[0.97] ya está y es correcto). A las pills de L216 agregarles `active:scale-[0.98]`."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/dashboard/VistaDashboard.tsx",
+        "linea": 165,
+        "problema": "El radar corta en 80 filas con slice(0, 80) sin decirlo: si cayeron 120, hay 40 invisibles y nada lo declara — roce con el principio de 'nada se esconde'.",
+        "severidad": "baja",
+        "sugerencia": "Cuando todas.length (post-filtros) supere 80, cerrar la lista con una línea: `Mostrando los 80 más recientes de {total} — afiná los filtros para ver el resto.` en text-[11px] text-muted-foreground py-3 text-center."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/dashboard/VistaDashboard.tsx",
+        "linea": 98,
+        "problema": "EtiquetaInline descarta en silencio lo tipeado al perder foco: escribís 'urgente', un clic afuera, y la etiqueta se esfuma sin guardar ni avisar.",
+        "severidad": "baja",
+        "sugerencia": "En onBlur, si `valor.trim()` existe, guardar (`agregar.mutate(valor.trim())`) en vez de solo cerrar; Escape queda como el único gesto que descarta explícitamente."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/dashboard/VistaDashboard.tsx",
+        "linea": 416,
+        "problema": "Las tres cards del riel son clones exactos (rounded-2xl + p-4 + shadow-panel + kicker idéntico) y comparten radio y tratamiento con el radar y la banda A: mismo radio en todo, padding uniforme-mecánico — nada le dice al ojo que el riel es contexto secundario y el radar el protagonista.",
+        "severidad": "baja",
+        "sugerencia": "Jerarquizar por radio y densidad: riel con `rounded-xl p-3.5` (placa menor que retrocede) manteniendo rounded-2xl solo en banda A y radar; opcionalmente `gap-2` interno del riel vs `gap-2.5` del layout mayor, para que la respiración también ordene."
+      }
+    ],
+    "oportunidades": [
+      "El titular de las 9am: convertir la banda 'Tu mañana' en una frase de diario con cifra héroe — '14 esperan · el más viejo hace 6 horas' con el 14 en Montserrat text-2xl tabular-nums y el resto en text-xs muted — usando el dato de `atender` que ya se calcula (L169-172); la banda pasa de tira de widgets a veredicto del día sin tocar su h-16 ni el presupuesto de oro.",
+      "El gradiente de enfriamiento: aplicar la rampa temp-* existente al hace() de cada fila hace que, al escanear el radar de arriba a abajo, la columna derecha vire de neutro a ladrillo a acero — la degradación del pipeline se ve como fenómeno físico, sin chips ni leyendas nuevas, y con oro reservado intacto para la ventana 20-24h.",
+      "El radar que se siente radar: cuando el SSE invalida y cae una fila nueva, entrar con translate-y-1 + opacity-0 → 0/1 (200ms, cubic-bezier(0.32,0.72,0,1)) y un fondo bg-secondary que decae en ~2s — el 'en vivo' del header deja de ser una promesa del puntito y se ve caer el lead; solo transform/opacity/background, y prefers-reduced-motion ya lo apaga globalmente.",
+      "El embudo que habla: reemplazar el title= nativo de cada segmento de la barra (hoy 'cotizado: 12', críptico y con delay del navegador) por una línea fija de 16px debajo de la barra que al hover/focus del segmento dice la frase humana — '12 personas cotizadas, tocá para filtrar el radar' — reutilizando el espacio que hoy ocupa la leyenda truncada."
+    ]
+  },
+  {
+    "vista": "Mensajes — la conversación (ConversacionActiva + HiloWhatsapp + HiloMessenger + ResponderPanel + QuePuedoHacer + HistorialPersona)",
+    "resumen": "Superficie conceptualmente premium: burbujas de la casa (no clon de WhatsApp), honestidad de estados excepcional (ban visible, Messenger read-only con motivo, QuePuedoHacer anticipando lo que Meta permite) y un composer que habla en persona (\"Escribile a Rosa…\"). Su problema número uno es que el TIEMPO — el corazón del negocio — está subrepresentado justo acá: el hilo solo muestra horas sin separadores de día, mientras el dorado (que significa tiempo) se gasta decorativamente en el badge de origen del anuncio. Segundo: la columna central cambia de piel al cambiar de canal (tres cabeceras con tipografía, radios y padding distintos), y hay dos violaciones directas de decisiones cerradas (doble marco sombra+ring en burbujas entrantes, dorado no-temporal).",
+    "kickers": 4,
+    "hallazgos": [
+      {
+        "archivo": "src/features/whatsapp/HiloWhatsapp.tsx",
+        "linea": 281,
+        "problema": "Dorado decorativo: el BadgeOrigen de anuncio usa bg-gold/10 + text-gold-ink, pero el origen del lead no es 'tiempo que se acaba'. Viola la regla de marca (el dorado significa UNA sola cosa) — y devalúa el dorado legítimo de los banners de ventana/vencidos.",
+        "severidad": "alta",
+        "sugerencia": "Cambiar a `bg-secondary text-secondary-foreground` (idéntico a la variante landing de la línea 291, que ya está bien); si anuncio necesita distinguirse de landing, que lo haga el ícono Megaphone en text-navy, no el color de fondo."
+      },
+      {
+        "archivo": "src/features/whatsapp/HiloWhatsapp.tsx",
+        "linea": 151,
+        "problema": "Doble marco en la burbuja entrante: shadow-[0_1px_2px_rgba(14,42,82,0.06)] (compartida en la clase base) + ring-1 ring-border en la rama entrante. Viola la decisión cerrada 'sombra O borde, nunca ambos'. Se repite igual en HiloMessenger.tsx:75-78.",
+        "severidad": "alta",
+        "sugerencia": "Mover la sombra a la rama saliente solamente ('rounded-br-md bg-secondary text-navy shadow-[…]') y dejar la entrante con `bg-card ring-1 ring-border` sin sombra. Aplicar el mismo cambio en HiloMessenger."
+      },
+      {
+        "archivo": "src/features/whatsapp/HiloWhatsapp.tsx",
+        "linea": 165,
+        "problema": "El hilo solo muestra hora (toLocaleTimeString): una conversación que abarca varios días es temporalmente ilegible — '14:32' puede ser hoy o el martes pasado. En un negocio cuyo dato central es la frescura del contacto, la vendedora no puede ubicar el último mensaje en el tiempo sin salir del hilo.",
+        "severidad": "alta",
+        "sugerencia": "Separadores de día entre grupos de mensajes: chip centrado `mx-auto w-fit rounded-full bg-muted px-2.5 py-0.5 font-mono text-[11px] text-muted-foreground` con 'hoy' / 'ayer' / 'lun 14 jul'. Agrupar por fecha antes del map."
+      },
+      {
+        "archivo": "src/features/canales/ResponderPanel.tsx",
+        "linea": 127,
+        "problema": "Fallback de nombre equivocado por canal: un comentario de Instagram sin nombre muestra 'Usuario de Facebook'. Información falsa en la cabecera del panel.",
+        "severidad": "media",
+        "sugerencia": "`interaccion.persona_nombre ?? (interaccion.canal === 'instagram' ? 'Alguien en Instagram' : 'Usuario de Facebook')`."
+      },
+      {
+        "archivo": "src/features/canales/ResponderPanel.tsx",
+        "linea": 130,
+        "problema": "Plural roto y cero humanización: 'hace {dias} días' produce 'hace 1 días' y 'hace 0 días'. Contradice la decisión de cifras en lenguaje humano.",
+        "severidad": "media",
+        "sugerencia": "dias === 0 → 'hoy' · dias === 1 → 'ayer' · resto → `hace ${dias} días`. (daysSince ya devuelve el número; es solo el formateo.)"
+      },
+      {
+        "archivo": "src/features/canales/QuePuedoHacer.tsx",
+        "linea": 49,
+        "problema": "Frase sin unidad: 'Meta lo permite solo durante 7 días. Este comentario tiene ${cap.dias}.' se lee 'Este comentario tiene 12.' — la cifra queda huérfana.",
+        "severidad": "media",
+        "sugerencia": "'Este comentario ya tiene ${cap.dias} días.' — y de paso el número en tabular-nums si se muestra en columna."
+      },
+      {
+        "archivo": "src/features/whatsapp/HiloWhatsapp.tsx",
+        "linea": 139,
+        "problema": "Loading del hilo es texto plano 'Cargando…' — la decisión pide skeleton con la forma del layout. Igual en HiloMessenger.tsx:65. (QuePuedoHacer:43 ya lo hace bien; el estándar existe en la misma superficie.)",
+        "severidad": "media",
+        "sugerencia": "4-5 burbujas fantasma alternadas: `<div class='flex justify-start'><div class='h-10 w-48 animate-pulse rounded-2xl rounded-bl-md bg-muted'/></div>` variando anchos (w-40/w-56/w-64) y lados, para que la carga ya tenga forma de conversación."
+      },
+      {
+        "archivo": "src/features/whatsapp/HiloWhatsapp.tsx",
+        "linea": 145,
+        "problema": "animate-in fade-in slide-in-from-bottom-1 aplicado a TODOS los mensajes: el historial entero entra animado en cada carga/render, no solo lo nuevo — y duration-500 excede el presupuesto 200-300ms. El efecto correcto (entrada del mensaje) está diluido por aplicarse en masa.",
+        "severidad": "media",
+        "sugerencia": "Animar solo mensajes que no estaban en el render anterior (set de ids vistos en un ref), o como mínimo solo los últimos 3 con stagger `style={{animationDelay: i*40+'ms'}}`; bajar a duration-300 manteniendo el ease-[cubic-bezier(0.32,0.72,0,1)]."
+      },
+      {
+        "archivo": "src/features/whatsapp/HiloWhatsapp.tsx",
+        "linea": 121,
+        "problema": "La columna cambia de piel al cambiar de canal: la cabecera de WhatsApp no usa font-heading y su avatar es rounded-full (117), mientras HiloMessenger usa font-heading y avatar rounded-[11px] (52/56), y ResponderPanel usa p-5 contra el px-4 py-3 de los hilos (119). Al pasar de una conversación a otra, la misma zona 'salta' de estilo.",
+        "severidad": "media",
+        "sugerencia": "Una sola espec de cabecera de conversación para los tres: `font-heading text-sm font-bold` en el nombre, un solo radio de avatar (el rounded-[11px] de Messenger es más de la casa que el círculo), y px-4 py-3 en las tres cabeceras."
+      },
+      {
+        "archivo": "src/features/whatsapp/HiloWhatsapp.tsx",
+        "linea": 231,
+        "problema": "El composer no toma foco al abrir la conversación: el flujo más frecuente de la vendedora (clic en la cola → escribir) exige un clic extra en el textarea cada vez. El placeholder invita ('Escribile a…') pero el cursor no está ahí.",
+        "severidad": "media",
+        "sugerencia": "useEffect que haga `textareaRef.current?.focus()` al cambiar `telefono` (solo si `conectado`). Cierra el gesto que el placeholder ya promete."
+      },
+      {
+        "archivo": "src/features/whatsapp/HiloWhatsapp.tsx",
+        "linea": 255,
+        "problema": "Nada de la superficie tiene focus-visible: botón enviar (255), adjuntar (227), quitar adjunto (203), X de ResponderPanel (133). Operar con teclado (que el Enter-para-enviar ya insinúa) es invisible.",
+        "severidad": "media",
+        "sugerencia": "`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1` en los cuatro botones."
+      },
+      {
+        "archivo": "src/features/canales/ResponderPanel.tsx",
+        "linea": 193,
+        "problema": "Los dos textareas (193 y 211) no tienen estado de focus — ni focus:border-primary ni ring — a diferencia del composer de WhatsApp (HiloWhatsapp:249). Escribiendo la respuesta más delicada del CRM, el campo activo no se distingue.",
+        "severidad": "media",
+        "sugerencia": "`outline-none focus:border-primary` en ambos, igual que el composer de WhatsApp, para que la columna hable un solo idioma de foco."
+      },
+      {
+        "archivo": "src/features/canales/QuePuedoHacer.tsx",
+        "linea": 120,
+        "problema": "El aviso de ventana cerrada usa text-warning (dorado #FFC800) sobre bg-warning/10: contraste flojo sobre fondo claro. El propio BannerSesion (HiloWhatsapp:325) ya resuelve esto con text-gold-ink sobre el mismo fondo.",
+        "severidad": "media",
+        "sugerencia": "`text-gold-ink` para el ícono Clock (119) y el párrafo (120). El uso del dorado acá es legítimo (la ventana que se cerró ES tiempo que se acabó) — solo falta la tinta correcta."
+      },
+      {
+        "archivo": "src/features/canales/HistorialPersona.tsx",
+        "linea": 31,
+        "problema": "Devuelve null mientras carga (el bloque 'ya te había escrito N veces' aparece de golpe, con layout shift) y si el fetch falla queda oculto en silencio: historial que existe pero no se ve, contra 'estados honestos, nada se esconde'. El dato cambia cómo se responde — perderlo en silencio es caro.",
+        "severidad": "media",
+        "sugerencia": "Skeleton `mt-5 h-20 animate-pulse rounded-xl bg-muted/50` mientras carga (como QuePuedoHacer:43) + `.catch()` que muestre 'No pudimos cargar su historial — puede que ya te haya escrito antes.'"
+      },
+      {
+        "archivo": "src/features/whatsapp/HiloWhatsapp.tsx",
+        "linea": 135,
+        "problema": "El aviso 'Esta conversación se ve desde que se vinculó el número…' ocupa una banda con fondo bg-secondary/60 en TODAS las conversaciones, para siempre — ruido permanente que compite con el primer mensaje, apilado además sobre BannerSesion + BadgeOrigen (hasta 3 bandas antes del hilo).",
+        "severidad": "baja",
+        "sugerencia": "Bajarlo a texto suelto `text-center text-[11px] text-muted-foreground` sin fondo, o mostrarlo solo cuando el hilo tiene menos de ~5 mensajes (que es cuando la duda existe)."
+      },
+      {
+        "archivo": "src/features/canales/HiloMessenger.tsx",
+        "linea": 67,
+        "problema": "El vacío 'No hay mensajes capturados de esta conversación.' declara el qué pero no el porqué ni el qué hacer — contra la decisión 'cada vacío declara su porqué'.",
+        "severidad": "baja",
+        "sugerencia": "'La ingesta guarda lo que llegó desde que se conectó la Página; lo anterior vive en Business Suite.' + repetir el link que ya existe en el footer (101)."
+      },
+      {
+        "archivo": "src/features/canales/QuePuedoHacer.tsx",
+        "linea": 89,
+        "problema": "Dos voces en la misma columna: tuteo acá ('Qué puedes hacer', 'te haya escrito', y ResponderPanel:243 'Puedes borrarlo') contra voseo en el resto de la superficie ('Escribile' HiloWhatsapp:247, 'Vinculalo' 318, 'tocá' 57, 'Abrilo' HiloMessenger:106). La misma pantalla cambia de acento según el panel.",
+        "severidad": "baja",
+        "sugerencia": "Unificar en la voz dominante de la superficie (voseo): 'Qué podés hacer con esto', 'Mandale un mensaje privado', 'Podés borrarlo después', 'aunque nunca te haya escrito' queda igual."
+      },
+      {
+        "archivo": "src/features/canales/ResponderPanel.tsx",
+        "linea": 186,
+        "problema": "4 kickers uppercase en la superficie (186 'Respuesta pública', 198 'Mensaje privado', QuePuedoHacer:88 'Qué puedes hacer con esto', HistorialPersona:50 'Ya te había escrito N veces') — el pendiente declarado pide racionarlos; acá tres son labels de campo/lista que no necesitan gritar.",
+        "severidad": "baja",
+        "sugerencia": "Conservar solo el de QuePuedoHacer:88 como título de caja. Los labels de los textareas y el de historial pasan a sentence-case: `text-xs font-semibold text-foreground` sin uppercase ni tracking-wide ('Respuesta pública', 'Mensaje privado', 'Ya te había escrito 3 veces')."
+      },
+      {
+        "archivo": "src/features/canales/ResponderPanel.tsx",
+        "linea": 237,
+        "problema": "La acción primaria ('Responder a esta persona') no da feedback al presionar ni tiene transición, mientras el send de WhatsApp sí (active:scale-[0.94]). Y en HiloWhatsapp:255 el send usa transition-all duration-500, que transiciona sombra/color a 500ms — fuera de la espec 200-300ms y solo transform/opacity.",
+        "severidad": "baja",
+        "sugerencia": "En 237: agregar `transition-transform duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] active:scale-[0.98]`. En HiloWhatsapp:255: cambiar transition-all duration-500 por duration-200 limitado a transform (dejar el cambio de sombra sin transición o quitarlo)."
+      },
+      {
+        "archivo": "src/features/canales/ResponderPanel.tsx",
+        "linea": 180,
+        "problema": "Puntos suspensivos tipeados: 'Borrando...', 'Enviando...' (240) y los placeholders (192, 208) usan tres puntos, contra el carácter … real del resto de la superficie ('Cargando…', 'Escribile a…'). Detalle de imprenta que delata descuido.",
+        "severidad": "baja",
+        "sugerencia": "Reemplazar '...' por '…' en las 4 apariciones del archivo."
+      },
+      {
+        "archivo": "src/features/canales/ResponderPanel.tsx",
+        "linea": 22,
+        "problema": "PLANTILLA_PUBLICA_SOLA suena a bot: dos exclamaciones y fórmula plantillera ('¡Con gusto te compartimos…! ¡Te esperamos!') en un producto cuyo credo es 'un envío = una acción humana'. Es contenido que ve el cliente, pero es el default que Hermes pone en la boca de la vendedora.",
+        "severidad": "baja",
+        "sugerencia": "Default más humano: 'Hola — con gusto. Escribinos por mensaje privado y te mandamos el programa completo con fechas y precios.' (una exclamación como máximo si el negocio la quiere; hoy hay tres entre las dos plantillas)."
+      }
+    ],
+    "oportunidades": [
+      "Separadores de día como momento firma del hilo: el fix de anclas temporales puede ser identidad — chips centrados en font-mono ('hoy', 'ayer', 'lun 14 jul'), y cuando el último mensaje de la persona tiene más de un día, ese separador toma la tinta de la rampa de temperatura (tibio dorado, frío ladrillo). El hilo mismo pasa a contar cuánto se enfrió la conversación, que es exactamente lo que Hermes vende.",
+      "La ventana de 7 días como cuenta regresiva viva en QuePuedoHacer: el componente ya sabe cap.dias — cuando quedan 1-2 días para que se cierre el privado, mostrar en dorado (uso legítimo: tiempo que se acaba) 'Te quedan 2 días para poder escribirle en privado'. Hoy el dorado solo aparece cuando ya es tarde; el momento de oro es ANTES de que se cierre.",
+      "El comentario de la persona como pieza tipográfica héroe en ResponderPanel: es EL objeto al que se responde y hoy es una caja muted igual a todo lo demás (línea 140, text-[15px]). Dársele un momento — cita en font-heading text-lg con una comilla de apertura grande en navy y el borde izquierdo del canal — haría que la vista se lea en un golpe: esto dijo, así respondo.",
+      "Matar el dead-end del 'Respondido': tras enviar, la tarjeta verde ofrece solo 'Borrar mi respuesta'. Agregar la acción de continuidad — 'Siguiente de la cola' (o Enter para saltar) — convierte la superficie en una mesa de despacho de ritmo continuo: responder → siguiente → responder, sin volver a la cola con el mouse."
+    ]
+  },
+  {
+    "vista": "Contactos (VistaPersonas) y Correos (VistaCorreos)",
+    "resumen": "Son las dos vistas más calladas del CRM y las más cerca del estándar — copy honesto, una acción primaria clara, mono bien usado para teléfonos y metadatos — pero fallan justo donde predican: la lista de Correos miente un vacío mientras carga y el aviso \"falta SMTP\" también aparece si la API se cayó, el motivo de un envío fallido vive escondido en un title de 6px, y las 3 tarjetas de Contactos llevan borde+sombra a la vez (la decisión cerrada que ya se barrió en el resto). El problema número uno de esta superficie: los bordes del estado (loading, error, fallido, vacío inicial) traicionan la filosofía de estados honestos que el propio copy declara.",
+    "kickers": 2,
+    "hallazgos": [
+      {
+        "archivo": "src/features/vistas/VistaPersonas.tsx",
+        "linea": 108,
+        "problema": "Doble marco: las tres tarjetas de resultado (skeleton línea 87, 'nuevo' línea 101, ficha cliente línea 108) llevan `border border-border` Y `shadow-panel` a la vez — la decisión cerrada sombra-O-borde está violada 3 veces en esta vista.",
+        "severidad": "alta",
+        "sugerencia": "Quitar `border border-border` de las tres y quedarse con `bg-card shadow-panel`, como ya hacen las cards de VistaCorreos (líneas 66 y 149)."
+      },
+      {
+        "archivo": "src/features/vistas/VistaPersonas.tsx",
+        "linea": 86,
+        "problema": "El vacío inicial renderiza `null`: antes de la primera búsqueda la vista es una barra y un hueco. El único guía es la nota de 11px de la línea 80 — el caso de uso (que el propio comentario del archivo cuenta bien) no se le cuenta a la vendedora.",
+        "severidad": "alta",
+        "sugerencia": "Reemplazar el `null` por un estado vacío con propósito: icono Search en `text-muted-foreground/40`, una frase en `text-sm text-muted-foreground` ('¿Te dictaron un número o llegó por Messenger sin teléfono? Pegalo arriba: te digo si ya es cliente de la Escuela.') y mover ahí la aclaración del límite por teléfono de la línea 80."
+      },
+      {
+        "archivo": "src/features/correos/VistaCorreos.tsx",
+        "linea": 144,
+        "problema": "Falso vacío: mientras `enviados.isPending`, `(enviados.data?.correos.length ?? 0) === 0` es true y se muestra 'Todavía no salió ningún correo desde Hermes' — un estado que miente durante la carga. Tampoco existe rama para `enviados.isError`.",
+        "severidad": "alta",
+        "sugerencia": "Ramificar primero: `enviados.isPending` → 3 filas skeleton con la forma de la lista (dot `size-1.5` + barras `w-24`/`w-48`/`flex-1` con `animate-pulse bg-muted`); `enviados.isError` → 'No se pudo cargar la lista — no es que no haya correos.'"
+      },
+      {
+        "archivo": "src/features/correos/VistaCorreos.tsx",
+        "linea": 156,
+        "problema": "El motivo de un correo fallido está escondido en el `title` de un punto de 6px: invisible sin hover preciso, inexistente para teclado y touch. Contradice el propio comentario del archivo ('incluidos los fallidos') y la regla de que nada se esconde.",
+        "severidad": "alta",
+        "sugerencia": "Para `estado === 'fallido'` renderizar visible en la fila: `<span className=\"shrink-0 rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive\">falló · {c.motivo}</span>`; el dot queda solo para los enviados."
+      },
+      {
+        "archivo": "src/features/vistas/VistaPersonas.tsx",
+        "linea": 100,
+        "problema": "Dead-end del lead nuevo: '{telefono} no figura en Cerberus. Es un lead nuevo.' y nada más — sin próximo paso ni qué sigue. La vendedora acaba de descubrir algo accionable y la vista la deja parada.",
+        "severidad": "alta",
+        "sugerencia": "Sumar al menos el copy de continuidad: 'Cuando le registres una venta, la ficha va a aparecer sola acá.' — e idealmente una acción secundaria (link 'Buscarlo en Mensajes' que conmute de vista con ese teléfono, mecanismo que ya existe: esta vista recibe `telefonoInicial`)."
+      },
+      {
+        "archivo": "src/features/correos/VistaCorreos.tsx",
+        "linea": 75,
+        "problema": "`!estado.isPending && !conectado` también es true cuando `estado.isError`: si la API de Hermes no responde se muestra 'falta cargar SMTP_HOST…', que puede ser falso. Mismo pecado que la vista promete no cometer ('jamás fingir').",
+        "severidad": "media",
+        "sugerencia": "Rama previa para `estado.isError` → 'No se pudo consultar el estado del canal de correo — reintentá en un momento.'; el aviso SMTP solo cuando `estado.data?.conectado === false`."
+      },
+      {
+        "archivo": "src/features/correos/VistaCorreos.tsx",
+        "linea": 78,
+        "problema": "El aviso fail-closed le habla a la vendedora con variables de entorno (`SMTP_HOST · SMTP_USER · SMTP_PASS`, `.env` del server) antes que con la parte humana; además usa `<b>` crudo. El estado honesto está bien — la audiencia está mezclada.",
+        "severidad": "media",
+        "sugerencia": "Invertir el orden: primero 'El canal de correo todavía no está conectado. Es un paso de sistemas — dos minutos — y esta pantalla se enciende sola cuando esté.'; la línea técnica al final en `font-mono text-[11px] text-muted-foreground` ('para sistemas: SMTP_HOST · SMTP_USER · SMTP_PASS en el .env'); `<b>` → `<span className=\"font-semibold\">`."
+      },
+      {
+        "archivo": "src/features/vistas/VistaPersonas.tsx",
+        "linea": 93,
+        "problema": "`text-gold-ink` (#CAA106) tiñe un aviso de sistema caído — el dorado quedó reservado a 'tiempo que se acaba' y acá significa 'API rota'. Además mezcla tokens: fondo/borde `warning` (#F59E0B) con tinta gold. Se repite en VistaCorreos.tsx:76 para el aviso SMTP.",
+        "severidad": "media",
+        "sugerencia": "En ambos avisos usar `text-warning-foreground` (#78350F, ya definido en index.css:42) en lugar de `text-gold-ink`; el gold-ink vuelve a ser exclusivo de ventana 24h / vencidos / frescura."
+      },
+      {
+        "archivo": "src/features/vistas/VistaPersonas.tsx",
+        "linea": 87,
+        "problema": "Skeleton genérico de 3 barras de texto iguales — no tiene la forma del resultado que reemplaza (badge de cliente + nombre + fila mono de meta + grid de compras). Decisión cerrada: skeleton con la forma del layout.",
+        "severidad": "media",
+        "sugerencia": "Espejar la ficha: `h-5 w-16 rounded-full` (badge), `h-6 w-48 rounded` (nombre), `h-3 w-2/3 rounded` (meta) y dos bloques `h-12 rounded-xl` dentro de `grid gap-2 sm:grid-cols-2` (compras), todos `animate-pulse bg-muted`."
+      },
+      {
+        "archivo": "src/features/vistas/VistaPersonas.tsx",
+        "linea": 150,
+        "problema": "`{v.fecha}` se pinta crudo tal como llega de Cerberus (server/src/cerberus/ficha.ts:79 hace `String(v.fecha_venta ?? '')`): fecha máquina en una app que promete cifras en lenguaje humano.",
+        "severidad": "media",
+        "sugerencia": "Formatear en el front: `new Date(v.fecha).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })` con fallback al string crudo si `Number.isNaN(Date.parse(v.fecha))`."
+      },
+      {
+        "archivo": "src/features/vistas/VistaPersonas.tsx",
+        "linea": 114,
+        "problema": "La ficha cliente no tiene momento tipográfico: el nombre queda en `text-lg` y los montos enterrados en text-xs. La pregunta real de la vendedora ('¿cuánto compró esta persona?') no tiene respuesta dominante en la vista.",
+        "severidad": "media",
+        "sugerencia": "Nombre a `font-heading text-2xl font-bold` y una línea resumen bajo el header con la suma por moneda: '2 compras · USD 1.250' en `font-heading text-xl tabular-nums text-navy` — la cifra héroe de la ficha."
+      },
+      {
+        "archivo": "src/features/correos/VistaCorreos.tsx",
+        "linea": 69,
+        "problema": "Jerarquía plana: el h1 'Nuevo correo' mide `text-sm`, casi lo mismo que el kicker de 'Últimos enviados' — nada domina la vista, todo susurra parejo.",
+        "severidad": "media",
+        "sugerencia": "h1 a `font-heading text-lg font-bold` (o eliminarlo y dejar que el campo 'Para' abra la tarjeta); Enviar sigue siendo la única acción primaria, que ya está bien resuelta."
+      },
+      {
+        "archivo": "src/features/vistas/VistaPersonas.tsx",
+        "linea": 74,
+        "problema": "El botón Buscar no tiene `focus-visible` (solo hover/active/disabled); ídem el link 'Ver en Cerberus' (línea 126) y el botón Enviar de VistaCorreos (línea 126). Tabular por la vista es navegar a ciegas.",
+        "severidad": "media",
+        "sugerencia": "Agregar `focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary` a los tres controles."
+      },
+      {
+        "archivo": "src/features/correos/VistaCorreos.tsx",
+        "linea": 88,
+        "problema": "Inputs del composer solo con placeholder (el 'Para:' desaparece al tipear; sin label ni aria-label) y focus débil: `focus:border-primary` pelado, sin el ring que la búsqueda de Personas ya tiene (VistaPersonas:60).",
+        "severidad": "media",
+        "sugerencia": "`aria-label=\"Para\"` / `\"Asunto\"` / `\"Cuerpo del correo\"` en los tres campos y sumar `focus:shadow-[0_0_0_3px_rgba(37,99,235,0.12)]` para igualar el patrón de foco de la casa."
+      },
+      {
+        "archivo": "src/features/correos/VistaCorreos.tsx",
+        "linea": 126,
+        "problema": "`transition-all` sin duración ni curva en el botón Enviar, mientras su gemelo Buscar (VistaPersonas:74) ya lleva `duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]` — micro-interacción inconsistente entre vistas hermanas.",
+        "severidad": "baja",
+        "sugerencia": "Copiar la misma curva: `transition-all duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]`."
+      },
+      {
+        "archivo": "src/features/correos/VistaCorreos.tsx",
+        "linea": 101,
+        "problema": "No hay Cmd/Ctrl+Enter para enviar: la acción más frecuente de la vista obliga a soltar el teclado y buscar el botón.",
+        "severidad": "baja",
+        "sugerencia": "`onKeyDown` en el textarea: `(e.metaKey || e.ctrlKey) && e.key === 'Enter'` → `enviar.mutate()` (con las mismas guardas del disabled), y sumarlo al microcopy de la línea 131: '⌘↵ para enviar'."
+      },
+      {
+        "archivo": "src/features/vistas/VistaPersonas.tsx",
+        "linea": 50,
+        "problema": "Submit inválido silencioso: Enter con menos de 8 dígitos no hace nada ni explica por qué (el disabled del botón tampoco se justifica en pantalla).",
+        "severidad": "baja",
+        "sugerencia": "Estado `hint` que al submit fallido muestre bajo el input, en `text-[11px] text-muted-foreground`: 'Faltan dígitos — incluí el código de país (51 …)'."
+      },
+      {
+        "archivo": "src/features/vistas/VistaPersonas.tsx",
+        "linea": 59,
+        "problema": "`mt-4` huérfano en el form: no hay nada arriba dentro del contenedor `p-6` — espaciado vestigial, no ritmo deliberado.",
+        "severidad": "baja",
+        "sugerencia": "Quitar el `mt-4` o convertirlo en decisión de respiración (p. ej. `mt-10`) si la barra debe entrar como momento propio de la vista."
+      },
+      {
+        "archivo": "src/features/vistas/VistaPersonas.tsx",
+        "linea": 149,
+        "problema": "El estado de la venta (`{v.estado}`) es texto muted plano: 'pagada' y 'anulada' pesan exactamente igual a los ojos.",
+        "severidad": "baja",
+        "sugerencia": "Base `font-medium text-foreground`, y si los valores de Cerberus son un set conocido, mapear a color semántico (success / destructive) — sin inventar estados que el backend no manda."
+      },
+      {
+        "archivo": "src/features/vistas/VistaPersonas.tsx",
+        "linea": 81,
+        "problema": "'Matchea solo por teléfono' — anglicismo dev en voz de producto; el resto del copy de la vista habla claro.",
+        "severidad": "baja",
+        "sugerencia": "'Busca solo por teléfono. El nombre o el usuario de Instagram llegan con la identidad entre canales.'"
+      },
+      {
+        "archivo": "src/features/correos/VistaCorreos.tsx",
+        "linea": 158,
+        "problema": "Anchos fijos `w-24` + `w-48 shrink-0` en la lista: en ventana angosta el asunto (`flex-1`) colapsa a cero antes de que cedan las columnas de vendedora y correo.",
+        "severidad": "baja",
+        "sugerencia": "Para el correo: `basis-48 shrink min-w-0 truncate` en lugar de `w-48 shrink-0`; la columna vendedora puede pasar a `hidden sm:block` bajo el breakpoint."
+      },
+      {
+        "archivo": "src/features/vistas/VistaPersonas.tsx",
+        "linea": 85,
+        "problema": "El swap skeleton → resultado es un corte seco: la ficha aparece de golpe, sin la entrada con transform/opacity que pide el estándar de micro-interacciones.",
+        "severidad": "baja",
+        "sugerencia": "Envolver el resultado con una entrada única: `animate-[entrar_240ms_cubic-bezier(0.32,0.72,0,1)]` con keyframes `from { opacity: 0; transform: translateY(4px) }` (solo transform/opacity)."
+      }
+    ],
+    "oportunidades": [
+      "Spotlight de búsqueda en Contactos: sin búsqueda activa, la barra centrada verticalmente y más generosa (input a text-base), con el caso de uso contado debajo; al buscar, se acopla arriba con un transform de 250ms. La vista pasa de 'form perdido en la esquina' a instrumento de consulta con gesto propio.",
+      "Cifra héroe en la ficha: el total histórico comprado en Montserrat grande con tabular-nums ('2 compras · USD 1.250') como respuesta dominante — es exactamente lo que la vendedora necesita cuando le preguntan por un cliente en voz alta.",
+      "Búsquedas recientes como chips mono bajo la barra (últimos 3 teléfonos consultados, estado local, sin backend): el caso real es 'me lo dictaron y lo vuelvo a necesitar en cinco minutos'.",
+      "En Correos, hacer visible el momento en que el canal se enciende: cuando `conectado` pasa a true, el 'desde mail.goberna.us' entra con una única transición de opacity/translate — el estado honesto no solo se declara, se ve cambiar. Y en 'Últimos enviados', fechas relativas humanas ('hace 2 h') con agrupación por día para que la coordinación del equipo se lea de un vistazo."
+    ]
+  },
+  {
+    "vista": "Mensajes — la cola unificada (ColaUnificada + FilaConversacion; Bandeja/FilaInteraccion como predecesores)",
+    "resumen": "La superficie viva (ColaUnificada + FilaConversacion) está a un 80% del estándar: costura honesta, banda de temperatura periférica, sombra-o-borde correcto, dorado solo para la ventana. Su problema número uno es la fila misma: habla en cuatro renglones con metadatos de relleno (\"Mensaje\", \"Comentario\") y el peso visual está invertido — la conversación YA respondida recibe color mientras la que espera respuesta se ve plana. Además hay dos regresiones contra decisiones cerradas: el vacío perdió el chequeo de frescura que Bandeja sí tenía (puede decir \"estás al día\" con la captura muerta) y el vacío de búsqueda es un dead-end que menciona un botón que no está en pantalla.",
+    "kickers": 2,
+    "hallazgos": [
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/canales/ColaUnificada.tsx",
+        "linea": 176,
+        "problema": "Vacío deshonesto: ColaUnificada perdió el chequeo vacioPorAtraso que Bandeja sí tenía (Bandeja.tsx:57-58). Con la ingesta de Meta muerta, el filtro 'Les puedo escribir' muestra 'Estás al día' — exactamente la mentira que la decisión 'estados honestos' prohíbe, y la ventana de Meta es el dato que depende de esa ingesta. BarraFrescura en el header mitiga pero el vacío afirma lo contrario en la misma pantalla.",
+        "severidad": "alta",
+        "sugerencia": "Portar el patrón de Bandeja: const { data: frescura } = useFrescura(); const vacioPorAtraso = frescura != null && !frescura.fresca && frescura.total > 0; y en el vacío renderizar el copy de Bandeja.tsx:95-102 ('No hay nada acá, pero no es porque estés al día. La última captura fue hace N…') antes de caer en filtro.vacio."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/canales/ColaUnificada.tsx",
+        "linea": 177,
+        "problema": "Dead-end de búsqueda: cuando visibles.length === 0 el vacío dice '\"Ver más\" trae más historia', pero el botón Ver más solo se renderiza en la rama con resultados (líneas 180-200). La vendedora busca un nombre, no matchea, y la pantalla la instruye a apretar un botón que no existe.",
+        "severidad": "alta",
+        "sugerencia": "Sacar el bloque {hayMas && …} del ternario para que también se renderice bajo el vacío de búsqueda; mejor aún, ahí el botón se vuelve la acción obvia: 'Buscar en más historia' llamando cargarMas, w-full rounded-lg border border-border py-2 text-xs font-bold."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/canales/FilaConversacion.tsx",
+        "linea": 78,
+        "problema": "La fila habla en cuatro renglones (nombre+tiempo / metadatos / preview / contexto) y el renglón 2 es mayormente relleno: 'Mensaje' en una fila que obviamente es un mensaje no informa nada, y el contador 'N mensajes' — el dato que sí importa (cuánto espera) — queda enterrado como texto plano. La jerarquía nombre>preview se diluye en una columna de 25rem.",
+        "severidad": "media",
+        "sugerencia": "Bajar a 2 renglones: eliminar el texto 'Mensaje'/'Comentario' (el tipo ya lo dan BadgeCanal y la línea 'en «…»' de los comentarios); mover c.n > 1 a una burbuja a la derecha bajo el tiempo, solo si !c.respondida: <span className=\"rounded-full bg-primary px-1.5 py-px text-[11px] font-bold tabular-nums text-primary-foreground\">{c.n}</span>; el check 'respondida' pasa junto al timestamp."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/canales/FilaConversacion.tsx",
+        "linea": 92,
+        "problema": "Estado no-leído invertido: la fila respondida recibe tinte (bg-success/5 en línea 48) y la que ESPERA respuesta queda plana; el preview solo gana peso si pide_info && !respondida. Un WhatsApp sin responder que no pide info se ve idéntico a una fila vieja resuelta — lo pendiente debería dominar sobre lo hecho.",
+        "severidad": "media",
+        "sugerencia": "Invertir el peso: preview !c.respondida → 'text-foreground' (sin depender de pide_info; font-medium solo con pide_info); nombre c.respondida → 'font-medium text-muted-foreground' en vez de font-semibold. El tinte bg-success/5 puede quedarse: con lo pendiente en tinta plena, lo verde pasa a leerse como descanso."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/canales/ColaUnificada.tsx",
+        "linea": 174,
+        "problema": "Loading es un '<p>Cargando…</p>' centrado — la decisión cerrada pide skeleton con la forma del layout, no texto/spinner. Es el primer frame de la vista principal en cada arranque en frío.",
+        "severidad": "media",
+        "sugerencia": "6 filas fantasma con la anatomía real de FilaConversacion: <div className=\"flex animate-pulse gap-3 border-b border-border py-3 pl-4 pr-3\"><div className=\"size-9 shrink-0 rounded-full bg-muted\"/><div className=\"flex-1 space-y-2 pt-1\"><div className=\"h-3 w-2/5 rounded bg-muted\"/><div className=\"h-3 w-4/5 rounded bg-muted\"/></div></div>."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/canales/FilaConversacion.tsx",
+        "linea": 68,
+        "problema": "Cuando la ventana está abierta, el chip dorado REEMPLAZA al timestamp: en las filas más urgentes de toda la cola no se ve cuándo llegó el último mensaje ('quedan 5d' no dice si escribió hace 10 minutos o hace 5 días).",
+        "severidad": "media",
+        "sugerencia": "Columna derecha de dos líneas: chip dorado arriba y debajo <span className=\"font-mono text-[11px] tabular-nums text-muted-foreground\">{hace(horas)}</span> — envolver ambos en un flex flex-col items-end gap-0.5."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/canales/FilaConversacion.tsx",
+        "linea": 80,
+        "problema": "Kicker 'Pide info' en uppercase tracking-wide text-primary dentro de cada fila: bajo el filtro 'Piden info' TODAS las filas gritan el mismo label — redundante con el filtro activo y compite en peso con el nombre (es el pendiente declarado de racionar kickers).",
+        "severidad": "media",
+        "sugerencia": "Bajarlo a chip sin uppercase: <span className=\"rounded bg-primary/10 px-1 py-px text-[11px] font-semibold text-primary\">Pide info</span>, y ocultarlo cuando el filtro activo ya es pide-info (prop mostrarPideInfo, mismo patrón que mostrarCanal de FilaInteraccion; ColaUnificada pasa intencion !== 'pide-info')."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/canales/ColaUnificada.tsx",
+        "linea": 87,
+        "problema": "Ritmo mecánico en la cabecera: dos barras apiladas con el mismo p-2 y dos border-b consecutivos en ~80px (búsqueda línea 87, filtros línea 149). En una columna de 25rem son dos franjas de cromo idénticas donde debería haber un solo bloque con respiración deliberada.",
+        "severidad": "media",
+        "sugerencia": "Fusionar en un solo header con una sola división: <div className=\"shrink-0 border-b border-border px-3 pb-2 pt-3\"> conteniendo búsqueda (mb-2) y la fila filtros+total; quitar el segundo border-b de la línea 149."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/canales/ColaUnificada.tsx",
+        "linea": 166,
+        "problema": "El total es un número suelto ('128') flotando junto a los filtros, sin sustantivo — viola 'cifras en lenguaje humano'; Bandeja al menos decía '128 en total'.",
+        "severidad": "media",
+        "sugerencia": "'{total.toLocaleString('es')} en cola' — y ya que es la única cifra del panel, dale voz instrumento: className=\"pr-1 font-mono text-[11px] tabular-nums text-muted-foreground\"."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/canales/ColaUnificada.tsx",
+        "linea": 177,
+        "problema": "Copy con anglicismo: 'Nada matchea en lo cargado' — la voz de la casa es directa y sin spanglish de dashboard.",
+        "severidad": "media",
+        "sugerencia": "«Ninguna conversación cargada coincide con \"{busqueda}\". Traé más historia con \"Ver más\".» (y con el botón visible, ver el dead-end)."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/canales/Bandeja.tsx",
+        "linea": 35,
+        "problema": "Código muerto sucedido: nada importa Bandeja (solo ella importa FilaInteraccion y useBandeja), y ColaUnificada declara sucederla. Además Bandeja viola la barrida sombra-o-borde ('border border-border … shadow-sm' en línea 88) y sus tabs activas usan bg-primary, inconsistentes con el segmented control de ColaUnificada — deuda visual que confunde cualquier auditoría futura.",
+        "severidad": "media",
+        "sugerencia": "Archivar Bandeja.tsx + FilaInteraccion.tsx + useBandeja.ts con ADR corto en docs/adr/ (regla dura #3, mismo tratamiento que PanelWhatsapp), migrando antes lo único que ColaUnificada no heredó: el chequeo vacioPorAtraso y el copy de vacío honesto."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/canales/ColaUnificada.tsx",
+        "linea": 91,
+        "problema": "Teclado inexistente en la acción más frecuente: no hay atajo para enfocar la búsqueda, Escape no limpia el input (la X es solo mouse), y la cola no se recorre con flechas — la vendedora vive en esta lista todo el día.",
+        "severidad": "media",
+        "sugerencia": "En el input: onKeyDown={(e) => e.key === 'Escape' && setBusqueda('')}. Atajo global '/' (o Cmd+K) con un ref que haga inputRef.current?.focus() cuando el foco no esté en un input. Las flechas ↑↓+Enter sobre las filas van como iteración aparte (roving tabindex)."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/canales/FilaConversacion.tsx",
+        "linea": 74,
+        "problema": "Timestamps y cifras sin voz instrumento: 'hace 3 horas' (línea 74) y el número del chip 'quedan 5d' (línea 71) van en sans proporcional — la columna derecha de tiempos no alinea entre filas; además 'quedan 5d' abrevia mientras FilaInteraccion decía 'quedan 5 días' (inconsistencia de copy).",
+        "severidad": "baja",
+        "sugerencia": "Timestamp: className=\"shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground\". Chip: agregar tabular-nums y unificar copy a 'quedan 5 días' (entra en 25rem) o declarar la abreviatura como voz mono en toda la app — pero una sola de las dos."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/canales/FilaConversacion.tsx",
+        "linea": 48,
+        "problema": "La fila seleccionada solo se distingue por bg-secondary — que es el mismo valor que --accent, el hover genérico de shadcn: como estado estructural de un master-detail es débil; y no hay feedback al presionar (solo transition-colors de hover).",
+        "severidad": "baja",
+        "sugerencia": "seleccionada → 'bg-secondary shadow-[inset_-3px_0_0_var(--color-primary)]' (el filo derecho apunta a la conversación abierta; no choca con la banda de temperatura que vive en el filo izquierdo) y agregar active:bg-muted para el press."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/canales/FilaConversacion.tsx",
+        "linea": 7,
+        "problema": "VENTANA_DIAS = 7 redefinida localmente cuando types.ts ya la exporta (FilaInteraccion la importa de ahí): si la ventana de Meta cambia, el reloj dorado de la cola diverge del resto en silencio.",
+        "severidad": "baja",
+        "sugerencia": "Borrar la const local e import { VENTANA_DIAS } from './types'."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/canales/FilaConversacion.tsx",
+        "linea": 37,
+        "problema": "Fallback de nombre en WhatsApp es el teléfono crudo ('51986394450') en la misma tipografía semibold del nombre: un número disfrazado de nombre, difícil de leer y de comparar.",
+        "severidad": "baja",
+        "sugerencia": "Cuando el nombre cae al persona_id numérico, renderizarlo como dato: font-mono font-medium tabular-nums y con separación legible ('51 986 394 450') — un helper formatoTelefono compartido con la ficha."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/canales/ColaUnificada.tsx",
+        "linea": 89,
+        "problema": "transition-all en el wrapper de búsqueda (89) y en el botón de chat nuevo (108) — el patrón genérico que la casa evita; solo cambian colores, borde, sombra y transform.",
+        "severidad": "baja",
+        "sugerencia": "Acotar: búsqueda → transition-[border-color,background-color]; botón → transition-[background-color,transform,box-shadow], ambos con duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]."
+      }
+    ],
+    "oportunidades": [
+      "Preview que dice qué espera: exponer en /api/conversaciones el tipo del último mensaje sin texto (audio, imagen, documento) y reemplazar '(sin texto)' por 'Audio · 0:14' o 'Foto' en font-mono text-[11px] — la vendedora sabe qué le espera antes de abrir, y el placeholder deja de ser un encogimiento de hombros.",
+      "Modo despacho por teclado: '/' enfoca la búsqueda, ↑↓ recorren la cola con el focus-visible que ya existe global, Enter abre — la vendedora baja la cola fila por fila sin tocar el mouse, que es exactamente el gesto de 'atender una cola'.",
+      "Momento firma de cola despachada: cuando 'Les puedo escribir' queda en cero CON frescura viva, el vacío se gana la única cifra héroe de esta vista — 'Respondiste a 14 personas hoy' en font-heading text-3xl navy sobre el 'Estás al día' — cierre del día honesto, sin confeti ni gamificación.",
+      "La cola respira al llegar alguien: cuando el SSE inserta una fila nueva, solo esa fila entra con animate-in fade-in slide-in-from-top-1 duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] (transform/opacity puros) — movimiento periférico que avisa sin badge ni sonido, coherente con la banda de temperatura como lectura de reojo."
+    ]
+  },
+  {
+    "vista": "Shell y navegación (App.tsx · Marca.tsx · BarraFrescura · EstadoWhatsapp · index.css · styles.ts)",
+    "resumen": "La cáscara está cerca del estándar: tokens firmes y documentados con intención, riel sobrio con un solo estado activo dominante, y honestidad de estados como principio escrito en los docstrings. Su problema número uno es que src/lib/styles.ts exporta slop a toda la app: cardClass lleva borde+sombra a la vez (la decisión cerrada violada en la clase compartida), cardHeaderClass es un slab navy de admin-template y sectionLabel hace del kicker uppercase el default — arreglar esas tres líneas corrige media app de un golpe. Lo segundo: los estados de sistema del header hablan en el idioma equivocado — copy de developer (npm run) dirigido a la vendedora, dorado usado para \"conectando\", y el semáforo de WhatsApp que desaparece en silencio si el server no contesta.",
+    "kickers": 1,
+    "hallazgos": [
+      {
+        "archivo": "src/lib/styles.ts",
+        "linea": 7,
+        "problema": "cardClass lleva 'border border-border' Y 'shadow-sm' a la vez — la decisión cerrada 'sombra O borde, nunca ambos' está violada en la clase compartida, así que cada feature que la importa nace con doble marco. Se barrieron 10 dobles-marcos a mano pero la fábrica sigue produciéndolos.",
+        "severidad": "alta",
+        "sugerencia": "export const cardClass = 'rounded-2xl border border-border bg-card overflow-hidden' (borde solo, la elección institucional sobre fondo #F5F7FB). Si alguna card puntual necesita flotar, que use la utilidad .shadow-panel SIN borde, caso por caso."
+      },
+      {
+        "archivo": "src/features/canales/BarraFrescura.tsx",
+        "linea": 49,
+        "problema": "El estado 'datos viejos' le dice a la VENDEDORA que corra 'npm run ingest:interactions' en server/ — copy de developer para una usuaria que no tiene terminal. Es un dead-end: ella no puede hacer nada con esa instrucción. Además el bloque multilínea con dos <code> vive dentro del header fino (App.tsx:168) y lo infla verticalmente; el docstring ('ocupa el ancho completo') describe una ubicación que ya no es la real.",
+        "severidad": "alta",
+        "sugerencia": "En el header, chip compacto de una línea: '<AlertTriangle/> Captura detenida hace N días' (border-warning/40 bg-warning/10). El detalle va en un popover al click: para la vendedora 'Los mensajes nuevos de Facebook e Instagram no están entrando. Avisá a sistemas.' y abajo, en font-mono text-[11px] marcado 'para sistemas:', la línea npm."
+      },
+      {
+        "archivo": "src/features/whatsapp/EstadoWhatsapp.tsx",
+        "linea": 19,
+        "problema": "El punto de 'conectando…' usa bg-gold animate-pulse. El dorado significa UNA sola cosa (tiempo que se acaba) y 'conectando' no es eso — es la marca diluyéndose en el header, el lugar más visible de la app. Mismo pecado atenuado en línea 25: 'desconectado' con text-gold-ink.",
+        "severidad": "alta",
+        "sugerencia": "Línea 19: punto 'bg-primary animate-pulse' (azul = actividad del sistema). Línea 25: mantener el punto bg-warning (ámbar semántico ≠ oro de marca) pero texto 'text-foreground font-semibold' en vez de text-gold-ink."
+      },
+      {
+        "archivo": "src/App.tsx",
+        "linea": 132,
+        "problema": "El badge de la Agenda usa text-[9px] — la decisión cerrada de micro-tipografía fija el piso en text-[11px], 'nada de 10px', y esto está dos puntos abajo. Es además la cifra más urgente del riel (promesas que apuran) en el tamaño menos legible de toda la app.",
+        "severidad": "alta",
+        "sugerencia": "className=\"absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-gold px-1 font-mono text-[11px] font-bold leading-none text-navy ring-2 ring-card\" — sube al piso de 11px agrandando el pill a 18px."
+      },
+      {
+        "archivo": "src/features/whatsapp/EstadoWhatsapp.tsx",
+        "linea": 12,
+        "problema": "if (!sesion) return null: si la query falla (server caído) o aún no cargó, el semáforo desaparece entero — el header con WhatsApp baneado-pero-sin-datos se ve idéntico al header sano. Roza la regla 'el ban SIEMPRE visible; nada se esconde': no distingue 'todo bien' de 'no sé cómo está'.",
+        "severidad": "media",
+        "sugerencia": "Sacar isPending/isError de useSesionWa. isPending → chip esqueleto (h-7 w-32 rounded-lg bg-muted animate-pulse). isError → chip real con punto bg-muted-foreground y texto font-mono 'sin señal del server'. Nunca null después del primer render."
+      },
+      {
+        "archivo": "src/App.tsx",
+        "linea": 121,
+        "problema": "El riel es solo-íconos con title nativo: Columns3 (Pipeline) y AlarmClock (Agenda) no se auto-explican, y el tooltip del sistema tarda ~1s y se ve ajeno a la marca. Para el encargo 'muy entendible' la vendedora nueva navega adivinando. El nombre de la vista solo aparece después del click, en el h1.",
+        "severidad": "media",
+        "sugerencia": "Opción A (recomendada): riel w-16 y botones en columna — ícono + <span className=\"mt-1 text-[11px] font-medium leading-none\">{v.label}</span> (Mensajes entra; el piso de 11px lo permite). Opción B: conservar solo-íconos pero con tooltip propio inmediato: button className añade 'group', y un <span> absolute left-full ml-2 rounded-md bg-navy px-2 py-1 text-[11px] text-white opacity-0 group-hover:opacity-100 transition-opacity."
+      },
+      {
+        "archivo": "src/lib/styles.ts",
+        "linea": 8,
+        "problema": "cardHeaderClass = slab navy con texto blanco en cada card: patrón admin-template 2015, y si varias cards lo usan en una vista, todos los headers gritan igual — compite con la regla de UNA cosa dominante por pantalla. El navy pleno debería ser escaso (como el estado activo del riel).",
+        "severidad": "media",
+        "sugerencia": "export const cardHeaderClass = 'flex items-center justify-between border-b border-border px-5 py-3 font-heading text-sm font-bold text-navy' — card blanca, título navy, hairline. Reservar el fill navy para el único elemento dominante de cada vista."
+      },
+      {
+        "archivo": "src/lib/styles.ts",
+        "linea": 5,
+        "problema": "sectionLabel hace del kicker uppercase el default compartido — es el origen de los ~33 kickers que la sesión anterior ya marcó para racionar. Mientras el camino fácil sea uppercase+tracking, cada sección nueva nace gritando.",
+        "severidad": "media",
+        "sugerencia": "Demoler el default: sectionLabel = 'text-xs font-semibold text-muted-foreground' (sin uppercase ni tracking). Crear aparte export const kicker = 'text-[11px] font-bold uppercase tracking-wide text-muted-foreground' para los 4-6 usos ganados. Un cambio en esta línea raciona toda la app."
+      },
+      {
+        "archivo": "src/index.css",
+        "linea": 200,
+        "problema": "El :focus-visible global fija border-radius: 4px en el ELEMENTO enfocado. Como es CSS sin layer, le gana a las utilities de Tailwind (que viven en @layer): un botón rounded-xl del riel o un pill rounded-full cambia de forma visiblemente al recibir foco de teclado — la esquina salta de 16px a 4px en toda la app.",
+        "severidad": "media",
+        "sugerencia": "Borrar la línea 'border-radius: 4px;' del bloque :focus-visible. El outline moderno ya sigue el border-radius propio de cada elemento; no hace falta forzar nada."
+      },
+      {
+        "archivo": "src/App.tsx",
+        "linea": 81,
+        "problema": "El estado de carga inicial es texto 'Cargando…' centrado en pantalla vacía — la decisión pide skeleton con la forma del layout. Además produce un flash blanco→shell al entrar cada mañana, el primer contacto del día con la app.",
+        "severidad": "media",
+        "sugerencia": "Skeleton con la anatomía del shell: <div className=\"flex h-dvh bg-background\"><div className=\"w-14 border-r border-border bg-card\"/><div className=\"flex flex-1 flex-col\"><div className=\"h-14 border-b border-border bg-card\"/><div className=\"flex-1 space-y-3 p-6\">{3 bloques rounded-2xl bg-card animate-pulse}</div></div></div>."
+      },
+      {
+        "archivo": "src/App.tsx",
+        "linea": 113,
+        "problema": "Cero navegación por teclado en el shell: la vendedora alterna Bandeja↔Agenda↔Pipeline todo el día y cada cambio es un viaje de mouse al riel. No hay atajos de vista ni forma de moverse sin puntero.",
+        "severidad": "media",
+        "sugerencia": "useEffect con keydown global: (e.metaKey||e.ctrlKey) && e.key entre '1' y '6' → setVista(VISTAS[+e.key-1].id). Publicarlo en el tooltip: title={`${v.label} · ⌘${i+1}`}. Son ~10 líneas y convierte la cáscara en instrumento."
+      },
+      {
+        "archivo": "src/App.tsx",
+        "linea": 174,
+        "problema": "key={vista} remonta la vista entera en cada conmutación para disparar animate-in: se pierde scroll y estado local (filtros, y verificar si el borrador de ConversacionActiva sobrevive — si la vendedora está escribiendo, mira la Agenda y vuelve, el texto no debería desaparecer). El costo del truco de animación lo paga el flujo más frecuente.",
+        "severidad": "media",
+        "sugerencia": "Mantener la Bandeja montada siempre (es el banco de trabajo): renderizarla con hidden cuando vista!=='bandeja' y remontar solo las vistas que 'miran'; o disparar la animación toggling una clase en useEffect sin cambiar key. Como red mínima, persistir el borrador por conversación fuera del componente."
+      },
+      {
+        "archivo": "src/App.tsx",
+        "linea": 106,
+        "problema": "El riel tiene WebkitAppRegion: drag (Electron) pero no data-tauri-drag-region — el header sí lo tiene (línea 164). En la cáscara Tauri (la definitiva) el riel no arrastra la ventana; en Electron sí. Comportamiento distinto entre las dos cáscaras en la franja más agarrable de la app.",
+        "severidad": "media",
+        "sugerencia": "Agregar data-tauri-drag-region al <nav> de la línea 104, igual que el header."
+      },
+      {
+        "archivo": "src/features/whatsapp/EstadoWhatsapp.tsx",
+        "linea": 21,
+        "problema": "Para 'baneado' solo cambian el punto y el texto; el contenedor del chip (línea 30) sigue con border-border neutro. El estado más grave del canal principal se distingue de 'conectado' por 2px de punto y una palabra en 12px — visible, sí, pero sin el peso que la regla del ban le asigna.",
+        "severidad": "media",
+        "sugerencia": "Hacer dinámico el contenedor: cuando estado==='baneado', 'border-destructive/40 bg-destructive/10'; el resto queda border-border. Una línea de ternario en la 30."
+      },
+      {
+        "archivo": "src/App.tsx",
+        "linea": 124,
+        "problema": "Los botones del riel usan transition-all (patrón genérico; anima box-shadow y layout sin necesidad) y no tienen feedback al presionar — hay hover y focus pero el click no responde físicamente.",
+        "severidad": "baja",
+        "sugerencia": "Reemplazar transition-all por 'transition-[color,background-color,box-shadow,transform]' y añadir 'active:scale-[0.96]' (transform-only, mismo cubic-bezier ya presente)."
+      },
+      {
+        "archivo": "src/App.tsx",
+        "linea": 144,
+        "problema": "El avatar usa rounded-[12px] arbitrario mientras los botones del riel usan rounded-xl (16px por token) y el logout rounded-lg (12px por token): tres radios en 60px de columna, uno hardcodeado fuera del sistema.",
+        "severidad": "baja",
+        "sugerencia": "Cambiar rounded-[12px] por rounded-lg (mismo 12px pero vía token) — el contraste avatar-cuadrado-suave vs botones-más-redondos queda como decisión, no como accidente."
+      },
+      {
+        "archivo": "src/App.tsx",
+        "linea": 162,
+        "problema": "bg-card/95 + backdrop-blur en el header no hace nada: el contenido scrollea en contenedores propios debajo, nunca pasa por detrás del header. Es costo de composición y un 5% de transparencia sin efecto visible. Además el gutter del h1 (px-4) no alinea con el de la Bandeja (p-3, línea 187): el borde izquierdo del título baila 4px contra el contenido.",
+        "severidad": "baja",
+        "sugerencia": "bg-card sólido, sin backdrop-blur; y unificar gutter horizontal (header px-3 o Bandeja p-4, uno de los dos, para que título y contenido compartan el mismo eje izquierdo)."
+      },
+      {
+        "archivo": "src/features/canales/BarraFrescura.tsx",
+        "linea": 21,
+        "problema": "isPending → null: los dos chips del header (frescura + WhatsApp) aparecen de golpe al cargar y el contenido del ml-auto salta — layout shift en la primera impresión de cada sesión.",
+        "severidad": "baja",
+        "sugerencia": "Mientras isPending, chip esqueleto con la forma final: <div className=\"h-5 w-36 rounded-md bg-muted animate-pulse\"/> — mismo patrón que sugiero para EstadoWhatsapp."
+      },
+      {
+        "archivo": "src/features/canales/BarraFrescura.tsx",
+        "linea": 27,
+        "problema": "'Datos al día · hace 2 h' va todo en la misma voz; el timestamp no usa la voz instrumento (font-mono) que la regla de datos pide para marcas de tiempo — EstadoWhatsapp al lado sí la usa, así que el header queda inconsistente consigo mismo.",
+        "severidad": "baja",
+        "sugerencia": "Envolver el valor: Datos al día · <span className=\"font-mono text-[11px]\">{hace(data.horasDesdeIngesta)}</span>."
+      },
+      {
+        "archivo": "src/features/whatsapp/EstadoWhatsapp.tsx",
+        "linea": 30,
+        "problema": "El tooltip muestra el enum crudo: 'WhatsApp: sin-vincular' con guion técnico — la única grieta de copy no-humano en un componente que ya tiene los textos humanizados en meta.texto.",
+        "severidad": "baja",
+        "sugerencia": "title={`WhatsApp: ${meta.texto}`} — reusar el texto ya humanizado en vez del estado interno."
+      }
+    ],
+    "oportunidades": [
+      "El riel como radar completo: hoy solo la Agenda tiene badge (dorado = tiempo, correcto). Un segundo contador sobre Mensajes — navy, no dorado — con las conversaciones sin responder haría que la vendedora sepa desde cualquier vista cuánta gente espera, y refuerza por contraste que el oro es solo de la Agenda: dos badges, dos significados, cero ambigüedad.",
+      "Conmutador de teclado con paleta mínima: ⌘1–6 para vistas más un ⌘K de dos comandos ('ir a vista', 'buscar persona por nombre/teléfono' reutilizando buscarPersona que ya existe en App.tsx:94). La cáscara ya conmuta por estado sin router — es barato y convierte a Hermes en instrumento de operadora, no página con botones.",
+      "Línea de salud unificada: fusionar BarraFrescura + EstadoWhatsapp en una sola línea de instrumentos font-mono a la derecha del header ('datos hace 2 h · WA conectado') que cuando todo está bien se contrae a su mínima expresión y solo crece y toma color cuando algo falla — más silencio en verde significa más señal en ámbar/rojo, y el header deja de tener dos widgets con dos gramáticas visuales.",
+      "Transición direccional entre vistas: derivar la dirección del slide del orden del riel — ir de Dashboard (arriba) a Agenda (abajo) entra deslizando desde abajo, volver entra desde arriba (índice destino vs origen elige slide-in-from-bottom-1 o -top-1). Solo transform/opacity, mismo bezier ya instalado, y el riel vertical gana memoria espacial: la interfaz se mueve en el mismo eje que la mano."
+    ]
+  },
+  {
+    "vista": "Gestión y panel derecho — BarraGestion · RegistrarGestion · Intereses · BotonLlamar · FichaContacto · PanelContexto · FormularioVenta · BadgeCanal",
+    "resumen": "Es de las superficies más honestas del CRM — el copy de estados (Cerberus caído, huecos de Messenger, \"Nada se envía solo\") ya es nivel premium y la barra ordena más de lo que abruma. Pero el panel derecho, donde se decide la venta, tiene jerarquía plana: dos primarias navy apiladas, hasta 9 kickers uppercase en una columna de 288px y ninguna cifra héroe que responda la pregunta que la ficha promete (\"¿cuánto compró?\"). Su problema número uno: el feedback de las acciones que importan falla en silencio — el folio de la venta nunca se muestra por un bug de precedencia, etiquetas/intereses mutan sin onError, y el aviso \"está en tu Agenda\" jamás llega a renderizar.",
+    "kickers": 14,
+    "hallazgos": [
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/venta/FormularioVenta.tsx",
+        "linea": 113,
+        "problema": "Bug de precedencia en el mensaje de éxito: el ternario liga el `+ (r.folio ? ...)` solo a la rama 'Cotización registrada' — al registrar una VENTA (el caso que más importa) el folio nunca se muestra.",
+        "severidad": "alta",
+        "sugerencia": "Envolver el ternario: `setSaved((saveMode === 'venta' ? 'Venta registrada en Cerberus.' : 'Cotización registrada en Cerberus.') + (r.folio ? ` (${r.folio})` : ''))`."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/gestion/RegistrarGestion.tsx",
+        "linea": 130,
+        "problema": "Dos acciones primarias en el mismo panel: 'Registrar gestión' (bg-navy, full width) y 'Registrar venta' (FichaContacto.tsx:157, bg-navy + shadow, full width) quedan apiladas a ~80px en la misma columna de 288px cuando el contacto es cliente — viola 'una acción primaria por pantalla'.",
+        "severidad": "alta",
+        "sugerencia": "Demoler 'Registrar gestión' a secundario: `border border-border bg-card text-navy hover:bg-muted` (mantener ícono y tamaño); 'Registrar venta' queda como la única navy del panel."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/gestion/BarraGestion.tsx",
+        "linea": 240,
+        "problema": "Dorado usado para un error de compuerta (`bg-gold/10 text-gold-ink`) — el gold significa SOLO tiempo que se acaba; un freno del server ('cotizado exige interés') no es tiempo. Mismo patrón en RegistrarGestion.tsx:193.",
+        "severidad": "alta",
+        "sugerencia": "Usar los tokens de warning (ámbar, ya definidos): `rounded-lg bg-warning/10 px-2 py-1 text-[11px] font-medium text-warning-foreground` — y reservar gold/gold-ink exclusivamente para la rampa de frescura y vencidos."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/gestion/RegistrarGestion.tsx",
+        "linea": 119,
+        "problema": "El sufijo ' — la próxima acción está en tu Agenda' no se muestra NUNCA: onSuccess resetea `setAccion(null)` antes de que el bloque `guardado` se renderice, así que `accion` siempre es null ahí.",
+        "severidad": "media",
+        "sugerencia": "Leer la mutación, no el estado reseteado: `{crear.variables?.proximaAccion ? ' — la próxima acción está en tu Agenda' : ''}` (o capturar un flag `conAgenda` antes del reset)."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/cerberus/FichaContacto.tsx",
+        "linea": 108,
+        "problema": "Falta la cifra héroe que justifica la ficha: el comentario del archivo promete responder '¿cuánto compró?', pero la UI solo lista folios sueltos — la vendedora suma de memoria. Cero momento tipográfico Montserrat en todo el panel.",
+        "severidad": "media",
+        "sugerencia": "Sumar `data.ventas` y abrir el estado cliente con `<div class=\"font-heading text-2xl font-bold tabular-nums text-navy\">{moneda} {total}</div><div class=\"text-[11px] text-muted-foreground\">en {ventasCount} compras</div>`; los folios pasan a detalle."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/venta/FormularioVenta.tsx",
+        "linea": 233,
+        "problema": "El monto total — el número más importante del formulario — es `text-lg font-extrabold` sin font-heading y sin moneda: '1850.00' pelado, sin saber si son soles o dólares hasta releer el select.",
+        "severidad": "media",
+        "sugerencia": "`<span class=\"font-heading text-2xl font-bold tabular-nums text-navy\">{form.monedas.find(m => m.id === monedaId)?.nombre ?? ''} {monto.toFixed(2)}</span>` — moneda junto a la cifra, Montserrat, momento único del modal."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/gestion/BarraGestion.tsx",
+        "linea": 43,
+        "problema": "Las mutaciones de etiquetas (agregar/quitar) no tienen onError: si el POST falla, la etiqueta desaparece en silencio y la vendedora cree que quedó guardada — contra 'estados honestos'.",
+        "severidad": "media",
+        "sugerencia": "Agregar `onError` que setee un error local y lo muestre en la misma línea (`text-[11px] text-destructive`): 'No se guardó la etiqueta — probá de nuevo.'"
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/gestion/Intereses.tsx",
+        "linea": 40,
+        "problema": "Igual que las etiquetas: agregar/quitar interés sin onError — y el interés es la COMPUERTA de Cotizado. Un fallo silencioso acá deja a la vendedora trabada en la compuerta sin entender por qué.",
+        "severidad": "media",
+        "sugerencia": "onError con mensaje inline bajo el buscador: 'No se guardó el interés — sin esto, Cotizado no abre.' (`text-[11px] text-destructive`)."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/gestion/Intereses.tsx",
+        "linea": 97,
+        "problema": "Con sugerencias reales de Cerberus visibles, Enter agrega el texto libre tipeado (no la sugerencia) y no hay navegación con flechas: elegir el curso REAL exige mouse, y el texto libre genera duplicados ('diplomado lider' vs el nombre oficial).",
+        "severidad": "media",
+        "sugerencia": "En onKeyDown: si hay `sugerencias.data?.length`, Enter agrega la primera sugerencia (o la resaltada con ArrowDown/ArrowUp vía índice activo); Enter agrega texto libre solo cuando no hay resultados."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/gestion/BotonLlamar.tsx",
+        "linea": 40,
+        "problema": "En modo compacto, 'Llamar' es un `<Phone>` (svg) con onClick — no es botón: sin foco, sin teclado, sin área de toque; el aria-label en un svg clickable no lo vuelve operable.",
+        "severidad": "media",
+        "sugerencia": "Envolver: `<button type=\"button\" aria-label=\"Llamar\" onClick={llamar} className=\"rounded p-1 text-success hover:bg-success/10\"><Phone size={13} /></button>`."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/gestion/BotonLlamar.tsx",
+        "linea": 24,
+        "problema": "La red de seguridad se autodestruye: el popover con el número y 'Copiar' se cierra solo a los 6s — justo el tiempo en que la vendedora está mirando si el marcador abrió. Si no abrió, vuelve y ya no está.",
+        "severidad": "media",
+        "sugerencia": "Quitar el setTimeout de 6s; cerrar por click afuera (listener en document o un overlay transparente) y por Escape. El popover de copiar debe esperar a la humana, no al reloj."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/gestion/BotonLlamar.tsx",
+        "linea": 55,
+        "problema": "Doble marco en el popover: `shadow-panel` + `ring-1 ring-border` — exactamente el patrón que la barrida de 10 dobles-marcos eliminó (sombra O borde, nunca ambos).",
+        "severidad": "media",
+        "sugerencia": "Dejar solo `shadow-panel` (la elevación ya separa del fondo): quitar `ring-1 ring-border`."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/gestion/BarraGestion.tsx",
+        "linea": 134,
+        "problema": "Otro doble marco: el popover de Agendar lleva `border border-border` + `shadow-panel` a la vez.",
+        "severidad": "media",
+        "sugerencia": "Quitar `border border-border`; queda `rounded-xl bg-card p-2.5 shadow-panel`."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/gestion/BarraGestion.tsx",
+        "linea": 135,
+        "problema": "El popover de Agendar no cierra con Escape ni con click afuera: solo re-clickeando el botón. El input no maneja Escape (el de etiquetas sí, línea 75 — inconsistente) y clickear el chat lo deja colgado encima.",
+        "severidad": "media",
+        "sugerencia": "onKeyDown con Escape → setAbierto(false) en el input, y cierre por click afuera (overlay transparente `fixed inset-0 z-20` antes del popover, onClick cierra)."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/gestion/BarraGestion.tsx",
+        "linea": 151,
+        "problema": "Mientras crear.isPending, TODOS los chips rápidos ('Hoy 16:00', 'Mañana 9:00'…) se vuelven spinner a la vez: se pierde cuál se apretó y el layout salta al cambiar texto por ícono.",
+        "severidad": "media",
+        "sugerencia": "Guardar la opción clickeada en estado y mostrar el Loader2 solo en esa: `{pendiente === o.etiqueta ? <Loader2 …/> : o.etiqueta}`; las demás solo `disabled`."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/gestion/BarraGestion.tsx",
+        "linea": 208,
+        "problema": "'Perdido' es un peer más del segmented, pegado a 'Cierre': un misclick a 3px mata el lead sin confirmación (y ambos son terminales). El rojo solo aparece DESPUÉS de clickear.",
+        "severidad": "media",
+        "sugerencia": "Sacar 'Perdido' del grupo: separador `ml-1 border-l border-border pl-1` dentro del pill, chip inactivo en `text-muted-foreground hover:text-destructive`, y primer clic pide confirmación inline ('¿Perdido? Sí / No') antes de mutar."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/gestion/RegistrarGestion.tsx",
+        "linea": 136,
+        "problema": "Cinco kickers uppercase en un mini-form de ~260px de ancho (Etapa, Etapa del embudo, Cursos de interés, Próxima acción, Notas de acuerdos): el ritmo es un metrónomo — todos los grupos pesan igual y ninguno lidera.",
+        "severidad": "media",
+        "sugerencia": "Un solo kicker para el bloque ('Registrar gestión' o ninguno); los labels internos pasan a sentence case `text-xs font-medium text-muted-foreground` sin tracking. El kicker 'Etapa' de la línea 110 puede desaparecer: el chip ya lo dice."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/canales/PanelContexto.tsx",
+        "linea": 54,
+        "problema": "Kicker 'Contexto' redundante encima de un header que ya se explica solo (avatar + nombre + canal); con RegistrarGestion abierto, la columna de 288px acumula hasta 9 labels uppercase apilados.",
+        "severidad": "media",
+        "sugerencia": "Eliminar el kicker 'Contexto' (el avatar-header ES el título); 'Ficha de Cerberus' (línea 116) a sentence case. Dejar como kickers solo 'Comentó en' / 'De dónde vino', que sí seccionan contenido."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/cerberus/FichaContacto.tsx",
+        "linea": 170,
+        "problema": "'Marcar como interesado' (registrarConversion) no muestra error jamás: sin onError ni render de isError, un fallo del POST deja el botón como si nada — la conversión se pierde en silencio.",
+        "severidad": "media",
+        "sugerencia": "Renderizar `registrarConversion.isError` bajo el botón: `<p class=\"mt-1.5 text-[11px] text-destructive\">No se registró la conversión — probá de nuevo.</p>`."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/gestion/RegistrarGestion.tsx",
+        "linea": 84,
+        "problema": "Guardar habilitado con todo vacío: sin etapa elegida ni historial, el fallback silencioso `?? 'contactado'` mueve el lead a Contactado sin que la vendedora lo haya decidido, y se puede asentar una gestión 100% vacía (ruido en la bitácora).",
+        "severidad": "media",
+        "sugerencia": "Deshabilitar Guardar hasta que haya al menos una cosa (etapa ≠ actual, acción o notas), y si no hay etapa previa exigir elegirla en vez del default: `disabled={!etapa && !accion && !notas.trim()}` + quitar el `?? 'contactado'`."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/cerberus/FichaContacto.tsx",
+        "linea": 85,
+        "problema": "La caja de 'Cerberus caído' mezcla familias: fondo/borde warning (ámbar) con texto `text-gold-ink` (dorado de marca) — el gold vuelve a usarse para algo que no es tiempo.",
+        "severidad": "media",
+        "sugerencia": "Cambiar `text-gold-ink` por `text-warning-foreground` (#78350F, ya definido) — la caja queda coherente en la familia warning."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/venta/FormularioVenta.tsx",
+        "linea": 120,
+        "problema": "El modal de venta no cierra con Escape ni atrapa el foco: overlay-click y la X funcionan, pero el gesto de teclado más básico de un modal está muerto (y Tab se escapa al fondo).",
+        "severidad": "media",
+        "sugerencia": "useEffect con listener de keydown (Escape → onCerrar) + `role=\"dialog\" aria-modal=\"true\"` en el contenedor; foco inicial en el primer select."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/gestion/BarraGestion.tsx",
+        "linea": 64,
+        "problema": "La X para quitar etiqueta vive en `opacity-0` hasta hover del chip: invisible e inalcanzable por teclado y touch (mismo patrón en Intereses.tsx:72).",
+        "severidad": "baja",
+        "sugerencia": "Agregar `focus-visible:opacity-100` al botón y `group-focus-within/tag:opacity-100` al patrón; en touch la opacidad-0 no existe como estado, considerar `opacity-40` base."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/venta/FormularioVenta.tsx",
+        "linea": 288,
+        "problema": "'Seleccione Moneda' — único usted formal en una superficie que vosea en todos lados ('Buscá', 'volvé', 'copialo'); además 'Seleccione Moneda' con mayúscula intermedia.",
+        "severidad": "baja",
+        "sugerencia": "`<option value=\"\">Elegí {placeholder.toLowerCase()}</option>` → 'Elegí moneda' / 'Elegí país'."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/cerberus/FichaContacto.tsx",
+        "linea": 126,
+        "problema": "La fecha y el estado de cada venta llegan crudos del API: fecha sin formato humano ni mono/tabular, y un folio 'anulado' se ve idéntico a uno 'pagado' (mismo gris).",
+        "severidad": "baja",
+        "sugerencia": "Fecha en `font-mono text-[11px] tabular-nums` con formato corto ('12 mar 2026'); estado con semántica mínima: `text-success` si pagado, `text-destructive` si anulado, muted el resto."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/cerberus/FichaContacto.tsx",
+        "linea": 81,
+        "problema": "El skeleton son dos barras genéricas, pero el layout real que carga es badge + nombre + fila mono + lista de compras: el salto de forma al resolver es notorio.",
+        "severidad": "baja",
+        "sugerencia": "Skeleton con la forma: una pill de 60px (badge), una barra ancha (nombre), una fila de 3 barras cortas (mono) y 2 rectángulos rounded-lg (compras), todos `animate-pulse bg-muted`."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/cerberus/FichaContacto.tsx",
+        "linea": 157,
+        "problema": "El botón 'Registrar venta' transiciona con `duration-500` — fuera del rango 200-300ms acordado; el hover se siente pastoso.",
+        "severidad": "baja",
+        "sugerencia": "`duration-200` (la curva cubic-bezier(0.32,0.72,0,1) ya está bien elegida)."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/canales/BadgeCanal.tsx",
+        "linea": 22,
+        "problema": "`fontSize: size * 0.5` con size=14 produce texto de 7px ('ig' ilegible) — muy por debajo del piso de 11px; la inicial no aporta a ese tamaño, solo ensucia el disco.",
+        "severidad": "baja",
+        "sugerencia": "Bajo 18px de disco, omitir la inicial y dejar el disco de color puro (el color + title ya identifican); con size >= 18, `fontSize: Math.max(9, size * 0.5)`."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/gestion/RegistrarGestion.tsx",
+        "linea": 111,
+        "problema": "`capitalize` sobre 'sin gestión' renderiza 'Sin Gestión' — title-case anglosajón que en español se ve mal.",
+        "severidad": "baja",
+        "sugerencia": "Quitar `capitalize` del chip y capitalizar en el dato: mapear las etapas a sus labels ('Interesado'…) y dejar 'Sin gestión' literal."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/venta/FormularioVenta.tsx",
+        "linea": 216,
+        "problema": "Los botones +/− de cantidad son targets de 20px (`size-5`) sin hover, active ni borde: casi invisibles como afordancia y difíciles de acertar.",
+        "severidad": "baja",
+        "sugerencia": "`size-6 rounded-md border border-border bg-card text-muted-foreground transition-colors hover:border-primary hover:text-foreground active:scale-95`."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/gestion/BarraGestion.tsx",
+        "linea": 194,
+        "problema": "El error de compuerta se autodestruye a los 8s: la explicación que la vendedora necesita para actuar ('cotizado exige interés') desaparece sola mientras ella está agregando el interés.",
+        "severidad": "baja",
+        "sugerencia": "Quitar el setTimeout; el error se limpia solo en el próximo intento exitoso (onSuccess ya hace setError(null)) o con una X de descarte."
+      },
+      {
+        "archivo": "/Users/milaa/goberna/hermes/src/features/cerberus/FichaContacto.tsx",
+        "linea": 74,
+        "problema": "Jerga interna frente a la vendedora: 'la identidad cruzada llega con tb_contacto_canal' (nombre de tabla en un <code>). Hoy es rama muerta (App.tsx:196 solo monta FichaContacto para WhatsApp), pero el copy existe.",
+        "severidad": "baja",
+        "sugerencia": "Reescribir humano: 'La ficha por teléfono aplica a WhatsApp. Para este canal, la ficha cruzada está en camino.' — o borrar la rama si se confirma inalcanzable."
+      }
+    ],
+    "oportunidades": [
+      "Valor de vida como cifra héroe de la ficha: al resolver 'cliente', abrir con la suma de todas sus compras en Montserrat grande ('S/ 1.850 · 3 compras', font-heading text-2xl tabular-nums text-navy) — la pregunta que la ficha promete responder ('¿cuánto compró?') contestada en el primer golpe de vista; los folios quedan como detalle debajo. Es EL momento tipográfico que a todo el panel derecho le falta.",
+      "La compuerta que guía en vez de regañar: cuando el server frena con 'cotizado exige interés', además del mensaje, darle ring-2 ring-primary (2s, luego fade) al control de Intereses que vive en la MISMA barra y abrir su buscador con foco — el freno se convierte en el siguiente paso con cero búsqueda. Es el momento firma de la BarraGestion: el error que te lleva de la mano.",
+      "El folio como recibo copiable: la pantalla de éxito de la venta muestra el folio en font-mono text-lg con botón 'Copiar folio' — la vendedora lo pega en el chat como confirmación al cliente en un gesto (hoy el folio ni aparece en ventas por el bug de precedencia, y se pierde al cerrar el modal).",
+      "'Agendado' que confirma el cuándo: el estado de éxito del botón Agendar podría decir la opción elegida ('Mañana 9:00' en bg-success/10) en vez del genérico 'Agendado' — feedback que confirma el DATO, no solo el gesto, sin agregar ningún elemento nuevo a la barra."
+    ]
+  },
+  {
+    "vista": "Flujos transversales",
+    "resumen": "El tramo medio del recorrido es de primera: atender desde el CTA del Dashboard cuesta 1 clic, cambiar etapa 1, agendar 2, y las compuertas explican en la cara. Pero la app no ENCADENA: cada acción termina en silencio (respondiste, ¿y ahora?), no existe ni un solo atajo de teclado global (ni 1-6, ni Esc, ni siguiente-de-la-cola), y el recorrido lead-de-landing → cliente nuevo → venta muere en dead-ends (Contactos es una ficha sin acciones; \"crear el cliente\" no tiene camino). El problema número uno es de bucle, no de pantalla: Hermes te trae al trabajo pero nunca te pasa al siguiente.",
+    "kickers": 10,
+    "hallazgos": [
+      {
+        "archivo": "src/App.tsx",
+        "linea": 66,
+        "problema": "Cero teclado global: no hay atajos 1-6 para las vistas, ni Esc para cerrar la conversación abierta, ni flechas/Enter para moverse por la cola. Para una vendedora que vive 8 horas acá, TODO es mouse; el único Esc que existe (ResponderPanel) es accidental.",
+        "severidad": "alta",
+        "sugerencia": "useEffect en App con window keydown: dígitos 1-6 → setVista(VISTAS[n-1].id) (ignorando e.target dentro de input/textarea/select), Escape → setAbierta(null) solo en vista bandeja. En el riel, agregar el número como affordance: <kbd className=\"font-mono text-[9px]…\"> no — piso 11px: title={`${v.label} (${i+1})`} y un overlay de ayuda con font-mono al mantener tecla ?"
+      },
+      {
+        "archivo": "src/features/vistas/VistaPersonas.tsx",
+        "linea": 107,
+        "problema": "Dead-end del recorrido landing→venta: el radar manda los leads de formulario acá (onBuscarPersona), pero la ficha resultante no tiene NINGUNA acción — ni escribirle por WhatsApp, ni llamar, ni registrar venta. La misma ficha de Cerberus, vista desde el chat (FichaContacto), sí vende. La vendedora tiene que memorizar el número, ir a Mensajes, abrir chat nuevo y re-tipearlo.",
+        "severidad": "alta",
+        "sugerencia": "Bajo el header de la ficha cliente/nuevo, una fila de acciones: botón primario \"Escribirle\" (levanta a App un onAbrirChat(telefono) que reuse la fábrica de conversación de ColaUnificada.abrirChatNuevo), + BotonLlamar, + \"Registrar venta\" si estado==='cliente' (reusar FormularioVenta con canal='whatsapp')."
+      },
+      {
+        "archivo": "src/features/cerberus/FichaContacto.tsx",
+        "linea": 166,
+        "problema": "La venta al lead NUEVO no tiene camino: el botón es \"Marcar como interesado\" y el comentario del código admite que \"crear el cliente es el paso previo\" — pero Hermes no ofrece ni el formulario de alta ni siquiera un link a Cerberus. La promesa del producto (\"ella nunca abre Cerberus\") se rompe justo en el momento de cobrar.",
+        "severidad": "alta",
+        "sugerencia": "Debajo del botón, o bien un mini-form de alta de cliente (nombre ya lo tenés de la conversación, teléfono ya lo tenés) contra un endpoint proxy de Cerberus, o mientras tanto un honesto <a href={`${CERBERUS}/clientes/nuevo/`} target=\"_blank\">Crear cliente en Cerberus →</a> con copy \"al volver, refrescá la ficha\". Hoy el copy declara el hueco pero no da la salida."
+      },
+      {
+        "archivo": "src/features/vistas/VistaEmbudo.tsx",
+        "linea": 74,
+        "problema": "El mismo dato se ve distinto entre vistas: el Pipeline arma el kanban con useConversaciones('') PAGINADO (\"Traer más\"), así que los conteos por columna son parciales, mientras el Dashboard muestra el embudo total del server (data.embudo). Un jefe mira el Dashboard y ve 34 cotizados; la vendedora abre Pipeline y ve 9. El kanban miente por omisión sin decirlo.",
+        "severidad": "alta",
+        "sugerencia": "En el header de cada columna mostrar \"{enEtapa.length} de {totalServer}\" usando el mismo /api que alimenta data.embudo del dashboard (query ['embudo','totales']), y si enEtapa.length < total, que el vacío/final de columna diga \"hay {n} más — Traer más\" en vez del \"Traer más\" genérico arriba."
+      },
+      {
+        "archivo": "src/features/canales/ResponderPanel.tsx",
+        "linea": 58,
+        "problema": "El listener de Escape está en window sin chequear el target: con un comentario abierto, apretar Escape dentro del input de etiquetas de la BarraGestion (que usa Escape para cerrar el inline) cierra LA CONVERSACIÓN ENTERA y descarta los borradores público/privado escritos (el useEffect los resetea al reabrir). Vuelta atrás destructiva por una tecla de uso normal.",
+        "severidad": "alta",
+        "sugerencia": "En onKey: `if ((e.target as HTMLElement)?.closest('input, textarea, select')) return;` antes de onCerrar(). Y en BarraGestion/EtiquetasInline, e.stopPropagation() en el handler de Escape."
+      },
+      {
+        "archivo": "src/App.tsx",
+        "linea": 89,
+        "problema": "abrirConversacion desde Dashboard/Agenda/Pipeline te deja en la Bandeja con el filtro persistido de la cola ('puedo-escribirle' u otro de ayer): la conversación que acabás de abrir muchas veces NO está en la lista, no hay fila resaltada, y la vendedora queda desorientada — el chat abierto parece huérfano de la cola que tiene al lado.",
+        "severidad": "media",
+        "sugerencia": "En ColaUnificada, cuando `seleccionada` no aparece en `visibles`, render de una fila pin arriba de la lista (borde border-l-[3px] border-l-navy, copy \"Abierta desde {Dashboard} — no matchea el filtro «{filtro.label}»\") con acción \"Ver en Todo\" que hace setIntencion('')."
+      },
+      {
+        "archivo": "src/features/dashboard/VistaDashboard.tsx",
+        "linea": 351,
+        "problema": "Fila de radar con clic muerto: los leads de landing/lead-ad SIN teléfono tienen cursor-pointer, hover y role=\"button\", pero el onClick hace `fila.form.telefono && onBuscarPersona(…)` — clic y no pasa nada, sin explicación. Además ninguna fila del radar responde a Enter (role=button sin onKeyDown).",
+        "severidad": "media",
+        "sugerencia": "Si no hay teléfono: quitar cursor-pointer y hover, y en L2 mostrar el correo con acción \"Copiar correo\" o \"Mandar correo\" (ver hallazgo de Correos); si hay acción, agregar onKeyDown={(e)=> e.key==='Enter' && onClick} a la fila."
+      },
+      {
+        "archivo": "src/features/dashboard/VistaDashboard.tsx",
+        "linea": 389,
+        "problema": "Las acciones de la fila del radar (Llamar, abrir chat, buscar persona) viven en opacity-0 group-hover:opacity-100: invisibles hasta pasar el mouse encima, indescubribles para una vendedora nueva e inexistentes por teclado. Llamar a un caliente — acción frecuente — depende de un affordance oculto.",
+        "severidad": "media",
+        "sugerencia": "Cambiar a visible-atenuado: quitar opacity-0 y usar text-muted-foreground group-hover:text-navy (mismo costo visual, descubrible), o al menos opacity-40 group-hover:opacity-100 y focus-within:opacity-100."
+      },
+      {
+        "archivo": "src/features/agenda/VistaAgenda.tsx",
+        "linea": 184,
+        "problema": "Pérdida de dato en silencio: en \"Nuevo seguimiento\", si el teléfono tipeado tiene <8 dígitos o WhatsApp está desconectado, `conTel` es false y el seguimiento se guarda como 'general' DESCARTANDO el teléfono sin ningún aviso. La vendedora cree que lo ató a un chat; el recordatorio nace sin \"Abrir chat\".",
+        "severidad": "media",
+        "sugerencia": "Validar antes de guardar: si telefono.trim() y !conTel, mostrar bajo el input un <p className=\"text-[11px] text-gold-ink\"> con el motivo real (\"número incompleto\" / \"WhatsApp desconectado — se guarda sin atar al chat\") y exigir un segundo clic para confirmar sin atar."
+      },
+      {
+        "archivo": "src/features/venta/FormularioVenta.tsx",
+        "linea": 62,
+        "problema": "El formulario de venta arranca con Moneda y País vacíos EN CADA venta, aunque la ficha del cliente ya trae `pais` y la vendedora repite casi siempre la misma moneda; y el modal no cierra con Escape (solo X o clic en backdrop). Costo por venta: 2 selects redundantes + sin salida de teclado.",
+        "severidad": "media",
+        "sugerencia": "Precargar paisId matcheando data.pais de la ficha contra form.paises, y monedaId desde localStorage('hermes.ultimaMoneda') (persistir en onSuccess); agregar useEffect keydown Escape → onCerrar (respetando inputs). Copy bajo los selects: \"precargado de la ficha — cambialo si hace falta\"."
+      },
+      {
+        "archivo": "src/features/cerberus/FichaContacto.tsx",
+        "linea": 147,
+        "problema": "Dos mandos para lo mismo en la misma pantalla: con un chat de WhatsApp abierto conviven BarraGestion (etapa + etiquetas + intereses + Agendar, arriba) y RegistrarGestion (etapa + intereses + próxima acción, panel derecho). Dos selectores de etapa y dos editores de intereses simultáneos — la vendedora no sabe cuál es \"el bueno\" y el mismo gesto tiene dos costos distintos.",
+        "severidad": "media",
+        "sugerencia": "Especializar: RegistrarGestion pierde el selector de etapa y los intereses (quedan solo en BarraGestion, que es 1 clic) y se renombra a su valor real — \"Notas y próxima acción\" (bitácora + acuerda fecha). El lector \"Etapa: X\" siempre visible puede quedarse, pero como texto, no como control."
+      },
+      {
+        "archivo": "src/features/canales/FilaConversacion.tsx",
+        "linea": 52,
+        "problema": "La misma gramática visual con dos semánticas: la banda izquierda de 3px en la Cola codifica TEMPERATURA (verde/dorado/ladrillo/acero) pero en el radar del Dashboard la misma banda izquierda dorada significa RELEVANCIA alta. Además la fila de la cola no muestra la etapa del embudo que el radar sí muestra como chip — el mismo lead se lee distinto en las dos listas.",
+        "severidad": "media",
+        "sugerencia": "Unificar el canon: la banda izquierda = temperatura en TODAS las listas (el radar puede marcar relevancia alta con el punto dorado que ya usa en \"calientes\"), y agregar a FilaConversacion el chip de etapa reusando ETAPA_CHIP (extraerlo a un módulo compartido, hoy vive duplicado en VistaDashboard)."
+      },
+      {
+        "archivo": "src/features/cerberus/FichaContacto.tsx",
+        "linea": 101,
+        "problema": "El canal de Correos está desconectado del recorrido: la ficha de Cerberus trae `correo` en el tipo pero jamás lo renderiza, y VistaCorreos no acepta prellenado — para mandarle un mail a un cliente hay que averiguar el correo por otro lado y tipearlo a mano. La \"próxima acción: Correo\" de RegistrarGestion agenda un correo que después cuesta 4 pasos manuales.",
+        "severidad": "media",
+        "sugerencia": "Mostrar data.correo en la fila font-mono de la ficha, con acción \"Mandar correo\" que suba a App un estado `correoInicial` (mismo patrón que telefonoPersonas → VistaPersonas) y VistaCorreos lo reciba como prop para setPara inicial."
+      },
+      {
+        "archivo": "src/features/vistas/VistaEmbudo.tsx",
+        "linea": 147,
+        "problema": "Cuando la compuerta de Cotizados frena (\"exige curso de interés\"), el aviso aparece arriba de la vista pero el remedio está a 40px, dentro de la propia tarjeta (Intereses compacto) — el mensaje explica el porqué pero no lleva al cómo, y la tarjeta rebotada ni se resalta.",
+        "severidad": "baja",
+        "sugerencia": "Guardar la clave rebotada en el estado del aviso y (1) agregar al copy \"— agregalo en la tarjeta, acá abajo\", (2) darle a esa TarjetaEmbudo un ring-1 ring-gold-ink temporal de 8s, idealmente abriendo el input de Intereses."
+      },
+      {
+        "archivo": "src/features/canales/ColaUnificada.tsx",
+        "linea": 10,
+        "problema": "El vacío estrella (\"Nadie tiene la ventana abierta ahora mismo. Estás al día.\") celebra pero no orienta: es uno de los pocos momentos donde la app debería decir qué hacer AHORA (mirar \"Piden info\", volver al Dashboard, revisar la Agenda) y corta el bucle de la mañana.",
+        "severidad": "baja",
+        "sugerencia": "Extender el copy del vacío de 'puedo-escribirle' con la siguiente jugada calculada: si hay pendientes en 'pide-info', botón inline \"Ver los {n} que piden info →\" (setIntencion('pide-info')); si no, \"Revisá tu Agenda\" con el conteo de apuran."
+      },
+      {
+        "archivo": "src/features/dashboard/VistaDashboard.tsx",
+        "linea": 509,
+        "problema": "Violaciones al piso micro-tipográfico decidido (11px, nada de 10px): header de la tabla Equipo en text-[10px], iniciales y badge \"vos\" en text-[9px], y el badge de la Agenda en el riel (App.tsx:132) en text-[9px].",
+        "severidad": "baja",
+        "sugerencia": "Subir todos a text-[11px] (el badge del riel puede sostener 11px con min-w-4 y px-1; las iniciales del avatar de 6px de caja pasan a text-[11px] con tracking-tight o el avatar crece a size-7)."
+      }
+    ],
+    "oportunidades": [
+      "MODO RACHA — encadenar la mañana: al enviar una respuesta o marcar hecho, la Bandeja ofrece en el borde superior el mismo CTA del Dashboard (\"Siguiente: {nombre} · espera hace 3 h →\", Enter lo abre). La banda A deja de ser solo de las 9am y se vuelve el metrónomo del día: la vendedora liquida los calientes sin volver nunca al Dashboard, y el contador \"quedan N calientes\" bajando en vivo es el momento firma — progreso real, sin gamificación de caricatura.",
+      "EL CIERRE QUE SE VE — momento firma de la venta: al registrar la venta, en vez del check genérico, la confirmación muestra el embudo moviéndose (la mini-barra del riel del Dashboard, con el segmento de Cierre creciendo +1 en verde) y el folio en font-mono; debajo, una sola acción calculada: \"Agendar bienvenida al curso\" (2 clics, cae en la Agenda). Cierra el bucle venta→postventa dentro del mismo modal y hace tangible que \"a Cierre se llega vendiendo\".",
+      "LOS DATOS VIAJAN, LA VENDEDORA NO RE-TIPEA — puentes con prellenado entre vistas: \"Escribirle\" desde Contactos abre el chat nuevo con el número ya puesto; \"Mandar correo\" desde la ficha salta a Correos con el Para lleno; el teléfono que la vendedora pega en Personas queda como chip reciente. Es el mismo patrón telefonoPersonas que ya existe en App — generalizarlo a un solo `puente` de estado convierte tres dead-ends en un sistema.",
+      "LA VOZ INSTRUMENTO PARA EL TECLADO: overlay de atajos al mantener \"?\" — panel font-mono estilo tabla de cabina (1-6 vistas · Esc cerrar · Enter abrir · ↑↓ cola), en card con shadow-panel, sin tutorial ni tooltips insistentes. El font-mono ya es la voz de metadatos de Hermes; usarlo para el mapa de teclas hace que los atajos se sientan parte del instrumento y no una feature pegada."
+    ]
+  }
+]
