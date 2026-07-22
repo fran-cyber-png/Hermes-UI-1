@@ -13,6 +13,17 @@ import { olvidarCacheDeHermes } from '../../lib/datos/cacheDeHermes';
  * El token se borra SOLO ante un 401 real (token muerto). Si el server no
  * contesta (red caída, deploy a medias), la sesión sigue siendo válida:
  * `sinServer` se prende y `reintentar()` vuelve a validar sin perder nada.
+ *
+ * ── Por qué la sesión se cree el token antes de preguntar ──
+ * Validar contra el server ANTES de mostrar nada dejaba la app tapada por un
+ * esqueleto durante todo el viaje de ida y vuelta a VPS1 — y eso hacía inútil el
+ * caché persistido, que existe justamente para que al abrir haya algo pintado
+ * (ADR 0007). Así que si hay un token que todavía no venció, la vendedora entra
+ * de una y `/api/auth/yo` valida por detrás.
+ *
+ * Lo que NO cambia: la firma la sigue verificando el server en cada request, y
+ * un 401 real echa igual. Lo único que se adelanta es la pantalla, y lo que se
+ * ve mientras tanto es el caché de ESA misma vendedora, en SU máquina.
  */
 
 export interface Vendedora {
@@ -23,6 +34,25 @@ export interface Vendedora {
 const CLAVE = 'hermes.token';
 /** El último usuario que entró — JAMÁS la contraseña. Precarga el login. */
 export const CLAVE_ULTIMO_USUARIO = 'hermes.ultimoUsuario';
+
+/**
+ * Quién dice ser el token, sin validarlo. El cuerpo es `<id>|<expira>` en
+ * base64url (ver `auth/sesion.ts` del server); la FIRMA no se mira, porque acá
+ * no hay secreto con el que mirarla — de eso se encarga el server en cada
+ * request. Devuelve null si está vencido o no se entiende, y entonces no hay
+ * atajo: se espera al server como siempre.
+ */
+export function quienDiceSer(token: string): Vendedora | null {
+  try {
+    const [cuerpo] = token.split('.');
+    const [id, expira] = atob(cuerpo.replace(/-/g, '+').replace(/_/g, '/')).split('|');
+    if (!id || !(Number(expira) > Date.now())) return null;
+    // `/api/auth/yo` devuelve el username como nombre: no hay un dato mejor que adelantar.
+    return { id, nombre: id };
+  } catch {
+    return null;
+  }
+}
 
 export function useSesion() {
   const [vendedora, setVendedora] = useState<Vendedora | null>(null);
@@ -36,13 +66,23 @@ export function useSesion() {
       setCargando(false);
       return;
     }
-    setCargando(true);
+    // El atajo: con un token que no venció, la app se pinta YA desde el caché.
+    const supuesta = quienDiceSer(token);
+    if (supuesta) {
+      setVendedora(supuesta);
+      setCargando(false);
+    } else {
+      setCargando(true);
+    }
     setSinServer(false);
     api<{ vendedora: Vendedora }>('/api/auth/yo')
       .then((r) => setVendedora(r.vendedora))
       .catch((err) => {
         if (err instanceof ErrorApi && err.status === 401) {
-          localStorage.removeItem(CLAVE); // token muerto de verdad: se limpia solo
+          // Token muerto de verdad: afuera, y sin dejarle el radar a la que entre.
+          localStorage.removeItem(CLAVE);
+          setVendedora(null);
+          void olvidarCacheDeHermes();
         } else {
           setSinServer(true); // el server no contesta: el token se queda
         }
@@ -54,6 +94,8 @@ export function useSesion() {
   const reintentar = useCallback(() => setIntento((n) => n + 1), []);
 
   const entrar = useCallback(async (username: string, password: string) => {
+    // Si entra OTRA vendedora, lo guardado no es suyo: se va antes de que ella vea nada.
+    if (username !== localStorage.getItem(CLAVE_ULTIMO_USUARIO)) await olvidarCacheDeHermes();
     const r = await api<{ token: string; vendedora: Vendedora }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),

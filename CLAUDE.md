@@ -63,6 +63,11 @@ CSRF + POST a `/ingresar/`. Éxito → Hermes emite un **token HMAC Bearer** (`a
 `vendedoraId` = username de Cerberus. Middleware `requiereVendedora` delante de todo lo que envía o
 atribuye a una vendedora.
 
+En el cliente, la sesión **se cree el token antes de preguntar** (ADR 0007): si hay uno guardado que
+no venció, la app se pinta ya y `/api/auth/yo` valida por detrás — si no, el caché persistido queda
+tapado por un skeleton durante todo el viaje a VPS1. La firma la verifica el server en cada request
+igual, y un 401 real echa y borra el caché.
+
 ## Deploy
 
 **VPS1** (`deploy@161.132.39.165`), en `/srv/hermes` — **EJECUTADO 2026-07-21**: servicio systemd

@@ -3,8 +3,8 @@ import { ArrowRight, MessageSquareText, Search, X } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/datos/cliente';
 import { hace } from '../../lib/datos/frescura';
-import { selloDeViejo } from '../../lib/datos/persistencia';
-import { SelloDeAntes } from '../../lib/datos/SelloDeAntes';
+import { useSelloDeViejo } from '../../lib/datos/useSelloDeViejo';
+import { SelloDeAntes } from '../../components/SelloDeAntes';
 import { tempBorde, tempClass } from '../../lib/formato';
 import { kicker, sectionLabel } from '../../lib/styles';
 import { ETAPAS, ETAPA_CHIP, colorSegmento } from '../../lib/etapas';
@@ -157,11 +157,13 @@ export function VistaDashboard({
   /** Puente a Correos (§2.9): prellena el Para. Opcional hasta que App lo cablee (Fase 3). */
   onMandarCorreo?: (para: string) => void;
 }) {
-  const { data, isPending, dataUpdatedAt, isFetching } = useDashboard();
+  // Renombrados como en la cola (`conversaciones.ts`): el vocabulario de
+  // react-query no cruza hacia las vistas.
+  const { data, isPending, dataUpdatedAt: traidoEn, isFetching: actualizando } = useDashboard();
   // Al abrir la app el radar viene del caché persistido. Mientras eso sea lo que
   // se ve, «en vivo» sería mentira: el sello dice de cuándo es hasta que llega
   // lo fresco (ver `lib/datos/persistencia.ts`).
-  const deAntes = selloDeViejo(dataUpdatedAt, Date.now());
+  const deAntes = useSelloDeViejo(traidoEn);
   const { agenda } = useAgenda();
   const [fuente, setFuente] = useState<(typeof FUENTES)[number]['id']>('');
   const [etapaFiltro, setEtapaFiltro] = useState<string | null>(null);
@@ -384,7 +386,7 @@ export function VistaDashboard({
           <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
             <span className="font-mono text-[11px] tabular-nums text-muted-foreground">{filas.length}</span>
             {deAntes ? (
-              <SelloDeAntes texto={deAntes} actualizando={isFetching} />
+              <SelloDeAntes texto={deAntes} actualizando={actualizando} />
             ) : (
               <>
                 <span className="relative flex size-1.5">

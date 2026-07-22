@@ -13,4 +13,9 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
   },
+  // Lo inyecta `vite.config.ts` en los builds de verdad; acá alcanza un valor
+  // fijo. Sin esto, importar `persistencia.ts` reventaría por el global ausente.
+  define: {
+    __ID_DEL_BUILD__: JSON.stringify('test'),
+  },
 })

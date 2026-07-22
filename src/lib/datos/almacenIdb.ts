@@ -27,6 +27,21 @@ const TIENDA = 'cache';
 /** Una sola clave: react-query dehidrata todo el caché en un objeto. */
 const CLAVE = 'consultas';
 
+/**
+ * Lo máximo que el arranque espera al disco.
+ *
+ * `main.tsx` no pinta hasta que la restauración termina, así que una base que no
+ * contesta NUNCA sería una pantalla en blanco permanente — mucho peor que el
+ * spinner que vinimos a sacar. Y no es hipotético: hay navegadores que, en modo
+ * privado, dejan el `open` sin disparar ningún evento, ni de éxito ni de error.
+ *
+ * Medio segundo es un orden de magnitud más de lo que tarda abrir una base con
+ * un objeto adentro, y sigue siendo menos que el parpadeo que reemplaza. Si se
+ * agota, esta sesión entera va sin disco: una base que tarda más que eso no es
+ * lenta, está rota.
+ */
+const TECHO_APERTURA_MS = 500;
+
 /** La conexión se abre una vez y se comparte. `null` = acá no hay disco, seguimos sin él. */
 let conexion: Promise<IDBDatabase | null> | null = null;
 
@@ -40,6 +55,8 @@ function abrir(): Promise<IDBDatabase | null> {
     } catch {
       return resolver(null); // modo privado de Safari, entre otros
     }
+    // Quien llegue primero gana; `resolve` posterior no hace nada.
+    setTimeout(() => resolver(null), TECHO_APERTURA_MS);
     pedido.onupgradeneeded = () => pedido.result.createObjectStore(TIENDA);
     pedido.onsuccess = () => resolver(pedido.result);
     pedido.onerror = () => resolver(null);

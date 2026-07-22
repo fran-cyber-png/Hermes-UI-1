@@ -38,6 +38,21 @@ Tres consecuencias concretas:
    vistas leerían `isPending` y pintarían el skeleton — el spinner que veníamos a sacar. Esperar la
    lectura de IndexedDB cuesta milisegundos y es lo que hace que la primera pintura tenga datos.
 
+   Con un techo de **500 ms** para abrir la base (`almacenIdb.ts`). Es la contracara de esperar
+   antes de pintar: si el `open` no contesta nunca —y hay navegadores que en modo privado no
+   disparan ni éxito ni error— la app quedaría en blanco para siempre, mucho peor que el spinner.
+   Agotado el techo, esa sesión va sin disco.
+
+4. **La sesión se cree el token antes de preguntar** (`features/auth/sesion.ts`). Esto no estaba en
+   el ticket y apareció revisando: `App.tsx` tapaba la app con un skeleton hasta que `/api/auth/yo`
+   contestara, así que el caché ganaba milisegundos contra IndexedDB y los perdía contra un viaje de
+   ida y vuelta a VPS1 — el AC «sin spinner» no se cumplía de verdad. Ahora, si hay un token que no
+   venció (la expiración viaja dentro), la vendedora entra de una y la validación va por detrás.
+
+   La firma la sigue verificando el server en cada request y un 401 real echa igual: lo único que se
+   adelanta es la pantalla, y lo que se ve mientras tanto es el caché de esa misma vendedora en su
+   propia máquina.
+
 ### Lo que se guarda, y lo que no
 
 Lista **blanca** de dos consultas: el **radar** (`dashboard`) y la **cola** (`conversaciones`).
@@ -52,8 +67,18 @@ que vigila que no mintamos sobre la edad de los datos.
 
 Mostrar datos de ayer como si fueran de ahora es peor que un spinner: el spinner te hace esperar,
 el dato viejo sin marcar te hace llamar a alguien que ya compró. Mientras lo que se ve venga del
-disco, el radar reemplaza su «en vivo» por **«hace 14 horas · actualizando»**, y la cola muestra el
-mismo sello en lugar del total. El sello se borra solo cuando llega lo fresco.
+disco, el radar reemplaza su «en vivo» por **«hace 14 horas»**, y la cola muestra el mismo sello en
+lugar del total. El sello se borra solo cuando llega lo fresco: `dataUpdatedAt` pasa a ser ahora.
+
+El «actualizando» lo dice el ícono que late, no una palabra. Escrita no entra en el encabezado de
+la cola sin empujar los filtros —el control principal— a una segunda línea.
+
+**El sello necesita que el reloj corra** (`useSelloDeViejo`). La primera versión calculaba
+`Date.now()` durante el render, y mientras `dataUpdatedAt` no cambiara React no tenía motivo para
+volver a renderizar: el resultado quedaba congelado. Medido con el server caído y la app abierta:
+el radar seguía diciendo «en vivo» sobre datos de 14 horas a los 90 segundos y para siempre — la
+misma mentira, en la forma que más dura, porque la vendedora deja Hermes abierto todo el día. Un
+latido de 30 s lo arregla.
 
 ### Caducidad y buster
 
@@ -61,11 +86,16 @@ Lo persistido dura **24 h**: el caso que existe es «cierra a la noche, abre a l
 ventana más corta lo dejaría afuera. Más allá de un día la cola ya no describe nada — los leads se
 movieron, las ventanas de Meta se cerraron.
 
-El **buster es la identidad del build** (`import.meta.env.VITE_BUILD_ID`, inyectado en
-`vite.config.ts`). Con OTA la UI se actualiza sin que nadie instale nada, así que una vendedora
-puede tener guardado el `/api/dashboard` de la forma vieja y abrir la UI nueva un minuto después;
-rehidratar eso revienta al pintar. Atarlo al build lo vuelve imposible por construcción, y cuesta
-un spinner por deploy.
+El **buster es el commit** (`__ID_DEL_BUILD__`, inyectado en `vite.config.ts` desde `git rev-parse`).
+Con OTA la UI se actualiza sin que nadie instale nada, así que una vendedora puede tener guardado el
+`/api/dashboard` de la forma vieja y abrir la UI nueva un minuto después; rehidratar eso revienta al
+pintar. Atarlo a la revisión lo vuelve imposible por construcción y no depende de que alguien
+recuerde subir un número a mano.
+
+Es el commit y no el reloj del build a propósito: el deploy es `git pull && npm run build`, así que
+el sello cambia exactamente cuando cambió el código, y recompilar lo mismo no le cuesta a nadie un
+arranque frío. Sin git a mano cae al reloj — peor sello, pero nunca uno repetido, que es lo único
+que no puede pasar.
 
 ## Alternativas consideradas
 
@@ -88,5 +118,27 @@ un spinner por deploy.
 - Si IndexedDB no está (modo privado, cuota, base bloqueada por otra ventana), **nada falla**: la
   app queda como antes de este trabajo, con caché en memoria y spinner al abrir. Persistir es un
   lujo, nunca un requisito.
-- Cerrar sesión borra lo persistido: con dos vendedoras en la misma máquina, la que entra no puede
-  ver el radar de la que se fue.
+- Lo persistido se borra en los **tres** caminos por los que cambia quién está sentada: cerrar
+  sesión, token vencido (401), y entrar con un usuario distinto al último. Los dos últimos
+  aparecieron revisando: sin ellos, a la vendedora A se le vence el token, entra B, y B abre con el
+  radar y la cola de A — exactamente lo que este ADR dice evitar.
+
+## Verificación
+
+Contra la base local con datos reales (60 conversaciones), con la API demorada o caída a propósito
+para ver **qué pinta la app mientras revalida**. Screenshots en `docs/rendimiento-2026-07/`:
+
+| | Qué prueba |
+|---|---|
+| `cache-01-arranque-frio` | El antes: sin caché, a los 900 ms, skeleton en todo |
+| `cache-02-arranque-tibio` | Con el caché envejecido 14 h y la API demorada 8 s: a los 1,4 s el radar completo y «hace 14 horas» donde decía «en vivo» |
+| `cache-03-ya-actualizado` | Llegó lo fresco: vuelve «en vivo», el sello se borró solo |
+| `cache-04-cola-tibia` | La cola llena con su sello, filtros en una sola línea |
+| `cache-05-tras-cerrar-sesion` | IndexedDB pasa de `["dashboard","conversaciones"]` a vacío |
+| `cache-06-cascara-tauri` | **La cáscara Tauri (WKWebView, no Chromium) con la API caída**: dashboard completo y «hace 2 min». Sin server, eso solo puede venir del disco |
+| `cache-07-sin-server` | Lo mismo en el navegador, y logueada sin que `/api/auth/yo` conteste |
+| `cache-08-sin-recargar` | El reloj del sello corriendo: «en vivo» → (45 s) → «hace 1 min», sin recargar nada |
+
+En la cáscara se verificó además, con una sonda temporal, que IndexedDB **guarda y devuelve** en
+WKWebView — es lo único que podía diferir del navegador, porque el resto del código no sabe en qué
+motor corre.

@@ -1,5 +1,5 @@
 import { almacenIdb } from './almacenIdb';
-import { arrancarCache, crearPersistidor, olvidarCache } from './persistencia';
+import { agrupandoEscrituras, arrancarCache, crearPersistidor, olvidarCache } from './persistencia';
 import { queryClient } from './cliente';
 
 /**
@@ -9,7 +9,7 @@ import { queryClient } from './cliente';
  * Existe para que las dos piezas de arriba no se conozcan entre sí — así la
  * política se testea con un almacén de memoria y el disco no sabe qué guarda.
  */
-const persistidor = crearPersistidor(almacenIdb);
+const persistidor = agrupandoEscrituras(crearPersistidor(almacenIdb));
 
 /** Restaura lo último conocido y deja el caché guardándose solo. Se llama ANTES del primer render. */
 export const arrancarCacheDeHermes = () => arrancarCache(queryClient, persistidor);

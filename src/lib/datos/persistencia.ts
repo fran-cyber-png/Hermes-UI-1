@@ -75,14 +75,21 @@ export function debePersistir(clave: readonly unknown[], estado: 'pending' | 'er
 export const CADUCIDAD_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Cada build tira el caché viejo.
+ * Cada COMMIT tira el caché viejo.
  *
  * Con OTA, la UI se actualiza sin que nadie instale nada: una vendedora puede
  * tener guardado el `/api/dashboard` de la forma vieja y abrir la UI nueva un
- * minuto después. Rehidratar eso revienta al pintar. Atar el buster al build lo
- * vuelve imposible por construcción, y el costo es un spinner por deploy.
+ * minuto después. Rehidratar eso revienta al pintar. Atarlo a la revisión lo
+ * vuelve imposible por construcción, sin depender de que alguien se acuerde de
+ * subir un número a mano.
+ *
+ * Es el commit y no el reloj del build a propósito: el deploy es `git pull &&
+ * npm run build`, así que el sello cambia exactamente cuando cambió el código.
+ * Recompilar lo mismo no le cuesta a nadie un arranque frío. Lo inyecta
+ * `vite.config.ts`.
  */
-const VERSION_CACHE: string = import.meta.env.VITE_BUILD_ID ?? 'dev';
+declare const __ID_DEL_BUILD__: string;
+const VERSION_CACHE = __ID_DEL_BUILD__;
 
 // ── Cómo se marca lo viejo ───────────────────────────────────────────────────
 
@@ -120,43 +127,53 @@ export interface AlmacenAsync {
   borrar(): Promise<void>;
 }
 
+/** Adapta un `AlmacenAsync` a lo que react-query espera. Nada más: sin timing, sin política. */
+export function crearPersistidor(almacen: AlmacenAsync): Persister {
+  return {
+    persistClient: (cliente) => almacen.escribir(cliente),
+    restoreClient: () => almacen.leer(),
+    removeClient: () => almacen.borrar(),
+  };
+}
+
 /** Lo que se espera antes de escribir, para no escribir en cada latido del caché. */
 export const ESPERA_ESCRITURA_MS = 1_000;
 
 /**
- * Adapta un `AlmacenAsync` a lo que react-query espera, agrupando las
- * escrituras: el caché avisa de CADA cambio, y sin agrupar una tanda de
- * mensajes entrando escribiría decenas de KB varias veces por segundo. Se
- * escribe como mucho una vez por `esperaMs`, siempre lo último.
+ * Agrupa las escrituras de un persistidor: el caché avisa de CADA cambio, y sin
+ * agrupar una tanda de mensajes entrando escribiría decenas de KB varias veces
+ * por segundo. Se escribe como mucho una vez por `esperaMs`, siempre lo último.
  *
- * `esperaMs = 0` escribe directo — es lo que usan los tests para poder esperar
- * la escritura con `await` en vez de con temporizadores.
+ * Va aparte del persistidor porque es una preocupación distinta —cuándo tocar el
+ * disco, no cómo—, y porque así lo que se testea de cada una no arrastra a la
+ * otra: el ida y vuelta se prueba con `await`, y esto con relojes de mentira.
  */
-export function crearPersistidor(almacen: AlmacenAsync, esperaMs = ESPERA_ESCRITURA_MS): Persister {
+export function agrupandoEscrituras(persistidor: Persister, esperaMs = ESPERA_ESCRITURA_MS): Persister {
   let pendiente: PersistedClient | undefined;
   let temporizador: ReturnType<typeof setTimeout> | null = null;
 
+  const cancelar = () => {
+    if (temporizador) clearTimeout(temporizador);
+    temporizador = null;
+    pendiente = undefined;
+  };
+
   return {
+    ...persistidor,
     persistClient: (cliente) => {
-      if (esperaMs <= 0) return almacen.escribir(cliente);
       pendiente = cliente;
       if (temporizador) return;
       temporizador = setTimeout(() => {
-        temporizador = null;
         const ultimo = pendiente;
-        pendiente = undefined;
+        cancelar();
         // Persistir es un lujo, nunca un requisito: si el disco falla, la app sigue.
-        if (ultimo) void almacen.escribir(ultimo).catch(() => {});
+        if (ultimo) void Promise.resolve(persistidor.persistClient(ultimo)).catch(() => {});
       }, esperaMs);
     },
-    restoreClient: () => almacen.leer(),
+    // Cerrar sesión no puede dejar viva una escritura de lo que se está borrando.
     removeClient: () => {
-      if (temporizador) {
-        clearTimeout(temporizador);
-        temporizador = null;
-      }
-      pendiente = undefined;
-      return almacen.borrar();
+      cancelar();
+      return persistidor.removeClient();
     },
   };
 }

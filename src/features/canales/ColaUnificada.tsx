@@ -4,8 +4,8 @@ import { MessageSquarePlus, Search, X } from 'lucide-react';
 import { useLocalStorage } from '../../lib/useLocalStorage';
 import { api } from '../../lib/datos/cliente';
 import { hace, useFrescura } from '../../lib/datos/frescura';
-import { selloDeViejo } from '../../lib/datos/persistencia';
-import { SelloDeAntes } from '../../lib/datos/SelloDeAntes';
+import { useSelloDeViejo } from '../../lib/datos/useSelloDeViejo';
+import { SelloDeAntes } from '../../components/SelloDeAntes';
 import { useSesionWa } from '../whatsapp/conversacionWa';
 import { pendientesQueApuran, useAgenda } from '../agenda/agenda';
 import type { DatosDashboard } from '../dashboard/dashboard';
@@ -63,7 +63,7 @@ export function ColaUnificada({
     useConversaciones(intencion);
   // Al abrir la app la cola viene del caché persistido: hasta que llegue lo
   // fresco hay que decir de cuándo es lo que se está mirando.
-  const deAntes = selloDeViejo(traidoEn, Date.now());
+  const deAntes = useSelloDeViejo(traidoEn);
   const filtro = FILTROS.find((f) => f.valor === intencion) ?? FILTROS[0];
 
   // Búsqueda: filtra lo YA cargado (nombre, teléfono, texto). Si no aparece,

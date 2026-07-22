@@ -3,6 +3,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { persistQueryClientSave, type PersistedClient } from '@tanstack/react-query-persist-client';
 import {
   CADUCIDAD_MS,
+  agrupandoEscrituras,
   arrancarCache,
   crearPersistidor,
   debePersistir,
@@ -38,9 +39,6 @@ function almacenFalso(): AlmacenAsync & {
     },
   };
 }
-
-/** Sin espera: en los tests la escritura tiene que poder esperarse con `await`. */
-const yaMismo = 0;
 
 describe('debePersistir — qué sobrevive al cierre de la app', () => {
   it('el radar y la cola sí: son las dos pantallas que la vendedora abre primero', () => {
@@ -99,7 +97,7 @@ describe('selloDeViejo — decirle a la vendedora de cuándo es lo que mira', ()
 describe('el caché que sobrevive al cierre de la app', () => {
   it('con algo persistido, la primera pintura ya tiene datos — no hay estado de carga', async () => {
     const almacen = almacenFalso();
-    const persistidor = crearPersistidor(almacen, yaMismo);
+    const persistidor = crearPersistidor(almacen);
 
     // Ayer: la vendedora tenía el radar cargado y cerró la app.
     const ayer = new QueryClient();
@@ -120,7 +118,7 @@ describe('el caché que sobrevive al cierre de la app', () => {
 
   it('lo persistido caduca: pasado el plazo se descarta en vez de mostrarse', async () => {
     const almacen = almacenFalso();
-    const persistidor = crearPersistidor(almacen, yaMismo);
+    const persistidor = crearPersistidor(almacen);
 
     const ayer = new QueryClient();
     ayer.setQueryData(['dashboard'], { chats: [] });
@@ -136,7 +134,7 @@ describe('el caché que sobrevive al cierre de la app', () => {
 
   it('guarda el radar y la cola, y nada más', async () => {
     const almacen = almacenFalso();
-    const persistidor = crearPersistidor(almacen, yaMismo);
+    const persistidor = crearPersistidor(almacen);
 
     const qc = new QueryClient();
     qc.setQueryData(['dashboard'], { chats: [] });
@@ -151,7 +149,7 @@ describe('el caché que sobrevive al cierre de la app', () => {
 
   it('cerrar sesión lo limpia: lo de una vendedora no lo hereda la siguiente', async () => {
     const almacen = almacenFalso();
-    const persistidor = crearPersistidor(almacen, yaMismo);
+    const persistidor = crearPersistidor(almacen);
 
     const suyo = new QueryClient();
     suyo.setQueryData(['dashboard'], { chats: [{ clave: 'conv:whatsapp:1:51986394450' }] });
@@ -171,7 +169,7 @@ describe('el caché que sobrevive al cierre de la app', () => {
     try {
       const almacen = almacenFalso();
       const escribir = vi.spyOn(almacen, 'escribir');
-      const persistidor = crearPersistidor(almacen, 1_000);
+      const persistidor = agrupandoEscrituras(crearPersistidor(almacen), 1_000);
 
       // El caché avisa de cada cambio; sin agrupar, cada tecleo escribiría decenas de KB.
       for (let i = 0; i < 20; i++) {
@@ -182,6 +180,23 @@ describe('el caché que sobrevive al cierre de la app', () => {
       await vi.advanceTimersByTimeAsync(1_000);
       expect(escribir).toHaveBeenCalledTimes(1);
       expect(almacen.contenido()?.timestamp).toBe(19);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cerrar sesión cancela la escritura en vuelo: nada vuelve a escribirse después de borrar', async () => {
+    vi.useFakeTimers();
+    try {
+      const almacen = almacenFalso();
+      const persistidor = agrupandoEscrituras(crearPersistidor(almacen), 1_000);
+
+      // Una escritura agendada, y la vendedora cierra sesión antes de que caiga.
+      void persistidor.persistClient({ buster: 'x', timestamp: 1, clientState: { queries: [], mutations: [] } });
+      await persistidor.removeClient();
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(almacen.contenido()).toBeUndefined();
     } finally {
       vi.useRealTimers();
     }
