@@ -47,11 +47,18 @@ dashboardRouter.get('/', async (_req, res) => {
       -- derivar respondida, que es lo que separa Deuda de Silencio. La ventana
       -- de 7 días se aplica abajo sobre el último ENTRANTE, así una respuesta
       -- posterior no queda afuera del grupo.
+      --
+      -- Los 30 días NO son un criterio de producto, son el techo del scan: sin
+      -- ellos esto escanea events entero (111 mil filas de JSON para leer UN
+      -- campo) y el CTE pasa de 8 ms a 191 ms. Es seguro porque la respuesta a un
+      -- entrante es siempre POSTERIOR a ese entrante: si el último entrante entra
+      -- en 7 días, su respuesta entra en 30. Medido con EXPLAIN ANALYZE.
       SELECT i.canal, i.persona_id, i.persona_nombre, i.texto, i.direccion, i.occurred_at,
              COALESCE(e.payload->>'numeroPropio', '') AS numero_propio
       FROM interactions i
       JOIN events e ON e.id = i.event_id
       WHERE i.tipo = 'mensaje' AND i.persona_id IS NOT NULL
+        AND i.occurred_at > now() - interval '30 days'
     ),
     conv AS (
       SELECT
