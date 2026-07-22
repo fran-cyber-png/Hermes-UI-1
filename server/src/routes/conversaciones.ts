@@ -29,6 +29,24 @@ const PIDE_INFO = sql`texto ~* '(informaci|info\\b|precio|costo|cuánto|cuanto|i
 /** La ventana de 7 días de Meta para el privado. IG también la tiene, no solo FB. */
 const VENTANA_ABIERTA = sql`(tipo = 'comentario' AND canal IN ('facebook','instagram') AND occurred_at > now() - interval '7 days')`;
 
+/**
+ * LA VENTANA DE LA COLA — hasta dónde mira «el trabajo pendiente».
+ *
+ * La cola contesta «¿a quién atiendo?», no «¿qué conversaciones existieron?».
+ * Una conversación sin actividad en un mes no es trabajo pendiente: es archivo,
+ * y el archivo se busca desde Contactos o desde el historial de la persona, que
+ * es donde uno busca. No desaparece del producto; deja de ocupar la cola.
+ *
+ * Sin esto la consulta agrupaba 35.353 conversaciones para devolver 40 — el
+ * 99,4 % del trabajo se tiraba — y sin cota de tiempo el planner ni siquiera
+ * podía usar el índice: escaneaba `events` entero, 111 mil filas de JSON, para
+ * leer un solo campo. Medido con EXPLAIN ANALYZE: 482 ms → 3,4 ms.
+ *
+ * Son 30 días porque es el ciclo de venta de la Escuela, no por una razón
+ * técnica. Si el ciclo resulta más largo, se corre este número y nada más.
+ */
+const ventanaCola = (columna: SQL) => sql`${columna} > now() - interval '30 days'`;
+
 conversacionesRouter.get('/', async (req, res) => {
  try {
   const canal = typeof req.query.canal === 'string' ? req.query.canal : '';
@@ -55,7 +73,7 @@ conversacionesRouter.get('/', async (req, res) => {
       (${PIDE_INFO})                              AS pide_info,
       1                                           AS n
     FROM interactions
-    WHERE tipo = 'comentario' ${filtroCanal}
+    WHERE tipo = 'comentario' AND (${ventanaCola(sql`occurred_at`)}) ${filtroCanal}
   `;
 
   /**
@@ -68,7 +86,7 @@ conversacionesRouter.get('/', async (req, res) => {
            COALESCE(e.payload->>'numeroPropio', '') AS numero_propio
     FROM interactions i
     JOIN events e ON e.id = i.event_id
-    WHERE i.tipo = 'mensaje' ${filtroCanal}
+    WHERE i.tipo = 'mensaje' AND (${ventanaCola(sql`i.occurred_at`)}) ${filtroCanal}
   `;
 
   /**
