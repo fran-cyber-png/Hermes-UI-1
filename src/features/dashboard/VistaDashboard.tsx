@@ -15,7 +15,7 @@ import { conversacionDeRecordatorio, useAgenda, type Recordatorio } from '../age
 import {
   conversacionDeChat,
   paisDe,
-  relevanciaDe,
+  esDeuda,
   useDashboard,
   type LeadChat,
   type LeadFormulario,
@@ -50,6 +50,8 @@ const FUENTES = [
 ] as const;
 
 type Fila = { fuente: 'chat' | 'comentario'; chat: LeadChat } | { fuente: 'landing' | 'lead-ad'; form: LeadFormulario };
+/** La fila con la clave de urgencia que mandó el server. El front la aplica, no la calcula. */
+type FilaConClave = Fila & { nivel: number; orden: number };
 
 /** Anchos variados para el skeleton del radar: anatomía real de 2 líneas. */
 const SKELETON_RADAR = [
@@ -184,27 +186,27 @@ export function VistaDashboard({
   // ── El titular de las 9am: calientes sobre la MISMA unión que el filtro. ──
   const { nCalientes, masViejaHoras } = useMemo(() => {
     const bases = [
-      ...(data?.chats ?? []),
-      ...(data?.formularios ?? []).map((f) => ({ pide_info: false, ventana_abierta: false, cayo_at: f.cayo_at })),
+      ...(data?.chats ?? []).map((c) => ({ nivel: c.nivel, cayo_at: c.cayo_at })),
+      ...(data?.formularios ?? []).map((f) => ({ nivel: f.nivel, cayo_at: f.cayo_at })),
     ];
-    const calientes = bases.filter((b) => relevanciaDe(b) === 'alta');
+    const esperan = bases.filter((b) => esDeuda(b.nivel));
     let masVieja: number | null = null;
-    for (const c of calientes) {
+    for (const c of esperan) {
       const t = new Date(c.cayo_at).getTime();
       if (masVieja === null || t < masVieja) masVieja = t;
     }
     return {
-      nCalientes: calientes.length,
+      nCalientes: esperan.length,
       masViejaHoras: masVieja === null ? null : (Date.now() - masVieja) / 3_600_000,
     };
   }, [data]);
 
   // ── B · Las filas del radar, con todos los filtros aplicados. ──
   const { filas, totalFiltradas } = useMemo(() => {
-    if (!data) return { filas: [] as Fila[], totalFiltradas: 0 };
-    const todas: (Fila & { cayo: number })[] = [
-      ...data.chats.map((c) => ({ fuente: c.fuente, chat: c, cayo: new Date(c.cayo_at).getTime() }) as Fila & { cayo: number }),
-      ...data.formularios.map((f) => ({ fuente: f.fuente, form: f, cayo: new Date(f.cayo_at).getTime() }) as Fila & { cayo: number }),
+    if (!data) return { filas: [] as FilaConClave[], totalFiltradas: 0 };
+    const todas: FilaConClave[] = [
+      ...data.chats.map((c) => ({ fuente: c.fuente, chat: c, nivel: c.nivel, orden: c.orden }) as FilaConClave),
+      ...data.formularios.map((f) => ({ fuente: f.fuente, form: f, nivel: f.nivel, orden: f.orden }) as FilaConClave),
     ];
     const filtradas = todas
       .filter((f) => !fuente || f.fuente === fuente)
@@ -214,20 +216,19 @@ export function VistaDashboard({
         const etapa = data.etapas[clave] ?? ('chat' in f ? 'interesado' : f.form.estado_lead === 'nuevo' ? 'interesado' : f.form.estado_lead);
         return etapa === etapaFiltro;
       })
-      .filter((f) => {
-        if (!soloCalientes) return true;
-        const base = 'chat' in f ? f.chat : { pide_info: false, ventana_abierta: false, cayo_at: f.form.cayo_at };
-        return relevanciaDe(base) === 'alta';
-      })
-      .sort((a, b) => b.cayo - a.cayo);
+      .filter((f) => !soloCalientes || esDeuda(f.nivel))
+      // Esto NO es un criterio del front: es la clave que mandó el server,
+      // aplicada tal cual para poder mezclar las dos listas en una. El orden lo
+      // decide cola/urgencia.ts, del otro lado.
+      .sort((a, b) => a.nivel - b.nivel || a.orden - b.orden);
     return { filas: filtradas.slice(0, 80), totalFiltradas: filtradas.length };
   }, [data, fuente, etapaFiltro, soloCalientes]);
 
-  // El caliente más antiguo sin atender: el gatillo de "Atender a {nombre} →".
-  const atender = useMemo(() => {
-    const calientes = (data?.chats ?? []).filter((c) => relevanciaDe(c) === 'alta');
-    return calientes.sort((a, b) => a.cayo_at.localeCompare(b.cayo_at))[0] ?? null;
-  }, [data]);
+  // El gatillo de "Atender a {nombre} →". Ya NO elige por su cuenta: toma la
+  // primera conversación en Deuda de la lista que el server mandó ordenada. Lo
+  // que el titular recomienda y lo que está arriba son la misma fila, por
+  // construcción — antes eran dos criterios opuestos y se contradecían.
+  const atender = useMemo(() => data?.chats.find((c) => esDeuda(c.nivel)) ?? null, [data]);
 
   // ── El radar que se siente radar: solo las filas NUEVAS del SSE se animan. ──
   const vistosRef = useRef<Set<string> | null>(null);
@@ -461,7 +462,7 @@ export function VistaDashboard({
                   const clave = base.clave;
                   const etapa =
                     data!.etapas[clave] ?? (esChat ? 'interesado' : fila.form.estado_lead === 'nuevo' ? 'interesado' : fila.form.estado_lead);
-                  const alta = relevanciaDe(esChat ? fila.chat : { pide_info: false, ventana_abierta: false, cayo_at: fila.form.cayo_at }) === 'alta';
+                  const alta = esDeuda(fila.nivel);
                   const tags = data!.etiquetas[clave] ?? [];
                   const pais = paisDe(base.pais_dato, esChat ? fila.chat.telefono : fila.form.telefono);
                   const horas = (Date.now() - new Date(base.cayo_at).getTime()) / 3_600_000;

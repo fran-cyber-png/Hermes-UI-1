@@ -25,7 +25,13 @@ export interface LeadChat {
   pais_dato: string | null;
   pide_info: boolean;
   ventana_abierta: boolean;
+  respondida: boolean;
+  referencia: string;
   cayo_at: string;
+  /** Nivel de urgencia (0 vivo … 5 archivo). Lo decide el server, ver cola/urgencia.ts. */
+  nivel: number;
+  /** Desempate dentro del nivel. Con (nivel, orden) alcanza para mezclar las dos listas. */
+  orden: number;
 }
 
 export interface LeadFormulario {
@@ -42,6 +48,10 @@ export interface LeadFormulario {
   es_organico: boolean | null;
   estado_lead: string;
   cayo_at: string;
+  respondida: boolean;
+  /** Misma clave de urgencia que los chats: el criterio de la pantalla es uno solo. */
+  nivel: number;
+  orden: number;
 }
 
 export interface StatsVendedora {
@@ -131,20 +141,21 @@ export function paisDe(paisDato: string | null | undefined, telefono: string | n
   return null;
 }
 
-// ── Relevancia: derivada y declarada, nunca un score mágico ────────────────
-
-export type Relevancia = 'alta' | 'media' | 'baja';
+// ── Deuda: leer el nivel que mandó el server, nunca recalcularlo ───────────
 
 /**
- * alta  → pide info, o cayó hace menos de 24 h (está caliente AHORA)
- * media → cayó esta semana o su ventana sigue abierta
- * baja  → el resto
+ * ¿El turno es NUESTRO? Los niveles 0–3 son Deuda (vivo, vencido, expira,
+ * espera); el 4 es Silencio y el 5 archivo. Ver `CONTEXT.md` y `cola/urgencia.ts`.
+ *
+ * Acá vivía `relevanciaDe`, que recalculaba la urgencia en el front con una
+ * regla propia y peor: marcaba como «alta» todo lo de menos de 24 h, y como el
+ * radar solo trae siete días terminaba marcando TODO igual. Peor: la lista y el
+ * botón «Atender a» ordenaban con criterios distintos, así que la pantalla
+ * recomendaba a alguien y lo escondía al fondo. Ahora el nivel lo decide el
+ * server, una sola vez — esto solo lo lee.
  */
-export function relevanciaDe(r: { pide_info?: boolean; ventana_abierta?: boolean; cayo_at: string }): Relevancia {
-  const horas = (Date.now() - new Date(r.cayo_at).getTime()) / 3_600_000;
-  if (r.pide_info || horas < 24) return 'alta';
-  if (horas < 24 * 7 || r.ventana_abierta) return 'media';
-  return 'baja';
+export function esDeuda(nivel: number): boolean {
+  return nivel <= 3;
 }
 
 /** La `Conversacion` mínima para abrir un chat del radar en la Bandeja. */
@@ -158,13 +169,17 @@ export function conversacionDeChat(c: LeadChat): Conversacion {
     numero_propio: c.numero_propio,
     texto: c.texto,
     contexto_texto: c.contexto_texto,
-    respondida: false,
+    respondida: c.respondida,
     ventana_abierta: c.ventana_abierta,
     pide_info: c.pide_info,
     n: 1,
-    referencia: c.cayo_at,
+    referencia: c.referencia,
     ultimo_at: c.cayo_at,
     dias: Math.floor((Date.now() - new Date(c.cayo_at).getTime()) / 86_400_000),
+    // OJO: no es el nivel del radar. `Conversacion.nivel` es la escala de la cola
+    // (0|1|2, su propio espejo en SQL) y el radar usa la de cola/urgencia.ts (0–5).
+    // Mezclarlas pintaría mal la fila. La cola recalcula el suyo al cargar; acá va
+    // un valor neutro a propósito.
     nivel: 2,
   };
 }
