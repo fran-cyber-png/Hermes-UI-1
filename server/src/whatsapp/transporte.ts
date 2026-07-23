@@ -115,6 +115,17 @@ export interface ResultadoEnvio {
   ocurridoEn: Date;
 }
 
+/**
+ * La foto de perfil de un contacto, ya bajada a bytes por el transporte. Como la
+ * media, viaja en vocabulario Hermes: bytes y mime, nunca una URL del proveedor.
+ */
+export interface FotoPerfil {
+  /** El id de la foto en WhatsApp: cambia cuando la persona cambia su foto. */
+  id: string;
+  bytes: Buffer;
+  mime: string;
+}
+
 export interface TransporteWhatsapp {
   /** Qué hay del otro lado. Se muestra en la UI: el equipo tiene que saberlo. */
   readonly nombre: 'whatsmeow' | 'cloud-api' | 'falso';
@@ -143,6 +154,14 @@ export interface TransporteWhatsapp {
   enviarMedia(telefono: string, media: MediaSaliente): Promise<ResultadoEnvio>;
 
   marcarLeido(telefono: string, idsExternos: string[]): Promise<void>;
+
+  /**
+   * La foto de perfil del contacto, si la tiene y es visible: null si no tiene,
+   * es privada, o el proveedor no la da. Habla teléfonos, como todo acá.
+   * Opcional: un transporte puede no soportarlo, y el consumidor cae a las
+   * iniciales. Es LECTURA, no un envío — no roza «un envío = una acción humana».
+   */
+  fotoDePerfil?(telefono: string): Promise<FotoPerfil | null>;
 
   detener(): Promise<void>;
 }

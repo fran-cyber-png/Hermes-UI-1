@@ -1,6 +1,7 @@
 import { basename } from 'node:path';
 import type {
   EstadoSesion,
+  FotoPerfil,
   MediaSaliente,
   MensajeWhatsapp,
   ResultadoEnvio,
@@ -164,6 +165,10 @@ export class TransporteFalso implements TransporteWhatsapp {
 
   async marcarLeido(_telefono: string, _idsExternos: string[]): Promise<void> {
     // No-op: marcar leído no cambia nada observable en el falso.
+  }
+
+  async fotoDePerfil(_telefono: string): Promise<FotoPerfil | null> {
+    return null; // el falso no tiene fotos: el consumidor cae a las iniciales.
   }
 
   async detener(): Promise<void> {

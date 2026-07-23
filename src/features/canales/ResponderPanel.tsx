@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, Check, ExternalLink, Lock, MessageCircle, Send, Trash2, X } from 'lucide-react';
 import { API_URL } from '../../config';
 import { sectionLabel } from '../../lib/styles';
+import { iniciales } from '../../lib/iniciales';
 import type { Interaccion } from './types';
 import { TIPO_META, tipoDe } from './tipos';
 import { daysSince } from '../leads/temperature';
@@ -98,9 +99,9 @@ export default function ResponderPanel({ interaccion, onCerrar, onRespondido, on
   const red = interaccion.canal === 'facebook' ? 'Facebook' : 'Instagram';
   const nombre =
     interaccion.persona_nombre ?? (interaccion.canal === 'instagram' ? 'Alguien en Instagram' : 'Usuario de Facebook');
-  const iniciales = (interaccion.persona_nombre ?? (interaccion.canal === 'instagram' ? 'IG' : 'FB'))
-    .slice(0, 2)
-    .toUpperCase();
+  const avatarIniciales = iniciales(
+    interaccion.persona_nombre ?? (interaccion.canal === 'instagram' ? 'IG' : 'FB'),
+  );
   const cuando = dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : `hace ${dias} días`;
   const fileteCanal = interaccion.canal === 'instagram' ? 'border-l-navy' : 'border-l-primary';
 
@@ -151,7 +152,7 @@ export default function ResponderPanel({ interaccion, onCerrar, onRespondido, on
         <header className="flex shrink-0 items-start justify-between gap-3 border-b border-border px-4 py-3">
           <div className="flex min-w-0 items-center gap-2.5">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-[11px] bg-secondary font-heading text-xs font-bold text-navy">
-              {iniciales}
+              {avatarIniciales}
             </span>
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-2">

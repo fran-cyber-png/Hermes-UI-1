@@ -2,14 +2,16 @@ import { existsSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import express, { Router } from 'express';
-import { sql } from 'drizzle-orm';
+import { sql, eq } from 'drizzle-orm';
 import { db } from '../db/client.js';
+import { fotosPerfil } from '../db/schema.js';
 import { requiereVendedora } from '../auth/sesion.js';
 import { whatsapp } from '../whatsapp/wiring.js';
 import { proyectarMensaje } from '../whatsapp/proyectar.js';
 import { repositorioDrizzle } from '../whatsapp/repositorioDrizzle.js';
 import { resolverAnuncio } from '../meta/anuncio.js';
 import { RUTA_MEDIA, nombreSeguro } from '../whatsapp/mediaDir.js';
+import { normalizarTelefono } from '../whatsapp/identidadWa.js';
 import type { MediaSaliente } from '../whatsapp/transporte.js';
 
 /**
@@ -133,6 +135,65 @@ whatsappRouter.get('/media/:archivo', (req, res) => {
     return;
   }
   res.sendFile(ruta);
+});
+
+/**
+ * La FOTO DE PERFIL de un contacto de WhatsApp, cacheada. Detrás de auth: la foto
+ * es PII. On-demand — se trae al abrir el contacto, una vez, y se guarda en disco
+ * como la media. `archivo` null en cache = ya preguntamos y no tiene → 404 sin
+ * volver a molestar a WhatsApp hasta que caduque (una semana). El front cae a las
+ * iniciales ante cualquier 404/error.
+ */
+const FOTO_FRESCA_MS = 7 * 24 * 60 * 60 * 1000;
+
+whatsappRouter.get('/foto/:telefono', requiereVendedora, async (req, res) => {
+  const telefono = normalizarTelefono(req.params.telefono);
+  if (!telefono) {
+    res.status(400).json({ ok: false, message: 'teléfono inválido' });
+    return;
+  }
+
+  const [cache] = await db.select().from(fotosPerfil).where(eq(fotosPerfil.telefono, telefono));
+  const fresca = cache && Date.now() - cache.actualizadoAt.getTime() < FOTO_FRESCA_MS;
+
+  if (fresca) {
+    if (!cache.archivo) {
+      res.status(404).end(); // ya sabíamos que no tiene foto
+      return;
+    }
+    const ruta = join(RUTA_MEDIA, cache.archivo);
+    if (existsSync(ruta)) {
+      res.sendFile(ruta);
+      return;
+    }
+    // el archivo se perdió del disco: caemos a re-traer abajo.
+  }
+
+  const transporte = whatsapp().transporte;
+  const foto = transporte.fotoDePerfil ? await transporte.fotoDePerfil(telefono) : null;
+
+  const guardar = (fotoId: string | null, archivo: string | null, mime: string | null) =>
+    db
+      .insert(fotosPerfil)
+      .values({ telefono, fotoId, archivo, mime, actualizadoAt: new Date() })
+      .onConflictDoUpdate({
+        target: fotosPerfil.telefono,
+        set: { fotoId, archivo, mime, actualizadoAt: new Date() },
+      });
+
+  if (!foto) {
+    await guardar(null, null, null); // cachear "no tiene foto"
+    res.status(404).end();
+    return;
+  }
+
+  const archivo = `pfp-${telefono}.${foto.mime.includes('png') ? 'png' : 'jpg'}`;
+  await writeFile(join(RUTA_MEDIA, archivo), foto.bytes);
+  await guardar(foto.id, archivo, foto.mime);
+
+  res.setHeader('content-type', foto.mime);
+  res.setHeader('cache-control', 'private, max-age=3600');
+  res.send(foto.bytes);
 });
 
 /**

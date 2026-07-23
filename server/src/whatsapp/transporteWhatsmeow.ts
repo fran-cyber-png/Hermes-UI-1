@@ -4,6 +4,7 @@ import { extname, join } from 'node:path';
 import { createClient, type WhatsmeowClient, type MediaType } from '@whatsmeow-node/whatsmeow-node';
 import type {
   EstadoSesion,
+  FotoPerfil,
   MediaSaliente,
   MediaWhatsapp,
   MensajeWhatsapp,
@@ -263,6 +264,28 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
     if (!idsExternos.length) return;
     // Ticks azules: se marca al abrir la conversación (decisión de Estephano).
     await this.client.markRead(idsExternos, jidDeTelefono(telefono));
+  }
+
+  /**
+   * La foto de perfil del contacto. whatsmeow da una URL del CDN de WhatsApp (que
+   * expira y necesita la sesión); la bajamos a bytes acá para servirla nosotros,
+   * detrás de auth, sin filtrar la URL del proveedor. Cualquier problema (sin
+   * foto, privada, no está en WhatsApp) → null, y el front cae a las iniciales.
+   */
+  async fotoDePerfil(telefono: string): Promise<FotoPerfil | null> {
+    try {
+      const pic = await this.client.getProfilePicture(jidDeTelefono(telefono));
+      if (!pic?.url) return null;
+      const r = await fetch(pic.url, { signal: AbortSignal.timeout(15_000) });
+      if (!r.ok) return null;
+      return {
+        id: pic.id,
+        bytes: Buffer.from(await r.arrayBuffer()),
+        mime: r.headers.get('content-type') ?? 'image/jpeg',
+      };
+    } catch {
+      return null;
+    }
   }
 
   async detener(): Promise<void> {

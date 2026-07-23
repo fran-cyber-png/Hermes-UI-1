@@ -5,17 +5,9 @@ import { hace } from '../../lib/datos/frescura';
 import { formatoTelefono } from '../../lib/formato';
 import { ETAPA_CHIP } from '../../lib/etapas';
 import { BadgeCanal } from './BadgeCanal';
+import { Avatar } from './Avatar';
 import { VENTANA_DIAS } from './types';
 import type { Conversacion } from './conversaciones';
-
-/** Iniciales para el avatar. De un nombre "Andre Q." → "AQ"; de un @usuario → "AN". */
-function iniciales(nombre: string | null): string {
-  if (!nombre) return '·';
-  const limpio = nombre.replace(/^@/, '').trim();
-  const partes = limpio.split(/\s+/).filter(Boolean);
-  if (partes.length >= 2) return (partes[0][0] + partes[1][0]).toUpperCase();
-  return limpio.slice(0, 2).toUpperCase();
-}
 
 /**
  * Una conversación en la cola, en dos renglones: quién (con su urgencia a la
@@ -95,9 +87,10 @@ export function FilaConversacion({
 
       {/* Avatar con la insignia del canal superpuesta abajo-derecha. */}
       <span className="relative mt-0.5 shrink-0">
-        <span className="flex size-9 items-center justify-center rounded-full bg-secondary text-xs font-bold text-navy">
-          {iniciales(c.persona_nombre)}
-        </span>
+        <Avatar
+          nombre={c.persona_nombre}
+          className="size-9 rounded-full bg-secondary text-xs font-bold text-navy"
+        />
         <span className="absolute -bottom-0.5 -right-0.5">
           <BadgeCanal canal={c.canal} />
         </span>

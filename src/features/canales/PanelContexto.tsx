@@ -5,6 +5,7 @@ import { kicker, sectionLabel } from '../../lib/styles';
 import type { Conversacion } from './conversaciones';
 import { BadgeCanal, nombreCanal } from './BadgeCanal';
 import HistorialPersona from './HistorialPersona';
+import { Avatar } from './Avatar';
 import { RegistrarGestion } from '../gestion/RegistrarGestion';
 
 /**
@@ -19,15 +20,6 @@ import { RegistrarGestion } from '../gestion/RegistrarGestion';
  * slices S8 (`docs/plan-panel-contexto.md`) — y este panel lo dice, no lo
  * disimula: cada hueco de datos se declara.
  */
-
-/** Iniciales para el retrato. "@marisol.ttito" → "MA"; "Aldo L" → "AL". */
-function iniciales(nombre: string | null): string {
-  if (!nombre) return '·';
-  const limpio = nombre.replace(/^@/, '').trim();
-  const partes = limpio.split(/\s+/).filter(Boolean);
-  if (partes.length >= 2) return (partes[0][0] + partes[1][0]).toUpperCase();
-  return limpio.slice(0, 2).toUpperCase();
-}
 
 export function PanelContexto({ conversacion }: { conversacion: Conversacion }) {
   // Los comentarios llegan con clave `int:<id>` — con ese id se resuelven el
@@ -55,9 +47,12 @@ export function PanelContexto({ conversacion }: { conversacion: Conversacion }) 
       <header className="shrink-0 border-b border-border px-4 py-3">
         <div className="flex items-center gap-2.5">
           <span className="relative shrink-0">
-            <span className="flex size-9 items-center justify-center rounded-[12px] bg-secondary font-heading text-xs font-bold text-navy">
-              {iniciales(conversacion.persona_nombre)}
-            </span>
+            <Avatar
+              nombre={conversacion.persona_nombre}
+              telefono={conversacion.canal === 'whatsapp' ? conversacion.persona_id : null}
+              conFoto={conversacion.canal === 'whatsapp'}
+              className="size-9 rounded-[12px] bg-secondary font-heading text-xs font-bold text-navy"
+            />
             <span className="absolute -bottom-0.5 -right-0.5">
               <BadgeCanal canal={conversacion.canal} />
             </span>

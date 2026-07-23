@@ -3,6 +3,7 @@ import { ArrowRight, MessageSquareText, Search, X } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/datos/cliente';
 import { hace } from '../../lib/datos/frescura';
+import { iniciales } from '../../lib/iniciales';
 import { useSelloDeViejo } from '../../lib/datos/useSelloDeViejo';
 import { SelloDeAntes } from '../../components/SelloDeAntes';
 import { tempBorde, tempClass } from '../../lib/formato';
@@ -70,13 +71,6 @@ const SKELETON_RADAR = [
 
 /** Columnas fantasma (alturas %) para el skeleton de la gráfica de 14 días. */
 const SKELETON_COLUMNAS = [40, 65, 30, 75, 50, 25, 60, 45, 80, 35, 55, 70, 30, 60] as const;
-
-function inicialesDe(nombre: string | null): string {
-  if (!nombre) return '·';
-  const limpio = nombre.replace(/^@/, '').trim();
-  const partes = limpio.split(/\s+/).filter(Boolean);
-  return (partes.length >= 2 ? partes[0][0] + partes[1][0] : limpio.slice(0, 2)).toUpperCase();
-}
 
 /**
  * El "+" de etiquetas: fantasma → input inline. Enter o blur con texto guardan;
@@ -754,7 +748,7 @@ export function VistaDashboard({
                           (soyYo ? ' ring-2 ring-navy' : '')
                         }
                       >
-                        {inicialesDe(v.vendedora)}
+                        {iniciales(v.vendedora)}
                       </span>
                       <span className="min-w-0 flex-1 truncate font-medium text-foreground">{v.vendedora}</span>
                       <span className="w-9 text-right font-mono tabular-nums text-foreground">{conv}</span>

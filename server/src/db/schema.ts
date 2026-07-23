@@ -401,3 +401,23 @@ export const correos = pgTable(
   },
   (t) => [index("correos_vendedora_idx").on(t.vendedoraId, t.creadoAt)],
 );
+
+/**
+ * CACHE DE FOTOS DE PERFIL — la foto de WhatsApp de cada contacto, traída una vez.
+ *
+ * Pedirle la foto a WhatsApp cuesta una llamada por contacto; sin cache, cada vez
+ * que la vendedora abre una ficha se vuelve a pedir (rate-limit, riesgo de ban).
+ * Acá queda qué se trajo y cuándo. Los bytes viven en disco como la media
+ * (`RUTA_MEDIA`); esta fila dice dónde y —clave— si el contacto NO tiene foto
+ * (`archivo` null tras preguntar), para no volver a preguntar en cada render.
+ */
+export const fotosPerfil = pgTable("fotos_perfil", {
+  /** Teléfono normalizado del contacto (la clave con la que llega a la interfaz). */
+  telefono: text("telefono").primaryKey(),
+  /** El id de la foto en WhatsApp: cambia al cambiarla (sirve para refrescar). */
+  fotoId: text("foto_id"),
+  /** Nombre del archivo local con los bytes; null = ya preguntamos y NO tiene foto. */
+  archivo: text("archivo"),
+  mime: text("mime"),
+  actualizadoAt: timestamp("actualizado_at", { withTimezone: true }).notNull().defaultNow(),
+});
