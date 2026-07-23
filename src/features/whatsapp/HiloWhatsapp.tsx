@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, FileText, Loader2, Megaphone, Paperclip, Phone, QrCode, Send, Link2, WifiOff, X } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
 import { formatoTelefono, tempClass } from '../../lib/formato';
+import { TextoWhatsapp } from './TextoWhatsapp';
 import type { Conversacion } from '../canales/conversaciones';
 import {
   urlMedia,
@@ -279,7 +280,9 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
                       >
                         {m.media && <MediaEnBurbuja media={m.media} />}
                         {m.texto ? (
-                          <div className={m.media ? 'px-2 pt-1.5' : ''}>{m.texto}</div>
+                          <div className={'whitespace-pre-wrap break-words' + (m.media ? ' px-2 pt-1.5' : '')}>
+                            <TextoWhatsapp texto={m.texto} />
+                          </div>
                         ) : m.media ? null : (
                           <span className="italic text-muted-foreground">(no es texto — velo en el teléfono)</span>
                         )}
