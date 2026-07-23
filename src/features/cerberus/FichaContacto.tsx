@@ -5,6 +5,7 @@ import { api } from '../../lib/datos/cliente';
 import { fechaCorta } from '../../lib/formato';
 import { sectionLabel } from '../../lib/styles';
 import type { Conversacion } from '../canales/conversaciones';
+import { Avatar } from '../canales/Avatar';
 import { FormularioVenta } from '../venta/FormularioVenta';
 import { RegistrarGestion } from '../gestion/RegistrarGestion';
 
@@ -117,8 +118,16 @@ export function FichaContacto({
     <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
       <header className="shrink-0 border-b border-border px-4 py-3">
         <div className={sectionLabel}>Ficha del contacto</div>
-        <div className="mt-1 truncate text-sm font-bold text-foreground">
-          {conversacion.persona_nombre ?? telefono ?? 'Contacto'}
+        <div className="mt-1 flex items-center gap-2.5">
+          <Avatar
+            nombre={conversacion.persona_nombre ?? telefono}
+            telefono={esTelefono ? telefono : null}
+            conFoto={esTelefono}
+            className="size-8 shrink-0 rounded-[11px] bg-secondary text-xs font-bold text-navy"
+          />
+          <div className="min-w-0 truncate text-sm font-bold text-foreground">
+            {conversacion.persona_nombre ?? telefono ?? 'Contacto'}
+          </div>
         </div>
       </header>
 

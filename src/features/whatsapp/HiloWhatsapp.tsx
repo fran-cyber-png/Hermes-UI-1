@@ -3,6 +3,7 @@ import { AlertTriangle, FileText, Loader2, Megaphone, Paperclip, Phone, QrCode, 
 import { ErrorApi } from '../../lib/datos/cliente';
 import { formatoTelefono, tempClass } from '../../lib/formato';
 import { TextoWhatsapp } from './TextoWhatsapp';
+import { Avatar } from '../canales/Avatar';
 import type { Conversacion } from '../canales/conversaciones';
 import {
   urlMedia,
@@ -212,9 +213,12 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
     <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
       {/* Cabecera del contacto — la misma anatomía en los tres canales */}
       <header className="flex shrink-0 items-center gap-2.5 border-b border-border px-4 py-3">
-        <span className="flex size-8 items-center justify-center rounded-[11px] bg-secondary font-heading text-xs font-bold text-navy">
-          {(conversacion.persona_nombre ?? telefono ?? '·').slice(0, 2).toUpperCase()}
-        </span>
+        <Avatar
+          nombre={conversacion.persona_nombre ?? telefono}
+          telefono={telefono}
+          conFoto
+          className="size-8 rounded-[11px] bg-secondary font-heading text-xs font-bold text-navy"
+        />
         <div className="min-w-0">
           <div className="truncate font-heading text-sm font-bold text-foreground">
             {conversacion.persona_nombre ?? formatoTelefono(telefono)}
