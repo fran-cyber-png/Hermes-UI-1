@@ -21,28 +21,34 @@ export type Origen =
   | { fuente: 'anuncio'; adId: string; ctwaClid: string | null; titulo: string | null; url: string | null }
   | { fuente: 'landing'; ref: string };
 
-/** Navega un objeto anidado de forma segura, tolerando que no exista. */
-function cavar(obj: unknown, ...claves: string[]): unknown {
-  let actual = obj;
-  for (const k of claves) {
-    if (actual == null || typeof actual !== 'object') return undefined;
-    actual = (actual as Record<string, unknown>)[k];
-  }
-  return actual;
-}
-
 const texto = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null);
 
-export function detectarOrigen(message: Record<string, unknown>, textoMensaje: string | null): Origen | null {
-  // 1. Anuncio: el externalAdReply vive en el contextInfo del extendedTextMessage
-  //    (a veces bajo otros tipos de mensaje; probamos los dos más comunes).
-  const ad =
-    cavar(message, 'extendedTextMessage', 'contextInfo', 'externalAdReply') ??
-    cavar(message, 'imageMessage', 'contextInfo', 'externalAdReply') ??
-    cavar(message, 'contextInfo', 'externalAdReply');
-
+/**
+ * Busca el externalAdReply a CUALQUIER profundidad del proto — no en tres rutas
+ * fijas. WhatsApp lo cuelga del contextInfo de distintos tipos de mensaje (texto,
+ * imagen, video…) y a veces dentro de un wrapper (viewOnce). Solo cuenta si trae
+ * `sourceId` (el ad_id): sin eso no es un anuncio atribuible. Por no cubrir estas
+ * formas, antes «no detectábamos de qué anuncio vino» en unos leads sí y otros no.
+ */
+function buscarAnuncio(obj: unknown, prof = 0): Record<string, unknown> | null {
+  if (obj == null || typeof obj !== 'object' || prof > 6) return null;
+  const o = obj as Record<string, unknown>;
+  const ad = o.externalAdReply;
   if (ad && typeof ad === 'object') {
     const a = ad as Record<string, unknown>;
+    if (texto(a.sourceId ?? a.sourceID)) return a;
+  }
+  for (const v of Object.values(o)) {
+    const encontrado = buscarAnuncio(v, prof + 1);
+    if (encontrado) return encontrado;
+  }
+  return null;
+}
+
+export function detectarOrigen(message: Record<string, unknown>, textoMensaje: string | null): Origen | null {
+  // 1. Anuncio (Click-to-WhatsApp): el externalAdReply, a cualquier profundidad.
+  const a = buscarAnuncio(message);
+  if (a) {
     const adId = texto(a.sourceId ?? a.sourceID);
     // El ctwaClid es el oro para atribución 1-a-1; el sourceId ya alcanza para el anuncio.
     if (adId) {

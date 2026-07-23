@@ -57,4 +57,22 @@ describe('detectarOrigen', () => {
     const message = { extendedTextMessage: { contextInfo: { externalAdReply: { title: 'algo' } } } };
     assert.equal(detectarOrigen(message, 'hola'), null);
   });
+
+  // Los dos que faltaban: el referral llega en formas que las rutas fijas no
+  // cubrían, y por eso «no detectábamos de qué anuncio vino» en unos leads sí y
+  // en otros no (mismo anuncio, resultado distinto).
+  test('detecta el anuncio aunque cuelgue de un tipo de mensaje no previsto', () => {
+    const message = { videoMessage: { contextInfo: { externalAdReply: { sourceId: '555', title: 'Diploma Inteligencia' } } } };
+    const o = detectarOrigen(message, null);
+    assert.ok(o && o.fuente === 'anuncio');
+    assert.equal(o.adId, '555');
+    assert.equal(o.titulo, 'Diploma Inteligencia');
+  });
+
+  test('detecta el anuncio anidado dentro de un wrapper (viewOnce / mensaje-en-mensaje)', () => {
+    const message = { viewOnceMessageV2: { message: { imageMessage: { contextInfo: { externalAdReply: { sourceId: '777' } } } } } };
+    const o = detectarOrigen(message, null);
+    assert.ok(o && o.fuente === 'anuncio');
+    assert.equal(o.adId, '777');
+  });
 });
