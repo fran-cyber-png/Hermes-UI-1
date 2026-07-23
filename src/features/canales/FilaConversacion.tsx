@@ -3,6 +3,7 @@ import { Check, Clock } from 'lucide-react';
 import { temperatureOf, TEMPERATURE_META } from '../leads/temperature';
 import { hace } from '../../lib/datos/frescura';
 import { formatoTelefono } from '../../lib/formato';
+import { etiquetaDeMedia } from '../../lib/etiquetaMedia';
 import { ETAPA_CHIP } from '../../lib/etapas';
 import { BadgeCanal } from './BadgeCanal';
 import { Avatar } from './Avatar';
@@ -129,7 +130,9 @@ export function FilaConversacion({
               Pide info
             </span>
           )}
-          <p className={'min-w-0 flex-1 truncate text-sm ' + clasePreview}>{c.texto || '(sin texto)'}</p>
+          <p className={'min-w-0 flex-1 truncate text-sm ' + clasePreview}>
+            {c.texto || etiquetaDeMedia(c.ultima_clase) || '(sin texto)'}
+          </p>
           {c.n > 1 && !c.respondida && (
             <span className="shrink-0 rounded-full bg-primary px-1.5 py-px text-[11px] font-bold tabular-nums text-primary-foreground">
               {c.n}

@@ -20,6 +20,8 @@ export interface MensajeSembrado {
   direccion?: "entrante" | "saliente";
   /** El número propio del que sale el hilo — la cola agrupa por él. */
   numeroPropio?: string;
+  /** La clase de media (imagen/video/audio/documento/sticker), en el payload del evento. */
+  mediaClase?: string;
   occurredAt?: Date;
 }
 
@@ -40,7 +42,7 @@ export async function sembrarMensaje(db: DbDePrueba, m: MensajeSembrado = {}): P
       source: "whatsapp",
       externalId: `evt:${ext}`,
       occurredAt,
-      payload: { numeroPropio },
+      payload: m.mediaClase ? { numeroPropio, media: { clase: m.mediaClase } } : { numeroPropio },
     })
     .returning({ id: events.id });
 
