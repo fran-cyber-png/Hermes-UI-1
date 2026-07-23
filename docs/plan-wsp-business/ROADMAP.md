@@ -15,6 +15,30 @@ WhatsApp Business, y consulta el catálogo — sin soltar el hilo.
 Y **con red debajo**: cada funcionalidad nueva nace con su test (lo que pidió Estephano). Por eso la
 Fase 0 es el piso, no una herramienta.
 
+## Progreso de ejecución (2026-07-23)
+
+Primera sesión de ejecución (matt tdd + taste). **Mergeado a `main`:**
+
+- **#33 — Harness de tests con base** (PR #56, ADR 0008). El piso: cada consulta SQL nueva nace con
+  su `*.test.db.ts`. Verde en el runner de VPS1. Ver `CLAUDE.md` §«Tests con base».
+- **#54 — El chat previsualiza el formato de WhatsApp** (PR #62). `*negrita*`/`_cursiva_`/enlaces
+  dejan de verse crudos; parser puro reusable que además destraba el preview de #45. Front → CD.
+
+**Issues nuevas del feedback del dueño** (todas en el milestone salvo #61, que es del puente Ivi):
+
+| # | Qué | Frente |
+|---|---|---|
+| #55 | Mapear no-texto (📷/🎤/📄) + tarjeta del anuncio Click-to-WhatsApp | Chat |
+| #57 | Timeline de intereses en la ficha (ya hay `intereses.creadoAt`) | Contacto |
+| #58 | Unificación de contactos multi-cuenta (**ÉPICA — necesita spec**; maquinaria dormida `gente`/`lazo`) | Contacto |
+| #59 | Foto de perfil del contacto (whatsmeow, cacheada, fallback iniciales) | Chat |
+| #60 | Pipeline: compuertas como **modales** (el drag-drop ya persiste; hoy rebota) | Pipeline |
+| #61 | Puente Ivi↔Hermes Pieza 1 (`/api/ivi/preguntar`) — ver `ivi-cerebro/docs/puente-hermes-pendiente.md` | Ivi |
+
+**Frente elegido para seguir: «Chat como WhatsApp real».** Orden: **#59** foto → **#55** mapeo →
+luego el piso invisible (**#36** auth, **#43** moneda, **#38/#37** VENCIDO+paridad, ya testeables con
+el harness). **#58** pide grilling→spec antes de codear; **#60** reusa `Intereses`/`FormularioVenta`.
+
 ## Cómo se despliega cada cosa (importa para el orden)
 
 Hay CD (ver `docs/despliegue-continuo.md`): **lo front-only se despliega solo** al mergear a `main`;
