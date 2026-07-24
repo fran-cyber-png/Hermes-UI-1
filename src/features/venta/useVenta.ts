@@ -22,6 +22,13 @@ export interface ProductoCurso {
   nombre: string;
   precioNormal: number;
   precioPromocion: number;
+  /**
+   * Símbolo o código de la moneda del precio («S/», «USD») — `''` cuando
+   * Cerberus no la trae (#43): mejor un hueco que una moneda inventada.
+   * OJO: el payload vivo hoy viene sin la key (escalado en el issue), así que
+   * esto es `''` hasta que Cerberus la exponga. Formatear/mostrar es Fase 1.
+   */
+  moneda: string;
 }
 
 /** Las opciones del formulario (monedas, países, medios, orígenes). */

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requiereVendedora } from '../auth/sesion.js';
 import { asentarVentaEnEmbudo } from './gestiones.js';
 import { cargarFormulario, crearVenta, type OrdenVenta } from '../cerberus/venta.js';
+import { mapearProducto } from '../cerberus/productos.js';
 
 /**
  * REGISTRAR VENTA — el formulario de venta, dentro de Hermes.
@@ -33,14 +34,9 @@ ventaRouter.get('/productos', requiereVendedora, async (req, res) => {
       { signal: AbortSignal.timeout(15_000) },
     );
     const d = (await r.json()) as { results?: Array<Record<string, unknown>> };
-    const productos = (d.results ?? []).map((p) => ({
-      id: String(p.codigo_producto),
-      sku: String(p.sku_producto ?? ''),
-      nombre: String(p.nombre_producto ?? ''),
-      precioNormal: Number(p.precio_normal ?? 0),
-      precioPromocion: Number(p.precio_promocion ?? p.precio_normal ?? 0),
-    }));
-    res.json({ productos });
+    // El mapeo (con la moneda, #43) es puro y vive en cerberus/productos.ts —
+    // acá solo la ruta: fetch, mapear, responder.
+    res.json({ productos: (d.results ?? []).map(mapearProducto) });
   } catch (err) {
     res.status(502).json({ ok: false, message: (err as Error).message });
   }
