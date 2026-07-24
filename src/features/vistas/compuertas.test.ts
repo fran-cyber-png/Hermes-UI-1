@@ -47,6 +47,15 @@ describe('decidirDrop — qué hace el Pipeline con cada destino', () => {
       etapa: 'perdido',
     });
   });
+
+  it('con un modal ya abierto no se suelta nada: los modales no se apilan', () => {
+    expect(
+      decidirDrop({ actual: 'interesado', destino: 'cierre', canal: 'whatsapp', modalAbierto: true }),
+    ).toEqual({ accion: 'nada' });
+    expect(
+      decidirDrop({ actual: 'interesado', destino: 'contactado', canal: 'whatsapp', modalAbierto: true }),
+    ).toEqual({ accion: 'nada' });
+  });
 });
 
 describe('decidirRebote — cuando el server rechazó el movimiento', () => {
@@ -61,6 +70,12 @@ describe('decidirRebote — cuando el server rechazó el movimiento', () => {
       accion: 'aviso',
       mensaje: 'No se pudo mover.',
     });
+  });
+
+  it('si el modal de venta ya está abierto, la compuerta de Cotizado cae al aviso — jamás dos modales', () => {
+    expect(
+      decidirRebote({ destino: 'cotizado', status: 400, mensaje: 'Falta el interés.', ventaAbierta: true }),
+    ).toEqual({ accion: 'aviso', mensaje: 'Falta el interés.' });
   });
 
   it('un rechazo en otra etapa es aviso con el motivo del server, con UN punto final', () => {

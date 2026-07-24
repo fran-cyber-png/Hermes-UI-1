@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Check, MessageSquareText, X } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
@@ -116,13 +116,13 @@ export function VistaEmbudo({
   const timerRebote = useRef<number | null>(null);
   /**
    * La tarjeta que la compuerta de Cotizados dejó ESPERANDO: se queda a la
-   * vista en la columna destino mientras el modal pide el curso; `previo` es
-   * la foto para devolverla si la vendedora cancela.
+   * vista en la columna destino (estado optimista, sin restaurar) mientras el
+   * modal pide el curso. NO se guarda ninguna foto para «volver»: todo camino
+   * de salida (cancelar, reintento fallido, desmontar) invalida y deja que la
+   * verdad del server pinte el mapa — una foto vieja podía deshacer
+   * movimientos de OTRAS tarjetas hechos en el medio.
    */
-  const [pendienteInteres, setPendienteInteres] = useState<{
-    c: Conversacion;
-    previo?: { etapas: Record<string, string> };
-  } | null>(null);
+  const [pendienteInteres, setPendienteInteres] = useState<Conversacion | null>(null);
   /** La conversación soltada en Cierre: abre el formulario de Registrar venta. */
   const [ventaPara, setVentaPara] = useState<Conversacion | null>(null);
 
@@ -130,6 +130,20 @@ export function VistaEmbudo({
     queryKey: ['embudo', 'etapas'],
     queryFn: () => api<{ etapas: Record<string, string> }>('/api/gestiones/etapas'),
   });
+
+  // Cambiar de vista desmonta el kanban: si el modal del interés quedó abierto,
+  // eso ES cancelar — sin esto, la tarjeta quedaba pegada en Cotizados (el
+  // estado optimista sobrevivía sin gestión real detrás).
+  const pendienteRef = useRef<Conversacion | null>(null);
+  useEffect(() => {
+    pendienteRef.current = pendienteInteres;
+  }, [pendienteInteres]);
+  useEffect(
+    () => () => {
+      if (pendienteRef.current) void qc.invalidateQueries({ queryKey: ['embudo', 'etapas'] });
+    },
+    [qc],
+  );
 
 
   /**
@@ -162,14 +176,14 @@ export function VistaEmbudo({
           etapa: v.etapa,
         }),
       }),
-    // Optimista: la tarjeta se muda al soltar; si la compuerta rechaza, vuelve sola.
+    // Optimista: la tarjeta se muda al soltar. Si algo falla, NO se restaura
+    // ninguna foto local (quedaría vieja si hubo otros movimientos en el
+    // medio): se invalida y la verdad del server pinta el mapa.
     onMutate: async (v) => {
       await qc.cancelQueries({ queryKey: ['embudo', 'etapas'] });
-      const previo = qc.getQueryData<{ etapas: Record<string, string> }>(['embudo', 'etapas']);
       qc.setQueryData<{ etapas: Record<string, string> }>(['embudo', 'etapas'], (d) => ({
         etapas: { ...(d?.etapas ?? {}), [v.c.clave]: v.etapa },
       }));
-      return { previo };
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['embudo'] });
@@ -177,46 +191,48 @@ export function VistaEmbudo({
       void qc.invalidateQueries({ queryKey: ['dashboard'] });
       setAviso(null);
     },
-    onError: (err, v, ctx) => {
+    onError: (err, v) => {
       const r = decidirRebote({
         destino: v.etapa,
         status: err instanceof ErrorApi ? err.status : null,
         mensaje: err instanceof ErrorApi ? err.message : null,
+        // Carrera real: este POST pudo quedar en vuelo mientras otro drop abría
+        // el modal de venta. En ese caso: aviso, jamás dos modales apilados.
+        ventaAbierta: ventaPara != null,
       });
       if (r.accion === 'modal-interes') {
         // La compuerta pide el interés: la tarjeta se queda esperando en
-        // Cotizados mientras el modal lo registra. Recién si cancela, vuelve.
-        setPendienteInteres({ c: v.c, previo: ctx?.previo });
+        // Cotizados (estado optimista) mientras el modal lo registra.
+        setPendienteInteres(v.c);
         return;
       }
-      if (ctx?.previo !== undefined) qc.setQueryData(['embudo', 'etapas'], ctx.previo);
-      else void qc.invalidateQueries({ queryKey: ['embudo', 'etapas'] });
-      // El fallback de siempre (red, validación): el motivo queda a la vista
-      // hasta el próximo arrastre o hasta cerrarlo — nada se autodestruye por reloj.
+      // El fallback de siempre (red, validación): el mapa vuelve a la verdad
+      // del server, y el motivo queda a la vista hasta el próximo arrastre o
+      // hasta cerrarlo — nada se autodestruye por reloj.
+      void qc.invalidateQueries({ queryKey: ['embudo', 'etapas'] });
       setAviso(r.mensaje);
       marcarRebote(v.c.clave);
     },
   });
 
-  /** La vendedora desistió del interés: la tarjeta vuelve a su columna, explícitamente. */
+  /** La vendedora desistió del interés: se invalida y la tarjeta vuelve con la verdad del server. */
   function cancelarInteres() {
     if (!pendienteInteres) return;
-    const { c, previo } = pendienteInteres;
+    const c = pendienteInteres;
     setPendienteInteres(null);
-    if (previo !== undefined) qc.setQueryData(['embudo', 'etapas'], previo);
-    else void qc.invalidateQueries({ queryKey: ['embudo', 'etapas'] });
+    void qc.invalidateQueries({ queryKey: ['embudo', 'etapas'] });
     marcarRebote(c.clave);
   }
 
-  /** El interés quedó guardado: el drag original se completa solo (reintento del POST). */
+  /**
+   * El interés quedó guardado: el drag original se completa solo (reintento del
+   * POST). No hace falta invalidar antes: si el reintento sale bien, onSuccess
+   * invalida; si falla, onError invalida — todo camino termina en el server.
+   */
   function guardadoInteres() {
     if (!pendienteInteres) return;
-    const { c, previo } = pendienteInteres;
+    const vars = reintentoTrasInteres(pendienteInteres);
     setPendienteInteres(null);
-    // El reintento parte de la foto REAL (no de la optimista que quedó a la
-    // vista): así, si vuelve a fallar, el rollback devuelve la tarjeta bien.
-    if (previo !== undefined) qc.setQueryData(['embudo', 'etapas'], previo);
-    const vars = reintentoTrasInteres(c);
     if (vars) mover.mutate(vars);
   }
 
@@ -251,7 +267,13 @@ export function VistaEmbudo({
     setArrastrada(null);
     setSobre(null);
     const actual = (etapas.data?.etapas[c.clave] ?? 'interesado') as Etapa;
-    const d = decidirDrop({ actual, destino: etapa, canal: c.canal });
+    const d = decidirDrop({
+      actual,
+      destino: etapa,
+      canal: c.canal,
+      // Con un modal de compuerta abierto no se suelta nada: no se apilan.
+      modalAbierto: pendienteInteres != null || ventaPara != null,
+    });
     if (d.accion === 'nada') return;
     if (d.accion === 'modal-venta') {
       // El cierre no se declara: se gana registrando la venta (la compuerta del
@@ -451,7 +473,7 @@ export function VistaEmbudo({
 
       {/* Las compuertas guían: el modal pide lo que falta, ahí mismo. */}
       {pendienteInteres && (
-        <ModalInteresCotizado c={pendienteInteres.c} onGuardado={guardadoInteres} onCancelar={cancelarInteres} />
+        <ModalInteresCotizado c={pendienteInteres} onGuardado={guardadoInteres} onCancelar={cancelarInteres} />
       )}
       {ventaPara && (
         <ModalVentaCierre

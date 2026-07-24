@@ -23,7 +23,14 @@ export type AccionDrop =
   /** Cierre + comentario FB/IG: sin teléfono no hay ficha ni venta — se abre la conversación. */
   | { accion: 'abrir' };
 
-export function decidirDrop(v: { actual: Etapa; destino: Etapa; canal: string }): AccionDrop {
+export function decidirDrop(v: {
+  actual: Etapa;
+  destino: Etapa;
+  canal: string;
+  /** ¿Ya hay un modal de compuerta abierto? Los modales NO se apilan. */
+  modalAbierto?: boolean;
+}): AccionDrop {
+  if (v.modalAbierto) return { accion: 'nada' };
   if (v.actual === v.destino) return { accion: 'nada' };
   if (v.destino === 'cierre') {
     return v.canal === 'whatsapp' ? { accion: 'modal-venta' } : { accion: 'abrir' };
@@ -45,8 +52,16 @@ export function decidirRebote(v: {
   /** El status HTTP del rechazo — `null` cuando ni siquiera hubo respuesta (red). */
   status: number | null;
   mensaje: string | null;
+  /**
+   * ¿El modal de Registrar venta ya está abierto? (Carrera posible: el POST a
+   * cotizado sigue en vuelo cuando otro drop en Cierre abre el de venta.)
+   * Si sí, el rechazo cae al aviso — jamás dos modales apilados.
+   */
+  ventaAbierta?: boolean;
 }): AccionRebote {
-  if (v.destino === 'cotizado' && v.status === 400) return { accion: 'modal-interes' };
+  if (v.destino === 'cotizado' && v.status === 400 && !v.ventaAbierta) {
+    return { accion: 'modal-interes' };
+  }
   const motivo = (v.mensaje ?? 'No se pudo mover').replace(/\.\s*$/, '');
   return { accion: 'aviso', mensaje: `${motivo}.` };
 }

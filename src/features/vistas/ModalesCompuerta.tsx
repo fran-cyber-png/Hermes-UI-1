@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
 import { AlertTriangle, GraduationCap, MessageSquareText, ShoppingCart, UserPlus, X } from 'lucide-react';
 import type { Conversacion } from '../canales/conversaciones';
+import { useEscape } from '../../lib/useEscape';
 import { Intereses } from '../gestion/Intereses';
 import { FormularioVenta } from '../venta/FormularioVenta';
 import { useFicha } from '../cerberus/FichaContacto';
@@ -14,20 +14,6 @@ import { useFicha } from '../cerberus/FichaContacto';
  * satisfacen, no las evitan. Nada se mueve solo: guardar el interés o registrar
  * la venta es siempre una acción humana explícita.
  */
-
-/** Escape cierra (respetando inputs), en captura — mismo patrón que FormularioVenta. */
-function useEscape(onCerrar: () => void) {
-  useEffect(() => {
-    const fn = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if ((e.target as HTMLElement | null)?.closest('input, textarea, select')) return;
-      e.stopPropagation();
-      onCerrar();
-    };
-    window.addEventListener('keydown', fn, true);
-    return () => window.removeEventListener('keydown', fn, true);
-  }, [onCerrar]);
-}
 
 function Cascara({
   titulo,
