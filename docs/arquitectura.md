@@ -316,20 +316,23 @@ conectado**; su POST no verifica firma).
 
 Lo que un recién llegado pisa. Ordenado por lo que más duele.
 
-### 8.1 🔴 Auth partida por la mitad
+### 8.1 🟡 Auth: cerrada por perímetro (era 🔴, cerrado en #36 / ADR 0009)
 
-`requiereVendedora` protege 8 routers. **No protege, y el front las llama igual**:
+Desde el ADR 0009, **todo `/api/*` exige el Bearer de una vendedora por defecto**:
+`app.use(perimetroApi)` (`auth/perimetro.ts`) va delante de todos los routers, y las excepciones
+(`/api/auth`, rutas de dev que solo se montan fuera de producción) viven enumeradas en una sola
+lista con su porqué. La media se consume con fetch+blob (`src/lib/datos/blobAutenticado.ts`) y el
+stream SSE con fetch+parser propio (`src/lib/datos/sse.ts`), porque `<img>` y EventSource no mandan
+headers.
 
-- `/api/conversaciones` — **la cola entera**
-- `/api/whatsapp/conversacion/:telefono` — **el hilo completo de un cliente**
-- `/api/whatsapp/media/:archivo` — los adjuntos
-- `/api/responder` — **publica y borra comentarios en Facebook**
-- `/api/persona/*`, `/api/interactions/*`
+Lo que **sigue abierto, a sabiendas** (detalle en el ADR 0009):
 
-Y ninguno de los 14 routers muertos tiene auth: `PUT /api/config` deja reconfigurar cuentas de pauta
-sin credencial. El comentario de `routes/sdk.ts` («se publica sin auth igual que el resto del server,
-que tampoco tiene») es **herencia que ya no es cierta de la mitad del server**. Como la API es
-pública por HTTPS, esto es exposición de datos personales de clientes, no de métricas.
+- **`/vincular`** — la consola del operador no tiene auth propia y nginx la proxya. Contenerla es
+  decisión aparte (auth de operador o bloqueo en nginx).
+- **El SDK exige token de vendedora**, pero sus consumidores reales (kos, Ivi, MCP) son máquinas:
+  falta una credencial de servicio.
+- **CORS en `*`** — con Bearer obligatorio ya no expone datos; acotarlo es defensa en profundidad
+  pendiente (ojo con los orígenes de Tauri/Electron y Vite dev).
 
 ### 8.2 ✅ El orden de la cola está implementado dos veces — resuelto con paridad verificada (#37)
 
