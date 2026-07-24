@@ -34,8 +34,19 @@ export const URL_ADMIN =
 /** La base plantilla: se monta una vez con extensión + schema; nadie escribe en ella. */
 export const TEMPLATE = "hermes_test_template";
 
-/** Marcas que delatan que una URL apunta a dev (5434) o a producción (5438). */
-const PROHIBIDOS = [":5438", ":5434", "meta_escuela", "hermes_db"];
+/**
+ * Marcas que delatan que una URL apunta a algo que NO es la base de tests:
+ * dev (5434), producción (5438) o staging (5440). Staging también está prohibido:
+ * persiste entre corridas, así que un `DROP DATABASE` ahí borra el ensayo general.
+ */
+const PROHIBIDOS = [
+  ":5438",
+  ":5434",
+  ":5440",
+  "meta_escuela",
+  "hermes_db",
+  "hermes_staging",
+];
 
 /**
  * GUARDIA HARD-FAIL ANTI-PROD. Corre ANTES de crear o borrar nada.

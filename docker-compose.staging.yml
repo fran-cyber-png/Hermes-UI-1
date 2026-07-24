@@ -1,0 +1,37 @@
+# Postgres de STAGING — el ensayo general antes de las vendedoras.
+#
+# Tres bases de Hermes conviven en VPS1 y no se tocan nunca:
+#   5438  hermes_db          producción, la que atiende a las vendedoras
+#   5440  hermes_staging_db  este: mismo schema, datos de mentira, se puede romper
+#   5439  hermes_test_db     efímera, en RAM, muere con cada corrida de tests
+#
+# A diferencia de la de tests, esta SÍ persiste (volumen, no tmpfs): staging existe
+# para que una migración se aplique sobre una base que ya tiene historia — que es el
+# único ensayo que vale. Una base vacía no prueba una migración.
+#
+# La password NO vive acá (regla dura #1): sale del entorno. En VPS1 está en
+# /srv/hermes-staging/.env, que docker compose lee solo.
+services:
+  db-staging:
+    # Mismo major e imagen que prod: si la migración se comporta distinto por versión
+    # de Postgres, el ensayo no sirvió de nada.
+    image: pgvector/pgvector:pg17
+    container_name: hermes_staging_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hermes_staging
+      POSTGRES_PASSWORD: ${STAGING_DB_PASSWORD:?falta STAGING_DB_PASSWORD (vive en /srv/hermes-staging/.env)}
+      POSTGRES_DB: hermes_staging
+    ports:
+      # Solo loopback y en 5440 — nunca 5438 (prod), nunca 5439 (tests).
+      - "127.0.0.1:5440:5432"
+    volumes:
+      - hermes_staging_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hermes_staging -d hermes_staging"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  hermes_staging_pgdata:
