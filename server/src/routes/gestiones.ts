@@ -10,6 +10,7 @@ import {
   registrarGestion,
   type EtapaGestion,
 } from '../gestiones/registrarGestion.js';
+import { consultarIntereses } from '../gestiones/intereses.js';
 
 /**
  * EL REGISTRO DE GESTIÓN + ETIQUETAS + INTERESES — la bitácora comercial.
@@ -93,12 +94,9 @@ gestionesRouter.get('/intereses', async (req, res) => {
   const claves = String(req.query.claves ?? '')
     .split(',')
     .filter(Boolean);
-  const filas = claves.length
-    ? await db.select().from(intereses).where(inArray(intereses.clave, claves))
-    : await db.select().from(intereses);
-  const porClave: Record<string, string[]> = {};
-  for (const f of filas) (porClave[f.clave] ??= []).push(f.curso);
-  res.json({ intereses: porClave });
+  // El orden cronológico y la forma con fecha viven en el seam (#57): la ruta
+  // solo parsea las claves. Devuelve `intereses` (retrocompat) + `interesesDetalle`.
+  res.json(await consultarIntereses(db, claves));
 });
 
 gestionesRouter.post('/intereses', async (req, res) => {

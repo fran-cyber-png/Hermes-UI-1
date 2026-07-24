@@ -207,16 +207,18 @@ export async function sembrarConversionWa(db: DbDePrueba, v: ConversionWaSembrad
 
 /**
  * Siembra un curso de interés — lo que la COMPUERTA 1 de las gestiones exige
- * para dejar pasar a Cotizado (issue #60).
+ * para dejar pasar a Cotizado (issue #60). Con `creadoAt` explícito se controla
+ * el orden que la línea de tiempo tiene que respetar (#57); sin él, `defaultNow()`.
  */
 export async function sembrarInteres(
   db: DbDePrueba,
-  i: { clave: string; curso?: string; vendedoraId?: string },
+  i: { clave: string; curso?: string; vendedoraId?: string; creadoAt?: Date },
 ): Promise<void> {
   await db.insert(intereses).values({
     clave: i.clave,
     curso: i.curso ?? "Curso de prueba",
     vendedoraId: i.vendedoraId ?? "vendedora-prueba",
+    ...(i.creadoAt ? { creadoAt: i.creadoAt } : {}),
   });
 }
 
