@@ -1,4 +1,4 @@
-# ADR 0009 — Las notas son una tabla EDITABLE aparte, no un campo dentro de `gestiones`
+# ADR 0011 — Las notas son una tabla EDITABLE aparte, no un campo dentro de `gestiones`
 
 - **Fecha:** 2026-07-23
 - **Estado:** aceptado
@@ -44,13 +44,31 @@ cómo se trabajó el lead):
 
 `RegistrarGestion.tsx` pierde el textarea de notas, el estado `notas`, y el campo `notas` del
 body del POST — queda con una sola responsabilidad: la PRÓXIMA ACCIÓN (que si tiene fecha, cae
-sola en la Agenda). El preview de «última nota» del cintillo colapsado ya no lee
-`gestiones.notas` (la última fila del historial): lee la nota más reciente de `notas` para esa
-conversación.
+sola en la Agenda).
 
 La columna `gestiones.notas` **no se borra** del schema: las filas viejas la siguen teniendo (es
 historia real, de antes de este cambio) y no vale la pena una migración de datos para un campo de
-texto libre que ya no se escribe. Simplemente deja de alimentarse.
+texto libre que ya no se escribe. Simplemente deja de alimentarse — **pero no deja de mostrarse**
+(corregido en la review de código del PR #47: la primera versión de este ADR decía que retirar el
+textarea era suficiente, y eso volvía invisibles las notas de gestión que una vendedora YA tenía
+guardadas, el día uno).
+
+`GET /api/notas?clave=` (`server/src/notas/notas.ts#listarNotas`) mezcla **dos fuentes**: las
+notas nuevas (editables, de la tabla `notas`) y las históricas de `gestiones.notas` para esa
+misma conversación y vendedora — marcadas `origen: 'gestion'`, de **solo lectura** (no tienen fila
+en `notas`, así que no hay `PATCH /:id` posible sobre ellas: el front no les dibuja los botones de
+editar/fijar/archivar, solo el texto, la fecha y un chip «nota de gestión»). El preview de «última
+nota» del cintillo colapsado de `RegistrarGestion` lee de esa lista mezclada — puede mostrar una
+histórica si es la más reciente (o la única) que hay.
+
+Alternativas para esto último, descartadas:
+
+- **Migrar `gestiones.notas` a filas de `notas`.** Perdería la relación 1-a-1 con SU gestión (una
+  conversación con 5 gestiones y notas en 3 de ellas generaría 3 filas nuevas sin trazabilidad de
+  cuál gestión era cuál) y, peor, las volvería EDITABLES — exactamente lo que este ADR dice que
+  `gestiones` no puede ser.
+- **No mostrarlas y avisar «hay notas viejas, mirá el historial de gestión».** Es más trabajo para
+  la vendedora que simplemente verlas en el mismo lugar donde siempre las buscó.
 
 ## Alternativas consideradas
 
@@ -64,7 +82,7 @@ texto libre que ya no se escribe. Simplemente deja de alimentarse.
 
 ## Consecuencias
 
-- Un típo se corrige en el momento, sin ensuciar el historial comercial.
+- Un typo se corrige en el momento, sin ensuciar el historial comercial.
 - `gestiones` sigue siendo confiablemente append-only — nada de este cambio lo toca.
 - La libreta personal (`clave='general'`, tecla «n») sale gratis del mismo modelo: es solo otro
   valor de `clave`, no un tipo de dato aparte.
