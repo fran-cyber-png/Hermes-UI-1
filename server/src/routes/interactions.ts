@@ -2,6 +2,7 @@ import { Router } from "express";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { diasDe, rangoDe } from "../lib/rangos.js";
+import { pideInfoSql } from "../cola/urgenciaSql.js";
 
 export const interactionsRouter = Router();
 
@@ -12,8 +13,11 @@ export const interactionsRouter = Router();
  * información", "precio", "me interesa" son leads idénticos a un formulario.
  * Es una HERRAMIENTA de filtrado, no un veredicto: quien usa la plataforma
  * decide si mira todo o solo lo que pide algo. No se esconde nada.
+ *
+ * El regex vive una sola vez en `cola/urgenciaSql.ts` (#96) — antes esta era
+ * una de tres copias que habían divergido.
  */
-const PIDE_INFO = sql`texto ~* '(informaci|info\\b|precio|costo|cuánto|cuanto|inscri|matricul|interes|quiero|cómo|más datos|mas datos|detalle)'`;
+const PIDE_INFO = pideInfoSql("texto");
 
 /**
  * ¿Sigue abierta la ventana para mandarle un mensaje privado?

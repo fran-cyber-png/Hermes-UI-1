@@ -1,6 +1,13 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { db } from "../db/client.js";
-import { nivelUrgenciaSql, ordenUrgenciaSql, seguimientosPendientesSql } from "./urgenciaSql.js";
+import {
+  nivelUrgenciaSql,
+  ordenUrgenciaSql,
+  pideInfoSql,
+  referenciaSql,
+  respondidaSql,
+  seguimientosPendientesSql,
+} from "./urgenciaSql.js";
 
 /**
  * LA COLA UNIFICADA — una fila por CONVERSACIÓN, no por mensaje. Extraída de la
@@ -22,9 +29,6 @@ import { nivelUrgenciaSql, ordenUrgenciaSql, seguimientosPendientesSql } from ".
  * «(sin texto)» (#55). Sale del payload del evento (`media.clase`), que ya se
  * guarda al proyectar; no agrega JOIN — `events` ya se une por el número propio.
  */
-
-/** ¿Pide que la contacten? Misma heurística que la bandeja de comentarios. */
-const PIDE_INFO = sql`texto ~* '(informaci|info\\b|precio|costo|cuánto|cuanto|inscri|matricul|interes|quiero|cómo|más datos|mas datos|detalle)'`;
 
 /** La ventana de 7 días de Meta para el privado. IG también la tiene, no solo FB. */
 const VENTANA_ABIERTA = sql`(tipo = 'comentario' AND canal IN ('facebook','instagram') AND occurred_at > now() - interval '7 days')`;
@@ -73,7 +77,7 @@ export async function consultarCola(
       occurred_at                                 AS ultimo_at,
       (status <> 'nuevo')                         AS respondida,
       (${VENTANA_ABIERTA})                        AS ventana_abierta,
-      (${PIDE_INFO})                              AS pide_info,
+      (${pideInfoSql("texto")})                    AS pide_info,
       1                                           AS n
     FROM interactions
     WHERE tipo = 'comentario' AND (${ventanaCola(sql`occurred_at`)}) ${filtroCanal}
@@ -105,20 +109,11 @@ export async function consultarCola(
       -- El origen del ÚLTIMO mensaje: si vino de un anuncio y no tiene texto, el
       -- front muestra «📣 Vino del anuncio» en vez de «(sin texto)».
       (array_agg(origen ORDER BY occurred_at DESC))[1]                AS ultima_origen,
-      CASE
-        WHEN max(occurred_at) FILTER (WHERE direccion = 'saliente') IS NOT NULL
-         AND max(occurred_at) FILTER (WHERE direccion = 'saliente')
-             >= COALESCE(max(occurred_at) FILTER (WHERE direccion = 'entrante'), '-infinity'::timestamptz)
-        THEN max(occurred_at)
-        ELSE COALESCE(max(occurred_at) FILTER (WHERE direccion = 'entrante'), max(occurred_at))
-      END                                                             AS referencia,
+      (${referenciaSql})                                              AS referencia,
       max(occurred_at)                                                AS ultimo_at,
-      (max(occurred_at) FILTER (WHERE direccion = 'saliente') IS NOT NULL
-        AND max(occurred_at) FILTER (WHERE direccion = 'saliente')
-            >= COALESCE(max(occurred_at) FILTER (WHERE direccion = 'entrante'), '-infinity'::timestamptz))
-                                                                      AS respondida,
+      (${respondidaSql})                                              AS respondida,
       false                                                          AS ventana_abierta,
-      bool_or(texto ~* '(informaci|info\\b|precio|costo|cuánto|cuanto|inscri|matricul|interes|quiero|cómo|más datos|mas datos|detalle)') AS pide_info,
+      bool_or(${pideInfoSql("texto")})                                AS pide_info,
       count(*)::int                                                  AS n
     FROM msg
     GROUP BY canal, persona_id, numero_propio
