@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Check, Loader2, Mail, Send, X } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { kicker } from '../../lib/styles';
-import { fechaCorta } from '../../lib/formato';
+import { fechaCorta, hace } from '../../lib/formato';
 
 /**
  * CORREOS — enviar un email sin salir de Hermes.
@@ -46,19 +46,6 @@ function etiquetaDia(fecha: string): string {
   if (mismoDia(d, ayer)) return 'ayer';
   if (d.getFullYear() !== hoy.getFullYear()) return fechaCorta(fecha);
   return d.toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '');
-}
-
-/** «recién» / «hace 40 min» / «hace 2 h» / «hace 3 días». */
-function hace(fecha: string): string {
-  const ms = Date.now() - new Date(fecha).getTime();
-  if (Number.isNaN(ms)) return '';
-  const min = Math.floor(ms / 60_000);
-  if (min < 1) return 'recién';
-  if (min < 60) return `hace ${min} min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `hace ${h} h`;
-  const d = Math.floor(h / 24);
-  return d === 1 ? 'hace 1 día' : `hace ${d} días`;
 }
 
 export function VistaCorreos({ correoInicial, onConsumido }: VistaCorreosProps) {

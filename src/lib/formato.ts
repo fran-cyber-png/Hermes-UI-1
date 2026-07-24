@@ -40,3 +40,23 @@ export function fechaCorta(f: string): string {
   if (Number.isNaN(ms)) return f;
   return new Date(ms).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' });
 }
+
+/**
+ * «recién» / «hace 40 min» / «hace 2 h» / «hace 3 días» — a partir de una fecha
+ * ISO. Compartida (antes vivía copiada en `VistaCorreos.tsx` y de nuevo en
+ * `PanelNotas.tsx`; una tercera copia fue la señal de sacarla para acá).
+ * Distinta de `datos/frescura.ts#hace`, que recibe HORAS ya calculadas (esa
+ * vive aparte porque su reloj es inyectable — la usa el sello de "caché
+ * viejo" con `Date.now()` como parámetro, no como global).
+ */
+export function hace(fecha: string): string {
+  const ms = Date.now() - new Date(fecha).getTime();
+  if (Number.isNaN(ms)) return '';
+  const min = Math.floor(ms / 60_000);
+  if (min < 1) return 'recién';
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `hace ${h} h`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? 'hace 1 día' : `hace ${d} días`;
+}
