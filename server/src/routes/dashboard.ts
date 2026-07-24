@@ -4,6 +4,7 @@ import { db } from '../db/client.js';
 import { requiereVendedora } from '../auth/sesion.js';
 import { ordenarRadar } from '../cola/radar.js';
 import { consultarRadar } from '../cola/consultarRadar.js';
+import { contarPorEtapaEfectiva } from '../cola/consultarCola.js';
 import { consultarSeriesDashboard } from '../dashboard/series.js';
 import { consultarPorVendedora } from '../dashboard/porVendedora.js';
 
@@ -98,10 +99,13 @@ dashboardRouter.get('/', async (_req, res) => {
   // radar (#4: `dashboard/porVendedora.ts`).
   const porVendedora = await consultarPorVendedora(db, ahora);
 
-  // ── El embudo de un vistazo: cuántos hay en cada etapa (normalizada). ──
+  // ── El embudo de un vistazo: conteos por ETAPA EFECTIVA sobre la ventana de
+  //    30 días de la cola (#89, ADR 0013). El MISMO seam que /api/conversaciones
+  //    — acá muere la dualidad de contar toda la historia de `gestiones` sin
+  //    ventana, que hacía incomparable el «N de M» del kanban. `norm` sigue para
+  //    el mapa de chips (`etapas`), que sí es «lo asentado a mano».
   const norm = (e: string) => (e === 'nuevo' ? 'interesado' : e === 'venta' ? 'cierre' : e);
-  const embudo: Record<string, number> = {};
-  for (const e of etapas) embudo[norm(e.etapa)] = (embudo[norm(e.etapa)] ?? 0) + 1;
+  const embudo = await contarPorEtapaEfectiva(db);
 
   // ── Qué cursos pide la gente: el ranking de intereses. Señal de negocio pura. ──
   const cursos = await db.execute<{ curso: string; n: number }>(sql`
