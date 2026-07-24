@@ -1,57 +1,38 @@
 import { Router } from 'express';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { gestiones, recordatorios, etiquetas, intereses, conversionesWa } from '../db/schema.js';
+import { gestiones, etiquetas, intereses, conversionesWa } from '../db/schema.js';
 import { requiereVendedora } from '../auth/sesion.js';
+import {
+  ACCIONES,
+  ETAPAS,
+  normalizarEtapa,
+  registrarGestion,
+  type EtapaGestion,
+} from '../gestiones/registrarGestion.js';
 
 /**
  * EL REGISTRO DE GESTIÓN + ETIQUETAS + INTERESES — la bitácora comercial.
  *
  * La etapa ACTUAL de una conversación es la de su última gestión (append-only).
- * El embudo tiene DOS compuertas honestas, validadas ACÁ (no en la UI):
- *
- *   · a COTIZADO no se llega sin al menos un INTERÉS registrado — no se cotiza
- *     lo que no se sabe qué es;
- *   · a CIERRE no se llega sin VENTA REGISTRADA — el cierre no se declara, se
- *     gana. (La ruta de venta lo declara sola al crear la venta.)
- *
- * Si la próxima acción trae fecha, cae sola en la Agenda. Nada envía nada.
+ * El embudo tiene DOS compuertas honestas, del lado del server (no en la UI):
+ * viven en el seam `gestiones/registrarGestion.ts` (inyectable, fijado con
+ * tests con base — ADR 0008); esta ruta solo valida el HTTP y le pasa el
+ * singleton. Si la próxima acción trae fecha, cae sola en la Agenda. Nada
+ * envía nada.
  */
 export const gestionesRouter = Router();
 gestionesRouter.use(requiereVendedora);
 
-export const ETAPAS = ['interesado', 'contactado', 'cotizado', 'cierre', 'perdido'] as const;
-export const ACCIONES = ['wsp', 'llamada', 'correo', 'reunion'] as const;
+export { ACCIONES, ETAPAS };
 
-/** Los valores viejos siguen siendo válidos al leer: se normalizan, no se rompen. */
-function normalizarEtapa(e: string): string {
-  if (e === 'nuevo') return 'interesado';
-  if (e === 'venta') return 'cierre';
-  return e;
-}
-
-const NOMBRE_ACCION: Record<string, string> = {
-  wsp: 'Wsp de seguimiento',
-  llamada: 'Llamada',
-  correo: 'Correo',
-  reunion: 'Reunión',
-};
-
-/** El teléfono de una conversación de WhatsApp, para la compuerta del cierre. */
-function telefonoDeClave(clave: string, personaId?: string | null): string | null {
-  const m = /^conv:whatsapp:(\d+):/.exec(clave);
-  if (m) return m[1];
-  if (personaId && /^\d{8,}$/.test(personaId)) return personaId;
-  return null;
-}
-
-/** Registrar una gestión. Las compuertas del embudo viven acá. */
+/** Registrar una gestión. Las compuertas del embudo viven en el seam. */
 gestionesRouter.post('/', async (req, res) => {
   const { clave, canal, personaId, personaNombre, numeroPropio, proximaAccion, proximaFecha, notas } =
     req.body ?? {};
   const etapa = normalizarEtapa(String(req.body?.etapa ?? ''));
 
-  if (!clave || !canal || !ETAPAS.includes(etapa as (typeof ETAPAS)[number])) {
+  if (!clave || !canal || !ETAPAS.includes(etapa as EtapaGestion)) {
     res.status(400).json({ ok: false, message: `etapa inválida (${ETAPAS.join(' | ')})` });
     return;
   }
@@ -65,68 +46,24 @@ gestionesRouter.post('/', async (req, res) => {
     return;
   }
 
-  // ── COMPUERTA 1: cotizado exige saber QUÉ curso quiere. ──
-  if (etapa === 'cotizado') {
-    const [n] = await db.execute<{ n: number }>(
-      sql`SELECT count(*)::int AS n FROM intereses WHERE clave = ${String(clave)}`,
-    );
-    if (!n?.n) {
-      res.status(400).json({
-        ok: false,
-        message: 'Para pasar a Cotizado hay que saber qué curso le interesa: registrá al menos un interés (puede tener varios).',
-      });
-      return;
-    }
+  const r = await registrarGestion(db, {
+    vendedoraId: req.vendedoraId!,
+    clave: String(clave),
+    canal: String(canal),
+    personaId: personaId ? String(personaId) : null,
+    personaNombre: personaNombre ? String(personaNombre) : null,
+    numeroPropio: numeroPropio ? String(numeroPropio) : null,
+    etapa: etapa as EtapaGestion,
+    proximaAccion: proximaAccion ? String(proximaAccion) : null,
+    proximaFecha: fecha,
+    notas: String(notas ?? '').trim() || null,
+  });
+
+  if (!r.ok) {
+    res.status(400).json({ ok: false, message: r.message });
+    return;
   }
-
-  // ── COMPUERTA 2: el cierre no se declara — se gana registrando la venta. ──
-  if (etapa === 'cierre') {
-    const telefono = telefonoDeClave(String(clave), personaId ? String(personaId) : null);
-    const [venta] = telefono
-      ? await db.execute<{ n: number }>(
-          sql`SELECT count(*)::int AS n FROM conversiones_wa WHERE telefono = ${telefono}`,
-        )
-      : [{ n: 0 }];
-    if (!venta?.n) {
-      res.status(400).json({
-        ok: false,
-        message: 'A Cierre se llega registrando la venta (botón "Registrar venta" en la ficha). Al crearla, el lead pasa solo.',
-      });
-      return;
-    }
-  }
-
-  const [gestion] = await db
-    .insert(gestiones)
-    .values({
-      vendedoraId: req.vendedoraId!,
-      clave: String(clave),
-      canal: String(canal),
-      personaId: personaId ? String(personaId) : null,
-      personaNombre: personaNombre ? String(personaNombre) : null,
-      numeroPropio: numeroPropio ? String(numeroPropio) : null,
-      etapa,
-      proximaAccion: proximaAccion ? String(proximaAccion) : null,
-      proximaFecha: fecha,
-      notas: String(notas ?? '').trim() || null,
-    })
-    .returning();
-
-  // La próxima acción con fecha ES una promesa: va derecho a la Agenda.
-  if (gestion.proximaAccion && gestion.proximaFecha) {
-    await db.insert(recordatorios).values({
-      vendedoraId: req.vendedoraId!,
-      clave: gestion.clave,
-      canal: gestion.canal,
-      personaId: gestion.personaId,
-      personaNombre: gestion.personaNombre,
-      numeroPropio: gestion.numeroPropio,
-      nota: `${NOMBRE_ACCION[gestion.proximaAccion]}${gestion.notas ? ` · ${gestion.notas.slice(0, 80)}` : ''}`,
-      cuando: gestion.proximaFecha,
-    });
-  }
-
-  res.json({ ok: true, gestion });
+  res.json({ ok: true, gestion: r.gestion });
 });
 
 /** El historial de gestiones de UNA conversación (la etapa actual es la primera). */

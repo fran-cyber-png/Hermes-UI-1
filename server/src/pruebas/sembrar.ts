@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { conversionesWa, enviosWa, events, interactions, leads, recordatorios } from "../db/schema.js";
+import { conversionesWa, enviosWa, events, interactions, intereses, leads, recordatorios } from "../db/schema.js";
 import type { DbDePrueba } from "./base.js";
 
 /**
@@ -203,6 +203,21 @@ export async function sembrarConversionWa(db: DbDePrueba, v: ConversionWaSembrad
     .returning({ id: conversionesWa.id });
 
   return row.id;
+}
+
+/**
+ * Siembra un curso de interés — lo que la COMPUERTA 1 de las gestiones exige
+ * para dejar pasar a Cotizado (issue #60).
+ */
+export async function sembrarInteres(
+  db: DbDePrueba,
+  i: { clave: string; curso?: string; vendedoraId?: string },
+): Promise<void> {
+  await db.insert(intereses).values({
+    clave: i.clave,
+    curso: i.curso ?? "Curso de prueba",
+    vendedoraId: i.vendedoraId ?? "vendedora-prueba",
+  });
 }
 
 export interface RecordatorioSembrado {
