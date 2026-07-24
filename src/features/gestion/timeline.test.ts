@@ -44,6 +44,9 @@ describe('normalizarIntereses — tolera las dos formas del endpoint', () => {
 });
 
 describe('agruparInteresesPorDia — ordena y agrupa por fecha', () => {
+  // `hoy` fijo para que el sufijo de año no dependa de cuándo corre el test.
+  const HOY = new Date('2026-07-24T12:00:00.000Z');
+
   it('ordena cronológicamente (el más viejo primero) aunque lleguen al revés', () => {
     const grupos = agruparInteresesPorDia(
       [
@@ -51,6 +54,7 @@ describe('agruparInteresesPorDia — ordena y agrupa por fecha', () => {
         { curso: 'Inteligencia', creadoAt: '2026-07-01T12:00:00.000Z' },
       ],
       'UTC',
+      HOY,
     );
     expect(grupos.map((g) => g.etiqueta)).toEqual(['1 jul', '15 jul']);
     expect(grupos.map((g) => g.cursos)).toEqual([['Inteligencia'], ['OSINT']]);
@@ -63,10 +67,32 @@ describe('agruparInteresesPorDia — ordena y agrupa por fecha', () => {
         { curso: 'OSINT', creadoAt: '2026-07-01T18:00:00.000Z' },
       ],
       'UTC',
+      HOY,
     );
     expect(grupos).toHaveLength(1);
     expect(grupos[0].etiqueta).toBe('1 jul');
     expect(grupos[0].cursos).toEqual(['Inteligencia', 'OSINT']);
+  });
+
+  it('el año NO se muestra si es el año en curso; SÍ cuando es otro año («15 dic 25»)', () => {
+    const grupos = agruparInteresesPorDia(
+      [
+        { curso: 'Viejo', creadoAt: '2025-12-15T12:00:00.000Z' },
+        { curso: 'Nuevo', creadoAt: '2026-07-01T12:00:00.000Z' },
+      ],
+      'UTC',
+      HOY,
+    );
+    expect(grupos.map((g) => g.etiqueta)).toEqual(['15 dic 25', '1 jul']);
+  });
+
+  it('la clave `dia` queda en ISO YYYY-MM-DD (para el atributo dateTime)', () => {
+    const grupos = agruparInteresesPorDia(
+      [{ curso: 'OSINT', creadoAt: '2026-07-01T09:00:00.000Z' }],
+      'UTC',
+      HOY,
+    );
+    expect(grupos[0].dia).toBe('2026-07-01');
   });
 
   it('los sin fecha (caché viejo) van al final, sin etiqueta', () => {
@@ -76,6 +102,7 @@ describe('agruparInteresesPorDia — ordena y agrupa por fecha', () => {
         { curso: 'Inteligencia', creadoAt: '2026-07-01T00:00:00.000Z' },
       ],
       'UTC',
+      HOY,
     );
     expect(grupos[0].etiqueta).toBe('1 jul');
     expect(grupos[grupos.length - 1]).toEqual({ dia: '', etiqueta: '', cursos: ['Sin fecha'] });
@@ -88,11 +115,12 @@ describe('agruparInteresesPorDia — ordena y agrupa por fecha', () => {
         { curso: 'OSINT', creadoAt: '2026-07-01T10:00:00.000Z' },
       ],
       'UTC',
+      HOY,
     );
     expect(grupos[0].cursos).toEqual(['OSINT']);
   });
 
   it('lista vacía → sin grupos', () => {
-    expect(agruparInteresesPorDia([], 'UTC')).toEqual([]);
+    expect(agruparInteresesPorDia([], 'UTC', HOY)).toEqual([]);
   });
 });

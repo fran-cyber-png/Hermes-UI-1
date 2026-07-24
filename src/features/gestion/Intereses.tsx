@@ -107,7 +107,10 @@ export function Intereses({
               <ChevronRight size={11} aria-hidden className="shrink-0 text-muted-foreground/50" />
             )}
             {g.etiqueta && (
-              <time className="shrink-0 text-[10px] font-medium tabular-nums text-muted-foreground">
+              <time
+                dateTime={g.dia}
+                className="shrink-0 text-[10px] font-medium tabular-nums text-muted-foreground"
+              >
                 {g.etiqueta}
               </time>
             )}

@@ -47,8 +47,17 @@ export interface GrupoTimeline {
   cursos: string[];
 }
 
-/** El día local de un ISO, en la zona dada (evita que el UTC corra la fecha). */
-function diaLocal(creadoAt: string, timeZone: string): { dia: string; etiqueta: string } | null {
+/**
+ * El día local de un ISO, en la zona dada (evita que el UTC corra la fecha).
+ * `dia` queda en ISO `YYYY-MM-DD` (sirve de `dateTime` del `<time>`). La etiqueta
+ * omite el año cuando es el año en curso y lo agrega si no («15 dic 25»): dentro
+ * del ciclo de venta el año es ruido, pero un interés viejo tiene que delatarse.
+ */
+function diaLocal(
+  creadoAt: string,
+  timeZone: string,
+  anioActual: number,
+): { dia: string; etiqueta: string } | null {
   const t = new Date(creadoAt).getTime();
   if (Number.isNaN(t)) return null;
   const partes = new Intl.DateTimeFormat('en-US', {
@@ -58,26 +67,35 @@ function diaLocal(creadoAt: string, timeZone: string): { dia: string; etiqueta: 
     day: '2-digit',
   }).formatToParts(new Date(t));
   const val = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? '';
+  const anio = Number(val('year'));
   const mes = Number(val('month'));
   const dia = Number(val('day'));
-  return { dia: `${val('year')}-${val('month')}-${val('day')}`, etiqueta: `${dia} ${MESES_ES[mes - 1]}` };
+  const sufijoAnio = anio !== anioActual ? ` ${String(anio).slice(-2)}` : '';
+  return {
+    dia: `${val('year')}-${val('month')}-${val('day')}`,
+    etiqueta: `${dia} ${MESES_ES[mes - 1]}${sufijoAnio}`,
+  };
 }
 
 /**
  * Ordena cronológicamente (el más viejo primero) y agrupa por día: si dos cursos
  * cayeron el mismo día, comparten fecha. Los sin fecha (caché viejo) van al final,
- * sin etiqueta. Zona por defecto America/Lima (la vendedora es peruana) — se
- * puede inyectar para tests deterministas.
+ * sin etiqueta. Zona por defecto America/Lima (la vendedora es peruana) y `hoy`
+ * por defecto ahora — ambos inyectables para tests deterministas.
  */
 export function agruparInteresesPorDia(
   items: readonly InteresRegistrado[],
   timeZone = 'America/Lima',
+  hoy: Date = new Date(),
 ): GrupoTimeline[] {
+  const anioActual = Number(
+    new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric' }).format(hoy),
+  );
   const conFecha: { dia: string; etiqueta: string; curso: string; t: number }[] = [];
   const sinFecha: string[] = [];
   for (const it of items) {
     if (!it?.curso) continue;
-    const d = it.creadoAt ? diaLocal(it.creadoAt, timeZone) : null;
+    const d = it.creadoAt ? diaLocal(it.creadoAt, timeZone, anioActual) : null;
     if (d) conFecha.push({ ...d, curso: it.curso, t: new Date(it.creadoAt as string).getTime() });
     else sinFecha.push(it.curso);
   }
