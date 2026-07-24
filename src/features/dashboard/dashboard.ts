@@ -176,10 +176,9 @@ export function conversacionDeChat(c: LeadChat): Conversacion {
     referencia: c.referencia,
     ultimo_at: c.cayo_at,
     dias: Math.floor((Date.now() - new Date(c.cayo_at).getTime()) / 86_400_000),
-    // OJO: no es el nivel del radar. `Conversacion.nivel` es la escala de la cola
-    // (0|1|2, su propio espejo en SQL) y el radar usa la de cola/urgencia.ts (0–5).
-    // Mezclarlas pintaría mal la fila. La cola recalcula el suyo al cargar; acá va
-    // un valor neutro a propósito.
-    nivel: 2,
+    // Desde #37 la cola y el radar hablan la MISMA escala (0–5, cola/urgencia.ts),
+    // pero este nivel no viaja con el chat del radar y la cola recalcula el suyo
+    // al cargar — acá va un valor neutro («resto») a propósito.
+    nivel: 5,
   };
 }

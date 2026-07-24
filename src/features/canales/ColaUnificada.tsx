@@ -27,10 +27,11 @@ const RECIEN_LLEGADA_MS = 10 * 60_000;
  * LA COLA UNIFICADA — el corazón de Hermes.
  *
  * Una sola lista con los cuatro canales mezclados (comentarios FB/IG, DMs de
- * Messenger, chats de WhatsApp), ordenada por el servidor según la urgencia de
- * dos niveles: primero lo que EXPIRA (ventana de Meta), después lo que ESPERA
- * (mensajes sin responder), y al final el resto. El canal es una insignia, no una
- * columna: nadie decide a quién responder según por dónde le escribieron.
+ * Messenger, chats de WhatsApp), ordenada por el servidor según la urgencia
+ * canónica de seis niveles (`server/src/cola/urgencia.ts`): vivo, vencido,
+ * expira, espera, silencio, resto — la misma que el radar del Dashboard. El
+ * canal es una insignia, no una columna: nadie decide a quién responder según
+ * por dónde le escribieron.
  *
  * Sucedió a la vieja `Bandeja` (archivada, ver ADR 0004): mismo esqueleto —
  * filtros por intención, «Ver más», vacíos honestos — pero contra
@@ -172,7 +173,7 @@ export function ColaUnificada({
       referencia: new Date().toISOString(),
       ultimo_at: new Date().toISOString(),
       dias: 0,
-      nivel: 2,
+      nivel: 5, // neutro: el «resto» de la escala 0–5; la cola recalcula el real al cargar
     });
     setNuevoAbierto(false);
     setNuevoTel('');

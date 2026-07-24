@@ -5,7 +5,8 @@ import type { Intencion } from './types';
 /**
  * Una fila de la cola unificada: o un comentario suelto (FB/IG) o una
  * conversación de mensajes agrupada (WhatsApp/Messenger). El servidor ya la
- * ordena por urgencia de dos niveles; el front no reordena nada.
+ * ordena por la urgencia de seis niveles (`server/src/cola/urgencia.ts`);
+ * el front no reordena nada.
  */
 export interface Conversacion {
   /** Clave estable: `int:<id>` para comentarios, `conv:<canal>:<persona>:<num>` para chats. */
@@ -32,8 +33,9 @@ export interface Conversacion {
   referencia: string;
   ultimo_at: string;
   dias: number;
-  /** 0 = expira (ventana Meta), 1 = espera (mensaje sin responder), 2 = el resto. */
-  nivel: 0 | 1 | 2;
+  /** La escala canónica de urgencia: 0 vivo · 1 vencido · 2 expira · 3 espera ·
+   *  4 silencio · 5 resto — la misma que el radar del Dashboard. */
+  nivel: 0 | 1 | 2 | 3 | 4 | 5;
 }
 
 type Pagina = { conversaciones: Conversacion[]; total?: number; hayMas: boolean };

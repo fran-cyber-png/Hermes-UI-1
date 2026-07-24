@@ -121,6 +121,6 @@ export function conversacionDeRecordatorio(r: Recordatorio): Conversacion {
     referencia: r.cuando,
     ultimo_at: r.cuando,
     dias: 0,
-    nivel: 2,
+    nivel: 5, // neutro: el «resto» de la escala 0–5; la cola recalcula el real al cargar
   };
 }

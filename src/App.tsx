@@ -236,7 +236,7 @@ export default function App() {
             referencia: new Date().toISOString(),
             ultimo_at: new Date().toISOString(),
             dias: 0,
-            nivel: 2,
+            nivel: 5, // neutro: el «resto» de la escala 0–5; la cola recalcula el real al cargar
           });
         }
       : undefined;
