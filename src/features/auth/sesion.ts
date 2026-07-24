@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { olvidarCacheDeHermes } from '../../lib/datos/cacheDeHermes';
+import { borrarToken, guardarToken, tokenGuardado } from '../../lib/datos/token';
 
 /**
  * LA SESIÓN DE LA VENDEDORA, del lado del cliente.
@@ -31,7 +32,6 @@ export interface Vendedora {
   nombre: string;
 }
 
-const CLAVE = 'hermes.token';
 /** El último usuario que entró — JAMÁS la contraseña. Precarga el login. */
 export const CLAVE_ULTIMO_USUARIO = 'hermes.ultimoUsuario';
 
@@ -70,7 +70,7 @@ export function useSesion() {
   const [cerberusVivo, setCerberusVivo] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem(CLAVE);
+    const token = tokenGuardado();
     if (!token) {
       setCargando(false);
       return;
@@ -93,7 +93,7 @@ export function useSesion() {
       .catch((err) => {
         if (err instanceof ErrorApi && err.status === 401) {
           // Token muerto de verdad: afuera, y sin dejarle el radar a la que entre.
-          localStorage.removeItem(CLAVE);
+          borrarToken();
           setVendedora(null);
           void olvidarCacheDeHermes();
         } else {
@@ -113,7 +113,7 @@ export function useSesion() {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     });
-    localStorage.setItem(CLAVE, r.token);
+    guardarToken(r.token);
     localStorage.setItem(CLAVE_ULTIMO_USUARIO, username);
     setSinServer(false);
     setVendedora(r.vendedora);
@@ -123,7 +123,7 @@ export function useSesion() {
   }, []);
 
   const salir = useCallback(() => {
-    localStorage.removeItem(CLAVE);
+    borrarToken();
     setVendedora(null);
     setCerberusVivo(null);
     // El caché persistido también: con dos vendedoras en la misma máquina, la

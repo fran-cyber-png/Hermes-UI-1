@@ -1,5 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 import { API_URL } from '../../config';
+import { tokenGuardado } from './token';
 
 /**
  * LA CAPA DE DATOS. Una sola puerta al servidor.
@@ -69,7 +70,7 @@ export class ErrorApi extends Error {
 export async function api<T>(ruta: string, init?: RequestInit): Promise<T> {
   // El token de la vendedora (si inició sesión) va en cada request. Un Bearer en
   // el header, no una cookie: la app de escritorio habla con su propio backend.
-  const token = localStorage.getItem('hermes.token');
+  const token = tokenGuardado();
   const res = await fetch(`${API_URL}${ruta}`, {
     ...init,
     headers: {

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ErrorApi } from '../../lib/datos/cliente';
+import { tokenGuardado } from '../../lib/datos/token';
 import { API_URL } from '../../config';
 
 /** Un adjunto del hilo: el archivo ya vive en el server, esto es la referencia. */
@@ -95,7 +96,7 @@ export function useConversacionWa(telefono: string | null) {
       archivo: File;
       caption: string;
     }) => {
-      const token = localStorage.getItem('hermes.token');
+      const token = tokenGuardado();
       const q = new URLSearchParams({
         telefono: vars.telefono,
         numeroPropio: vars.numeroPropio,

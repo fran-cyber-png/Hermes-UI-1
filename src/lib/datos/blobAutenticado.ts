@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { tokenGuardado } from './token';
 
 /**
  * MEDIA DETRÁS DEL PERÍMETRO — el mecanismo central, y el único.
@@ -30,7 +31,7 @@ export function useBlobAutenticado(url: string | null): { url: string | null; fa
     if (!url) return;
     let vivo = true;
     let objectUrl: string | null = null;
-    const token = localStorage.getItem('hermes.token');
+    const token = tokenGuardado();
     void fetch(url, {
       headers: token ? { authorization: `Bearer ${token}` } : {},
     })

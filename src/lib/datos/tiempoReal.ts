@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { API_URL } from '../../config';
 import { crearParserSSE } from './sse';
+import { tokenGuardado } from './token';
 
 /**
  * TIEMPO REAL — el frontend escucha lo que el server empuja.
@@ -57,7 +58,7 @@ export function useTiempoReal(sesionActiva: boolean) {
     };
 
     async function conectar() {
-      const token = localStorage.getItem('hermes.token');
+      const token = tokenGuardado();
       try {
         const res = await fetch(`${API_URL}/api/stream`, {
           headers: token ? { authorization: `Bearer ${token}` } : {},
