@@ -8,6 +8,7 @@ import {
   respondidaSql,
   seguimientosPendientesSql,
 } from "./urgenciaSql.js";
+import { etapaEfectivaSql, ultimasGestionesSql } from "./etapaEfectivaSql.js";
 
 /**
  * LA COLA UNIFICADA — una fila por CONVERSACIÓN, no por mensaje. Extraída de la
@@ -28,6 +29,12 @@ import {
  * no tiene texto (media-only), el front la usa para mostrar «📷 Foto» en vez de
  * «(sin texto)» (#55). Sale del payload del evento (`media.clase`), que ya se
  * guarda al proyectar; no agrega JOIN — `events` ya se une por el número propio.
+ *
+ * `etapa_efectiva` / `etapa_manual` (#88, ADR 0013): la etapa del embudo, dicha
+ * por el server — max(manual, derivada) con `perdido` terminal, calculada por el
+ * seam `cola/etapaEfectivaSql.ts` sobre esta MISMA ventana de 30 días. El front
+ * NO la recalcula ni cae a ningún fallback: la paridad SQL≡TS la fija
+ * `etapaEfectiva.paridad.test.db.ts`.
  */
 
 /** La ventana de 7 días de Meta para el privado. IG también la tiene, no solo FB. */
@@ -137,15 +144,21 @@ export async function consultarCola(
     ),
     seguimientos AS (
       ${seguimientosPendientesSql}
+    ),
+    ultimas_gestiones AS (
+      ${ultimasGestionesSql}
     )
     SELECT clave, canal, tipo, persona_id, persona_nombre, numero_propio,
            texto, contexto_texto, ultima_clase, ultima_origen, respondida, ventana_abierta, pide_info, n,
            referencia, ultimo_at, seguimiento_en,
+           etapa_manual,
+           (${etapaEfectivaSql}) AS etapa_efectiva,
            extract(day from now() - referencia)::int AS dias,
            (${nivelUrgenciaSql}) AS nivel,
            (${ordenUrgenciaSql}) AS orden
     FROM todo
     LEFT JOIN seguimientos USING (clave)
+    LEFT JOIN ultimas_gestiones USING (clave)
     ${filtroIntencion}
     ORDER BY nivel ASC, orden ASC
     LIMIT ${limit} OFFSET ${offset}
