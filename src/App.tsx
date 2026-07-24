@@ -126,9 +126,10 @@ export default function App() {
   );
 
   // El nervio en vivo: escucha el stream del server e invalida lo que cambió.
-  // Solo con sesión: el stream está detrás del perímetro (#36) y sin token
-  // sería un 401 en loop cada 3 segundos.
-  useTiempoReal(Boolean(vendedora));
+  // Solo con sesión (el stream está detrás del perímetro, #36); si el stream
+  // recibe un 401, corta y dispara la re-validación — que echa si el token
+  // murió de verdad, en vez de martillar cada 3 segundos.
+  useTiempoReal(Boolean(vendedora), reintentar);
 
   // El badge de la Agenda: cuántas promesas apuran (vencidas + de hoy).
   // Dorado, porque es TIEMPO — la única acepción del oro en Hermes.

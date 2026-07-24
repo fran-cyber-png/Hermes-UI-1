@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { API_URL } from '../../config';
-import { crearParserSSE } from './sse';
+import { consumirStream } from './streamAutenticado';
 import { tokenGuardado } from './token';
 
 /**
@@ -17,16 +17,18 @@ import { tokenGuardado } from './token';
  * ── Por qué fetch y no EventSource ──
  * Los eventos de mensaje llevan el teléfono del contacto (PII), así que desde
  * el cierre del issue #36 el stream exige el Bearer como todo /api — y
- * EventSource no puede mandar headers. `fetch` sí: se lee el body como stream
- * y `crearParserSSE` reconstruye los eventos. Lo que se pierde de EventSource
- * (la reconexión automática) se repone acá: ante cualquier corte —red, deploy,
- * 401 por token vencido— se reintenta a los 3s, igual que el `retry` que
- * mandaba el server. Solo se conecta con sesión iniciada: sin token, el stream
- * daría 401 en loop.
+ * EventSource no puede mandar headers. `consumirStream` lo consume con fetch.
+ *
+ * ── Red caída ≠ sesión muerta ──
+ * Un corte de red o un deploy se reintenta a los 3s (los mismos del `retry`
+ * que mandaba el server). Un **401 corta el loop**: martillar con un token
+ * muerto no lo revive — se dispara `alNoAutorizado` (App pasa la re-validación
+ * de sesión, el mismo camino de `/api/auth/yo` que echa y limpia si
+ * corresponde). Y solo se conecta con sesión iniciada.
  */
 const REINTENTO_MS = 3000;
 
-export function useTiempoReal(sesionActiva: boolean) {
+export function useTiempoReal(sesionActiva: boolean, alNoAutorizado?: () => void) {
   const qc = useQueryClient();
 
   useEffect(() => {
@@ -58,29 +60,20 @@ export function useTiempoReal(sesionActiva: boolean) {
     };
 
     async function conectar() {
-      const token = tokenGuardado();
-      try {
-        const res = await fetch(`${API_URL}/api/stream`, {
-          headers: token ? { authorization: `Bearer ${token}` } : {},
-          signal: control.signal,
-        });
-        if (!res.ok || !res.body) throw new Error(`stream ${res.status}`);
-
-        const alimentar = crearParserSSE(manejar);
-        const decodificador = new TextDecoder();
-        const lector = res.body.getReader();
-        for (;;) {
-          const { done, value } = await lector.read();
-          if (done) break;
-          alimentar(decodificador.decode(value, { stream: true }));
-        }
-      } catch {
-        // Red caída, deploy a medias o 401: abajo se reintenta. Nunca se
-        // revienta la app por perder el nervio en vivo.
+      const fin = await consumirStream({
+        url: `${API_URL}/api/stream`,
+        token: tokenGuardado(),
+        senal: control.signal,
+        onData: manejar,
+      });
+      if (control.signal.aborted) return;
+      if (fin === 'no-autorizado') {
+        // Token muerto: se corta acá. La re-validación decide si echa (y
+        // entonces `sesionActiva` baja y este efecto se desmonta solo).
+        alNoAutorizado?.();
+        return;
       }
-      if (!control.signal.aborted) {
-        reintento = setTimeout(() => void conectar(), REINTENTO_MS);
-      }
+      reintento = setTimeout(() => void conectar(), REINTENTO_MS);
     }
 
     void conectar();
@@ -89,5 +82,5 @@ export function useTiempoReal(sesionActiva: boolean) {
       control.abort();
       if (reintento !== undefined) clearTimeout(reintento);
     };
-  }, [qc, sesionActiva]);
+  }, [qc, sesionActiva, alNoAutorizado]);
 }
