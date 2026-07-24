@@ -4,6 +4,8 @@ import { db } from '../db/client.js';
 import { requiereVendedora } from '../auth/sesion.js';
 import { ordenarRadar } from '../cola/radar.js';
 import { consultarRadar } from '../cola/consultarRadar.js';
+import { consultarSeriesDashboard } from '../dashboard/series.js';
+import { consultarPorVendedora } from '../dashboard/porVendedora.js';
 
 /**
  * EL DASHBOARD — el radar de la mesa: los leads CAYENDO, de todas las fuentes.
@@ -92,36 +94,9 @@ dashboardRouter.get('/', async (_req, res) => {
   for (const t of tags) (etiquetasPorClave[t.clave] ??= []).push(t.etiqueta);
 
   // ── Por vendedora: los números del equipo, hoy y la semana.
-  const porVendedora = await db.execute<{
-    vendedora: string;
-    conversaciones_hoy: number;
-    mensajes_hoy: number;
-    ventas_hoy: number;
-    conversaciones_7d: number;
-    mensajes_7d: number;
-    ventas_7d: number;
-  }>(sql`
-    WITH envios AS (
-      SELECT vendedora_id, telefono, creado_at FROM envios_wa WHERE estado = 'enviado'
-    ),
-    ventas AS (
-      SELECT vendedora_id, iniciada_at FROM conversiones_wa
-    )
-    SELECT
-      v.vendedora_id AS vendedora,
-      count(DISTINCT e.telefono) FILTER (WHERE e.creado_at::date = now()::date)::int AS conversaciones_hoy,
-      count(e.*) FILTER (WHERE e.creado_at::date = now()::date)::int                 AS mensajes_hoy,
-      count(DISTINCT vt.iniciada_at) FILTER (WHERE vt.iniciada_at::date = now()::date)::int AS ventas_hoy,
-      count(DISTINCT e.telefono) FILTER (WHERE e.creado_at > now() - interval '7 days')::int AS conversaciones_7d,
-      count(e.*) FILTER (WHERE e.creado_at > now() - interval '7 days')::int         AS mensajes_7d,
-      count(DISTINCT vt.iniciada_at) FILTER (WHERE vt.iniciada_at > now() - interval '7 days')::int AS ventas_7d
-    FROM (SELECT DISTINCT vendedora_id FROM envios_wa
-          UNION SELECT DISTINCT vendedora_id FROM conversiones_wa) v
-    LEFT JOIN envios e ON e.vendedora_id = v.vendedora_id
-    LEFT JOIN ventas vt ON vt.vendedora_id = v.vendedora_id
-    GROUP BY v.vendedora_id
-    ORDER BY mensajes_7d DESC
-  `);
+  // El corte de «hoy» es en hora de Lima, no UTC — mismo `ahora` que ordena el
+  // radar (#4: `dashboard/porVendedora.ts`).
+  const porVendedora = await consultarPorVendedora(db, ahora);
 
   // ── El embudo de un vistazo: cuántos hay en cada etapa (normalizada). ──
   const norm = (e: string) => (e === 'nuevo' ? 'interesado' : e === 'venta' ? 'cierre' : e);
@@ -135,66 +110,9 @@ dashboardRouter.get('/', async (_req, res) => {
 
   // ── Las series de 14 días para las gráficas del riel. Siempre 14 puntos:
   //    los días sin datos van en 0 desde acá (el front no inventa continuidad).
-  //    El corte de día usa la fecha del server, igual que el resto del archivo.
-  const leadsDia = await db.execute<{ dia: string; chats: number; comentarios: number; formularios: number }>(sql`
-    WITH dias AS (
-      SELECT generate_series(now()::date - 13, now()::date, interval '1 day')::date AS dia
-    ),
-    c AS (
-      SELECT occurred_at::date AS dia, count(DISTINCT (canal, persona_id))::int AS n
-      FROM interactions
-      WHERE tipo = 'mensaje' AND direccion = 'entrante' AND persona_id IS NOT NULL
-        AND occurred_at > now()::date - 13
-      GROUP BY 1
-    ),
-    co AS (
-      SELECT occurred_at::date AS dia, count(*)::int AS n
-      FROM interactions
-      WHERE tipo = 'comentario' AND occurred_at > now()::date - 13
-      GROUP BY 1
-    ),
-    f AS (
-      SELECT created_time::date AS dia, count(*)::int AS n
-      FROM leads
-      WHERE created_time > now()::date - 13
-      GROUP BY 1
-    )
-    SELECT d.dia::text AS dia,
-           COALESCE(c.n, 0) AS chats,
-           COALESCE(co.n, 0) AS comentarios,
-           COALESCE(f.n, 0) AS formularios
-    FROM dias d
-    LEFT JOIN c ON c.dia = d.dia
-    LEFT JOIN co ON co.dia = d.dia
-    LEFT JOIN f ON f.dia = d.dia
-    ORDER BY d.dia
-  `);
-  const enviosDia = await db.execute<{ dia: string; n: number }>(sql`
-    WITH dias AS (
-      SELECT generate_series(now()::date - 13, now()::date, interval '1 day')::date AS dia
-    )
-    SELECT d.dia::text AS dia, COALESCE(e.n, 0) AS n
-    FROM dias d
-    LEFT JOIN (
-      SELECT creado_at::date AS dia, count(*)::int AS n
-      FROM envios_wa WHERE estado = 'enviado' AND creado_at > now()::date - 13
-      GROUP BY 1
-    ) e ON e.dia = d.dia
-    ORDER BY d.dia
-  `);
-  const ventasDia = await db.execute<{ dia: string; n: number }>(sql`
-    WITH dias AS (
-      SELECT generate_series(now()::date - 13, now()::date, interval '1 day')::date AS dia
-    )
-    SELECT d.dia::text AS dia, COALESCE(v.n, 0) AS n
-    FROM dias d
-    LEFT JOIN (
-      SELECT iniciada_at::date AS dia, count(*)::int AS n
-      FROM conversiones_wa WHERE iniciada_at > now()::date - 13
-      GROUP BY 1
-    ) v ON v.dia = d.dia
-    ORDER BY d.dia
-  `);
+  //    El corte de día es en hora de Lima, no en la del server — #4.
+  const { leads_dia: leadsDia, envios_dia: enviosDia, ventas_dia: ventasDia } =
+    await consultarSeriesDashboard(db, ahora);
 
   res.json({
     chats: chatsOrdenados,
