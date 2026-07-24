@@ -51,7 +51,7 @@ function EmailCopiable({ email }: { email: string }) {
   );
 }
 
-export function LeadForm({ telefono, activo, pushname }: { telefono: string | null; activo: boolean; pushname: string | null }) {
+export function BloqueLeadForm({ telefono, activo, pushname }: { telefono: string | null; activo: boolean; pushname: string | null }) {
   const { data } = useLeadForm(telefono, activo);
   const lead = data?.lead;
   if (!lead) return null; // sin match: nada. Ni placeholder ni hueco.

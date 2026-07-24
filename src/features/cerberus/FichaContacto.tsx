@@ -10,6 +10,7 @@ import { FormularioVenta } from '../venta/FormularioVenta';
 import { RegistrarGestion } from '../gestion/RegistrarGestion';
 import { Intereses } from '../gestion/Intereses';
 import { PanelNotas } from '../notas/PanelNotas';
+import { BloqueLeadForm } from './BloqueLeadForm';
 
 /**
  * LA FICHA DEL CONTACTO — la razón de ser de Hermes.
@@ -224,6 +225,12 @@ export function FichaContacto({
             </a>
           </div>
         ) : null}
+
+        {/* Lo que Meta o la landing web ya sabía, por match de teléfono (#113):
+            nombre real, EMAIL y campaña, marcados por origen. Va SIEMPRE (es dato
+            de Hermes, no de Cerberus); se auto-oculta si el teléfono no matcheó
+            ningún lead. */}
+        <BloqueLeadForm telefono={telefono} activo={esTelefono} pushname={conversacion.persona_nombre} />
 
         {/* La línea de tiempo del interés: qué cursos pidió y cuándo (#57). Va
             SIEMPRE (sea cliente, lead nuevo o Cerberus caído): el interés es dato

@@ -9,6 +9,7 @@ import { Avatar } from './Avatar';
 import { RegistrarGestion } from '../gestion/RegistrarGestion';
 import { Intereses } from '../gestion/Intereses';
 import { PanelNotas } from '../notas/PanelNotas';
+import { BloqueLeadForm } from '../cerberus/BloqueLeadForm';
 
 /**
  * EL PANEL DE CONTEXTO — el lado derecho cuando la conversación es de Meta.
@@ -124,6 +125,15 @@ export function PanelContexto({ conversacion }: { conversacion: Conversacion }) 
             </div>
           </>
         )}
+
+        {/* El lead-form por teléfono (#113). En los canales de Meta el número no
+            viene, así que esto se auto-oculta; queda cableado para cuando la
+            unificación cross-canal (#58) aporte el teléfono de un DM/comentario. */}
+        <BloqueLeadForm
+          telefono={conversacion.canal === 'whatsapp' ? conversacion.persona_id : null}
+          activo={conversacion.canal === 'whatsapp'}
+          pushname={conversacion.persona_nombre}
+        />
 
         {/* La línea de tiempo del interés: qué cursos pidió y cuándo (#57). Es la
             ficha del contacto en el aside — acá se lee la evolución de un vistazo. */}
