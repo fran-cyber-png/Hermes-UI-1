@@ -1,0 +1,75 @@
+# /etc/sudoers.d/hermes-andreecito
+#
+# andreecito opera Hermes en VPS1. Autorizado por Estephano el 2026-07-24.
+#
+# Instalar (valida ANTES de mover: un sudoers roto deja la máquina sin sudo):
+#   sudo visudo -c -f deploy/vps1/sudoers-hermes-andreecito \
+#     && sudo install -m 0440 -o root -g root deploy/vps1/sudoers-hermes-andreecito \
+#          /etc/sudoers.d/hermes-andreecito
+#
+# QUÉ NO ESTÁ ACÁ, a propósito: el acceso al código y a los secretos de Hermes NO pasa
+# por sudo — pasa por el grupo `hermes` (dueño de /srv/hermes con setgid + ACL, y de
+# server/.env en 660). sudo se reserva para lo que de verdad necesita privilegio: el
+# servicio, sus logs y su Postgres.
+#
+# NOTA SOBRE EL ALCANCE REAL: andreecito está en el grupo `docker`, y eso ya es root de
+# facto en la máquina (con docker se monta / y se lee cualquier cosa). Esta lista NO es
+# una frontera de seguridad contra él; es una declaración de qué se espera que use, para
+# que un comando fuera de la lista sea una decisión consciente y no un resbalón.
+
+Cmnd_Alias HERMES_SVC = \
+  /usr/bin/systemctl start hermes, \
+  /usr/bin/systemctl stop hermes, \
+  /usr/bin/systemctl restart hermes, \
+  /usr/bin/systemctl status hermes, \
+  /usr/bin/systemctl is-active hermes, \
+  /usr/bin/systemctl show hermes *, \
+  /usr/bin/journalctl -u hermes, \
+  /usr/bin/journalctl -u hermes *, \
+  /usr/bin/journalctl -fu hermes
+
+# Staging: es DONDE se rompe algo sin que lo sufra una vendedora. Mismo alcance.
+Cmnd_Alias HERMES_STAGING = \
+  /usr/bin/systemctl start hermes-staging, \
+  /usr/bin/systemctl stop hermes-staging, \
+  /usr/bin/systemctl restart hermes-staging, \
+  /usr/bin/systemctl status hermes-staging, \
+  /usr/bin/systemctl is-active hermes-staging, \
+  /usr/bin/journalctl -u hermes-staging, \
+  /usr/bin/journalctl -u hermes-staging *, \
+  /usr/bin/journalctl -fu hermes-staging
+
+Cmnd_Alias HERMES_DOCKER = \
+  /usr/bin/docker compose -f /srv/hermes/docker-compose.yml *, \
+  /usr/bin/docker compose -f /srv/hermes/docker-compose.test.yml *, \
+  /usr/bin/docker compose -f /srv/hermes-staging/docker-compose.staging.yml *, \
+  /usr/bin/docker logs hermes_db, \
+  /usr/bin/docker logs -f hermes_db, \
+  /usr/bin/docker logs hermes_staging_db, \
+  /usr/bin/docker logs -f hermes_staging_db, \
+  /usr/bin/docker restart hermes_db, \
+  /usr/bin/docker start hermes_db, \
+  /usr/bin/docker stop hermes_db, \
+  /usr/bin/docker restart hermes_staging_db, \
+  /usr/bin/docker start hermes_staging_db, \
+  /usr/bin/docker stop hermes_staging_db, \
+  /usr/bin/docker exec hermes_db *, \
+  /usr/bin/docker exec -it hermes_db *, \
+  /usr/bin/docker exec hermes_staging_db *, \
+  /usr/bin/docker exec -it hermes_staging_db *, \
+  /usr/bin/docker inspect hermes_db, \
+  /usr/bin/docker inspect hermes_staging_db
+
+# El deploy completo. Va por script porque el `git pull` necesita la deploy key de
+# `deploy`, y porque así «a mano» y «por pipeline» son la misma pieza
+# (deploy/vps1/hermes-deploy.sh). El script respalda, migra, verifica y revierte solo.
+Cmnd_Alias HERMES_DEPLOY = \
+  /usr/local/bin/hermes-deploy, \
+  /usr/local/bin/hermes-deploy *
+
+andreecito ALL=(root) NOPASSWD: HERMES_SVC, HERMES_STAGING, HERMES_DOCKER, HERMES_DEPLOY
+
+# `deploy` es quien corre el runner de Actions y ya tiene NOPASSWD:ALL por
+# 99-deploy-bootstrap; se lista igual para que el día que se acote ese bootstrap, el
+# pipeline siga funcionando.
+deploy ALL=(root) NOPASSWD: HERMES_SVC, HERMES_STAGING, HERMES_DEPLOY
