@@ -58,7 +58,16 @@ function rangoDias(hoy: string) {
 
 export async function consultarSeriesDashboard(base: typeof db, ahora: Date): Promise<SeriesDashboard> {
   const hoy = diaLimaISO(ahora);
-  const corte = corteDiasAtras(ahora, 13);
+  // postgres.js serializa un `Date` crudo distinto según el camino: el `sql`
+  // TAGGED de la librería `postgres` lo detecta y lo formatea solo, pero el
+  // `execute()` de drizzle (el que usamos acá) baja los params por el bind de
+  // `unsafe()`, que espera texto/Buffer — un `Date` ahí revienta con
+  // `ERR_INVALID_ARG_TYPE` en `Buffer.byteLength` (se vio recién en CI: los
+  // params $1/$2 —strings— andaban bien, $3-$5 —objetos Date— no). El resto
+  // del repo ya resuelve esto así (`analisis/ventasPorPais.ts`): el corte
+  // viaja como STRING ISO, con el cast explícito `::timestamptz` puesto acá,
+  // no confiado a la inferencia de Postgres.
+  const corte = corteDiasAtras(ahora, 13).toISOString();
 
   const leadsDia = await base.execute<PuntoLeadsDia>(sql`
     WITH dias AS (
@@ -68,19 +77,19 @@ export async function consultarSeriesDashboard(base: typeof db, ahora: Date): Pr
       SELECT (occurred_at AT TIME ZONE 'America/Lima')::date AS dia, count(DISTINCT (canal, persona_id))::int AS n
       FROM interactions
       WHERE tipo = 'mensaje' AND direccion = 'entrante' AND persona_id IS NOT NULL
-        AND occurred_at > ${corte}
+        AND occurred_at > ${corte}::timestamptz
       GROUP BY 1
     ),
     co AS (
       SELECT (occurred_at AT TIME ZONE 'America/Lima')::date AS dia, count(*)::int AS n
       FROM interactions
-      WHERE tipo = 'comentario' AND occurred_at > ${corte}
+      WHERE tipo = 'comentario' AND occurred_at > ${corte}::timestamptz
       GROUP BY 1
     ),
     f AS (
       SELECT (created_time AT TIME ZONE 'America/Lima')::date AS dia, count(*)::int AS n
       FROM leads
-      WHERE created_time > ${corte}
+      WHERE created_time > ${corte}::timestamptz
       GROUP BY 1
     )
     SELECT d.dia::text AS dia,
@@ -102,7 +111,7 @@ export async function consultarSeriesDashboard(base: typeof db, ahora: Date): Pr
     FROM dias d
     LEFT JOIN (
       SELECT (creado_at AT TIME ZONE 'America/Lima')::date AS dia, count(*)::int AS n
-      FROM envios_wa WHERE estado = 'enviado' AND creado_at > ${corte}
+      FROM envios_wa WHERE estado = 'enviado' AND creado_at > ${corte}::timestamptz
       GROUP BY 1
     ) e ON e.dia = d.dia
     ORDER BY d.dia
@@ -116,7 +125,7 @@ export async function consultarSeriesDashboard(base: typeof db, ahora: Date): Pr
     FROM dias d
     LEFT JOIN (
       SELECT (iniciada_at AT TIME ZONE 'America/Lima')::date AS dia, count(*)::int AS n
-      FROM conversiones_wa WHERE iniciada_at > ${corte}
+      FROM conversiones_wa WHERE iniciada_at > ${corte}::timestamptz
       GROUP BY 1
     ) v ON v.dia = d.dia
     ORDER BY d.dia
