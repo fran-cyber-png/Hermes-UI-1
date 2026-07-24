@@ -6,6 +6,11 @@
 > gestiona qué números de WhatsApp existen, qué significan y qué vendedora(s) tiene cada uno; y desde
 > acá se **vincula** (se escanea el QR). Cerberus **empuja** todo eso a Hermes por HTTP; Hermes ejecuta
 > el ruteo de mensajes y guarda las credenciales de WhatsApp.
+>
+> **Estado del lado Hermes (2026-07-24):** el API está **implementado, testeado y en verde** (PR #103:
+> 353 tests puros + 33 con base + smoke HTTP del contrato). Base pública: `https://hermes-api.goberna.us`
+> (queda vivo cuando se deploye a VPS1). El secreto `HERMES_ADMIN_TOKEN` te lo pasa Estephano por canal
+> seguro (nunca en este repo). **Podés arrancar tu panel ya**, contra este contrato — no cambia al deployar.
 
 ## Qué NO hacés (para acotar el trabajo)
 
