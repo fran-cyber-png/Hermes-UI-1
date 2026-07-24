@@ -7,15 +7,18 @@
 #     && sudo install -m 0440 -o root -g root deploy/vps1/sudoers-hermes-andreecito \
 #          /etc/sudoers.d/hermes-andreecito
 #
-# QUÉ NO ESTÁ ACÁ, a propósito: el acceso al código y a los secretos de Hermes NO pasa
-# por sudo — pasa por el grupo `hermes` (dueño de /srv/hermes con setgid + ACL, y de
-# server/.env en 660). sudo se reserva para lo que de verdad necesita privilegio: el
-# servicio, sus logs y su Postgres.
+# ALCANCE: TODO Hermes en producción, sin fricción. Sus dos servicios, sus logs, sus dos
+# Postgres, su nginx, su certificado, sus unit files y el runner de Actions que lo
+# despliega. Lo que queda afuera son los OTROS productos de VPS1 (geovisor,
+# certificaciones, assets, icarus, nexus…): no por desconfianza, sino porque un comando
+# fuera de Hermes debería ser una decisión consciente y no un resbalón de tab.
+#
+# El acceso al código y a los secretos NO pasa por sudo — pasa por el grupo `hermes`
+# (dueño de /srv/hermes y /srv/hermes-staging con setgid + ACL, y de server/.env en 660).
 #
 # NOTA SOBRE EL ALCANCE REAL: andreecito está en el grupo `docker`, y eso ya es root de
-# facto en la máquina (con docker se monta / y se lee cualquier cosa). Esta lista NO es
-# una frontera de seguridad contra él; es una declaración de qué se espera que use, para
-# que un comando fuera de la lista sea una decisión consciente y no un resbalón.
+# facto en la máquina (con docker se monta / y se lee cualquier cosa). Esta lista no es
+# una frontera de seguridad contra él; es un mapa de lo que le toca.
 
 Cmnd_Alias HERMES_SVC = \
   /usr/bin/systemctl start hermes, \
@@ -67,7 +70,49 @@ Cmnd_Alias HERMES_DEPLOY = \
   /usr/local/bin/hermes-deploy, \
   /usr/local/bin/hermes-deploy *
 
-andreecito ALL=(root) NOPASSWD: HERMES_SVC, HERMES_STAGING, HERMES_DOCKER, HERMES_DEPLOY
+# La unidad de systemd: poder cambiar cómo arranca el servicio, no solo arrancarlo.
+# `sudoedit` y no `vim` a secas: edita una copia con permisos de andreecito y la mueve
+# de vuelta al final, así un editor con plugins raros no corre como root.
+Cmnd_Alias HERMES_UNIT = \
+  sudoedit /etc/systemd/system/hermes.service, \
+  sudoedit /etc/systemd/system/hermes-staging.service, \
+  /usr/bin/systemctl daemon-reload, \
+  /usr/bin/systemctl enable hermes, \
+  /usr/bin/systemctl disable hermes, \
+  /usr/bin/systemctl enable hermes-staging, \
+  /usr/bin/systemctl disable hermes-staging
+
+# El borde público de Hermes: nginx termina el TLS de hermes-api.goberna.us y hace de
+# proxy al 4110 (que no se expone). Sin esto no se puede tocar el timeout del SSE ni el
+# client_max_body_size de los adjuntos.
+#
+# ⚠️ `reload`/`restart` de nginx afectan a TODOS los sitios de VPS1, no solo a Hermes.
+# Corré SIEMPRE `sudo nginx -t` antes: si la config está rota, el reload falla y nginx
+# se queda con la anterior, pero un restart con config rota deja todo abajo.
+Cmnd_Alias HERMES_NGINX = \
+  sudoedit /etc/nginx/sites-available/hermes-api, \
+  /usr/sbin/nginx -t, \
+  /usr/bin/systemctl reload nginx, \
+  /usr/bin/systemctl restart nginx, \
+  /usr/bin/systemctl status nginx
+
+# El certificado de hermes-api.goberna.us (dns-cloudflare, renovación automática).
+# Acotado por `--cert-name`: no puede tocar los certificados de los otros dominios.
+Cmnd_Alias HERMES_CERT = \
+  /usr/bin/certbot certificates, \
+  /usr/bin/certbot renew --cert-name hermes-api.goberna.us *, \
+  /usr/bin/certbot renew --dry-run --cert-name hermes-api.goberna.us
+
+# El runner self-hosted que ejecuta el pipeline. Si se cuelga, no hay despliegue.
+Cmnd_Alias HERMES_RUNNER = \
+  /usr/bin/systemctl start actions.runner.Goberna-Lab-hermes.vps1-hermes, \
+  /usr/bin/systemctl stop actions.runner.Goberna-Lab-hermes.vps1-hermes, \
+  /usr/bin/systemctl restart actions.runner.Goberna-Lab-hermes.vps1-hermes, \
+  /usr/bin/systemctl status actions.runner.Goberna-Lab-hermes.vps1-hermes, \
+  /usr/bin/journalctl -u actions.runner.Goberna-Lab-hermes.vps1-hermes *
+
+andreecito ALL=(root) NOPASSWD: HERMES_SVC, HERMES_STAGING, HERMES_DOCKER, \
+  HERMES_DEPLOY, HERMES_UNIT, HERMES_NGINX, HERMES_CERT, HERMES_RUNNER
 
 # `deploy` es quien corre el runner de Actions y ya tiene NOPASSWD:ALL por
 # 99-deploy-bootstrap; se lista igual para que el día que se acote ese bootstrap, el

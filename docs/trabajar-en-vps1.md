@@ -155,12 +155,44 @@ lo reconstruyas de memoria.
 
 ---
 
-## Lo que no podés hacer, y está bien
+## El resto de Hermes en producción: también es tuyo
 
-Tu `sudo` está acotado a Hermes: sus dos servicios, sus logs, sus dos Postgres y el script de
-despliegue. Otros servicios de VPS1 —nginx, el correo, los sitios de clientes, icarus— no están en la
-lista. La lista vive versionada en `deploy/vps1/sudoers-hermes-andreecito`; si necesitás algo que no
-está, pedilo y se agrega ahí, en un PR.
+No solo el servicio. Todo el borde de Hermes está en tu `sudo`:
+
+```bash
+# La unidad de systemd: cómo arranca, no solo arrancarlo
+sudoedit /etc/systemd/system/hermes.service
+sudo systemctl daemon-reload && sudo systemctl restart hermes
+
+# nginx: el TLS de hermes-api.goberna.us y el proxy al 4110 (que no se expone).
+# Acá viven el timeout del SSE y el client_max_body_size de los adjuntos.
+sudoedit /etc/nginx/sites-available/hermes-api
+sudo nginx -t              # ⚠️ SIEMPRE antes de recargar
+sudo systemctl reload nginx
+
+# El certificado
+sudo certbot certificates
+sudo certbot renew --dry-run --cert-name hermes-api.goberna.us
+
+# El runner que ejecuta el pipeline: si se cuelga, no hay despliegue
+sudo systemctl restart actions.runner.Goberna-Lab-hermes.vps1-hermes
+```
+
+> **`nginx -t` no es opcional.** `reload`/`restart` de nginx afectan a **todos** los sitios de VPS1,
+> no solo a Hermes. Con la config rota, un `reload` falla sin consecuencias (nginx se queda con la
+> anterior), pero un `restart` deja todo abajo. Verificá primero, siempre.
+
+`sudoedit` en vez de abrir el archivo con `sudo vim`: edita una copia con tus permisos y la mueve de
+vuelta al final, así tu editor —con los plugins que tenga— nunca corre como root.
+
+## Lo que queda afuera
+
+Los **otros productos** de VPS1: geovisor, certificaciones, assets, nexus, el correo. No es
+desconfianza — es que un comando fuera de Hermes debería ser una decisión consciente y no un resbalón
+de tab a las 2 AM.
+
+La lista completa vive versionada en `deploy/vps1/sudoers-hermes-andreecito`. Si necesitás algo que
+no está, se agrega ahí, en un PR — se lee y se revisa como cualquier otro cambio.
 
 ---
 
