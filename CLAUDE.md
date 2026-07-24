@@ -425,15 +425,32 @@ Decisión completa en **ADR 0017**; issue #58.
 
 ## Deploy
 
-**VPS1** (`deploy@161.132.39.165`), en `/srv/hermes` — **EJECUTADO 2026-07-21**: servicio systemd
-`hermes` (PORT=4110), Postgres propio `hermes_db` (127.0.0.1:5438), API pública
-**`https://hermes-api.goberna.us`** (nginx + certbot dns-cloudflare; el 4110 no se expone), número
-51986394450 vinculado ALLÁ. Actualizar: `ssh … 'cd /srv/hermes && git pull && sudo systemctl
-restart hermes'`. **El deploy sigue siendo manual** (no hay CD). Runbook: **`docs/deploy-vps1.md`**.
-**CI sí hay**: `.github/workflows/ci.yml` corre lint · typecheck · build del front · tests del front ·
-tests del server en cada PR y en cada push a `main`, sobre el **runner self-hosted de VPS1** (label `vps1-hermes`,
-servicio `actions.runner.Goberna-Lab-hermes.vps1-hermes`, dir `~deploy/actions-runner-hermes`) —
-así no gasta minutos de GitHub. `tauri-windows.yml` es la excepción: necesita host Windows.
+**VPS1** (`deploy@161.132.39.165`), en `/srv/hermes`: servicio systemd `hermes` (PORT=4110), Postgres
+propio `hermes_db` (127.0.0.1:5438), API pública **`https://hermes-api.goberna.us`** (nginx + certbot
+dns-cloudflare; el 4110 no se expone), número 51986394450 vinculado ALLÁ.
+
+**Hay CD, en cinco niveles** (`docs/despliegue-continuo.md`; ADR 0013 y 0014). Todo corre en el
+**runner self-hosted de VPS1** (label `vps1-hermes`, servicio
+`actions.runner.Goberna-Lab-hermes.vps1-hermes`, dir `~deploy/actions-runner-hermes`), que es uno
+solo: los jobs se serializan.
+
+| | Qué | Cuándo |
+|---|---|---|
+| **N1** | lint · typecheck · journal monótono · migraciones expand-only | toda corrida |
+| **N2 / N2b** | build · tests puros · secretos · tests con base | toda corrida |
+| **N3** | **staging** (`/srv/hermes-staging`, `:4111`, base propia en `:5440`): despliega, migra y corre el smoke funcional | push a `main` |
+| **N4** | front a producción, sin restart — cero downtime | solo si N3 pasó |
+| **N5** | server a producción: respalda, migra, reinicia, smoke, revierte solo si falla | **botón** en Actions |
+
+N5 es un botón porque reiniciar tira las sesiones de Cerberus de las vendedoras. El trabajo lo hace
+**`deploy/vps1/hermes-deploy.sh`** —versionado, no YAML— y es la misma pieza que corre por SSH:
+`ssh … 'sudo hermes-deploy --dry-run | --rollback'`. `tauri-windows.yml` sigue aparte: necesita host
+Windows.
+
+**El schema va en migraciones versionadas**, no en `db:push` (ADR 0013). Al tocar `src/db/*.ts`:
+`npm run db:generate` → `goberna-journal-set-when` → commitear `server/drizzle/` completo. Cómo y por
+qué: **`docs/migraciones.md`**. Runbook del server: **`docs/deploy-vps1.md`**.
+
 **La app de las vendedoras se EMPAQUETA**, no se clona: `env VITE_API_URL=https://hermes-api.goberna.us
 npm run build && npm run empaquetar:mac` (o `:win`) → `release/Hermes-*.dmg|.exe`.
 
@@ -490,29 +507,22 @@ sensato). Ver `server/.env.example` (solo nombres).
 
 ## Gotchas
 
-- **Drizzle sin migraciones versionadas**: el schema se aplica con `npm run db:push` (drizzle-kit). Al
-  tocar `server/src/db/schema.ts`, push contra la DB. **Al 27-jul-2026 producción está al día**: las
-  dos tablas de la auto-respuesta, `envios_wa.automatico` (#125), el modo supervisado (ADR 0016),
-  `campana_fuente` (ADR 0018), `clientes_padron` (#133), `alias_curso` + `ad_id` (#102, ADR 0019),
-  `plantillas` + `plantilla_pasos` y `hechos` están todas aplicadas. Lo único pendiente es lo del
-  PR #165 (`ventas_no_atribuidas` y las 14 columnas de `conversiones_wa`), que aún no se mergeó.
-  Cuando falta un push, casi todo **degrada y lo dice** (hilo sin marca de ex-cliente y `sinPadron`
-  en la respuesta, interruptor en 503, bandeja vacía con el motivo escrito, ficha sin propuesta de
-  curso, `aliasesActivos` reintentando sin `ad_id` y perdiendo solo el mapeo por anuncio) — la
-  excepción es `plantillas`/`plantilla_pasos`, sin las cuales `/api/plantillas` **no funciona**.
-- **`db:push` PREGUNTA, y sin TTY se muere a mitad.** Cuando el cambio incluye una restricción sobre
-  una tabla con filas, drizzle-kit abre un prompt interactivo (`pgSuggestions`) y, sin terminal real,
-  aborta con `Interactive prompts require a TTY`. El `!` de Claude Code **no** aloca TTY ni con
-  `ssh -t`: hay que correrlo desde una terminal de verdad. **Leé lo que pregunta**: para
-  `alias_curso.ad_id` ofrecía *truncar la tabla* (habría borrado los 30 alias vivos, incluidos los
-  editados a mano) y la respuesta correcta era **No** — los `NULL` no chocan entre sí en Postgres,
-  así que el UNIQUE entra igual. Si el prompt propone borrar, truncar o renombrar, es drift, no el
-  cambio que venías a aplicar.
-- **El workflow de deploy no se puede satisfacer corriendo `db:push`.** `desplegar-server.yml` frena
-  si `schema.ts` cambió entre el sha guardado en `~/.hermes-despliegue/server` y `main`, y ese diff
-  no desaparece porque hayas migrado la base: el gate vuelve a saltar. Con cambio de schema el
-  deploy va a mano (checkout → `npm ci` → `db:push` → build con swap de `dist` → restart) y al final
-  se actualiza el archivo de estado, o el próximo rollback apunta al sha equivocado.
+- **`db:push` se RETIRÓ de prod y staging** (ADR 0021). Era el que dejaba la lista de «pendientes de
+  push» que este archivo llevaba a mano —y que se olvidaba—: `clientes_padron`, `hechos`,
+  `alias_curso` + `ad_id`, las columnas del modo supervisado. Ahora el schema viaja en el PR como
+  `.sql` versionado y el deploy lo aplica solo. `db:push` **sigue siendo lo correcto para las bases
+  efímeras de test** (`montarBase.ts`): no hay datos que preservar ni historia que registrar.
+  > Lo que decía acá y ya no aplica, para que nadie lo repita: que `db:push` **pregunta y sin TTY se
+  > muere a mitad** (para `alias_curso.ad_id` ofrecía *truncar la tabla*, y la respuesta correcta era
+  > **No**), y que **el gate de schema del workflow no se podía satisfacer** corriendo `db:push`,
+  > porque comparaba el sha de `~/.hermes-despliegue/server` contra `main` y migrar la base no
+  > cambiaba ese diff. Las dos cosas eran ciertas hasta el 27-jul; las dos desaparecen con las
+  > migraciones versionadas, y son la mitad del motivo por el que se hicieron.
+- **El `when` del journal de migraciones es un contador monótono, y falla en SILENCIO**: si una
+  migración queda con un `when` menor al máximo ya aplicado, drizzle la **saltea sin error** y el
+  deploy sale verde con la tabla sin crear. Pasa al mergear dos ramas que generaron una migración
+  cada una. Arreglo: `JOURNAL_FILE=server/drizzle/meta/_journal.json goberna-journal-set-when`.
+  `journal.test.ts` lo atrapa en N1, y `db:adoptar` lo verifica también contra la base.
 - **El transporte falso repite ids entre reinicios** (`falso-1`, `falso-2`…): reprocesar colisiona con la
   idempotencia (`wa:falso-N` ya existe) y el mensaje no entra. Para demos limpias, borrar los
   `external_id LIKE 'wa:falso-%'` primero. El transporte real usa ids reales de WhatsApp (únicos).

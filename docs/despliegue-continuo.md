@@ -3,6 +3,43 @@
 > Por qué el front se despliega solo y el server no, qué se verificó para que sea seguro, y qué
 > hacer cuando algo sale mal. Escrito el **2026-07-22**, cuando descubrimos que producción llevaba
 > **26 commits de atraso** — precisamente porque el despliegue era manual.
+>
+> **Actualizado el 2026-07-24**: el pipeline pasó a tener **cinco niveles** y apareció un
+> **staging** entre `main` y las vendedoras (ADR 0014). Las migraciones dejaron de frenarlo
+> (ADR 0013). Lo que sigue vigente de la versión original: por qué el front puede ser automático
+> y el server no (§2 y §3), y las tres reglas que lo hacen seguro (§4).
+
+---
+
+## 0. El pipeline de un vistazo
+
+```
+PR o push          push a main                     botón en Actions
+    │                   │                                 │
+    ▼                   ▼                                 ▼
+ N1 rápido  ──▶  N2 unidad ──┬──▶ N3 STAGING ──▶ N4 front a prod    N5 server a prod
+ ~30 s            ~2 min     └──▶ N2b base        ~1 min             ~3 min
+ lint             build           tests SQL       sin restart        con restart
+ typecheck        tests puros                     cero downtime      respalda, migra,
+ journal          secretos        despliega,                         smoke y revierte
+ expand-only      audit           migra y smoke                      solo si falla
+```
+
+| Nivel | Qué verifica | Cuándo | Dónde |
+|---|---|---|---|
+| **N1** | lint · typecheck · journal monótono · migraciones expand-only | toda corrida | `ci.yml` |
+| **N2** | build · tests puros · ningún secreto en el árbol · `npm audit` | toda corrida | `ci.yml` |
+| **N2b** | tests con Postgres efímera — el SQL de la cola y el radar | toda corrida | `ci.yml` |
+| **N3** | **staging**: despliega, migra sobre una base con historia, smoke funcional autenticado | push a `main` | `ci.yml` |
+| **N4** | front a producción, sin reiniciar el proceso | solo si N3 pasó | `ci.yml` |
+| **N5** | server a producción: respalda, migra, reinicia, smoke, revierte solo si falla | botón | `desplegar-server.yml` |
+
+El orden no es decorativo: **lo barato falla primero**. Un typo no espera cuatro minutos de tests
+para avisar, y nada llega a tocar una base sin haber pasado por los tres niveles anteriores.
+
+> El runner self-hosted es **uno solo**: los jobs se serializan aunque el grafo los dibuje en
+> paralelo. Por eso están agrupados así y no en diez jobs chiquitos — cada job extra cuesta un
+> `npm ci`.
 
 ---
 
@@ -43,15 +80,34 @@ O sea: reiniciar por un cambio de CSS le cuesta a la vendedora una venta a medio
 
 ## 3. La postura: automatizar lo barato, decidir lo caro
 
-| | Front (no toca `server/`) | Server |
-|---|---|---|
-| **Cuándo** | Automático al mergear a `main`, después de CI verde | Botón en Actions |
-| **Workflow** | `ci.yml` → job `desplegar-front` | `desplegar-server.yml` |
-| **Costo para la vendedora** | Ninguno. Cero downtime | Pierde la sesión de Cerberus |
-| **Rollback** | `mv dist dist.roto && mv dist.anterior dist` — segundos | `git checkout <sha> && build && restart` |
+| | Staging | Front de prod (no toca `server/`) | Server de prod |
+|---|---|---|---|
+| **Cuándo** | Automático, cada push a `main` | Automático, solo si staging quedó verde | Botón en Actions |
+| **Workflow** | `ci.yml` → `n3-staging` | `ci.yml` → `n4-prod-front` | `desplegar-server.yml` → `hermes-deploy.sh` |
+| **Costo para la vendedora** | Ninguno: ni sabe que existe | Ninguno. Cero downtime | Pierde la sesión de Cerberus |
+| **Migraciones** | Se aplican solas | No corresponde | Se aplican, con respaldo previo |
+| **Rollback** | Se pisa en el próximo push | `mv dist dist.roto && mv dist.anterior dist` — segundos | `sudo hermes-deploy --rollback`, y el script ya lo intenta solo |
 
 La automatización se reparte por **costo**, no por conveniencia: lo que no le cuesta nada a nadie se
 mantiene solo (y así el drift no vuelve); lo que interrumpe a una persona lo decide una persona.
+
+Lo que agregó staging a esa postura: **antes, «automatizar lo barato» significaba que el front
+llegaba a las vendedoras sin que nadie hubiera ejecutado ese código en ningún lado.** Ahora lo barato
+se automatiza igual, pero pasando por un lugar donde romperlo no le cuesta nada a nadie (ADR 0014).
+
+### El despliegue del server es un script, no YAML
+
+`deploy/vps1/hermes-deploy.sh`, versionado en el repo. El workflow lo instala desde el checkout en
+cada corrida y lo llama; por SSH corre exactamente lo mismo:
+
+```bash
+ssh deploy@161.132.39.165 'sudo hermes-deploy --dry-run'   # qué haría, y qué migraciones trae
+ssh deploy@161.132.39.165 'sudo hermes-deploy'             # promueve origin/main
+ssh deploy@161.132.39.165 'sudo hermes-deploy --rollback'  # vuelve al último SHA sano
+```
+
+Cuando «desplegar a mano» y «desplegar por pipeline» son dos códigos distintos, divergen — y la vía
+que se usa a las 2 AM termina siendo la que nadie probó.
 
 ---
 
@@ -116,22 +172,26 @@ secretos en GitHub: el workflow escribe en el disco local.
 
 ## 6. Lo que NO automatiza, a propósito
 
-### El schema de la base
+### ~~El schema de la base~~ — resuelto el 2026-07-24 (ADR 0013)
 
-Si el rango toca `server/src/db/schema.ts`, **los dos workflows frenan**.
+> Lo que decía acá: «si el rango toca `server/src/db/schema.ts`, **los dos workflows frenan**»,
+> porque `db:push` compara contra la base viva y aplica lo que le parece, sin plan y sin backup.
+> Era cierto, y significaba que **el caso más común de cambio real era justo el que no se podía
+> automatizar**.
 
-Drizzle no tiene migraciones versionadas en este repo (deuda declarada en ADR 0001): `db:push`
-compara el schema contra la base viva y aplica lo que le parece —incluyendo **borrar una columna**—
-sin plan y sin backup. Automatizar eso contra producción es de las pocas cosas que pueden perder
-datos de verdad.
+Ahora el schema viaja en **migraciones versionadas**: un `.sql` revisable en el PR que lo introduce.
+El pipeline las aplica solo, pero nunca a ciegas:
 
-El camino es mirar lo que propone y decidir:
+1. **N1** verifica el journal (que el `when` sea monótono — si no, drizzle saltea en silencio) y que
+   la migración sea **expand-only**.
+2. **N3** la aplica en **staging**, sobre una base con historia, y corre el smoke funcional. Si
+   rompe, rompe ahí.
+3. **N5** respalda la base (`/srv/respaldos-hermes/`) y recién entonces la aplica en producción.
 
-```bash
-ssh deploy@161.132.39.165 'cd /srv/hermes/server && npm run db:push'
-```
+Lo que sigue siendo humano es **el momento**: N5 es un botón, porque reiniciar el server cuesta las
+sesiones de Cerberus. Pero ya no hay que ir a correr nada por SSH antes de apretarlo.
 
-Y después disparar el despliegue.
+El cómo, completo, en **`docs/migraciones.md`**.
 
 ### El instalador de Windows
 
@@ -183,12 +243,25 @@ artefactos, no drift.
 
 ## 8. Lo que este CD no arregla
 
-- **No hay staging.** `main` va directo a las vendedoras. La red es CI (lint · typecheck · build ·
-  303 tests) y que el front sea reversible en segundos.
-- **No hay smoke test funcional**: se verifica que el sitio sirva el build nuevo y que `/health`
-  conteste, no que la cola cargue o que se pueda responder un WhatsApp.
-- **No avisa a nadie.** El resultado vive en el resumen del run de Actions; nadie recibe un mensaje.
-- **No mide.** Si el deploy empeora la latencia, hay que notarlo a ojo.
+Los cuatro huecos que esta sección declaraba el 2026-07-22 se cerraron el 2026-07-24:
 
-Los cuatro son mejoras posibles. Ninguno es razón para no tener CD: hoy la alternativa es lo que ya
-pasó — 26 commits de atraso que nadie vio.
+- ~~**No hay staging.**~~ Lo hay: `/srv/hermes-staging`, `:4111`, base propia. Cada push a `main`
+  pasa por ahí antes que producción (ADR 0014).
+- ~~**No hay smoke test funcional.**~~ `npm run humo` verifica el perímetro de auth ruta por ruta, el
+  front servido, el login contra Cerberus y —autenticado— la cola, el radar, la agenda y el SSE.
+  Corre en staging con sesión y en producción en modo público.
+- ~~**No avisa a nadie.**~~ Un job de resumen consolida los cinco niveles, y un deploy fallido a
+  producción **abre un issue** con el estado forense. (Un aviso a Mattermost sigue sin estar: se
+  evaluó y se descartó por ahora.)
+- **No mide.** Sigue abierto. Si un cambio empeora la latencia, hay que notarlo a ojo.
+
+### Lo que sigue faltando
+
+- **Staging no tiene datos realistas.** Su base arranca vacía y se llena con lo que los tests dejen.
+  Una migración que tarde diez minutos sobre dos millones de filas va a parecer instantánea acá.
+  Sembrarla con un dump anonimizado de producción es el próximo paso obvio.
+- **Staging comparte máquina con producción.** Un staging que se coma la RAM o el disco afecta a las
+  vendedoras. Deuda consciente (ADR 0014).
+- **La cáscara no entra al pipeline.** Tauri/Electron se siguen empaquetando aparte y a mano.
+- **No hay despliegue por tags ni versionado.** Se despliega el HEAD de `main` o un SHA suelto.
+- **CORS sigue en `*`** (issue #94). No es del CD, pero es la deuda de perímetro que queda viva.

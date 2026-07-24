@@ -194,6 +194,22 @@ los assets nuevos. El `--delete` es lo único que hay que respetar, o `dist/` cr
 
 No hay forma de evitarlo: el código del server está en memoria.
 
+> **Desde el 2026-07-24 esto no se hace a mano.** Es el **nivel 5** del pipeline: Actions →
+> **Desplegar server (con restart)**. El trabajo lo hace `deploy/vps1/hermes-deploy.sh`, que
+> respalda la base si hay migraciones, migra, construye, reinicia, espera `/health`, corre el smoke
+> funcional y **revierte solo** si algo falla. Ver `docs/despliegue-continuo.md`.
+>
+> Por SSH corre exactamente la misma pieza — no es un camino alternativo, es el mismo:
+>
+> ```bash
+> ssh deploy@161.132.39.165 'sudo hermes-deploy --dry-run'   # qué haría y qué migraciones trae
+> ssh deploy@161.132.39.165 'sudo hermes-deploy'             # promueve origin/main
+> ssh deploy@161.132.39.165 'sudo hermes-deploy --rollback'  # vuelve al último SHA sano
+> ```
+
+<details>
+<summary>El procedimiento manual que esto reemplazó (por si el script no está disponible)</summary>
+
 ```bash
 ssh deploy@161.132.39.165 'cd /srv/hermes && git pull && \
   ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci && \
@@ -203,30 +219,22 @@ ssh deploy@161.132.39.165 'cd /srv/hermes && git pull && \
 
 - `npm ci` **solo si cambiaron dependencias** (`git diff --stat <sha-viejo>..main -- package.json`).
 - `ELECTRON_SKIP_BINARY_DOWNLOAD=1` evita bajar ~100 MB que el VPS nunca usa.
-- `cd server && npm run db:push` **solo si cambió `server/src/db/schema.ts`**.
-- Si querés ahorrarte el build en el VPS también acá, hacé el paso A **después** del restart (el
-  `git pull` deja el `dist/` viejo hasta que alguien lo reemplace).
+- `cd server && npm run db:migrate` **solo si hay migraciones nuevas** en `server/drizzle/`.
+  (Antes era `db:push`; ver ADR 0013.)
 
-#### SQL manual tras `db:push` — el GIN de `notas` (issue #47)
+</details>
 
-`db:push` crea la tabla `notas` con sus dos índices btree (`notas_clave_idx`,
-`notas_vendedora_idx`) — verificado en seco con `drizzle-kit generate` contra un
-`out` descartable: **12 tablas, `notas` con 8 columnas y 2 índices**, ninguno GIN.
-drizzle-kit (0.31.10 / drizzle-orm 0.45.2) no emite índices de expresión sobre
-`to_tsvector`, así que la búsqueda de la libreta (`GET /api/notas?q=`) necesita
-este índice a mano, UNA vez, después de cada `db:push` que toque `notas`:
+#### ~~SQL manual tras `db:push`~~ — el GIN de `notas`, resuelto
 
-```sql
-CREATE INDEX IF NOT EXISTS notas_texto_gin_idx
-  ON notas USING gin (to_tsvector('spanish', texto));
-```
+> Lo que decía acá: drizzle-kit no emite índices de expresión sobre `to_tsvector`, así que
+> `notas_texto_gin_idx` había que crearlo **a mano por SSH después de cada `db:push`**.
+>
+> Eso produjo deriva real: el índice existía en producción y en ninguna base nueva. Lo encontró el
+> `pg_dump` comparativo al montar staging (ADR 0013).
 
-```bash
-ssh deploy@161.132.39.165 "docker exec -i hermes_db sh -c 'psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\"'" <<'SQL'
-CREATE INDEX IF NOT EXISTS notas_texto_gin_idx
-  ON notas USING gin (to_tsvector('spanish', texto));
-SQL
-```
+drizzle-kit sigue sin emitirlo, pero ahora el índice está **escrito en la migración**
+(`server/drizzle/0000_baseline.sql`), que es la ventaja de tener un archivo: lo que la herramienta no
+sabe generar, se agrega a mano una vez y queda versionado. No hay paso manual.
 
 El contenedor es **`hermes_db`** (no `cartografia_db` — ese es el Postgres de otro servicio, el del
 geovisor/cartografía-electoral, en la MISMA VPS1 pero nada que ver). El usuario/base salen de las
