@@ -49,6 +49,14 @@ describe('esRutaAbierta — qué queda fuera del token', () => {
     assert.equal(esRutaAbierta('/api/whatsapp/_simulador'), false);
     assert.equal(esRutaAbierta('/api/auth'), true); // el prefijo exacto sí
   });
+
+  test('las mayúsculas no esquivan el perímetro (Express rutea case-insensitive)', () => {
+    // Sin esto, GET /API/conversaciones pasaba la guardia («no es /api/») y
+    // el router lo atendía igual, porque Express matchea sin distinguir caja.
+    assert.equal(esRutaAbierta('/API/conversaciones'), false);
+    assert.equal(esRutaAbierta('/Api/Whatsapp/Media/adjunto.jpg'), false);
+    assert.equal(esRutaAbierta('/API/AUTH/LOGIN'), true); // y el login sigue entrando
+  });
 });
 
 /** Fakes mínimos: alcanza con lo que `perimetroApi` y `requiereVendedora` tocan. */

@@ -27,8 +27,12 @@ const PREFIJOS_ABIERTOS = [
 
 /** ¿Esta ruta queda fuera de la exigencia de vendedora? */
 export function esRutaAbierta(path: string): boolean {
-  if (path !== '/api' && !path.startsWith('/api/')) return true;
-  return PREFIJOS_ABIERTOS.some((p) => path === p || path.startsWith(`${p}/`));
+  // En minúsculas ANTES de comparar: Express rutea case-insensitive por
+  // defecto, así que /API/conversaciones llega al router igual — sin esto,
+  // las mayúsculas esquivaban la guardia.
+  const p = path.toLowerCase();
+  if (p !== '/api' && !p.startsWith('/api/')) return true;
+  return PREFIJOS_ABIERTOS.some((prefijo) => p === prefijo || p.startsWith(`${prefijo}/`));
 }
 
 /**
