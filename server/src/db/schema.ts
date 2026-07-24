@@ -513,3 +513,42 @@ export const categorias = pgTable(
     index("categorias_vendedora_idx").on(t.vendedoraId, t.orden),
   ],
 );
+
+/**
+ * NOTAS — el «Notion» a una tecla (issue #47). Reemplaza el campo `notas` de
+ * `gestiones`: ese es append-only (una fila por gestión, la etapa es la última),
+ * así que un typo queda grabado para siempre y una nota apócrifa puede ensuciar
+ * la etapa (`RegistrarGestion` mandaba `etapa: etapaActual ?? 'interesado'` solo
+ * para poder guardar una nota). Esta nota es EDITABLE por su autora, se archiva
+ * sin borrarse, y no deriva nada: de acá no sale etapa, ni recordatorio, ni
+ * envío. Ver ADR 0012.
+ *
+ * `clave` ancla la nota a una conversación (`conv:…` / `int:…` / `lead:…`) o vale
+ * `'general'` para la libreta personal de la vendedora (atajo «n», sin `clave`).
+ * `vendedoraId` es la autora: v1 es por autora, no se comparte con el equipo
+ * (a diferencia de `etiquetas`) — promoverlo a «del equipo» es otro frente.
+ */
+export const notas = pgTable(
+  "notas",
+  {
+    id: bigserial({ mode: "number" }).primaryKey(),
+    clave: text("clave").notNull(),
+    vendedoraId: text("vendedora_id").notNull(),
+    texto: text("texto").notNull(),
+    /** Sube la nota al tope de su ancla. */
+    fijada: boolean("fijada").notNull().default(false),
+    creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+    /** null = nunca editada; se setea en cada PATCH. */
+    editadoAt: timestamp("editado_at", { withTimezone: true }),
+    /** null = viva. No hay borrado físico. */
+    archivadoAt: timestamp("archivado_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("notas_clave_idx").on(t.clave, t.creadoAt),
+    index("notas_vendedora_idx").on(t.vendedoraId, t.creadoAt),
+    // La búsqueda de la libreta es GIN sobre to_tsvector('spanish', texto) — drizzle-kit
+    // no la emite (no hay expression index para tsvector en el dialecto pg-core de
+    // drizzle-orm 0.45): se crea A MANO tras `db:push`. Ver docs/deploy-vps1.md.
+    // Sin ella, GET /api/notas?q= degrada a seq scan — no revienta, solo es lento.
+  ],
+);

@@ -7,6 +7,7 @@ import {
   interactions,
   intereses,
   leads,
+  notas,
   recordatorios,
 } from "../db/schema.js";
 import type { DbDePrueba } from "./base.js";
@@ -287,4 +288,28 @@ export async function sembrarEtiqueta(db: DbDePrueba, e: EtiquetaSembrada): Prom
     etiqueta: e.etiqueta.toLowerCase(),
     vendedoraId: e.vendedoraId ?? "vendedora-prueba",
   });
+}
+
+export interface NotaSembrada {
+  clave?: string;
+  vendedoraId?: string;
+  texto?: string;
+  fijada?: boolean;
+  archivadoAt?: Date | null;
+}
+
+/** Siembra una nota (#47). Por defecto viva, sin fijar, en la libreta 'general'. */
+export async function sembrarNota(db: DbDePrueba, n: NotaSembrada = {}): Promise<number> {
+  const [fila] = await db
+    .insert(notas)
+    .values({
+      clave: n.clave ?? "general",
+      vendedoraId: n.vendedoraId ?? "vendedora-prueba",
+      texto: n.texto ?? "nota de prueba",
+      fijada: n.fijada ?? false,
+      archivadoAt: n.archivadoAt ?? null,
+    })
+    .returning({ id: notas.id });
+
+  return fila.id;
 }
