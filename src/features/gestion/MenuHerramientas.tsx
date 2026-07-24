@@ -15,11 +15,20 @@ import { armarItemsMenu } from './itemsHerramientas';
  * Patrón de popover calcado de `BotonLlamar`/`AgendarRapido` (mismo archivo
  * de referencia, `BarraGestion.tsx`): overlay `fixed inset-0` + panel
  * `absolute` con `shadow-panel` (sombra, sin borde), Escape con capture +
- * stopPropagation para no chocar con el composer del chat.
+ * stopPropagation para no chocar con el composer del chat. Botones planos
+ * con `aria-label`/`title`, sin roles de menú — igual que las referencias:
+ * son botones en un panel, no un `<menu>` con navegación por flechas.
  */
 export function MenuHerramientas({ clave }: { clave: string }) {
   const [abierto, setAbierto] = useState(false);
   const primerItemRef = useRef<HTMLButtonElement>(null);
+
+  // Cambió la conversación (otro lead, otra vista): el menú no puede
+  // sobrevivir abierto apuntando a la de antes — `BarraGestion` no se
+  // re-keyea por `clave`, así que hay que cerrarlo a mano acá.
+  useEffect(() => {
+    setAbierto(false);
+  }, [clave]);
 
   useEffect(() => {
     if (!abierto) return;
@@ -49,8 +58,6 @@ export function MenuHerramientas({ clave }: { clave: string }) {
       <button
         type="button"
         aria-label="Más herramientas"
-        aria-haspopup="menu"
-        aria-expanded={abierto}
         title="Más herramientas"
         onClick={() => setAbierto((v) => !v)}
         className={
@@ -64,13 +71,12 @@ export function MenuHerramientas({ clave }: { clave: string }) {
       {abierto && (
         <>
           <span className="fixed inset-0 z-20" onClick={() => setAbierto(false)} aria-hidden="true" />
-          <div role="menu" aria-label="Herramientas" className="absolute right-0 top-7 z-30 w-56 rounded-xl bg-card p-1.5 shadow-panel">
+          <div className="absolute right-0 top-7 z-30 w-56 rounded-xl bg-card p-1.5 shadow-panel">
             {items.map((item, i) => (
               <button
                 key={item.id}
                 ref={i === 0 ? primerItemRef : undefined}
                 type="button"
-                role="menuitem"
                 aria-disabled={!item.onSeleccionar}
                 title={item.onSeleccionar ? undefined : 'Próximamente'}
                 onClick={() => {
