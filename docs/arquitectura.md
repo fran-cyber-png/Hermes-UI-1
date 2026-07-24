@@ -339,12 +339,14 @@ la función pura (`urgencia.ts`) y su proyección SQL (`urgenciaSql.ts`) lado a 
 paridad (`urgencia.paridad.test.db.ts`, harness ADR 0008) corre las dos contra los mismos datos y
 falla en CI si vuelven a decir cosas distintas. Decisión y alternativas: ADR 0009.
 
-### 8.3 🔴 El nivel VENCIDO no se dispara nunca
+### 8.3 ✅ El nivel VENCIDO no se disparaba nunca — resuelto (#38)
 
-`claveUrgencia` solo lo devuelve si el item trae `seguimientoEn`, y el único constructor de items
-(`cola/radar.ts`) no lo setea — su tipo ni siquiera tiene el campo, y `routes/dashboard.ts` no
-consulta `recordatorios`. **La agenda de la vendedora no influye en el orden de nada**, aunque el
-módulo, sus tests y el glosario lo den por hecho.
+Era: `claveUrgencia` solo devolvía nivel 1 si el item traía `seguimientoEn`, y nadie se lo pasaba —
+`FilaRadar` ni tenía el campo y el radar no consultaba `recordatorios`. Ahora la consulta del radar
+vive en el seam `cola/consultarRadar.ts` (inyectable, testeable contra la base) y trae el pendiente
+más viejo de la agenda por clave (`seguimientosPendientesSql`, el mismo que usa la cola); el módulo
+decide si venció. Los tests de `consultarRadar.test.db.ts` fijan el **cableado**, no solo el
+cálculo — el hueco por el que esto pasó inadvertido.
 
 ### 8.4 El corta-corriente no está cableado
 

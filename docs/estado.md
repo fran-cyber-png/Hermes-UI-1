@@ -59,9 +59,9 @@ Correos · Agenda (Tablero fuera por decisión; componente conservado).
 
 Cómo está hecho, los patrones de la casa, los bordes externos y la deuda. **Léelo antes de tocar
 arquitectura.** Lo más importante que dice: **este repo tiene dos mitades** —el CRM vivo y el
-dashboard de pauta heredado de meta-escuela, que está montado pero desconectado— y hay **tres cosas
-rotas** (auth partida, el orden de la cola implementado dos veces y ya divergido, y el nivel VENCIDO
-que no se dispara nunca).
+dashboard de pauta heredado de meta-escuela, que está montado pero desconectado— y hay **cosas
+rotas** (auth partida; las otras dos —la cola duplicada y el nivel VENCIDO que no se disparaba— se
+resolvieron en #37/#38, ver `arquitectura.md` §8.2–8.3).
 
 ## PENDIENTES
 

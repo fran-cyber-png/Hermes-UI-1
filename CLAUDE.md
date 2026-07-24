@@ -181,7 +181,8 @@ Correos (falta SMTP) · Agenda-calendario.
 2. ~~El orden de la cola está implementado dos veces y divergió~~ **Resuelto (#37, ADR 0009)**: la
    urgencia vive una vez en `cola/` (función pura + proyección SQL en `urgenciaSql.ts`) y el test
    de paridad `urgencia.paridad.test.db.ts` falla en CI si vuelven a divergir.
-3. **El nivel VENCIDO no se dispara nunca**: nadie setea `seguimientoEn`, así que la agenda no
-   influye en el orden de nada.
+3. ~~El nivel VENCIDO no se dispara nunca~~ **Resuelto (#38)**: el radar consulta los recordatorios
+   pendientes por clave (seam `cola/consultarRadar.ts`) y la agenda sube los vencidos al nivel 1;
+   los tests con base fijan el cableado, no solo el cálculo.
 
 Detalle y evidencia en `docs/arquitectura.md` §8.
