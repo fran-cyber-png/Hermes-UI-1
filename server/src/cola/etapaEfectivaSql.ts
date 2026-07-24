@@ -1,5 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
-import { ETAPAS, normalizarEtapa } from "../gestiones/registrarGestion.js";
+import { ETAPAS, normalizarEtapa, type EtapaGestion } from "../gestiones/registrarGestion.js";
 
 /**
  * LA ETAPA EFECTIVA — la política del embudo, dicha UNA vez (#88, ADR 0013).
@@ -46,19 +46,22 @@ import { ETAPAS, normalizarEtapa } from "../gestiones/registrarGestion.js";
  * duplicar el orden; `perdido` queda afuera a propósito — no es un peldaño, es
  * la salida terminal.
  */
-export const ESCALA_ETAPAS: readonly string[] = ETAPAS.filter((e) => e !== "perdido");
+export const ESCALA_ETAPAS: readonly EtapaGestion[] = ETAPAS.filter((e) => e !== "perdido");
 
 /**
  * LA FUNCIÓN PURA — la definición canónica de la regla. La comparten los tests
  * de paridad y cualquier lector de TypeScript que necesite la etapa efectiva.
+ * Devuelve `EtapaGestion`, no `string`: quien la consuma no tiene que volver a
+ * validar contra ETAPAS lo que esta función ya garantiza.
  */
-export function etapaEfectiva(etapaManual: string | null, respondida: boolean): string {
-  const derivada = respondida ? "contactado" : "interesado";
+export function etapaEfectiva(etapaManual: string | null, respondida: boolean): EtapaGestion {
+  const derivada: EtapaGestion = respondida ? "contactado" : "interesado";
   if (etapaManual == null) return derivada;
   const manual = normalizarEtapa(etapaManual);
   if (manual === "perdido") return "perdido";
   // Una manual fuera de la escala (dato viejo o basura) rankea -1: manda el piso.
-  return ESCALA_ETAPAS.indexOf(manual) >= ESCALA_ETAPAS.indexOf(derivada) ? manual : derivada;
+  const rangoManual = ESCALA_ETAPAS.indexOf(manual as EtapaGestion);
+  return rangoManual >= ESCALA_ETAPAS.indexOf(derivada) ? ESCALA_ETAPAS[rangoManual] : derivada;
 }
 
 // ── La MISMA regla, dicha en SQL ─────────────────────────────────────────────
