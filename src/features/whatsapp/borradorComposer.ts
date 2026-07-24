@@ -37,3 +37,65 @@ export function guardarBorrador(telefono: string, texto: string): void {
 export function limpiarBorrador(telefono: string): void {
   borradores.delete(telefono);
 }
+
+/**
+ * Lo que necesita `ejecutarEnvioComposer` para mandar y decidir qué limpiar,
+ * inyectado desde React: así se testea sin DOM y sin mockear TanStack Query.
+ */
+export interface DependenciasEnvioComposer {
+  /** El teléfono de la conversación para la que se armó ESTE envío. */
+  telefonoDelEnvio: string;
+  texto: string;
+  adjunto: File | null;
+  enviarTexto: (texto: string) => Promise<unknown>;
+  enviarConAdjunto: (adjunto: File, caption: string) => Promise<unknown>;
+  /** La conversación que se ve AHORA — se lee recién al resolver, no antes. */
+  telefonoVisibleAhora: () => string;
+  limpiarTextoVisible: () => void;
+  limpiarAdjuntoVisible: () => void;
+}
+
+/**
+ * Todo el flujo de un envío desde el composer: manda (texto solo, o con
+ * adjunto como caption), y al resolver limpia el borrador GUARDADO del
+ * teléfono que se envió — siempre, ya se mandó — pero solo toca el composer
+ * VISIBLE si la conversación que se ve ahora sigue siendo esa.
+ *
+ * La carrera que esto cierra (detectada en la review de PR #84): `onEnviar`
+ * hacía `await mutateAsync(...); setTexto('')` con el `telefono` capturado
+ * al ARRANCAR el envío. Si la vendedora cambiaba de conversación mientras el
+ * envío volaba, ese `setTexto('')` tardío pisaba el composer de la
+ * conversación NUEVA en vez de la que se mandó. Por eso `telefonoVisibleAhora`
+ * es una función (no un valor): se evalúa al resolver, no al arrancar.
+ */
+export async function ejecutarEnvioComposer(deps: DependenciasEnvioComposer): Promise<void> {
+  const {
+    telefonoDelEnvio,
+    texto,
+    adjunto,
+    enviarTexto,
+    enviarConAdjunto,
+    telefonoVisibleAhora,
+    limpiarTextoVisible,
+    limpiarAdjuntoVisible,
+  } = deps;
+  const t = texto.trim();
+
+  if (adjunto) {
+    // Con adjunto, el texto de la caja viaja como caption (como en WhatsApp).
+    await enviarConAdjunto(adjunto, t);
+    limpiarBorrador(telefonoDelEnvio);
+    if (telefonoVisibleAhora() === telefonoDelEnvio) {
+      limpiarAdjuntoVisible();
+      limpiarTextoVisible();
+    }
+    return;
+  }
+
+  if (!t) return; // nada que mandar
+  await enviarTexto(t);
+  limpiarBorrador(telefonoDelEnvio);
+  if (telefonoVisibleAhora() === telefonoDelEnvio) {
+    limpiarTextoVisible();
+  }
+}

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, FileText, Loader2, Megaphone, Paperclip, Phone, QrCode, Send, Link2, WifiOff, X } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
 import { formatoTelefono, tempClass } from '../../lib/formato';
-import { guardarBorrador, leerBorrador, limpiarBorrador } from './borradorComposer';
+import { ejecutarEnvioComposer, guardarBorrador, leerBorrador } from './borradorComposer';
 import { TextoWhatsapp } from './TextoWhatsapp';
 import { Avatar } from '../canales/Avatar';
 import type { Conversacion } from '../canales/conversaciones';
@@ -153,20 +153,12 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
   const numeroPropio = conversacion.numero_propio ?? '';
   const { data: sesion } = useSesionWa();
   const { hilo, enviar, enviarMedia, marcarLeido } = useConversacionWa(telefono);
-  // El valor inicial es best-effort (el Map ya puede tener algo si el
-  // componente monta directo sobre este teléfono); el efecto de abajo es la
-  // fuente de verdad real en cada cambio de conversación.
-  const [texto, setTexto] = useState(() => leerBorrador(telefono));
-  const [adjunto, setAdjunto] = useState<File | null>(null);
-  const archivoRef = useRef<HTMLInputElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const finRef = useRef<HTMLDivElement>(null);
   // Solo lo NUEVO se anima: ids ya vistos por hilo (se resetea al cambiar de teléfono).
   const vistosRef = useRef<Set<number>>(new Set());
   const hiloVistoRef = useRef(telefono);
 
   const conectado = sesion?.estado === 'conectado';
-  const enviando = enviar.isPending || enviarMedia.isPending;
   const mensajes = hilo.data?.mensajes ?? [];
   const grupos = agruparPorDia(mensajes);
 
@@ -175,18 +167,6 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
     if (telefono) marcarLeido.mutate(telefono);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [telefono]);
-
-  // El composer se hidrata del borrador de ESTE teléfono al cambiar de
-  // conversación (issue #3): el Map vive afuera del componente, así que el
-  // texto de A ya no se filtra al de B — y volver a A lo recupera.
-  useEffect(() => {
-    setTexto(leerBorrador(telefono));
-  }, [telefono]);
-
-  // Composer con foco: al cambiar de conversación, la caja queda lista para tipear.
-  useEffect(() => {
-    if (conectado) textareaRef.current?.focus();
-  }, [telefono, conectado]);
 
   // Autoscroll al último mensaje cuando llega algo.
   useEffect(() => {
@@ -201,26 +181,6 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
     }
     for (const m of mensajes) vistosRef.current.add(m.id);
   });
-
-  async function onEnviar() {
-    const t = texto.trim();
-    try {
-      if (adjunto) {
-        // Con adjunto, el texto de la caja viaja como caption (como en WhatsApp).
-        await enviarMedia.mutateAsync({ numeroPropio, telefono, referencia: conversacion.clave, archivo: adjunto, caption: t });
-        setAdjunto(null);
-        setTexto('');
-        limpiarBorrador(telefono);
-        return;
-      }
-      if (!t) return;
-      await enviar.mutateAsync({ numeroPropio, telefono, texto: t, referencia: conversacion.clave });
-      setTexto('');
-      limpiarBorrador(telefono);
-    } catch {
-      // El error se muestra abajo; no limpiamos texto ni adjunto para no perderlos.
-    }
-  }
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
@@ -322,106 +282,204 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
         <div ref={finRef} />
       </div>
 
-      {/* Caja de envío */}
-      <footer className="shrink-0 border-t border-border p-3">
-        {(enviar.isError || enviarMedia.isError) && (
-          <div className="mb-2 flex items-start gap-1.5 rounded-lg border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">
-            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-            {(enviar.error ?? enviarMedia.error) instanceof ErrorApi
-              ? ((enviar.error ?? enviarMedia.error) as ErrorApi).message
-              : 'No se pudo enviar.'}
-          </div>
-        )}
+      {/* `key={telefono}`: remonta la caja de envío entera al cambiar de
+          conversación. Con eso, el `useState(() => leerBorrador(telefono))`
+          de adentro hidrata en el PRIMER render de cada conversación — sin
+          el frame de más que dejaba solo el `useEffect` (review de PR #84).
+          También de yapa: el adjunto elegido (que no se persiste) se resetea
+          solo, porque la instancia entera es nueva. */}
+      <ComposerWa
+        key={telefono}
+        telefono={telefono}
+        numeroPropio={numeroPropio}
+        conversacionClave={conversacion.clave}
+        personaNombre={conversacion.persona_nombre}
+        conectado={conectado}
+        enviar={enviar}
+        enviarMedia={enviarMedia}
+      />
+    </div>
+  );
+}
 
-        {/* El adjunto elegido, antes de mandarlo: se ve, se puede sacar. */}
-        {adjunto && (
-          <div className="mb-2 flex items-center gap-2 rounded-xl border border-border bg-secondary/50 px-3 py-2">
-            {adjunto.type.startsWith('image/') ? (
-              <img src={URL.createObjectURL(adjunto)} alt="" className="size-10 rounded-lg object-cover" />
-            ) : (
-              <FileText size={18} className="shrink-0 text-navy" />
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-xs font-semibold text-foreground">{adjunto.name}</div>
-              <div className="text-[11px] text-muted-foreground">
-                {(adjunto.size / 1024 / 1024).toFixed(1)} MB · el texto de abajo va como leyenda
-              </div>
+type MutacionEnviar = ReturnType<typeof useConversacionWa>['enviar'];
+type MutacionEnviarMedia = ReturnType<typeof useConversacionWa>['enviarMedia'];
+
+/**
+ * La caja de envío: texto, adjunto y el botón de mandar. Aparte de
+ * `HiloWhatsapp` a propósito — se monta con `key={telefono}` (ver arriba),
+ * así que cada conversación tiene su PROPIA instancia con su propio
+ * `texto`/`adjunto`, sin arrastrar nada de la anterior.
+ *
+ * La carrera del envío en vuelo (review de PR #84): si la vendedora cambia
+ * de conversación mientras `mutateAsync` todavía vuela, la respuesta llega
+ * sobre una instancia YA DESMONTADA (React ignora sus `setState`) — pero el
+ * borrador GUARDADO del teléfono que se envió igual se limpia siempre, vía
+ * `ejecutarEnvioComposer` (que no depende del ciclo de vida de React). El
+ * `telefonoActualRef` es una segunda red por si algún día el `key` se
+ * pierde en un refactor y esto vuelve a compartir instancia entre chats.
+ */
+function ComposerWa({
+  telefono,
+  numeroPropio,
+  conversacionClave,
+  personaNombre,
+  conectado,
+  enviar,
+  enviarMedia,
+}: {
+  telefono: string;
+  numeroPropio: string;
+  conversacionClave: string;
+  personaNombre: string | null;
+  conectado: boolean;
+  enviar: MutacionEnviar;
+  enviarMedia: MutacionEnviarMedia;
+}) {
+  // El valor inicial ya hidrata correcto: con `key={telefono}` esto es
+  // SIEMPRE el primer render de una instancia nueva para este teléfono.
+  const [texto, setTexto] = useState(() => leerBorrador(telefono));
+  const [adjunto, setAdjunto] = useState<File | null>(null);
+  const archivoRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const telefonoActualRef = useRef(telefono);
+  telefonoActualRef.current = telefono;
+
+  const enviando = enviar.isPending || enviarMedia.isPending;
+
+  // Red de seguridad, no el mecanismo principal (ver el comentario de arriba
+  // del componente): si esto llega a correr con un `telefono` distinto al
+  // que hidrató el `useState`, gana igual — pero con `key` no debería pasar.
+  useEffect(() => {
+    setTexto(leerBorrador(telefono));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [telefono]);
+
+  // Composer con foco: apenas monta (nueva conversación) y si la sesión
+  // recién se conecta, la caja queda lista para tipear.
+  useEffect(() => {
+    if (conectado) textareaRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conectado]);
+
+  async function onEnviar() {
+    try {
+      await ejecutarEnvioComposer({
+        telefonoDelEnvio: telefono,
+        texto,
+        adjunto,
+        enviarTexto: (t) =>
+          enviar.mutateAsync({ numeroPropio, telefono, texto: t, referencia: conversacionClave }),
+        enviarConAdjunto: (archivo, caption) =>
+          enviarMedia.mutateAsync({ numeroPropio, telefono, referencia: conversacionClave, archivo, caption }),
+        telefonoVisibleAhora: () => telefonoActualRef.current,
+        limpiarTextoVisible: () => setTexto(''),
+        limpiarAdjuntoVisible: () => setAdjunto(null),
+      });
+    } catch {
+      // El error se muestra abajo; no limpiamos texto ni adjunto para no perderlos.
+    }
+  }
+
+  return (
+    <footer className="shrink-0 border-t border-border p-3">
+      {(enviar.isError || enviarMedia.isError) && (
+        <div className="mb-2 flex items-start gap-1.5 rounded-lg border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">
+          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+          {(enviar.error ?? enviarMedia.error) instanceof ErrorApi
+            ? ((enviar.error ?? enviarMedia.error) as ErrorApi).message
+            : 'No se pudo enviar.'}
+        </div>
+      )}
+
+      {/* El adjunto elegido, antes de mandarlo: se ve, se puede sacar. */}
+      {adjunto && (
+        <div className="mb-2 flex items-center gap-2 rounded-xl border border-border bg-secondary/50 px-3 py-2">
+          {adjunto.type.startsWith('image/') ? (
+            <img src={URL.createObjectURL(adjunto)} alt="" className="size-10 rounded-lg object-cover" />
+          ) : (
+            <FileText size={18} className="shrink-0 text-navy" />
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-xs font-semibold text-foreground">{adjunto.name}</div>
+            <div className="text-[11px] text-muted-foreground">
+              {(adjunto.size / 1024 / 1024).toFixed(1)} MB · el texto de abajo va como leyenda
             </div>
-            <button
-              type="button"
-              onClick={() => setAdjunto(null)}
-              title="Quitar adjunto"
-              className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1"
-            >
-              <X size={14} />
-            </button>
           </div>
-        )}
-
-        <div className="flex items-end gap-2">
-          <input
-            ref={archivoRef}
-            type="file"
-            accept="image/*,video/*,audio/*,application/pdf"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0] ?? null;
-              if (f) setAdjunto(f);
-              e.target.value = '';
-            }}
-          />
           <button
             type="button"
-            onClick={() => archivoRef.current?.click()}
-            disabled={!conectado}
-            title="Adjuntar imagen, video o documento"
-            className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 disabled:opacity-40"
+            onClick={() => setAdjunto(null)}
+            title="Quitar adjunto"
+            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1"
           >
-            <Paperclip size={16} />
-          </button>
-          <textarea
-            ref={textareaRef}
-            value={texto}
-            onChange={(e) => {
-              const valor = e.target.value;
-              setTexto(valor);
-              guardarBorrador(telefono, valor);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                void onEnviar();
-              }
-            }}
-            disabled={!conectado}
-            rows={1}
-            placeholder={
-              !conectado
-                ? 'La sesión no está conectada'
-                : adjunto
-                  ? 'Leyenda del adjunto (opcional)…'
-                  : `Escribile a ${conversacion.persona_nombre ?? telefono}…`
-            }
-            className="max-h-28 min-h-[2.5rem] flex-1 resize-none rounded-xl border border-border bg-muted px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50"
-          />
-          <button
-            type="button"
-            onClick={() => void onEnviar()}
-            disabled={!conectado || (!texto.trim() && !adjunto) || enviando}
-            className="group flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_2px_10px_-2px_rgba(37,99,235,0.5)] transition-[background-color,box-shadow,transform] duration-200 ease-house hover:bg-primary-hover hover:shadow-[0_4px_16px_-2px_rgba(37,99,235,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 active:scale-[0.94] disabled:opacity-40 disabled:shadow-none"
-          >
-            {enviando ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : (
-              <Send size={16} className="transition-transform duration-200 ease-house group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-            )}
+            <X size={14} />
           </button>
         </div>
-        <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
-          Se envía solo a esta persona, con tu nombre. Nada masivo, nada automático.
-        </p>
-      </footer>
-    </div>
+      )}
+
+      <div className="flex items-end gap-2">
+        <input
+          ref={archivoRef}
+          type="file"
+          accept="image/*,video/*,audio/*,application/pdf"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0] ?? null;
+            if (f) setAdjunto(f);
+            e.target.value = '';
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => archivoRef.current?.click()}
+          disabled={!conectado}
+          title="Adjuntar imagen, video o documento"
+          className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 disabled:opacity-40"
+        >
+          <Paperclip size={16} />
+        </button>
+        <textarea
+          ref={textareaRef}
+          value={texto}
+          onChange={(e) => {
+            const valor = e.target.value;
+            setTexto(valor);
+            guardarBorrador(telefono, valor);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              void onEnviar();
+            }
+          }}
+          disabled={!conectado}
+          rows={1}
+          placeholder={
+            !conectado
+              ? 'La sesión no está conectada'
+              : adjunto
+                ? 'Leyenda del adjunto (opcional)…'
+                : `Escribile a ${personaNombre ?? telefono}…`
+          }
+          className="max-h-28 min-h-[2.5rem] flex-1 resize-none rounded-xl border border-border bg-muted px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50"
+        />
+        <button
+          type="button"
+          onClick={() => void onEnviar()}
+          disabled={!conectado || (!texto.trim() && !adjunto) || enviando}
+          className="group flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_2px_10px_-2px_rgba(37,99,235,0.5)] transition-[background-color,box-shadow,transform] duration-200 ease-house hover:bg-primary-hover hover:shadow-[0_4px_16px_-2px_rgba(37,99,235,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 active:scale-[0.94] disabled:opacity-40 disabled:shadow-none"
+        >
+          {enviando ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <Send size={16} className="transition-transform duration-200 ease-house group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          )}
+        </button>
+      </div>
+      <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
+        Se envía solo a esta persona, con tu nombre. Nada masivo, nada automático.
+      </p>
+    </footer>
   );
 }
 
