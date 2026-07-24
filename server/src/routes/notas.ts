@@ -1,7 +1,27 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
 import { requiereVendedora } from '../auth/sesion.js';
-import { archivarNota, buscarNotas, crearNota, editarNota, listarNotas, prepararEdicion, validarTexto } from '../notas/notas.js';
+import type { NotaFila } from '../notas/notas.js';
+import {
+  archivarNota,
+  buscarNotas,
+  crearNota,
+  desarchivarNota,
+  editarNota,
+  listarNotas,
+  prepararEdicion,
+  validarTexto,
+} from '../notas/notas.js';
+
+/**
+ * `crearNota`/`editarNota`/`archivarNota`/`desarchivarNota` solo tocan la tabla
+ * `notas` — cualquier fila que devuelven es, por construcción, editable (nunca
+ * histórica de `gestiones`). Acá se le agrega el campo `origen` para que el
+ * front reciba la MISMA forma sin importar qué endpoint contestó.
+ */
+function conOrigenNota(fila: NotaFila) {
+  return { ...fila, origen: 'nota' as const };
+}
 
 /**
  * NOTAS — el «Notion» a una tecla (issue #47). Router chico: la lógica (SQL +
@@ -24,8 +44,8 @@ notasRouter.use(requiereVendedora);
 notasRouter.get('/', async (req, res) => {
   const q = typeof req.query.q === 'string' ? req.query.q : '';
   if (q.trim()) {
-    const notas = await buscarNotas(db, { vendedoraId: req.vendedoraId!, q });
-    res.json({ notas });
+    const filas = await buscarNotas(db, { vendedoraId: req.vendedoraId!, q });
+    res.json({ notas: filas.map(conOrigenNota) });
     return;
   }
 
@@ -34,6 +54,7 @@ notasRouter.get('/', async (req, res) => {
     res.status(400).json({ ok: false, message: 'falta clave (o q para buscar)' });
     return;
   }
+  // Ya viene con `origen` — listarNotas mezcla lo editable con lo histórico de gestiones.
   const notas = await listarNotas(db, { clave, vendedoraId: req.vendedoraId! });
   res.json({ notas });
 });
@@ -50,7 +71,7 @@ notasRouter.post('/', async (req, res) => {
     return;
   }
   const nota = await crearNota(db, { clave, vendedoraId: req.vendedoraId!, texto: v.texto });
-  res.json({ ok: true, nota });
+  res.json({ ok: true, nota: conOrigenNota(nota) });
 });
 
 notasRouter.patch('/:id', async (req, res) => {
@@ -73,7 +94,7 @@ notasRouter.patch('/:id', async (req, res) => {
     res.status(403).json({ ok: false, message: 'solo la autora puede editar esta nota' });
     return;
   }
-  res.json({ ok: true, nota: r.nota });
+  res.json({ ok: true, nota: conOrigenNota(r.nota) });
 });
 
 notasRouter.patch('/:id/archivar', async (req, res) => {
@@ -91,5 +112,28 @@ notasRouter.patch('/:id/archivar', async (req, res) => {
     res.status(403).json({ ok: false, message: 'solo la autora puede archivar esta nota' });
     return;
   }
-  res.json({ ok: true, nota: r.nota });
+  res.json({ ok: true, nota: conOrigenNota(r.nota) });
+});
+
+/**
+ * DESHACER un archivado — el camino de vuelta que le faltaba al «un clic y
+ * desaparece» (review de código del PR #47). Lo llama el toast «Nota archivada
+ * — Deshacer» del front, apenas después de archivar.
+ */
+notasRouter.patch('/:id/desarchivar', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ ok: false, message: 'id inválido' });
+    return;
+  }
+  const r = await desarchivarNota(db, { id, vendedoraId: req.vendedoraId! });
+  if (!r.ok && r.motivo === 'no-encontrada') {
+    res.status(404).json({ ok: false, message: 'la nota no existe (o no estaba archivada)' });
+    return;
+  }
+  if (!r.ok) {
+    res.status(403).json({ ok: false, message: 'solo la autora puede desarchivar esta nota' });
+    return;
+  }
+  res.json({ ok: true, nota: conOrigenNota(r.nota) });
 });

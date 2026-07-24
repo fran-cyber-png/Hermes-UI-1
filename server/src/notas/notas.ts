@@ -1,6 +1,6 @@
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { db as DbSingleton } from '../db/client.js';
-import { notas } from '../db/schema.js';
+import { gestiones, notas } from '../db/schema.js';
 
 /**
  * LA LÓGICA DE NOTAS — extraída del router para poder testearla contra una base
@@ -63,16 +63,79 @@ export function prepararEdicion(cambios: { texto?: unknown; fijada?: unknown }, 
   return { ok: true, cambios: resultado };
 }
 
-/** Vivas de una conversación (o de la libreta 'general'), de ESTA vendedora — fijada primero. */
+/**
+ * Una nota tal como la ve la UI: de la tabla `notas` (editable) o HISTÓRICA —
+ * el textarea append-only que `RegistrarGestion` tenía antes de #47, vive en
+ * `gestiones.notas` (ver ADR 0011). Esas NO se migran (perderían su fecha real,
+ * o se duplicarían por cada gestión de la misma conversación): se SURFACEAN acá
+ * de solo lectura, para que retirar el textarea no las vuelva invisibles.
+ */
+export interface NotaListada {
+  id: number;
+  clave: string;
+  vendedoraId: string;
+  texto: string;
+  fijada: boolean;
+  creadoAt: Date;
+  editadoAt: Date | null;
+  archivadoAt: Date | null;
+  origen: 'nota' | 'gestion';
+}
+
+/**
+ * Las notas de acuerdos que quedaron guardadas en `gestiones.notas` ANTES de
+ * #47. Solo lectura: no tienen `id` en la tabla `notas`, así que no hay PATCH
+ * posible sobre ellas (el router nunca las expone en /:id).
+ */
+async function listarNotasHistoricas(
+  base: typeof DbSingleton,
+  opciones: { clave: string; vendedoraId: string },
+): Promise<NotaListada[]> {
+  const filas = await base
+    .select({ id: gestiones.id, vendedoraId: gestiones.vendedoraId, texto: gestiones.notas, creadoAt: gestiones.creadoAt })
+    .from(gestiones)
+    .where(and(eq(gestiones.clave, opciones.clave), eq(gestiones.vendedoraId, opciones.vendedoraId), isNotNull(gestiones.notas)));
+
+  return filas
+    .filter((f): f is typeof f & { texto: string } => Boolean(f.texto && f.texto.trim()))
+    .map((f) => ({
+      id: f.id,
+      clave: opciones.clave,
+      vendedoraId: f.vendedoraId,
+      texto: f.texto,
+      fijada: false,
+      creadoAt: f.creadoAt,
+      editadoAt: null,
+      archivadoAt: null,
+      origen: 'gestion' as const,
+    }));
+}
+
+/**
+ * Vivas de una conversación (o de la libreta 'general'), de ESTA vendedora —
+ * fijada primero, luego más nueva primero. Mezcla las notas nuevas (editables)
+ * con las históricas de `gestiones` (solo lectura) — ver `NotaListada`.
+ */
 export async function listarNotas(
   base: typeof DbSingleton,
   opciones: { clave: string; vendedoraId: string },
-): Promise<NotaFila[]> {
-  return base
-    .select()
-    .from(notas)
-    .where(and(eq(notas.clave, opciones.clave), eq(notas.vendedoraId, opciones.vendedoraId), isNull(notas.archivadoAt)))
-    .orderBy(desc(notas.fijada), desc(notas.creadoAt));
+): Promise<NotaListada[]> {
+  const [nuevas, historicas] = await Promise.all([
+    base
+      .select()
+      .from(notas)
+      .where(and(eq(notas.clave, opciones.clave), eq(notas.vendedoraId, opciones.vendedoraId), isNull(notas.archivadoAt))),
+    listarNotasHistoricas(base, opciones),
+  ]);
+
+  const combinadas: NotaListada[] = [...nuevas.map((n) => ({ ...n, origen: 'nota' as const })), ...historicas];
+
+  combinadas.sort((a, b) => {
+    if (a.fijada !== b.fijada) return a.fijada ? -1 : 1;
+    return b.creadoAt.getTime() - a.creadoAt.getTime();
+  });
+
+  return combinadas;
 }
 
 /**
@@ -131,5 +194,22 @@ export async function archivarNota(
   if (existente.vendedoraId !== opciones.vendedoraId) return { ok: false, motivo: 'prohibido' };
 
   const [fila] = await base.update(notas).set({ archivadoAt: opciones.ahora }).where(eq(notas.id, opciones.id)).returning();
+  return { ok: true, nota: fila };
+}
+
+/**
+ * DESHACER un archivado (limpia `archivado_at`). Un solo clic sin confirmar ni
+ * poder volver atrás era el problema (review de código del PR #47): esto es el
+ * camino de vuelta — el botón «Deshacer» del toast que sigue al archivado.
+ */
+export async function desarchivarNota(
+  base: typeof DbSingleton,
+  opciones: { id: number; vendedoraId: string },
+): Promise<ResultadoMutacion> {
+  const [existente] = await base.select().from(notas).where(eq(notas.id, opciones.id));
+  if (!existente || !existente.archivadoAt) return { ok: false, motivo: 'no-encontrada' };
+  if (existente.vendedoraId !== opciones.vendedoraId) return { ok: false, motivo: 'prohibido' };
+
+  const [fila] = await base.update(notas).set({ archivadoAt: null }).where(eq(notas.id, opciones.id)).returning();
   return { ok: true, nota: fila };
 }

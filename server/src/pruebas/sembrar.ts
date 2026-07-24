@@ -4,6 +4,7 @@ import {
   enviosWa,
   etiquetas,
   events,
+  gestiones,
   interactions,
   intereses,
   leads,
@@ -310,6 +311,38 @@ export async function sembrarNota(db: DbDePrueba, n: NotaSembrada = {}): Promise
       archivadoAt: n.archivadoAt ?? null,
     })
     .returning({ id: notas.id });
+
+  return fila.id;
+}
+
+export interface GestionSembrada {
+  clave: string;
+  vendedoraId?: string;
+  canal?: string;
+  etapa?: string;
+  /** El texto del viejo textarea «Notas de acuerdos» — null/omitido = sin nota en esa gestión. */
+  notas?: string | null;
+  creadoAt?: Date;
+}
+
+/**
+ * Siembra una GESTIÓN (la bitácora comercial, append-only) — para los tests de
+ * `listarNotas` que mezclan lo editable con lo histórico de `gestiones.notas`
+ * (#47, ver ADR 0011). No usa el seam de gestiones (no lo necesita: es solo
+ * fixture) — inserta directo, como el resto de `sembrar.ts`.
+ */
+export async function sembrarGestion(db: DbDePrueba, g: GestionSembrada): Promise<number> {
+  const [fila] = await db
+    .insert(gestiones)
+    .values({
+      vendedoraId: g.vendedoraId ?? "vendedora-prueba",
+      clave: g.clave,
+      canal: g.canal ?? "whatsapp",
+      etapa: g.etapa ?? "interesado",
+      notas: g.notas ?? null,
+      creadoAt: g.creadoAt ?? new Date(),
+    })
+    .returning({ id: gestiones.id });
 
   return fila.id;
 }
