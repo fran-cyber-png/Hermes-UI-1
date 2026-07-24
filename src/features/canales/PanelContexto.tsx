@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ExternalLink, FileText, Search } from 'lucide-react';
-import { API_URL } from '../../config';
+import { api } from '../../lib/datos/cliente';
 import { kicker, sectionLabel } from '../../lib/styles';
 import type { Conversacion } from './conversaciones';
 import { BadgeCanal, nombreCanal } from './BadgeCanal';
@@ -34,8 +34,8 @@ export function PanelContexto({ conversacion }: { conversacion: Conversacion }) 
   useEffect(() => {
     setLink(null);
     if (!interactionId) return;
-    fetch(`${API_URL}/api/persona/${interactionId}/link`)
-      .then((r) => r.json())
+    // Por `api()`: la ruta está detrás del perímetro y necesita el Bearer.
+    api<{ permalink?: string | null }>(`/api/persona/${interactionId}/link`)
       .then((d) => setLink(d.permalink ?? null))
       .catch(() => setLink(null));
   }, [interactionId]);

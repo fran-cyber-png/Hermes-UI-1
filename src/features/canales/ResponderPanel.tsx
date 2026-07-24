@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, Check, ExternalLink, Lock, MessageCircle, Send, Trash2, X } from 'lucide-react';
-import { API_URL } from '../../config';
+import { api, ErrorApi } from '../../lib/datos/cliente';
 import { sectionLabel } from '../../lib/styles';
 import { iniciales } from '../../lib/iniciales';
 import type { Interaccion } from './types';
@@ -51,8 +51,8 @@ export default function ResponderPanel({ interaccion, onCerrar, onRespondido, on
     setEnviado(false);
     setError(null);
     if (id) {
-      fetch(`${API_URL}/api/persona/${id}/link`)
-        .then((r) => r.json())
+      // Por `api()`: la ruta está detrás del perímetro y necesita el Bearer.
+      api<{ permalink?: string | null }>(`/api/persona/${id}/link`)
         .then((d) => setLink(d.permalink ?? null))
         .catch(() => setLink(null));
     }
@@ -110,37 +110,46 @@ export default function ResponderPanel({ interaccion, onCerrar, onRespondido, on
     setEnviando(true);
     setError(null);
 
-    const res = await fetch(`${API_URL}/api/responder/${interaccion.id}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mensajePublico: publico,
-        mensajePrivado: puedePrivado ? privado : '',
-      }),
-    }).then((r) => r.json());
-
-    setEnviando(false);
-
-    if (res.type === 'enviado') {
-      setEnviado(true);
-      onRespondido(interaccion.id);
-    } else {
-      setError(res.errores?.join(' · ') ?? res.message ?? 'No se pudo enviar.');
+    // Por `api()` (Bearer incluido): esto publica en Facebook en nombre de
+    // Goberna — es exactamente lo que el perímetro existe para custodiar.
+    try {
+      const res = await api<{ type: string; errores?: string[] }>(`/api/responder/${interaccion.id}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          mensajePublico: publico,
+          mensajePrivado: puedePrivado ? privado : '',
+        }),
+      });
+      if (res.type === 'enviado') {
+        setEnviado(true);
+        onRespondido(interaccion.id);
+      } else {
+        setError(res.errores?.join(' · ') ?? 'No se pudo enviar.');
+      }
+    } catch (e) {
+      setError(
+        e instanceof ErrorApi ? (e.errores?.join(' · ') ?? e.message) : 'No se pudo enviar.',
+      );
+    } finally {
+      setEnviando(false);
     }
   }
 
   async function borrar() {
     if (!interaccion) return;
     setEnviando(true);
-    const res = await fetch(`${API_URL}/api/responder/${interaccion.id}`, { method: 'DELETE' }).then((r) =>
-      r.json(),
-    );
-    setEnviando(false);
-    if (res.type === 'borrado') {
-      setEnviado(false);
-      setError(null);
-    } else {
-      setError(res.message ?? 'No se pudo borrar.');
+    try {
+      const res = await api<{ type: string }>(`/api/responder/${interaccion.id}`, { method: 'DELETE' });
+      if (res.type === 'borrado') {
+        setEnviado(false);
+        setError(null);
+      } else {
+        setError('No se pudo borrar.');
+      }
+    } catch (e) {
+      setError(e instanceof ErrorApi ? e.message : 'No se pudo borrar.');
+    } finally {
+      setEnviando(false);
     }
   }
 

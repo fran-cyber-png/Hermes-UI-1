@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, History, UserX } from 'lucide-react';
-import { API_URL } from '../../config';
+import { api } from '../../lib/datos/cliente';
 import { sectionLabel } from '../../lib/styles';
 
 interface Item {
@@ -27,8 +27,8 @@ export default function HistorialPersona({ interactionId }: { interactionId: num
   useEffect(() => {
     setDatos(null);
     setFallo(false);
-    fetch(`${API_URL}/api/persona/${interactionId}`)
-      .then((r) => r.json())
+    // Por `api()`: la ruta está detrás del perímetro y necesita el Bearer.
+    api<{ historial: Item[]; anonima: boolean; nombre?: string }>(`/api/persona/${interactionId}`)
       .then(setDatos)
       .catch(() => setFallo(true));
   }, [interactionId, reintento]);

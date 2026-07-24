@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Check, Clock, Lock, MessageCircle, Trash2, X } from 'lucide-react';
-import { API_URL } from '../../config';
+import { api } from '../../lib/datos/cliente';
 import { kicker } from '../../lib/styles';
 
 export interface Capacidades {
@@ -33,10 +33,18 @@ export default function QuePuedoHacer({
 
   useEffect(() => {
     setCap(null);
-    fetch(`${API_URL}/api/persona/${interactionId}/puede-privado`)
-      .then((r) => r.json())
-      .then((d: { puede: boolean; motivo: Capacidades['motivo']; dias?: number }) => {
+    // Por `api()`: la ruta está detrás del perímetro y necesita el Bearer. Si
+    // falla, se declara `motivo: 'error'` en vez de dejar el esqueleto eterno.
+    api<{ puede: boolean; motivo: Capacidades['motivo']; dias?: number }>(
+      `/api/persona/${interactionId}/puede-privado`,
+    )
+      .then((d) => {
         const c = { puedePrivado: d.puede, motivo: d.motivo, dias: d.dias };
+        setCap(c);
+        onCapacidades(c);
+      })
+      .catch(() => {
+        const c: Capacidades = { puedePrivado: false, motivo: 'error' };
         setCap(c);
         onCapacidades(c);
       });

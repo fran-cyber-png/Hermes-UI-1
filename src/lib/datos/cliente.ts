@@ -49,11 +49,14 @@ export class ErrorApi extends Error {
   // sintaxis que TypeScript *emite* en vez de solo borrar.
   readonly status: number;
   readonly tipo?: string;
+  /** El detalle que algunos endpoints (responder) mandan junto al error. */
+  readonly errores?: string[];
 
-  constructor(message: string, status: number, tipo?: string) {
+  constructor(message: string, status: number, tipo?: string, errores?: string[]) {
     super(message);
     this.status = status;
     this.tipo = tipo;
+    this.errores = errores;
   }
 }
 
@@ -82,6 +85,7 @@ export async function api<T>(ruta: string, init?: RequestInit): Promise<T> {
       cuerpo.message ?? `Error ${res.status}`,
       res.status,
       cuerpo.type,
+      Array.isArray(cuerpo.errores) ? cuerpo.errores : undefined,
     );
   }
   return res.json() as Promise<T>;
