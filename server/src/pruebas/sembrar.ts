@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { events, interactions, recordatorios } from "../db/schema.js";
+import { conversionesWa, enviosWa, events, interactions, leads, recordatorios } from "../db/schema.js";
 import type { DbDePrueba } from "./base.js";
 
 /**
@@ -14,6 +14,8 @@ import type { DbDePrueba } from "./base.js";
 
 export interface MensajeSembrado {
   canal?: string;
+  /** 'mensaje' (default) | 'comentario' — mismo helper, la tabla es una sola. */
+  tipo?: "mensaje" | "comentario";
   personaId?: string;
   personaNombre?: string | null;
   texto?: string | null;
@@ -28,10 +30,10 @@ export interface MensajeSembrado {
 }
 
 /**
- * Siembra un mensaje: el evento crudo (fuente de verdad) + la interacción
- * proyectada. El `numeroPropio` va en el payload del evento, que es de donde la
- * cola y el radar lo sacan (`payload->>'numeroPropio'`). Devuelve el id de la
- * interacción.
+ * Siembra un mensaje (o comentario): el evento crudo (fuente de verdad) + la
+ * interacción proyectada. El `numeroPropio` va en el payload del evento, que
+ * es de donde la cola y el radar lo sacan (`payload->>'numeroPropio'`).
+ * Devuelve el id de la interacción.
  */
 export async function sembrarMensaje(db: DbDePrueba, m: MensajeSembrado = {}): Promise<number> {
   const occurredAt = m.occurredAt ?? new Date();
@@ -58,7 +60,7 @@ export async function sembrarMensaje(db: DbDePrueba, m: MensajeSembrado = {}): P
       eventId: ev.id,
       externalId: `wa:${ext}`,
       canal: m.canal ?? "whatsapp",
-      tipo: "mensaje",
+      tipo: m.tipo ?? "mensaje",
       direccion: m.direccion ?? "entrante",
       personaId: m.personaId ?? "51900000000",
       personaNombre: m.personaNombre ?? "Lead de prueba",
@@ -116,6 +118,91 @@ export async function sembrarComentario(db: DbDePrueba, c: ComentarioSembrado = 
     .returning({ id: interactions.id });
 
   return it.id;
+}
+
+export interface LeadSembrado {
+  fullName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  platform?: string | null;
+  createdTime?: Date;
+}
+
+/**
+ * Siembra un lead de formulario (Lead Ads / landing): el evento crudo + la
+ * proyección en `leads`. Devuelve el `leadId` (el externo, no el serial).
+ */
+export async function sembrarLead(db: DbDePrueba, l: LeadSembrado = {}): Promise<string> {
+  const createdTime = l.createdTime ?? new Date();
+  const ext = randomUUID();
+
+  const [ev] = await db
+    .insert(events)
+    .values({
+      source: "meta_lead_ad",
+      externalId: `evt:${ext}`,
+      occurredAt: createdTime,
+      payload: {},
+    })
+    .returning({ id: events.id });
+
+  const leadId = `lead:${ext}`;
+  await db.insert(leads).values({
+    eventId: ev.id,
+    leadId,
+    fullName: l.fullName ?? "Lead de prueba",
+    email: l.email ?? null,
+    phone: l.phone ?? null,
+    platform: l.platform ?? "fb",
+    createdTime,
+  });
+
+  return leadId;
+}
+
+export interface EnvioWaSembrado {
+  vendedoraId?: string;
+  telefono?: string;
+  estado?: "pendiente" | "enviado" | "fallido";
+  creadoAt?: Date;
+}
+
+/** Siembra un envío de WhatsApp (la auditoría de `EnvioControlado`). */
+export async function sembrarEnvioWa(db: DbDePrueba, e: EnvioWaSembrado = {}): Promise<number> {
+  const [row] = await db
+    .insert(enviosWa)
+    .values({
+      vendedoraId: e.vendedoraId ?? "vendedora-prueba",
+      numeroPropio: "51999999999",
+      telefono: e.telefono ?? "51900000000",
+      texto: "hola",
+      referencia: "conv:whatsapp:51900000000:51999999999",
+      estado: e.estado ?? "enviado",
+      creadoAt: e.creadoAt ?? new Date(),
+    })
+    .returning({ id: enviosWa.id });
+
+  return row.id;
+}
+
+export interface ConversionWaSembrada {
+  vendedoraId?: string;
+  telefono?: string;
+  iniciadaAt?: Date;
+}
+
+/** Siembra una conversión de WhatsApp (un lead que se volvió venta). */
+export async function sembrarConversionWa(db: DbDePrueba, v: ConversionWaSembrada = {}): Promise<number> {
+  const [row] = await db
+    .insert(conversionesWa)
+    .values({
+      vendedoraId: v.vendedoraId ?? "vendedora-prueba",
+      telefono: v.telefono ?? "51900000000",
+      iniciadaAt: v.iniciadaAt ?? new Date(),
+    })
+    .returning({ id: conversionesWa.id });
+
+  return row.id;
 }
 
 export interface RecordatorioSembrado {
