@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, describe } from 'node:test';
-import { normalizarTelefono, telefonoDeContacto, jidDeTelefono, esJidDeGrupo } from './identidadWa.js';
+import { normalizarTelefono, sufijoTelefono, telefonoDeContacto, jidDeTelefono, esJidDeGrupo } from './identidadWa.js';
 
 /**
  * Esta es la línea donde muere el vocabulario JID de WhatsApp. Si un JID se
@@ -13,7 +13,19 @@ describe('identidad WhatsApp ↔ teléfono', () => {
   test('normaliza un móvil peruano de 9 dígitos con prefijo 51', () => {
     assert.equal(normalizarTelefono('987654321'), '51987654321');
     assert.equal(normalizarTelefono('+51 987 654 321'), '51987654321');
+    // Guiones, paréntesis y espacios se descartan igual que el '+'.
+    assert.equal(normalizarTelefono('(51) 987-654-321'), '51987654321');
     assert.equal(normalizarTelefono('51987654321'), '51987654321');
+  });
+
+  test('el sufijo de match son los últimos 9 dígitos, venga como venga el número', () => {
+    // Con código, sin código, o con separadores: la clave de match es la misma.
+    assert.equal(sufijoTelefono('51987654321'), '987654321');
+    assert.equal(sufijoTelefono('987654321'), '987654321');
+    assert.equal(sufijoTelefono('+51 987 654 321'), '987654321');
+    // Lo que no es un teléfono no genera clave (no se inventa un match).
+    assert.equal(sufijoTelefono('123'), null);
+    assert.equal(sufijoTelefono(''), null);
   });
 
   test('deriva el teléfono de un JID de contacto, con y sin sufijo de dispositivo', () => {

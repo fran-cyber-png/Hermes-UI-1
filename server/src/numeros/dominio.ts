@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizarTelefono } from "../whatsapp/identidadWa.js";
 import type { EstadoSesion } from "../whatsapp/transporte.js";
 import type { EstadoVinculacion } from "../whatsapp/vinculador.js";
 
@@ -37,14 +38,12 @@ export type DatosUpsert = z.infer<typeof esquemaUpsert>;
  * Número propio canónico: solo dígitos con código de país. Cerberus debería mandar
  * canónico (regla del contrato); se normaliza igual para que las claves coincidan
  * de los dos lados. Devuelve null si no parece un número válido.
+ *
+ * La normalización vive UNA sola vez, en `whatsapp/identidadWa.ts` (#98). Acá se
+ * re-exporta con el nombre del dominio de números propios; el comportamiento es el
+ * mismo, y su test puro está allá.
  */
-export function normalizarNumero(raw: string): string | null {
-  const digitos = (raw ?? "").replace(/\D/g, "");
-  if (digitos.length < 8) return null;
-  // Un móvil peruano sin código (9 dígitos empezando en 9) → prefijo 51.
-  if (digitos.length === 9 && digitos.startsWith("9")) return `51${digitos}`;
-  return digitos;
-}
+export const normalizarNumero = normalizarTelefono;
 
 // ── Estado de sesión (transporte) → contrato ──────────────────────────────────
 

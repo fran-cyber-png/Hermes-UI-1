@@ -23,6 +23,21 @@ export function normalizarTelefono(crudo: string): string | null {
   return digitos;
 }
 
+/**
+ * La CLAVE DE MATCH entre teléfonos: los últimos 9 dígitos del número
+ * normalizado. Perú guarda y muestra el número de móvil (9 dígitos) con o sin el
+ * código de país `51`, según de dónde venga (WhatsApp lo trae con código, un
+ * lead-form de Meta a veces sin él, Cerberus lo guarda local). Comparar los 9
+ * finales cruza esas variantes sin depender del prefijo — es el mismo criterio
+ * que usa la búsqueda en Cerberus (`cerberus/ficha.ts`).
+ *
+ * Devuelve `null` si el crudo no es un teléfono (no inventa una clave de basura).
+ */
+export function sufijoTelefono(crudo: string): string | null {
+  const normalizado = normalizarTelefono(crudo);
+  return normalizado ? normalizado.slice(-9) : null;
+}
+
 /** `51987654321:41@s.whatsapp.net` → `51987654321`. Null si es grupo o no deriva. */
 export function telefonoDeContacto(jid: string): string | null {
   const [usuario, servidor] = (jid ?? '').split('@');
