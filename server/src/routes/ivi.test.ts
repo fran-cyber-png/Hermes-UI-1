@@ -1,0 +1,126 @@
+import assert from 'node:assert/strict';
+import { test, describe } from 'node:test';
+import { once } from 'node:events';
+import type { AddressInfo } from 'node:net';
+import express from 'express';
+import { firmarSesion } from '../auth/sesion.js';
+import { CODIGO_ERROR_IVI, ErrorIvi, type CodigoErrorIvi, type RespuestaIvi, type TurnoHistorial } from '../ivi/cliente.js';
+import { iviRouter } from './ivi.js';
+
+/**
+ * El proxy con el cliente INYECTADO (cero red hacia Ivi): que exija la sesión, valide
+ * el body, pase el `usuario` del token, devuelva 200 con la respuesta, y traduzca cada
+ * clase de fallo a un 502 con motivo. El server efímero es 127.0.0.1 (loopback): probamos
+ * NUESTRA ruta + middleware, no salimos a ningún servicio.
+ */
+
+type PreguntarAIvi = (
+  pregunta: string,
+  usuario: string,
+  historial?: TurnoHistorial[],
+) => Promise<RespuestaIvi>;
+
+const TOKEN = firmarSesion('ana');
+
+function respuestaValida(): RespuestaIvi {
+  return { texto: 'ok', tipo: 'dato', fuentes: [], groundingOk: true, edadDelDato: null };
+}
+
+interface Respuesta {
+  status: number;
+  json: Record<string, unknown> | null;
+}
+
+/** Levanta el router con el cliente inyectado, hace UN request y cierra. */
+async function pedir(
+  preguntar: PreguntarAIvi,
+  opciones: { token?: string; body?: unknown },
+): Promise<Respuesta> {
+  const app = express();
+  app.use(express.json());
+  app.use('/api/ivi', iviRouter(preguntar));
+
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const { port } = server.address() as AddressInfo;
+
+  try {
+    const headers: Record<string, string> = { 'content-type': 'application/json' };
+    if (opciones.token) headers.authorization = `Bearer ${opciones.token}`;
+    const resp = await fetch(`http://127.0.0.1:${port}/api/ivi/preguntar`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(opciones.body ?? {}),
+    });
+    const json = (await resp.json().catch(() => null)) as Record<string, unknown> | null;
+    return { status: resp.status, json };
+  } finally {
+    server.close();
+    await once(server, 'close');
+  }
+}
+
+describe('POST /api/ivi/preguntar', () => {
+  test('sin token: 401 y ni llama al cliente', async () => {
+    let llamado = false;
+    const preguntar: PreguntarAIvi = async () => {
+      llamado = true;
+      return respuestaValida();
+    };
+    const r = await pedir(preguntar, { body: { pregunta: 'hola' } });
+    assert.equal(r.status, 401);
+    assert.equal(llamado, false);
+  });
+
+  test('body inválido (sin pregunta): 400 y ni llama al cliente', async () => {
+    let llamado = false;
+    const preguntar: PreguntarAIvi = async () => {
+      llamado = true;
+      return respuestaValida();
+    };
+    const r = await pedir(preguntar, { token: TOKEN, body: {} });
+    assert.equal(r.status, 400);
+    assert.equal(llamado, false);
+  });
+
+  test('éxito: 200 con la respuesta, y el usuario sale del token', async () => {
+    let visto: { pregunta: string; usuario: string; historial?: TurnoHistorial[] } | null = null;
+    const preguntar: PreguntarAIvi = async (pregunta, usuario, historial) => {
+      visto = { pregunta, usuario, historial };
+      return respuestaValida();
+    };
+    const historial: TurnoHistorial[] = [{ rol: 'vendedora', texto: 'hola' }];
+    const r = await pedir(preguntar, { token: TOKEN, body: { pregunta: '¿ventas?', historial } });
+
+    assert.equal(r.status, 200);
+    assert.equal(r.json?.ok, true);
+    assert.deepEqual(r.json?.respuesta, respuestaValida());
+    assert.equal(visto!.pregunta, '¿ventas?');
+    assert.equal(visto!.usuario, 'ana'); // del token, no del body
+    assert.deepEqual(visto!.historial, historial);
+  });
+
+  test('cada clase de ErrorIvi → 502 con su codigo y motivo', async () => {
+    const codigos = Object.values(CODIGO_ERROR_IVI) as CodigoErrorIvi[];
+    for (const codigo of codigos) {
+      const preguntar: PreguntarAIvi = async () => {
+        throw new ErrorIvi(codigo, `falló: ${codigo}`);
+      };
+      const r = await pedir(preguntar, { token: TOKEN, body: { pregunta: 'hola' } });
+      assert.equal(r.status, 502, `codigo ${codigo}`);
+      assert.equal(r.json?.ok, false);
+      assert.equal(r.json?.codigo, codigo);
+      assert.equal(typeof r.json?.message, 'string');
+    }
+  });
+
+  test('un error no tipado → 502 genérico, sin inventar respuesta', async () => {
+    const preguntar: PreguntarAIvi = async () => {
+      throw new Error('boom inesperado');
+    };
+    const r = await pedir(preguntar, { token: TOKEN, body: { pregunta: 'hola' } });
+    assert.equal(r.status, 502);
+    assert.equal(r.json?.ok, false);
+    assert.equal(r.json?.codigo, 'desconocido');
+  });
+});

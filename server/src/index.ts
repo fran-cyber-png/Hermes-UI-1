@@ -36,6 +36,7 @@ import { whatsappRouter } from "./routes/whatsapp.js";
 import { streamRouter } from "./routes/stream.js";
 import { vincularRouter } from "./routes/vincular.js";
 import { simularRouter } from "./routes/simular.js";
+import { iviRouter } from "./routes/ivi.js";
 
 const app = express();
 const port = process.env.PORT ? Number(process.env.PORT) : 4100;
@@ -76,6 +77,8 @@ app.use("/api/structure", structureRouter); // las 3 etapas anidadas, con la pla
 // EL SDK: lo mismo, pero con la forma de la PREGUNTA en vez de la de la pantalla. Se autodescribe
 // en /api/sdk/catalogo. Lo consumen el verificador de CQs hoy, Ivi y MCP después.
 app.use("/api/sdk", sdkRouter);
+
+app.use("/api/ivi", iviRouter()); // el proxy al cerebro RAG en geografo (issue #61)
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
