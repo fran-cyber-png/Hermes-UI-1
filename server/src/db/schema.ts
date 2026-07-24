@@ -331,7 +331,11 @@ export const gestiones = pgTable(
     creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index("gestiones_conversacion_idx").on(t.clave, t.creadoAt),
+    // (clave, creado_at DESC): el orden EXACTO del DISTINCT ON canónico de
+    // `cola/etapaEfectivaSql.ts` (ultimasGestionesSql) — la última gestión por
+    // conversación sale del índice, sin sort. También sirve al historial de
+    // una clave (`GET /api/gestiones/de/:clave`, ORDER BY creado_at DESC).
+    index("gestiones_conversacion_idx").on(t.clave.asc(), t.creadoAt.desc()),
     index("gestiones_vendedora_idx").on(t.vendedoraId, t.creadoAt),
   ],
 );

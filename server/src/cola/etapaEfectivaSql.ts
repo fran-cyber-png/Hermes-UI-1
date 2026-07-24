@@ -94,9 +94,18 @@ END`;
  * declarada — la misma regla que `GET /api/gestiones/de/:clave`). Se cruda acá
  * y se normaliza en el CASE de arriba, así el test de paridad también cubre los
  * valores viejos guardados ('nuevo', 'venta').
+ *
+ * El `id DESC` es el DESEMPATE: dos gestiones pueden caer con el MISMO
+ * `creado_at` (mismo tick del reloj, backfill) y sin él el DISTINCT ON elige
+ * cualquiera — la etapa quedaría al azar. `id` es bigserial: la última
+ * insertada gana, determinista. El índice `gestiones_conversacion_idx`
+ * (`db/schema.ts`) acompaña este orden: (clave, creado_at DESC).
+ *
+ * Este fragmento es EL DISTINCT ON canónico: quien necesite «la última gestión
+ * por clave» lo consume de acá, no lo re-escribe — la lección de #37.
  */
 export const ultimasGestionesSql: SQL = sql`
   SELECT DISTINCT ON (clave) clave, etapa AS etapa_manual
   FROM gestiones
-  ORDER BY clave, creado_at DESC
+  ORDER BY clave, creado_at DESC, id DESC
 `;

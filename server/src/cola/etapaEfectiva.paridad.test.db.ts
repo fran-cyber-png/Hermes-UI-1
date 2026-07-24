@@ -97,6 +97,24 @@ describe("etapa efectiva en la cola (SQL) — la precedencia del dueño", () => 
     assert.equal(por.get("p-historia")?.etapa_efectiva, "perdido");
   });
 
+  test("dos gestiones con el MISMO creado_at: gana la última asentada (id), no el azar", async (t) => {
+    const db = await baseDePrueba(t);
+    // El escenario real: dos gestiones seguidas caen en el mismo tick del reloj
+    // (o un backfill las insertó con el mismo timestamp). Sin desempate, el
+    // DISTINCT ON elige CUALQUIERA — y la etapa de la conversación queda al azar.
+    const empate = hace(2);
+    await sembrarMensaje(db, { personaId: "p-empate", occurredAt: hace(5) });
+    await sembrarGestion(db, { clave: claveDe("p-empate"), etapa: "cotizado", creadoAt: empate });
+    await sembrarGestion(db, { clave: claveDe("p-empate"), etapa: "perdido", creadoAt: empate });
+
+    const por = await colaPorPersona(db);
+    assert.equal(
+      por.get("p-empate")?.etapa_efectiva,
+      "perdido",
+      "el desempate es id DESC: la última fila insertada ES la etapa declarada",
+    );
+  });
+
   test("los valores viejos se normalizan al leer: 'venta'→cierre, 'nuevo'+respondida→contactado", async (t) => {
     const db = await baseDePrueba(t);
     await sembrarMensaje(db, { personaId: "p-venta-vieja", occurredAt: hace(5) });
