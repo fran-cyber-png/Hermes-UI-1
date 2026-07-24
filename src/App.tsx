@@ -34,6 +34,8 @@ import { useSesionWa } from './features/whatsapp/conversacionWa';
 import { useDashboard } from './features/dashboard/dashboard';
 import { useTiempoReal } from './lib/datos/tiempoReal';
 import type { Puente } from './lib/puente';
+import { LibretaPersonal } from './features/notas/PanelNotas';
+import { esAtajoLibreta } from './features/notas/notas';
 
 /**
  * HERMES — la mesa de la vendedora.
@@ -47,7 +49,8 @@ import type { Puente } from './lib/puente';
  *
  * Teclado global (§2.8 del spec): ⌘1-6 cambia de vista · «/» va a la búsqueda
  * de la cola · Escape cierra la conversación (solo en Mensajes, nunca desde un
- * input) · «?» abre la cabina con el mapa completo.
+ * input) · «?» abre la cabina con el mapa completo · «n» abre la libreta
+ * personal (#47).
  */
 
 /** `WebkitAppRegion` no está en los tipos de CSSProperties; Electron sí lo lee. */
@@ -83,6 +86,7 @@ const ATAJOS: { tecla: string; que: string }[] = [
   { tecla: '/', que: 'Buscar en la cola' },
   { tecla: '↑↓ ⏎', que: 'Recorrer la cola' },
   { tecla: 'Esc', que: 'Cerrar la conversación' },
+  { tecla: 'n', que: 'Tu libreta personal' },
   { tecla: '?', que: 'Esta ayuda' },
 ];
 
@@ -113,6 +117,7 @@ export default function App() {
   const [direccion, setDireccion] = useState<'abajo' | 'arriba'>('abajo');
   const [telefonoPersonas, setTelefonoPersonas] = useState<string | null>(null);
   const [cabina, setCabina] = useState(false);
+  const [libreta, setLibreta] = useState(false);
   // El puente (§2.9): una vista le pasa el mando a otra; la destinataria lo consume y lo limpia.
   const [puente, setPuente] = useState<Puente | null>(null);
   const busquedaRef = useRef<HTMLInputElement>(null);
@@ -148,8 +153,12 @@ export default function App() {
   useEffect(() => {
     function alTeclear(e: KeyboardEvent) {
       if (e.key === 'Escape') {
-        // Escape cierra en orden: cabina → conversación abierta (solo en Mensajes).
+        // Escape cierra en orden: libreta → cabina → conversación abierta (solo en Mensajes).
         if (tecleandoEn(e)) return;
+        if (libreta) {
+          setLibreta(false);
+          return;
+        }
         if (cabina) {
           setCabina(false);
           return;
@@ -169,6 +178,12 @@ export default function App() {
         setCabina((v) => !v);
         return;
       }
+      // La libreta personal (#47): «n» sola, nunca ⌘N/Ctrl+N (eso es del navegador).
+      if (esAtajoLibreta(e)) {
+        e.preventDefault();
+        setLibreta((v) => !v);
+        return;
+      }
       if (e.key === '/') {
         e.preventDefault();
         cambiarVista('bandeja');
@@ -180,7 +195,7 @@ export default function App() {
     window.addEventListener('keydown', alTeclear);
     return () => window.removeEventListener('keydown', alTeclear);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vista, cabina, abierta]);
+  }, [vista, cabina, abierta, libreta]);
 
   if (cargando) {
     // El esqueleto con la anatomía del shell: riel, header, tres placas.
@@ -395,6 +410,7 @@ export default function App() {
       </div>
 
       {cabina && <Cabina onCerrar={() => setCabina(false)} />}
+      <LibretaPersonal abierta={libreta} onCerrar={() => setLibreta(false)} />
     </div>
   );
 }

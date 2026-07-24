@@ -9,6 +9,7 @@ import { Avatar } from '../canales/Avatar';
 import { FormularioVenta } from '../venta/FormularioVenta';
 import { RegistrarGestion } from '../gestion/RegistrarGestion';
 import { Intereses } from '../gestion/Intereses';
+import { PanelNotas } from '../notas/PanelNotas';
 
 /**
  * LA FICHA DEL CONTACTO — la razón de ser de Hermes.
@@ -233,8 +234,10 @@ export function FichaContacto({
         </div>
       </div>
 
-      {/* La bitácora comercial: próxima acción (cae en la Agenda) + notas. */}
+      {/* La bitácora comercial: próxima acción (cae en la Agenda). */}
       <RegistrarGestion conversacion={conversacion} />
+      {/* Las notas de ESTA conversación (#47) — editables, se archivan, no derivan nada. */}
+      <PanelNotas clave={conversacion.clave} />
 
       {/* Registrar venta — el formulario vive DENTRO de Hermes (la vendedora no
           entra a Cerberus). Para un cliente existente, abre el form; para un lead

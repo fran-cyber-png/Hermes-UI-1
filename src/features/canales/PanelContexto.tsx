@@ -8,6 +8,7 @@ import HistorialPersona from './HistorialPersona';
 import { Avatar } from './Avatar';
 import { RegistrarGestion } from '../gestion/RegistrarGestion';
 import { Intereses } from '../gestion/Intereses';
+import { PanelNotas } from '../notas/PanelNotas';
 
 /**
  * EL PANEL DE CONTEXTO — el lado derecho cuando la conversación es de Meta.
@@ -132,8 +133,10 @@ export function PanelContexto({ conversacion }: { conversacion: Conversacion }) 
         </div>
       </div>
 
-      {/* La bitácora comercial: etapa + próxima acción (cae en la Agenda) + notas. */}
+      {/* La bitácora comercial: etapa + próxima acción (cae en la Agenda). */}
       <RegistrarGestion conversacion={conversacion} />
+      {/* Las notas de ESTA conversación (#47) — editables, se archivan, no derivan nada. */}
+      <PanelNotas clave={conversacion.clave} />
     </div>
   );
 }

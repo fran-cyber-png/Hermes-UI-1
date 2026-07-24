@@ -5,15 +5,20 @@ import { api } from '../../lib/datos/cliente';
 import { sectionLabel } from '../../lib/styles';
 import type { Conversacion } from '../canales/conversaciones';
 import { opcionesRapidas } from '../agenda/agenda';
+import { useNotas } from '../notas/notas';
 
 /**
- * NOTAS Y PRÓXIMA ACCIÓN — la bitácora comercial en el panel derecho.
+ * PRÓXIMA ACCIÓN — la bitácora comercial en el panel derecho.
  *
- * Dos cosas en un solo gesto: cuál es la PRÓXIMA ACCIÓN (wsp de seguimiento /
- * llamada / correo / reunión — con fecha, que cae sola en la Agenda) y las
- * NOTAS de acuerdos. La etapa y los intereses se manejan en la BarraGestion,
- * arriba del chat; acá la etapa solo se LEE. Nada de esto envía nada: es la
- * memoria comercial del equipo.
+ * Cuál es la PRÓXIMA ACCIÓN (wsp de seguimiento / llamada / correo / reunión —
+ * con fecha, que cae sola en la Agenda). La etapa y los intereses se manejan
+ * en la BarraGestion, arriba del chat; acá la etapa solo se LEE. Nada de esto
+ * envía nada: es la memoria comercial del equipo.
+ *
+ * Las NOTAS de acuerdos vivían acá (un textarea append-only dentro de cada
+ * gestión) — issue #47 las saca a `PanelNotas`, editable y sin mover el
+ * embudo. El preview de «última nota» del cintillo de abajo ahora lee de ahí,
+ * no de `gestiones.notas` (ver ADR 0009).
  */
 
 const ETAPA_LABEL: Record<string, string> = {
@@ -36,7 +41,6 @@ interface Gestion {
   etapa: string;
   proximaAccion: string | null;
   proximaFecha: string | null;
-  notas: string | null;
   vendedoraId: string;
   creadoAt: string;
 }
@@ -51,7 +55,6 @@ interface NuevaGestion {
   etapa: string;
   proximaAccion: string | null;
   proximaFecha: string | null;
-  notas: string;
 }
 
 export function RegistrarGestion({ conversacion }: { conversacion: Conversacion }) {
@@ -60,7 +63,6 @@ export function RegistrarGestion({ conversacion }: { conversacion: Conversacion 
   const [accion, setAccion] = useState<string | null>(null);
   const [cuando, setCuando] = useState<Date | null>(null);
   const [personalizada, setPersonalizada] = useState('');
-  const [notas, setNotas] = useState('');
   const [guardado, setGuardado] = useState(false);
 
   const historial = useQuery({
@@ -69,7 +71,11 @@ export function RegistrarGestion({ conversacion }: { conversacion: Conversacion 
       api<{ gestiones: Gestion[]; etapa: string | null }>(`/api/gestiones/de/${encodeURIComponent(conversacion.clave)}`),
   });
   const etapaActual = historial.data?.etapa ?? null;
-  const ultima = historial.data?.gestiones[0] ?? null;
+  // El preview de «última nota» del cintillo (#47): ya no viene de `gestiones`
+  // (append-only, ver el header del módulo) — sale de la nota más reciente
+  // (fijada primero) de ESTA conversación.
+  const { data: notasConv } = useNotas(conversacion.clave);
+  const ultimaNota = notasConv?.[0] ?? null;
 
   const [errorCompuerta, setErrorCompuerta] = useState<string | null>(null);
   const crear = useMutation({
@@ -87,14 +93,13 @@ export function RegistrarGestion({ conversacion }: { conversacion: Conversacion 
       setAccion(null);
       setCuando(null);
       setPersonalizada('');
-      setNotas('');
     },
   });
 
   function guardar() {
-    // La etapa no se elige acá (eso es de la BarraGestion): la nota se asienta
-    // sobre la etapa actual. El server exige una válida — para un lead sin
-    // gestión, la base es 'interesado' (la misma lectura que hace la barra).
+    // La etapa no se elige acá (eso es de la BarraGestion): la próxima acción
+    // se asienta sobre la etapa actual. El server exige una válida — para un
+    // lead sin gestión, la base es 'interesado' (la misma lectura de la barra).
     const fecha = personalizada ? new Date(personalizada) : cuando;
     crear.mutate({
       clave: conversacion.clave,
@@ -105,7 +110,6 @@ export function RegistrarGestion({ conversacion }: { conversacion: Conversacion 
       etapa: etapaActual ?? 'interesado',
       proximaAccion: accion,
       proximaFecha: accion && fecha ? fecha.toISOString() : null,
-      notas,
     });
   }
 
@@ -121,7 +125,7 @@ export function RegistrarGestion({ conversacion }: { conversacion: Conversacion 
         <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-semibold text-secondary-foreground">
           {etapaActual ? (ETAPA_LABEL[etapaActual] ?? etapaActual) : 'Sin gestión'}
         </span>
-        {ultima?.notas && <span className="truncate italic">“{ultima.notas.slice(0, 40)}”</span>}
+        {ultimaNota && <span className="truncate italic">“{ultimaNota.texto.slice(0, 40)}”</span>}
       </div>
 
       {guardado && !abierto && (
@@ -139,7 +143,7 @@ export function RegistrarGestion({ conversacion }: { conversacion: Conversacion 
           }}
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card py-2 text-xs font-bold text-navy transition-[background-color,transform] duration-200 ease-house hover:bg-muted active:scale-[0.98]"
         >
-          <ClipboardList size={14} /> Notas y próxima acción
+          <ClipboardList size={14} /> Próxima acción
         </button>
       ) : (
         <div className="rounded-xl border border-border bg-muted/30 p-2.5">
@@ -178,15 +182,6 @@ export function RegistrarGestion({ conversacion }: { conversacion: Conversacion 
             </div>
           )}
 
-          <div className={'mt-3 ' + sectionLabel}>Notas de acuerdos</div>
-          <textarea
-            value={notas}
-            onChange={(e) => setNotas(e.target.value)}
-            rows={2}
-            placeholder="Qué se acordó: le interesa el diplomado, paga en cuotas, mandarle el temario…"
-            className="mt-1.5 w-full resize-none rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs outline-none focus:border-primary"
-          />
-
           {errorCompuerta && (
             <div className="mt-2 flex items-start justify-between gap-2 rounded-lg bg-warning/10 px-2.5 py-1.5 text-[11px] font-medium text-warning-foreground">
               <span>{errorCompuerta}</span>
@@ -204,7 +199,7 @@ export function RegistrarGestion({ conversacion }: { conversacion: Conversacion 
             <button
               type="button"
               onClick={guardar}
-              disabled={crear.isPending || (!accion && !notas.trim())}
+              disabled={crear.isPending || !accion}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary py-1.5 text-xs font-bold text-primary-foreground transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover active:scale-[0.98] disabled:opacity-40"
             >
               {crear.isPending ? <Loader2 size={12} className="animate-spin" /> : <ClipboardList size={12} />}
