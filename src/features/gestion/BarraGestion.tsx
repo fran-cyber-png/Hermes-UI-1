@@ -6,6 +6,7 @@ import type { Conversacion } from '../canales/conversaciones';
 import { opcionesRapidas, useAgenda } from '../agenda/agenda';
 import { BotonLlamar } from './BotonLlamar';
 import { Intereses } from './Intereses';
+import { MenuHerramientas } from './MenuHerramientas';
 
 /**
  * LA BARRA DE GESTIÓN — el embudo entero manejable DESDE el chat.
@@ -313,6 +314,7 @@ export function BarraGestion({ conversacion }: { conversacion: Conversacion }) {
             <BotonLlamar telefono={conversacion.persona_id} />
           )}
           <AgendarRapido conversacion={conversacion} />
+          <MenuHerramientas clave={conversacion.clave} />
         </span>
       </div>
 
