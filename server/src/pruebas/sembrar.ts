@@ -136,6 +136,9 @@ export interface LeadSembrado {
   email?: string | null;
   phone?: string | null;
   platform?: string | null;
+  campaignName?: string | null;
+  adName?: string | null;
+  formName?: string | null;
   createdTime?: Date;
 }
 
@@ -165,6 +168,9 @@ export async function sembrarLead(db: DbDePrueba, l: LeadSembrado = {}): Promise
     email: l.email ?? null,
     phone: l.phone ?? null,
     platform: l.platform ?? "fb",
+    campaignName: l.campaignName ?? null,
+    adName: l.adName ?? null,
+    formName: l.formName ?? null,
     createdTime,
   });
 
