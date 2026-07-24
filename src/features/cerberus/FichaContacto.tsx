@@ -8,6 +8,7 @@ import type { Conversacion } from '../canales/conversaciones';
 import { Avatar } from '../canales/Avatar';
 import { FormularioVenta } from '../venta/FormularioVenta';
 import { RegistrarGestion } from '../gestion/RegistrarGestion';
+import { Intereses } from '../gestion/Intereses';
 
 /**
  * LA FICHA DEL CONTACTO — la razón de ser de Hermes.
@@ -222,6 +223,14 @@ export function FichaContacto({
             </a>
           </div>
         ) : null}
+
+        {/* La línea de tiempo del interés: qué cursos pidió y cuándo (#57). Va
+            SIEMPRE (sea cliente, lead nuevo o Cerberus caído): el interés es dato
+            de Hermes, no de la ficha de Cerberus. */}
+        <div className={'mt-5 ' + sectionLabel}>Le interesa</div>
+        <div className="mt-2">
+          <Intereses clave={conversacion.clave} compacto />
+        </div>
       </div>
 
       {/* La bitácora comercial: próxima acción (cae en la Agenda) + notas. */}

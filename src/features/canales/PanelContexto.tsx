@@ -7,6 +7,7 @@ import { BadgeCanal, nombreCanal } from './BadgeCanal';
 import HistorialPersona from './HistorialPersona';
 import { Avatar } from './Avatar';
 import { RegistrarGestion } from '../gestion/RegistrarGestion';
+import { Intereses } from '../gestion/Intereses';
 
 /**
  * EL PANEL DE CONTEXTO — el lado derecho cuando la conversación es de Meta.
@@ -122,6 +123,13 @@ export function PanelContexto({ conversacion }: { conversacion: Conversacion }) 
             </div>
           </>
         )}
+
+        {/* La línea de tiempo del interés: qué cursos pidió y cuándo (#57). Es la
+            ficha del contacto en el aside — acá se lee la evolución de un vistazo. */}
+        <div className={'mt-5 ' + sectionLabel}>Le interesa</div>
+        <div className="mt-2">
+          <Intereses clave={conversacion.clave} compacto />
+        </div>
       </div>
 
       {/* La bitácora comercial: etapa + próxima acción (cae en la Agenda) + notas. */}
