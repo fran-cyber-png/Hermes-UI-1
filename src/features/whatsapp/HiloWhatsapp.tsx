@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, FileText, Loader2, Megaphone, Paperclip, Phone, QrCode, Send, Link2, WifiOff, X } from 'lucide-react';
+import { AlertTriangle, FileText, Loader2, Megaphone, Paperclip, Phone, Play, QrCode, Send, Link2, WifiOff, X } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
 import { useBlobAutenticado } from '../../lib/datos/blobAutenticado';
 import { formatoTelefono, tempClass } from '../../lib/formato';
@@ -97,60 +97,152 @@ export function SkeletonHilo() {
  * video y el audio se reproducen, el documento se baja. Los mensajes multimedia
  * viejos (de antes de que Hermes bajara adjuntos) no tienen archivo — para esos
  * queda el aviso honesto de siempre.
+ *
+ * La media está detrás del perímetro (Bearer, #36) y las etiquetas no mandan
+ * headers, así que todo pasa por `useBlobAutenticado`. El blob se baja ENTERO
+ * (se pierde el streaming por rango) — por eso solo la imagen es eager: video,
+ * audio y documento se bajan recién cuando la vendedora los toca. Trade-off
+ * documentado en el ADR 0009.
  */
 function MediaEnBurbuja({ media }: { media: MediaHilo }) {
-  // El adjunto está detrás del perímetro (Bearer) y las etiquetas de media no
-  // mandan headers: se baja autenticado y se sirve como blob local.
+  if (media.clase === 'imagen' || media.clase === 'sticker') return <ImagenEnBurbuja media={media} />;
+  if (media.clase === 'video' || media.clase === 'audio') return <ReproducirBajoDemanda media={media} />;
+  return <DocumentoBajoDemanda media={media} />;
+}
+
+function AdjuntoRoto() {
+  return (
+    <p className="rounded-lg border border-border bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+      No se pudo cargar el adjunto.
+    </p>
+  );
+}
+
+/** Imagen y sticker: eager — son livianas y SON el mensaje. El caché evita re-bajarlas. */
+function ImagenEnBurbuja({ media }: { media: MediaHilo }) {
   const { url: src, fallo } = useBlobAutenticado(urlMedia(media.archivo));
 
-  if (fallo) {
-    return (
-      <p className="rounded-lg border border-border bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-        No se pudo cargar el adjunto.
-      </p>
-    );
-  }
+  if (fallo) return <AdjuntoRoto />;
   if (!src) {
     return <div className="h-24 w-56 max-w-full animate-pulse rounded-lg bg-muted" aria-hidden="true" />;
   }
+  return (
+    <a href={src} target="_blank" rel="noreferrer" title="Ver completa">
+      <img
+        src={src}
+        alt={media.nombre ?? 'imagen recibida'}
+        className={
+          media.clase === 'sticker'
+            ? 'size-28 object-contain'
+            : 'max-h-72 w-full rounded-lg object-cover'
+        }
+        loading="lazy"
+      />
+    </a>
+  );
+}
 
-  if (media.clase === 'imagen' || media.clase === 'sticker') {
+/**
+ * Video y audio: NO se bajan al montar — un hilo con tres videos castigaría la
+ * pantalla principal. Se baja al primer toque y arranca solo (la vendedora ya
+ * apretó play una vez).
+ */
+function ReproducirBajoDemanda({ media }: { media: MediaHilo }) {
+  const { url: src, fallo, bajando, pedir } = useBlobAutenticado(urlMedia(media.archivo), {
+    alPedir: true,
+  });
+
+  if (fallo) return <AdjuntoRoto />;
+  if (src) {
+    return media.clase === 'video' ? (
+      <video src={src} controls autoPlay className="max-h-72 w-full rounded-lg" />
+    ) : (
+      <audio src={src} controls autoPlay className="w-56 max-w-full" />
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={pedir}
+      disabled={bajando}
+      className="flex w-56 max-w-full items-center gap-2.5 rounded-lg border border-border bg-muted/60 px-3 py-2.5 text-left transition-colors hover:bg-muted disabled:cursor-wait"
+    >
+      {bajando ? (
+        <Loader2 size={18} className="shrink-0 animate-spin text-navy" />
+      ) : (
+        <Play size={18} className="shrink-0 text-navy" />
+      )}
+      <span className="min-w-0">
+        <span className="block truncate text-xs font-semibold text-foreground">
+          {media.clase === 'video' ? 'Video' : 'Audio'}
+        </span>
+        <span className="block text-[11px] text-muted-foreground">
+          {bajando ? 'Bajando…' : 'Tocá para reproducir'}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+/**
+ * Documento (el flyer, el PDF del temario…): la bajada autenticada ocurre AL
+ * TOCAR la tarjeta, no al montar — y al llegar, se abre solo. Ya bajado, la
+ * tarjeta queda como link normal al blob.
+ */
+function DocumentoBajoDemanda({ media }: { media: MediaHilo }) {
+  const { url: src, fallo, bajando, pedir } = useBlobAutenticado(urlMedia(media.archivo), {
+    alPedir: true,
+  });
+  const abrirAlLlegar = useRef(false);
+
+  useEffect(() => {
+    if (src && abrirAlLlegar.current) {
+      abrirAlLlegar.current = false;
+      const a = document.createElement('a');
+      a.href = src;
+      a.download = media.nombre ?? media.archivo;
+      a.rel = 'noreferrer';
+      a.click();
+    }
+  }, [src, media.nombre, media.archivo]);
+
+  const cuerpo = (
+    <>
+      {bajando ? (
+        <Loader2 size={18} className="shrink-0 animate-spin text-navy" />
+      ) : (
+        <FileText size={18} className="shrink-0 text-navy" />
+      )}
+      <span className="min-w-0">
+        <span className="block truncate text-xs font-semibold text-foreground">{media.nombre ?? 'Documento'}</span>
+        <span className="block text-[11px] text-muted-foreground">
+          {fallo ? 'No se pudo bajar — tocá para reintentar' : bajando ? 'Bajando…' : `${media.mime ?? 'archivo'} · tocá para abrir`}
+        </span>
+      </span>
+    </>
+  );
+  const estilo =
+    'flex items-center gap-2.5 rounded-lg border border-border bg-muted/60 px-3 py-2.5 text-left transition-colors hover:bg-muted';
+
+  if (src) {
     return (
-      <a href={src} target="_blank" rel="noreferrer" title="Ver completa">
-        <img
-          src={src}
-          alt={media.nombre ?? 'imagen recibida'}
-          className={
-            media.clase === 'sticker'
-              ? 'size-28 object-contain'
-              : 'max-h-72 w-full rounded-lg object-cover'
-          }
-          loading="lazy"
-        />
+      <a href={src} target="_blank" rel="noreferrer" download={media.nombre ?? undefined} className={estilo}>
+        {cuerpo}
       </a>
     );
   }
-  if (media.clase === 'video') {
-    return <video src={src} controls preload="metadata" className="max-h-72 w-full rounded-lg" />;
-  }
-  if (media.clase === 'audio') {
-    return <audio src={src} controls preload="metadata" className="w-56 max-w-full" />;
-  }
-  // Documento (el flyer, el PDF del temario…): tarjeta con nombre y descarga.
   return (
-    <a
-      href={src}
-      target="_blank"
-      rel="noreferrer"
-      download={media.nombre ?? undefined}
-      className="flex items-center gap-2.5 rounded-lg border border-border bg-muted/60 px-3 py-2.5 transition-colors hover:bg-muted"
+    <button
+      type="button"
+      disabled={bajando}
+      onClick={() => {
+        abrirAlLlegar.current = true;
+        pedir();
+      }}
+      className={`${estilo} disabled:cursor-wait`}
     >
-      <FileText size={18} className="shrink-0 text-navy" />
-      <span className="min-w-0">
-        <span className="block truncate text-xs font-semibold text-foreground">{media.nombre ?? 'Documento'}</span>
-        <span className="block text-[11px] text-muted-foreground">{media.mime ?? 'archivo'} · tocá para abrir</span>
-      </span>
-    </a>
+      {cuerpo}
+    </button>
   );
 }
 

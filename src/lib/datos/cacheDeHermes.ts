@@ -1,6 +1,7 @@
 import { almacenIdb } from './almacenIdb';
 import { agrupandoEscrituras, arrancarCache, crearPersistidor, olvidarCache } from './persistencia';
 import { queryClient } from './cliente';
+import { limpiarBlobsAutenticados } from './blobAutenticado';
 
 /**
  * DÓNDE SE ARMA EL CACHÉ PERSISTENTE: la política de `persistencia.ts` sobre el
@@ -15,4 +16,8 @@ const persistidor = agrupandoEscrituras(crearPersistidor(almacenIdb));
 export const arrancarCacheDeHermes = () => arrancarCache(queryClient, persistidor);
 
 /** Cierre de sesión: lo de una vendedora no lo hereda la siguiente. */
-export const olvidarCacheDeHermes = () => olvidarCache(queryClient, persistidor);
+export const olvidarCacheDeHermes = () => {
+  // Los blobs de media (fotos, adjuntos) también son de SU sesión.
+  limpiarBlobsAutenticados();
+  return olvidarCache(queryClient, persistidor);
+};

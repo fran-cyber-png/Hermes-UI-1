@@ -34,6 +34,15 @@ igual que el resto del server») quedó fosilizado de la época del portátil.
    caduca a mitad de sesión (un link de descarga abierto tarde fallaría). Todo componente que
    muestre media del server pasa por ese hook.
 
+   **El trade-off asumido: el blob se baja ENTERO.** No hay streaming por rango (`Range`), así que
+   `preload="metadata"` deja de servir y un video no puede empezar a reproducirse antes de tener el
+   archivo completo. Cómo se contiene el costo: **imágenes y stickers son eager** (livianos, SON el
+   mensaje); **video, audio y documentos se bajan recién cuando la vendedora los toca** (`alPedir`);
+   y hay **un caché LRU compartido** (`cacheDeBlobs.ts`, 250 entradas, dueño único de la
+   revocación, se vacía al cerrar sesión) que deduplica bajadas concurrentes y hace que cambiar de
+   chat y volver no re-baje nada. Si algún día un hilo necesita scrubbing de videos largos, la
+   salida es un endpoint con token corto de un solo uso — no reabrir la media.
+
 3. **El tiempo real deja EventSource** (`src/lib/datos/tiempoReal.ts` + `sse.ts`): los eventos de
    mensaje llevan el teléfono del contacto (PII), así que `/api/stream` también quedó detrás del
    perímetro — y EventSource no puede mandar `Authorization`. Se consume con `fetch` (que sí) y un
