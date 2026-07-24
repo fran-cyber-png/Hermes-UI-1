@@ -20,10 +20,10 @@ import { iniciales } from '../../lib/iniciales';
 function useFotoPerfil(telefono: string | null | undefined): string | null {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
-    if (!telefono) {
-      setUrl(null);
-      return;
-    }
+    // Limpiar la foto del contacto ANTERIOR al cambiar de chat. Sin esto, si el
+    // contacto nuevo no tiene foto (404), la del anterior se quedaba pegada.
+    setUrl(null);
+    if (!telefono) return;
     let vivo = true;
     let objectUrl: string | null = null;
     const token = localStorage.getItem('hermes.token');
@@ -32,7 +32,7 @@ function useFotoPerfil(telefono: string | null | undefined): string | null {
     })
       .then((r) => (r.ok ? r.blob() : null))
       .then((blob) => {
-        if (blob && vivo) {
+        if (vivo && blob) {
           objectUrl = URL.createObjectURL(blob);
           setUrl(objectUrl);
         }
