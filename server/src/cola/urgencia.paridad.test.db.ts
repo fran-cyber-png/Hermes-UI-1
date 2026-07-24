@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { baseDePrueba } from "../pruebas/base.js";
 import { sembrarComentario, sembrarMensaje, sembrarRecordatorio } from "../pruebas/sembrar.js";
 import { consultarCola } from "./consultarCola.js";
+import { consultarRadar } from "./consultarRadar.js";
 import { claveUrgencia, ordenarPorUrgencia, type ItemUrgencia } from "./urgencia.js";
 
 /**
@@ -150,6 +151,36 @@ describe("paridad SQL ≡ TS de la urgencia (#37)", () => {
     for (const fila of filas) {
       assert.equal(fila.nivel, 3, `${fila.persona_id} tendría que seguir en ESPERA, no en VENCIDO`);
     }
+  });
+
+  test("los DOS CAMINOS del issue: la cola (SQL) y el radar (ordenarRadar) ordenan igual el mismo conjunto", async (t) => {
+    // La verificación literal de #37: un conjunto que cubre los seis niveles,
+    // pedido por los dos caminos, tiene que salir en el MISMO orden. A
+    // diferencia de sembrarSeisNiveles, acá todo cae dentro de la ventana de
+    // 7 días del radar (su «resto» es un comentario respondido, no uno viejo).
+    const db = await baseDePrueba(t);
+    await sembrarMensaje(db, { personaId: "p-vivo", occurredAt: hace(2) });
+    await sembrarMensaje(db, { personaId: "p-vencido", occurredAt: hace(6 * 24) });
+    await sembrarRecordatorio(db, {
+      clave: `conv:whatsapp:p-vencido:${NUMERO}`,
+      cuando: hace(4),
+    });
+    await sembrarComentario(db, { personaId: "p-expira", occurredAt: hace(10) });
+    await sembrarMensaje(db, { personaId: "p-espera", occurredAt: hace(3 * 24) });
+    await sembrarMensaje(db, { personaId: "p-silencio", occurredAt: hace(26) });
+    await sembrarMensaje(db, { personaId: "p-silencio", direccion: "saliente", occurredAt: hace(1) });
+    await sembrarComentario(db, { personaId: "p-resto", occurredAt: hace(2), status: "contactado" });
+
+    const cola = (await consultarCola(db, {})).conversaciones as Fila[];
+    const radar = await consultarRadar(db);
+
+    assert.deepEqual(
+      cola.map((f) => f.clave),
+      radar.map((f) => f.clave),
+      "Mensajes y Dashboard tienen que mostrar el mismo orden para lo mismo",
+    );
+    assert.deepEqual(cola.map((f) => f.nivel), [0, 1, 2, 3, 4, 5]);
+    assert.deepEqual(radar.map((f) => f.nivel), [0, 1, 2, 3, 4, 5]);
   });
 
   test("con varios seguimientos pendientes manda el más viejo", async (t) => {

@@ -97,3 +97,29 @@ describe('el orden del radar', () => {
     assert.deepEqual(filas, copia);
   });
 });
+
+describe('el seguimiento agendado llega al ordenador (#38)', () => {
+  test('una fila con seguimiento vencido sube a VENCIDO: debajo de lo vivo, arriba de lo demás', () => {
+    // El bug de #38: el constructor de items no pasaba seguimiento_en, así que
+    // VENCIDO no se disparaba nunca aunque la función pura lo supiera calcular.
+    const vivo = fila('vivo', { referencia: hDe(1) });
+    const vencida = fila('vencida', { referencia: dDe(4), seguimiento_en: dDe(1) });
+    const expira = fila('expira', { tipo: 'comentario', ventana_abierta: true, referencia: dDe(5) });
+
+    const orden = ordenarRadar([expira, vencida, vivo], AHORA);
+    assert.deepEqual(orden.map((f) => f.clave), ['vivo', 'vencida', 'expira']);
+    assert.equal(orden[1]?.nivel, 1);
+  });
+
+  test('el seguimiento llega como texto ISO desde Postgres, igual que referencia', () => {
+    const conTexto = fila('iso', { referencia: dDe(4), seguimiento_en: hDe(2) });
+    assert.equal(ordenarRadar([conTexto], AHORA)[0]?.nivel, 1);
+  });
+
+  test('sin seguimiento (null o ausente) nada cambia: la fila sigue su curso', () => {
+    const sinCampo = fila('sin-campo', { referencia: dDe(3) });
+    const conNull = fila('con-null', { referencia: dDe(3), seguimiento_en: null });
+    assert.equal(ordenarRadar([sinCampo], AHORA)[0]?.nivel, 3);
+    assert.equal(ordenarRadar([conNull], AHORA)[0]?.nivel, 3);
+  });
+});

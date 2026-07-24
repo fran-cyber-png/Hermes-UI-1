@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { db } from "../db/client.js";
 import { ordenarRadar } from "./radar.js";
+import { seguimientosPendientesSql } from "./urgenciaSql.js";
 
 /**
  * LAS CONVERSACIONES DEL RADAR — el seam que la ruta del Dashboard consulta.
@@ -32,6 +33,8 @@ export type ChatRadar = {
   respondida: boolean;
   referencia: string;
   cayo_at: string;
+  /** El pendiente más viejo de la agenda para esta clave — NULL si no hay. */
+  seguimiento_en: string | null;
 };
 
 export async function consultarRadar(
@@ -113,8 +116,15 @@ export async function consultarRadar(
         i.occurred_at AS cayo_at
       FROM interactions i
       WHERE i.tipo = 'comentario' AND i.occurred_at > now() - interval '7 days'
+    ),
+    -- La agenda entra al radar por acá (#38): sin este JOIN, el nivel VENCIDO
+    -- no se dispara nunca y los seguimientos no influyen en el orden de nada.
+    seguimientos AS (
+      ${seguimientosPendientesSql}
     )
-    SELECT * FROM (SELECT * FROM conv UNION ALL SELECT * FROM comentarios) t
+    SELECT t.*, s.seguimiento_en
+    FROM (SELECT * FROM conv UNION ALL SELECT * FROM comentarios) t
+    LEFT JOIN seguimientos s USING (clave)
     -- Este orden NO es el que ve la vendedora: solo elige QUÉ 60 filas viajan.
     -- El orden real lo decide ordenarRadar abajo, con el módulo de urgencia.
     -- El tope de 60 se hereda tal cual: hoy el front ya ordenaba estas mismas 60,

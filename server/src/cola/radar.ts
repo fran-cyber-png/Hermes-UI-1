@@ -27,6 +27,13 @@ export interface FilaRadar {
   ventana_abierta: boolean;
   /** Postgres devuelve timestamps como texto ISO; se convierten acá, no antes. */
   referencia: string | Date;
+  /**
+   * El seguimiento agendado más viejo que sigue pendiente, si hay uno — de
+   * `recordatorios` por clave. Sin este campo el nivel VENCIDO no existe: fue
+   * el bug de #38 (el tipo ni lo tenía, así que nadie notó que no llegaba).
+   * Opcional porque los leads de formulario no cargan agenda.
+   */
+  seguimiento_en?: string | Date | null;
 }
 
 function itemDe(fila: FilaRadar): ItemUrgencia {
@@ -35,6 +42,12 @@ function itemDe(fila: FilaRadar): ItemUrgencia {
     ventanaAbierta: fila.ventana_abierta,
     respondida: fila.respondida,
     referencia: fila.referencia instanceof Date ? fila.referencia : new Date(fila.referencia),
+    seguimientoEn:
+      fila.seguimiento_en == null
+        ? null
+        : fila.seguimiento_en instanceof Date
+          ? fila.seguimiento_en
+          : new Date(fila.seguimiento_en),
   };
 }
 
