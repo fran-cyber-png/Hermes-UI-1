@@ -21,13 +21,23 @@ import { ficha } from '../cerberus/ficha.js';
 const TOPE = Number(process.argv[2] ?? 80);
 
 async function main() {
+  // El ORDER BY md5(...) NO es decoración: un DISTINCT + LIMIT sin orden deja
+  // que el planner devuelva sistemáticamente los teléfonos lexicográficamente
+  // más chicos (verificado contra el índice de interactions) — una muestra
+  // sesgada decidiendo si el correo de cotización «nace muerto». md5 da una
+  // muestra insesgada Y reproducible entre corridas (mejor que random() para
+  // pegar la evidencia). Va en subquery porque en un SELECT DISTINCT el ORDER
+  // BY solo puede usar expresiones de la lista de selección.
   const filas = await db.execute<{ telefono: string }>(sql`
-    SELECT DISTINCT persona_id AS telefono
-    FROM interactions
-    WHERE canal = 'whatsapp'
-      AND direccion = 'entrante'
-      AND persona_id ~ '^[0-9]{8,}$'
-      AND occurred_at > now() - interval '30 days'
+    SELECT telefono FROM (
+      SELECT DISTINCT persona_id AS telefono
+      FROM interactions
+      WHERE canal = 'whatsapp'
+        AND direccion = 'entrante'
+        AND persona_id ~ '^[0-9]{8,}$'
+        AND occurred_at > now() - interval '30 days'
+    ) sub
+    ORDER BY md5(telefono)
     LIMIT ${TOPE}
   `);
   console.log(`Muestra: ${filas.length} teléfonos únicos de WhatsApp (entrantes, últimos 30 días)`);
