@@ -18,7 +18,17 @@ import { ficha } from '../cerberus/ficha.js';
  * no imprime teléfonos ni correos: solo los agregados.
  */
 
-const TOPE = Number(process.argv[2] ?? 80);
+// El tope de la muestra. Validado ACÁ: un argumento no numérico llegaba hasta
+// Postgres como «LIMIT NaN» y moría con un error críptico del planner.
+const argTope = process.argv[2];
+const TOPE = argTope === undefined ? 80 : Number(argTope);
+if (!Number.isInteger(TOPE) || TOPE < 1) {
+  console.error(
+    `El tope de la muestra tiene que ser un entero positivo — recibí «${argTope}».\n` +
+      'Uso: npm run medir:correo [-- <tope>]   (por defecto, 80)',
+  );
+  process.exit(1);
+}
 
 async function main() {
   // El ORDER BY md5(...) NO es decoración: un DISTINCT + LIMIT sin orden deja
