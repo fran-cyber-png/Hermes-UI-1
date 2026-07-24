@@ -559,10 +559,12 @@ export const notas = pgTable(
   (t) => [
     index("notas_clave_idx").on(t.clave, t.creadoAt),
     index("notas_vendedora_idx").on(t.vendedoraId, t.creadoAt),
-    // La búsqueda de la libreta es GIN sobre to_tsvector('spanish', texto) — drizzle-kit
-    // no la emite (no hay expression index para tsvector en el dialecto pg-core de
-    // drizzle-orm 0.45): se crea A MANO tras `db:push`. Ver docs/deploy-vps1.md.
-    // Sin ella, GET /api/notas?q= degrada a seq scan — no revienta, solo es lento.
+    // La búsqueda de la libreta es GIN sobre to_tsvector('spanish', texto). drizzle-kit
+    // sigue sin emitirlo (no hay expression index para tsvector en el pg-core de
+    // drizzle-orm 0.45), pero ya NO se crea a mano: vive escrito en la migración
+    // `drizzle/0000_baseline.sql`. Mientras dependía de un paso manual post-`db:push`,
+    // producción lo tenía y una base nueva no — el único drift real que había.
+    // Sin él, GET /api/notas?q= degrada a seq scan — no revienta, solo es lento.
   ],
 );
 

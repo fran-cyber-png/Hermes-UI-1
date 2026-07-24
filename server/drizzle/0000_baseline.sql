@@ -488,4 +488,12 @@ CREATE INDEX "leads_email_idx" ON "leads" USING btree ("email");--> statement-br
 CREATE INDEX "notas_clave_idx" ON "notas" USING btree ("clave","creado_at");--> statement-breakpoint
 CREATE INDEX "notas_vendedora_idx" ON "notas" USING btree ("vendedora_id","creado_at");--> statement-breakpoint
 CREATE INDEX "numero_vendedora_vendedora_idx" ON "numero_vendedora" USING btree ("vendedora_id");--> statement-breakpoint
-CREATE INDEX "recordatorios_agenda_idx" ON "recordatorios" USING btree ("vendedora_id","estado","cuando");
+CREATE INDEX "recordatorios_agenda_idx" ON "recordatorios" USING btree ("vendedora_id","estado","cuando");--> statement-breakpoint
+-- AGREGADO A MANO, igual que la extensión de arriba: drizzle-orm 0.45 no emite índices
+-- de expresión en pg-core, así que este GIN se venía creando por SSH después de cada
+-- `db:push` (ver el comentario en src/db/schema.ts y docs/deploy-vps1.md). Producción
+-- lo tiene; una base recién creada NO lo tenía, y ese era el único drift real entre
+-- prod y el schema declarado — lo encontró el diff contra staging.
+-- Acá deja de ser un paso manual olvidable y pasa a ser parte de la migración.
+-- Sin él, GET /api/notas?q= degrada a seq scan.
+CREATE INDEX IF NOT EXISTS "notas_texto_gin_idx" ON "notas" USING gin (to_tsvector('spanish', "texto"));
