@@ -1,7 +1,8 @@
 import { Router } from 'express';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { gestiones, etiquetas, intereses, conversionesWa } from '../db/schema.js';
+import { ultimasGestionesSql } from '../cola/etapaEfectivaSql.js';
 import { requiereVendedora } from '../auth/sesion.js';
 import {
   ACCIONES,
@@ -78,14 +79,21 @@ gestionesRouter.get('/de/:clave', async (req, res) => {
   res.json({ gestiones: filas, etapa: filas[0] ? normalizarEtapa(filas[0].etapa) : null });
 });
 
-/** El mapa clave → etapa actual (normalizada), para el Embudo y el Dashboard. */
+/**
+ * El mapa clave → etapa actual (normalizada), para el Embudo viejo.
+ *
+ * El DISTINCT ON canónico vive en el seam (`cola/etapaEfectivaSql.ts`): acá se
+ * consume, no se re-escribe — espejarlo a mano es la clase de bug de #37 (este
+ * endpoint ya había divergido: le faltaba el desempate por `id`).
+ *
+ * CANDIDATO A RETIRO: cuando el tablero honesto (#122) llegue a producción, el
+ * front lee `etapa_efectiva` de la cola y este mapa pierde su único consumidor.
+ */
 gestionesRouter.get('/etapas', async (_req, res) => {
-  const filas = await db.execute<{ clave: string; etapa: string }>(sql`
-    SELECT DISTINCT ON (clave) clave, etapa
-    FROM gestiones
-    ORDER BY clave, creado_at DESC
-  `);
-  res.json({ etapas: Object.fromEntries(filas.map((f) => [f.clave, normalizarEtapa(f.etapa)])) });
+  const filas = await db.execute<{ clave: string; etapa_manual: string }>(ultimasGestionesSql);
+  res.json({
+    etapas: Object.fromEntries(filas.map((f) => [f.clave, normalizarEtapa(f.etapa_manual)])),
+  });
 });
 
 // ── Intereses: qué curso(s) quiere. La compuerta de "cotizado". ────────────
