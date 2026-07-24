@@ -8,7 +8,7 @@ import { archivarNota, buscarNotas, crearNota, desarchivarNota, editarNota, list
  * Tests con base (#33) de la lógica de notas (#47): crear → editar (setea
  * `editadoAt`) → archivar (sigue en la base) → desarchivar (el camino de
  * vuelta); guarda de autora; búsqueda por término sobre la libreta de CADA
- * vendedora; y la mezcla con las notas históricas de `gestiones` (ADR 0011 —
+ * vendedora; y la mezcla con las notas históricas de `gestiones` (ADR 0012 —
  * retirar el textarea de `RegistrarGestion` no puede volver invisible lo que
  * ya estaba guardado ahí).
  */
@@ -147,7 +147,7 @@ test('desarchivarNota sobre una nota que NO está archivada devuelve no-encontra
   assert.equal(!r.ok && r.motivo, 'no-encontrada');
 });
 
-// ── Notas históricas (`gestiones.notas`, ADR 0011) ──────────────────────────
+// ── Notas históricas (`gestiones.notas`, ADR 0012) ──────────────────────────
 
 test('listarNotas mezcla lo editable con lo histórico de gestiones.notas, marcado origen:"gestion"', async (t) => {
   const db = await baseDePrueba(t);

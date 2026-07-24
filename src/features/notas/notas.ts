@@ -27,7 +27,7 @@ export interface Nota {
   /**
    * 'nota' = editable, de la tabla `notas`. 'gestion' = HISTÓRICA — el texto
    * que quedó en `gestiones.notas` antes de #47 (el viejo textarea de
-   * `RegistrarGestion`), solo lectura: no tiene PATCH posible (ver ADR 0011).
+   * `RegistrarGestion`), solo lectura: no tiene PATCH posible (ver ADR 0012).
    * `id` de una histórica es el id de esa fila de `gestiones`, no de `notas`.
    */
   origen: 'nota' | 'gestion';

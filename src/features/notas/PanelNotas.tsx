@@ -17,7 +17,7 @@ import { LIMITE_TEXTO, useBuscarNotas, useMutacionesNotas, useNotas, type Nota }
  * NO tiene botón «Enviar»: una libreta no es un enviador. Si se pareciera a
  * una Respuesta rápida, rompería «un envío = una acción humana».
  *
- * Cada fila puede venir de dos orígenes (ADR 0011): `'nota'` (editable) o
+ * Cada fila puede venir de dos orígenes (ADR 0012): `'nota'` (editable) o
  * `'gestion'` — HISTÓRICA, lo que quedó en `gestiones.notas` antes de #47.
  * Las históricas se muestran de solo lectura: retirar el textarea viejo no
  * puede volverlas invisibles.

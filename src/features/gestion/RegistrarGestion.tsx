@@ -18,7 +18,7 @@ import { useNotas } from '../notas/notas';
  * Las NOTAS de acuerdos vivían acá (un textarea append-only dentro de cada
  * gestión) — issue #47 las saca a `PanelNotas`, editable y sin mover el
  * embudo. El preview de «última nota» del cintillo de abajo ahora lee de ahí,
- * no de `gestiones.notas` (ver ADR 0011).
+ * no de `gestiones.notas` (ver ADR 0012).
  */
 
 const ETAPA_LABEL: Record<string, string> = {

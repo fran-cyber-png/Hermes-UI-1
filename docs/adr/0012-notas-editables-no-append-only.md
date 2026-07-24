@@ -1,4 +1,4 @@
-# ADR 0011 — Las notas son una tabla EDITABLE aparte, no un campo dentro de `gestiones`
+# ADR 0012 — Las notas son una tabla EDITABLE aparte, no un campo dentro de `gestiones`
 
 - **Fecha:** 2026-07-23
 - **Estado:** aceptado

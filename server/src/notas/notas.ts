@@ -66,7 +66,7 @@ export function prepararEdicion(cambios: { texto?: unknown; fijada?: unknown }, 
 /**
  * Una nota tal como la ve la UI: de la tabla `notas` (editable) o HISTÓRICA —
  * el textarea append-only que `RegistrarGestion` tenía antes de #47, vive en
- * `gestiones.notas` (ver ADR 0011). Esas NO se migran (perderían su fecha real,
+ * `gestiones.notas` (ver ADR 0012). Esas NO se migran (perderían su fecha real,
  * o se duplicarían por cada gestión de la misma conversación): se SURFACEAN acá
  * de solo lectura, para que retirar el textarea no las vuelva invisibles.
  */

@@ -328,7 +328,7 @@ export interface GestionSembrada {
 /**
  * Siembra una GESTIÓN (la bitácora comercial, append-only) — para los tests de
  * `listarNotas` que mezclan lo editable con lo histórico de `gestiones.notas`
- * (#47, ver ADR 0011). No usa el seam de gestiones (no lo necesita: es solo
+ * (#47, ver ADR 0012). No usa el seam de gestiones (no lo necesita: es solo
  * fixture) — inserta directo, como el resto de `sembrar.ts`.
  */
 export async function sembrarGestion(db: DbDePrueba, g: GestionSembrada): Promise<number> {
