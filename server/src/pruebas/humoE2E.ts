@@ -119,11 +119,17 @@ async function main(): Promise<void> {
     const { status, texto } = await pedir("/api/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ usuario: "smoke-no-existe", clave: "smoke-no-existe" }),
+      // `username`/`password`, los nombres que espera el router: con otros nombres da
+      // 400 por validación y no se llega a tocar Cerberus — o sea, no probaría nada.
+      body: JSON.stringify({ username: "smoke-no-existe", password: "smoke-no-existe" }),
     });
-    // 401 = Cerberus contestó y rechazó, que es lo que queremos. Un 5xx significa que
-    // el handshake se rompió: el login de las vendedoras está caído.
-    return { ok: status === 401, detalle: `${status} ${status >= 500 ? texto : ""}`.trim() };
+    // 401 = Cerberus contestó y rechazó: es lo que queremos. 503 = el router detectó a
+    // Cerberus caído, y eso significa que NINGUNA vendedora puede entrar ahora mismo.
+    const detalle =
+      status === 503
+        ? `503 · CERBERUS CAÍDO — nadie puede loguearse: ${texto}`
+        : `${status} ${status >= 500 ? texto : ""}`.trim();
+    return { ok: status === 401, detalle };
   });
 
   // ── 6. Con sesión: las pantallas que usa la vendedora contestan de verdad ──
@@ -153,8 +159,12 @@ async function main(): Promise<void> {
     for (const [nombre, ruta] of [
       ["el radar del dashboard", "/api/dashboard"],
       ["la agenda", "/api/agenda"],
-      ["las notas", "/api/notas"],
       ["las categorías", "/api/categorias"],
+      // `?q=` a propósito, no `?clave=`: esa rama es la búsqueda GIN sobre
+      // to_tsvector, o sea que ejercita el índice `notas_texto_gin_idx`. Si la
+      // migración no lo creó, esto sigue dando 200 pero por seq scan — no lo
+      // detecta; lo que sí detecta es que la ruta de búsqueda no reviente.
+      ["la búsqueda de notas", "/api/notas?q=smoke"],
     ] as const) {
       await revisar(`${nombre} responde`, esperaStatus(ruta, 200, auth));
     }
