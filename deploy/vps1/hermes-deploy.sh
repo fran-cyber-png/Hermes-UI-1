@@ -123,13 +123,18 @@ fi
 # ── Respaldo de la base, ANTES de migrar ────────────────────────────────────────
 # Solo si el rango trae migraciones: un dump por cada deploy de código sería ruido.
 if [ -n "$TRAE_MIGRACION" ] && [ "$MIGRAR" -eq 1 ]; then
+  # Usuario y base salen del DATABASE_URL, que es la única fuente de verdad de a qué
+  # base le habla el server. La contraseña de esa URL no se toca: `docker exec` entra
+  # al contenedor, donde la autenticación local ya está resuelta.
+  DBU="$(sed -n 's|^DATABASE_URL=||p' "$RAIZ/server/.env")"
+  DBUSER="$(printf '%s' "$DBU" | sed -E 's|postgresql://([^:]+):.*|\1|')"
+  DBNAME="$(printf '%s' "$DBU" | sed -E 's|.*/([^/?]+)$|\1|')"
+  [ -n "$DBUSER" ] && [ -n "$DBNAME" ] || fallar "no pude leer usuario/base del DATABASE_URL de $RAIZ/server/.env"
+
   mkdir -p "$DIR_RESPALDOS"
   chown "$USUARIO":hermes "$DIR_RESPALDOS" 2>/dev/null || true
   ARCHIVO="$DIR_RESPALDOS/hermes_db-$(date +%Y%m%d-%H%M%S)-pre-${NUEVO:0:8}.sql.gz"
   decir "trae migraciones → respaldando la base en $ARCHIVO"
-  DBU="$(sed -n 's|^DATABASE_URL=||p' "$RAIZ/server/.env")"
-  DBUSER="$(printf '%s' "$DBU" | sed -E 's|postgresql://([^:]+):.*|\1|')"
-  DBNAME="$(printf '%s' "$DBU" | sed -E 's|.*/([^/?]+)$|\1|')"
   docker exec "$CONTENEDOR_DB" pg_dump -U "$DBUSER" -d "$DBNAME" | gzip > "$ARCHIVO" \
     || fallar "el respaldo falló — NO sigo con una migración sin red"
   chown "$USUARIO":hermes "$ARCHIVO" 2>/dev/null || true
@@ -153,6 +158,20 @@ if [ -n "$CAMBIO_DEPS_RAIZ" ] || [ "$ROLLBACK" -eq 1 ]; then
 fi
 
 if [ -n "$TRAE_MIGRACION" ] && [ "$MIGRAR" -eq 1 ]; then
+  # Guardia: una base que existía ANTES de las migraciones no tiene la tabla de
+  # registro, así que `migrate` intentaría aplicar el baseline y moriría en el primer
+  # `CREATE TABLE` con un error que no dice nada de lo que pasa. Se detecta antes y se
+  # dice qué hacer. Ver docs/migraciones.md §«Adoptar una base que ya existía».
+  REGISTRO="$(docker exec "$CONTENEDOR_DB" psql -U "$DBUSER" -d "$DBNAME" -tAc \
+    "select to_regclass('drizzle.__drizzle_migrations') is not null" 2>/dev/null | tr -d '[:space:]')"
+  if [ "$REGISTRO" = "f" ]; then
+    fallar "la base no tiene drizzle.__drizzle_migrations: nunca se adoptó el baseline.
+       Migrar ahora intentaría recrear tablas que ya existen.
+       Corré primero (y leé docs/migraciones.md antes):
+         cd $RAIZ/server && npm run db:adoptar        # dice qué haría
+         cd $RAIZ/server && npm run db:adoptar -- --si"
+  fi
+
   decir "aplicando migraciones"
   como_deploy bash -c "cd '$RAIZ/server' && npm run db:migrate" \
     || fallar "la migración falló. La base quedó como estaba salvo lo que alcanzó a aplicar; el respaldo está en $DIR_RESPALDOS. NO reinicié el servicio."
