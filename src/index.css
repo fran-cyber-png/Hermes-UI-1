@@ -52,6 +52,19 @@
   --gold: #FFC800;
   --gold-ink: #CAA106;
 
+  /* CATEGORÍAS — la paleta fija de las etiquetas con color elegible (#48).
+     Armoniosa y SIN ORO a propósito: el oro es señal de tiempo que se acaba, no
+     decoración. Se excluye toda la familia ámbar/amarillo. Genérica de nombre:
+     la reusa el chip de curso (#72). */
+  --cat-pizarra: #64748B;
+  --cat-rojo: #DC2626;
+  --cat-naranja: #EA580C;
+  --cat-verde: #16A34A;
+  --cat-azul: #2563EB;
+  --cat-cian: #0891B2;
+  --cat-morado: #7C3AED;
+  --cat-rosa: #DB2777;
+
   /* Única excepción documentada: color de marca externa (Meta), para el CTA
      "Ver en Ads Manager" — ver crear_campana.html en goberna-dashboard. */
   --meta-blue: #1877F2;
@@ -96,6 +109,14 @@
   --color-navy-muted: var(--navy-muted);
   --color-gold: var(--gold);
   --color-gold-ink: var(--gold-ink);
+  --color-cat-pizarra: var(--cat-pizarra);
+  --color-cat-rojo: var(--cat-rojo);
+  --color-cat-naranja: var(--cat-naranja);
+  --color-cat-verde: var(--cat-verde);
+  --color-cat-azul: var(--cat-azul);
+  --color-cat-cian: var(--cat-cian);
+  --color-cat-morado: var(--cat-morado);
+  --color-cat-rosa: var(--cat-rosa);
   --color-meta-blue: var(--meta-blue);
   --color-meta-blue-hover: var(--meta-blue-hover);
   --color-temp-fresco: var(--temp-fresco);

@@ -4,6 +4,7 @@ import {
   bigserial,
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   primaryKey,
@@ -469,5 +470,46 @@ export const numeroVendedora = pgTable(
   (t) => [
     primaryKey({ columns: [t.numero, t.vendedoraId] }),
     index("numero_vendedora_vendedora_idx").on(t.vendedoraId),
+  ],
+);
+
+/**
+ * CATEGORÍAS — el catálogo de etiquetas con color, POR VENDEDORA (#48, ADR 0011).
+ *
+ * Las etiquetas de texto libre subieron de nivel: pasan a ser CATEGORÍAS con
+ * color elegible. Esta tabla es el CATÁLOGO (el nombre + su color + si es
+ * favorita + el orden), personal de cada vendedora — se keyea por `vendedora_id`
+ * igual que `gestiones`/`recordatorios`.
+ *
+ * OJO — la ASIGNACIÓN (qué conversación lleva qué categoría) sigue viviendo en
+ * `etiquetas` (compartida por el equipo, sin tocar). La identidad-por-string es
+ * el puente: `etiquetas.etiqueta` matchea `categorias.nombre` y se resuelve AL
+ * COLOR DE QUIEN MIRA (`categorias.vendedora_id = <viewer>`). Una etiqueta cuyo
+ * string no matchea ninguna categoría del que mira se pinta neutra. El color lo
+ * resuelve el front con el mapa de `GET /api/categorias`; la tabla compartida no
+ * se toca.
+ *
+ * `color` guarda la CLAVE de la paleta fija (`azul`, `rojo`…), validada por Zod
+ * contra `categorias/paleta.ts`. Nunca oro: el oro es tiempo que se acaba.
+ */
+export const categorias = pgTable(
+  "categorias",
+  {
+    id: bigserial({ mode: "number" }).primaryKey(),
+    /** Personal: cada vendedora tiene su libreta. La 2ª vendedora arranca vacía (seed perezoso). */
+    vendedoraId: text("vendedora_id").notNull(),
+    /** ≤30, trim+lowercase — es la clave de join contra `etiquetas.etiqueta`. */
+    nombre: text("nombre").notNull(),
+    /** Clave de la paleta fija (`categorias/paleta.ts`), validada por Zod enum. Sin oro. */
+    color: text("color").notNull(),
+    /** Chip candidato de la barra/cola (los filtros de favoritas son de #49). */
+    esFavorito: boolean("es_favorito").notNull().default(false),
+    /** Orden manual del catálogo. */
+    orden: integer("orden").notNull().default(0),
+    creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique().on(t.vendedoraId, t.nombre),
+    index("categorias_vendedora_idx").on(t.vendedoraId, t.orden),
   ],
 );
