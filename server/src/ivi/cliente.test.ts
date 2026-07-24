@@ -5,6 +5,7 @@ import {
   ErrorIvi,
   preguntarleAIvi,
   respuestaIviSchema,
+  TIMEOUT_MS,
   type RespuestaIvi,
   type TurnoHistorial,
 } from './cliente.js';
@@ -49,6 +50,24 @@ function fetchQueEstalla(err: unknown): typeof fetch {
   return async () => {
     throw err;
   };
+}
+
+/**
+ * Un `fetch` falso que SÍ resuelve con una Response 200, pero cuya lectura del
+ * body (`.json()`) es la que estalla — el caso del #98: el mismo AbortSignal
+ * sigue armado mientras se lee el body, así que un timeout ahí no es lo mismo
+ * que un JSON roto.
+ */
+function fetchConBodyQueEstalla(err: unknown): typeof fetch {
+  return async () =>
+    new Response(
+      new ReadableStream({
+        pull(controller) {
+          controller.error(err);
+        },
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
 }
 
 describe('preguntarleAIvi — arma el request', () => {
@@ -144,12 +163,25 @@ describe('preguntarleAIvi — fail-closed y ruidoso', () => {
     );
   });
 
-  test('fallo de red → RED', async () => {
-    const fake = fetchQueEstalla(new TypeError('fetch failed'));
+  test('timeout durante la LECTURA del body → TIMEOUT, no RESPUESTA_INVALIDA (#98)', async () => {
+    const fake = fetchConBodyQueEstalla(new DOMException('tardó demasiado', 'TimeoutError'));
     await assert.rejects(
       () => preguntarleAIvi('q', 'ana', undefined, { ...CONFIG_OK, fetch: fake }),
-      (e: unknown) => e instanceof ErrorIvi && e.codigo === CODIGO_ERROR_IVI.RED,
+      (e: unknown) => e instanceof ErrorIvi && e.codigo === CODIGO_ERROR_IVI.TIMEOUT,
     );
+  });
+
+  test('fallo de red → RED, con la causa original preservada (no se descarta, #98)', async () => {
+    const causa = new TypeError('fetch failed');
+    const fake = fetchQueEstalla(causa);
+    await assert.rejects(
+      () => preguntarleAIvi('q', 'ana', undefined, { ...CONFIG_OK, fetch: fake }),
+      (e: unknown) => e instanceof ErrorIvi && e.codigo === CODIGO_ERROR_IVI.RED && e.cause === causa,
+    );
+  });
+
+  test('el presupuesto de tiempo es 30 s — fijado por test, no puede cambiar sin querer (#98)', () => {
+    assert.equal(TIMEOUT_MS, 30_000);
   });
 
   test('cuerpo que no cumple el contrato → RESPUESTA_INVALIDA (nunca «no hay datos»)', async () => {
