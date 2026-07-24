@@ -39,7 +39,7 @@ export function normalizarIntereses(d: RespuestaIntereses, clave: string): Inter
 
 const MESES_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
-export interface GrupoTimeline {
+export interface GrupoLineaDeTiempo {
   /** Clave de día `YYYY-MM-DD` en la zona dada; `''` para los sin fecha. */
   dia: string;
   /** «1 jul» — vacío cuando el interés no trae fecha. */
@@ -87,7 +87,7 @@ export function agruparInteresesPorDia(
   items: readonly InteresRegistrado[],
   timeZone = 'America/Lima',
   hoy: Date = new Date(),
-): GrupoTimeline[] {
+): GrupoLineaDeTiempo[] {
   const anioActual = Number(
     new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric' }).format(hoy),
   );
@@ -101,8 +101,8 @@ export function agruparInteresesPorDia(
   }
   conFecha.sort((a, b) => a.t - b.t);
 
-  const grupos: GrupoTimeline[] = [];
-  const porDia = new Map<string, GrupoTimeline>();
+  const grupos: GrupoLineaDeTiempo[] = [];
+  const porDia = new Map<string, GrupoLineaDeTiempo>();
   for (const it of conFecha) {
     let g = porDia.get(it.dia);
     if (!g) {

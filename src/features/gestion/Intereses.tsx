@@ -6,7 +6,7 @@ import {
   agruparInteresesPorDia,
   normalizarIntereses,
   type RespuestaIntereses,
-} from './timeline';
+} from './lineaDeTiempo';
 
 /**
  * LOS INTERESES — qué curso(s) quiere esta persona, EN EL TIEMPO (#57).
@@ -30,7 +30,7 @@ export function useIntereses(clave: string) {
     queryKey: ['intereses', clave],
     queryFn: () =>
       api<RespuestaIntereses>(`/api/gestiones/intereses?claves=${encodeURIComponent(clave)}`),
-    // Tolera la forma nueva (con fecha) y la vieja/cacheada (plana): ver `timeline.ts`.
+    // Tolera la forma nueva (con fecha) y la vieja/cacheada (plana): ver `lineaDeTiempo.ts`.
     select: (d) => normalizarIntereses(d, clave),
   });
 }
