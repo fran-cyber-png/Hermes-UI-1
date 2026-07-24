@@ -207,6 +207,30 @@ ssh deploy@161.132.39.165 'cd /srv/hermes && git pull && \
 - Si querés ahorrarte el build en el VPS también acá, hacé el paso A **después** del restart (el
   `git pull` deja el `dist/` viejo hasta que alguien lo reemplace).
 
+#### SQL manual tras `db:push` — el GIN de `notas` (issue #47)
+
+`db:push` crea la tabla `notas` con sus dos índices btree (`notas_clave_idx`,
+`notas_vendedora_idx`) — verificado en seco con `drizzle-kit generate` contra un
+`out` descartable: **12 tablas, `notas` con 8 columnas y 2 índices**, ninguno GIN.
+drizzle-kit (0.31.10 / drizzle-orm 0.45.2) no emite índices de expresión sobre
+`to_tsvector`, así que la búsqueda de la libreta (`GET /api/notas?q=`) necesita
+este índice a mano, UNA vez, después de cada `db:push` que toque `notas`:
+
+```sql
+CREATE INDEX IF NOT EXISTS notas_texto_gin_idx
+  ON notas USING gin (to_tsvector('spanish', texto));
+```
+
+```bash
+ssh deploy@161.132.39.165 \
+  'docker exec -i cartografia_db psql -U hermes_db -d hermes_db -c "CREATE INDEX IF NOT EXISTS notas_texto_gin_idx ON notas USING gin (to_tsvector(\'spanish\', texto));"' \
+  # ajustar el contenedor/usuario/base al Postgres REAL de hermes_db (127.0.0.1:5438) — ver §2.
+```
+
+Sin el índice, `GET /api/notas?q=` sigue contestando bien (mismo resultado): la
+expresión del `WHERE` es idéntica a la del índice, así que Postgres solo hace
+seq scan en vez de usar el GIN — más lento con la libreta grande, no roto.
+
 ### Cuál de las dos me toca
 
 ```bash
