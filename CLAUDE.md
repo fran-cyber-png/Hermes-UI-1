@@ -104,6 +104,18 @@ referenciado por nombre, regla dura #1). El cliente vive en `server/src/ivi/clie
 - **Env**: `IVI_URL` + `IVI_SERVICE_TOKEN` (solo nombres en `.env.example`). Del lado geografo,
   `POST /api/preguntar` puede **no estar vivo aún**: hasta entonces la ruta responde 502 honesto.
 
+## Administración de números (para Cerberus)
+
+`/api/admin/*` (`server/src/routes/admin.ts`), detrás de **`requiereServicio`**
+(`server/src/auth/servicio.ts`): credencial de servicio `HERMES_ADMIN_SERVICE_TOKEN`, Bearer estático,
+familia aparte del HMAC de vendedora (issues #50/#95). Lo consume **Cerberus** (el panel), que es la
+fuente de verdad del mapa número↔vendedora y lo **empuja** acá; Hermes guarda la copia (`numeros_wa` +
+`numero_vendedora`) que necesita para etiquetar/rutear, y ejecuta la vinculación (el QR sale por acá; la
+sesión nunca deja VPS1). Endpoint central: `PUT /api/admin/numeros/:numero` (upsert declarativo,
+`vendedoras[]` reemplaza el set). El mapa es **solo etiqueta/atribución**: la cola NO se filtra por
+vendedora. Contrato de los dos lados en **`docs/multi-numero/`**; decisión en **ADR 0010**. El ruteo
+multi-número real (N transportes vivos) es el Frente A, **issue #50**, todavía pendiente.
+
 ## Deploy
 
 **VPS1** (`deploy@161.132.39.165`), en `/srv/hermes` — **EJECUTADO 2026-07-21**: servicio systemd
@@ -154,8 +166,8 @@ gane) + `docs/adr/` con los ADR 0001–0005. Ver `docs/agents/domain.md`.
 
 Solo en `server/.env` (gitignored). **Se referencian por nombre, jamás se pegan** (regla dura #1):
 `DATABASE_URL`, `META_ACCESS_TOKEN`, `CERBERUS_BASE_URL`, `HERMES_SESSION_SECRET`,
-`WHATSAPP_TRANSPORTE`, `WHATSAPP_NUMERO`, `IVI_URL`, `IVI_SERVICE_TOKEN`. Ver
-`server/.env.example` (solo nombres).
+`WHATSAPP_TRANSPORTE`, `WHATSAPP_NUMERO`, `IVI_URL`, `IVI_SERVICE_TOKEN`,
+`HERMES_ADMIN_SERVICE_TOKEN`. Ver `server/.env.example` (solo nombres).
 
 ## Reglas duras (Goberna)
 

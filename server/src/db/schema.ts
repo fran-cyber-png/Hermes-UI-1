@@ -6,6 +6,7 @@ import {
   index,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -421,3 +422,52 @@ export const fotosPerfil = pgTable("fotos_perfil", {
   mime: text("mime"),
   actualizadoAt: timestamp("actualizado_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * NÚMEROS PROPIOS DE WHATSAPP — el registro de qué números atiende Hermes y qué
+ * significa cada uno. Es una COPIA local: la fuente humana es Cerberus (el panel),
+ * que la empuja por `PUT /api/admin/numeros/:numero`. Hermes la necesita para
+ * etiquetar la cola y para rutear los envíos por el número correcto.
+ *
+ * NO guarda credenciales: la sesión de WhatsApp vive en `.wa-sessions/<numero>.db`
+ * (gitignored). Acá solo vive el SIGNIFICADO del número.
+ */
+export const numerosWa = pgTable("numeros_wa", {
+  /** Canónico: solo dígitos con código de país (`51986394450`). */
+  numero: text("numero").primaryKey(),
+  /** Nombre visible: «Escuela — línea principal», «Campaña diplomado». */
+  etiqueta: text("etiqueta").notNull(),
+  /** escuela | campana | vendedora. Categoriza el número; NO es la asignación. */
+  proposito: text("proposito").notNull().default("escuela"),
+  /** Solo `campana`: a qué campaña/anuncio ata (adId). */
+  referencia: text("referencia"),
+  activo: boolean("activo").notNull().default(true),
+  /** Cuándo quedó vinculada la sesión `.db` (null si nunca se vinculó). */
+  vinculadoAt: timestamp("vinculado_at", { withTimezone: true }),
+  creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+  actualizadoAt: timestamp("actualizado_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * MAPA NÚMERO ↔ VENDEDORA — muchos-a-muchos, SOLO etiqueta y atribución.
+ *
+ * Decisión de Estephano (2026-07-24): la cola NO se filtra por vendedora, sigue
+ * siendo una sola pantalla compartida. Asignar una vendedora a un número lo
+ * organiza/etiqueta; no crea una bandeja privada. Un número puede tener varias
+ * vendedoras y una vendedora varios números. La atribución de la venta la sigue
+ * dando el token (`vendedoraId`), no este mapa.
+ */
+export const numeroVendedora = pgTable(
+  "numero_vendedora",
+  {
+    numero: text("numero")
+      .notNull()
+      .references(() => numerosWa.numero, { onDelete: "cascade" }),
+    /** Username de Cerberus (misma clave que `vendedoraId` en envios_wa/gestiones). */
+    vendedoraId: text("vendedora_id").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.numero, t.vendedoraId] }),
+    index("numero_vendedora_vendedora_idx").on(t.vendedoraId),
+  ],
+);

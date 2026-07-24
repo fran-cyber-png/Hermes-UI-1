@@ -37,6 +37,8 @@ import { streamRouter } from "./routes/stream.js";
 import { vincularRouter } from "./routes/vincular.js";
 import { simularRouter } from "./routes/simular.js";
 import { iviRouter } from "./routes/ivi.js";
+import { adminRouter } from "./routes/admin.js";
+import { requiereServicio } from "./auth/servicio.js";
 
 const app = express();
 const port = process.env.PORT ? Number(process.env.PORT) : 4100;
@@ -89,6 +91,7 @@ const { falso } = arrancarWhatsapp();
 app.use("/api/stream", streamRouter);     // tiempo real: push de cambios (SSE)
 app.use("/api/whatsapp", whatsappRouter); // conversación nativa: hilo + enviar
 app.use("/vincular", vincularRouter);     // consola de operador: enlazar un número (D13)
+app.use("/api/admin", requiereServicio, adminRouter); // administración de números desde Cerberus (#50/#95)
 if (process.env.NODE_ENV !== "production") {
   app.use("/api/whatsapp/_sim", simularRouter); // simular detección de origen (dev)
 }
