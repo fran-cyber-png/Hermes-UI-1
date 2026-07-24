@@ -1,0 +1,61 @@
+import assert from 'node:assert/strict';
+import { test, describe, after } from 'node:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { TransporteWhatsmeow } from './transporteWhatsmeow.js';
+
+/**
+ * REGRESIÓN de #70, encontrada por la revisión adversaria del PR #74: los 11
+ * tests de `contenido.test.ts` prueban `tieneContenido` en aislamiento, pero
+ * ninguno prueba que `aMensaje` — el método real que usa `cablearEventos` —
+ * de verdad LLAME a ese guard. Si alguien borra la línea
+ * `if (!tieneContenido(message)) return null` del cableado, esos 11 tests
+ * siguen verdes y el «(no es texto)» vuelve sin que CI lo note.
+ *
+ * Estos tests pasan por `aMensajeParaTests` (una costura agregada solo para
+ * esto — ver su comentario en transporteWhatsmeow.ts), que llama al mismo
+ * `aMensaje` privado. No hace falta una sesión de whatsmeow real: el
+ * constructor de `TransporteWhatsmeow` no levanta ningún proceso.
+ */
+
+const dir = mkdtempSync(join(tmpdir(), 'transporte-whatsmeow-'));
+
+const INFO_BASE = {
+  id: 'wa-1',
+  chat: '51961506674@s.whatsapp.net',
+  sender: '51961506674@s.whatsapp.net',
+  isFromMe: false,
+  isGroup: false,
+  timestamp: 1753300000,
+  pushName: 'Andre',
+};
+
+describe('TransporteWhatsmeow — aMensaje descarta protocolMessage (regresión #70)', () => {
+  after(() => rmSync(dir, { recursive: true, force: true }));
+
+  test('un evento con solo protocolMessage + messageContextInfo NO produce mensaje', async () => {
+    const t = new TransporteWhatsmeow('51987654321', dir);
+    const m = await t.aMensajeParaTests(INFO_BASE, {
+      messageContextInfo: {},
+      protocolMessage: {},
+    });
+    assert.equal(m, null);
+  });
+
+  test('control: el mismo teléfono con un texto real SÍ produce mensaje', async () => {
+    // Mismo chat/teléfono resoluble que el caso de arriba — la única variable
+    // es el contenido del proto. Si esto también diera null, el test de
+    // arriba no probaría nada (podría estar fallando por el teléfono, no por
+    // el guard).
+    const t = new TransporteWhatsmeow('51987654321', dir);
+    const m = await t.aMensajeParaTests(
+      { ...INFO_BASE, id: 'wa-2' },
+      { extendedTextMessage: { text: 'x' } },
+    );
+    assert.ok(m, 'un extendedTextMessage con teléfono resoluble debe producir mensaje');
+    assert.equal(m?.texto, 'x');
+    assert.equal(m?.clase, 'texto');
+    assert.equal(m?.telefono, '51961506674');
+  });
+});

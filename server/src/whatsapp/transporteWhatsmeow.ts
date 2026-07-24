@@ -204,6 +204,24 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
     };
   }
 
+  /**
+   * SOLO PARA TESTS. La revisión adversaria del PR #74 encontró un hueco: la
+   * línea de guardia de arriba (`if (!tieneContenido(message)) return null`)
+   * no la ejercitaba ningún test — `contenido.test.ts` prueba el helper puro
+   * en aislamiento, así que si alguien borraba esa línea del cableado, los
+   * 298 tests seguían verdes y el bug de #70 volvía sin que CI se enterara.
+   * Esta costura llama al mismo `aMensaje` privado que usa `cablearEventos`
+   * al recibir un evento real de whatsmeow, sin necesitar una sesión viva:
+   * el constructor de esta clase no levanta ningún proceso (eso lo hace
+   * recién `.iniciar()`), así que instanciar y llamar acá es seguro y rápido.
+   */
+  aMensajeParaTests(
+    info: { id: string; chat: string; sender: string; isFromMe: boolean; isGroup: boolean; timestamp: number; pushName: string },
+    message: Record<string, unknown>,
+  ): Promise<MensajeWhatsapp | null> {
+    return this.aMensaje(info, message);
+  }
+
   async enviarMedia(telefono: string, media: MediaSaliente): Promise<ResultadoEnvio> {
     if (this.sesion.estado !== 'conectado') {
       throw new Error(`No se puede enviar: la sesión está "${this.sesion.estado}".`);
