@@ -158,8 +158,9 @@ function FilaCategoria({
             title={categoria.esFavorito ? 'Favorita' : 'Marcar favorita'}
             onClick={() => editar.mutate({ id: categoria.id, esFavorito: !categoria.esFavorito })}
             className={
+              // El oro es SOLO tiempo que se acaba: la favorita se marca en navy, no en dorado.
               'rounded-md p-1 transition-colors ' +
-              (categoria.esFavorito ? 'text-gold-ink' : 'text-muted-foreground/50 hover:text-foreground')
+              (categoria.esFavorito ? 'text-navy' : 'text-muted-foreground/50 hover:text-foreground')
             }
           >
             <Star size={14} fill={categoria.esFavorito ? 'currentColor' : 'none'} />
