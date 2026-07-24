@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
 import { API_URL } from '../../config';
 import { iniciales } from '../../lib/iniciales';
+import { useBlobAutenticado } from '../../lib/datos/blobAutenticado';
 
 /**
  * EL AVATAR de un contacto: su foto de WhatsApp si la hay, las iniciales si no.
@@ -12,39 +12,16 @@ import { iniciales } from '../../lib/iniciales';
  *
  * La foto se trae SOLO cuando `conFoto` está prendido —típicamente al abrir un
  * contacto, uno a la vez— nunca para las 984 filas de la cola de golpe (eso es
- * pedirle a WhatsApp una foto por fila: rate-limit y riesgo de ban). Se baja con
- * el Bearer de la sesión (el endpoint está detrás de auth), como blob, y cae a
- * las iniciales ante cualquier problema. Sin foto → iniciales, nunca un roto.
+ * pedirle a WhatsApp una foto por fila: rate-limit y riesgo de ban). Se baja por
+ * `useBlobAutenticado` (el mecanismo central de media con Bearer: el endpoint
+ * está detrás del perímetro y `<img>` no manda headers), y cae a las iniciales
+ * ante cualquier problema. Sin foto → iniciales, nunca un roto.
  */
 
 function useFotoPerfil(telefono: string | null | undefined): string | null {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    // Limpiar la foto del contacto ANTERIOR al cambiar de chat. Sin esto, si el
-    // contacto nuevo no tiene foto (404), la del anterior se quedaba pegada.
-    setUrl(null);
-    if (!telefono) return;
-    let vivo = true;
-    let objectUrl: string | null = null;
-    const token = localStorage.getItem('hermes.token');
-    void fetch(`${API_URL}/api/whatsapp/foto/${encodeURIComponent(telefono)}`, {
-      headers: token ? { authorization: `Bearer ${token}` } : {},
-    })
-      .then((r) => (r.ok ? r.blob() : null))
-      .then((blob) => {
-        if (vivo && blob) {
-          objectUrl = URL.createObjectURL(blob);
-          setUrl(objectUrl);
-        }
-      })
-      .catch(() => {
-        /* sin foto → iniciales, en silencio */
-      });
-    return () => {
-      vivo = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [telefono]);
+  const { url } = useBlobAutenticado(
+    telefono ? `${API_URL}/api/whatsapp/foto/${encodeURIComponent(telefono)}` : null,
+  );
   return url;
 }
 

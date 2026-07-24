@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, FileText, Loader2, Megaphone, Paperclip, Phone, QrCode, Send, Link2, WifiOff, X } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
+import { useBlobAutenticado } from '../../lib/datos/blobAutenticado';
 import { formatoTelefono, tempClass } from '../../lib/formato';
 import { ejecutarEnvioComposer, guardarBorrador, leerBorrador } from './borradorComposer';
 import { TextoWhatsapp } from './TextoWhatsapp';
@@ -98,7 +99,20 @@ export function SkeletonHilo() {
  * queda el aviso honesto de siempre.
  */
 function MediaEnBurbuja({ media }: { media: MediaHilo }) {
-  const src = urlMedia(media.archivo);
+  // El adjunto está detrás del perímetro (Bearer) y las etiquetas de media no
+  // mandan headers: se baja autenticado y se sirve como blob local.
+  const { url: src, fallo } = useBlobAutenticado(urlMedia(media.archivo));
+
+  if (fallo) {
+    return (
+      <p className="rounded-lg border border-border bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+        No se pudo cargar el adjunto.
+      </p>
+    );
+  }
+  if (!src) {
+    return <div className="h-24 w-56 max-w-full animate-pulse rounded-lg bg-muted" aria-hidden="true" />;
+  }
 
   if (media.clase === 'imagen' || media.clase === 'sticker') {
     return (

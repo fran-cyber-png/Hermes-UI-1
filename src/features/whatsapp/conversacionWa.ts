@@ -23,7 +23,12 @@ export interface MensajeHilo {
   origen?: { fuente: string; titulo?: string | null } | null;
 }
 
-/** La URL para ver/bajar un adjunto del hilo. */
+/**
+ * La URL para ver/bajar un adjunto del hilo. OJO: está detrás del perímetro
+ * (Bearer), así que NO va directa a un `<img src>` — se consume vía
+ * `useBlobAutenticado` (src/lib/datos/blobAutenticado.ts), el mecanismo
+ * central de media autenticada.
+ */
 export function urlMedia(archivo: string): string {
   return `${API_URL}/api/whatsapp/media/${encodeURIComponent(archivo)}`;
 }
