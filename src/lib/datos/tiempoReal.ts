@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { API_URL } from '../../config';
+import { crearParserSSE } from './sse';
 
 /**
  * TIEMPO REAL — el frontend escucha lo que el server empuja.
@@ -12,19 +13,30 @@ import { API_URL } from '../../config';
  * mensaje aparece en la pantalla apenas llega al server, sin que la vendedora
  * toque nada.
  *
- * Si el stream se corta (red, deploy), el navegador reconecta solo (el server
- * manda `retry`), y además la cola tiene un refetch de respaldo por si acaso.
+ * ── Por qué fetch y no EventSource ──
+ * Los eventos de mensaje llevan el teléfono del contacto (PII), así que desde
+ * el cierre del issue #36 el stream exige el Bearer como todo /api — y
+ * EventSource no puede mandar headers. `fetch` sí: se lee el body como stream
+ * y `crearParserSSE` reconstruye los eventos. Lo que se pierde de EventSource
+ * (la reconexión automática) se repone acá: ante cualquier corte —red, deploy,
+ * 401 por token vencido— se reintenta a los 3s, igual que el `retry` que
+ * mandaba el server. Solo se conecta con sesión iniciada: sin token, el stream
+ * daría 401 en loop.
  */
-export function useTiempoReal() {
+const REINTENTO_MS = 3000;
+
+export function useTiempoReal(sesionActiva: boolean) {
   const qc = useQueryClient();
 
   useEffect(() => {
-    const es = new EventSource(`${API_URL}/api/stream`);
+    if (!sesionActiva) return;
+    const control = new AbortController();
+    let reintento: ReturnType<typeof setTimeout> | undefined;
 
-    es.onmessage = (ev) => {
+    const manejar = (data: string) => {
       let e: { tipo?: string; telefono?: string | null };
       try {
-        e = JSON.parse(ev.data);
+        e = JSON.parse(data);
       } catch {
         return;
       }
@@ -44,6 +56,37 @@ export function useTiempoReal() {
       }
     };
 
-    return () => es.close();
-  }, [qc]);
+    async function conectar() {
+      const token = localStorage.getItem('hermes.token');
+      try {
+        const res = await fetch(`${API_URL}/api/stream`, {
+          headers: token ? { authorization: `Bearer ${token}` } : {},
+          signal: control.signal,
+        });
+        if (!res.ok || !res.body) throw new Error(`stream ${res.status}`);
+
+        const alimentar = crearParserSSE(manejar);
+        const decodificador = new TextDecoder();
+        const lector = res.body.getReader();
+        for (;;) {
+          const { done, value } = await lector.read();
+          if (done) break;
+          alimentar(decodificador.decode(value, { stream: true }));
+        }
+      } catch {
+        // Red caída, deploy a medias o 401: abajo se reintenta. Nunca se
+        // revienta la app por perder el nervio en vivo.
+      }
+      if (!control.signal.aborted) {
+        reintento = setTimeout(() => void conectar(), REINTENTO_MS);
+      }
+    }
+
+    void conectar();
+
+    return () => {
+      control.abort();
+      if (reintento !== undefined) clearTimeout(reintento);
+    };
+  }, [qc, sesionActiva]);
 }
