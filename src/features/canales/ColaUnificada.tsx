@@ -294,7 +294,11 @@ export function ColaUnificada({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto" onKeyDown={onTeclasLista}>
+      <div
+        className="min-h-0 flex-1 overflow-y-auto"
+        onKeyDown={onTeclasLista}
+        data-scroll-cola
+      >
         {pinVisible && (
           <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-l-[3px] border-border border-l-navy bg-card py-2.5 pl-3 pr-2">
             <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">

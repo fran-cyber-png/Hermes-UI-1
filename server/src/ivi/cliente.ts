@@ -58,9 +58,13 @@ export const ROL_TURNO = {
 
 export type RolTurno = (typeof ROL_TURNO)[keyof typeof ROL_TURNO];
 
+// Tope de tamaño (#98): sin esto, Ivi (y su factura de tokens) amplifica lo que
+// mande la vendedora. 4000 caracteres es de sobra para un turno de chat real.
+const MAX_CARACTERES_TEXTO = 4_000;
+
 export const turnoHistorialSchema = z.object({
   rol: z.enum([ROL_TURNO.VENDEDORA, ROL_TURNO.IVI] as const),
-  texto: z.string(),
+  texto: z.string().max(MAX_CARACTERES_TEXTO),
 });
 
 export type TurnoHistorial = z.infer<typeof turnoHistorialSchema>;
@@ -82,6 +86,8 @@ export const CODIGO_ERROR_IVI = {
   RESPUESTA_INVALIDA: 'respuesta_invalida',
   /** Cualquier otro estado HTTP que no esperamos. */
   HTTP_INESPERADO: 'http_inesperado',
+  /** Un fallo que no es un `ErrorIvi` (bug, no una clase de problema conocida). */
+  DESCONOCIDO: 'desconocido',
 } as const;
 
 export type CodigoErrorIvi = (typeof CODIGO_ERROR_IVI)[keyof typeof CODIGO_ERROR_IVI];
@@ -92,8 +98,8 @@ export class ErrorIvi extends Error {
   /** El estado HTTP, cuando el fallo vino de una respuesta (401/503/…). */
   readonly estado?: number;
 
-  constructor(codigo: CodigoErrorIvi, message: string, estado?: number) {
-    super(message);
+  constructor(codigo: CodigoErrorIvi, message: string, estado?: number, causa?: unknown) {
+    super(message, causa !== undefined ? { cause: causa } : undefined);
     this.name = 'ErrorIvi';
     this.codigo = codigo;
     this.estado = estado;
@@ -109,7 +115,15 @@ export interface DepsIvi {
   token?: string;
 }
 
-const TIMEOUT_MS = 30_000;
+/** El presupuesto de tiempo para toda la ida y vuelta (fetch + lectura del body). Fijado por test. */
+export const TIMEOUT_MS = 30_000;
+
+/** La firma del cliente — un solo lugar la define (antes duplicada entre la ruta y su test, #98). */
+export type PreguntarAIvi = (
+  pregunta: string,
+  usuario: string,
+  historial?: TurnoHistorial[],
+) => Promise<RespuestaIvi>;
 
 /**
  * Le pregunta a Ivi y devuelve una `RespuestaIvi` ya validada. Ante cualquier
@@ -151,14 +165,17 @@ export async function preguntarleAIvi(
       body: JSON.stringify({ pregunta, usuario, ...(historial ? { historial } : {}) }),
     });
   } catch (err) {
+    console.error('ivi: fetch falló', err);
     // AbortSignal.timeout lanza un DOMException 'TimeoutError'; un abort manual, 'AbortError'.
     const nombre = err instanceof Error ? err.name : '';
     if (nombre === 'TimeoutError' || nombre === 'AbortError') {
-      throw new ErrorIvi(CODIGO_ERROR_IVI.TIMEOUT, `Ivi no respondió a tiempo (${TIMEOUT_MS / 1000} s).`);
+      throw new ErrorIvi(CODIGO_ERROR_IVI.TIMEOUT, `Ivi no respondió a tiempo (${TIMEOUT_MS / 1000} s).`, undefined, err);
     }
     throw new ErrorIvi(
       CODIGO_ERROR_IVI.RED,
       'No se pudo conectar con Ivi (¿la máquina de geografo está apagada?).',
+      undefined,
+      err,
     );
   }
 
@@ -187,12 +204,20 @@ export async function preguntarleAIvi(
   let crudo: unknown;
   try {
     crudo = await resp.json();
-  } catch {
-    throw new ErrorIvi(CODIGO_ERROR_IVI.RESPUESTA_INVALIDA, 'Ivi respondió con un cuerpo que no es JSON.');
+  } catch (err) {
+    // El MISMO AbortSignal sigue armado mientras se lee el body: si el presupuesto de
+    // tiempo se agota justo acá, es un TIMEOUT — no una respuesta con JSON roto.
+    const nombre = err instanceof Error ? err.name : '';
+    if (nombre === 'TimeoutError' || nombre === 'AbortError') {
+      throw new ErrorIvi(CODIGO_ERROR_IVI.TIMEOUT, `Ivi no respondió a tiempo (${TIMEOUT_MS / 1000} s).`, undefined, err);
+    }
+    console.error('ivi: el cuerpo de la respuesta no es JSON', err);
+    throw new ErrorIvi(CODIGO_ERROR_IVI.RESPUESTA_INVALIDA, 'Ivi respondió con un cuerpo que no es JSON.', undefined, err);
   }
 
   const parseado = respuestaIviSchema.safeParse(crudo);
   if (!parseado.success) {
+    console.error('ivi: la respuesta no cumple el contrato RespuestaIvi', parseado.error.issues);
     throw new ErrorIvi(
       CODIGO_ERROR_IVI.RESPUESTA_INVALIDA,
       'La respuesta de Ivi no cumple el contrato RespuestaIvi.',

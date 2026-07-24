@@ -2,6 +2,7 @@ import "dotenv/config";
 import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createClient } from "@whatsmeow-node/whatsmeow-node";
 import QRCode from "qrcode";
 
@@ -34,7 +35,7 @@ if (!numero) {
   process.exit(1);
 }
 
-const dir = new URL("../../.wa-sessions/", import.meta.url).pathname;
+const dir = fileURLToPath(new URL("../../.wa-sessions/", import.meta.url));
 mkdirSync(dir, { recursive: true });
 const store = `${dir}${numero}.db`;
 

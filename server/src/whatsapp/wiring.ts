@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { TransporteFalso } from './transporteFalso.js';
 import { TransporteWhatsmeow } from './transporteWhatsmeow.js';
 import { IngestaWhatsapp } from './ingesta.js';
@@ -37,7 +38,7 @@ export function arrancarWhatsapp(): WhatsappArmado {
   if (cual === 'whatsmeow') {
     const numero = process.env.WHATSAPP_NUMERO;
     if (!numero) throw new Error('WHATSAPP_TRANSPORTE=whatsmeow necesita WHATSAPP_NUMERO (el número propio ya vinculado con wa:vincular).');
-    const dir = new URL('../../.wa-sessions/', import.meta.url).pathname;
+    const dir = fileURLToPath(new URL('../../.wa-sessions/', import.meta.url));
     transporte = new TransporteWhatsmeow(numero, dir);
   } else {
     falso = new TransporteFalso({ telefono: process.env.WHATSAPP_NUMERO_FALSO ?? '51987654321' });

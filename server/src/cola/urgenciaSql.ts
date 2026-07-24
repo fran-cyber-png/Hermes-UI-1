@@ -52,14 +52,18 @@ const T = sql`(extract(epoch from referencia) * 1000)`;
  * El desempate dentro del nivel — espejo de `claveUrgencia(...).orden`: negativo
  * donde el más reciente va primero (vivo, silencio, resto), positivo donde el
  * más viejo apremia (expira, espera), y la fecha del COMPROMISO en los vencidos.
+ *
+ * `::float8` al final: `extract(epoch from ...)` devuelve `numeric` en Postgres,
+ * y `pg` manda `numeric` como STRING al cliente para no perder precisión — sin
+ * el cast, `orden` llegaba al JSON como `"-1737..."` en vez de un número.
  */
-export const ordenUrgenciaSql: SQL = sql`CASE
+export const ordenUrgenciaSql: SQL = sql`(CASE
   WHEN ${VIVO} THEN -${T}
   WHEN ${VENCIDO} THEN (extract(epoch from seguimiento_en) * 1000)
   WHEN ${EXPIRA} THEN ${T}
   WHEN ${ESPERA} THEN ${T}
   ELSE -${T}
-END`;
+END)::float8`;
 
 /**
  * De dónde sale `seguimiento_en`: el pendiente MÁS VIEJO de la agenda por

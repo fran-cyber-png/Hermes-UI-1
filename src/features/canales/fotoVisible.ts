@@ -24,6 +24,16 @@ export function esPrioritaria(indice: number | undefined, n = FILAS_PRIORITARIAS
 }
 
 /**
+ * ¿Este canal tiene foto de perfil para pedir? Solo WhatsApp la tiene — FB/IG
+ * no exponen ese dato por esta vía. Antes vivía inline en el JSX de
+ * `FilaConversacion` (`conFoto && c.canal === 'whatsapp'`); acá es pura y
+ * gatea el propio observer, así las filas de FB/IG ni lo instancian.
+ */
+export function quiereFoto(canal: string): boolean {
+  return canal === 'whatsapp';
+}
+
+/**
  * Reduce un lote de entradas del observer (con solo lo que importa de
  * `IntersectionObserverEntry`) al siguiente estado de `conFoto`. Sticky: si ya
  * estaba prendida, ningún lote posterior la apaga.

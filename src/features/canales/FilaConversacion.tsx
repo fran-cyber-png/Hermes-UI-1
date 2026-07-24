@@ -9,7 +9,7 @@ import { BadgeCanal } from './BadgeCanal';
 import { Avatar } from './Avatar';
 import { VENTANA_DIAS } from './types';
 import type { Conversacion } from './conversaciones';
-import { esPrioritaria, siguienteConFoto } from './fotoVisible';
+import { esPrioritaria, quiereFoto, siguienteConFoto } from './fotoVisible';
 
 /**
  * Prende `conFoto` con el propio IntersectionObserver de la fila (guardarraíl
@@ -17,24 +17,30 @@ import { esPrioritaria, siguienteConFoto } from './fotoVisible';
  * ni observan: ya arrancan con `conFoto` en `true`, así el primer pintado no
  * tiene el parpadeo iniciales→foto. El resto observa hasta que entra al
  * viewport UNA vez — ahí se desconecta (sticky, no repite el fetch al
- * scrollear de un lado a otro).
+ * scrollear de un lado a otro). Las filas de canales sin foto (FB/IG,
+ * `quiereFoto`) ni instancian el observer.
+ *
+ * `root`: el que clipea la fila no es el viewport del documento, es el `<div
+ * data-scroll-cola>` de `ColaUnificada` — sin decirle eso al observer,
+ * `rootMargin` mide contra la ventana entera y no anticipa nada real.
  */
-function useConFotoVisible(indice: number | undefined) {
-  const prioritaria = esPrioritaria(indice);
+function useConFotoVisible(indice: number | undefined, canal: string) {
+  const prioritaria = esPrioritaria(indice) && quiereFoto(canal);
   const [conFoto, setConFoto] = useState(prioritaria);
   const elRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (conFoto || typeof IntersectionObserver === 'undefined') return;
+    if (conFoto || !quiereFoto(canal) || typeof IntersectionObserver === 'undefined') return;
     const el = elRef.current;
     if (!el) return;
+    const root = el.closest<HTMLElement>('[data-scroll-cola]');
     const observer = new IntersectionObserver(
       (entradas) => setConFoto((actual) => siguienteConFoto(actual, entradas)),
-      { rootMargin: '200px' }, // llega un poco antes de que la fila esté del todo a la vista
+      { root, rootMargin: '200px' }, // llega un poco antes de que la fila esté del todo a la vista
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [conFoto]);
+  }, [conFoto, canal]);
 
   return { conFoto, elRef };
 }
@@ -76,7 +82,7 @@ export function FilaConversacion({
   onFocus?: () => void;
   ref?: Ref<HTMLButtonElement>;
 }) {
-  const { conFoto, elRef } = useConFotoVisible(indice);
+  const { conFoto, elRef } = useConFotoVisible(indice, c.canal);
   const temp = TEMPERATURE_META[temperatureOf(c.referencia)];
   const restan = VENTANA_DIAS - c.dias;
   const esTelefono = !c.persona_nombre && c.canal === 'whatsapp' && c.persona_id != null;
@@ -131,7 +137,7 @@ export function FilaConversacion({
         <Avatar
           nombre={c.persona_nombre}
           telefono={c.canal === 'whatsapp' ? c.persona_id : null}
-          conFoto={conFoto && c.canal === 'whatsapp'}
+          conFoto={conFoto}
           className="size-9 rounded-full bg-secondary text-xs font-bold text-navy"
         />
         <span className="absolute -bottom-0.5 -right-0.5">

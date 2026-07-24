@@ -1,4 +1,5 @@
 import { mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { createClient, type WhatsmeowClient } from '@whatsmeow-node/whatsmeow-node';
 import QRCode from 'qrcode';
 
@@ -42,7 +43,7 @@ class Vinculador {
     // Reset de cualquier intento previo: un solo cliente vivo por vez.
     await this.cerrar();
 
-    const dir = new URL('../../.wa-sessions/', import.meta.url).pathname;
+    const dir = fileURLToPath(new URL('../../.wa-sessions/', import.meta.url));
     mkdirSync(dir, { recursive: true });
     const client = createClient({ store: `${dir}${numero}.db` });
     this.client = client;

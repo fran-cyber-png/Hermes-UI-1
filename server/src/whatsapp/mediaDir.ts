@@ -1,4 +1,5 @@
 import { mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 /**
  * EL DIRECTORIO DE MEDIA DE WHATSAPP — `server/.wa-media/`.
@@ -12,7 +13,10 @@ import { mkdirSync } from 'node:fs';
  * (la ruta que sirve media) revalida igual — nunca se arma un path con entrada
  * del cliente sin filtrar.
  */
-export const RUTA_MEDIA = new URL('../../.wa-media/', import.meta.url).pathname;
+// `fileURLToPath`, no `.pathname`: en Windows nativo `.pathname` de un `file://`
+// da `/C:/Users/...` (la barra inicial no es parte de la ruta) — pasarlo tal
+// cual a `mkdirSync` resolvía relativo al cwd y duplicaba la unidad (`C:\C:\...`).
+export const RUTA_MEDIA = fileURLToPath(new URL('../../.wa-media/', import.meta.url));
 
 mkdirSync(RUTA_MEDIA, { recursive: true });
 

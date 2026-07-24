@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requiereVendedora } from '../auth/sesion.js';
-import { ErrorIvi, preguntarleAIvi, turnoHistorialSchema } from '../ivi/cliente.js';
-import type { RespuestaIvi, TurnoHistorial } from '../ivi/cliente.js';
+import { CODIGO_ERROR_IVI, ErrorIvi, preguntarleAIvi, turnoHistorialSchema } from '../ivi/cliente.js';
+import type { PreguntarAIvi } from '../ivi/cliente.js';
 
 /**
  * EL PROXY A IVI. La app de la vendedora pregunta acá (`POST /api/ivi/preguntar`);
@@ -14,17 +14,18 @@ import type { RespuestaIvi, TurnoHistorial } from '../ivi/cliente.js';
  * como «Ivi no encontró datos».
  */
 
-const cuerpoPreguntarSchema = z.object({
-  pregunta: z.string().min(1, { error: 'La pregunta no puede estar vacía.' }),
-  historial: z.array(turnoHistorialSchema).optional(),
-});
+// Topes de tamaño (#98): sin ellos, la pregunta o el historial de la vendedora
+// amplifican sin límite lo que Hermes le reenvía a Ivi (y su factura de tokens).
+const MAX_CARACTERES_PREGUNTA = 4_000;
+const MAX_TURNOS_HISTORIAL = 30;
 
-/** La firma del cliente. Se inyecta para los tests; en producción es `preguntarleAIvi`. */
-type PreguntarAIvi = (
-  pregunta: string,
-  usuario: string,
-  historial?: TurnoHistorial[],
-) => Promise<RespuestaIvi>;
+const cuerpoPreguntarSchema = z.object({
+  pregunta: z
+    .string()
+    .min(1, { error: 'La pregunta no puede estar vacía.' })
+    .max(MAX_CARACTERES_PREGUNTA, { error: `La pregunta no puede pasar los ${MAX_CARACTERES_PREGUNTA} caracteres.` }),
+  historial: z.array(turnoHistorialSchema).max(MAX_TURNOS_HISTORIAL).optional(),
+});
 
 export function iviRouter(preguntar: PreguntarAIvi = preguntarleAIvi): Router {
   const r = Router();
@@ -43,11 +44,12 @@ export function iviRouter(preguntar: PreguntarAIvi = preguntarleAIvi): Router {
     } catch (err) {
       // Fail-closed: un fallo se reporta como fallo, con su clase — jamás como «no hay datos».
       if (err instanceof ErrorIvi) {
+        console.error(`ivi: ${err.codigo} — ${err.message}`, err.cause ?? '');
         res.status(502).json({ ok: false, codigo: err.codigo, message: err.message });
         return;
       }
       console.error('ivi: error inesperado consultando a Ivi', err);
-      res.status(502).json({ ok: false, codigo: 'desconocido', message: 'No se pudo consultar a Ivi.' });
+      res.status(502).json({ ok: false, codigo: CODIGO_ERROR_IVI.DESCONOCIDO, message: 'No se pudo consultar a Ivi.' });
     }
   });
 

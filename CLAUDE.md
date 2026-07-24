@@ -96,11 +96,17 @@ referenciado por nombre, regla dura #1). El cliente vive en `server/src/ivi/clie
 (`preguntarleAIvi`); el contrato de vuelta es `RespuestaIvi` (`texto`, `tipo`, `fuentes`,
 `groundingOk`, `edadDelDato`), validado con Zod.
 
-- **Body**: `{ pregunta: string, historial?: {rol,texto}[] }`. El `usuario` sale del token (la
-  vendedora), no del body — no se puede suplantar.
-- **FAIL-CLOSED y RUIDOSO**: cualquier fallo es un **502 con `codigo`** (`falta_config` sin
-  `IVI_URL`/`IVI_SERVICE_TOKEN`, `config_hermes` en 401, `ivi_no_configurado` en 503, `timeout`,
-  `red`, `respuesta_invalida`). **Nunca** se muestra un fallo como «Ivi no encontró datos».
+- **Body**: `{ pregunta: string, historial?: {rol,texto}[] }`, con tope de tamaño (4000
+  caracteres la pregunta y cada turno, 30 turnos de historial — sin eso, amplificaba sin límite
+  lo que Hermes le reenvía a Ivi). El `usuario` sale del token (la vendedora), no del body — no
+  se puede suplantar.
+- **FAIL-CLOSED y RUIDOSO**: cualquier fallo es un **502 con `codigo`**, los ocho de
+  `CODIGO_ERROR_IVI` (`cliente.ts`): `falta_config` sin `IVI_URL`/`IVI_SERVICE_TOKEN`,
+  `config_hermes` en 401, `ivi_no_configurado` en 503, `timeout` (30s, incluye timeout leyendo el
+  body de la respuesta, no solo conectando), `red`, `respuesta_invalida`, `http_inesperado` (otro
+  estado no esperado) y `desconocido` (un error que no es `ErrorIvi` — bug, no una clase conocida
+  de problema). **Nunca** se muestra un fallo como «Ivi no encontró datos». Cada `ErrorIvi` deja
+  rastro en los logs del server, con la causa original si la hay.
 - **Env**: `IVI_URL` + `IVI_SERVICE_TOKEN` (solo nombres en `.env.example`). Del lado geografo,
   `POST /api/preguntar` puede **no estar vivo aún**: hasta entonces la ruta responde 502 honesto.
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FILAS_PRIORITARIAS_CON_FOTO, esPrioritaria, siguienteConFoto } from './fotoVisible';
+import { FILAS_PRIORITARIAS_CON_FOTO, esPrioritaria, quiereFoto, siguienteConFoto } from './fotoVisible';
 
 /**
  * El guardarraíl anti-ban de #71: la cola NO puede pedir la foto de ~1300
@@ -26,6 +26,18 @@ describe('esPrioritaria', () => {
   it('el corte N es configurable (para el test, no para la cola real)', () => {
     expect(esPrioritaria(2, 3)).toBe(true);
     expect(esPrioritaria(3, 3)).toBe(false);
+  });
+});
+
+describe('quiereFoto', () => {
+  it('solo WhatsApp tiene foto de perfil para pedir', () => {
+    expect(quiereFoto('whatsapp')).toBe(true);
+  });
+
+  it('FB/IG/Messenger no exponen esa foto por esta vía', () => {
+    expect(quiereFoto('facebook')).toBe(false);
+    expect(quiereFoto('instagram')).toBe(false);
+    expect(quiereFoto('messenger')).toBe(false);
   });
 });
 

@@ -4,7 +4,14 @@ import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import express from 'express';
 import { firmarSesion } from '../auth/sesion.js';
-import { CODIGO_ERROR_IVI, ErrorIvi, type CodigoErrorIvi, type RespuestaIvi, type TurnoHistorial } from '../ivi/cliente.js';
+import {
+  CODIGO_ERROR_IVI,
+  ErrorIvi,
+  type CodigoErrorIvi,
+  type PreguntarAIvi,
+  type RespuestaIvi,
+  type TurnoHistorial,
+} from '../ivi/cliente.js';
 import { iviRouter } from './ivi.js';
 
 /**
@@ -13,12 +20,6 @@ import { iviRouter } from './ivi.js';
  * clase de fallo a un 502 con motivo. El server efímero es 127.0.0.1 (loopback): probamos
  * NUESTRA ruta + middleware, no salimos a ningún servicio.
  */
-
-type PreguntarAIvi = (
-  pregunta: string,
-  usuario: string,
-  historial?: TurnoHistorial[],
-) => Promise<RespuestaIvi>;
 
 const TOKEN = firmarSesion('ana');
 
@@ -83,6 +84,32 @@ describe('POST /api/ivi/preguntar', () => {
     assert.equal(llamado, false);
   });
 
+  test('pregunta que pasa el tope de tamaño: 400 y ni llama al cliente (#98, sin amplificación hacia Ivi)', async () => {
+    let llamado = false;
+    const preguntar: PreguntarAIvi = async () => {
+      llamado = true;
+      return respuestaValida();
+    };
+    const r = await pedir(preguntar, { token: TOKEN, body: { pregunta: 'x'.repeat(4_001) } });
+    assert.equal(r.status, 400);
+    assert.equal(llamado, false);
+  });
+
+  test('historial con más turnos que el tope: 400 y ni llama al cliente (#98)', async () => {
+    let llamado = false;
+    const preguntar: PreguntarAIvi = async () => {
+      llamado = true;
+      return respuestaValida();
+    };
+    const historialEnorme: TurnoHistorial[] = Array.from({ length: 31 }, () => ({
+      rol: 'vendedora' as const,
+      texto: 'hola',
+    }));
+    const r = await pedir(preguntar, { token: TOKEN, body: { pregunta: 'hola', historial: historialEnorme } });
+    assert.equal(r.status, 400);
+    assert.equal(llamado, false);
+  });
+
   test('éxito: 200 con la respuesta, y el usuario sale del token', async () => {
     let visto: { pregunta: string; usuario: string; historial?: TurnoHistorial[] } | null = null;
     const preguntar: PreguntarAIvi = async (pregunta, usuario, historial) => {
@@ -121,6 +148,6 @@ describe('POST /api/ivi/preguntar', () => {
     const r = await pedir(preguntar, { token: TOKEN, body: { pregunta: 'hola' } });
     assert.equal(r.status, 502);
     assert.equal(r.json?.ok, false);
-    assert.equal(r.json?.codigo, 'desconocido');
+    assert.equal(r.json?.codigo, CODIGO_ERROR_IVI.DESCONOCIDO);
   });
 });

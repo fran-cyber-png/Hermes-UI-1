@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { agruparInteresesPorDia, normalizarIntereses } from './timeline';
+import { agruparInteresesPorDia, normalizarIntereses } from './lineaDeTiempo';
 
 /**
  * LA LÍNEA DE TIEMPO DEL INTERÉS (#57) — la lógica pura, sin DOM.

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { db } from "../db/client.js";
 import { corteDiasAtras, diaLimaISO } from "../lib/horaLima.js";
+import { diaLimaSql } from "../lib/horaLimaSql.js";
 
 /**
  * LAS SERIES DE 14 DÍAS DEL DASHBOARD — extraídas de `routes/dashboard.ts` a
@@ -80,20 +81,20 @@ export async function consultarSeriesDashboard(base: typeof db, ahora: Date): Pr
       SELECT ${rangoDias(hoy)} AS dia
     ),
     c AS (
-      SELECT (occurred_at AT TIME ZONE 'America/Lima')::date AS dia, count(DISTINCT (canal, persona_id))::int AS n
+      SELECT ${diaLimaSql("occurred_at")} AS dia, count(DISTINCT (canal, persona_id))::int AS n
       FROM interactions
       WHERE tipo = 'mensaje' AND direccion = 'entrante' AND persona_id IS NOT NULL
         AND occurred_at >= ${corte}::timestamptz
       GROUP BY 1
     ),
     co AS (
-      SELECT (occurred_at AT TIME ZONE 'America/Lima')::date AS dia, count(*)::int AS n
+      SELECT ${diaLimaSql("occurred_at")} AS dia, count(*)::int AS n
       FROM interactions
       WHERE tipo = 'comentario' AND occurred_at >= ${corte}::timestamptz
       GROUP BY 1
     ),
     f AS (
-      SELECT (created_time AT TIME ZONE 'America/Lima')::date AS dia, count(*)::int AS n
+      SELECT ${diaLimaSql("created_time")} AS dia, count(*)::int AS n
       FROM leads
       WHERE created_time >= ${corte}::timestamptz
       GROUP BY 1
@@ -116,7 +117,7 @@ export async function consultarSeriesDashboard(base: typeof db, ahora: Date): Pr
     SELECT d.dia::text AS dia, COALESCE(e.n, 0) AS n
     FROM dias d
     LEFT JOIN (
-      SELECT (creado_at AT TIME ZONE 'America/Lima')::date AS dia, count(*)::int AS n
+      SELECT ${diaLimaSql("creado_at")} AS dia, count(*)::int AS n
       FROM envios_wa WHERE estado = 'enviado' AND creado_at >= ${corte}::timestamptz
       GROUP BY 1
     ) e ON e.dia = d.dia
@@ -130,7 +131,7 @@ export async function consultarSeriesDashboard(base: typeof db, ahora: Date): Pr
     SELECT d.dia::text AS dia, COALESCE(v.n, 0) AS n
     FROM dias d
     LEFT JOIN (
-      SELECT (iniciada_at AT TIME ZONE 'America/Lima')::date AS dia, count(*)::int AS n
+      SELECT ${diaLimaSql("iniciada_at")} AS dia, count(*)::int AS n
       FROM conversiones_wa WHERE iniciada_at >= ${corte}::timestamptz
       GROUP BY 1
     ) v ON v.dia = d.dia
