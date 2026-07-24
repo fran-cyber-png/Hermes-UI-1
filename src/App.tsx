@@ -115,8 +115,6 @@ export default function App() {
   const [cabina, setCabina] = useState(false);
   // El puente (§2.9): una vista le pasa el mando a otra; la destinataria lo consume y lo limpia.
   const [puente, setPuente] = useState<Puente | null>(null);
-  // Contador-señal: cada drop en Cierre lo incrementa y la ficha abre el form de venta.
-  const [senalVenta, setSenalVenta] = useState(0);
   const busquedaRef = useRef<HTMLInputElement>(null);
   const { data: sesionWa } = useSesionWa();
   const { data: dash } = useDashboard();
@@ -251,14 +249,6 @@ export default function App() {
     cambiarVista('agenda');
   }
 
-  // Soltar en Cierre (kanban): el cierre no se declara, se gana registrando la
-  // venta. Se abre la conversación en la Bandeja y la ficha recibe la señal de
-  // abrir el formulario. En comentarios (sin ficha por teléfono) solo se abre.
-  function registrarVentaDe(c: Conversacion) {
-    abrirConversacion(c);
-    if (c.canal === 'whatsapp') setSenalVenta((n) => n + 1);
-  }
-
   const vistaActiva = VISTAS.find((v) => v.id === vista)!;
   const claseEntrada =
     'flex min-h-0 flex-1 flex-col duration-300 ease-house animate-in fade-in ' +
@@ -364,7 +354,6 @@ export default function App() {
                   conversacion={abierta}
                   onCorreo={mandarCorreoA}
                   onAgendarBienvenida={agendarBienvenida}
-                  senalVenta={senalVenta}
                 />
               ) : (
                 <PanelContexto conversacion={abierta} />
@@ -384,7 +373,9 @@ export default function App() {
                 onMandarCorreo={mandarCorreoA}
               />
             )}
-            {vista === 'embudo' && <VistaEmbudo onAbrir={abrirConversacion} onRegistrarVenta={registrarVentaDe} />}
+            {/* El drop en Cierre/Cotizados abre su modal DENTRO del Pipeline (#60);
+                acá solo se cablea la salida del recibo (agendar la bienvenida). */}
+            {vista === 'embudo' && <VistaEmbudo onAbrir={abrirConversacion} onAgendarBienvenida={agendarBienvenida} />}
             {vista === 'agenda' && (
               <VistaAgenda
                 onAbrir={abrirConversacion}

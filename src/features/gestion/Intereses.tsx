@@ -26,6 +26,7 @@ export function Intereses({
   compacto = false,
   resaltado = false,
   senalAbrir = 0,
+  onAgregado,
 }: {
   clave: string;
   compacto?: boolean;
@@ -33,6 +34,8 @@ export function Intereses({
   resaltado?: boolean;
   /** Señal externa (contador): al cambiar, abre el buscador y lo enfoca. */
   senalAbrir?: number;
+  /** Avisa cuando un interés quedó GUARDADO (#60): el modal de Cotizados reintenta el movimiento con esto. */
+  onAgregado?: (curso: string) => void;
 }) {
   const qc = useQueryClient();
   const { data: lista = [] } = useIntereses(clave);
@@ -62,11 +65,12 @@ export function Intereses({
   const agregar = useMutation({
     mutationFn: (curso: string) =>
       api('/api/gestiones/intereses', { method: 'POST', body: JSON.stringify({ clave, curso }) }),
-    onSuccess: () => {
+    onSuccess: (_d, curso) => {
       invalidar();
       setQ('');
       setIdx(0);
       setAbierto(false);
+      onAgregado?.(curso);
     },
   });
   const quitar = useMutation({

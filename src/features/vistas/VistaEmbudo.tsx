@@ -9,6 +9,8 @@ import { Intereses } from '../gestion/Intereses';
 import { hace } from '../../lib/datos/frescura';
 import { ETAPAS, type Etapa } from '../../lib/etapas';
 import { tempBorde, tempClass } from '../../lib/formato';
+import { decidirDrop, decidirRebote, reintentoTrasInteres } from './compuertas';
+import { ModalInteresCotizado, ModalVentaCierre } from './ModalesCompuerta';
 
 /**
  * EL EMBUDO — kanban real, con las etapas del negocio y sus compuertas.
@@ -16,13 +18,17 @@ import { tempBorde, tempClass } from '../../lib/formato';
  *   Interesados → Contactados → Cotizados → Cierre · Perdidos
  *
  * Se ARRASTRA: soltar una tarjeta en otra columna registra la gestión (con
- * actualización optimista: la tarjeta se muda ya, y si la compuerta del server
- * rechaza, vuelve sola). El embudo no miente: a Cotizados no se pasa sin un
- * curso de interés registrado; a Cierre no se pasa declarándolo — soltar ahí
- * abre el flujo de Registrar venta con la conversación precargada, y es la
- * venta la que mueve el lead. La manchette de cada columna es honesta: si hay
- * más historia en el server que tarjetas cargadas, dice «N de M» (o «N+»
- * cuando el total con la misma definición no existe — ver nota en `totales`).
+ * actualización optimista: la tarjeta se muda ya). El embudo no miente, y las
+ * compuertas GUÍAN en vez de rebotar (#60): a Cotizados no se pasa sin un
+ * curso de interés — si falta, un modal lo pide ahí mismo y al guardarlo el
+ * movimiento se completa solo; a Cierre no se pasa declarándolo — soltar ahí
+ * abre el formulario de Registrar venta con la conversación precargada, y es
+ * la venta la que mueve el lead (el server asienta `cierre` al crearla). Las
+ * compuertas del server no se relajan: los modales las satisfacen. El `aviso`
+ * de texto queda como fallback (error de red), no como la vía principal.
+ * La manchette de cada columna es honesta: si hay más historia en el server
+ * que tarjetas cargadas, dice «N de M» (o «N+» cuando el total con la misma
+ * definición no existe — ver nota en `totales`).
  */
 
 const COLUMNAS: { id: Etapa; titulo: string; pista: string }[] = [
@@ -93,15 +99,11 @@ function TarjetaEmbudo({
 
 export function VistaEmbudo({
   onAbrir,
-  onRegistrarVenta,
+  onAgendarBienvenida,
 }: {
   onAbrir: (c: Conversacion) => void;
-  /**
-   * Fase 3 (§3.7): abre el flujo de Registrar venta con la conversación
-   * precargada. Mientras App no la cablee, el drop en Cierre abre la
-   * conversación en la Bandeja (ahí vive el botón «Registrar venta»).
-   */
-  onRegistrarVenta?: (c: Conversacion) => void;
+  /** La siguiente jugada del recibo de venta (cae en la Agenda vía puente). */
+  onAgendarBienvenida?: (telefono: string | null) => void;
 }) {
   const qc = useQueryClient();
   const { items, total, cargando, hayMas, cargandoMas, cargarMas } = useConversaciones('');
@@ -112,11 +114,23 @@ export function VistaEmbudo({
   const [aviso, setAviso] = useState<string | null>(null);
   const [rebotada, setRebotada] = useState<string | null>(null);
   const timerRebote = useRef<number | null>(null);
+  /**
+   * La tarjeta que la compuerta de Cotizados dejó ESPERANDO: se queda a la
+   * vista en la columna destino mientras el modal pide el curso; `previo` es
+   * la foto para devolverla si la vendedora cancela.
+   */
+  const [pendienteInteres, setPendienteInteres] = useState<{
+    c: Conversacion;
+    previo?: { etapas: Record<string, string> };
+  } | null>(null);
+  /** La conversación soltada en Cierre: abre el formulario de Registrar venta. */
+  const [ventaPara, setVentaPara] = useState<Conversacion | null>(null);
 
   const etapas = useQuery({
     queryKey: ['embudo', 'etapas'],
     queryFn: () => api<{ etapas: Record<string, string> }>('/api/gestiones/etapas'),
   });
+
 
   /**
    * Totales por etapa del server (`data.embudo` del Dashboard). Paridad
@@ -164,15 +178,47 @@ export function VistaEmbudo({
       setAviso(null);
     },
     onError: (err, v, ctx) => {
+      const r = decidirRebote({
+        destino: v.etapa,
+        status: err instanceof ErrorApi ? err.status : null,
+        mensaje: err instanceof ErrorApi ? err.message : null,
+      });
+      if (r.accion === 'modal-interes') {
+        // La compuerta pide el interés: la tarjeta se queda esperando en
+        // Cotizados mientras el modal lo registra. Recién si cancela, vuelve.
+        setPendienteInteres({ c: v.c, previo: ctx?.previo });
+        return;
+      }
       if (ctx?.previo !== undefined) qc.setQueryData(['embudo', 'etapas'], ctx.previo);
       else void qc.invalidateQueries({ queryKey: ['embudo', 'etapas'] });
-      // La compuerta habló: el motivo queda a la vista hasta el próximo
-      // arrastre o hasta cerrarlo — nada se autodestruye por reloj.
-      const motivo = (err instanceof ErrorApi ? err.message : 'No se pudo mover').replace(/\.\s*$/, '');
-      setAviso(v.etapa === 'cotizado' ? `${motivo} — agregalo en la tarjeta, acá abajo.` : `${motivo}.`);
+      // El fallback de siempre (red, validación): el motivo queda a la vista
+      // hasta el próximo arrastre o hasta cerrarlo — nada se autodestruye por reloj.
+      setAviso(r.mensaje);
       marcarRebote(v.c.clave);
     },
   });
+
+  /** La vendedora desistió del interés: la tarjeta vuelve a su columna, explícitamente. */
+  function cancelarInteres() {
+    if (!pendienteInteres) return;
+    const { c, previo } = pendienteInteres;
+    setPendienteInteres(null);
+    if (previo !== undefined) qc.setQueryData(['embudo', 'etapas'], previo);
+    else void qc.invalidateQueries({ queryKey: ['embudo', 'etapas'] });
+    marcarRebote(c.clave);
+  }
+
+  /** El interés quedó guardado: el drag original se completa solo (reintento del POST). */
+  function guardadoInteres() {
+    if (!pendienteInteres) return;
+    const { c, previo } = pendienteInteres;
+    setPendienteInteres(null);
+    // El reintento parte de la foto REAL (no de la optimista que quedó a la
+    // vista): así, si vuelve a fallar, el rollback devuelve la tarjeta bien.
+    if (previo !== undefined) qc.setQueryData(['embudo', 'etapas'], previo);
+    const vars = reintentoTrasInteres(c);
+    if (vars) mover.mutate(vars);
+  }
 
   const porEtapa = useMemo(() => {
     const mapa = new Map<Etapa, Conversacion[]>(COLUMNAS.map((e) => [e.id, []]));
@@ -205,14 +251,21 @@ export function VistaEmbudo({
     setArrastrada(null);
     setSobre(null);
     const actual = (etapas.data?.etapas[c.clave] ?? 'interesado') as Etapa;
-    if (actual === etapa) return;
-    if (etapa === 'cierre') {
+    const d = decidirDrop({ actual, destino: etapa, canal: c.canal });
+    if (d.accion === 'nada') return;
+    if (d.accion === 'modal-venta') {
       // El cierre no se declara: se gana registrando la venta (la compuerta del
-      // server queda intacta). El drop abre el flujo con la conversación a mano.
-      (onRegistrarVenta ?? onAbrir)(c);
+      // server queda intacta). El modal abre el formulario con la conversación
+      // precargada; al crear la venta, el server asienta `cierre` solo.
+      setVentaPara(c);
       return;
     }
-    mover.mutate({ c, etapa });
+    if (d.accion === 'abrir') {
+      // Comentario FB/IG: sin teléfono no hay ficha ni venta — a la Bandeja.
+      onAbrir(c);
+      return;
+    }
+    mover.mutate({ c, etapa: d.etapa });
   }
 
   const restantes = total > items.length ? total - items.length : 0;
@@ -223,7 +276,8 @@ export function VistaEmbudo({
         {arrastrada != null && (
           <p className="text-xs text-muted-foreground">
             A <span className="font-semibold">Cotizados</span> con curso de interés; a{' '}
-            <span className="font-semibold">Cierre</span>, registrando la venta.
+            <span className="font-semibold">Cierre</span>, registrando la venta. Si falta algo, se
+            pide al soltar.
           </p>
         )}
         {hayMas && (
@@ -393,6 +447,19 @@ export function VistaEmbudo({
             );
           })}
         </div>
+      )}
+
+      {/* Las compuertas guían: el modal pide lo que falta, ahí mismo. */}
+      {pendienteInteres && (
+        <ModalInteresCotizado c={pendienteInteres.c} onGuardado={guardadoInteres} onCancelar={cancelarInteres} />
+      )}
+      {ventaPara && (
+        <ModalVentaCierre
+          c={ventaPara}
+          onCerrar={() => setVentaPara(null)}
+          onAbrir={onAbrir}
+          onAgendarBienvenida={onAgendarBienvenida}
+        />
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, BadgeCheck, ExternalLink, Loader2, ShoppingBag, ShoppingCart, UserPlus } from 'lucide-react';
 import { api } from '../../lib/datos/cliente';
@@ -30,12 +30,13 @@ interface VentaFicha {
   fecha: string;
 }
 
-type Ficha =
+export type Ficha =
   | { estado: 'cliente'; id: number; nombre: string; codigo: string; dni: string; pais: string; correo: string; ventasCount: number; ventas: VentaFicha[] }
   | { estado: 'nuevo' }
   | { estado: 'error'; motivo: string };
 
-function useFicha(telefono: string | null, activo: boolean) {
+/** Exportado para el modal de Cierre del Pipeline (#60): misma query, mismo caché. */
+export function useFicha(telefono: string | null, activo: boolean) {
   return useQuery({
     queryKey: ['ficha', telefono],
     queryFn: () => api<Ficha>(`/api/contactos/ficha?telefono=${encodeURIComponent(telefono ?? '')}`),
@@ -66,15 +67,12 @@ export function FichaContacto({
   conversacion,
   onCorreo,
   onAgendarBienvenida,
-  senalVenta,
 }: {
   conversacion: Conversacion;
   /** Puente a Correos: prellena el Para con el correo de la ficha. Sin esto, la acción no se muestra. */
   onCorreo?: (para: string) => void;
   /** Puente a la Agenda desde el recibo de venta. Sin esto, el botón no se muestra. */
   onAgendarBienvenida?: (telefono: string | null) => void;
-  /** Contador-señal del drop en Cierre del kanban: al incrementarse, abre el form de venta. */
-  senalVenta?: number;
 }) {
   // La ficha se resuelve por teléfono. Solo aplica a WhatsApp (ahí el persona_id
   // ES el teléfono); en comentarios el persona_id es un id de Meta, no un número.
@@ -85,22 +83,11 @@ export function FichaContacto({
   const qc = useQueryClient();
 
   // Cambiar de conversación desarma cualquier form pendiente de la anterior.
-  // Corre ANTES que el efecto de la señal: en un drop cambian los dos a la vez
-  // y el orden de definición decide — primero se desarma, después la señal arma.
+  // (La señal `senalVenta` del drop en Cierre del kanban se retiró en #60: ese
+  // drop ahora abre su modal DENTRO del Pipeline, sin viajar a la Bandeja.)
   useEffect(() => {
     setMostrarForm(false);
   }, [conversacion.clave]);
-
-  // El drop en Cierre pide abrir el form. Si la ficha todavía carga, mostrarForm
-  // queda armado y el modal aparece solo cuando el contacto resuelve como cliente;
-  // para un lead nuevo no hay form que abrir (la ficha ya muestra el camino).
-  const senalVista = useRef(senalVenta ?? 0);
-  useEffect(() => {
-    if (senalVenta != null && senalVenta > senalVista.current) {
-      senalVista.current = senalVenta;
-      setMostrarForm(true);
-    }
-  }, [senalVenta]);
 
   // Para un lead NUEVO (todavía no cliente) registramos la conversión (el dato de
   // embudo) — la venta necesita primero crear el cliente en Cerberus.
