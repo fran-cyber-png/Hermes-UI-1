@@ -206,9 +206,10 @@ Correos (falta SMTP) · Agenda-calendario.
 
 ### Tres cosas rotas que conviene saber antes de tocar nada
 
-1. **Auth partida por la mitad**: `/api/conversaciones`, `/api/whatsapp/conversacion/:telefono`,
-   `/api/whatsapp/media/*` y `/api/responder` (que publica en Facebook) **no piden token**, y la API
-   es pública por HTTPS. Lo mismo `/api/sdk`.
+1. ~~Auth partida por la mitad~~ **Resuelto (#36): cerrada por perímetro** (ADR del perímetro):
+   todo `/api/*` exige el Bearer de una vendedora por defecto — `app.use(perimetroApi)` en
+   `server/src/auth/perimetro.ts`, las excepciones se enumeran ahí. Deuda trackeada: CORS sigue
+   en `*` (#94) y el SDK necesita credencial de servicio máquina-a-máquina (#95).
 2. ~~El orden de la cola está implementado dos veces y divergió~~ **Resuelto (#37, ADR 0009)**: la
    urgencia vive una vez en `cola/` (función pura + proyección SQL en `urgenciaSql.ts`) y el test
    de paridad `urgencia.paridad.test.db.ts` falla en CI si vuelven a divergir.

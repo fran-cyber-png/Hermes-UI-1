@@ -102,9 +102,9 @@ app.use("/api/whatsapp", whatsappRouter); // conversación nativa: hilo + enviar
 // es decisión aparte (auth de operador, o bloquear /vincular en nginx) — ver #36.
 app.use("/vincular", vincularRouter);     // consola de operador: enlazar un número (D13)
 app.use("/api/admin", requiereServicio, adminRouter); // administración de números desde Cerberus (#50/#95)
-// Las dos rutas de dev están exentas del perímetro (auth/perimetro.ts), así que
-// SOLO pueden montarse fuera de producción — correr el transporte falso en prod
-// ya no las abre.
+// Las dos rutas de dev solo se montan fuera de producción; y su exención en el
+// perímetro (auth/perimetro.ts) también es solo-dev — en prod no hay agujero
+// que recordar, aunque alguien las montara igual.
 if (process.env.NODE_ENV !== "production") {
   app.use("/api/whatsapp/_sim", simularRouter); // simular detección de origen (dev)
   if (falso) app.use("/api/whatsapp/_dev", rutaDevWhatsapp(falso));

@@ -1,4 +1,4 @@
-# ADR 0009 — La API se cierra por perímetro, no router por router
+# ADR 0010 — La API se cierra por perímetro, no router por router
 
 - **Fecha:** 2026-07-23
 - **Estado:** aceptado
@@ -60,6 +60,7 @@ igual que el resto del server») quedó fosilizado de la época del portátil.
 - **`/vincular` sigue abierto**: la consola del operador no tiene auth propia y nginx la proxya.
   Contenerla es decisión aparte (auth de operador o bloqueo en nginx).
 - **El SDK necesita una credencial de servicio** (máquina-a-máquina) para kos/Ivi/MCP; hoy exige el
-  token de una vendedora, que no es lo que esos consumidores tienen.
+  token de una vendedora, que no es lo que esos consumidores tienen. Trackeado en **#95**.
 - **CORS sigue en `*`** (`app.use(cors())`): con Bearer obligatorio ya no expone datos, pero acotar
   el origen es defensa en profundidad pendiente (ojo con los orígenes de Tauri/Electron y Vite dev).
+  Trackeado en **#94**.

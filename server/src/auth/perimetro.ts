@@ -18,21 +18,33 @@ import { requiereVendedora } from './sesion.js';
  * dos veces es gratis; olvidarse una vez ya costó una exposición.
  */
 
-/** Prefijos de /api que NO exigen token, cada uno con su razón de existir. */
+/** Prefijos de /api que NO exigen token NUNCA, con su razón de existir. */
 const PREFIJOS_ABIERTOS = [
   '/api/auth', // el login: sin esto nadie consigue token (y /yo valida el suyo adentro)
-  '/api/whatsapp/_sim', // dev-only: index.ts solo lo monta fuera de producción
-  '/api/whatsapp/_dev', // dev-only: index.ts solo lo monta con el transporte falso y fuera de producción
+];
+
+/**
+ * Prefijos exentos SOLO fuera de producción. En prod estas rutas ni se montan
+ * (index.ts) — pero el perímetro no depende de acordarse de eso: si algún día
+ * se montaran igual, acá nacen cerradas.
+ */
+const PREFIJOS_ABIERTOS_DEV = [
+  '/api/whatsapp/_sim', // simular detección de origen
+  '/api/whatsapp/_dev', // inyectar mensajes con el transporte falso
 ];
 
 /** ¿Esta ruta queda fuera de la exigencia de vendedora? */
-export function esRutaAbierta(path: string): boolean {
+export function esRutaAbierta(
+  path: string,
+  enProduccion: boolean = process.env.NODE_ENV === 'production',
+): boolean {
   // En minúsculas ANTES de comparar: Express rutea case-insensitive por
   // defecto, así que /API/conversaciones llega al router igual — sin esto,
   // las mayúsculas esquivaban la guardia.
   const p = path.toLowerCase();
   if (p !== '/api' && !p.startsWith('/api/')) return true;
-  return PREFIJOS_ABIERTOS.some((prefijo) => p === prefijo || p.startsWith(`${prefijo}/`));
+  const abiertos = enProduccion ? PREFIJOS_ABIERTOS : [...PREFIJOS_ABIERTOS, ...PREFIJOS_ABIERTOS_DEV];
+  return abiertos.some((prefijo) => p === prefijo || p.startsWith(`${prefijo}/`));
 }
 
 /**

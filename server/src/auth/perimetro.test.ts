@@ -26,9 +26,18 @@ describe('esRutaAbierta — qué queda fuera del token', () => {
     assert.equal(esRutaAbierta('/assets/index-abc123.js'), true);
   });
 
-  test('las rutas de dev quedan exentas (solo se montan fuera de producción)', () => {
-    assert.equal(esRutaAbierta('/api/whatsapp/_sim/entrante'), true);
-    assert.equal(esRutaAbierta('/api/whatsapp/_dev/mensaje'), true);
+  test('las rutas de dev quedan exentas SOLO fuera de producción', () => {
+    assert.equal(esRutaAbierta('/api/whatsapp/_sim/entrante', false), true);
+    assert.equal(esRutaAbierta('/api/whatsapp/_dev/mensaje', false), true);
+  });
+
+  test('en producción NO hay agujeros de dev que recordar: _sim y _dev exigen token', () => {
+    // El ADR 0010 dice «el perímetro no depende de que alguien se acuerde»;
+    // una exención incondicional re-creaba exactamente ese patrón (si algún
+    // día _sim/_dev se montaran en prod, nacían abiertas).
+    assert.equal(esRutaAbierta('/api/whatsapp/_sim/entrante', true), false);
+    assert.equal(esRutaAbierta('/api/whatsapp/_dev/mensaje', true), false);
+    assert.equal(esRutaAbierta('/api/auth/login', true), true); // el login sí, siempre
   });
 
   test('lo que el issue #36 encontró abierto queda CERRADO', () => {
