@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import cors from "cors";
 import express from "express";
+import { perimetroApi } from "./auth/perimetro.js";
 import { adsRouter } from "./routes/ads.js";
 import { audiencesRouter } from "./routes/audiences.js";
 import { adsetsRouter } from "./routes/adsets.js";
@@ -45,6 +46,12 @@ const port = process.env.PORT ? Number(process.env.PORT) : 4100;
 
 app.use(cors());
 app.use(express.json());
+
+// EL PERÍMETRO (issue #36): la API es pública por HTTPS, así que TODO /api/*
+// exige el token de una vendedora — cerrado por defecto, las excepciones viven
+// enumeradas con su porqué en auth/perimetro.ts. Va ANTES de montar cualquier
+// router: uno nuevo nace protegido sin que nadie tenga que acordarse.
+app.use(perimetroApi);
 
 // EL BFF: una sola llamada con todo lo que la home necesita. Solo Postgres, cero Meta.
 // Reemplaza las 4 llamadas que la pantalla hacía al montar — una de ellas de 4 minutos.
@@ -90,12 +97,18 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 const { falso } = arrancarWhatsapp();
 app.use("/api/stream", streamRouter);     // tiempo real: push de cambios (SSE)
 app.use("/api/whatsapp", whatsappRouter); // conversación nativa: hilo + enviar
+// ⚠ /vincular queda FUERA del perímetro /api y sigue abierto: la consola del
+// operador no tiene auth propia todavía (su HTML no manda Bearer). Contenerlo
+// es decisión aparte (auth de operador, o bloquear /vincular en nginx) — ver #36.
 app.use("/vincular", vincularRouter);     // consola de operador: enlazar un número (D13)
 app.use("/api/admin", requiereServicio, adminRouter); // administración de números desde Cerberus (#50/#95)
+// Las dos rutas de dev están exentas del perímetro (auth/perimetro.ts), así que
+// SOLO pueden montarse fuera de producción — correr el transporte falso en prod
+// ya no las abre.
 if (process.env.NODE_ENV !== "production") {
   app.use("/api/whatsapp/_sim", simularRouter); // simular detección de origen (dev)
+  if (falso) app.use("/api/whatsapp/_dev", rutaDevWhatsapp(falso));
 }
-if (falso) app.use("/api/whatsapp/_dev", rutaDevWhatsapp(falso));
 
 // LA UI SERVIDA DESDE ACÁ (actualización "over the air", estilo EAS Update):
 // si el build del front existe (dist/ en la raíz del repo), el server lo sirve.

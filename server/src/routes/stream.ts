@@ -6,9 +6,11 @@ import { suscribirRT } from '../realtime/bus.js';
  *
  * Cada Hermes abierto mantiene una conexión acá. Cuando el server recibe un
  * mensaje o cambia el estado de la sesión, empuja un evento por este stream, y el
- * frontend invalida las queries afectadas al instante. No transporta datos —solo
- * la señal de "esto cambió, volvé a pedirlo"—, así que no necesita auth: no
- * expone nada que la cola no exponga ya.
+ * frontend invalida las queries afectadas al instante. No transporta contenido,
+ * pero los eventos de mensaje SÍ llevan el teléfono del contacto (PII), así que
+ * el stream vive DETRÁS del perímetro (`auth/perimetro.ts`) como todo /api. Como
+ * EventSource no puede mandar headers, el front lo consume con fetch + Bearer y
+ * parsea el SSE a mano (`src/lib/datos/tiempoReal.ts`).
  */
 export const streamRouter = Router();
 

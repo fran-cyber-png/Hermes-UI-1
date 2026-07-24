@@ -26,9 +26,10 @@ export const sdkRouter = Router();
 /**
  * El catálogo: qué puede responder el sistema, con el JSON Schema de cada entrada.
  *
- * Se publica sin auth igual que el resto del server (que tampoco tiene). Es lectura y describe
- * capacidades, no datos — pero cuando el server salga del portátil, esto va detrás de auth junto
- * con todo lo demás.
+ * Desde el cierre del issue #36 esto vive detrás del perímetro (`auth/perimetro.ts`):
+ * exige el Bearer de una vendedora, como todo /api. Los consumidores máquina (kos,
+ * Ivi, MCP) necesitan una credencial de servicio que todavía no existe — cuando se
+ * conecten, esa credencial se diseña aparte; abrir esto de nuevo NO es la opción.
  */
 sdkRouter.get("/catalogo", (_req, res) => {
   res.json(catalogo());
