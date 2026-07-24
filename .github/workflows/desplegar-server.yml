@@ -1,14 +1,20 @@
 name: Desplegar server (con restart)
 
-# El despliegue que CUESTA algo, y por eso lo dispara un humano.
+# NIVEL 5 — el despliegue que CUESTA algo, y por eso lo dispara una persona.
 #
 # Reiniciar `hermes` corta el SSE, obliga a whatsmeow a reconectar y —lo que más duele—
 # tira las sesiones de Cerberus, que viven en un Map de proceso: cada vendedora logueada
 # se encuentra un 409 «la sesión de Cerberus expiró» la próxima vez que abra el formulario
 # de venta. Por eso el momento lo elegís vos, idealmente fuera del horario de atención.
 #
-# El front solo se despliega automático al mergear a `main` (ver `ci.yml` → desplegar-front).
-# Contexto y decisiones: `docs/despliegue-continuo.md`.
+# El trabajo real NO está acá: está en `deploy/vps1/hermes-deploy.sh`, versionado en el
+# repo y revisable en un PR. Este workflow lo instala y lo llama. La misma pieza corre
+# cuando alguien despliega por SSH — para que «a mano» y «por pipeline» no puedan
+# divergir, que es como se llega a que la vía usada a las 2 AM sea la que nadie probó.
+#
+# El script respalda la base si hay migraciones, migra, construye, reinicia, espera
+# /health, corre el smoke funcional y —si algo falla— revierte solo y verifica que lo
+# revertido esté sano. Contexto y decisiones: `docs/despliegue-continuo.md`.
 
 on:
   workflow_dispatch:
@@ -21,6 +27,15 @@ on:
         description: 'SHA a desplegar (vacío = el HEAD de main)'
         required: false
         type: string
+      sin_migrar:
+        description: 'NO aplicar migraciones (solo para desenredar algo a mano)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write # para dejar rastro si producción se rompe
 
 jobs:
   desplegar:
@@ -36,115 +51,111 @@ jobs:
           echo "::error::Hay que escribir exactamente 'reiniciar' para confirmar."
           exit 1
 
-      - name: Desplegar y reiniciar
+      - uses: actions/checkout@v4
+
+      # El script se instala DESDE EL REPO en cada corrida: así lo que corre es siempre
+      # lo que está commiteado y revisado, y nadie puede parchear el servidor a mano sin
+      # que el próximo deploy lo pise.
+      - name: Instalar la versión commiteada del script de deploy
+        run: sudo install -m 0755 -o root -g root deploy/vps1/hermes-deploy.sh /usr/local/bin/hermes-deploy
+
+      - name: Qué se va a desplegar
+        id: plan
         env:
-          SRV: /srv/hermes
           PEDIDO: ${{ inputs.sha }}
-          API: https://hermes-api.goberna.us
         run: |
           set -euo pipefail
-          ESTADO="$HOME/.hermes-despliegue"
-          mkdir -p "$ESTADO"
+          sudo hermes-deploy ${PEDIDO:-origin/main} --dry-run | tee /tmp/plan.txt
+          {
+            echo "### Lo que se va a desplegar"
+            echo '```'
+            cat /tmp/plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
-          # Regla dura #6: ante drift prod≠git, avisar antes de tocar.
-          if [ -n "$(git -C "$SRV" status --porcelain -uno)" ]; then
-            echo "::error::/srv/hermes tiene cambios locales sin commitear. No toco nada."
-            git -C "$SRV" status --short -uno
-            exit 1
-          fi
-          git -C "$SRV" fetch --quiet origin main
-
-          NUEVO="${PEDIDO:-$(git -C "$SRV" rev-parse origin/main)}"
-          if [ -f "$ESTADO/server" ]; then VIEJO="$(cat "$ESTADO/server")"; else VIEJO="$(git -C "$SRV" rev-parse HEAD)"; fi
-          echo "$VIEJO → $NUEVO"
-          echo "ROLLBACK=$VIEJO" >> "$GITHUB_ENV"
-
-          TOCADOS="$(git -C "$SRV" diff --name-only "$VIEJO".."$NUEVO" || true)"
-
-          # El schema NO se migra solo. Drizzle no tiene migraciones versionadas: `db:push`
-          # compara contra la base viva y aplica lo que le parece, sin plan y sin backup.
-          # Es la deuda declarada en ADR 0001 y el CD no la resuelve — la haría peligrosa.
-          if printf '%s\n' "$TOCADOS" | grep -qE '^server/src/db/schema\.ts$'; then
-            {
-              echo "## 🛑 Cambió el schema — frené"
-              echo
-              echo "\`server/src/db/schema.ts\` cambió entre \`${VIEJO:0:8}\` y \`${NUEVO:0:8}\`."
-              echo "Drizzle no tiene migraciones versionadas, así que esto no se automatiza:"
-              echo
-              echo '```bash'
-              echo "ssh deploy@161.132.39.165 'cd /srv/hermes/server && npm run db:push'   # mirá lo que propone"
-              echo '```'
-              echo
-              echo "Cuando la base esté al día, volvé a disparar este workflow."
-            } >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::Cambió el schema: corré db:push a mano y volvé a disparar."
-            exit 1
-          fi
-
-          git -C "$SRV" checkout --quiet --force "$NUEVO"
-          cd "$SRV"
-
-          if printf '%s\n' "$TOCADOS" | grep -qE '^(package\.json|package-lock\.json)$'; then
-            ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci
-          fi
-          if printf '%s\n' "$TOCADOS" | grep -qE '^server/(package\.json|package-lock\.json)$'; then
-            (cd server && npm ci)
-          fi
-
-          # Mismo swap que el despliegue de front: `vite build` vacía la salida antes de
-          # escribir, y hacerlo sobre `dist/` dejaría 404 durante todo el build.
-          rm -rf dist.nuevo
-          env VITE_API_URL="$API" npx vite build --outDir dist.nuevo --emptyOutDir
-          test -f dist.nuevo/index.html
-          rm -rf dist.anterior
-          mv dist dist.anterior
-          mv dist.nuevo dist
-
-          sudo systemctl restart hermes
-          echo "$NUEVO" > "$ESTADO/server"
-          echo "$NUEVO" > "$ESTADO/front"
-
-      - name: Verificar que quedó vivo (regla dura #2)
+      - name: Desplegar
+        id: desplegar
         env:
-          API: https://hermes-api.goberna.us
+          PEDIDO: ${{ inputs.sha }}
+          SIN_MIGRAR: ${{ inputs.sin_migrar }}
         run: |
           set -euo pipefail
-          # El proceso arranca, se conecta a Postgres y levanta whatsmeow: se le da tiempo.
-          for i in $(seq 1 30); do
-            if curl -fsS --max-time 5 "$API/health" >/dev/null 2>&1; then LISTO=1; break; fi
-            sleep 2
-          done
-          if [ "${LISTO:-0}" != "1" ]; then
-            echo "::error::El server no contesta /health después de 60s."
-            systemctl status hermes --no-pager --lines=30 || true
-            exit 1
-          fi
-          systemctl is-active hermes
-          echo "sesión de WhatsApp: $(curl -fsS --max-time 10 "$API/api/whatsapp/sesion" || echo 'sin respuesta')"
+          EXTRA=""
+          [ "$SIN_MIGRAR" = "true" ] && EXTRA="--sin-migrar"
+          sudo hermes-deploy ${PEDIDO:-origin/main} $EXTRA
 
-          {
-            echo "## ✅ Server desplegado y vivo"
-            echo
-            echo "\`/health\` responde y \`hermes\` está activo."
-            echo
-            echo "Si algo salió mal:"
-            echo '```bash'
-            echo "ssh deploy@161.132.39.165 'cd /srv/hermes && git checkout --force ${ROLLBACK:-<sha-anterior>} && \\"
-            echo "  npm ci && npm run build && sudo systemctl restart hermes'"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Avisar si quedó caído
-        if: failure()
+      - name: Resumen
+        if: success()
         run: |
           {
-            echo "## 🔴 El despliegue falló"
+            echo "## ✅ Server desplegado y verificado"
             echo
-            echo "Revisá \`systemctl status hermes\` en VPS1. Rollback al SHA anterior:"
+            echo "\`/health\` responde y el **smoke funcional** pasó contra la URL pública:"
+            echo "el perímetro de auth sigue cerrado y el front nuevo se sirve."
+            echo
+            echo "Volver atrás (el script sabe a dónde):"
             echo '```bash'
-            echo "ssh deploy@161.132.39.165 'cd /srv/hermes && git checkout --force ${ROLLBACK:-<sha-anterior>} && \\"
-            echo "  npm ci && npm run build && sudo systemctl restart hermes'"
+            echo "ssh deploy@161.132.39.165 'sudo hermes-deploy --rollback'"
             echo '```'
-            echo
-            echo "Si solo el front quedó mal, es más rápido: \`mv dist dist.roto && mv dist.anterior dist\`."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Si el deploy falló, el script YA revirtió y verificó. Lo que falta es que quede
+      # rastro: un run rojo en Actions lo ve quien estaba mirando, y nadie más.
+      - name: Estado real de producción tras el fallo
+        if: failure()
+        id: forense
+        run: |
+          set +e
+          {
+            echo "### Estado de producción ahora"
+            echo
+            echo "- \`/health\`: $(curl -fsS --max-time 5 https://hermes-api.goberna.us/health 2>&1 || echo 'SIN RESPUESTA')"
+            echo "- servicio: $(systemctl is-active hermes 2>&1)"
+            echo "- SHA del checkout: $(git -C /srv/hermes rev-parse --short HEAD 2>&1)"
+            echo
+            echo "Últimas líneas del log:"
+            echo '```'
+            sudo journalctl -u hermes -n 30 --no-pager 2>&1 | tail -30
+            echo '```'
+          } | tee /tmp/forense.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Abrir un issue con lo que pasó
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let forense = '(no se pudo recolectar el estado)';
+            try { forense = fs.readFileSync('/tmp/forense.md', 'utf8'); } catch {}
+
+            const sha = context.sha.slice(0, 8);
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            const cuerpo = [
+              `El despliegue de \`${sha}\` a producción **falló**.`,
+              '',
+              `El script revierte solo y verifica lo revertido, así que lo más probable es que`,
+              `producción esté en el SHA anterior y respondiendo — pero eso hay que **confirmarlo**,`,
+              `no darlo por hecho.`,
+              '',
+              forense,
+              '',
+              `**Run:** ${run}`,
+              '',
+              '---',
+              '',
+              'Si producción quedó caída:',
+              '```bash',
+              "ssh deploy@161.132.39.165 'sudo hermes-deploy --rollback'",
+              '```',
+              '',
+              '_Abierto automáticamente por `desplegar-server.yml`._',
+            ].join('\n');
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Falló el despliegue de ${sha} a producción`,
+              body: cuerpo,
+              labels: ['infra'],
+            });

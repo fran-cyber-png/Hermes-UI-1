@@ -58,3 +58,6 @@ server/.wa-media/
 release/
 src-tauri/target/
 src-tauri/gen/
+
+# Worktrees de agentes: son checkouts, no código del repo.
+.claude/worktrees/
