@@ -291,7 +291,7 @@ export function VistaEmbudo({
   return (
     <div className="flex min-h-0 flex-1 flex-col p-3">
       {/* ── LA BANDEJA DE INTERESADOS: contador real, no una pila infinita. ── */}
-      <div className="mb-2.5 flex shrink-0 items-center gap-3 rounded-2xl bg-card px-4 py-2.5 shadow-panel">
+      <div className="mb-2.5 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl bg-card px-4 py-2.5 shadow-panel">
         <Inbox size={16} className="shrink-0 text-navy" />
         <div className="flex min-w-0 flex-1 items-baseline gap-2">
           <span className="font-heading text-xl font-bold tabular-nums text-foreground">
@@ -306,7 +306,7 @@ export function VistaEmbudo({
           <button
             type="button"
             onClick={onIrAMensajes}
-            className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 active:scale-[0.98]"
+            className="flex shrink-0 basis-full items-center justify-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 active:scale-[0.98] sm:basis-auto sm:justify-start"
           >
             Responder en Mensajes
             <ArrowRight size={12} />
