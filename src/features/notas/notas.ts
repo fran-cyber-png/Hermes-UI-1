@@ -24,6 +24,13 @@ export interface Nota {
   editadoAt: string | null;
   /** null = viva. No hay borrado físico. */
   archivadoAt: string | null;
+  /**
+   * 'nota' = editable, de la tabla `notas`. 'gestion' = HISTÓRICA — el texto
+   * que quedó en `gestiones.notas` antes de #47 (el viejo textarea de
+   * `RegistrarGestion`), solo lectura: no tiene PATCH posible (ver ADR 0011).
+   * `id` de una histórica es el id de esa fila de `gestiones`, no de `notas`.
+   */
+  origen: 'nota' | 'gestion';
 }
 
 /**
@@ -67,10 +74,18 @@ export function useBuscarNotas(q: string) {
   });
 }
 
-/** Las tres mutaciones comparten la invalidación: la lista de esa `clave` (nunca se cachea en disco). */
+/**
+ * Las mutaciones comparten la invalidación: la lista de esa `clave` (nunca se
+ * cachea en disco). `onSuccess` DEVUELVE la promesa de `invalidateQueries` (no
+ * `void`) a propósito: así `mutateAsync(...)` no se considera terminada hasta
+ * que la lista se refrescó de verdad — sin esto, dos clics rápidos en "fijar"
+ * (el botón se reactiva apenas el PATCH vuelve, todavía con el dato viejo en
+ * caché) podían pisarse. `PanelNotas` además deshabilita el botón mientras la
+ * promesa está en vuelo.
+ */
 export function useMutacionesNotas(clave: string) {
   const qc = useQueryClient();
-  const invalidar = () => void qc.invalidateQueries({ queryKey: ['notas', clave] });
+  const invalidar = () => qc.invalidateQueries({ queryKey: ['notas', clave] });
 
   const crear = useMutation({
     mutationFn: (texto: string) => api<{ ok: true; nota: Nota }>('/api/notas', { method: 'POST', body: JSON.stringify({ clave, texto }) }),
@@ -91,5 +106,11 @@ export function useMutacionesNotas(clave: string) {
     onSuccess: invalidar,
   });
 
-  return { crear, editar, archivar };
+  /** El «Deshacer» del toast que sigue a archivar — el camino de vuelta que faltaba. */
+  const desarchivar = useMutation({
+    mutationFn: (id: number) => api<{ ok: true; nota: Nota }>(`/api/notas/${id}/desarchivar`, { method: 'PATCH' }),
+    onSuccess: invalidar,
+  });
+
+  return { crear, editar, archivar, desarchivar };
 }

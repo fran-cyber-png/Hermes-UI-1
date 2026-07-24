@@ -16,6 +16,7 @@ function nota(p: Partial<Nota>): Nota {
     creadoAt: '2026-07-01T00:00:00Z',
     editadoAt: null,
     archivadoAt: null,
+    origen: 'nota',
     ...p,
   };
 }
@@ -43,6 +44,15 @@ describe('ordenarNotas', () => {
 
   it('lista vacía no revienta', () => {
     expect(ordenarNotas([])).toEqual([]);
+  });
+
+  it('mezcla notas nuevas e históricas (origen "gestion") por la misma regla — ninguna se pierde', () => {
+    // ADR 0011: retirar el textarea viejo de RegistrarGestion no puede volver
+    // invisibles las notas que ya estaban en gestiones.notas.
+    const nueva = nota({ id: 1, origen: 'nota', creadoAt: '2026-07-10T00:00:00Z' });
+    const historica = nota({ id: 2, origen: 'gestion', creadoAt: '2026-01-01T00:00:00Z' });
+    const resultado = ordenarNotas([historica, nueva]);
+    expect(resultado.map((n) => n.origen)).toEqual(['nota', 'gestion']);
   });
 });
 
