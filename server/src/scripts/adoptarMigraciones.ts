@@ -71,16 +71,21 @@ async function main(): Promise<void> {
       );
     }
 
-    await sql.unsafe(`CREATE SCHEMA IF NOT EXISTS drizzle`);
-    await sql.unsafe(`CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (
-      id SERIAL PRIMARY KEY,
-      hash text NOT NULL,
-      created_at bigint
-    )`);
+    // El dry-run NO escribe: ni siquiera crea el schema. Un «decime qué harías» que
+    // deja objetos atrás no es un dry-run, y la tabla de migraciones es justo la que
+    // no querés que aparezca a medias en una base de producción.
+    const [{ hayTabla }] = await sql<{ hayTabla: boolean }[]>`
+      select exists (
+        select 1 from information_schema.tables
+        where table_schema = 'drizzle' and table_name = '__drizzle_migrations'
+      ) as "hayTabla"`;
 
-    const yaRegistradas = await sql<{ hash: string }[]>`
-      select hash from drizzle.__drizzle_migrations`;
-    const registradas = new Set(yaRegistradas.map((r) => r.hash));
+    const registradas = new Set<string>();
+    if (hayTabla) {
+      const yaRegistradas = await sql<{ hash: string }[]>`
+        select hash from drizzle.__drizzle_migrations`;
+      for (const r of yaRegistradas) registradas.add(r.hash);
+    }
 
     const pendientes = leerJournal()
       .map((e) => ({ ...e, hash: hashDe(e.tag) }))
@@ -101,6 +106,13 @@ async function main(): Promise<void> {
       );
       return;
     }
+
+    await sql.unsafe(`CREATE SCHEMA IF NOT EXISTS drizzle`);
+    await sql.unsafe(`CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (
+      id SERIAL PRIMARY KEY,
+      hash text NOT NULL,
+      created_at bigint
+    )`);
 
     for (const p of pendientes) {
       await sql`
