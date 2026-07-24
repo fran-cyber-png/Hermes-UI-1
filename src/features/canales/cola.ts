@@ -86,6 +86,10 @@ export interface EstadoCola {
   /** El nombre (minúsculas) de la categoría en el modo Listas; null = sin filtro. */
   categoria: string | null;
   canal?: string;
+  /** Filtra por etapa efectiva en el server: la carga POR COLUMNA del Pipeline
+   *  (#89/#90). Solo entra a la queryKey/URL cuando se pide, así las queries de
+   *  siempre (Mensajes) conservan su clave y su caché persistido. */
+  etapa?: string;
 }
 
 /**
@@ -99,5 +103,6 @@ export function parametrosDeCola(e: EstadoCola): Record<string, string> {
   if (e.filtroSec) p.intencion = e.filtroSec;
   if (e.categoria) p.categoria = e.categoria;
   if (e.canal) p.canal = e.canal;
+  if (e.etapa) p.etapa = e.etapa;
   return p;
 }

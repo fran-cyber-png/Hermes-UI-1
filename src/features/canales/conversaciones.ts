@@ -26,6 +26,11 @@ export interface Conversacion {
   ultima_origen?: { fuente: string; titulo?: string | null } | null;
   /** Derivada: hay un saliente posterior al último entrante. Nunca estado de fila. */
   respondida: boolean;
+  /** La etapa del embudo dicha por el SERVER (ADR 0013): max(manual, derivada),
+   *  `perdido` terminal. Opcional hasta que el server desplegado la sirva (#88). */
+  etapa_efectiva?: string | null;
+  /** La última gestión asentada a mano (o null). Informativa; la que manda es la efectiva. */
+  etapa_manual?: string | null;
   ventana_abierta: boolean;
   pide_info: boolean;
   /** Cuántos mensajes agrupa la conversación (1 en comentarios). */
@@ -54,21 +59,39 @@ type Pagina = {
   hayMas: boolean;
   /** El server sirvió la cola SIN estado personal (la tabla no existe todavía). */
   sinEstado?: boolean;
+  /** Conteos reales por etapa efectiva sobre la misma ventana (#89). Solo primera página. */
+  conteos?: Record<string, number>;
 };
 
 /**
  * La cola unificada. Mismo patrón que `useInteracciones` (infinite query cacheada
  * por filtros), pero contra `/api/conversaciones`: una fila por conversación, no
- * por mensaje. Los ejes (tab, filtro secundario, categoría) van en `estado` y se
- * traducen a query-params con `parametrosDeCola` (lógica pura, testeada aparte).
+ * por mensaje. Los ejes (tab, filtro secundario, categoría, etapa) van en
+ * `estado` y se traducen a query-params con `parametrosDeCola` (lógica pura,
+ * testeada aparte).
+ *
+ * `etapa` (#89/#90): la carga POR COLUMNA del Pipeline — filtra por etapa
+ * efectiva en el server. Solo entra a la queryKey/URL cuando se pide, así las
+ * queries de siempre (Mensajes) conservan su clave y su caché persistido.
  */
-export function useConversaciones(estado: EstadoCola | string = { tab: 'todo', filtroSec: '', categoria: null }) {
-  // Compat: `VistaEmbudo` (otro frente) todavía llama `useConversaciones('')`
-  // con el string viejo. Un string legado se normaliza a un estado: `''` = todo,
-  // y solo `pide-info`/`por-vencer` sobreviven como filtro secundario.
+export function useConversaciones(
+  estado: EstadoCola | string = { tab: 'todo', filtroSec: '', categoria: null },
+  canal = '',
+  etapa = '',
+) {
+  // Compat: `VistaEmbudo` (otro frente) todavía llama `useConversaciones(intencion, canal, etapa)`
+  // por posición, con el string viejo de intención. Un string legado se normaliza
+  // a un estado: `''` = todo, y solo `pide-info`/`por-vencer` sobreviven como
+  // filtro secundario; `canal`/`etapa` posicionales entran igual al estado.
   const norm: EstadoCola =
     typeof estado === 'string'
-      ? { tab: 'todo', filtroSec: estado === 'pide-info' || estado === 'por-vencer' ? estado : '', categoria: null }
+      ? {
+          tab: 'todo',
+          filtroSec: estado === 'pide-info' || estado === 'por-vencer' ? estado : '',
+          categoria: null,
+          canal: canal || undefined,
+          etapa: etapa || undefined,
+        }
       : estado;
   const base = parametrosDeCola(norm);
 
@@ -91,6 +114,8 @@ export function useConversaciones(estado: EstadoCola | string = { tab: 'todo', f
   return {
     items: q.data?.pages.flatMap((p) => p.conversaciones) ?? [],
     total: q.data?.pages[0]?.total ?? 0,
+    /** Los conteos del embudo (primera página): el total real de cada columna del tablero. */
+    conteos: q.data?.pages[0]?.conteos,
     hayMas: Boolean(q.hasNextPage),
     cargando: q.isPending,
     cargandoMas: q.isFetchingNextPage,
