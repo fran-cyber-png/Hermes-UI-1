@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { MoreVertical } from 'lucide-react';
 import { armarItemsMenu } from './itemsHerramientas';
+import { GestorCategorias } from './GestorCategorias';
 
 /**
  * EL BOTÓN `···` — la puerta única a las herramientas de venta, siempre en
  * el mismo lugar sobre CUALQUIER conversación.
  *
- * Este issue es SOLO el contenedor: las cinco herramientas (correo rápido,
- * mensajes predeterminados, etiquetas, notas, catálogo) son issues aparte
- * que todavía no aterrizaron, así que hoy se ven pero deshabilitadas con
- * «Próximamente» — el día que una herramienta exista, `MenuHerramientas`
- * le pasa su callback a `armarItemsMenu` y el item se habilita solo.
+ * De las cinco herramientas (correo rápido, mensajes predeterminados,
+ * etiquetas, notas, catálogo), **«Etiquetas» ya aterrizó** (#48): abre el
+ * `GestorCategorias`. Las que faltan siguen deshabilitadas con «Próximamente»
+ * — el día que existan, `MenuHerramientas` le pasa su callback a
+ * `armarItemsMenu` y el item se habilita solo.
  *
  * Patrón de popover calcado de `BotonLlamar`/`AgendarRapido` (mismo archivo
  * de referencia, `BarraGestion.tsx`): overlay `fixed inset-0` + panel
@@ -21,6 +22,7 @@ import { armarItemsMenu } from './itemsHerramientas';
  */
 export function MenuHerramientas({ clave }: { clave: string }) {
   const [abierto, setAbierto] = useState(false);
+  const [gestorAbierto, setGestorAbierto] = useState(false);
   const primerItemRef = useRef<HTMLButtonElement>(null);
 
   // Cambió la conversación (otro lead, otra vista): el menú no puede
@@ -49,9 +51,9 @@ export function MenuHerramientas({ clave }: { clave: string }) {
     if (abierto) primerItemRef.current?.focus();
   }, [abierto]);
 
-  // Ninguna herramienta real aterrizó todavía: todos los items quedan sin
-  // handler (deshabilitados) hasta que su propio issue los conecte acá.
-  const items = armarItemsMenu(clave);
+  // «Etiquetas» ya tiene herramienta: abre el gestor de categorías (#48). El
+  // resto sigue sin handler (deshabilitado) hasta que su propio issue lo conecte.
+  const items = armarItemsMenu(clave, { etiquetas: () => setGestorAbierto(true) });
 
   return (
     <span className="relative inline-flex">
@@ -98,6 +100,8 @@ export function MenuHerramientas({ clave }: { clave: string }) {
           </div>
         </>
       )}
+
+      {gestorAbierto && <GestorCategorias onCerrar={() => setGestorAbierto(false)} />}
     </span>
   );
 }

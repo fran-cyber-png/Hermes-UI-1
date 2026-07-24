@@ -1,12 +1,23 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlarmClock, Check, Loader2, Tag, X } from 'lucide-react';
+import { AlarmClock, Check, Loader2, Plus, Tag, X } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import type { Conversacion } from '../canales/conversaciones';
 import { opcionesRapidas, useAgenda } from '../agenda/agenda';
 import { BotonLlamar } from './BotonLlamar';
 import { Intereses } from './Intereses';
 import { MenuHerramientas } from './MenuHerramientas';
+import { useCategorias, useMutacionesCategorias } from './categorias';
+import {
+  CLASE_FONDO,
+  CLASE_TEXTO,
+  COLORES,
+  NOMBRE_COLOR,
+  claseBorde,
+  normalizarNombre,
+  resolverColor,
+  type ColorCategoria,
+} from './paletaCategorias';
 
 /**
  * LA BARRA DE GESTIÓN — el embudo entero manejable DESDE el chat.
@@ -26,7 +37,17 @@ const ETAPAS_BARRA = [
   { id: 'cierre', label: 'Cierre' },
 ] as const;
 
-/** Etiquetas inline: chips + agregar, contra el endpoint compartido del equipo. */
+/**
+ * Etiquetas inline: las CATEGORÍAS (con color) asignadas a esta conversación.
+ *
+ * La ASIGNACIÓN sigue contra el endpoint compartido del equipo
+ * (`/api/gestiones/etiquetas`, por string); el COLOR se resuelve en el front
+ * contra el catálogo de la vendedora (`/api/categorias`) — una etiqueta que
+ * matchea una categoría del que mira toma su color; la que no, se pinta neutra.
+ * El «+» elige de las categorías propias o crea una nueva (nombre + color de la
+ * paleta) y la asigna en dos pasos. Regla dura: la píldora usa BORDE de color,
+ * nunca sombra, nunca oro.
+ */
 function EtiquetasInline({ clave }: { clave: string }) {
   const qc = useQueryClient();
   const { data: lista = [] } = useQuery({
@@ -34,21 +55,21 @@ function EtiquetasInline({ clave }: { clave: string }) {
     queryFn: () => api<{ etiquetas: Record<string, string[]> }>(`/api/gestiones/etiquetas?claves=${encodeURIComponent(clave)}`),
     select: (d) => d.etiquetas[clave] ?? [],
   });
+  const { data: categorias = [] } = useCategorias();
+  const { crear } = useMutacionesCategorias();
   const [abierto, setAbierto] = useState(false);
-  const [valor, setValor] = useState('');
+  const [nuevo, setNuevo] = useState('');
+  const [colorNuevo, setColorNuevo] = useState<ColorCategoria>('azul');
 
   const invalidar = () => {
     void qc.invalidateQueries({ queryKey: ['etiquetas', clave] });
     void qc.invalidateQueries({ queryKey: ['dashboard'] });
+    void qc.invalidateQueries({ queryKey: ['categorias'] });
   };
-  const agregar = useMutation({
+  const asignar = useMutation({
     mutationFn: (etiqueta: string) =>
       api('/api/gestiones/etiquetas', { method: 'POST', body: JSON.stringify({ clave, etiqueta }) }),
-    onSuccess: () => {
-      invalidar();
-      setValor('');
-      setAbierto(false);
-    },
+    onSuccess: invalidar,
   });
   const quitar = useMutation({
     mutationFn: (etiqueta: string) =>
@@ -56,50 +77,149 @@ function EtiquetasInline({ clave }: { clave: string }) {
     onSuccess: invalidar,
   });
 
+  const asignadas = new Set(lista);
+  const disponibles = categorias.filter((c) => !asignadas.has(c.nombre));
+
+  function crearYAsignar() {
+    const limpio = normalizarNombre(nuevo);
+    if (!limpio) return;
+    // Dos pasos: crea la categoría (con color) y la asigna a esta conversación.
+    crear.mutate(
+      { nombre: limpio, color: colorNuevo },
+      {
+        onSettled: () => {
+          asignar.mutate(limpio);
+          setNuevo('');
+          setAbierto(false);
+        },
+      },
+    );
+  }
+
   return (
-    <span className="flex items-center gap-1">
+    <span className="relative flex items-center gap-1">
       <Tag size={11} className="shrink-0 text-muted-foreground" />
-      {lista.map((t) => (
-        <span key={t} className="group/tag inline-flex items-center gap-0.5 rounded-md border border-border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground">
-          {t}
-          <button
-            type="button"
-            aria-label={`Quitar ${t}`}
-            onClick={() => quitar.mutate(t)}
-            className="opacity-40 transition-opacity focus-visible:opacity-100 group-hover/tag:opacity-100"
-          >
-            <X size={9} />
-          </button>
-        </span>
-      ))}
-      {abierto ? (
-        <input
-          value={valor}
-          onChange={(e) => setValor(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && valor.trim()) agregar.mutate(valor.trim());
-            if (e.key === 'Escape') {
-              e.stopPropagation();
-              setAbierto(false);
+      {lista.map((etq) => {
+        const color = resolverColor(etq, categorias);
+        return (
+          <span
+            key={etq}
+            className={
+              'group/tag inline-flex items-center gap-1 rounded-full border bg-card px-2 py-0.5 text-[11px] font-semibold ' +
+              claseBorde(color) +
+              (color ? ' ' + CLASE_TEXTO[color] : ' text-muted-foreground')
             }
-          }}
-          onBlur={() => setAbierto(false)}
-          autoFocus
-          placeholder="etiqueta…"
-          className="w-20 rounded-md border border-primary bg-card px-1.5 py-0.5 text-[11px] outline-none"
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={() => setAbierto(true)}
-          title="Etiquetar"
-          className="rounded-md border border-dashed border-border px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
-        >
-          +
-        </button>
+          >
+            {color && <span className={'h-1.5 w-1.5 rounded-full ' + CLASE_FONDO[color]} />}
+            {etq}
+            <button
+              type="button"
+              aria-label={`Quitar ${etq}`}
+              onClick={() => quitar.mutate(etq)}
+              className="opacity-40 transition-opacity focus-visible:opacity-100 group-hover/tag:opacity-100"
+            >
+              <X size={9} />
+            </button>
+          </span>
+        );
+      })}
+
+      <button
+        type="button"
+        onClick={() => setAbierto((v) => !v)}
+        title="Asignar categoría"
+        aria-label="Asignar categoría"
+        className={
+          'rounded-full border border-dashed px-1.5 py-0.5 text-[11px] transition-colors ' +
+          (abierto
+            ? 'border-primary text-foreground'
+            : 'border-border text-muted-foreground hover:border-primary hover:text-foreground')
+        }
+      >
+        +
+      </button>
+
+      {abierto && (
+        <>
+          <span className="fixed inset-0 z-20" onClick={() => setAbierto(false)} aria-hidden="true" />
+          <div className="absolute left-4 top-6 z-30 w-56 rounded-xl bg-card p-2 shadow-panel">
+            {disponibles.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1">
+                {disponibles.map((c) => {
+                  const color = resolverColor(c.nombre, categorias);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        asignar.mutate(c.nombre);
+                        setAbierto(false);
+                      }}
+                      className={
+                        'inline-flex items-center gap-1 rounded-full border bg-card px-2 py-0.5 text-[11px] font-semibold transition-transform hover:scale-105 ' +
+                        claseBorde(color) +
+                        (color ? ' ' + CLASE_TEXTO[color] : ' text-muted-foreground')
+                      }
+                    >
+                      {color && <span className={'h-1.5 w-1.5 rounded-full ' + CLASE_FONDO[color]} />}
+                      {c.nombre}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="rounded-lg border border-border p-1.5">
+              <div className="flex items-center gap-1">
+                <input
+                  value={nuevo}
+                  maxLength={30}
+                  onChange={(e) => setNuevo(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') crearYAsignar();
+                    if (e.key === 'Escape') {
+                      e.stopPropagation();
+                      setAbierto(false);
+                    }
+                  }}
+                  autoFocus
+                  placeholder="nueva categoría…"
+                  className="min-w-0 flex-1 rounded-md border border-border bg-card px-1.5 py-0.5 text-[11px] outline-none focus:border-primary"
+                />
+                <button
+                  type="button"
+                  aria-label="Crear y asignar"
+                  onClick={crearYAsignar}
+                  disabled={!normalizarNombre(nuevo) || crear.isPending}
+                  className="flex items-center rounded-md bg-primary p-1 text-primary-foreground transition-colors hover:bg-primary-hover disabled:opacity-40"
+                >
+                  {crear.isPending ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
+                </button>
+              </div>
+              <div className="mt-1.5 flex flex-wrap gap-1" role="group" aria-label="Elegir color">
+                {COLORES.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    aria-label={NOMBRE_COLOR[c]}
+                    aria-pressed={colorNuevo === c}
+                    title={NOMBRE_COLOR[c]}
+                    onClick={() => setColorNuevo(c)}
+                    className={
+                      'h-4 w-4 rounded-full transition-transform ' +
+                      CLASE_FONDO[c] +
+                      (colorNuevo === c ? ' scale-110 ring-2 ring-navy ring-offset-1 ring-offset-card' : ' hover:scale-110')
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
       )}
-      {(agregar.isError || quitar.isError) && (
-        <span className="text-[11px] text-destructive">No se guardó la etiqueta — probá de nuevo.</span>
+
+      {(asignar.isError || quitar.isError) && (
+        <span className="text-[11px] text-destructive">No se guardó — probá de nuevo.</span>
       )}
     </span>
   );
