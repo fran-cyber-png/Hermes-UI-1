@@ -66,6 +66,25 @@ test('moneda null o vacía también cae a «» — nunca "null" como texto', () 
   assert.equal(mapearProducto({ ...FILA_VIVA, moneda: '' }).moneda, '');
 });
 
+test('la forma ANIDADA — el patrón real de Cerberus (categoria/negocio/division vienen así) — se entiende', () => {
+  assert.equal(
+    mapearProducto({ ...FILA_VIVA, moneda: { simbolo_moneda: 'S/', codigo_moneda: 'PEN' } }).moneda,
+    'S/',
+  );
+  assert.equal(mapearProducto({ ...FILA_VIVA, moneda: { codigo_moneda: 'PEN' } }).moneda, 'PEN');
+});
+
+test('un objeto de moneda sin nada usable jamás viaja como "[object Object]"', () => {
+  assert.equal(mapearProducto({ ...FILA_VIVA, moneda: { raro: 1 } }).moneda, '');
+  assert.equal(mapearProducto({ ...FILA_VIVA, moneda: {} }).moneda, '');
+});
+
+test('solo primitivas cuentan como moneda: false y arrays caen a «»', () => {
+  assert.equal(mapearProducto({ ...FILA_VIVA, moneda: false }).moneda, '');
+  assert.equal(mapearProducto({ ...FILA_VIVA, moneda: true }).moneda, '');
+  assert.equal(mapearProducto({ ...FILA_VIVA, moneda: ['S/'] }).moneda, '');
+});
+
 test('sin precio_promocion, el precio de promoción cae al normal (comportamiento de siempre)', () => {
   const { precio_promocion: _fuera, ...sinPromo } = FILA_VIVA;
   const p = mapearProducto(sinPromo);

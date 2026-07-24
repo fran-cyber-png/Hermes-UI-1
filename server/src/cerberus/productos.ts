@@ -23,11 +23,31 @@ export interface ProductoCatalogo {
   moneda: string;
 }
 
-/** La primera key de moneda presente y con valor; si ninguna, `''`. */
+/**
+ * Solo una PRIMITIVA sirve como moneda: un `String(objeto)` da
+ * `'[object Object]'`, y eso viajando como moneda es peor que el hueco.
+ */
+function primitiva(v: unknown): string {
+  return typeof v === 'string' || typeof v === 'number' ? String(v) : '';
+}
+
+/**
+ * La primera key de moneda presente y con valor; si ninguna, `''`. Contempla
+ * también la forma ANIDADA — el patrón real de Cerberus: `categoria`/`negocio`/
+ * `division` vienen como `{codigo_*, nombre_*}`, así que una futura `moneda`
+ * bien puede llegar como `{simbolo_moneda, codigo_moneda}`.
+ */
 function monedaDe(p: Record<string, unknown>): string {
   for (const key of ['moneda', 'simbolo_moneda', 'codigo_moneda'] as const) {
     const v = p[key];
-    if (v != null && String(v) !== '') return String(v);
+    if (v !== null && typeof v === 'object') {
+      const o = v as Record<string, unknown>;
+      const anidada = primitiva(o.simbolo_moneda) || primitiva(o.codigo_moneda);
+      if (anidada !== '') return anidada;
+      continue; // objeto sin nada usable: se sigue buscando, jamás se stringifica
+    }
+    const s = primitiva(v);
+    if (s !== '') return s;
   }
   return '';
 }
