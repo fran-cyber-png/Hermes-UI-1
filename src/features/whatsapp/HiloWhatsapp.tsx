@@ -102,7 +102,7 @@ export function SkeletonHilo() {
  * headers, así que todo pasa por `useBlobAutenticado`. El blob se baja ENTERO
  * (se pierde el streaming por rango) — por eso solo la imagen es eager: video,
  * audio y documento se bajan recién cuando la vendedora los toca. Trade-off
- * documentado en el ADR 0010.
+ * documentado en el ADR 0011.
  */
 function MediaEnBurbuja({ media }: { media: MediaHilo }) {
   if (media.clase === 'imagen' || media.clase === 'sticker') return <ImagenEnBurbuja media={media} />;

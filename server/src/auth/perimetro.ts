@@ -18,9 +18,10 @@ import { requiereVendedora } from './sesion.js';
  * dos veces es gratis; olvidarse una vez ya costó una exposición.
  */
 
-/** Prefijos de /api que NO exigen token NUNCA, con su razón de existir. */
+/** Prefijos de /api que NO exigen vendedora NUNCA, con su razón de existir. */
 const PREFIJOS_ABIERTOS = [
   '/api/auth', // el login: sin esto nadie consigue token (y /yo valida el suyo adentro)
+  '/api/admin', // su puerta es la CREDENCIAL DE SERVICIO (requiereServicio, #85): la llama Cerberus, no una vendedora
 ];
 
 /**

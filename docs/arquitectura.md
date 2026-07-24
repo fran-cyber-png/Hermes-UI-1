@@ -316,16 +316,16 @@ conectado**; su POST no verifica firma).
 
 Lo que un recién llegado pisa. Ordenado por lo que más duele.
 
-### 8.1 🟡 Auth: cerrada por perímetro (era 🔴, cerrado en #36 / ADR 0010)
+### 8.1 🟡 Auth: cerrada por perímetro (era 🔴, cerrado en #36 / ADR 0011)
 
-Desde el ADR 0010, **todo `/api/*` exige el Bearer de una vendedora por defecto**:
+Desde el ADR 0011, **todo `/api/*` exige el Bearer de una vendedora por defecto**:
 `app.use(perimetroApi)` (`auth/perimetro.ts`) va delante de todos los routers, y las excepciones
 (`/api/auth`, rutas de dev que solo se montan fuera de producción) viven enumeradas en una sola
 lista con su porqué. La media se consume con fetch+blob (`src/lib/datos/blobAutenticado.ts`) y el
 stream SSE con fetch+parser propio (`src/lib/datos/sse.ts`), porque `<img>` y EventSource no mandan
 headers.
 
-Lo que **sigue abierto, a sabiendas** (detalle en el ADR 0010):
+Lo que **sigue abierto, a sabiendas** (detalle en el ADR 0011):
 
 - **`/vincular`** — la consola del operador no tiene auth propia y nginx la proxya. Contenerla es
   decisión aparte (auth de operador o bloqueo en nginx).

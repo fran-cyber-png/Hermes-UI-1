@@ -32,7 +32,7 @@ describe('esRutaAbierta — qué queda fuera del token', () => {
   });
 
   test('en producción NO hay agujeros de dev que recordar: _sim y _dev exigen token', () => {
-    // El ADR 0010 dice «el perímetro no depende de que alguien se acuerde»;
+    // El ADR 0011 dice «el perímetro no depende de que alguien se acuerde»;
     // una exención incondicional re-creaba exactamente ese patrón (si algún
     // día _sim/_dev se montaran en prod, nacían abiertas).
     assert.equal(esRutaAbierta('/api/whatsapp/_sim/entrante', true), false);
@@ -57,6 +57,14 @@ describe('esRutaAbierta — qué queda fuera del token', () => {
     assert.equal(esRutaAbierta('/api/authx'), false);
     assert.equal(esRutaAbierta('/api/whatsapp/_simulador'), false);
     assert.equal(esRutaAbierta('/api/auth'), true); // el prefijo exacto sí
+  });
+
+  test('/api/admin queda exento: su puerta es la credencial de servicio, no la vendedora', () => {
+    // Cerberus llama con HERMES_ADMIN_SERVICE_TOKEN (requiereServicio, #85).
+    // Si el perímetro le exigiera además token de vendedora, el token de
+    // servicio moriría en verificarSesion antes de llegar a su middleware.
+    assert.equal(esRutaAbierta('/api/admin/numeros/51999888777'), true);
+    assert.equal(esRutaAbierta('/api/adminx'), false); // el vecino no hereda
   });
 
   test('las mayúsculas no esquivan el perímetro (Express rutea case-insensitive)', () => {

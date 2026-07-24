@@ -206,7 +206,7 @@ Correos (falta SMTP) · Agenda-calendario.
 
 ### Tres cosas rotas que conviene saber antes de tocar nada
 
-1. ~~Auth partida por la mitad~~ **Resuelto (#36): cerrada por perímetro** (ADR del perímetro):
+1. ~~Auth partida por la mitad~~ **Resuelto (#36): cerrada por perímetro** (ADR 0011):
    todo `/api/*` exige el Bearer de una vendedora por defecto — `app.use(perimetroApi)` en
    `server/src/auth/perimetro.ts`, las excepciones se enumeran ahí. Deuda trackeada: CORS sigue
    en `*` (#94) y el SDK necesita credencial de servicio máquina-a-máquina (#95).

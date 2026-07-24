@@ -1,4 +1,4 @@
-# ADR 0010 — La API se cierra por perímetro, no router por router
+# ADR 0011 — La API se cierra por perímetro, no router por router
 
 - **Fecha:** 2026-07-23
 - **Estado:** aceptado
