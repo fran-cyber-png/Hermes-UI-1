@@ -4,6 +4,7 @@ import { db } from '../db/client.js';
 import { conversionesWa } from '../db/schema.js';
 import { requiereVendedora } from '../auth/sesion.js';
 import { ficha } from '../cerberus/ficha.js';
+import { leadDeTelefono } from '../gente/leadDeTelefono.js';
 
 /**
  * La ficha del contacto y el registro de venta. Detrás de auth: muestra PII de
@@ -18,6 +19,25 @@ contactosRouter.get('/ficha', requiereVendedora, async (req, res) => {
     return;
   }
   res.json(await ficha(telefono));
+});
+
+/**
+ * EL LEAD-FORM DEL CONTACTO — el enriquecimiento automático (#113).
+ *
+ * Aparte de la ficha de Cerberus, esto cruza el teléfono contra `leads` (los
+ * formularios de Meta y las landings web): nombre real, EMAIL y campaña. Es una
+ * derivación en consulta, no un dato copiado — vive detrás de auth porque muestra
+ * PII. `{ lead: null }` cuando el teléfono no matchea ningún lead: la ficha
+ * simplemente no muestra el bloque (nunca un placeholder).
+ */
+contactosRouter.get('/lead', requiereVendedora, async (req, res) => {
+  const telefono = typeof req.query.telefono === 'string' ? req.query.telefono : '';
+  if (!telefono) {
+    res.status(400).json({ estado: 'error', motivo: 'falta el teléfono' });
+    return;
+  }
+  const mapa = await leadDeTelefono(db, [telefono]);
+  res.json({ lead: mapa[telefono] ?? null });
 });
 
 /**
