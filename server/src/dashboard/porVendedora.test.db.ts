@@ -55,3 +55,42 @@ test("un envío de la madrugada UTC que ya es de MAÑANA en Lima no cuenta como 
   const gaby = filas.find((f) => f.vendedora === "gaby");
   assert.equal(gaby?.mensajes_hoy, 0, "es de mañana en Lima, no de hoy");
 });
+
+test("envíos Y ventas de la MISMA vendedora no se multiplican entre sí (producto cartesiano)", async (t) => {
+  const db = await baseDePrueba(t);
+
+  // 2 envíos (a teléfonos distintos) + 3 ventas, todos "hoy" (Lima) para
+  // `gaby`. Con el JOIN crudo viejo (envíos × ventas por vendedora_id, sin
+  // pre-agregar) esto daba 2×3 = 6 filas ANTES de contar: `mensajes_hoy`
+  // (`count(e.*)`, sin DISTINCT) reportaba 6 en vez de 2. Los números exactos
+  // de este test tienen que romper si ese cartesiano vuelve.
+  await sembrarEnvioWa(db, {
+    vendedoraId: "gaby",
+    telefono: "51900000001",
+    estado: "enviado",
+    creadoAt: new Date("2026-07-24T01:00:00Z"), // 2026-07-23T20:00 Lima — hoy.
+  });
+  await sembrarEnvioWa(db, {
+    vendedoraId: "gaby",
+    telefono: "51900000002",
+    estado: "enviado",
+    creadoAt: new Date("2026-07-24T02:00:00Z"), // 2026-07-23T21:00 Lima — hoy.
+  });
+  await sembrarConversionWa(db, { vendedoraId: "gaby", iniciadaAt: new Date("2026-07-24T00:30:00Z") });
+  await sembrarConversionWa(db, { vendedoraId: "gaby", iniciadaAt: new Date("2026-07-24T02:30:00Z") });
+  await sembrarConversionWa(db, { vendedoraId: "gaby", iniciadaAt: new Date("2026-07-24T03:30:00Z") });
+
+  const filas = await consultarPorVendedora(db, AHORA);
+  const gaby = filas.find((f) => f.vendedora === "gaby");
+
+  assert.equal(gaby?.mensajes_hoy, 2, "2 envíos — NO 2×3 (el cartesiano con ventas)");
+  assert.equal(gaby?.conversaciones_hoy, 2, "2 teléfonos distintos");
+  assert.equal(gaby?.ventas_hoy, 3, "3 ventas — NO 3×2 (el cartesiano con envíos)");
+  // `mensajes_7d`/`ventas_7d` NO se asertan acá a propósito: ese filtro
+  // compara contra el `now()` REAL de Postgres (ventana rodante, ver el
+  // comentario del módulo), no contra `AHORA` — atarlo a una fecha fija
+  // haría flaky el test según cuándo corra. La corrección de esos dos campos
+  // la garantiza la MISMA CTE pre-agregada que ya prueban `mensajes_hoy` y
+  // `ventas_hoy` arriba: es el mismo `GROUP BY vendedora_id`, el mismo JOIN
+  // 1-a-1, solo cambia el FILTER.
+});
