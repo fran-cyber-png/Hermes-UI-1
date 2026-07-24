@@ -21,7 +21,8 @@
     "cerberus:proyectar": "tsx src/scripts/cerberus.ts proyectar",
     "cerberus:hechos": "tsx src/scripts/cerberus.ts hechos",
     "lazo": "tsx src/scripts/cerberus.ts lazo",
-    "backfill": "tsx src/scripts/backfill.ts"
+    "backfill": "tsx src/scripts/backfill.ts",
+    "backfill:categorias": "tsx src/scripts/backfillCategorias.ts"
   },
   "dependencies": {
     "@types/nodemailer": "^8.0.1",

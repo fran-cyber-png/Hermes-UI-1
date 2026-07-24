@@ -1,5 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { conversionesWa, enviosWa, events, interactions, intereses, leads, recordatorios } from "../db/schema.js";
+import {
+  conversionesWa,
+  enviosWa,
+  etiquetas,
+  events,
+  interactions,
+  intereses,
+  leads,
+  recordatorios,
+} from "../db/schema.js";
 import type { DbDePrueba } from "./base.js";
 
 /**
@@ -257,4 +266,25 @@ export async function sembrarRecordatorio(db: DbDePrueba, r: RecordatorioSembrad
     .returning({ id: recordatorios.id });
 
   return rec.id;
+}
+
+export interface EtiquetaSembrada {
+  /** La conversación etiquetada (clave de la cola). */
+  clave: string;
+  /** El string de la etiqueta — se guarda en minúsculas, como el POST real. */
+  etiqueta: string;
+  /** Quién la puso. La asignación es compartida por el equipo; el backfill agrupa por acá. */
+  vendedoraId?: string;
+}
+
+/**
+ * Siembra una ASIGNACIÓN de etiqueta (la tabla compartida `etiquetas`). Sirve
+ * para probar el conteo por categoría y el backfill de categorías (#48).
+ */
+export async function sembrarEtiqueta(db: DbDePrueba, e: EtiquetaSembrada): Promise<void> {
+  await db.insert(etiquetas).values({
+    clave: e.clave,
+    etiqueta: e.etiqueta.toLowerCase(),
+    vendedoraId: e.vendedoraId ?? "vendedora-prueba",
+  });
 }
