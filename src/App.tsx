@@ -393,7 +393,14 @@ export default function App() {
             )}
             {/* El drop en Cierre/Cotizados abre su modal DENTRO del Pipeline (#60);
                 acá solo se cablea la salida del recibo (agendar la bienvenida). */}
-            {vista === 'embudo' && <VistaEmbudo onAbrir={abrirConversacion} onAgendarBienvenida={agendarBienvenida} />}
+            {vista === 'embudo' && (
+              <VistaEmbudo
+                onAbrir={abrirConversacion}
+                onAgendarBienvenida={agendarBienvenida}
+                // La bandeja de Interesados no se trabaja en el kanban: se responde en Mensajes.
+                onIrAMensajes={() => cambiarVista('bandeja')}
+              />
+            )}
             {vista === 'agenda' && (
               <VistaAgenda
                 onAbrir={abrirConversacion}

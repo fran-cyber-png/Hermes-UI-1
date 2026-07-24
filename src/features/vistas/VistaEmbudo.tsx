@@ -1,47 +1,40 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Check, MessageSquareText, X } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, ArrowRight, Check, Inbox, MessageSquareText, X } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { useConversaciones, type Conversacion } from '../canales/conversaciones';
-import { useDashboard } from '../dashboard/dashboard';
 import { BadgeCanal } from '../canales/BadgeCanal';
 import { Intereses } from '../gestion/Intereses';
 import { hace } from '../../lib/datos/frescura';
-import { ETAPAS, type Etapa } from '../../lib/etapas';
+import type { Etapa } from '../../lib/etapas';
 import { tempBorde, tempClass } from '../../lib/formato';
 import { decidirDrop, decidirRebote, reintentoTrasInteres } from './compuertas';
 import { ModalInteresCotizado, ModalVentaCierre } from './ModalesCompuerta';
+import {
+  COLUMNAS_TRABAJO,
+  etapaDeTarjeta,
+  quedanPorTraer,
+  repartirColumnas,
+  type EtapaTrabajo,
+} from './tablero';
 
 /**
- * EL EMBUDO — kanban real, con las etapas del negocio y sus compuertas.
+ * EL TABLERO HONESTO (#90) — el Pipeline que cuenta de verdad.
  *
- *   Interesados → Contactados → Cotizados → Cierre · Perdidos
+ * Interesados DEJÓ de ser columna: es la bandeja compacta de arriba (contador
+ * real + acceso a Mensajes, donde ese trabajo se hace de verdad). Las columnas
+ * de trabajo — Contactados · Cotizados · Cierre · Perdidos — cargan POR columna
+ * (`?etapa=`, #89) con su conteo real por etapa efectiva (ADR 0013) sobre la
+ * ventana de 30 días. Murieron el fallback client-side a 'interesado', el
+ * «N de M» que mezclaba universos y el «hay N más» que traía 30 del feed
+ * entero (#9).
  *
- * Se ARRASTRA: soltar una tarjeta en otra columna registra la gestión (con
- * actualización optimista: la tarjeta se muda ya). El embudo no miente, y las
- * compuertas GUÍAN en vez de rebotar (#60): a Cotizados no se pasa sin un
- * curso de interés — si falta, un modal lo pide ahí mismo y al guardarlo el
- * movimiento se completa solo; a Cierre no se pasa declarándolo — soltar ahí
- * abre el formulario de Registrar venta con la conversación precargada, y es
- * la venta la que mueve el lead (el server asienta `cierre` al crearla). Las
- * compuertas del server no se relajan: los modales las satisfacen. El `aviso`
- * de texto queda como fallback (error de red), no como la vía principal.
- * La manchette de cada columna es honesta: si hay más historia en el server
- * que tarjetas cargadas, dice «N de M» (o «N+» cuando el total con la misma
- * definición no existe — ver nota en `totales`).
+ * Lo que NO cambió (#60): se ARRASTRA igual, y las compuertas GUÍAN en vez de
+ * rebotar — a Cotizados sin curso de interés, un modal lo pide ahí mismo; a
+ * Cierre no se pasa declarándolo, se llega registrando la venta (la compuerta
+ * del server queda intacta). El movimiento optimista vive en `overrides`
+ * (tablero.ts) hasta que la verdad del server refresca las columnas.
  */
-
-const COLUMNAS: { id: Etapa; titulo: string; pista: string }[] = [
-  { id: 'interesado', titulo: 'Interesados', pista: 'Levantaron la mano. Todo lo nuevo cae acá.' },
-  { id: 'contactado', titulo: 'Contactados', pista: 'Ya les hablamos.' },
-  { id: 'cotizado', titulo: 'Cotizados', pista: 'Compuerta: exige curso de interés.' },
-  { id: 'cierre', titulo: 'Cierre', pista: 'Se llega registrando la venta.' },
-  { id: 'perdido', titulo: 'Perdidos', pista: 'Se enfrió o dijo que no.' },
-];
-
-/** La grilla real: 4 columnas de trabajo + Perdidos como cajón angosto. */
-const GRID =
-  'grid min-h-0 flex-1 grid-cols-[repeat(4,minmax(190px,1fr))_minmax(150px,0.75fr)] gap-2.5 overflow-x-auto';
 
 function TarjetaEmbudo({
   c,
@@ -97,65 +90,77 @@ function TarjetaEmbudo({
   );
 }
 
+/** La grilla real: 3 columnas de trabajo + Perdidos como cajón angosto. */
+const GRID =
+  'grid min-h-0 flex-1 grid-cols-[repeat(3,minmax(200px,1fr))_minmax(150px,0.7fr)] gap-2.5 overflow-x-auto';
+
 export function VistaEmbudo({
   onAbrir,
   onAgendarBienvenida,
+  onIrAMensajes,
 }: {
   onAbrir: (c: Conversacion) => void;
   /** La siguiente jugada del recibo de venta (cae en la Agenda vía puente). */
   onAgendarBienvenida?: (telefono: string | null) => void;
+  /** La bandeja de Interesados no se trabaja acá: este botón lleva a Mensajes. */
+  onIrAMensajes?: () => void;
 }) {
   const qc = useQueryClient();
-  const { items, total, cargando, hayMas, cargandoMas, cargarMas } = useConversaciones('');
-  // Comparte la queryKey ['dashboard'] con el Dashboard: es cache, no una llamada nueva.
-  const dashboard = useDashboard();
+  // Cada columna carga LO SUYO (#89): traer más de Contactados trae Contactados.
+  const contactados = useConversaciones('', '', 'contactado');
+  const cotizados = useConversaciones('', '', 'cotizado');
+  const cierres = useConversaciones('', '', 'cierre');
+  const perdidos = useConversaciones('', '', 'perdido');
+  const porColumna: Record<EtapaTrabajo, ReturnType<typeof useConversaciones>> = {
+    contactado: contactados,
+    cotizado: cotizados,
+    cierre: cierres,
+    perdido: perdidos,
+  };
+
+  // Los conteos reales por etapa (misma ventana, mismo seam): vienen en la
+  // primera página de cualquier columna. El de `interesado` es la bandeja.
+  const conteos =
+    contactados.conteos ?? cotizados.conteos ?? cierres.conteos ?? perdidos.conteos;
+
   const [arrastrada, setArrastrada] = useState<Conversacion | null>(null);
-  const [sobre, setSobre] = useState<Etapa | null>(null);
+  const [sobre, setSobre] = useState<EtapaTrabajo | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [rebotada, setRebotada] = useState<string | null>(null);
   const timerRebote = useRef<number | null>(null);
   /**
-   * La tarjeta que la compuerta de Cotizados dejó ESPERANDO: se queda a la
-   * vista en la columna destino (estado optimista, sin restaurar) mientras el
-   * modal pide el curso. NO se guarda ninguna foto para «volver»: todo camino
-   * de salida (cancelar, reintento fallido, desmontar) invalida y deja que la
-   * verdad del server pinte el mapa — una foto vieja podía deshacer
-   * movimientos de OTRAS tarjetas hechos en el medio.
+   * Los movimientos optimistas en vuelo: clave → etapa destino. La tarjeta se
+   * pinta ya en la columna nueva (repartirColumnas) y el override se levanta
+   * cuando la verdad del server refresca las columnas — nunca se restaura una
+   * foto local que podría deshacer movimientos de OTRAS tarjetas.
    */
+  const [overrides, setOverrides] = useState<Record<string, Etapa>>({});
+  /** La tarjeta que la compuerta de Cotizados dejó ESPERANDO el curso de interés. */
   const [pendienteInteres, setPendienteInteres] = useState<Conversacion | null>(null);
   /** La conversación soltada en Cierre: abre el formulario de Registrar venta. */
   const [ventaPara, setVentaPara] = useState<Conversacion | null>(null);
 
-  const etapas = useQuery({
-    queryKey: ['embudo', 'etapas'],
-    queryFn: () => api<{ etapas: Record<string, string> }>('/api/gestiones/etapas'),
+  const cargando = COLUMNAS_TRABAJO.every((c) => porColumna[c.id].cargando);
+
+  // El server desplegado todavía no habla de etapas (#88/#89 sin deploy): sin
+  // `etapa_efectiva` cada columna traería el feed entero y el tablero MENTIRÍA
+  // con cara de honesto. Mejor decirlo que pintarlo.
+  const servidorSinEtapas = COLUMNAS_TRABAJO.some((col) => {
+    const primera = porColumna[col.id].items[0];
+    return primera != null && primera.etapa_efectiva === undefined;
   });
 
-  // Cambiar de vista desmonta el kanban: si el modal del interés quedó abierto,
-  // eso ES cancelar — sin esto, la tarjeta quedaba pegada en Cotizados (el
-  // estado optimista sobrevivía sin gestión real detrás).
-  const pendienteRef = useRef<Conversacion | null>(null);
-  useEffect(() => {
-    pendienteRef.current = pendienteInteres;
-  }, [pendienteInteres]);
-  useEffect(
-    () => () => {
-      if (pendienteRef.current) void qc.invalidateQueries({ queryKey: ['embudo', 'etapas'] });
-    },
-    [qc],
+  const repartidas = repartirColumnas(
+    COLUMNAS_TRABAJO.map((col) => [col.id, porColumna[col.id].items] as const),
+    overrides,
   );
 
-
-  /**
-   * Totales por etapa del server (`data.embudo` del Dashboard). Paridad
-   * VERIFICADA en código: ambas fuentes cuentan «última fila de gestiones por
-   * clave, normalizada nuevo→interesado / venta→cierre» (gestiones.ts GET
-   * /etapas y dashboard.ts calculan sobre la misma query). La ÚNICA
-   * divergencia es Interesados: el kanban suma también las conversaciones SIN
-   * gestión (fallback), y el embudo del server no — por eso esa columna nunca
-   * dice «N de M»: dice «N+».
-   */
-  const totales = dashboard.data?.embudo;
+  function quitarOverride(clave: string) {
+    setOverrides((o) => {
+      const { [clave]: _, ...resto } = o;
+      return resto;
+    });
+  }
 
   function marcarRebote(clave: string) {
     setRebotada(clave);
@@ -176,20 +181,23 @@ export function VistaEmbudo({
           etapa: v.etapa,
         }),
       }),
-    // Optimista: la tarjeta se muda al soltar. Si algo falla, NO se restaura
-    // ninguna foto local (quedaría vieja si hubo otros movimientos en el
-    // medio): se invalida y la verdad del server pinta el mapa.
-    onMutate: async (v) => {
-      await qc.cancelQueries({ queryKey: ['embudo', 'etapas'] });
-      qc.setQueryData<{ etapas: Record<string, string> }>(['embudo', 'etapas'], (d) => ({
-        etapas: { ...(d?.etapas ?? {}), [v.c.clave]: v.etapa },
-      }));
+    // Optimista: la tarjeta se muda al soltar (override). Si algo falla, NO se
+    // restaura ninguna foto local: se levanta el override y la verdad del
+    // server pinta el mapa.
+    onMutate: (v) => {
+      setOverrides((o) => ({ ...o, [v.c.clave]: v.etapa }));
     },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['embudo'] });
-      void qc.invalidateQueries({ queryKey: ['gestiones'] });
-      void qc.invalidateQueries({ queryKey: ['dashboard'] });
+    onSuccess: async (_r, v) => {
       setAviso(null);
+      // El override se levanta DESPUÉS del refetch: si no, la tarjeta volvería
+      // a la columna vieja un instante, hasta que llegue lo fresco.
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['conversaciones'] }),
+        qc.invalidateQueries({ queryKey: ['embudo'] }),
+        qc.invalidateQueries({ queryKey: ['gestiones'] }),
+        qc.invalidateQueries({ queryKey: ['dashboard'] }),
+      ]);
+      quitarOverride(v.c.clave);
     },
     onError: (err, v) => {
       const r = decidirRebote({
@@ -202,32 +210,30 @@ export function VistaEmbudo({
       });
       if (r.accion === 'modal-interes') {
         // La compuerta pide el interés: la tarjeta se queda esperando en
-        // Cotizados (estado optimista) mientras el modal lo registra.
+        // Cotizados (el override sigue puesto) mientras el modal lo registra.
         setPendienteInteres(v.c);
         return;
       }
-      // El fallback de siempre (red, validación): el mapa vuelve a la verdad
-      // del server, y el motivo queda a la vista hasta el próximo arrastre o
-      // hasta cerrarlo — nada se autodestruye por reloj.
-      void qc.invalidateQueries({ queryKey: ['embudo', 'etapas'] });
+      // El fallback de siempre (red, validación): se levanta el override y el
+      // motivo queda a la vista hasta el próximo arrastre o hasta cerrarlo.
+      quitarOverride(v.c.clave);
       setAviso(r.mensaje);
       marcarRebote(v.c.clave);
     },
   });
 
-  /** La vendedora desistió del interés: se invalida y la tarjeta vuelve con la verdad del server. */
+  /** La vendedora desistió del interés: se levanta el override y la tarjeta vuelve. */
   function cancelarInteres() {
     if (!pendienteInteres) return;
     const c = pendienteInteres;
     setPendienteInteres(null);
-    void qc.invalidateQueries({ queryKey: ['embudo', 'etapas'] });
+    quitarOverride(c.clave);
     marcarRebote(c.clave);
   }
 
   /**
    * El interés quedó guardado: el drag original se completa solo (reintento del
-   * POST). No hace falta invalidar antes: si el reintento sale bien, onSuccess
-   * invalida; si falla, onError invalida — todo camino termina en el server.
+   * POST). Todo camino termina en el server: onSuccess o onError deciden.
    */
   function guardadoInteres() {
     if (!pendienteInteres) return;
@@ -235,20 +241,6 @@ export function VistaEmbudo({
     setPendienteInteres(null);
     if (vars) mover.mutate(vars);
   }
-
-  const porEtapa = useMemo(() => {
-    const mapa = new Map<Etapa, Conversacion[]>(COLUMNAS.map((e) => [e.id, []]));
-    for (const c of items) {
-      const declarada = etapas.data?.etapas[c.clave] ?? 'interesado';
-      const etapa = (ETAPAS as readonly string[]).includes(declarada) ? (declarada as Etapa) : 'interesado';
-      mapa.get(etapa)!.push(c);
-    }
-    return mapa;
-  }, [items, etapas.data]);
-
-  const etapaArrastrada = arrastrada
-    ? ((etapas.data?.etapas[arrastrada.clave] ?? 'interesado') as Etapa)
-    : null;
 
   function empezarArrastre(c: Conversacion) {
     setArrastrada(c);
@@ -261,12 +253,13 @@ export function VistaEmbudo({
     setSobre(null);
   }
 
-  function soltar(etapa: Etapa) {
+  function soltar(etapa: EtapaTrabajo) {
     if (!arrastrada) return;
     const c = arrastrada;
     setArrastrada(null);
     setSobre(null);
-    const actual = (etapas.data?.etapas[c.clave] ?? 'interesado') as Etapa;
+    const actual = etapaDeTarjeta(c, overrides);
+    if (actual == null) return; // sin etapa del server no se mueve nada a ciegas
     const d = decidirDrop({
       actual,
       destino: etapa,
@@ -290,11 +283,38 @@ export function VistaEmbudo({
     mover.mutate({ c, etapa: d.etapa });
   }
 
-  const restantes = total > items.length ? total - items.length : 0;
+  const interesados = conteos?.interesado ?? 0;
+  const etapaArrastrada = arrastrada ? etapaDeTarjeta(arrastrada, overrides) : null;
+  const tableroVacio =
+    !cargando && conteos != null && COLUMNAS_TRABAJO.every((c) => (conteos[c.id] ?? 0) === 0) && interesados === 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col p-3">
-      <div className="mb-2.5 flex min-h-7 shrink-0 items-center gap-3 px-1">
+      {/* ── LA BANDEJA DE INTERESADOS: contador real, no una pila infinita. ── */}
+      <div className="mb-2.5 flex shrink-0 items-center gap-3 rounded-2xl bg-card px-4 py-2.5 shadow-panel">
+        <Inbox size={16} className="shrink-0 text-navy" />
+        <div className="flex min-w-0 flex-1 items-baseline gap-2">
+          <span className="font-heading text-xl font-bold tabular-nums text-foreground">
+            {conteos ? interesados.toLocaleString('es-PE') : '—'}
+          </span>
+          <h3 className="font-heading text-[13px] font-bold text-foreground">Interesados</h3>
+          <p className="hidden min-w-0 truncate text-[11px] text-muted-foreground sm:block">
+            Levantaron la mano y nadie les respondió aún. Responder los pasa solos a Contactados.
+          </p>
+        </div>
+        {onIrAMensajes && (
+          <button
+            type="button"
+            onClick={onIrAMensajes}
+            className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 active:scale-[0.98]"
+          >
+            Responder en Mensajes
+            <ArrowRight size={12} />
+          </button>
+        )}
+      </div>
+
+      <div className="mb-2.5 flex min-h-5 shrink-0 items-center gap-3 px-1">
         {arrastrada != null && (
           <p className="text-xs text-muted-foreground">
             A <span className="font-semibold">Cotizados</span> con curso de interés; a{' '}
@@ -302,31 +322,15 @@ export function VistaEmbudo({
             pide al soltar.
           </p>
         )}
-        {hayMas && (
-          <button
-            type="button"
-            onClick={cargarMas}
-            disabled={cargandoMas}
-            className="ml-auto rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 active:scale-[0.98] disabled:opacity-50"
-          >
-            {cargandoMas ? 'Trayendo…' : restantes > 0 ? `hay ${restantes} más` : 'Traer más'}
-          </button>
-        )}
       </div>
 
-      {etapas.isError && (
+      {servidorSinEtapas && (
         <div className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-secondary/70 px-3 py-2 text-xs text-foreground">
           <AlertTriangle size={14} className="shrink-0 text-temp-frio" />
           <span className="flex-1">
-            No se pudieron cargar las etapas — las tarjetas se ven todas en Interesados, no es que estén ahí.
+            El server todavía no sirve la etapa efectiva (falta desplegar #88/#89): sin eso el
+            tablero mentiría, así que no se pinta.
           </span>
-          <button
-            type="button"
-            onClick={() => void etapas.refetch()}
-            className="shrink-0 rounded-md border border-border px-2 py-0.5 text-[11px] font-semibold transition-colors hover:border-primary hover:text-foreground"
-          >
-            Reintentar
-          </button>
         </div>
       )}
 
@@ -350,7 +354,7 @@ export function VistaEmbudo({
 
       {cargando ? (
         <div className={GRID}>
-          {[3, 2, 3, 2, 2].map((bloques, i) => (
+          {[3, 2, 2, 2].map((bloques, i) => (
             <div key={i} className="flex min-h-0 flex-col gap-2 rounded-2xl bg-secondary/30 p-2">
               <div className="h-6 w-3/5 animate-pulse rounded-md bg-secondary/70" />
               {Array.from({ length: bloques }, (_, j) => (
@@ -359,28 +363,24 @@ export function VistaEmbudo({
             </div>
           ))}
         </div>
-      ) : items.length === 0 ? (
+      ) : servidorSinEtapas ? null : tableroVacio ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-1 px-6 text-center">
           <p className="text-sm font-semibold text-foreground">El embudo está vacío.</p>
           <p className="max-w-sm text-xs text-muted-foreground">
-            Cuando alguien escriba por WhatsApp, Facebook o Instagram, cae solo en Interesados. Mientras
-            tanto, revisá Mensajes por si alguien espera respuesta.
+            Cuando alguien escriba por WhatsApp, Facebook o Instagram, cae solo en Interesados — y
+            al responderle, pasa solo a Contactados.
           </p>
         </div>
       ) : (
         <div className={GRID}>
-          {COLUMNAS.map((col) => {
-            const enEtapa = porEtapa.get(col.id) ?? [];
-            const n = enEtapa.length;
+          {COLUMNAS_TRABAJO.map((col) => {
+            const enEtapa = repartidas.get(col.id) ?? [];
+            const columna = porColumna[col.id];
+            const total = conteos?.[col.id] ?? columna.total;
+            const faltan = quedanPorTraer(total, columna.items.length);
             const esDestino = sobre === col.id && arrastrada != null;
             const esPerdidos = col.id === 'perdido';
             const esCierre = col.id === 'cierre';
-            // «N de M» solo cuando la definición cuadra (nunca en Interesados,
-            // ver nota en `totales`) y el total del server no quedó atrás.
-            const totalServer = col.id === 'interesado' || !totales ? undefined : (totales[col.id] ?? 0);
-            const muestraDe = hayMas && totalServer != null && totalServer >= n;
-            const muestraMas = hayMas && !muestraDe;
-            const faltan = muestraDe && totalServer != null ? totalServer - n : 0;
             const fondo = esDestino ? 'bg-secondary' : esPerdidos ? 'bg-transparent' : 'bg-secondary/50';
             return (
               <section
@@ -405,20 +405,13 @@ export function VistaEmbudo({
                 <header className="px-1.5 pb-2 pt-1">
                   <div className="flex items-baseline gap-1.5">
                     <span
-                      aria-label={muestraMas ? `al menos ${n}` : undefined}
                       className={
                         'font-heading text-xl font-bold tabular-nums ' +
                         (esPerdidos ? 'text-muted-foreground' : 'text-foreground')
                       }
                     >
-                      {n}
-                      {muestraMas ? '+' : ''}
+                      {(total ?? enEtapa.length).toLocaleString('es-PE')}
                     </span>
-                    {muestraDe && (
-                      <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                        de {totalServer}
-                      </span>
-                    )}
                     <h3
                       className={
                         'font-heading text-[13px] font-bold ' +
@@ -427,7 +420,9 @@ export function VistaEmbudo({
                     >
                       {col.titulo}
                     </h3>
-                    {esCierre && n > 0 && <Check size={13} strokeWidth={3} className="self-center text-success" />}
+                    {esCierre && enEtapa.length > 0 && (
+                      <Check size={13} strokeWidth={3} className="self-center text-success" />
+                    )}
                   </div>
                   {esCierre && arrastrada != null && etapaArrastrada !== 'cierre' ? (
                     <p className="mt-0.5 text-xs font-semibold leading-tight text-navy">
@@ -454,14 +449,18 @@ export function VistaEmbudo({
                       Soltá acá
                     </div>
                   )}
-                  {faltan > 0 && (
+                  {columna.hayMas && (
                     <button
                       type="button"
-                      onClick={cargarMas}
-                      disabled={cargandoMas}
+                      onClick={columna.cargarMas}
+                      disabled={columna.cargandoMas}
                       className="rounded-xl border border-dashed border-border py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-primary hover:text-foreground disabled:opacity-50"
                     >
-                      {cargandoMas ? 'Trayendo…' : `hay ${faltan} más`}
+                      {columna.cargandoMas
+                        ? 'Trayendo…'
+                        : faltan > 0
+                          ? `Ver más · faltan ${faltan.toLocaleString('es-PE')}`
+                          : 'Ver más'}
                     </button>
                   )}
                 </div>
