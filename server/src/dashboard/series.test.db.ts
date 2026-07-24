@@ -70,6 +70,26 @@ test("un lead de formulario de la noche de Lima cae en el día de HOY (Lima)", a
   assert.equal(hoy?.formularios, 1);
 });
 
+test("un mensaje EXACTAMENTE en la medianoche de Lima del día más viejo no se pierde (corte >=, no >)", async (t) => {
+  const db = await baseDePrueba(t);
+
+  // `hoy` (Lima) para AHORA es 2026-07-23; el día más viejo de la ventana de
+  // 14 puntos es 2026-07-23 − 13 = 2026-07-10, y su medianoche de Lima
+  // (00:00:00-05:00) es exactamente 2026-07-10T05:00:00.000Z — el mismo
+  // instante que `corteDiasAtras(AHORA, 13)`. Ese instante SÍ pertenece al
+  // bucket del 10 (`dias` lo genera igual, a partir de `hoy`, no del corte):
+  // con un filtro `>` estricto, este evento desaparecía de una serie que
+  // igual mostraba el día del 10 — vacío, mintiendo "no pasó nada" cuando sí.
+  await sembrarMensaje(db, {
+    personaId: "51900000004",
+    occurredAt: new Date("2026-07-10T05:00:00.000Z"),
+  });
+
+  const { leads_dia } = await consultarSeriesDashboard(db, AHORA);
+  assert.equal(leads_dia[0]?.dia, "2026-07-10", "el primer punto de la serie es el día más viejo");
+  assert.equal(leads_dia[0]?.chats, 1, "el evento exactamente en el corte cuenta en su propio día");
+});
+
 test("un mensaje de la madrugada UTC (antes del filo de Lima) cae en el día de AYER, no en HOY", async (t) => {
   const db = await baseDePrueba(t);
 

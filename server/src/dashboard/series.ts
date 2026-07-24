@@ -25,9 +25,15 @@ import { corteDiasAtras, diaLimaISO } from "../lib/horaLima.js";
  * Sigue sin haber índice por expresión sobre estas columnas (son btree planas
  * sobre el timestamptz — ver `db/schema.ts`), así que el corte por IGUALDAD
  * (`... ::date = ...`) no lo usa, ni antes ni ahora: no se rompe nada que ya
- * funcionara. Los filtros de RANGO (`occurred_at > corte`) sí siguen pudiendo
+ * funcionara. Los filtros de RANGO (`occurred_at >= corte`) sí siguen pudiendo
  * usar el índice, porque el corte es un valor de columna (timestamptz)
  * bindeado, no una expresión sobre `now()`.
+ *
+ * `corte` es la MEDIANOCHE de Lima del día más viejo de la ventana (hace 13
+ * días) — ese instante exacto SÍ pertenece al bucket más viejo (`dias` lo
+ * genera igual, a partir de `hoy`, no de `corte`). El filtro tiene que ser
+ * `>=`, no `>`: con `>` estricto, un evento que ocurre justo en esa
+ * medianoche desaparecía de una serie que sí tiene el día para recibirlo.
  */
 
 // `type`, no `interface`: drizzle exige que el genérico de `execute<T>` sea
@@ -77,19 +83,19 @@ export async function consultarSeriesDashboard(base: typeof db, ahora: Date): Pr
       SELECT (occurred_at AT TIME ZONE 'America/Lima')::date AS dia, count(DISTINCT (canal, persona_id))::int AS n
       FROM interactions
       WHERE tipo = 'mensaje' AND direccion = 'entrante' AND persona_id IS NOT NULL
-        AND occurred_at > ${corte}::timestamptz
+        AND occurred_at >= ${corte}::timestamptz
       GROUP BY 1
     ),
     co AS (
       SELECT (occurred_at AT TIME ZONE 'America/Lima')::date AS dia, count(*)::int AS n
       FROM interactions
-      WHERE tipo = 'comentario' AND occurred_at > ${corte}::timestamptz
+      WHERE tipo = 'comentario' AND occurred_at >= ${corte}::timestamptz
       GROUP BY 1
     ),
     f AS (
       SELECT (created_time AT TIME ZONE 'America/Lima')::date AS dia, count(*)::int AS n
       FROM leads
-      WHERE created_time > ${corte}::timestamptz
+      WHERE created_time >= ${corte}::timestamptz
       GROUP BY 1
     )
     SELECT d.dia::text AS dia,
@@ -111,7 +117,7 @@ export async function consultarSeriesDashboard(base: typeof db, ahora: Date): Pr
     FROM dias d
     LEFT JOIN (
       SELECT (creado_at AT TIME ZONE 'America/Lima')::date AS dia, count(*)::int AS n
-      FROM envios_wa WHERE estado = 'enviado' AND creado_at > ${corte}::timestamptz
+      FROM envios_wa WHERE estado = 'enviado' AND creado_at >= ${corte}::timestamptz
       GROUP BY 1
     ) e ON e.dia = d.dia
     ORDER BY d.dia
@@ -125,7 +131,7 @@ export async function consultarSeriesDashboard(base: typeof db, ahora: Date): Pr
     FROM dias d
     LEFT JOIN (
       SELECT (iniciada_at AT TIME ZONE 'America/Lima')::date AS dia, count(*)::int AS n
-      FROM conversiones_wa WHERE iniciada_at > ${corte}::timestamptz
+      FROM conversiones_wa WHERE iniciada_at >= ${corte}::timestamptz
       GROUP BY 1
     ) v ON v.dia = d.dia
     ORDER BY d.dia
