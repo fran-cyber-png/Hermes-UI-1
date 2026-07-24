@@ -70,6 +70,54 @@ export async function sembrarMensaje(db: DbDePrueba, m: MensajeSembrado = {}): P
   return it.id;
 }
 
+export interface ComentarioSembrado {
+  canal?: string;
+  personaId?: string;
+  personaNombre?: string | null;
+  texto?: string | null;
+  /** 'nuevo' = sin responder. Cualquier otro estado cuenta como respondido para la cola. */
+  status?: string;
+  occurredAt?: Date;
+}
+
+/**
+ * Siembra un comentario de FB/IG: el evento crudo + la interacción proyectada.
+ * A diferencia de los mensajes, un comentario es UNA fila de la cola (no se
+ * agrupa) y su ventana de Meta se deriva de `occurred_at` (7 días).
+ */
+export async function sembrarComentario(db: DbDePrueba, c: ComentarioSembrado = {}): Promise<number> {
+  const occurredAt = c.occurredAt ?? new Date();
+  const ext = randomUUID();
+
+  const [ev] = await db
+    .insert(events)
+    .values({
+      source: c.canal ?? "facebook",
+      externalId: `evt:${ext}`,
+      occurredAt,
+      payload: {},
+    })
+    .returning({ id: events.id });
+
+  const [it] = await db
+    .insert(interactions)
+    .values({
+      eventId: ev.id,
+      externalId: `com:${ext}`,
+      canal: c.canal ?? "facebook",
+      tipo: "comentario",
+      direccion: "entrante",
+      personaId: c.personaId ?? "fb-persona",
+      personaNombre: c.personaNombre ?? "Comentarista de prueba",
+      texto: c.texto ?? "¿precio?",
+      occurredAt,
+      ...(c.status ? { status: c.status } : {}),
+    })
+    .returning({ id: interactions.id });
+
+  return it.id;
+}
+
 export interface RecordatorioSembrado {
   vendedoraId?: string;
   clave: string;

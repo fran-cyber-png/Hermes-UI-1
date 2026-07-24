@@ -11,10 +11,10 @@ import { claveUrgencia, compararUrgencia, type ItemUrgencia } from './urgencia.j
  * definición, la misma fila.
  *
  * El radar puede ordenar acá porque NO pagina — trae un tope y punto. La cola de
- * Mensajes sí pagina, y por eso conserva su espejo de esta lógica en SQL
- * (`routes/conversaciones.ts`): para paginar en la base, el orden tiene que
- * calcularse en la base. Son dos fuentes de verdad y lo sabemos; si tocás los
- * niveles de `urgencia.ts`, el espejo hay que tocarlo a mano.
+ * Mensajes sí pagina, y para paginar en la base el orden tiene que calcularse en
+ * la base: esa proyección vive en `cola/urgenciaSql.ts`, al lado de la función
+ * pura, y el test de paridad (`urgencia.paridad.test.db.ts`) falla en CI si las
+ * dos implementaciones vuelven a decir cosas distintas (#37).
  */
 
 /** Lo mínimo que una fila del radar necesita para que la urgencia la ordene. */

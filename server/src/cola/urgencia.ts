@@ -32,6 +32,12 @@
  * está escribiendo ahora mismo se contesta al toque, y una promesa de ayer aguanta
  * cinco minutos más. Fue una decisión explícita, no un descuido. Hay un test que
  * la fija; si lo ves fallar, no lo "arregles" sin releer esto.
+ *
+ * ESTA REGLA EXISTE DOS VECES A PROPÓSITO: acá (la definición canónica) y
+ * proyectada a SQL en `urgenciaSql.ts`, porque la cola pagina en la base. Si
+ * tocás un nivel acá, tocá la proyección en el mismo commit — el test de paridad
+ * (`urgencia.paridad.test.db.ts`) corre las dos contra los mismos datos y es el
+ * candado que faltó cuando divergieron (#37).
  */
 
 export interface ItemUrgencia {

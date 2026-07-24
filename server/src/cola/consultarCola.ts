@@ -1,19 +1,21 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { db } from "../db/client.js";
+import { nivelUrgenciaSql, ordenUrgenciaSql, seguimientosPendientesSql } from "./urgenciaSql.js";
 
 /**
  * LA COLA UNIFICADA — una fila por CONVERSACIÓN, no por mensaje. Extraída de la
  * ruta (`routes/conversaciones.ts`) a este seam para poder testear el SQL contra
  * una base de verdad (harness #33): recibe `db` INYECTADO — la ruta le pasa el
- * singleton, el test su base de prueba. Es también el seam que pide #37 (unificar
- * la urgencia de la cola y el radar en un solo lugar).
+ * singleton, el test su base de prueba.
  *
  *   · Comentarios FB/IG → una fila por comentario.
  *   · Mensajes (WhatsApp/Messenger) → una fila por (canal, persona, número propio).
  *
  * `respondida` es DERIVADA (hay un saliente posterior al último entrante), no un
- * estado de fila. El orden es la urgencia de cuatro niveles expresada en SQL —
- * espejo de `cola/urgencia.ts` (la divergencia con los 6 niveles es #37).
+ * estado de fila. El orden es la urgencia de SEIS niveles de `cola/urgencia.ts`,
+ * proyectada a SQL en `cola/urgenciaSql.ts` (#37): esta consulta no define
+ * ningún criterio propio, y el test de paridad (`urgencia.paridad.test.db.ts`)
+ * falla si la cola y el radar vuelven a ordenar distinto.
  *
  * `ultima_clase` (nuevo): la clase de media del ÚLTIMO mensaje. Cuando el preview
  * no tiene texto (media-only), el front la usa para mostrar «📷 Foto» en vez de
@@ -122,19 +124,13 @@ export async function consultarCola(
     GROUP BY canal, persona_id, numero_propio
   `;
 
-  // Urgencia de cuatro niveles (espejo de cola/urgencia.ts): vivo, expira, espera, resto.
-  const nivel = sql`
-    CASE
-      WHEN tipo = 'mensaje' AND NOT respondida AND referencia > now() - interval '24 hours' THEN 0
-      WHEN tipo = 'comentario' AND ventana_abierta AND NOT respondida THEN 1
-      WHEN tipo = 'mensaje' AND NOT respondida THEN 2
-      ELSE 3
-    END`;
-
   let filtroIntencion: SQL = sql``;
   if (intencion === "pide-info") filtroIntencion = sql`WHERE pide_info`;
   if (intencion === "puedo-escribirle") filtroIntencion = sql`WHERE (ventana_abierta OR tipo = 'mensaje')`;
 
+  // El orden es la urgencia canónica (cola/urgenciaSql.ts): nivel 0–5 y su
+  // desempate, los mismos que el radar. `seguimiento_en` llega de la agenda —
+  // sin él, VENCIDO no existiría acá (issue #38).
   const filas = await base.execute(sql`
     WITH msg AS (
       ${msgCte}
@@ -143,17 +139,20 @@ export async function consultarCola(
       ${comentarios}
       UNION ALL
       ${conversaciones}
+    ),
+    seguimientos AS (
+      ${seguimientosPendientesSql}
     )
     SELECT clave, canal, tipo, persona_id, persona_nombre, numero_propio,
            texto, contexto_texto, ultima_clase, ultima_origen, respondida, ventana_abierta, pide_info, n,
-           referencia, ultimo_at,
+           referencia, ultimo_at, seguimiento_en,
            extract(day from now() - referencia)::int AS dias,
-           (${nivel}) AS nivel
+           (${nivelUrgenciaSql}) AS nivel,
+           (${ordenUrgenciaSql}) AS orden
     FROM todo
+    LEFT JOIN seguimientos USING (clave)
     ${filtroIntencion}
-    ORDER BY (${nivel}) ASC,
-             CASE WHEN (${nivel}) IN (1, 2) THEN referencia END ASC,
-             referencia DESC
+    ORDER BY nivel ASC, orden ASC
     LIMIT ${limit} OFFSET ${offset}
   `);
 
