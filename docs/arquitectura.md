@@ -331,12 +331,13 @@ sin credencial. El comentario de `routes/sdk.ts` («se publica sin auth igual qu
 que tampoco tiene») es **herencia que ya no es cierta de la mitad del server**. Como la API es
 pública por HTTPS, esto es exposición de datos personales de clientes, no de métricas.
 
-### 8.2 🔴 El orden de la cola está implementado dos veces, y ya divergió
+### 8.2 ✅ El orden de la cola está implementado dos veces — resuelto con paridad verificada (#37)
 
-`cola/urgencia.ts` tiene **6 niveles** (vivo · vencido · expira · espera · silencio · resto).
-`routes/conversaciones.ts` tiene **4 en SQL**, y renumerados. Está documentado como espejo a mantener
-a mano — pero el espejo ya no tiene `VENCIDO` ni `SILENCIO`. **La cola de Mensajes y el radar del
-Dashboard ordenan distinto la misma conversación.**
+Era: `cola/urgencia.ts` con 6 niveles y el SQL de la cola con 4, renumerados — un «espejo a
+mantener a mano» que divergió sin que CI dijera nada. Ahora la urgencia vive UNA vez en `cola/`:
+la función pura (`urgencia.ts`) y su proyección SQL (`urgenciaSql.ts`) lado a lado, y el test de
+paridad (`urgencia.paridad.test.db.ts`, harness ADR 0008) corre las dos contra los mismos datos y
+falla en CI si vuelven a decir cosas distintas. Decisión y alternativas: ADR 0009.
 
 ### 8.3 🔴 El nivel VENCIDO no se dispara nunca
 

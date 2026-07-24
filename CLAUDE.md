@@ -178,8 +178,9 @@ Correos (falta SMTP) · Agenda-calendario.
 1. **Auth partida por la mitad**: `/api/conversaciones`, `/api/whatsapp/conversacion/:telefono`,
    `/api/whatsapp/media/*` y `/api/responder` (que publica en Facebook) **no piden token**, y la API
    es pública por HTTPS. Lo mismo `/api/sdk`.
-2. **El orden de la cola está implementado dos veces y divergió**: 6 niveles en `cola/urgencia.ts`,
-   4 en el SQL de `routes/conversaciones.ts`. Mensajes y Dashboard ordenan distinto lo mismo.
+2. ~~El orden de la cola está implementado dos veces y divergió~~ **Resuelto (#37, ADR 0009)**: la
+   urgencia vive una vez en `cola/` (función pura + proyección SQL en `urgenciaSql.ts`) y el test
+   de paridad `urgencia.paridad.test.db.ts` falla en CI si vuelven a divergir.
 3. **El nivel VENCIDO no se dispara nunca**: nadie setea `seguimientoEn`, así que la agenda no
    influye en el orden de nada.
 
