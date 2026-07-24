@@ -86,6 +86,24 @@ no venció, la app se pinta ya y `/api/auth/yo` valida por detrás — si no, el
 tapado por un skeleton durante todo el viaje a VPS1. La firma la verifica el server en cada request
 igual, y un 401 real echa y borra el caché.
 
+## Ivi — el puente al cerebro RAG (proxy)
+
+La app de la vendedora le pregunta a **Ivi** (el cerebro RAG en **geografo**) a través de Hermes,
+nunca directo: **`POST /api/ivi/preguntar`** (`server/src/routes/ivi.ts`), **detrás de
+`requiereVendedora`**. El server reenvía la pregunta a `IVI_URL/api/preguntar` con
+`Authorization: Bearer IVI_SERVICE_TOKEN` (token de servicio que la vendedora **jamás** ve;
+referenciado por nombre, regla dura #1). El cliente vive en `server/src/ivi/cliente.ts`
+(`preguntarleAIvi`); el contrato de vuelta es `RespuestaIvi` (`texto`, `tipo`, `fuentes`,
+`groundingOk`, `edadDelDato`), validado con Zod.
+
+- **Body**: `{ pregunta: string, historial?: {rol,texto}[] }`. El `usuario` sale del token (la
+  vendedora), no del body — no se puede suplantar.
+- **FAIL-CLOSED y RUIDOSO**: cualquier fallo es un **502 con `codigo`** (`falta_config` sin
+  `IVI_URL`/`IVI_SERVICE_TOKEN`, `config_hermes` en 401, `ivi_no_configurado` en 503, `timeout`,
+  `red`, `respuesta_invalida`). **Nunca** se muestra un fallo como «Ivi no encontró datos».
+- **Env**: `IVI_URL` + `IVI_SERVICE_TOKEN` (solo nombres en `.env.example`). Del lado geografo,
+  `POST /api/preguntar` puede **no estar vivo aún**: hasta entonces la ruta responde 502 honesto.
+
 ## Deploy
 
 **VPS1** (`deploy@161.132.39.165`), en `/srv/hermes` — **EJECUTADO 2026-07-21**: servicio systemd
@@ -136,7 +154,8 @@ gane) + `docs/adr/` con los ADR 0001–0005. Ver `docs/agents/domain.md`.
 
 Solo en `server/.env` (gitignored). **Se referencian por nombre, jamás se pegan** (regla dura #1):
 `DATABASE_URL`, `META_ACCESS_TOKEN`, `CERBERUS_BASE_URL`, `HERMES_SESSION_SECRET`,
-`WHATSAPP_TRANSPORTE`, `WHATSAPP_NUMERO`. Ver `server/.env.example` (solo nombres).
+`WHATSAPP_TRANSPORTE`, `WHATSAPP_NUMERO`, `IVI_URL`, `IVI_SERVICE_TOKEN`. Ver
+`server/.env.example` (solo nombres).
 
 ## Reglas duras (Goberna)
 
