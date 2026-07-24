@@ -407,6 +407,7 @@ export function ColaUnificada({
               etapa={etapas?.[c.persona_id ?? '']}
               mostrarPideInfo={intencion !== 'pide-info'}
               esNueva={esNueva(c)}
+              indice={i}
               tabIndex={i === idxSeguro ? 0 : -1}
               onFocus={() => setIdxFoco(i)}
               ref={(el) => {

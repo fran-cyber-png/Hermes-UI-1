@@ -1,4 +1,4 @@
-import type { Ref } from 'react';
+import { useEffect, useRef, useState, type Ref } from 'react';
 import { Check, Clock } from 'lucide-react';
 import { temperatureOf, TEMPERATURE_META } from '../leads/temperature';
 import { hace } from '../../lib/datos/frescura';
@@ -9,6 +9,35 @@ import { BadgeCanal } from './BadgeCanal';
 import { Avatar } from './Avatar';
 import { VENTANA_DIAS } from './types';
 import type { Conversacion } from './conversaciones';
+import { esPrioritaria, siguienteConFoto } from './fotoVisible';
+
+/**
+ * Prende `conFoto` con el propio IntersectionObserver de la fila (guardarraíl
+ * anti-ban de #71/#59, lógica pura en `fotoVisible.ts`). Las primeras N filas
+ * ni observan: ya arrancan con `conFoto` en `true`, así el primer pintado no
+ * tiene el parpadeo iniciales→foto. El resto observa hasta que entra al
+ * viewport UNA vez — ahí se desconecta (sticky, no repite el fetch al
+ * scrollear de un lado a otro).
+ */
+function useConFotoVisible(indice: number | undefined) {
+  const prioritaria = esPrioritaria(indice);
+  const [conFoto, setConFoto] = useState(prioritaria);
+  const elRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (conFoto || typeof IntersectionObserver === 'undefined') return;
+    const el = elRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entradas) => setConFoto((actual) => siguienteConFoto(actual, entradas)),
+      { rootMargin: '200px' }, // llega un poco antes de que la fila esté del todo a la vista
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [conFoto]);
+
+  return { conFoto, elRef };
+}
 
 /**
  * Una conversación en la cola, en dos renglones: quién (con su urgencia a la
@@ -26,6 +55,7 @@ export function FilaConversacion({
   etapa,
   mostrarPideInfo = true,
   esNueva = false,
+  indice,
   tabIndex,
   onFocus,
   ref,
@@ -39,11 +69,14 @@ export function FilaConversacion({
   mostrarPideInfo?: boolean;
   /** Solo la fila recién llegada por SSE entra animada, nunca la lista entera. */
   esNueva?: boolean;
+  /** Posición en la lista — decide si es de las primeras N con foto prioritaria (`fotoVisible.ts`). */
+  indice?: number;
   /** Roving tabindex: la cola se recorre con ↑↓ + Enter. */
   tabIndex?: number;
   onFocus?: () => void;
   ref?: Ref<HTMLButtonElement>;
 }) {
+  const { conFoto, elRef } = useConFotoVisible(indice);
   const temp = TEMPERATURE_META[temperatureOf(c.referencia)];
   const restan = VENTANA_DIAS - c.dias;
   const esTelefono = !c.persona_nombre && c.canal === 'whatsapp' && c.persona_id != null;
@@ -69,7 +102,14 @@ export function FilaConversacion({
   return (
     <button
       type="button"
-      ref={ref}
+      ref={(el) => {
+        // Dos dueños del mismo nodo: el roving-tabindex del shell (`ref`,
+        // viene de afuera) y el IntersectionObserver de la foto (`elRef`,
+        // interno). React 19 no mergea refs solo — se hace a mano acá.
+        elRef.current = el;
+        if (typeof ref === 'function') ref(el);
+        else if (ref) ref.current = el;
+      }}
       tabIndex={tabIndex}
       onFocus={onFocus}
       onClick={() => onAbrir(c)}
@@ -90,6 +130,8 @@ export function FilaConversacion({
       <span className="relative mt-0.5 shrink-0">
         <Avatar
           nombre={c.persona_nombre}
+          telefono={c.canal === 'whatsapp' ? c.persona_id : null}
+          conFoto={conFoto && c.canal === 'whatsapp'}
           className="size-9 rounded-full bg-secondary text-xs font-bold text-navy"
         />
         <span className="absolute -bottom-0.5 -right-0.5">
