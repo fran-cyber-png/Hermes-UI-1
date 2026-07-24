@@ -82,18 +82,56 @@ export const seguimientosPendientesSql: SQL = sql`
 `;
 
 /**
- * ¿PIDE QUE LA CONTACTEN? — canónico (#96): antes había dos regex divergidos,
- * uno en `cola/consultarCola.ts` + `routes/interactions.ts` (más rico) y otro,
- * más pobre, en `cola/consultarRadar.ts` (pero con `inversion`/`temario`, que
- * el otro no tenía). Este es la UNIÓN de ambos — no pierde señal de ninguno.
+ * El regex canónico de «pide info» (#96) como LITERAL SQL entre comillas — UNA
+ * vez, para que los dos fragmentos de abajo lo compartan sin duplicarlo. Es una
+ * constante fija (no entra input de nadie), así que `sql.raw` es seguro y produce
+ * el MISMO SQL que el literal inline que tenía `pideInfoSql` antes.
+ */
+const PIDE_INFO_REGEX_SQL = `'(informaci|info\\b|precio|costo|cuánto|cuanto|inscri|matricul|interes|quiero|cómo|más datos|mas datos|detalle|inversion|temario)'`;
+
+/**
+ * ¿ESTE TEXTO PIDE QUE LA CONTACTEN? — el PREDICADO base, sobre un texto suelto.
+ * Canónico (#96): antes había dos regex divergidos, uno en `cola/consultarCola.ts`
+ * + `routes/interactions.ts` (más rico) y otro, más pobre, en
+ * `cola/consultarRadar.ts` (pero con `inversion`/`temario`, que el otro no tenía).
+ * Este es la UNIÓN de ambos — no pierde señal de ninguno.
+ *
+ * Se aplica a lo que es UNA sola cosa dicha: un comentario de FB/IG (que es su
+ * propio último mensaje). Para una CONVERSACIÓN agrupada, el fragmento correcto
+ * es `pideInfoAgrupadoSql` — no este.
  *
  * Toma la columna como parámetro (mismo patrón que `diaLimaSql` en
  * `horaLimaSql.ts`): los call-sites la referencian distinto — `texto` a secas
  * en cola/interactions, `i.texto` calificado en el CTE de comentarios del radar.
  */
 export function pideInfoSql(columna: string): SQL {
-  return sql`${sql.raw(columna)} ~* '(informaci|info\\b|precio|costo|cuánto|cuanto|inscri|matricul|interes|quiero|cómo|más datos|mas datos|detalle|inversion|temario)'`;
+  return sql`${sql.raw(columna)} ~* ${sql.raw(PIDE_INFO_REGEX_SQL)}`;
 }
+
+/**
+ * ¿PIDE INFO ESTA CONVERSACIÓN? — el MISMO predicado aplicado al **último
+ * entrante con texto**, dentro de un `GROUP BY` (como `respondidaSql`).
+ *
+ * POR QUÉ EL ÚLTIMO Y NO `bool_or`: antes esto se derivaba con un `bool_or`
+ * histórico y el chip «Pide info» quedaba pegado a TODAS — una persona que
+ * preguntó el precio hace semanas lo llevaba para siempre, aunque lo último que
+ * dijera fuera «no gracias». Con 1800 conversaciones en cola eso volvió el chip
+ * ruido puro: dejó de distinguir al lead caliente del que ya dijo que no.
+ * Decisión del dueño (#49): **manda lo último que dijo**.
+ *
+ * `FILTER (... AND texto IS NOT NULL)`: un audio, una foto o un sticker POSTERIOR
+ * no apagan el pedido — la última palabra es el último mensaje que TIENE palabras.
+ * `COALESCE(..., false)`: sin ningún entrante con texto, no pide info.
+ *
+ * Es UNA sola semántica para toda la casa: la usan la cola (`consultarCola`) y el
+ * radar del Dashboard (`consultarRadar`). Si divergen otra vez, el chip vuelve a
+ * significar cosas distintas en dos pantallas — que es el bug que esto cerró.
+ */
+export const pideInfoAgrupadoSql: SQL = sql`COALESCE(
+  (array_agg(texto ORDER BY occurred_at DESC)
+     FILTER (WHERE direccion = 'entrante' AND texto IS NOT NULL))[1] ~* ${sql.raw(PIDE_INFO_REGEX_SQL)},
+  false
+)`;
 
 /**
  * ¿RESPONDIDA? — hay un saliente igual o posterior al último entrante. Antes

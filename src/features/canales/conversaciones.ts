@@ -1,6 +1,6 @@
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/datos/cliente';
-import type { Intencion } from './types';
+import { parametrosDeCola, type EstadoCola } from './cola';
 
 /**
  * Una fila de la cola unificada: o un comentario suelto (FB/IG) o una
@@ -36,25 +36,47 @@ export interface Conversacion {
   /** La escala canónica de urgencia: 0 vivo · 1 vencido · 2 expira · 3 espera ·
    *  4 silencio · 5 resto — la misma que el radar del Dashboard. */
   nivel: 0 | 1 | 2 | 3 | 4 | 5;
+  /** Estado PERSONAL de la vendedora sobre la conversación (cola potenciada #49).
+   *  Opcionales: solo la cola (`/api/conversaciones`) los trae; radar/agenda no. */
+  /** Fijada (pin): sube a la banda de arriba de todo (tope 3). */
+  fijada?: boolean;
+  /** Favorita: entra al tab «Favoritos». */
+  favorita?: boolean;
+  /** Sin leer: hay un entrante posterior al cursor de lectura. Distinto de `respondida`. */
+  no_leido?: boolean;
+  /** Las categorías (etiquetas) asignadas, en minúsculas — para la píldora de color. */
+  categorias?: string[];
 }
 
-type Pagina = { conversaciones: Conversacion[]; total?: number; hayMas: boolean };
+type Pagina = {
+  conversaciones: Conversacion[];
+  total?: number;
+  hayMas: boolean;
+  /** El server sirvió la cola SIN estado personal (la tabla no existe todavía). */
+  sinEstado?: boolean;
+};
 
 /**
  * La cola unificada. Mismo patrón que `useInteracciones` (infinite query cacheada
  * por filtros), pero contra `/api/conversaciones`: una fila por conversación, no
- * por mensaje.
+ * por mensaje. Los ejes (tab, filtro secundario, categoría) van en `estado` y se
+ * traducen a query-params con `parametrosDeCola` (lógica pura, testeada aparte).
  */
-export function useConversaciones(intencion: Intencion, canal = '') {
-  const filtros = { intencion, canal, porTanda: 30 };
+export function useConversaciones(estado: EstadoCola | string = { tab: 'todo', filtroSec: '', categoria: null }) {
+  // Compat: `VistaEmbudo` (otro frente) todavía llama `useConversaciones('')`
+  // con el string viejo. Un string legado se normaliza a un estado: `''` = todo,
+  // y solo `pide-info`/`por-vencer` sobreviven como filtro secundario.
+  const norm: EstadoCola =
+    typeof estado === 'string'
+      ? { tab: 'todo', filtroSec: estado === 'pide-info' || estado === 'por-vencer' ? estado : '', categoria: null }
+      : estado;
+  const base = parametrosDeCola(norm);
 
   const q = useInfiniteQuery({
-    queryKey: ['conversaciones', filtros],
+    queryKey: ['conversaciones', base],
     initialPageParam: 0,
     queryFn: ({ pageParam }) => {
-      const p = new URLSearchParams({ limit: '30', offset: String(pageParam) });
-      if (canal) p.set('canal', canal);
-      if (intencion) p.set('intencion', intencion);
+      const p = new URLSearchParams({ ...base, limit: '30', offset: String(pageParam) });
       return api<Pagina>(`/api/conversaciones?${p}`);
     },
     getNextPageParam: (ultima, todas) =>
@@ -80,5 +102,37 @@ export function useConversaciones(intencion: Intencion, canal = '') {
      */
     traidoEn: q.dataUpdatedAt,
     actualizando: q.isFetching,
+    /**
+     * El server no pudo leer el estado personal (falta el `db:push` de
+     * `estado_conversacion`). La cola igual sirve; la UI lo dice en voz alta en
+     * vez de fingir que nadie fijó ni marcó nada.
+     */
+    sinEstado: q.data?.pages[0]?.sinEstado === true,
   };
+}
+
+/** Un cambio de estado personal de una conversación (pin / favorita / leído). */
+export interface CambioEstadoConversacion {
+  clave: string;
+  fijada?: boolean;
+  favorita?: boolean;
+  leido?: boolean;
+}
+
+/**
+ * Fijar / marcar favorita / marcar leído — la mutación contra
+ * `PUT /api/conversaciones/estado`. Es una ESCRITURA (una acción humana): al
+ * terminar invalida la cola para que el pin/estrella/punto azul se repinten.
+ * Fijar con el tope lleno devuelve 409 (`ErrorApi`), que la UI muestra sin
+ * esconder. `marcarLeido` avanza el cursor cross-canal al abrir cualquier hilo.
+ */
+export function useEstadoConversacion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (cambio: CambioEstadoConversacion) =>
+      api('/api/conversaciones/estado', { method: 'PUT', body: JSON.stringify(cambio) }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['conversaciones'] });
+    },
+  });
 }

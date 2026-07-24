@@ -1,7 +1,13 @@
 import { sql } from "drizzle-orm";
 import type { db } from "../db/client.js";
 import { ordenarRadar } from "./radar.js";
-import { pideInfoSql, referenciaSql, respondidaSql, seguimientosPendientesSql } from "./urgenciaSql.js";
+import {
+  pideInfoAgrupadoSql,
+  pideInfoSql,
+  referenciaSql,
+  respondidaSql,
+  seguimientosPendientesSql,
+} from "./urgenciaSql.js";
 
 /**
  * LAS CONVERSACIONES DEL RADAR — el seam que la ruta del Dashboard consulta.
@@ -75,8 +81,10 @@ export async function consultarRadar(
         NULL::text AS contexto_texto,
         CASE WHEN canal = 'whatsapp' THEN persona_id ELSE NULL END AS telefono,
         NULL::text AS pais_dato,
-        bool_or(${pideInfoSql("texto")})
-          FILTER (WHERE direccion = 'entrante') AS pide_info,
+        -- Lo que pide la persona es lo ÚLTIMO que dijo, no todo lo que dijo
+        -- alguna vez (#49): el bool_or de antes dejaba el chip pegado para
+        -- siempre. Mismo fragmento que la cola — una sola semántica.
+        (${pideInfoAgrupadoSql})                                       AS pide_info,
         -- En WhatsApp no hay ventana: el número está vinculado como dispositivo de
         -- un teléfono real, no como cuenta de negocio (ver CONTEXT.md).
         false AS ventana_abierta,

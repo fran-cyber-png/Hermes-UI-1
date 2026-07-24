@@ -556,3 +556,43 @@ export const notas = pgTable(
     // Sin ella, GET /api/notas?q= degrada a seq scan — no revienta, solo es lento.
   ],
 );
+
+/**
+ * ESTADO PERSONAL DE LA CONVERSACIÓN — todo lo que la vendedora decide sobre una
+ * conversación de la cola (la fija, la marca favorita, hasta dónde la leyó), una
+ * fila por (vendedora, conversación). La cola potenciada (#49) la une con UN solo
+ * LEFT JOIN a la consulta caliente. Por vendedora, como `gestiones`/`recordatorios`.
+ *
+ * DERIVAR LO DERIVABLE (regla de la casa): NO se guarda «no leído». Se guarda el
+ * CURSOR (`leido_hasta` = cuándo abrió el hilo); `no_leido` se deriva en la
+ * consulta (`max(occurred_at entrante) > leido_hasta`). Es distinto de
+ * `respondida` (que es «hay un saliente posterior al último entrante»): una
+ * conversación puede estar leída sin responder, y viceversa.
+ *
+ * `fijada` es el pin (banda arriba de la cola, tope 3 por vendedora); `fijada_at`
+ * ordena la banda y sirve para contar el tope. La PK compuesta (vendedora, clave)
+ * es a la vez la clave de upsert y la garantía de una sola fila por par.
+ */
+export const estadoConversacion = pgTable(
+  "estado_conversacion",
+  {
+    /** De quién es este estado. Cada vendedora tiene el suyo (el pin de A no lo ve B). */
+    vendedoraId: text("vendedora_id").notNull(),
+    /** La conversación (clave transversal de la cola): `conv:…` / `int:…` / `lead:…`. */
+    clave: text("clave").notNull(),
+    /** Pin: sube la conversación a la banda de arriba de todo (tope 3). */
+    fijada: boolean("fijada").notNull().default(false),
+    /** Cuándo se fijó — ordena la banda (más viejo primero) y cuenta contra el tope. */
+    fijadaAt: timestamp("fijada_at", { withTimezone: true }),
+    /** Favorita: entra al tab «Favoritos». */
+    favorita: boolean("favorita").notNull().default(false),
+    /** CURSOR de lectura: cuándo abrió el hilo por última vez. `no_leido` se deriva de acá. */
+    leidoHasta: timestamp("leido_hasta", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.vendedoraId, t.clave] }),
+    index("estado_conversacion_pin_idx").on(t.vendedoraId, t.fijada),
+    index("estado_conversacion_fav_idx").on(t.vendedoraId, t.favorita),
+  ],
+);

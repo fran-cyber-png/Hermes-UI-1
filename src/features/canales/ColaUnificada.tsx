@@ -1,41 +1,48 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type Ref } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { MessageSquarePlus, Search, X } from 'lucide-react';
+import { ChevronLeft, Mail, MailOpen, MessageSquarePlus, Pin, Search, Star, Tags, X } from 'lucide-react';
 import { useLocalStorage } from '../../lib/useLocalStorage';
-import { api } from '../../lib/datos/cliente';
+import { api, ErrorApi } from '../../lib/datos/cliente';
 import { hace, useFrescura } from '../../lib/datos/frescura';
 import { useSelloDeViejo } from '../../lib/datos/useSelloDeViejo';
 import { SelloDeAntes } from '../../components/SelloDeAntes';
 import { useSesionWa } from '../whatsapp/conversacionWa';
 import { pendientesQueApuran, useAgenda } from '../agenda/agenda';
+import { useCategorias } from '../gestion/categorias';
+import { GestorCategorias } from '../gestion/GestorCategorias';
+import { CLASE_FONDO, esColorCategoria } from '../gestion/paletaCategorias';
 import type { DatosDashboard } from '../dashboard/dashboard';
-import type { Intencion } from './types';
-import { useConversaciones, type Conversacion } from './conversaciones';
+import {
+  FILTROS_SEC,
+  KEY_TAB,
+  TABS,
+  migracionDesdeKeyVieja,
+  migrarFiltroViejo,
+  type FiltroSec,
+  type Tab,
+} from './cola';
+import { useConversaciones, useEstadoConversacion, type Conversacion } from './conversaciones';
 import { FilaConversacion } from './FilaConversacion';
+import { ListaCategorias } from './ListaCategorias';
 import { nombreCanal } from './BadgeCanal';
-
-const FILTROS: { valor: Intencion; label: string; vacio: string }[] = [
-  { valor: 'puedo-escribirle', label: 'Les puedo escribir', vacio: 'Nadie tiene la ventana abierta ahora mismo. Estás al día.' },
-  { valor: 'pide-info', label: 'Piden info', vacio: 'Nadie pidió información todavía.' },
-  { valor: '', label: 'Todo', vacio: 'No entró nada por ningún canal.' },
-];
 
 /** Solo anima lo que llegó AHORA (SSE): lo viejo que entra por «Ver más» no. */
 const RECIEN_LLEGADA_MS = 10 * 60_000;
 
 /**
- * LA COLA UNIFICADA — el corazón de Hermes.
+ * LA COLA UNIFICADA — el corazón de Hermes, ahora la MESA DE TRABAJO (#49).
  *
  * Una sola lista con los cuatro canales mezclados (comentarios FB/IG, DMs de
  * Messenger, chats de WhatsApp), ordenada por el servidor según la urgencia
- * canónica de seis niveles (`server/src/cola/urgencia.ts`): vivo, vencido,
- * expira, espera, silencio, resto — la misma que el radar del Dashboard. El
- * canal es una insignia, no una columna: nadie decide a quién responder según
- * por dónde le escribieron.
+ * canónica de seis niveles (`server/src/cola/urgencia.ts`). El canal es una
+ * insignia, no una columna.
  *
- * Sucedió a la vieja `Bandeja` (archivada, ver ADR 0004): mismo esqueleto —
- * filtros por intención, «Ver más», vacíos honestos — pero contra
- * `/api/conversaciones`, una fila por conversación.
+ * La cola potenciada suma la organización estilo WhatsApp Business: TABS
+ * (`Todo · No leídos · Favoritos`) como eje, filtros secundarios (`Piden info`,
+ * `Por vencer`), una BANDA de conversaciones fijadas arriba de todo, y el MODO
+ * LISTAS: la lista de la izquierda se convierte en la lista de categorías, y
+ * entrar a una la filtra (drill-down). El pin, la favorita y el «no leído» son
+ * POR VENDEDORA (`estado_conversacion`).
  */
 export function ColaUnificada({
   seleccionada,
@@ -59,13 +66,53 @@ export function ColaUnificada({
   /** Ref de la búsqueda, para el atajo «/» global (se cablea en el shell). */
   inputRef?: Ref<HTMLInputElement>;
 }) {
-  const [intencion, setIntencion] = useLocalStorage<Intencion>('hermes.colaFiltro', 'puedo-escribirle');
-  const { items, total, hayMas, cargando, cargandoMas, cargarMas, traidoEn, actualizando } =
-    useConversaciones(intencion);
+  // El tab es el eje (persistido). El default dejó de ser `puedo-escribirle`:
+  // `migrarFiltroViejo` mapea cualquier valor viejo/basura a un tab válido, así
+  // el caché persistido no abre mostrando un filtro que ya no existe (#49).
+  const [tabGuardado, setTab] = useLocalStorage<string>(KEY_TAB, 'todo');
+  const tab: Tab = migrarFiltroViejo(tabGuardado);
+  // Filtros secundarios y modo Listas: efímeros (la sesión arranca en limpio).
+  const [filtroSec, setFiltroSec] = useState<FiltroSec>('');
+  const [modoListas, setModoListas] = useState(false);
+  const [categoriaActiva, setCategoriaActiva] = useState<{ nombre: string; color: string } | null>(null);
+  const [gestorAbierto, setGestorAbierto] = useState(false);
+
+  // La key de la cola cambió con los tabs: quien venía usando la vieja tiene que
+  // encontrar SU filtro, no un default mudo. Se traduce una vez, al montar.
+  useEffect(() => {
+    const migrado = migracionDesdeKeyVieja(
+      (k) => {
+        try {
+          return window.localStorage.getItem(k);
+        } catch {
+          return null;
+        }
+      },
+      (k) => {
+        try {
+          window.localStorage.removeItem(k);
+        } catch {
+          // Bloqueado: no es crítico, solo se reintentaría la próxima vez.
+        }
+      },
+    );
+    if (!migrado) return;
+    setTab(migrado.tab);
+    setFiltroSec(migrado.filtroSec);
+    // Solo al montar: la migración es de una vez y borra su propia key.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const { data: catalogo = [] } = useCategorias();
+  const estadoMut = useEstadoConversacion();
+  const [avisoPin, setAvisoPin] = useState<string | null>(null);
+
+  const { items, total, hayMas, cargando, cargandoMas, cargarMas, traidoEn, actualizando, sinEstado } =
+    useConversaciones({ tab, filtroSec, categoria: categoriaActiva?.nombre ?? null });
   // Al abrir la app la cola viene del caché persistido: hasta que llegue lo
   // fresco hay que decir de cuándo es lo que se está mirando.
   const deAntes = useSelloDeViejo(traidoEn);
-  const filtro = FILTROS.find((f) => f.valor === intencion) ?? FILTROS[0];
+  const tabMeta = TABS.find((t) => t.valor === tab) ?? TABS[0];
 
   // Búsqueda: filtra lo YA cargado (nombre, teléfono, texto). Si no aparece,
   // «Buscar en más historia» trae más — honesto: busca en lo que hay, no en toda la base.
@@ -87,10 +134,11 @@ export function ColaUnificada({
   const { data: frescura } = useFrescura();
   const vacioPorAtraso = frescura != null && !frescura.fresca && frescura.total > 0;
 
-  // Cierre de edición despachada: la cola en cero CON datos frescos es trabajo
-  // terminado, y se celebra con la cifra del día + la siguiente jugada.
-  const despachada =
-    !cargando && visibles.length === 0 && !busqueda && intencion === 'puedo-escribirle' && frescura?.fresca === true;
+  // Cierre de edición despachada: la cola de «Todo» en cero CON datos frescos y
+  // sin ningún filtro es trabajo terminado — la Deuda en cero. Se celebra con la
+  // cifra del día + la siguiente jugada.
+  const sinFiltros = tab === 'todo' && !filtroSec && !categoriaActiva;
+  const despachada = !cargando && visibles.length === 0 && !busqueda && sinFiltros && frescura?.fresca === true;
 
   const statsDia = useQuery({
     queryKey: ['dashboard'],
@@ -180,17 +228,80 @@ export function ColaUnificada({
     setNuevoNombre('');
   }
 
+  // Toggle de estado personal (pin / favorita / leído) desde la fila. Fijar con
+  // el tope lleno rebota con 409: se muestra, no se esconde (política de la casa).
+  function togglear(c: Conversacion, campo: 'fijada' | 'favorita') {
+    setAvisoPin(null);
+    estadoMut.mutate(
+      { clave: c.clave, [campo]: !c[campo] },
+      {
+        onError: (e) => {
+          if (e instanceof ErrorApi && e.status === 409) setAvisoPin(e.message);
+        },
+      },
+    );
+  }
+  function marcarLeido(c: Conversacion, leido: boolean) {
+    estadoMut.mutate({ clave: c.clave, leido });
+  }
+
   // Fila pin de orientación: la conversación abierta no aparece bajo el filtro
   // (o la búsqueda) activo — se fija arriba para que la vendedora no la pierda.
   const noEstaEnLista = seleccionada != null && !cargando && !visibles.some((c) => c.clave === seleccionada);
-  const pinVisible = noEstaEnLista && (busqueda !== '' || intencion !== '');
+  const hayFiltroActivo = tab !== 'todo' || filtroSec !== '' || categoriaActiva != null;
+  const pinVisible = noEstaEnLista && (busqueda !== '' || hayFiltroActivo);
   const canalPin =
     conversacionAbierta?.canal ?? (seleccionada?.startsWith('conv:') ? seleccionada.split(':')[1] : null);
   const origenPin = canalPin ? nombreCanal(canalPin) : 'un comentario';
 
+  /** Vuelve a la cola completa: sin búsqueda, sin filtros y fuera del modo Listas. */
+  function limpiarFiltros() {
+    setBusqueda('');
+    setTab('todo');
+    setFiltroSec('');
+    setCategoriaActiva(null);
+    setModoListas(false);
+  }
+
+  /**
+   * Entrar a una lista arranca LIMPIO. Si no, los tabs y los filtros secundarios
+   * quedan aplicados pero fuera de la vista (la cabecera del drill-down no los
+   * muestra): «Precio (12)» abría con 2 filas y la vendedora no tenía cómo saber
+   * que su tab «No leídos» de hace un rato seguía angostando.
+   */
+  function entrarACategoria(cat: { nombre: string; color: string }) {
+    setTab('todo');
+    setFiltroSec('');
+    setBusqueda('');
+    setCategoriaActiva(cat);
+  }
+
+  // ── MODO LISTAS: la lista de la izquierda se vuelve la lista de categorías ──
+  if (modoListas && !categoriaActiva) {
+    return (
+      <>
+        <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
+          <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
+            <button
+              type="button"
+              onClick={() => setModoListas(false)}
+              className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold text-primary transition-colors hover:bg-primary/10"
+            >
+              <ChevronLeft size={14} /> Cola
+            </button>
+          </div>
+          <div className="min-h-0 flex-1">
+            <ListaCategorias onElegir={entrarACategoria} onGestionar={() => setGestorAbierto(true)} />
+          </div>
+        </div>
+        {gestorAbierto && <GestorCategorias onCerrar={() => setGestorAbierto(false)} />}
+      </>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
-      {/* Header fusionado: búsqueda arriba, filtros + total abajo, un solo bloque. */}
+      {/* Header: búsqueda + acciones arriba, tabs + filtros abajo, un solo bloque. */}
       <div className="shrink-0 border-b border-border px-3 pb-2 pt-3">
         <div className="mb-2 flex items-center gap-2">
           <div className="flex flex-1 items-center gap-2 rounded-full border border-border bg-muted/50 px-3 py-1.5 transition-[border-color,background-color] focus-within:border-primary focus-within:bg-card">
@@ -219,6 +330,15 @@ export function ColaUnificada({
               </button>
             )}
           </div>
+          <button
+            type="button"
+            title="Listas (organizá por categoría)"
+            aria-label="Listas por categoría"
+            onClick={() => setModoListas(true)}
+            className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+          >
+            <Tags size={15} />
+          </button>
           <button
             type="button"
             title={conectado ? 'Chat nuevo (a un número que no está en la cola)' : 'WhatsApp no está conectado'}
@@ -264,35 +384,107 @@ export function ColaUnificada({
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-2">
-          {/* Los filtros no se encogen nunca: son el control principal de la cola. */}
-          <div className="flex shrink-0 gap-0.5 rounded-lg bg-muted/60 p-0.5">
-            {FILTROS.map((f) => (
-              <button
-                key={f.valor}
-                type="button"
-                onClick={() => setIntencion(f.valor)}
+        {categoriaActiva ? (
+          /* Drill-down de categoría: cabecera de «volver» en vez de tabs. */
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setCategoriaActiva(null)}
+              className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-xs font-bold text-primary transition-colors hover:bg-primary/10"
+            >
+              <ChevronLeft size={14} /> Listas
+            </button>
+            <span className="flex min-w-0 flex-1 items-center gap-1.5">
+              <span
                 className={
-                  'rounded-md px-2.5 py-1 text-xs font-bold transition-colors ' +
-                  (intencion === f.valor ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')
+                  'size-2.5 shrink-0 rounded-full ' +
+                  (esColorCategoria(categoriaActiva.color) ? CLASE_FONDO[categoriaActiva.color] : 'bg-muted')
                 }
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-          {deAntes ? (
-            <SelloDeAntes texto={deAntes} actualizando={actualizando} />
-          ) : (
-            !cargando &&
-            total > 0 && (
+              />
+              <span className="truncate text-sm font-bold capitalize text-navy">{categoriaActiva.nombre}</span>
+            </span>
+            {!cargando && total > 0 && (
               <span className="pr-1 font-mono text-[11px] tabular-nums text-muted-foreground">
-                {total.toLocaleString('es')} en cola
+                {total.toLocaleString('es')}
               </span>
-            )
-          )}
-        </div>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between gap-2">
+              {/* Tabs: el eje de la cola. No se encogen: son el control principal. */}
+              <div className="flex shrink-0 gap-0.5 rounded-lg bg-muted/60 p-0.5" role="tablist" aria-label="Filtrar la cola">
+                {TABS.map((t) => (
+                  <button
+                    key={t.valor}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === t.valor}
+                    onClick={() => setTab(t.valor)}
+                    className={
+                      'rounded-md px-2.5 py-1 text-xs font-bold transition-colors ' +
+                      (tab === t.valor ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')
+                    }
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              {deAntes ? (
+                <SelloDeAntes texto={deAntes} actualizando={actualizando} />
+              ) : (
+                !cargando &&
+                total > 0 && (
+                  <span className="pr-1 font-mono text-[11px] tabular-nums text-muted-foreground">
+                    {total.toLocaleString('es')} en cola
+                  </span>
+                )
+              )}
+            </div>
+
+            {/* Filtros secundarios: angostan dentro del tab. Chips sobrios, apagables. */}
+            <div className="mt-2 flex items-center gap-1.5">
+              {FILTROS_SEC.map((f) => {
+                const activo = filtroSec === f.valor;
+                return (
+                  <button
+                    key={f.valor}
+                    type="button"
+                    aria-pressed={activo}
+                    onClick={() => setFiltroSec(activo ? '' : f.valor)}
+                    className={
+                      'rounded-full border px-2 py-0.5 text-[11px] font-semibold transition-colors ' +
+                      (activo
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground')
+                    }
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
+
+      {avisoPin && (
+        <div className="flex items-center justify-between gap-2 border-b border-border bg-warning/10 px-3 py-2 text-[12px] font-medium text-warning-foreground">
+          <span className="min-w-0 flex-1">{avisoPin}</span>
+          <button type="button" onClick={() => setAvisoPin(null)} className="shrink-0 text-muted-foreground hover:text-foreground">
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
+      {/* El server no pudo leer el estado personal: la cola sirve igual, pero
+          fijar/marcar no va a guardar nada. Se dice, no se esconde. */}
+      {sinEstado && (
+        <p className="border-b border-border bg-warning/10 px-3 py-2 text-[12px] font-medium text-warning-foreground">
+          Fijar, favoritos y «sin leer» no están disponibles todavía — falta aplicar el cambio de base en
+          el servidor. El resto de la cola funciona normal.
+        </p>
+      )}
 
       <div
         className="min-h-0 flex-1 overflow-y-auto"
@@ -302,11 +494,11 @@ export function ColaUnificada({
         {pinVisible && (
           <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-l-[3px] border-border border-l-navy bg-card py-2.5 pl-3 pr-2">
             <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-              Abierta desde {origenPin} — no coincide con {busqueda ? 'tu búsqueda' : `«${filtro.label}»`}
+              Abierta desde {origenPin} — no coincide con {busqueda ? 'tu búsqueda' : 'este filtro'}
             </p>
             <button
               type="button"
-              onClick={() => (busqueda ? setBusqueda('') : setIntencion(''))}
+              onClick={() => (busqueda ? setBusqueda('') : limpiarFiltros())}
               className="shrink-0 rounded-md px-2 py-1 text-[11px] font-bold text-primary transition-colors hover:bg-primary/10"
             >
               {busqueda ? 'Limpiar búsqueda' : 'Ver en Todo'}
@@ -332,13 +524,13 @@ export function ColaUnificada({
             <p className="px-4 py-12 text-center text-sm text-muted-foreground">
               Ninguna conversación cargada coincide con «{busqueda}».
             </p>
-          ) : vacioPorAtraso ? (
+          ) : vacioPorAtraso && sinFiltros ? (
             <div className="px-5 py-12 text-center">
               <p className="text-sm font-bold text-foreground">No hay nada acá, pero no es porque estés al día.</p>
               <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-muted-foreground">
                 La última captura fue {hace(frescura.horasDesdeIngesta)}. Hay{' '}
                 {frescura.total.toLocaleString('es')} interacciones guardadas, pero ninguna es lo bastante
-                reciente como para entrar en este filtro.
+                reciente como para entrar en la cola.
               </p>
             </div>
           ) : despachada ? (
@@ -348,18 +540,18 @@ export function ColaUnificada({
                   <p className="font-heading text-3xl font-bold tabular-nums text-navy">
                     Respondiste a {nHoy} {nHoy === 1 ? 'persona' : 'personas'} hoy
                   </p>
-                  <p className="mt-1.5 text-sm text-muted-foreground">Estás al día: nadie espera respuesta ahora mismo.</p>
+                  <p className="mt-1.5 text-sm text-muted-foreground">Estás al día: no queda deuda en la cola.</p>
                 </>
               ) : (
                 <>
                   <p className="font-heading text-3xl font-bold text-navy">Estás al día</p>
-                  <p className="mt-1.5 text-sm text-muted-foreground">Nadie tiene la ventana abierta ahora mismo.</p>
+                  <p className="mt-1.5 text-sm text-muted-foreground">No queda deuda en la cola ahora mismo.</p>
                 </>
               )}
               {nPideInfo > 0 ? (
                 <button
                   type="button"
-                  onClick={() => setIntencion('pide-info')}
+                  onClick={() => setFiltroSec('pide-info')}
                   className="mt-4 rounded-lg border border-border px-3 py-1.5 text-xs font-bold text-foreground transition-colors hover:border-primary hover:text-primary"
                 >
                   Ver los {nPideInfo} que piden info →
@@ -378,7 +570,7 @@ export function ColaUnificada({
                 </p>
               )}
             </div>
-          ) : intencion === 'puedo-escribirle' && frescura == null ? (
+          ) : sinFiltros && frescura == null ? (
             /* La frescura todavía no llegó: sin ella no se puede afirmar «al día». */
             <div className="space-y-2 px-6 py-12" aria-hidden="true">
               <div className="mx-auto h-3 w-2/3 animate-pulse rounded bg-muted" />
@@ -386,11 +578,13 @@ export function ColaUnificada({
             </div>
           ) : (
             <div className="px-4 py-12 text-center">
-              <p className="text-sm text-muted-foreground">{filtro.vacio}</p>
-              {intencion === 'pide-info' ? (
+              <p className="text-sm text-muted-foreground">
+                {categoriaActiva ? `Nadie en «${categoriaActiva.nombre}» todavía.` : filtroSec ? 'Nada con ese filtro.' : tabMeta.vacio}
+              </p>
+              {hayFiltroActivo ? (
                 <button
                   type="button"
-                  onClick={() => setIntencion('')}
+                  onClick={limpiarFiltros}
                   className="mt-3 rounded-lg border border-border px-3 py-1.5 text-xs font-bold text-foreground transition-colors hover:border-primary hover:text-primary"
                 >
                   Ver todo lo que entró
@@ -404,21 +598,72 @@ export function ColaUnificada({
           )
         ) : (
           visibles.map((c, i) => (
-            <FilaConversacion
-              key={c.clave}
-              c={c}
-              seleccionada={seleccionada === c.clave}
-              onAbrir={onSeleccionar}
-              etapa={etapas?.[c.persona_id ?? '']}
-              mostrarPideInfo={intencion !== 'pide-info'}
-              esNueva={esNueva(c)}
-              indice={i}
-              tabIndex={i === idxSeguro ? 0 : -1}
-              onFocus={() => setIdxFoco(i)}
-              ref={(el) => {
-                refsFilas.current[i] = el;
-              }}
-            />
+            <div key={c.clave} className="group/fila relative">
+              <FilaConversacion
+                c={c}
+                seleccionada={seleccionada === c.clave}
+                onAbrir={onSeleccionar}
+                etapa={etapas?.[c.persona_id ?? '']}
+                mostrarPideInfo={filtroSec !== 'pide-info'}
+                catalogoCategorias={catalogo}
+                esNueva={esNueva(c)}
+                indice={i}
+                tabIndex={i === idxSeguro ? 0 : -1}
+                onFocus={() => setIdxFoco(i)}
+                ref={(el) => {
+                  refsFilas.current[i] = el;
+                }}
+              />
+              {/* Acciones de organización: fuera del <button> de la fila (HTML no
+                  anida botones). Aparecen al pasar el mouse; el estado activo
+                  (fijada/favorita) queda visible siempre.
+
+                  `pointer-events-none` mientras están invisibles, y `-auto` al
+                  aparecer: si no, la esquina derecha de CADA fila se come el clic
+                  con botones que no se ven — tocás para abrir la conversación y
+                  terminás fijándola. El foco de teclado también los reactiva
+                  (`focus-within` prende la opacidad y el hijo recupera el clic). */}
+              <div
+                data-activo={c.fijada || c.favorita || undefined}
+                className="pointer-events-none absolute right-2.5 top-2 flex items-center gap-0.5 opacity-0 transition-opacity focus-within:pointer-events-auto focus-within:opacity-100 group-hover/fila:pointer-events-auto group-hover/fila:opacity-100 data-[activo=true]:pointer-events-auto data-[activo=true]:opacity-100"
+              >
+                <button
+                  type="button"
+                  aria-label={c.fijada ? 'Soltar' : 'Fijar arriba'}
+                  aria-pressed={c.fijada}
+                  title={c.fijada ? 'Soltar' : 'Fijar arriba'}
+                  onClick={() => togglear(c, 'fijada')}
+                  className={
+                    'rounded-md bg-card/90 p-1 shadow-sm transition-colors ' +
+                    (c.fijada ? 'text-navy' : 'text-muted-foreground/60 hover:text-navy')
+                  }
+                >
+                  <Pin size={13} fill={c.fijada ? 'currentColor' : 'none'} />
+                </button>
+                <button
+                  type="button"
+                  aria-label={c.favorita ? 'Quitar de favoritos' : 'Marcar favorita'}
+                  aria-pressed={c.favorita}
+                  title={c.favorita ? 'Favorita' : 'Marcar favorita'}
+                  onClick={() => togglear(c, 'favorita')}
+                  className={
+                    'rounded-md bg-card/90 p-1 shadow-sm transition-colors ' +
+                    (c.favorita ? 'text-navy' : 'text-muted-foreground/60 hover:text-navy')
+                  }
+                >
+                  <Star size={13} fill={c.favorita ? 'currentColor' : 'none'} />
+                </button>
+                <button
+                  type="button"
+                  aria-label={c.no_leido ? 'Marcar leído' : 'Marcar sin leer'}
+                  title={c.no_leido ? 'Marcar leído' : 'Marcar sin leer'}
+                  onClick={() => marcarLeido(c, Boolean(c.no_leido))}
+                  className="rounded-md bg-card/90 p-1 text-muted-foreground/60 shadow-sm transition-colors hover:text-primary"
+                >
+                  {c.no_leido ? <MailOpen size={13} /> : <Mail size={13} />}
+                </button>
+              </div>
+            </div>
           ))
         )}
 
@@ -440,6 +685,8 @@ export function ColaUnificada({
           <p className="pb-4 text-center text-[11px] text-muted-foreground">Ya está cargada toda la historia.</p>
         )}
       </div>
+
+      {gestorAbierto && <GestorCategorias onCerrar={() => setGestorAbierto(false)} />}
     </div>
   );
 }

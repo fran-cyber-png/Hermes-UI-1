@@ -1,6 +1,7 @@
+import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { MessageSquareText } from 'lucide-react';
-import type { Conversacion } from './conversaciones';
+import { useEstadoConversacion, type Conversacion } from './conversaciones';
 import { HiloWhatsapp } from '../whatsapp/HiloWhatsapp';
 import { HiloMessenger } from './HiloMessenger';
 import ResponderPanel from './ResponderPanel';
@@ -26,6 +27,19 @@ export function ConversacionActiva({
   onCerrar: () => void;
 }) {
   const qc = useQueryClient();
+
+  // Avanzar el cursor de lectura al abrir el hilo, CROSS-CANAL (#49): marca la
+  // conversación como leída (el punto azul se apaga) para todos los canales, no
+  // solo WhatsApp. Los ticks azules de WhatsApp son un efecto lateral aparte
+  // (`useConversacionWa.marcarLeido`). Es una escritura por acción humana: abrir.
+  const estado = useEstadoConversacion();
+  const clave = conversacion?.clave ?? null;
+  useEffect(() => {
+    if (!clave) return;
+    estado.mutate({ clave, leido: true });
+    // Solo al cambiar de conversación: `estado` es estable entre renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clave]);
 
   if (!conversacion) {
     return (

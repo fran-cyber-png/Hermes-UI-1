@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   conversionesWa,
   enviosWa,
+  estadoConversacion,
   etiquetas,
   events,
   gestiones,
@@ -319,6 +320,36 @@ export async function sembrarNota(db: DbDePrueba, n: NotaSembrada = {}): Promise
     .returning({ id: notas.id });
 
   return fila.id;
+}
+
+export interface EstadoConversacionSembrado {
+  vendedoraId?: string;
+  clave: string;
+  fijada?: boolean;
+  fijadaAt?: Date | null;
+  favorita?: boolean;
+  /** El cursor de lectura. Con una fecha ANTES del último entrante → sigue «sin leer». */
+  leidoHasta?: Date | null;
+}
+
+/**
+ * Siembra el estado personal de una conversación (`estado_conversacion`, #49) —
+ * para los tests de pin/favorita/no_leído de la cola potenciada. Inserta directo
+ * (fixture), no vía el seam `upsertEstado`, para poder fijar `leido_hasta` a una
+ * fecha exacta relativa a los mensajes sembrados.
+ */
+export async function sembrarEstadoConversacion(
+  db: DbDePrueba,
+  e: EstadoConversacionSembrado,
+): Promise<void> {
+  await db.insert(estadoConversacion).values({
+    vendedoraId: e.vendedoraId ?? "vendedora-prueba",
+    clave: e.clave,
+    fijada: e.fijada ?? false,
+    fijadaAt: e.fijadaAt ?? (e.fijada ? new Date() : null),
+    favorita: e.favorita ?? false,
+    leidoHasta: e.leidoHasta ?? null,
+  });
 }
 
 export interface GestionSembrada {

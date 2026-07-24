@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type Ref } from 'react';
-import { Check, Clock } from 'lucide-react';
+import { Check, Clock, Pin, Star } from 'lucide-react';
 import { temperatureOf, TEMPERATURE_META } from '../leads/temperature';
 import { hace } from '../../lib/datos/frescura';
 import { formatoTelefono } from '../../lib/formato';
 import { etiquetaDeMedia } from '../../lib/etiquetaMedia';
 import { ETAPA_CHIP } from '../../lib/etapas';
+import { CLASE_BORDE, CLASE_TEXTO, resolverColor } from '../gestion/paletaCategorias';
 import { BadgeCanal } from './BadgeCanal';
 import { Avatar } from './Avatar';
 import { VENTANA_DIAS } from './types';
@@ -60,6 +61,7 @@ export function FilaConversacion({
   onAbrir,
   etapa,
   mostrarPideInfo = true,
+  catalogoCategorias,
   esNueva = false,
   indice,
   tabIndex,
@@ -73,6 +75,8 @@ export function FilaConversacion({
   etapa?: string | null;
   /** En el filtro «Piden info» el chip es redundante: se apaga desde afuera. */
   mostrarPideInfo?: boolean;
+  /** El catálogo de la vendedora, para resolver el color de la píldora de categoría (#49). */
+  catalogoCategorias?: readonly { nombre: string; color: string }[];
   /** Solo la fila recién llegada por SSE entra animada, nunca la lista entera. */
   esNueva?: boolean;
   /** Posición en la lista — decide si es de las primeras N con foto prioritaria (`fotoVisible.ts`). */
@@ -104,6 +108,10 @@ export function FilaConversacion({
       ? 'font-medium text-foreground'
       : 'text-foreground';
   const chipEtapa = etapa ? (ETAPA_CHIP[etapa] ?? 'bg-secondary text-secondary-foreground') : '';
+  // Las categorías de la fila, resueltas al color de quien mira (#49). La píldora
+  // usa BORDE de color (nunca sombra, nunca oro) — la banda de 3px es temperatura.
+  const categorias = c.categorias ?? [];
+  const catalogo = catalogoCategorias ?? [];
 
   return (
     <button
@@ -149,7 +157,15 @@ export function FilaConversacion({
         {/* Renglón 1: quién, y a la derecha la urgencia en dos líneas. */}
         <div className="flex items-start justify-between gap-2">
           <span className="flex min-w-0 items-center gap-1.5">
+            {/* Pin: por qué esta fila está en la banda de arriba. Navy, no oro. */}
+            {c.fijada && <Pin size={12} fill="currentColor" className="shrink-0 text-navy" aria-label="Fijada" />}
+            {/* Sin leer: punto azul. Distinto del check de respondida y del conteo. */}
+            {c.no_leido && (
+              <span className="size-2 shrink-0 rounded-full bg-primary" role="img" aria-label="Sin leer" title="Sin leer" />
+            )}
             <span className={`truncate text-sm ${pesoNombre} ${tintaNombre}`}>{nombre}</span>
+            {/* Favorita: estrella navy (el oro es SOLO tiempo que se acaba). */}
+            {c.favorita && <Star size={12} fill="currentColor" className="shrink-0 text-navy" aria-label="Favorita" />}
             {etapa && (
               <span className={'shrink-0 rounded px-1 py-px text-[11px] font-semibold capitalize ' + chipEtapa}>
                 {etapa}
@@ -171,20 +187,43 @@ export function FilaConversacion({
           </span>
         </div>
 
-        {/* Renglón 2: qué dijo, con la marca de lead y los mensajes sin leer. */}
+        {/* Renglón 2: qué dijo, con la marca de lead y las categorías. */}
         <div className="mt-0.5 flex items-center gap-1.5">
           {mostrarPideInfo && c.pide_info && (
             <span className="shrink-0 rounded bg-primary/10 px-1 py-px text-[11px] font-semibold text-primary">
               Pide info
             </span>
           )}
+          {/* Categorías: píldora con BORDE de color (sin sombra, sin oro). */}
+          {categorias.slice(0, 1).map((nombre) => {
+            const color = resolverColor(nombre, catalogo);
+            return (
+              <span
+                key={nombre}
+                title={nombre}
+                className={
+                  'shrink-0 rounded-full border bg-card px-1.5 py-px text-[11px] font-semibold capitalize ' +
+                  (color ? CLASE_BORDE[color] + ' ' + CLASE_TEXTO[color] : 'border-border text-muted-foreground')
+                }
+              >
+                {nombre}
+              </span>
+            );
+          })}
+          {categorias.length > 1 && (
+            <span className="shrink-0 text-[11px] font-medium text-muted-foreground">+{categorias.length - 1}</span>
+          )}
           <p className={'min-w-0 flex-1 truncate text-sm ' + clasePreview}>
             {c.texto ||
               etiquetaDeMedia(c.ultima_clase) ||
               (c.ultima_origen?.fuente === 'anuncio' ? '📣 Vino del anuncio' : '(sin texto)')}
           </p>
+          {/* Conteo de mensajes: neutro y rotulado. El AZUL queda para «sin leer». */}
           {c.n > 1 && !c.respondida && (
-            <span className="shrink-0 rounded-full bg-primary px-1.5 py-px text-[11px] font-bold tabular-nums text-primary-foreground">
+            <span
+              title={`${c.n} mensajes en la conversación`}
+              className="shrink-0 rounded-full bg-muted px-1.5 py-px text-[11px] font-bold tabular-nums text-muted-foreground"
+            >
               {c.n}
             </span>
           )}
