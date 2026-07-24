@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import cors from "cors";
 import express from "express";
 import { perimetroApi } from "./auth/perimetro.js";
@@ -121,7 +122,7 @@ if (process.env.NODE_ENV !== "production") {
 // La app de escritorio empaquetada CARGA esta URL — actualizar Hermes para
 // todas las vendedoras es `git pull + build + restart` en el server, sin
 // reinstalar nada en ninguna máquina. La cáscara de Electron casi no cambia.
-const DIST = new URL("../../dist/", import.meta.url).pathname;
+const DIST = fileURLToPath(new URL("../../dist/", import.meta.url));
 if (existsSync(join(DIST, "index.html"))) {
   app.use(express.static(DIST));
   // SPA fallback: cualquier ruta que no sea API/webhook devuelve la app.

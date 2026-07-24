@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { Router, type Request, type Response } from "express";
 import { db } from "../db/client.js";
 import { whatsapp } from "../whatsapp/wiring.js";
@@ -33,7 +34,7 @@ import {
  */
 export const adminRouter = Router();
 
-const DIR_SESIONES = new URL("../../.wa-sessions/", import.meta.url).pathname;
+const DIR_SESIONES = fileURLToPath(new URL("../../.wa-sessions/", import.meta.url));
 
 function responderError(res: Response, status: number, motivo: string, mensaje: string): void {
   res.status(status).json({ error: { motivo, mensaje } });
