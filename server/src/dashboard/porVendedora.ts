@@ -1,17 +1,21 @@
 import { sql } from "drizzle-orm";
 import type { db } from "../db/client.js";
-import { diaLimaISO } from "../lib/horaLima.js";
+import { corteDiasAtras, diaLimaISO } from "../lib/horaLima.js";
+import { diaLimaSql } from "../lib/horaLimaSql.js";
 
 /**
  * «HOY» Y «7 DÍAS» POR VENDEDORA — extraído de `routes/dashboard.ts` (mismo
  * motivo que `dashboard/series.ts`: testear el SQL contra una base de
  * verdad, harness #33).
  *
- * Solo el corte de «hoy» tenía el bug de #4 (`e.creado_at::date = now()::date`
- * comparaba en UTC). El de «7 días» (`creado_at > now() - interval '7 days'`)
- * es una ventana RODANTE, no un corte de calendario — no depende de en qué
- * zona horaria cae la medianoche, así que se queda tal cual (evaluado y
- * descartado a propósito, no un olvido).
+ * El corte de «hoy» tenía el bug de #4 (`e.creado_at::date = now()::date`
+ * comparaba en UTC). El de «7 días» es una ventana RODANTE, no un corte de
+ * calendario — no depende de en qué zona horaria cae la medianoche — pero
+ * seguía anclada a `now()` corrido DENTRO de la query en vez del `ahora`
+ * inyectado (deuda de review de #98): dos requests a un segundo de distancia
+ * podían ver ventanas de 7 días distintas, y un test no podía congelar el
+ * reloj. `corteDiasAtras(ahora, 7)` lo deja bindeado, igual que hace
+ * `series.ts` para su ventana de 14 días.
  *
  * SEGUNDO BUG, heredado del SQL viejo de `routes/dashboard.ts` y que este
  * seam heredó sin querer: `envios` y `ventas` entraban CRUDAS (una fila por
@@ -41,16 +45,17 @@ export type FilaPorVendedora = {
 
 export async function consultarPorVendedora(base: typeof db, ahora: Date): Promise<FilaPorVendedora[]> {
   const hoy = diaLimaISO(ahora);
+  const corte7d = corteDiasAtras(ahora, 7).toISOString();
 
   return base.execute<FilaPorVendedora>(sql`
     WITH envios AS (
       -- Ya agregada por vendedora: UNA fila por vendedora_id, no una por envío.
       SELECT
         vendedora_id,
-        count(DISTINCT telefono) FILTER (WHERE (creado_at AT TIME ZONE 'America/Lima')::date = ${hoy}::date)::int AS conversaciones_hoy,
-        count(*) FILTER (WHERE (creado_at AT TIME ZONE 'America/Lima')::date = ${hoy}::date)::int                 AS mensajes_hoy,
-        count(DISTINCT telefono) FILTER (WHERE creado_at > now() - interval '7 days')::int AS conversaciones_7d,
-        count(*) FILTER (WHERE creado_at > now() - interval '7 days')::int                 AS mensajes_7d
+        count(DISTINCT telefono) FILTER (WHERE ${diaLimaSql("creado_at")} = ${hoy}::date)::int AS conversaciones_hoy,
+        count(*) FILTER (WHERE ${diaLimaSql("creado_at")} = ${hoy}::date)::int                 AS mensajes_hoy,
+        count(DISTINCT telefono) FILTER (WHERE creado_at > ${corte7d}::timestamptz)::int AS conversaciones_7d,
+        count(*) FILTER (WHERE creado_at > ${corte7d}::timestamptz)::int                 AS mensajes_7d
       FROM envios_wa
       WHERE estado = 'enviado'
       GROUP BY vendedora_id
@@ -59,8 +64,8 @@ export async function consultarPorVendedora(base: typeof db, ahora: Date): Promi
       -- Ídem: UNA fila por vendedora_id.
       SELECT
         vendedora_id,
-        count(*) FILTER (WHERE (iniciada_at AT TIME ZONE 'America/Lima')::date = ${hoy}::date)::int AS ventas_hoy,
-        count(*) FILTER (WHERE iniciada_at > now() - interval '7 days')::int                         AS ventas_7d
+        count(*) FILTER (WHERE ${diaLimaSql("iniciada_at")} = ${hoy}::date)::int AS ventas_hoy,
+        count(*) FILTER (WHERE iniciada_at > ${corte7d}::timestamptz)::int        AS ventas_7d
       FROM conversiones_wa
       GROUP BY vendedora_id
     )
