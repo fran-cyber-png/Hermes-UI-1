@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, FileText, Loader2, Megaphone, Paperclip, Phone, QrCode, Send, Link2, WifiOff, X } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
 import { formatoTelefono, tempClass } from '../../lib/formato';
+import { guardarBorrador, leerBorrador, limpiarBorrador } from './borradorComposer';
 import { TextoWhatsapp } from './TextoWhatsapp';
 import { Avatar } from '../canales/Avatar';
 import type { Conversacion } from '../canales/conversaciones';
@@ -152,7 +153,10 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
   const numeroPropio = conversacion.numero_propio ?? '';
   const { data: sesion } = useSesionWa();
   const { hilo, enviar, enviarMedia, marcarLeido } = useConversacionWa(telefono);
-  const [texto, setTexto] = useState('');
+  // El valor inicial es best-effort (el Map ya puede tener algo si el
+  // componente monta directo sobre este teléfono); el efecto de abajo es la
+  // fuente de verdad real en cada cambio de conversación.
+  const [texto, setTexto] = useState(() => leerBorrador(telefono));
   const [adjunto, setAdjunto] = useState<File | null>(null);
   const archivoRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -170,6 +174,13 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
   useEffect(() => {
     if (telefono) marcarLeido.mutate(telefono);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [telefono]);
+
+  // El composer se hidrata del borrador de ESTE teléfono al cambiar de
+  // conversación (issue #3): el Map vive afuera del componente, así que el
+  // texto de A ya no se filtra al de B — y volver a A lo recupera.
+  useEffect(() => {
+    setTexto(leerBorrador(telefono));
   }, [telefono]);
 
   // Composer con foco: al cambiar de conversación, la caja queda lista para tipear.
@@ -199,11 +210,13 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
         await enviarMedia.mutateAsync({ numeroPropio, telefono, referencia: conversacion.clave, archivo: adjunto, caption: t });
         setAdjunto(null);
         setTexto('');
+        limpiarBorrador(telefono);
         return;
       }
       if (!t) return;
       await enviar.mutateAsync({ numeroPropio, telefono, texto: t, referencia: conversacion.clave });
       setTexto('');
+      limpiarBorrador(telefono);
     } catch {
       // El error se muestra abajo; no limpiamos texto ni adjunto para no perderlos.
     }
@@ -369,7 +382,11 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
           <textarea
             ref={textareaRef}
             value={texto}
-            onChange={(e) => setTexto(e.target.value)}
+            onChange={(e) => {
+              const valor = e.target.value;
+              setTexto(valor);
+              guardarBorrador(telefono, valor);
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
