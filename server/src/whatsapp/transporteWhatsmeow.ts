@@ -13,6 +13,7 @@ import type {
 } from './transporte.js';
 import { normalizarTelefono, telefonoDeContacto, jidDeTelefono, esJidDeGrupo } from './identidadWa.js';
 import { detectarOrigen } from './origen.js';
+import { tieneContenido } from './contenido.js';
 import { MapaLids } from './lidMap.js';
 import { RUTA_MEDIA, nombreSeguro } from './mediaDir.js';
 
@@ -98,7 +99,7 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
       console.log(`[wa raw] chat=${info.chat} sender=${info.sender} mio=${info.isFromMe} grupo=${info.isGroup} tipos=${Object.keys(message ?? {}).join(',')}`);
       void this.aMensaje(info, message).then((m) => {
         if (m) for (const cb of this.susMensaje) cb(m);
-        else console.log('[wa raw] aMensaje devolvió null (no se derivó teléfono/contacto)');
+        else console.log('[wa raw] aMensaje devolvió null (sin contenido de usuario, o no se derivó teléfono/contacto)');
       });
     });
   }
@@ -158,6 +159,14 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
         clase: 'otro',
       };
     }
+
+    // Recibos de lectura, revokes, ajustes de efímeros, distribución de claves
+    // de grupo… viajan por el mismo evento "message" que el contenido real,
+    // pero no son nada que el contacto haya escrito (#70: eran el origen del
+    // «(no es texto)»). Se descartan igual que el caso «ni teléfono», antes de
+    // gastar un lookup de lid o bajar media. Los que ya se ingirieron antes de
+    // este fix NO se limpian acá — es forward-only, ver el issue.
+    if (!tieneContenido(message)) return null;
 
     // Primero el camino directo (JID con teléfono); si el chat vino como @lid,
     // el mapa que whatsmeow sincroniza en su store baja el lid al teléfono real.
