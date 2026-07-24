@@ -222,10 +222,28 @@ CREATE INDEX IF NOT EXISTS notas_texto_gin_idx
 ```
 
 ```bash
-ssh deploy@161.132.39.165 \
-  'docker exec -i cartografia_db psql -U hermes_db -d hermes_db -c "CREATE INDEX IF NOT EXISTS notas_texto_gin_idx ON notas USING gin (to_tsvector(\'spanish\', texto));"' \
-  # ajustar el contenedor/usuario/base al Postgres REAL de hermes_db (127.0.0.1:5438) — ver §2.
+ssh deploy@161.132.39.165 "docker exec -i hermes_db sh -c 'psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\"'" <<'SQL'
+CREATE INDEX IF NOT EXISTS notas_texto_gin_idx
+  ON notas USING gin (to_tsvector('spanish', texto));
+SQL
 ```
+
+El contenedor es **`hermes_db`** (no `cartografia_db` — ese es el Postgres de otro servicio, el del
+geovisor/cartografía-electoral, en la MISMA VPS1 pero nada que ver). El usuario/base salen de las
+env vars **del propio contenedor** (`$POSTGRES_USER`/`$POSTGRES_DB`, las que le puso
+`docker-compose.override.yml` al crearlo) en vez de escribirlos a mano acá: así el comando no
+depende de que quien lo corre adivine bien esos dos valores.
+
+Por qué la citación es así (para no repetir el bug): el SQL va por **stdin** (heredoc con
+delimitador citado `<<'SQL'`, que no interpola nada localmente) en vez de con `-c "..."`, así no
+hay que escapar comillas simples dentro de comillas simples (que en bash **no se puede** — un
+`\'` dentro de `'...'` no escapa nada, corta la cadena ahí mismo, que era exactamente el bug
+anterior). El `docker exec -i hermes_db sh -c '...'` usa un `sh` DENTRO del contenedor para recién
+ahí expandir `$POSTGRES_USER`/`$POSTGRES_DB` — de ahí el `\"\$POSTGRES_USER\"` en el comando ssh
+(comillas y `$` escapados para que el shell LOCAL los mande literales y no los toque). Verificado
+en seco (sin tocar ningún servidor): `echo` del string que arma el shell local +
+`python3 -c 'import shlex; ...'` confirmando que lo que llega al `sh -c` del contenedor es
+exactamente `psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"`.
 
 Sin el índice, `GET /api/notas?q=` sigue contestando bien (mismo resultado): la
 expresión del `WHERE` es idéntica a la del índice, así que Postgres solo hace
