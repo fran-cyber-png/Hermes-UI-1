@@ -80,3 +80,38 @@ export const seguimientosPendientesSql: SQL = sql`
   WHERE estado = 'pendiente'
   GROUP BY clave
 `;
+
+/**
+ * ¿PIDE QUE LA CONTACTEN? — canónico (#96): antes había dos regex divergidos,
+ * uno en `cola/consultarCola.ts` + `routes/interactions.ts` (más rico) y otro,
+ * más pobre, en `cola/consultarRadar.ts` (pero con `inversion`/`temario`, que
+ * el otro no tenía). Este es la UNIÓN de ambos — no pierde señal de ninguno.
+ *
+ * Toma la columna como parámetro (mismo patrón que `diaLimaSql` en
+ * `horaLimaSql.ts`): los call-sites la referencian distinto — `texto` a secas
+ * en cola/interactions, `i.texto` calificado en el CTE de comentarios del radar.
+ */
+export function pideInfoSql(columna: string): SQL {
+  return sql`${sql.raw(columna)} ~* '(informaci|info\\b|precio|costo|cuánto|cuanto|inscri|matricul|interes|quiero|cómo|más datos|mas datos|detalle|inversion|temario)'`;
+}
+
+/**
+ * ¿RESPONDIDA? — hay un saliente igual o posterior al último entrante. Antes
+ * escrito dos veces (`consultarCola.ts` y `consultarRadar.ts`), mitigado por
+ * el test de paridad de #37 pero sin un hogar único (#96).
+ *
+ * Opera sobre `direccion`/`occurred_at` sin calificar, dentro de un
+ * `GROUP BY` — así están en los dos call-sites, sin parámetros necesarios.
+ */
+export const respondidaSql: SQL = sql`(max(occurred_at) FILTER (WHERE direccion = 'saliente') IS NOT NULL
+  AND max(occurred_at) FILTER (WHERE direccion = 'saliente')
+      >= COALESCE(max(occurred_at) FILTER (WHERE direccion = 'entrante'), '-infinity'::timestamptz))`;
+
+/**
+ * REFERENCIA — el momento que manda para la urgencia: si ya se respondió, el
+ * máximo global (cuándo empezó el silencio); si no, el último entrante.
+ */
+export const referenciaSql: SQL = sql`CASE
+  WHEN ${respondidaSql} THEN max(occurred_at)
+  ELSE COALESCE(max(occurred_at) FILTER (WHERE direccion = 'entrante'), max(occurred_at))
+END`;

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { db } from "../db/client.js";
 import { ordenarRadar } from "./radar.js";
-import { seguimientosPendientesSql } from "./urgenciaSql.js";
+import { pideInfoSql, referenciaSql, respondidaSql, seguimientosPendientesSql } from "./urgenciaSql.js";
 
 /**
  * LAS CONVERSACIONES DEL RADAR — el seam que la ruta del Dashboard consulta.
@@ -75,27 +75,18 @@ export async function consultarRadar(
         NULL::text AS contexto_texto,
         CASE WHEN canal = 'whatsapp' THEN persona_id ELSE NULL END AS telefono,
         NULL::text AS pais_dato,
-        bool_or(texto ~* '(info|precio|costo|inversion|inscri|temario|cuanto)')
+        bool_or(${pideInfoSql("texto")})
           FILTER (WHERE direccion = 'entrante') AS pide_info,
         -- En WhatsApp no hay ventana: el número está vinculado como dispositivo de
         -- un teléfono real, no como cuenta de negocio (ver CONTEXT.md).
         false AS ventana_abierta,
-        -- Misma definición que la cola (cola/consultarCola.ts): hay un
+        -- Misma definición que la cola (cola/urgenciaSql.ts, #96): hay un
         -- saliente igual o posterior al último entrante.
-        (max(occurred_at) FILTER (WHERE direccion = 'saliente') IS NOT NULL
-         AND max(occurred_at) FILTER (WHERE direccion = 'saliente')
-             >= COALESCE(max(occurred_at) FILTER (WHERE direccion = 'entrante'), '-infinity'::timestamptz))
-                                                                      AS respondida,
+        (${respondidaSql})                                             AS respondida,
         -- El contrato de referencia del módulo de urgencia: si espera respuesta
         -- es el entrante sin contestar; si ya se respondió, cuándo respondimos —
         -- o sea cuándo empezó el silencio.
-        CASE
-          WHEN max(occurred_at) FILTER (WHERE direccion = 'saliente') IS NOT NULL
-           AND max(occurred_at) FILTER (WHERE direccion = 'saliente')
-               >= COALESCE(max(occurred_at) FILTER (WHERE direccion = 'entrante'), '-infinity'::timestamptz)
-          THEN max(occurred_at)
-          ELSE COALESCE(max(occurred_at) FILTER (WHERE direccion = 'entrante'), max(occurred_at))
-        END                                                           AS referencia,
+        (${referenciaSql})                                             AS referencia,
         max(occurred_at) FILTER (WHERE direccion = 'entrante')         AS cayo_at
       FROM msgs
       GROUP BY canal, persona_id, numero_propio
@@ -108,7 +99,7 @@ export async function consultarRadar(
         i.persona_id, i.persona_nombre, NULL::text AS numero_propio,
         i.texto, i.contexto_texto,
         NULL::text AS telefono, NULL::text AS pais_dato,
-        (i.texto ~* '(info|precio|costo|inversion|inscri|temario|cuanto)') AS pide_info,
+        (${pideInfoSql("i.texto")}) AS pide_info,
         (i.occurred_at > now() - interval '7 days') AS ventana_abierta,
         -- Misma fuente que la cola: status lo persiste responder.ts.
         (i.status <> 'nuevo')                       AS respondida,

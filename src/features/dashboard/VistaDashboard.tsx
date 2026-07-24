@@ -506,6 +506,11 @@ export function VistaDashboard({
                       <div className="flex items-center gap-2">
                         {alta && <span title="caliente" className="size-1.5 shrink-0 rounded-full bg-gold-ink" />}
                         {esChat ? <BadgeCanal canal={fila.chat.canal} size={13} /> : null}
+                        {esChat && fila.chat.pide_info && (
+                          <span className="shrink-0 rounded bg-primary/10 px-1 py-px text-[11px] font-semibold text-primary">
+                            Pide info
+                          </span>
+                        )}
                         <span className="truncate text-[11px] text-muted-foreground">
                           {esChat
                             ? `${fila.fuente === 'comentario' ? 'Comentario' : nombreCanal(fila.chat.canal)}${fila.chat.contexto_texto ? ` · “${fila.chat.contexto_texto.slice(0, 48)}”` : ''}`
