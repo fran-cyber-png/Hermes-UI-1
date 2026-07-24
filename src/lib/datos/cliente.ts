@@ -82,12 +82,14 @@ export async function api<T>(ruta: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const cuerpo = await res.json().catch(() => ({}));
-    throw new ErrorApi(
-      cuerpo.message ?? `Error ${res.status}`,
-      res.status,
-      cuerpo.type,
-      Array.isArray(cuerpo.errores) ? cuerpo.errores : undefined,
-    );
+    // La key canónica es `errores` (así emite responder); `errors` se acepta
+    // porque la mitad heredada del server todavía la usa en sus 400.
+    const errores = Array.isArray(cuerpo.errores)
+      ? cuerpo.errores
+      : Array.isArray(cuerpo.errors)
+        ? cuerpo.errors
+        : undefined;
+    throw new ErrorApi(cuerpo.message ?? `Error ${res.status}`, res.status, cuerpo.type, errores);
   }
   return res.json() as Promise<T>;
 }

@@ -45,13 +45,15 @@ const app = express();
 const port = process.env.PORT ? Number(process.env.PORT) : 4100;
 
 app.use(cors());
-app.use(express.json());
 
 // EL PERÍMETRO (issue #36): la API es pública por HTTPS, así que TODO /api/*
 // exige el token de una vendedora — cerrado por defecto, las excepciones viven
 // enumeradas con su porqué en auth/perimetro.ts. Va ANTES de montar cualquier
-// router: uno nuevo nace protegido sin que nadie tenga que acordarse.
+// router Y antes del parser de body: un request anónimo se rebota con 401 sin
+// gastarle un parseo de JSON (el perímetro decide por path + header, jamás lee
+// el body — hay un test que lo fija).
 app.use(perimetroApi);
+app.use(express.json());
 
 // EL BFF: una sola llamada con todo lo que la home necesita. Solo Postgres, cero Meta.
 // Reemplaza las 4 llamadas que la pantalla hacía al montar — una de ellas de 4 minutos.

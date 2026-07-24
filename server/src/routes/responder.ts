@@ -58,7 +58,8 @@ responderRouter.post("/:id", async (req, res) => {
   const privado = Boolean(mensajePrivado?.trim());
 
   if (!publico && !privado) {
-    res.status(400).json({ type: "validation_error", errors: ["Escribe al menos un mensaje."] });
+    // `errores`, como el 409 de abajo: una sola key para el detalle, la que lee ErrorApi.
+    res.status(400).json({ type: "validation_error", errores: ["Escribe al menos un mensaje."] });
     return;
   }
 

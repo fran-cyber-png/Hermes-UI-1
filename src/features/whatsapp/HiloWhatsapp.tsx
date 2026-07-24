@@ -118,27 +118,58 @@ function AdjuntoRoto() {
   );
 }
 
-/** Imagen y sticker: eager — son livianas y SON el mensaje. El caché evita re-bajarlas. */
+/**
+ * Imagen y sticker: eager — son livianas y SON el mensaje. El caché evita
+ * re-bajarlas. «Ver completa» es un VISOR EN EL MISMO WEBVIEW, no un
+ * `target="_blank"`: en las cáscaras un blob en pestaña nueva muere — Electron
+ * lo manda a `shell.openExternal` (que no sabe abrir `blob:`) y el shim de
+ * Tauri (`enlacesExternos.ts`) lo manda al opener del sistema, mismo final.
+ */
 function ImagenEnBurbuja({ media }: { media: MediaHilo }) {
   const { url: src, fallo } = useBlobAutenticado(urlMedia(media.archivo));
+  const [ampliada, setAmpliada] = useState(false);
+
+  useEffect(() => {
+    if (!ampliada) return;
+    const alTeclear = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation(); // que no cierre también la conversación
+        setAmpliada(false);
+      }
+    };
+    window.addEventListener('keydown', alTeclear, true);
+    return () => window.removeEventListener('keydown', alTeclear, true);
+  }, [ampliada]);
 
   if (fallo) return <AdjuntoRoto />;
   if (!src) {
     return <div className="h-24 w-56 max-w-full animate-pulse rounded-lg bg-muted" aria-hidden="true" />;
   }
   return (
-    <a href={src} target="_blank" rel="noreferrer" title="Ver completa">
-      <img
-        src={src}
-        alt={media.nombre ?? 'imagen recibida'}
-        className={
-          media.clase === 'sticker'
-            ? 'size-28 object-contain'
-            : 'max-h-72 w-full rounded-lg object-cover'
-        }
-        loading="lazy"
-      />
-    </a>
+    <>
+      <button type="button" onClick={() => setAmpliada(true)} title="Ver completa" className="block w-full">
+        <img
+          src={src}
+          alt={media.nombre ?? 'imagen recibida'}
+          className={
+            media.clase === 'sticker'
+              ? 'size-28 object-contain'
+              : 'max-h-72 w-full rounded-lg object-cover'
+          }
+          loading="lazy"
+        />
+      </button>
+      {ampliada && (
+        <div
+          role="dialog"
+          aria-label="Imagen completa — clic o Escape para cerrar"
+          className="fixed inset-0 z-50 flex cursor-zoom-out items-center justify-center bg-navy/85 p-6"
+          onClick={() => setAmpliada(false)}
+        >
+          <img src={src} alt={media.nombre ?? 'imagen completa'} className="max-h-full max-w-full rounded-lg object-contain" />
+        </div>
+      )}
+    </>
   );
 }
 
@@ -186,8 +217,14 @@ function ReproducirBajoDemanda({ media }: { media: MediaHilo }) {
 
 /**
  * Documento (el flyer, el PDF del temario…): la bajada autenticada ocurre AL
- * TOCAR la tarjeta, no al montar — y al llegar, se abre solo. Ya bajado, la
- * tarjeta queda como link normal al blob.
+ * TOCAR la tarjeta, no al montar — y al llegar, se descarga solo. Ya bajado,
+ * la tarjeta queda como link de descarga al blob.
+ *
+ * SIN `target="_blank"` a propósito: con blobs eso muere en las cáscaras (ver
+ * ImagenEnBurbuja). `download` a secas descarga en navegador, en Electron
+ * (will-download default) y en Tauri Windows/WebView2; el Tauri de macOS
+ * (WKWebView) necesita cablear `on_download` en la cáscara — señalado en el
+ * PR #78, no bloquea: la app empaquetada de las vendedoras es Windows.
  */
 function DocumentoBajoDemanda({ media }: { media: MediaHilo }) {
   const { url: src, fallo, bajando, pedir } = useBlobAutenticado(urlMedia(media.archivo), {
@@ -216,7 +253,13 @@ function DocumentoBajoDemanda({ media }: { media: MediaHilo }) {
       <span className="min-w-0">
         <span className="block truncate text-xs font-semibold text-foreground">{media.nombre ?? 'Documento'}</span>
         <span className="block text-[11px] text-muted-foreground">
-          {fallo ? 'No se pudo bajar — tocá para reintentar' : bajando ? 'Bajando…' : `${media.mime ?? 'archivo'} · tocá para abrir`}
+          {fallo
+            ? 'No se pudo bajar — tocá para reintentar'
+            : bajando
+              ? 'Bajando…'
+              : src
+                ? 'Bajado · tocá para guardarlo de nuevo'
+                : `${media.mime ?? 'archivo'} · tocá para bajar`}
         </span>
       </span>
     </>
@@ -226,7 +269,7 @@ function DocumentoBajoDemanda({ media }: { media: MediaHilo }) {
 
   if (src) {
     return (
-      <a href={src} target="_blank" rel="noreferrer" download={media.nombre ?? undefined} className={estilo}>
+      <a href={src} download={media.nombre ?? media.archivo} className={estilo}>
         {cuerpo}
       </a>
     );

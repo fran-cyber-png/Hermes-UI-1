@@ -132,4 +132,18 @@ describe('perimetroApi — el middleware delante de todo', () => {
     }) as NextFunction);
     assert.equal(siguio, true);
   });
+
+  test('decide sin leer el body: va montado ANTES de express.json() a propósito', () => {
+    // Un anónimo no merece ni el parseo de su JSON. El fake ni tiene `body`, y
+    // además lo declara con un getter que revienta si alguien lo toca.
+    const req = requestDe('/api/conversaciones');
+    Object.defineProperty(req, 'body', {
+      get() {
+        throw new Error('el perímetro no debe leer el body');
+      },
+    });
+    const res = responseFalsa();
+    perimetroApi(req, res, (() => {}) as NextFunction);
+    assert.equal(res.codigo, 401);
+  });
 });
