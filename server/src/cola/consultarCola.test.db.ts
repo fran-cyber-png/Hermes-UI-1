@@ -11,7 +11,11 @@ import { consultarCola } from "./consultarCola.js";
  * a habilitar.
  */
 
-type Fila = { texto: string | null; ultima_clase: string | null };
+type Fila = {
+  texto: string | null;
+  ultima_clase: string | null;
+  ultima_origen: { fuente: string; titulo?: string | null } | null;
+};
 
 test("la cola surfacea la clase del último mensaje cuando es media-only", async (t) => {
   const db = await baseDePrueba(t);
@@ -44,4 +48,20 @@ test("manda el ÚLTIMO mensaje: si lo último es un audio, esa es la clase del p
   const fila = (await consultarCola(db, {})).conversaciones[0] as Fila;
   assert.equal(fila.ultima_clase, "audio", "la clase es la del último mensaje, no la de cualquiera");
   assert.equal(fila.texto, null, "el preview es el del último (media-only)");
+});
+
+test("la cola surfacea el origen del anuncio (para «📣 Vino del anuncio» en vez de «(sin texto)»)", async (t) => {
+  const db = await baseDePrueba(t);
+  // El primer mensaje de un lead que hizo clic en un anuncio: sin texto, sin media.
+  await sembrarMensaje(db, {
+    personaId: "51900555",
+    texto: null,
+    origen: { fuente: "anuncio", titulo: "Diploma de Inteligencia", adId: "123" },
+  });
+
+  const fila = (await consultarCola(db, {})).conversaciones[0] as Fila;
+  assert.equal(fila.texto, null);
+  assert.equal(fila.ultima_clase, null, "no es media: es un referral de anuncio");
+  assert.equal(fila.ultima_origen?.fuente, "anuncio");
+  assert.equal(fila.ultima_origen?.titulo, "Diploma de Inteligencia");
 });

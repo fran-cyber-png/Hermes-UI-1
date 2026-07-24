@@ -66,6 +66,7 @@ export async function consultarCola(
       NULL::text                                  AS numero_propio,
       texto, contexto_texto,
       NULL::text                                  AS ultima_clase,
+      NULL::jsonb                                 AS ultima_origen,
       occurred_at                                 AS referencia,
       occurred_at                                 AS ultimo_at,
       (status <> 'nuevo')                         AS respondida,
@@ -80,7 +81,8 @@ export async function consultarCola(
   const msgCte = sql`
     SELECT i.canal, i.persona_id, i.persona_nombre, i.texto, i.direccion, i.occurred_at,
            COALESCE(e.payload->>'numeroPropio', '') AS numero_propio,
-           e.payload->'media'->>'clase'             AS clase
+           e.payload->'media'->>'clase'             AS clase,
+           e.payload->'origen'                      AS origen
     FROM interactions i
     JOIN events e ON e.id = i.event_id
     WHERE i.tipo = 'mensaje' AND (${ventanaCola(sql`i.occurred_at`)}) ${filtroCanal}
@@ -98,6 +100,9 @@ export async function consultarCola(
       -- La clase del ÚLTIMO mensaje: si no hay texto (media-only), el front la usa
       -- para mostrar «📷 Foto» en vez de «(sin texto)».
       (array_agg(clase ORDER BY occurred_at DESC))[1]                 AS ultima_clase,
+      -- El origen del ÚLTIMO mensaje: si vino de un anuncio y no tiene texto, el
+      -- front muestra «📣 Vino del anuncio» en vez de «(sin texto)».
+      (array_agg(origen ORDER BY occurred_at DESC))[1]                AS ultima_origen,
       CASE
         WHEN max(occurred_at) FILTER (WHERE direccion = 'saliente') IS NOT NULL
          AND max(occurred_at) FILTER (WHERE direccion = 'saliente')
@@ -140,7 +145,7 @@ export async function consultarCola(
       ${conversaciones}
     )
     SELECT clave, canal, tipo, persona_id, persona_nombre, numero_propio,
-           texto, contexto_texto, ultima_clase, respondida, ventana_abierta, pide_info, n,
+           texto, contexto_texto, ultima_clase, ultima_origen, respondida, ventana_abierta, pide_info, n,
            referencia, ultimo_at,
            extract(day from now() - referencia)::int AS dias,
            (${nivel}) AS nivel

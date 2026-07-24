@@ -287,7 +287,12 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
                           <div className={'whitespace-pre-wrap break-words' + (m.media ? ' px-2 pt-1.5' : '')}>
                             <TextoWhatsapp texto={m.texto} />
                           </div>
-                        ) : m.media ? null : (
+                        ) : m.media ? null : m.origen?.fuente === 'anuncio' ? (
+                          <span className="inline-flex items-center gap-1.5 text-navy">
+                            <Megaphone size={13} className="shrink-0" />
+                            Vino del anuncio{m.origen.titulo ? `: ${m.origen.titulo}` : ''}
+                          </span>
+                        ) : (
                           <span className="italic text-muted-foreground">(no es texto — velo en el teléfono)</span>
                         )}
                         <div className={'mt-0.5 text-right font-mono text-[11px] text-muted-foreground ' + (m.media ? 'px-2 pb-1' : '')}>

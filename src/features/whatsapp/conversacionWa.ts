@@ -19,6 +19,8 @@ export interface MensajeHilo {
   occurred_at: string;
   external_id: string;
   media?: MediaHilo | null;
+  /** Si este mensaje trajo el origen del lead (anuncio/landing). Solo el primero suele traerlo. */
+  origen?: { fuente: string; titulo?: string | null } | null;
 }
 
 /** La URL para ver/bajar un adjunto del hilo. */

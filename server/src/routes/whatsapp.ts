@@ -33,7 +33,8 @@ whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
   // columna nueva — el event store haciendo su trabajo.
   const mensajes = await db.execute(sql`
     SELECT i.id, i.direccion, i.autor, i.texto, i.occurred_at, i.external_id,
-           e.payload->'media' AS media
+           e.payload->'media' AS media,
+           e.payload->'origen' AS origen
     FROM interactions i
     LEFT JOIN events e ON e.id = i.event_id
     WHERE i.canal = 'whatsapp' AND i.persona_id = ${telefono}

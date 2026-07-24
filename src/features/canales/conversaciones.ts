@@ -21,6 +21,8 @@ export interface Conversacion {
   /** Clase del último mensaje (imagen/video/audio/documento/sticker): para «📷 Foto» cuando no hay texto.
    *  Opcional: solo la cola (`/api/conversaciones`) la trae; el radar/agenda arman Conversacion sin ella. */
   ultima_clase?: string | null;
+  /** Origen del último mensaje (anuncio/landing): para «📣 Vino del anuncio» cuando no hay texto ni media. */
+  ultima_origen?: { fuente: string; titulo?: string | null } | null;
   /** Derivada: hay un saliente posterior al último entrante. Nunca estado de fila. */
   respondida: boolean;
   ventana_abierta: boolean;

@@ -22,6 +22,8 @@ export interface MensajeSembrado {
   numeroPropio?: string;
   /** La clase de media (imagen/video/audio/documento/sticker), en el payload del evento. */
   mediaClase?: string;
+  /** El origen del lead (anuncio/landing), en el payload del evento — como lo guarda proyectar. */
+  origen?: { fuente: string; titulo?: string | null; adId?: string; ref?: string } | null;
   occurredAt?: Date;
 }
 
@@ -42,7 +44,11 @@ export async function sembrarMensaje(db: DbDePrueba, m: MensajeSembrado = {}): P
       source: "whatsapp",
       externalId: `evt:${ext}`,
       occurredAt,
-      payload: m.mediaClase ? { numeroPropio, media: { clase: m.mediaClase } } : { numeroPropio },
+      payload: {
+        numeroPropio,
+        ...(m.mediaClase ? { media: { clase: m.mediaClase } } : {}),
+        ...(m.origen !== undefined ? { origen: m.origen } : {}),
+      },
     })
     .returning({ id: events.id });
 

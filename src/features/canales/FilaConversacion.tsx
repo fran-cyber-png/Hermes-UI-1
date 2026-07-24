@@ -131,7 +131,9 @@ export function FilaConversacion({
             </span>
           )}
           <p className={'min-w-0 flex-1 truncate text-sm ' + clasePreview}>
-            {c.texto || etiquetaDeMedia(c.ultima_clase) || '(sin texto)'}
+            {c.texto ||
+              etiquetaDeMedia(c.ultima_clase) ||
+              (c.ultima_origen?.fuente === 'anuncio' ? '📣 Vino del anuncio' : '(sin texto)')}
           </p>
           {c.n > 1 && !c.respondida && (
             <span className="shrink-0 rounded-full bg-primary px-1.5 py-px text-[11px] font-bold tabular-nums text-primary-foreground">
