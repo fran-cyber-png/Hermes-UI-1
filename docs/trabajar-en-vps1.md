@@ -2,6 +2,11 @@
 
 > Para quien tiene cuenta en el servidor y va a tocar Hermes. Qué podés hacer, dónde, y qué conviene
 > no hacer. Escrito el **2026-07-24**, cuando se le dio acceso completo a `andreecito`.
+>
+> **Tenés Hermes entero en producción**: el código, los secretos, las dos bases, los dos servicios,
+> nginx, el certificado, los unit files, el runner y el despliegue. Si algo de Hermes no te deja,
+> es un bug de la configuración — pedilo y se arregla. Lo único fuera de alcance son los otros
+> productos que viven en la misma máquina.
 
 ---
 
@@ -183,7 +188,18 @@ sudo systemctl restart actions.runner.Goberna-Lab-hermes.vps1-hermes
 > anterior), pero un `restart` deja todo abajo. Verificá primero, siempre.
 
 `sudoedit` en vez de abrir el archivo con `sudo vim`: edita una copia con tus permisos y la mueve de
-vuelta al final, así tu editor —con los plugins que tenga— nunca corre como root.
+vuelta al final, así tu editor —con los plugins que tenga— nunca corre como root. Elegí cuál se abre
+con `SUDO_EDITOR`:
+
+```bash
+export SUDO_EDITOR=nano   # o vim, o code -w
+sudoedit /etc/nginx/sites-available/hermes-api
+```
+
+> **Si un comando te pide contraseña, casi seguro es por los argumentos.** sudo compara la línea
+> **exacta**: `systemctl status hermes` está permitido y `systemctl status hermes --no-pager` es otra
+> cosa. Están contempladas las variantes con flags, pero si aparece una que no, no es que no confíen
+> en vos — es que falta una línea en `deploy/vps1/sudoers-hermes-andreecito`. Avisá y se agrega.
 
 ## Lo que queda afuera
 

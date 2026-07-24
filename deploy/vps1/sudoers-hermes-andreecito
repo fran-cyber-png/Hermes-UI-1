@@ -25,6 +25,7 @@ Cmnd_Alias HERMES_SVC = \
   /usr/bin/systemctl stop hermes, \
   /usr/bin/systemctl restart hermes, \
   /usr/bin/systemctl status hermes, \
+  /usr/bin/systemctl status hermes *, \
   /usr/bin/systemctl is-active hermes, \
   /usr/bin/systemctl show hermes *, \
   /usr/bin/journalctl -u hermes, \
@@ -37,6 +38,7 @@ Cmnd_Alias HERMES_STAGING = \
   /usr/bin/systemctl stop hermes-staging, \
   /usr/bin/systemctl restart hermes-staging, \
   /usr/bin/systemctl status hermes-staging, \
+  /usr/bin/systemctl status hermes-staging *, \
   /usr/bin/systemctl is-active hermes-staging, \
   /usr/bin/journalctl -u hermes-staging, \
   /usr/bin/journalctl -u hermes-staging *, \
@@ -47,8 +49,10 @@ Cmnd_Alias HERMES_DOCKER = \
   /usr/bin/docker compose -f /srv/hermes/docker-compose.test.yml *, \
   /usr/bin/docker compose -f /srv/hermes-staging/docker-compose.staging.yml *, \
   /usr/bin/docker logs hermes_db, \
+  /usr/bin/docker logs hermes_db *, \
   /usr/bin/docker logs -f hermes_db, \
   /usr/bin/docker logs hermes_staging_db, \
+  /usr/bin/docker logs hermes_staging_db *, \
   /usr/bin/docker logs -f hermes_staging_db, \
   /usr/bin/docker restart hermes_db, \
   /usr/bin/docker start hermes_db, \
@@ -94,12 +98,14 @@ Cmnd_Alias HERMES_NGINX = \
   /usr/sbin/nginx -t, \
   /usr/bin/systemctl reload nginx, \
   /usr/bin/systemctl restart nginx, \
-  /usr/bin/systemctl status nginx
+  /usr/bin/systemctl status nginx, \
+  /usr/bin/systemctl status nginx *
 
 # El certificado de hermes-api.goberna.us (dns-cloudflare, renovación automática).
 # Acotado por `--cert-name`: no puede tocar los certificados de los otros dominios.
 Cmnd_Alias HERMES_CERT = \
   /usr/bin/certbot certificates, \
+  /usr/bin/certbot certificates *, \
   /usr/bin/certbot renew --cert-name hermes-api.goberna.us *, \
   /usr/bin/certbot renew --dry-run --cert-name hermes-api.goberna.us
 
@@ -109,6 +115,7 @@ Cmnd_Alias HERMES_RUNNER = \
   /usr/bin/systemctl stop actions.runner.Goberna-Lab-hermes.vps1-hermes, \
   /usr/bin/systemctl restart actions.runner.Goberna-Lab-hermes.vps1-hermes, \
   /usr/bin/systemctl status actions.runner.Goberna-Lab-hermes.vps1-hermes, \
+  /usr/bin/systemctl status actions.runner.Goberna-Lab-hermes.vps1-hermes *, \
   /usr/bin/journalctl -u actions.runner.Goberna-Lab-hermes.vps1-hermes *
 
 andreecito ALL=(root) NOPASSWD: HERMES_SVC, HERMES_STAGING, HERMES_DOCKER, \
