@@ -126,6 +126,26 @@ export interface FotoPerfil {
   mime: string;
 }
 
+/**
+ * Señal de «no pude preguntar», distinta de «WhatsApp contestó que no tiene».
+ *
+ * `fotoDePerfil` sigue resolviendo `null` cuando WhatsApp de verdad dijo que el
+ * contacto no tiene foto (o es privada) — eso es un negativo legítimo y la ruta
+ * lo cachea. Pero si la sesión todavía no está `'conectado'` (típico justo
+ * después de un restart del server, mientras whatsmeow reconecta) o la consulta
+ * falla por un problema de conexión (el binario de Go no respondió, el CDN de
+ * WhatsApp no contestó), NO es lo mismo: ahí el transporte lanza esto, y la ruta
+ * NO debe cachear un negativo — si lo hiciera, cada restart envenenaría la caché
+ * de fotos por 7 días para cualquier contacto consultado en esa ventana
+ * (hallazgo de la revisión del PR #75).
+ */
+export class FotoNoDisponibleError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FotoNoDisponibleError';
+  }
+}
+
 export interface TransporteWhatsapp {
   /** Qué hay del otro lado. Se muestra en la UI: el equipo tiene que saberlo. */
   readonly nombre: 'whatsmeow' | 'cloud-api' | 'falso';
@@ -156,10 +176,14 @@ export interface TransporteWhatsapp {
   marcarLeido(telefono: string, idsExternos: string[]): Promise<void>;
 
   /**
-   * La foto de perfil del contacto, si la tiene y es visible: null si no tiene,
-   * es privada, o el proveedor no la da. Habla teléfonos, como todo acá.
-   * Opcional: un transporte puede no soportarlo, y el consumidor cae a las
-   * iniciales. Es LECTURA, no un envío — no roza «un envío = una acción humana».
+   * La foto de perfil del contacto, si la tiene y es visible: null si WhatsApp
+   * CONTESTÓ que no tiene, es privada, o el proveedor no la da — un negativo
+   * legítimo y cacheable. Si en cambio no se pudo NI PREGUNTAR (sesión no
+   * conectada, falla de conexión) lanza `FotoNoDisponibleError`, para que quien
+   * llama no confunda «no tiene» con «no pude averiguar». Habla teléfonos, como
+   * todo acá. Opcional: un transporte puede no soportarlo, y el consumidor cae a
+   * las iniciales. Es LECTURA, no un envío — no roza «un envío = una acción
+   * humana».
    */
   fotoDePerfil?(telefono: string): Promise<FotoPerfil | null>;
 

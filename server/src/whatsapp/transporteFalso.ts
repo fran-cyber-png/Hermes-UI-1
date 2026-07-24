@@ -1,11 +1,12 @@
 import { basename } from 'node:path';
-import type {
-  EstadoSesion,
-  FotoPerfil,
-  MediaSaliente,
-  MensajeWhatsapp,
-  ResultadoEnvio,
-  TransporteWhatsapp,
+import {
+  FotoNoDisponibleError,
+  type EstadoSesion,
+  type FotoPerfil,
+  type MediaSaliente,
+  type MensajeWhatsapp,
+  type ResultadoEnvio,
+  type TransporteWhatsapp,
 } from './transporte.js';
 
 /**
@@ -167,7 +168,14 @@ export class TransporteFalso implements TransporteWhatsapp {
     // No-op: marcar leído no cambia nada observable en el falso.
   }
 
-  async fotoDePerfil(_telefono: string): Promise<FotoPerfil | null> {
+  async fotoDePerfil(telefono: string): Promise<FotoPerfil | null> {
+    // Mismo contrato que el transporte real: sin sesión conectada no se puede
+    // preguntar, y eso NO es lo mismo que «no tiene foto» (ver FotoNoDisponibleError).
+    if (this.sesion.estado !== 'conectado') {
+      throw new FotoNoDisponibleError(
+        `no se pudo consultar la foto de ${telefono}: la sesión está "${this.sesion.estado}", no conectada`,
+      );
+    }
     return null; // el falso no tiene fotos: el consumidor cae a las iniciales.
   }
 

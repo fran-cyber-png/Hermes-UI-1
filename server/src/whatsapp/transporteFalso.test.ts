@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test, describe } from 'node:test';
 import { TransporteFalso } from './transporteFalso.js';
-import type { EstadoSesion, MensajeWhatsapp } from './transporte.js';
+import { FotoNoDisponibleError, type EstadoSesion, type MensajeWhatsapp } from './transporte.js';
 
 /**
  * El falso es la base de todos los tests de WhatsApp de Hermes. Si el falso miente
@@ -103,5 +103,31 @@ describe('TransporteFalso', () => {
     const t = new TransporteFalso({ telefono: '51987654321' });
     t.simularBan();
     await assert.rejects(() => t.enviarTexto('51961506674', 'hola'), /no se puede enviar/i);
+  });
+
+  /**
+   * Regresión del hallazgo de la revisión del PR #75: un restart del server deja
+   * la sesión en `'conectando'` (o cualquier estado que no sea `'conectado'`)
+   * mientras whatsmeow reconecta, y el server ya acepta HTTP en ese hueco. Si
+   * `fotoDePerfil` devolviera `null` ahí (en vez de señalizar "no pude
+   * preguntar"), la ruta lo cachearía 7 días como "no tiene foto" — sobre
+   * cualquier contacto que la cola pida en ese momento. `FotoNoDisponibleError`
+   * es la señal distinguible que evita eso.
+   */
+  test('fotoDePerfil: sin sesión conectada, señala "no disponible" — nunca null', async () => {
+    const t = new TransporteFalso(); // sin número => arranca 'sin-vincular', no 'conectado'
+    await assert.rejects(() => t.fotoDePerfil('51961506674'), FotoNoDisponibleError);
+  });
+
+  test('fotoDePerfil: estado "conectando" también señala "no disponible"', async () => {
+    const t = new TransporteFalso({ telefono: '51987654321' });
+    t.simularEstado({ estado: 'conectando' });
+    await assert.rejects(() => t.fotoDePerfil('51961506674'), FotoNoDisponibleError);
+  });
+
+  test('fotoDePerfil: con sesión conectada, el falso resuelve null (sin foto) sin lanzar', async () => {
+    const t = new TransporteFalso({ telefono: '51987654321' });
+    const foto = await t.fotoDePerfil('51961506674');
+    assert.equal(foto, null);
   });
 });

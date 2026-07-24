@@ -1,15 +1,22 @@
 import { mkdirSync } from 'node:fs';
 import { copyFile, rm } from 'node:fs/promises';
 import { extname, join } from 'node:path';
-import { createClient, type WhatsmeowClient, type MediaType } from '@whatsmeow-node/whatsmeow-node';
-import type {
-  EstadoSesion,
-  FotoPerfil,
-  MediaSaliente,
-  MediaWhatsapp,
-  MensajeWhatsapp,
-  ResultadoEnvio,
-  TransporteWhatsapp,
+import {
+  createClient,
+  ProcessExitedError,
+  TimeoutError,
+  type WhatsmeowClient,
+  type MediaType,
+} from '@whatsmeow-node/whatsmeow-node';
+import {
+  FotoNoDisponibleError,
+  type EstadoSesion,
+  type FotoPerfil,
+  type MediaSaliente,
+  type MediaWhatsapp,
+  type MensajeWhatsapp,
+  type ResultadoEnvio,
+  type TransporteWhatsapp,
 } from './transporte.js';
 import { normalizarTelefono, telefonoDeContacto, jidDeTelefono, esJidDeGrupo } from './identidadWa.js';
 import { detectarOrigen } from './origen.js';
@@ -296,21 +303,39 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
   /**
    * La foto de perfil del contacto. whatsmeow da una URL del CDN de WhatsApp (que
    * expira y necesita la sesión); la bajamos a bytes acá para servirla nosotros,
-   * detrás de auth, sin filtrar la URL del proveedor. Cualquier problema (sin
-   * foto, privada, no está en WhatsApp) → null, y el front cae a las iniciales.
+   * detrás de auth, sin filtrar la URL del proveedor.
+   *
+   * Antes de preguntarle nada a whatsmeow, chequeamos la sesión — igual que
+   * `enviarTexto`/`enviarMedia` — porque el server acepta HTTP ANTES de que
+   * whatsmeow reconecte tras un restart: sin este chequeo, un pedido que llega en
+   * ese hueco (`'conectando'`) terminaba en el catch de abajo, devolvía `null`, y
+   * la ruta lo cacheaba 7 días como «no tiene foto» (hallazgo de la revisión del
+   * PR #75). `FotoNoDisponibleError` distingue ese «no pude preguntar» de un
+   * negativo de verdad: solo la respuesta de WhatsApp (sin foto, privada, o el
+   * `fetch` del CDN devolviendo un error del servidor) sigue siendo `null`.
    */
   async fotoDePerfil(telefono: string): Promise<FotoPerfil | null> {
+    if (this.sesion.estado !== 'conectado') {
+      throw new FotoNoDisponibleError(
+        `no se pudo consultar la foto de ${telefono}: la sesión está "${this.sesion.estado}", no conectada`,
+      );
+    }
     try {
       const pic = await this.client.getProfilePicture(jidDeTelefono(telefono));
-      if (!pic?.url) return null;
+      if (!pic?.url) return null; // WhatsApp contestó: este contacto no tiene foto (o es privada).
       const r = await fetch(pic.url, { signal: AbortSignal.timeout(15_000) });
-      if (!r.ok) return null;
+      if (!r.ok) return null; // El CDN respondió, pero no con la foto: se trata igual que "no tiene".
       return {
         id: pic.id,
         bytes: Buffer.from(await r.arrayBuffer()),
         mime: r.headers.get('content-type') ?? 'image/jpeg',
       };
-    } catch {
+    } catch (err) {
+      if (esFalloDeConexion(err)) {
+        throw new FotoNoDisponibleError(`no se pudo consultar la foto de ${telefono}: ${(err as Error).message}`);
+      }
+      // Cualquier otro error (protocolo, JID inválido, etc.) se trata como antes:
+      // no hay foto que mostrar, y el front cae a las iniciales.
       return null;
     }
   }
@@ -325,4 +350,21 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
     this.sesion = e;
     for (const cb of this.susEstado) cb(e);
   }
+}
+
+/**
+ * ¿Este error dice «no pude preguntar» (proceso, RPC o red) en vez de «pregunté y
+ * WhatsApp contestó algo»? Cubre el binario de Go muriendo a mitad de la consulta
+ * (`ProcessExitedError`), el RPC al binario colgándose (`TimeoutError` del
+ * wrapper), y el `fetch` al CDN fallando por red o por el timeout de
+ * `AbortSignal.timeout` (que rechaza con un `TimeoutError`/`AbortError` del DOM,
+ * o un `TypeError` si ni siquiera hubo respuesta). Deliberadamente NO incluye
+ * `WhatsmeowError` genérico: ese es WhatsApp contestando algo por protocolo, y se
+ * sigue tratando como "no tiene foto" (el comportamiento de siempre).
+ */
+function esFalloDeConexion(err: unknown): boolean {
+  if (err instanceof ProcessExitedError || err instanceof TimeoutError) return true;
+  if (err instanceof TypeError) return true; // fetch: fallo de red antes de recibir respuesta.
+  if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) return true;
+  return false;
 }

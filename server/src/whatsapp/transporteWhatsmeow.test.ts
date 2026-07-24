@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { TransporteWhatsmeow } from './transporteWhatsmeow.js';
+import { FotoNoDisponibleError } from './transporte.js';
 
 /**
  * REGRESIÓN de #70, encontrada por la revisión adversaria del PR #74: los 11
@@ -57,5 +58,25 @@ describe('TransporteWhatsmeow — aMensaje descarta protocolMessage (regresión 
     assert.equal(m?.texto, 'x');
     assert.equal(m?.clase, 'texto');
     assert.equal(m?.telefono, '51961506674');
+  });
+});
+
+/**
+ * Regresión del hallazgo de la revisión del PR #75: el constructor de
+ * `TransporteWhatsmeow` deja la sesión en `'conectando'` (ver la inicialización
+ * del campo `sesion`) — es exactamente el estado en el que queda el transporte
+ * justo después de un restart del server, antes de que whatsmeow reconecte. En
+ * ese hueco, `fotoDePerfil` NO debe devolver `null` (eso terminaba cacheado 7
+ * días como "no tiene foto" por la ruta) sino señalizar que no se pudo preguntar.
+ * Como el chequeo de estado corre ANTES de tocar `this.client`, este test no
+ * necesita levantar ningún proceso real (mismo principio que `aMensajeParaTests`).
+ */
+describe('TransporteWhatsmeow — fotoDePerfil no cachea el hueco post-restart (regresión PR #75)', () => {
+  after(() => rmSync(dir, { recursive: true, force: true }));
+
+  test('recién construido (estado "conectando"), fotoDePerfil señala "no disponible", no null', async () => {
+    const t = new TransporteWhatsmeow('51987654321', dir);
+    assert.equal(t.estado().estado, 'conectando', 'precondición: el transporte arranca sin conectar');
+    await assert.rejects(() => t.fotoDePerfil('51961506674'), FotoNoDisponibleError);
   });
 });

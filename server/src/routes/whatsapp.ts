@@ -12,7 +12,7 @@ import { repositorioDrizzle } from '../whatsapp/repositorioDrizzle.js';
 import { resolverAnuncio } from '../meta/anuncio.js';
 import { RUTA_MEDIA, nombreSeguro } from '../whatsapp/mediaDir.js';
 import { normalizarTelefono } from '../whatsapp/identidadWa.js';
-import type { MediaSaliente } from '../whatsapp/transporte.js';
+import { FotoNoDisponibleError, type FotoPerfil, type MediaSaliente } from '../whatsapp/transporte.js';
 
 /**
  * LA CONVERSACIÓN NATIVA DE WHATSAPP dentro de Hermes: ver el hilo y responder,
@@ -144,6 +144,13 @@ whatsappRouter.get('/media/:archivo', (req, res) => {
  * como la media. `archivo` null en cache = ya preguntamos y no tiene → 404 sin
  * volver a molestar a WhatsApp hasta que caduque (una semana). El front cae a las
  * iniciales ante cualquier 404/error.
+ *
+ * Ese cache de negativo SOLO es válido si de verdad preguntamos. Si el transporte
+ * no pudo (`FotoNoDisponibleError`: sesión no conectada, típicamente justo tras un
+ * restart del server mientras whatsmeow reconecta) se responde 503 y NO se
+ * guarda nada — de lo contrario cada restart envenenaría la caché por 7 días
+ * para cualquier contacto consultado en ese hueco (hallazgo de la revisión del
+ * PR #75).
  */
 const FOTO_FRESCA_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -171,7 +178,19 @@ whatsappRouter.get('/foto/:telefono', requiereVendedora, async (req, res) => {
   }
 
   const transporte = whatsapp().transporte;
-  const foto = transporte.fotoDePerfil ? await transporte.fotoDePerfil(telefono) : null;
+  let foto: FotoPerfil | null;
+  try {
+    foto = transporte.fotoDePerfil ? await transporte.fotoDePerfil(telefono) : null;
+  } catch (err) {
+    if (err instanceof FotoNoDisponibleError) {
+      // No pudimos preguntar (sesión no conectada / falla de conexión): 503, sin
+      // tocar la caché. Un negativo acá sería «no tiene foto» durante 7 días
+      // sobre un contacto que ni siquiera llegamos a consultar.
+      res.status(503).json({ ok: false, message: 'no se pudo consultar la foto ahora mismo, reintentá en un momento' });
+      return;
+    }
+    throw err;
+  }
 
   const guardar = (fotoId: string | null, archivo: string | null, mime: string | null) =>
     db
