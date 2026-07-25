@@ -12,6 +12,8 @@ import {
   type EtapaGestion,
 } from '../gestiones/registrarGestion.js';
 import { consultarIntereses } from '../gestiones/intereses.js';
+import { confirmarInteresDerivado } from '../cursos/confirmar.js';
+import { buscarProductos } from '../cerberus/productos.js';
 
 /**
  * EL REGISTRO DE GESTIÓN + ETIQUETAS + INTERESES — la bitácora comercial.
@@ -119,6 +121,33 @@ gestionesRouter.post('/intereses', async (req, res) => {
     .values({ clave: String(clave), curso: limpio, vendedoraId: req.vendedoraId! })
     .onConflictDoNothing();
   res.json({ ok: true });
+});
+
+/**
+ * CONFIRMAR EL INTERÉS DERIVADO (#102) — un clic humano, no una automatización.
+ *
+ * El body trae SOLO la conversación: el curso lo recalcula el server y lo
+ * resuelve contra el catálogo vivo de Cerberus, para guardar el nombre crudo de
+ * la última edición (el porqué, en `cursos/confirmar.ts`). Falla ruidoso: 502 si
+ * Cerberus no contestó, 409 si no hay nada que confirmar — nunca un «listo» que
+ * no registró nada.
+ */
+gestionesRouter.post('/intereses/derivado', async (req, res) => {
+  const clave = String(req.body?.clave ?? '').trim();
+  if (!clave) {
+    res.status(400).json({ ok: false, message: 'falta la conversación' });
+    return;
+  }
+  const r = await confirmarInteresDerivado(db, {
+    clave,
+    vendedoraId: req.vendedoraId!,
+    catalogo: () => buscarProductos(),
+  });
+  if (!r.ok) {
+    res.status(r.codigo === 'catalogo_caido' ? 502 : 409).json(r);
+    return;
+  }
+  res.json(r);
 });
 
 gestionesRouter.delete('/intereses', async (req, res) => {

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requiereVendedora } from '../auth/sesion.js';
 import { asentarVentaEnEmbudo } from './gestiones.js';
 import { cargarFormulario, crearVenta, type OrdenVenta } from '../cerberus/venta.js';
-import { mapearProducto } from '../cerberus/productos.js';
+import { buscarProductos } from '../cerberus/productos.js';
 import { aLatin1 } from '../cerberus/latin1.js';
 
 /**
@@ -13,8 +13,6 @@ import { aLatin1 } from '../cerberus/latin1.js';
  * ya capturamos (vino por WhatsApp, de un anuncio o una landing).
  */
 export const ventaRouter = Router();
-
-const BASE = (process.env.CERBERUS_BASE_URL ?? 'https://app.goberna.us').replace(/\/$/, '');
 
 /** Las opciones del formulario (monedas, países) + los choices de medio/origen. */
 ventaRouter.get('/formulario', requiereVendedora, async (req, res) => {
@@ -32,14 +30,10 @@ ventaRouter.get('/productos', requiereVendedora, async (req, res) => {
   // y un emoji en el buscador no encuentra nada de todos modos.
   const q = aLatin1(typeof req.query.q === 'string' ? req.query.q : '');
   try {
-    const r = await fetch(
-      `${BASE}/productos/api/public/productos-cursos/?estado=1${q ? `&q=${encodeURIComponent(q)}` : ''}`,
-      { signal: AbortSignal.timeout(15_000) },
-    );
-    const d = (await r.json()) as { results?: Array<Record<string, unknown>> };
-    // El mapeo (con la moneda, #43) es puro y vive en cerberus/productos.ts —
-    // acá solo la ruta: fetch, mapear, responder.
-    res.json({ productos: (d.results ?? []).map(mapearProducto) });
+    // El fetch + el mapeo (con la moneda, #43) viven en cerberus/productos.ts —
+    // acá solo la ruta. Los comparte con la confirmación del interés derivado
+    // (#102), que pregunta por el MISMO catálogo.
+    res.json({ productos: await buscarProductos(q) });
   } catch (err) {
     res.status(502).json({ ok: false, message: (err as Error).message });
   }

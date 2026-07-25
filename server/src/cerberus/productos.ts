@@ -52,6 +52,30 @@ function monedaDe(p: Record<string, unknown>): string {
   return '';
 }
 
+const BASE = (process.env.CERBERUS_BASE_URL ?? "https://app.goberna.us").replace(/\/$/, "");
+
+/**
+ * EL CATÁLOGO VIVO — la API pública de Cerberus, solo lectura, sin sesión.
+ *
+ * Vive acá y no en la ruta porque tiene DOS consumidores: el buscador de cursos
+ * del front (`routes/venta.ts`) y la confirmación del interés derivado
+ * (`cursos/confirmar.ts`), que necesita el catálogo entero para saber qué
+ * edición de la familia se vende hoy. Sin `q` devuelve los ~111 productos
+ * activos, que es un payload chico y una sola llamada.
+ *
+ * Tira `Error` si Cerberus no responde: quien llama decide qué hacer, pero
+ * NUNCA se degrada a una lista vacía — «no hay productos» y «Cerberus está
+ * caído» son cosas distintas y confundirlas registra interés equivocado.
+ */
+export async function buscarProductos(q = ""): Promise<ProductoCatalogo[]> {
+  const r = await fetch(
+    `${BASE}/productos/api/public/productos-cursos/?estado=1${q ? `&q=${encodeURIComponent(q)}` : ""}`,
+    { signal: AbortSignal.timeout(15_000) },
+  );
+  const d = (await r.json()) as { results?: Array<Record<string, unknown>> };
+  return (d.results ?? []).map(mapearProducto);
+}
+
 export function mapearProducto(p: Record<string, unknown>): ProductoCatalogo {
   return {
     id: String(p.codigo_producto),
