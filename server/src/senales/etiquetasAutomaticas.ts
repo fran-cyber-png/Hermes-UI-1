@@ -5,7 +5,7 @@ import type { Enfriamiento } from "./enfriamiento.js";
 /**
  * LAS ETIQUETAS AUTOMÁTICAS — «Cotizado» y «Se enfrió», puestas por el sistema.
  *
- * ══ POR QUÉ NO SON CATEGORÍAS (la decisión, ver ADR 0015) ═════════════════
+ * ══ POR QUÉ NO SON CATEGORÍAS (la decisión, ver ADR 0016) ═════════════════
  *
  * Una categoría (#48) es una fila en `categorias` (catálogo por vendedora) + una
  * fila en `etiquetas` (la asignación, compartida). Meterle un flag `automatica`

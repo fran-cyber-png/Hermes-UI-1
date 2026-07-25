@@ -157,7 +157,7 @@ referenciado por nombre, regla dura #1). El cliente vive en `server/src/ivi/clie
 mandaron el **precio** y si **se enfrió** después. `GET /api/senales?claves=a,b,c`
 (`routes/senales.ts`, detrás de `requiereVendedora`, solo lectura).
 
-- **No se guardan** (ADR 0015): no hay fila, no hay job. Se derivan en cada consulta, como la etapa
+- **No se guardan** (ADR 0016): no hay fila, no hay job. Se derivan en cada consulta, como la etapa
   efectiva (0013) y `no_leido` (0014). Conviven con las **categorías manuales** (#48) sin ser una:
   la manual es píldora de **borde**, la automática de **fondo** tenue; misma paleta `--cat-*`, sin oro.
 - **El criterio vive UNA vez**, puro: `senales/cotizacion.ts` (monto con moneda plausible, veto a la
@@ -174,7 +174,7 @@ mandaron el **precio** y si **se enfrió** después. `GET /api/senales?claves=a,
 orden en que la vendedora necesita las cosas:
 
 1. **Quién es** — avatar, nombre, canal.
-2. **Qué es** — `FranjaEtiquetas`: las automáticas (fondo tenue, ADR 0015) y las categorías manuales
+2. **Qué es** — `FranjaEtiquetas`: las automáticas (fondo tenue, ADR 0016) y las categorías manuales
    (borde de color, #48) en la misma línea. **El dibujo es lo que las distingue**: la automática no se
    puede borrar. Solo lectura — se editan en la `BarraGestion`, arriba del chat.
 3. **Qué mandarle** — `DosRespuestas`: **dos** respuestas listas, un clic manda la secuencia entera

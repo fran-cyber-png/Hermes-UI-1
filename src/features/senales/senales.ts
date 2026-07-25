@@ -6,7 +6,7 @@ import type { ColorCategoria } from '../gestion/paletaCategorias';
  * LAS ETIQUETAS AUTOMÁTICAS — «Cotizado» y «Se enfrió», calculadas por el server.
  *
  * NO tienen fila en ninguna tabla: se derivan del hilo en cada consulta
- * (ADR 0015). El front no las computa ni las cachea largo: `staleTime` corto,
+ * (ADR 0016). El front no las computa ni las cachea largo: `staleTime` corto,
  * porque «se enfrió» es una función del reloj y una etiqueta de hace media hora
  * puede estar diciendo algo que ya no es cierto.
  */

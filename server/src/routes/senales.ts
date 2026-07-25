@@ -10,7 +10,7 @@ import { etiquetasDeSenal, type EtiquetaAutomatica } from "../senales/etiquetasA
  *
  * Nace AUTENTICADO (`requiereVendedora` en la primera línea, patrón de #48): no
  * arrastra la deuda de #36. Es de solo lectura y no escribe NADA — las etiquetas
- * automáticas no tienen fila que escribir (ADR 0015).
+ * automáticas no tienen fila que escribir (ADR 0016).
  *
  * Se pide por lote (`?claves=a,b,c`) y no de a una: la ficha abre con una
  * conversación, pero la cola quiere pintar veinte de un saque, y veinte

@@ -95,7 +95,7 @@ export const CLASE_FONDO: Record<ColorCategoria, string> = {
 
 /**
  * Clase de FONDO TENUE por color — la píldora de las etiquetas AUTOMÁTICAS
- * («Cotizado», «Se enfrió»; ADR 0015). Fondo, no borde, y ahí está el punto:
+ * («Cotizado», «Se enfrió»; ADR 0016). Fondo, no borde, y ahí está el punto:
  * la manual se dibuja con borde y la automática con relleno, así «esta no la
  * puedo borrar» se entiende sin leer un tooltip. Literales completos porque
  * Tailwind escanea el código y no vería una clase armada en runtime.

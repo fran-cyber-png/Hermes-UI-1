@@ -16,7 +16,7 @@ import { useSenales } from './senales';
  * Lo que las distingue es el DIBUJO, no un ícono ni un tooltip:
  *
  *   · **automática** (`Cotizado`, `Se enfrió`) — píldora de FONDO tenue. La pone
- *     el hilo, se recalcula sola, no se puede borrar (ADR 0015).
+ *     el hilo, se recalcula sola, no se puede borrar (ADR 0016).
  *   · **manual** (las categorías de #48) — píldora de BORDE de color. La pone la
  *     vendedora, y se edita donde siempre: en la barra de arriba del chat.
  *

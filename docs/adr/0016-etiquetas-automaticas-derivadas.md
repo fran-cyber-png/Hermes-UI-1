@@ -1,6 +1,12 @@
-# ADR 0015 — Las etiquetas automáticas se DERIVAN; no son categorías con un flag
+# ADR 0016 — Las etiquetas automáticas se DERIVAN; no son categorías con un flag
 
 **Fecha**: 2026-07-25 · **Estado**: aceptada · **Issues**: #91, #101 · deriva del pedido del dueño del 2026-07-25
+
+> **Nota de numeración**: nació como `0015` y se renumeró a `0016` al mergear. Tres ramas paralelas
+> eligieron `0015` el mismo día (esta, la auto-respuesta de #125 y la barra de filtros de la cola);
+> la de #125 llegó primero a `main`, así que esta se corre. Queda **una colisión pendiente** entre
+> `0015-auto-respuesta-fuera-de-horario.md` y `0015-barra-de-filtros-y-curso-en-la-fila.md` — no se
+> toca desde acá porque renumerar el ADR de otra rama es pisarle el trabajo a su autor.
 
 ## El contexto
 
