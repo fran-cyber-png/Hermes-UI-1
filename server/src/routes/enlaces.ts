@@ -51,7 +51,8 @@ enlacesRouter.post("/", async (req, res) => {
 
   const r = await enlazarClaves(db, { claveA, claveB, vendedoraId: req.vendedoraId! });
   if (!r.ok) {
-    res.status(r.motivo === "conflicto" ? 409 : 400).json({ ok: false, motivo: r.motivo });
+    // El motivo viaja en `type`, que es la llave que el cliente de la app ya lee (`ErrorApi.tipo`).
+    res.status(r.motivo === "conflicto" ? 409 : 400).json({ ok: false, type: r.motivo });
     return;
   }
   res.json({ ok: true, personaId: r.personaId, yaEstaban: r.yaEstaban });
@@ -67,7 +68,7 @@ enlacesRouter.delete("/", async (req, res) => {
 
   const r = await revocarEnlace(db, { clave, vendedoraId: req.vendedoraId! });
   if (!r.ok) {
-    res.status(400).json({ ok: false, motivo: r.motivo });
+    res.status(400).json({ ok: false, type: r.motivo });
     return;
   }
   res.json({ ok: true, revocadas: r.revocadas });

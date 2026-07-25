@@ -11,6 +11,7 @@ import { RegistrarGestion } from '../gestion/RegistrarGestion';
 import { Intereses } from '../gestion/Intereses';
 import { PanelNotas } from '../notas/PanelNotas';
 import { BloqueLeadForm } from './BloqueLeadForm';
+import { PersonaUnificada } from '../identidad/PersonaUnificada';
 
 /**
  * LA FICHA DEL CONTACTO — la razón de ser de Hermes.
@@ -239,6 +240,13 @@ export function FichaContacto({
         <div className="mt-2">
           <Intereses clave={conversacion.clave} compacto />
         </div>
+
+        {/* «Es la misma persona que…» (#58): une la FICHA con la de otro número u otra red.
+            Los hilos siguen separados. Todo el bloque vive en su propio archivo. */}
+        <PersonaUnificada
+          clave={conversacion.clave}
+          nombreActual={conversacion.persona_nombre ?? telefono ?? 'este contacto'}
+        />
       </div>
 
       {/* La bitácora comercial: próxima acción (cae en la Agenda). */}

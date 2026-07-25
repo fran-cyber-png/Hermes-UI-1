@@ -10,6 +10,7 @@ import { RegistrarGestion } from '../gestion/RegistrarGestion';
 import { Intereses } from '../gestion/Intereses';
 import { PanelNotas } from '../notas/PanelNotas';
 import { BloqueLeadForm } from '../cerberus/BloqueLeadForm';
+import { PersonaUnificada } from '../identidad/PersonaUnificada';
 
 /**
  * EL PANEL DE CONTEXTO — el lado derecho cuando la conversación es de Meta.
@@ -141,6 +142,14 @@ export function PanelContexto({ conversacion }: { conversacion: Conversacion }) 
         <div className="mt-2">
           <Intereses clave={conversacion.clave} compacto />
         </div>
+
+        {/* «Es la misma persona que…» (#58) — acá es donde más falta hace: un DM de
+            Instagram no trae teléfono, y unirlo al WhatsApp de la misma persona es la
+            única forma de que esta ficha muestre su ficha de Cerberus. */}
+        <PersonaUnificada
+          clave={conversacion.clave}
+          nombreActual={conversacion.persona_nombre ?? 'este contacto'}
+        />
       </div>
 
       {/* La bitácora comercial: etapa + próxima acción (cae en la Agenda). */}
