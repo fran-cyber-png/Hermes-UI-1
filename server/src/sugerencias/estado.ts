@@ -90,13 +90,16 @@ export interface Sugerido {
  * gana. Una conversación fría es fría aunque además sea el primer contacto de
  * la semana.
  */
-export type MomentoDeVenta =
-  | "enfriada"
-  | "cotizada"
-  | "material-sin-precio"
-  | "primer-contacto"
-  | "pidiendo-info"
-  | "en-conversacion";
+export const MOMENTOS_DE_VENTA = [
+  "enfriada",
+  "cotizada",
+  "material-sin-precio",
+  "primer-contacto",
+  "pidiendo-info",
+  "en-conversacion",
+] as const;
+
+export type MomentoDeVenta = (typeof MOMENTOS_DE_VENTA)[number];
 
 export function momentoDeVenta(e: EstadoDeVenta): MomentoDeVenta {
   if (e.enfriada) return "enfriada";

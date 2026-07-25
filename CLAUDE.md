@@ -168,25 +168,75 @@ mandaron el **precio** y si **se enfrió** después. `GET /api/senales?claves=a,
 - **Medir la precisión sobre datos reales**: `cd server && npm run medir:cotizaciones [días]`
   (read-only) — imprime ingenuo vs. detector vs. corroboradas y la muestra de falsos positivos evitados.
 
-## El panel derecho es MULTIFUNCIÓN
+## El panel derecho — ordenado por lo que decide una venta (ADR 0017)
 
-`src/features/panel/PanelDerecho.tsx` (360 px, `w-[22.5rem]` en `App.tsx`). De arriba abajo, en el
-orden en que la vendedora necesita las cosas:
+`src/features/panel/PanelDerecho.tsx` (360 px, `w-[22.5rem]` en `App.tsx`). El orden **no es
+temático**: es el de las preguntas que la vendedora se hace mientras escribe. **Una pestaña guarda lo
+que se CONSULTA, nunca lo que se DECIDE.**
 
-1. **Quién es** — avatar, nombre, canal.
-2. **Qué es** — `FranjaEtiquetas`: las automáticas (fondo tenue, ADR 0016) y las categorías manuales
-   (borde de color, #48) en la misma línea. **El dibujo es lo que las distingue**: la automática no se
-   puede borrar. Solo lectura — se editan en la `BarraGestion`, arriba del chat.
-3. **Qué mandarle** — `DosRespuestas`: **dos** respuestas listas, un clic manda la secuencia entera
-   (espaciada, con progreso, cancelable); tocar el texto lo abre en el composer para editarlo.
-   `GET /api/sugerencias?clave=…`. Si no hay sugerencia clara **no se inventa una**.
-4. **El resto**, en pestañas (`panel/pestanas.ts`, pura): Ficha · Enviar · Notas · Curso. Pestañas y no
-   acordeón: con 360 px, el acordeón obliga a plegar y scrollear; la barra cuesta 30 px fijos.
+1. **Quién es** — `panel/BandaEstado`. El estado **se ve, no se lee**: filete de 3 px + fondo tenue,
+   verde cliente · `--temp-frio` conversación fría · ámbar «no se pudo saber» · gris lead nuevo.
+   **Sin oro** (el oro es tiempo que se acaba). Encabeza con el **nombre real** (Cerberus >
+   formulario > pushname, `panel/identidad.ts`) y deja el pushname de alias. La cifra de compras va
+   en una línea. El arbitraje entre «quién es» y «cómo va el hilo» vive puro en
+   `panel/estadoContacto.ts`: **un cliente que se enfrió sigue siendo cliente**. Cierra con
+   `FranjaEtiquetas` (automáticas de fondo tenue ADR 0016 + categorías manuales de borde #48; el
+   dibujo las distingue, y son solo lectura — se editan en la `BarraGestion`).
+2. **Qué quiere** — `panel/BloqueInteres`, **fuera de las pestañas**. 611 conversaciones con precio
+   enviado y 1 interés registrado: acá se destraba. Si el interés no está pero el sistema lo sabe
+   (formulario o anuncio), **lo propone con borde punteado y un botón «Es este»** — nunca lo asienta
+   solo: abre la compuerta de «Cotizado». La precedencia la manda `canales/curso.ts` (#72), la misma
+   del chip de la cola, así panel y fila nunca dicen cosas distintas.
+3. **Qué mandarle** — dos calibres de la misma pregunta:
+   - `DosRespuestas`: **dos** respuestas listas, un clic manda la secuencia entera (espaciada, con
+     progreso, cancelable); tocar el texto lo abre en el composer para editarlo.
+     `GET /api/sugerencias?clave=…`. Si no hay sugerencia clara **no se inventa una**, y si la
+     consulta falla se dice el fallo (un 404 **no** es «no hay respuesta clara»).
+   - `hechos/BloqueHechos` (#153): los **datos que cierran ventas y casi nunca se dicen** —«se puede
+     en 2 cuotas» se dijo 2 veces en 1.876 conversaciones; «el acceso es por todo un año», 1—.
+     Frases sueltas, **no secuencias**, y **tocarlas NO envía**: caen en el composer.
+     `GET /api/hechos?clave=…`. Ver §Datos recomendados.
+4. **El detalle**, en pestañas (`panel/pestanas.ts`, pura): Ficha · Enviar · Notas · Curso. Pestañas y
+   no acordeón: con 360 px, el acordeón obliga a plegar y scrollear; la barra cuesta 30 px fijos.
+   La bandeja va **hundida** (`bg-muted/60`): el panel se lee en tres planos —blanco decide, bandeja
+   consulta, blanco actúa.
+5. **Qué hago** — `panel/AccionesContacto`, al pie y **siempre visible**, con **una sola acción
+   primaria** según el estado. Antes vivía dentro de la pestaña Ficha y abrir «Notas» hacía
+   desaparecer el botón que cierra la venta.
+
+**El pie está clavado y el medio es un solo scroll** con la barra de pestañas pegajosa: a 1280×720
+con dos respuestas cargadas, el reparto flex empujaba «Registrar venta» fuera del panel.
+
+**La ficha y las sugerencias tienen techo de 12 s** (`AbortSignal.any` + `retry: false`). Cerberus a
+veces deja la conexión abierta sin responder: sin techo el panel se congela en «Buscando…» y el
+estado de error —cuidadosamente dibujado— no se dispara nunca.
 
 **Quién decide las dos**: `server/src/sugerencias/estado.ts` — puro, y es **el vocabulario compartido
 con la auto-respuesta nocturna** (#125): su `ContextoPlantilla` es este mismo tipo. Al mergear esa
 rama, `autorespuesta/plantillas.ts` importa de acá y borra el suyo. La misma cabeza decide de día
 (sugerencia) y de noche (auto-respuesta).
+
+## Datos recomendados — la munición de una línea (#153, ADR 0017)
+
+`server/src/hechos/` + `src/features/hechos/`. Los hechos que **desbloquean la venta en el acto** y
+que casi nunca salen de nuestro lado, medidos sobre 1.876 conversaciones: «el acceso lo tiene por
+todo un año» (dicho **1** vez), «se puede pagar en cuotas» (**2**), «es para público general» (**3**),
+«este es nuestro canal oficial» (**1**).
+
+- **`GET /api/hechos?clave=…`** devuelve como máximo **tres**, ya filtrados por `momentoDeVenta()` —
+  la MISMA cabeza que elige las dos secuencias y el acuse nocturno. El seam que da el momento sin
+  tocar el catálogo de plantillas es `estadoDeLaVenta()` (`sugerencias/consultarSugerencias.ts`):
+  hoy en producción no hay ni una plantilla cargada y el bloque tiene que funcionar igual.
+- **No son plantillas y no envían**: tocar un dato lo pone en el composer (regla de #45). El botón no
+  dice «Mandar» a propósito.
+- **El catálogo es editable** (tabla `hechos`): `POST`/`PUT`/`DELETE` sobre `/api/hechos`. Lo que
+  cierra ventas cambia, y agregarlo no puede costar un deploy. `hechos/catalogo.ts` es el punto de
+  partida medido; se siembra con `cd server && npm run hechos:sembrar -- --aplicar` (sin `--aplicar`
+  es dry-run). **Sin el `db:push` degrada**: sirve el default y avisa que no se puede editar.
+- Ver el catálogo que se serviría, sin base ni red: `npx tsx src/scripts/imprimirHechos.ts`.
+- **Follow-up declarado**: la objeción #1 del informe es el **aplazamiento** (13%, «avisame para la
+  próxima edición») y no hay mecanismo para capturarla. Acá solo entra la frase; la lista de espera
+  real es un frente propio.
 
 ## Plantillas-secuencia — «varios mensajes, con imágenes y todo en orden»
 

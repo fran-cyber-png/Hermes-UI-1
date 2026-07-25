@@ -21,6 +21,7 @@ import { categoriasRouter } from "./routes/categorias.js";
 import { senalesRouter } from "./routes/senales.js";
 import { plantillasRouter } from "./routes/plantillas.js";
 import { sugerenciasRouter } from "./routes/sugerencias.js";
+import { hechosRouter } from "./routes/hechos.js";
 import { dashboardRouter } from "./routes/dashboard.js";
 import { landingRouter } from "./webhook/landing.js";
 import { correosRouter } from "./routes/correos.js";
@@ -86,6 +87,7 @@ app.use("/api/categorias", categoriasRouter); // catálogo de categorías con co
 app.use("/api/senales", senalesRouter); // cotizado / se enfrió: etiquetas derivadas, no guardadas (ADR 0016)
 app.use("/api/plantillas", plantillasRouter); // secuencias de venta: un paso por llamada, nunca un bucle en el server
 app.use("/api/sugerencias", sugerenciasRouter); // las dos respuestas listas del panel derecho
+app.use("/api/hechos", hechosRouter); // los datos recomendados: la munición de una línea (#153)
 app.use("/api/dashboard", dashboardRouter); // el radar: leads cayendo + números por vendedora
 app.use("/webhook/landing", landingRouter); // los leads de las landings, reenviados por Bravo
 app.use("/api/correos", correosRouter); // email 1-a-1, auditado — sin listas, sin campañas

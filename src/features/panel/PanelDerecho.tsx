@@ -8,6 +8,7 @@ import { useLeadForm } from '../cerberus/BloqueLeadForm';
 import { PanelNotas } from '../notas/PanelNotas';
 import { PanelPlantillas } from '../plantillas/PanelPlantillas';
 import { DosRespuestas } from '../sugerencias/DosRespuestas';
+import { BloqueHechos } from '../hechos/BloqueHechos';
 import { useSenales } from '../senales/senales';
 import { ponerEnComposer } from '../whatsapp/puenteComposer';
 import { AccionesContacto } from './AccionesContacto';
@@ -34,7 +35,9 @@ import { pestanaInicial, pestanasDe, type IdPestana } from './pestanas';
  *   2. **QUÉ QUIERE** — `BloqueInteres`. 611 conversaciones con precio enviado y
  *      UN interés registrado: el bloque donde se traba el CRM. Si el sistema ya
  *      sabe el curso (formulario o anuncio), lo propone y se asienta con un clic.
- *   3. **QUÉ LE MANDO** — `DosRespuestas`. Dos respuestas listas, un clic.
+ *   3. **QUÉ LE MANDO** — `DosRespuestas` (la secuencia entera, un clic) y
+ *      `BloqueHechos` (la frase suelta que desatasca: «se puede en cuotas»,
+ *      «el acceso es por un año»). Dos calibres de la misma pregunta.
  *   4. **EL DETALLE**, en pestañas — Ficha · Enviar · Notas · Curso. Lo que se
  *      consulta cuando hace falta, no lo que se mira siempre.
  *   5. **QUÉ HAGO** — `AccionesContacto`, al pie y SIEMPRE visible.
@@ -144,6 +147,13 @@ export function PanelDerecho({
             <DosRespuestas conversacion={conversacion} onIrAPlantillas={() => elegir('plantillas')} />
           </div>
         )}
+
+        {/* 3b — qué DECIRLE. Va pegado a las respuestas porque es la misma
+            pregunta («¿qué le mando?») con dos calibres: la secuencia entera y
+            la frase suelta. Debajo, no encima: mandar el material es lo que se
+            hace en la mayoría de las conversaciones; el dato suelto es el que
+            desatasca las que ya están habladas. */}
+        <BloqueHechos conversacion={conversacion} />
 
         {/* 4 — el detalle. */}
         <nav

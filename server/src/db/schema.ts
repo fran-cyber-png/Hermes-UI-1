@@ -873,3 +873,47 @@ export const aliasCurso = pgTable(
     index("alias_curso_familia_idx").on(t.familia),
   ],
 );
+
+/**
+ * LOS DATOS RECOMENDADOS — la munición de una línea que cierra ventas (#153).
+ *
+ * «El acceso lo tiene por todo un año» se dijo **1 vez** en 1.876
+ * conversaciones. «Se puede pagar en cuotas», **2**. En los transcripts, cada
+ * uno de esos desbloqueó la venta en el acto. No es que la vendedora no los
+ * sepa: es que no los tiene a mano mientras escribe.
+ *
+ * Es una TABLA y no una constante del código por una razón sola: **lo que hoy
+ * cierra ventas cambia**. Cambia el producto, cambia el país, cambia la
+ * objeción de la semana. Si vive en un `const`, agregar una frase es un deploy;
+ * acá es un `PUT`. `hechos/catalogo.ts` tiene el punto de partida medido, y el
+ * endpoint lo sirve mientras la tabla esté vacía —o mientras falte el
+ * `db:push`— en vez de mostrar un bloque vacío.
+ *
+ * NO son plantillas: una plantilla son varios mensajes que salen espaciados por
+ * `EnvioControlado`; esto es una línea que se pega en la caja para que la
+ * vendedora la lea, la edite y la mande ella.
+ */
+export const hechos = pgTable(
+  "hechos",
+  {
+    id: bigserial({ mode: "number" }).primaryKey(),
+    /** Slug estable: la identidad contra la que se edita. Renombrar el rótulo no rompe nada. */
+    clave: text("clave").notNull().unique(),
+    /** Lo que se lee en el chip. Corto: el panel mide 360 px. */
+    rotulo: text("rotulo").notNull(),
+    /** La frase que se pega en la caja. Una línea, en la voz de la vendedora. */
+    texto: text("texto").notNull(),
+    /**
+     * En qué momentos de la venta corresponde (`sugerencias/estado.ts`).
+     * Array vacío = en todos: el default deliberado para lo que se agregue sin
+     * querer pensar dónde va.
+     */
+    momentos: jsonb("momentos").$type<string[]>().notNull().default([]),
+    orden: integer("orden").notNull().default(100),
+    /** Apagar un hecho no lo borra: la frase que dejó de funcionar sirve de historia. */
+    activo: boolean("activo").notNull().default(true),
+    creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+    actualizadoAt: timestamp("actualizado_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("hechos_orden_idx").on(t.activo, t.orden)],
+);

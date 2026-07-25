@@ -35,10 +35,20 @@ export interface ResultadoSugerencias {
   sugerencias: Sugerencia[];
 }
 
-export async function consultarSugerencias(
+/**
+ * EN QUÉ PUNTO ESTÁ ESTA CONVERSACIÓN — sin mirar el catálogo de plantillas.
+ *
+ * Sale aparte porque hay DOS consumidores y uno de ellos no tiene plantillas:
+ * los **datos recomendados** (`hechos/`) eligen qué frase corresponde con el
+ * mismo `momentoDeVenta()` y tienen que funcionar aunque la vendedora todavía
+ * no haya cargado ni una secuencia — que es exactamente el estado de producción
+ * hoy. Si el estado se calculara adentro de `consultarSugerencias`, pedirle el
+ * momento obligaría a traer un catálogo que no se va a usar.
+ */
+export async function estadoDeLaVenta(
   base: typeof db,
-  o: { clave: string; vendedoraId: string; ahora?: Date },
-): Promise<ResultadoSugerencias> {
+  o: { clave: string; ahora?: Date },
+): Promise<EstadoDeVenta> {
   const partes = o.clave.split(":");
   const personaId = partes[2] ?? "";
   const canal = partes[1] ?? "";
@@ -75,6 +85,14 @@ export async function consultarSugerencias(
     vioMaterial: Boolean(hechos?.con_media || hechos?.temario),
   };
 
+  return estado;
+}
+
+export async function consultarSugerencias(
+  base: typeof db,
+  o: { clave: string; vendedoraId: string; ahora?: Date },
+): Promise<ResultadoSugerencias> {
+  const estado = await estadoDeLaVenta(base, o);
   const plantillas = await listarPlantillas(base, o.vendedoraId);
   return { estado, sugerencias: sugerirDos(estado, plantillas) };
 }
