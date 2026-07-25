@@ -5,7 +5,8 @@ import { hace } from '../../lib/datos/frescura';
 import { formatoTelefono } from '../../lib/formato';
 import { etiquetaDeMedia } from '../../lib/etiquetaMedia';
 import { ETAPA_CHIP } from '../../lib/etapas';
-import { CLASE_BORDE, CLASE_TEXTO, resolverColor } from '../gestion/paletaCategorias';
+import { CLASE_BORDE, CLASE_FONDO_SUAVE, CLASE_TEXTO, resolverColor } from '../gestion/paletaCategorias';
+import { cursoDeFila, detalleDeCurso } from './curso';
 import { BadgeCanal } from './BadgeCanal';
 import { Avatar } from './Avatar';
 import { VENTANA_DIAS } from './types';
@@ -112,6 +113,18 @@ export function FilaConversacion({
   // usa BORDE de color (nunca sombra, nunca oro) — la banda de 3px es temperatura.
   const categorias = c.categorias ?? [];
   const catalogo = catalogoCategorias ?? [];
+  /**
+   * EL CURSO MANDA SOBRE «PIDE INFO» (#72). En el censo de producción del
+   * 25-jul-2026, 311 de 1.867 conversaciones llevan «Pide info» — pero entre las
+   * 478 que están sin responder (donde la vendedora realmente trabaja) son 311:
+   * dos de cada tres. Un chip que aparece en dos de cada tres filas del trabajo
+   * pendiente no ayuda a elegir a quién atender primero; QUÉ CURSO quiere, sí.
+   *
+   * Conviven como pidió el dueño, pero en una fila de 360 px no entran los dos:
+   * cuando se sabe el curso, gana el curso (es el dato más accionable), y
+   * «Pide info» queda de respaldo para las filas sin curso conocido.
+   */
+  const curso = cursoDeFila(c);
 
   return (
     <button
@@ -193,10 +206,28 @@ export function FilaConversacion({
 
         {/* Renglón 2: qué dijo, con la marca de lead y las categorías. */}
         <div className="mt-0.5 flex items-center gap-1.5">
-          {mostrarPideInfo && c.pide_info && (
-            <span className="shrink-0 rounded bg-primary/10 px-1 py-px text-[11px] font-semibold text-primary">
-              Pide info
+          {curso ? (
+            /* El QUÉ: fondo suave del color de su familia (nunca borde + sombra,
+               nunca oro — el oro es tiempo que se acaba, y un curso no es un
+               reloj). El `title` dice de dónde salió el dato: el chip no miente. */
+            <span
+              title={detalleDeCurso(curso)}
+              className={
+                'max-w-[45%] shrink-0 truncate rounded px-1.5 py-px text-[11px] font-semibold ' +
+                CLASE_FONDO_SUAVE[curso.color] +
+                ' ' +
+                CLASE_TEXTO[curso.color]
+              }
+            >
+              {curso.nombre}
             </span>
+          ) : (
+            mostrarPideInfo &&
+            c.pide_info && (
+              <span className="shrink-0 rounded bg-primary/10 px-1 py-px text-[11px] font-semibold text-primary">
+                Pide info
+              </span>
+            )
           )}
           {/* Categorías: píldora con BORDE de color (sin sombra, sin oro). */}
           {categorias.slice(0, 1).map((nombre) => {
