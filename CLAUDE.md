@@ -168,6 +168,26 @@ mandaron el **precio** y si **se enfrió** después. `GET /api/senales?claves=a,
 - **Medir la precisión sobre datos reales**: `cd server && npm run medir:cotizaciones [días]`
   (read-only) — imprime ingenuo vs. detector vs. corroboradas y la muestra de falsos positivos evitados.
 
+## El panel derecho es MULTIFUNCIÓN
+
+`src/features/panel/PanelDerecho.tsx` (360 px, `w-[22.5rem]` en `App.tsx`). De arriba abajo, en el
+orden en que la vendedora necesita las cosas:
+
+1. **Quién es** — avatar, nombre, canal.
+2. **Qué es** — `FranjaEtiquetas`: las automáticas (fondo tenue, ADR 0015) y las categorías manuales
+   (borde de color, #48) en la misma línea. **El dibujo es lo que las distingue**: la automática no se
+   puede borrar. Solo lectura — se editan en la `BarraGestion`, arriba del chat.
+3. **Qué mandarle** — `DosRespuestas`: **dos** respuestas listas, un clic manda la secuencia entera
+   (espaciada, con progreso, cancelable); tocar el texto lo abre en el composer para editarlo.
+   `GET /api/sugerencias?clave=…`. Si no hay sugerencia clara **no se inventa una**.
+4. **El resto**, en pestañas (`panel/pestanas.ts`, pura): Ficha · Enviar · Notas · Curso. Pestañas y no
+   acordeón: con 360 px, el acordeón obliga a plegar y scrollear; la barra cuesta 30 px fijos.
+
+**Quién decide las dos**: `server/src/sugerencias/estado.ts` — puro, y es **el vocabulario compartido
+con la auto-respuesta nocturna** (#125): su `ContextoPlantilla` es este mismo tipo. Al mergear esa
+rama, `autorespuesta/plantillas.ts` importa de acá y borra el suyo. La misma cabeza decide de día
+(sugerencia) y de noche (auto-respuesta).
+
 ## Plantillas-secuencia — «varios mensajes, con imágenes y todo en orden»
 
 Una plantilla es una **lista ordenada de pasos** (tablas `plantillas` + `plantilla_pasos`), no un
