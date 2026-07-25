@@ -10,6 +10,7 @@ import {
   seguimientosPendientesSql,
 } from "./urgenciaSql.js";
 import { etapaEfectivaSql, ultimasGestionesSql } from "./etapaEfectivaSql.js";
+import { precioEnviadoSql } from "./precio.js";
 import {
   bandaPinOrdenSql,
   categoriasCteSql,
@@ -96,6 +97,7 @@ const comentariosCte = (filtroCanal: SQL, incluirPins: boolean) => sql`
     texto, contexto_texto,
     NULL::text                                  AS ultima_clase,
     NULL::jsonb                                 AS ultima_origen,
+    false                                       AS precio_enviado,
     occurred_at                                 AS referencia,
     occurred_at                                 AS ultimo_at,
     occurred_at                                 AS ultimo_entrante_at,
@@ -140,6 +142,10 @@ const conversacionesCte = sql`
     -- El origen del ÚLTIMO mensaje: si vino de un anuncio y no tiene texto, el
     -- front muestra «📣 Vino del anuncio» en vez de «(sin texto)».
     (array_agg(origen ORDER BY occurred_at DESC))[1]                AS ultima_origen,
+    -- ¿Ya le pasamos el precio? (cola/precio.ts): el hecho comercial que el
+    -- embudo no veía — 611 conversaciones con precio enviado y 1 interés
+    -- registrado en toda la base. Es derivado de lo escrito, no un estado.
+    (${precioEnviadoSql})                                           AS precio_enviado,
     (${referenciaSql})                                              AS referencia,
     max(occurred_at)                                                AS ultimo_at,
     max(occurred_at) FILTER (WHERE direccion = 'entrante')          AS ultimo_entrante_at,
@@ -306,7 +312,8 @@ async function ejecutarCola(
       ${leadCursoCteSql}
     )
     SELECT todo.clave AS clave, canal, tipo, persona_id, persona_nombre, numero_propio,
-           texto, contexto_texto, ultima_clase, ultima_origen, respondida, ventana_abierta, pide_info, n,
+           texto, contexto_texto, ultima_clase, ultima_origen, respondida, precio_enviado,
+           ventana_abierta, pide_info, n,
            referencia, ultimo_at, seguimiento_en,
            etapa_manual,
            iu.curso AS interes_curso,
