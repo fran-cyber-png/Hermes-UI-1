@@ -66,12 +66,8 @@ export function BarraFiltros({
   useEffect(() => {
     const el = pista.current;
     if (!el) return;
-    const refrescar = () => {
-      const nueva = sombrasDe(el);
-      setSombra((prev) => (prev.izq === nueva.izq && prev.der === nueva.der ? prev : nueva));
-    };
-    refrescar();
-    const observador = new ResizeObserver(refrescar);
+    medir();
+    const observador = new ResizeObserver(medir);
     observador.observe(el);
 
     /**
