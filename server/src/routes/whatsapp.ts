@@ -7,8 +7,7 @@ import { db } from '../db/client.js';
 import { fotosPerfil } from '../db/schema.js';
 import { requiereVendedora } from '../auth/sesion.js';
 import { whatsapp } from '../whatsapp/wiring.js';
-import { proyectarMensaje } from '../whatsapp/proyectar.js';
-import { repositorioDrizzle } from '../whatsapp/repositorioDrizzle.js';
+import { enviarMediaYProyectar, enviarTextoYProyectar } from '../whatsapp/enviarYProyectar.js';
 import { resolverAnuncio } from '../meta/anuncio.js';
 import { RUTA_MEDIA, nombreSeguro } from '../whatsapp/mediaDir.js';
 import { normalizarTelefono } from '../whatsapp/identidadWa.js';
@@ -124,7 +123,10 @@ whatsappRouter.post('/leido/:telefono', requiereVendedora, async (req, res) => {
 whatsappRouter.post('/enviar', requiereVendedora, async (req, res) => {
   const { numeroPropio, telefono, texto, referencia } = req.body ?? {};
 
-  const r = await whatsapp().envio.enviar({
+  // Mandar y persistir el saliente van juntos (`enviarYProyectar.ts`): un envío
+  // que sale y no queda en el hilo es un mensaje fantasma, y la vendedora lo
+  // manda de nuevo. Las plantillas-secuencia usan la MISMA función.
+  const r = await enviarTextoYProyectar({
     vendedoraId: req.vendedoraId!,
     numeroPropio: String(numeroPropio ?? ''),
     telefono: String(telefono ?? ''),
@@ -140,22 +142,8 @@ whatsappRouter.post('/enviar', requiereVendedora, async (req, res) => {
   // La persona ganó de mano a la máquina: si había una auto-respuesta en cola
   // para esta conversación, se cancela (#125). Va acá, en el momento exacto en
   // que deja de hacer falta, y no rompe el envío si el esquema no está.
+  // (La proyección del saliente ya la hizo `enviarTextoYProyectar`.)
   await cancelarPorRespuestaHumana(db, String(referencia ?? ''));
-
-  // Persistimos el saliente (idempotente) para que aparezca en el hilo aunque el
-  // transporte no haga eco. D10: SOLO con el idExterno del envío real.
-  const proy = proyectarMensaje({
-    idExterno: r.idExterno,
-    numeroPropio: String(numeroPropio),
-    telefono: String(telefono),
-    esMio: true,
-    esGrupo: false,
-    ocurridoEn: r.ocurridoEn,
-    nombreVisible: null,
-    texto: String(texto),
-    clase: 'texto',
-  });
-  if ('evento' in proy) await repositorioDrizzle.persistir(proy.evento, proy.interaccion);
 
   res.json({ ok: true, idExterno: r.idExterno });
 });
@@ -295,12 +283,13 @@ whatsappRouter.post(
       texto: caption || null,
     };
 
-    const r = await whatsapp().envio.enviarMedia({
+    const r = await enviarMediaYProyectar({
       vendedoraId: req.vendedoraId!,
       numeroPropio: String(numeroPropio ?? ''),
       telefono: String(telefono ?? ''),
       referencia: String(referencia ?? ''),
       media,
+      archivo,
     });
 
     if (!r.ok) {
@@ -309,21 +298,8 @@ whatsappRouter.post(
     }
 
     // Mandar un adjunto también es responder: cancela la automática en cola.
+    // (La proyección del saliente ya la hizo `enviarMediaYProyectar`.)
     await cancelarPorRespuestaHumana(db, String(referencia ?? ''));
-
-    const proy = proyectarMensaje({
-      idExterno: r.idExterno,
-      numeroPropio: String(numeroPropio),
-      telefono: String(telefono),
-      esMio: true,
-      esGrupo: false,
-      ocurridoEn: r.ocurridoEn,
-      nombreVisible: null,
-      texto: caption || null,
-      clase: 'multimedia',
-      media: { clase, archivo, mime, nombre: nombre || null },
-    });
-    if ('evento' in proy) await repositorioDrizzle.persistir(proy.evento, proy.interaccion);
 
     res.json({ ok: true, idExterno: r.idExterno });
   },
