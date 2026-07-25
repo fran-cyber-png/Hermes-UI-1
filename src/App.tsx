@@ -20,7 +20,11 @@ import type { Conversacion } from './features/canales/conversaciones';
 import BarraFrescura from './features/canales/BarraFrescura';
 import { EstadoWhatsapp } from './features/whatsapp/EstadoWhatsapp';
 import { InterruptorAutoRespuesta } from './features/autorespuesta/InterruptorAutoRespuesta';
-import { BandejaRevision } from './features/autorespuesta/BandejaRevision';
+import { ColaRevision } from './features/autorespuesta/ColaRevision';
+import { PorQueEstaSugerencia } from './features/autorespuesta/PorQueEstaSugerencia';
+import { useModoRevision } from './features/autorespuesta/useModoRevision';
+import { useAutoRespuesta } from './features/autorespuesta/datos';
+import { conversacionDeSugerencia, paso as pasoDeRevision } from './features/autorespuesta/revision';
 import { PanelDerecho } from './features/panel/PanelDerecho';
 import { VistaDashboard } from './features/dashboard/VistaDashboard';
 import { VistaEmbudo } from './features/vistas/VistaEmbudo';
@@ -97,13 +101,49 @@ const ATAJOS: { tecla: string; que: string }[] = [
   { tecla: '?', que: 'Esta ayuda' },
 ];
 
+/**
+ * LAS TECLAS DE LA REVISIÓN, aparte porque solo existen adentro del modo — y
+ * porque son todas ACORDES, que es lo que las hace seguras.
+ *
+ * En revisión el foco está en el composer (ahí se edita el borrador), así que
+ * las teclas sueltas tipo `j`/`k` de Superhuman o Intercom no se pueden usar:
+ * escribirían. Los acordes con ⌘/Ctrl no escriben texto y pasan igual. De yapa,
+ * ninguna de las dos decisiones —aprobar, descartar— se dispara con un dedo que
+ * resbala.
+ *
+ * `⌘↵` es el «enviar» de toda la industria (Intercom, Missive, Gmail) y `⌘D` el
+ * «descartar borrador» de Missive: se eligieron por convención, no por gusto.
+ */
+const ATAJOS_REVISION: { tecla: string; que: string }[] = [
+  { tecla: '⌘↵', que: 'Aprobar y seguir' },
+  { tecla: '⌘D', que: 'Descartar y seguir' },
+  { tecla: '⌘↓ ⌘↑', que: 'Saltar sin decidir' },
+  { tecla: 'Esc', que: 'Salir de la revisión' },
+];
+
 /** La cabina: el mapa de teclas, en voz de imprenta. Se abre con «?». */
-function Cabina({ onCerrar }: { onCerrar: () => void }) {
+function Cabina({ onCerrar, enRevision }: { onCerrar: () => void; enRevision: boolean }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/20" onClick={onCerrar} role="dialog" aria-modal="true" aria-label="Atajos de teclado">
       <div className="w-72 rounded-2xl bg-card p-5 shadow-panel animate-entrar" onClick={(e) => e.stopPropagation()}>
         <h2 className="font-heading text-sm font-bold text-navy">La cabina</h2>
         <p className="mt-0.5 text-[11px] text-muted-foreground">Todo Hermes sin soltar el teclado.</p>
+        {/* Las de la revisión van PRIMERO y solo cuando se está adentro: es el
+            único momento en que alguien abre esto para buscar una tecla. */}
+        {enRevision && (
+          <>
+            <p className="mt-3 font-mono text-[10px] font-bold uppercase tracking-wide text-navy">En la revisión</p>
+            <dl className="mt-1.5 space-y-1.5">
+              {ATAJOS_REVISION.map((a) => (
+                <div key={a.tecla + a.que} className="flex items-center justify-between gap-3">
+                  <dt className="rounded-md bg-navy px-1.5 py-0.5 font-mono text-[11px] font-semibold text-white">{a.tecla}</dt>
+                  <dd className="text-xs text-foreground">{a.que}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className="mt-3 font-mono text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Siempre</p>
+          </>
+        )}
         <dl className="mt-3 space-y-1.5">
           {ATAJOS.map((a) => (
             <div key={a.tecla + a.que} className="flex items-center justify-between gap-3">
@@ -125,10 +165,12 @@ export default function App() {
   const [telefonoPersonas, setTelefonoPersonas] = useState<string | null>(null);
   const [cabina, setCabina] = useState(false);
   const [libreta, setLibreta] = useState(false);
-  // La bandeja de revisión (#125, ADR 0016) es una TAREA, no un lugar: se abre
-  // sobre cualquier vista y se cierra. Por eso vive en un estado suelto y no en
-  // el riel — ver `BandejaRevision.tsx`.
-  const [bandejaAuto, setBandejaAuto] = useState(false);
+  // EL MODO REVISIÓN (ADR 0018). No es una hoja encima de la app: es la vista
+  // Mensajes con la cola filtrada a lo que hay que decidir, la conversación
+  // real en el medio y el porqué a la derecha. Todo su estado vive en el hook,
+  // que también sabe «a cuál voy» cuando la abierta se resuelve.
+  const revision = useModoRevision();
+  const { limites: limitesAuto } = useAutoRespuesta();
   // El puente (§2.9): una vista le pasa el mando a otra; la destinataria lo consume y lo limpia.
   const [puente, setPuente] = useState<Puente | null>(null);
   const busquedaRef = useRef<HTMLInputElement>(null);
@@ -140,6 +182,18 @@ export default function App() {
     () => (puente?.tipo === 'agenda' ? { telefono: puente.telefono ?? undefined, nota: puente.nota } : null),
     [puente],
   );
+
+  // Entrar a una sugerencia ABRE su conversación: revisar es mirar un chat, no
+  // leer un texto suelto. Es la costura entre el modo y la mesa de siempre.
+  const claveDeRevision = revision.actual?.clave ?? null;
+  useEffect(() => {
+    if (!revision.activo || !revision.actual) return;
+    setAbierta(conversacionDeSugerencia(revision.actual));
+    setVista('bandeja');
+    // Solo al cambiar de sugerencia: reabrir en cada render pisaría la
+    // conversación que la vendedora haya elegido a mano.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claveDeRevision, revision.activo]);
 
   // El nervio en vivo: escucha el stream del server e invalida lo que cambió.
   // Solo con sesión (el stream está detrás del perímetro, #36); si el stream
@@ -164,7 +218,9 @@ export default function App() {
   useEffect(() => {
     function alTeclear(e: KeyboardEvent) {
       if (e.key === 'Escape') {
-        // Escape cierra en orden: libreta → cabina → conversación abierta (solo en Mensajes).
+        // Escape cierra en orden: libreta → cabina → revisión → conversación
+        // abierta (solo en Mensajes). La revisión sale ANTES que la
+        // conversación: adentro del modo, Escape significa «salime de acá».
         if (tecleandoEn(e)) return;
         if (libreta) {
           setLibreta(false);
@@ -174,8 +230,8 @@ export default function App() {
           setCabina(false);
           return;
         }
-        if (bandejaAuto) {
-          setBandejaAuto(false);
+        if (revision.activo) {
+          revision.salir();
           return;
         }
         if (vista === 'bandeja') setAbierta(null);
@@ -186,6 +242,29 @@ export default function App() {
         e.preventDefault();
         cambiarVista(VISTAS[Number(e.key) - 1].id);
         return;
+      }
+      // ── LAS TECLAS DE LA REVISIÓN ──
+      // Van acá arriba, ANTES de la guarda de «estás tecleando», porque en
+      // revisión el foco vive en el composer: si esperaran a que el foco salga
+      // del textarea, no funcionarían nunca. Son acordes justamente por eso.
+      // `⌘↵` (aprobar) lo maneja el composer, que es el que tiene el texto
+      // editado — acá solo van las que no lo necesitan.
+      if (revision.activo && (e.metaKey || e.ctrlKey)) {
+        if (e.key === 'd' || e.key === 'D') {
+          e.preventDefault();
+          if (revision.actualId !== null) revision.descartarIds([revision.actualId]);
+          return;
+        }
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          revision.saltar(1);
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          revision.saltar(-1);
+          return;
+        }
       }
       if (tecleandoEn(e)) return;
       if (e.key === '?') {
@@ -199,11 +278,12 @@ export default function App() {
         setLibreta((v) => !v);
         return;
       }
-      // La bandeja de revisión de la auto-respuesta: «a» sola. Es lo que se hace
-      // a las 9 de la mañana, desde donde sea que estés parada.
+      // La revisión de las auto-respuestas: «a» sola. Es lo que se hace a las 9
+      // de la mañana, desde donde sea que estés parada.
       if (e.key === 'a' || e.key === 'A') {
         e.preventDefault();
-        setBandejaAuto((v) => !v);
+        if (revision.activo) revision.salir();
+        else revision.entrar();
         return;
       }
       if (e.key === '/') {
@@ -217,7 +297,7 @@ export default function App() {
     window.addEventListener('keydown', alTeclear);
     return () => window.removeEventListener('keydown', alTeclear);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vista, cabina, abierta, libreta, bandejaAuto]);
+  }, [vista, cabina, abierta, libreta, revision.activo, revision.actualId, revision.fila]);
 
   if (cargando) {
     // El esqueleto con la anatomía del shell: riel, header, tres placas.
@@ -370,36 +450,93 @@ export default function App() {
             {/* El interruptor va PEGADO al semáforo de WhatsApp: los dos hablan
                 del estado del canal. Que la máquina esté contestando sola es
                 parte de la misma pregunta que «¿el número está vivo?» (#125). */}
-            <InterruptorAutoRespuesta onAbrirBandeja={() => setBandejaAuto(true)} />
+            <InterruptorAutoRespuesta onRevisar={revision.entrar} />
             <EstadoWhatsapp />
           </div>
         </header>
 
-        {/* La Bandeja vive SIEMPRE montada: ocultarla no es desmontarla. */}
+        {/* La Bandeja vive SIEMPRE montada: ocultarla no es desmontarla.
+
+            EN MODO REVISIÓN (ADR 0018) es la MISMA mesa: cambia solo quién
+            ocupa la columna izquierda —la fila de sugerencias en vez de la cola
+            entera— y aparece un bloque de contexto arriba de la ficha. El
+            centro no se toca: la conversación real es el punto. Por eso la
+            revisión no es un modal: un modal tapa justamente lo que hay que
+            mirar para poder decidir. */}
         <div className={vista === 'bandeja' ? 'flex min-h-0 flex-1 gap-3 p-3' : 'hidden'}>
           <main className="min-h-0 w-[25rem] shrink-0">
-            <ColaUnificada
-              seleccionada={abierta?.clave ?? null}
-              onSeleccionar={setAbierta}
-              conversacionAbierta={abierta}
-              etapas={dash?.etapas}
-              miVendedora={vendedora.id}
-              onIrAgenda={() => cambiarVista('agenda')}
-              inputRef={busquedaRef}
-            />
+            {revision.activo ? (
+              <ColaRevision
+                grupos={revision.grupos}
+                fila={revision.fila}
+                actualId={revision.actualId}
+                cargando={revision.cargando}
+                error={revision.error}
+                trabajando={revision.trabajando}
+                recibo={revision.recibo}
+                onElegir={revision.abrir}
+                onAprobarGrupo={(ids) => revision.aprobarIds(ids)}
+                onDescartarTodo={revision.descartarTodo}
+                onCerrarRecibo={revision.cerrarRecibo}
+                onSalir={revision.salir}
+              />
+            ) : (
+              <ColaUnificada
+                seleccionada={abierta?.clave ?? null}
+                onSeleccionar={setAbierta}
+                conversacionAbierta={abierta}
+                etapas={dash?.etapas}
+                miVendedora={vendedora.id}
+                onIrAgenda={() => cambiarVista('agenda')}
+                inputRef={busquedaRef}
+              />
+            )}
           </main>
           <section className="min-h-0 min-w-0 flex-1">
-            <ConversacionActiva conversacion={abierta} onCerrar={() => setAbierta(null)} />
+            <ConversacionActiva
+              conversacion={abierta}
+              onCerrar={() => setAbierta(null)}
+              sugerencia={
+                revision.activo && revision.actual && revision.actual.clave === abierta?.clave
+                  ? {
+                      id: revision.actual.id,
+                      texto: revision.actual.texto,
+                      campana: revision.actual.campana,
+                      paso: pasoDeRevision(revision.fila, revision.actualId),
+                      trabajando: revision.trabajando,
+                      onAprobar: (texto) => revision.aprobarIds([revision.actual!.id], texto),
+                      onDescartar: () => revision.descartarIds([revision.actual!.id]),
+                    }
+                  : undefined
+              }
+            />
           </section>
           {abierta && (
             // 22.5rem = 360 px: el ancho para el que está diseñado el panel
             // multifunción (antes 18rem, que solo daba para la ficha).
-            <aside className="min-h-0 w-[22.5rem] shrink-0">
-              <PanelDerecho
-                conversacion={abierta}
-                onCorreo={mandarCorreoA}
-                onAgendarBienvenida={agendarBienvenida}
-              />
+            <aside className="flex min-h-0 w-[22.5rem] shrink-0 flex-col gap-3">
+              {/* EL PORQUÉ DE LA SUGERENCIA, arriba del panel y no en vez de él:
+                  «por qué se sugiere esto» y «quién es esta persona» son dos
+                  preguntas y se contestan las dos. Bloque aparte a propósito —
+                  el panel multifunción (ADR 0017) es de otro frente y este
+                  cambio no toca ninguno de sus archivos. Cuando convenga, esto
+                  se vuelve una pestaña suya: el contenido ya está aislado y no
+                  depende de dónde se monte.
+
+                  Solo aparece en revisión, así que fuera del modo el panel
+                  ocupa la columna entera como siempre. */}
+              {revision.activo && revision.actual && revision.actual.clave === abierta.clave && (
+                <PorQueEstaSugerencia sugerencia={revision.actual} limites={limitesAuto} />
+              )}
+              {/* El panel se queda con lo que sobra y scrollea adentro, como
+                  siempre: el bloque del porqué es `shrink-0` y él `flex-1`. */}
+              <div className="min-h-0 flex-1">
+                <PanelDerecho
+                  conversacion={abierta}
+                  onCorreo={mandarCorreoA}
+                  onAgendarBienvenida={agendarBienvenida}
+                />
+              </div>
             </aside>
           )}
         </div>
@@ -440,8 +577,7 @@ export default function App() {
         )}
       </div>
 
-      {cabina && <Cabina onCerrar={() => setCabina(false)} />}
-      <BandejaRevision abierta={bandejaAuto} onCerrar={() => setBandejaAuto(false)} />
+      {cabina && <Cabina onCerrar={() => setCabina(false)} enRevision={revision.activo} />}
       <LibretaPersonal abierta={libreta} onCerrar={() => setLibreta(false)} />
     </div>
   );

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Bot, FileText, Loader2, Megaphone, Paperclip, Phone, Play, QrCode, Send, Link2, WifiOff, X } from 'lucide-react';
+import { AlertTriangle, Bot, Check, FileText, Loader2, Megaphone, Paperclip, Phone, Play, QrCode, Send, Link2, Trash2, WifiOff, X } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
 import { useBlobAutenticado } from '../../lib/datos/blobAutenticado';
 import { formatoTelefono, tempClass } from '../../lib/formato';
 import { usePopover } from '../../lib/teclado/usePopover';
 import { ejecutarEnvioComposer, guardarBorrador, leerBorrador } from './borradorComposer';
 import { alPonerEnComposer } from './puenteComposer';
+import { textoDelBoton } from '../autorespuesta/revision';
 import { TextoWhatsapp } from './TextoWhatsapp';
 import { Avatar } from '../canales/Avatar';
 import type { Conversacion } from '../canales/conversaciones';
@@ -292,7 +293,18 @@ function DocumentoBajoDemanda({ media }: { media: MediaHilo }) {
  * vincula nada acá —eso es de la consola del operador (D13)— solo ve el estado y
  * responde.
  */
-export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
+export function HiloWhatsapp({
+  conversacion,
+  sugerencia,
+}: {
+  conversacion: Conversacion;
+  /**
+   * MODO REVISIÓN (ADR 0018): hay una auto-respuesta preparada para esta
+   * conversación y el composer la muestra como borrador, editable, con
+   * «Aprobar» en vez de «Enviar». Sin esto, el composer es el de siempre.
+   */
+  sugerencia?: SugerenciaEnComposer;
+}) {
   const telefono = conversacion.persona_id ?? '';
   const numeroPropio = conversacion.numero_propio ?? '';
   const { data: sesion } = useSesionWa();
@@ -463,8 +475,9 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
           También de yapa: el adjunto elegido (que no se persiste) se resetea
           solo, porque la instancia entera es nueva. */}
       <ComposerWa
-        key={telefono}
+        key={sugerencia ? `${telefono}:sug:${sugerencia.id}` : telefono}
         telefono={telefono}
+        sugerencia={sugerencia}
         numeroPropio={numeroPropio}
         conversacionClave={conversacion.clave}
         personaNombre={conversacion.persona_nombre}
@@ -501,6 +514,7 @@ function ComposerWa({
   conectado,
   enviar,
   enviarMedia,
+  sugerencia,
 }: {
   telefono: string;
   numeroPropio: string;
@@ -509,10 +523,17 @@ function ComposerWa({
   conectado: boolean;
   enviar: MutacionEnviar;
   enviarMedia: MutacionEnviarMedia;
+  sugerencia?: SugerenciaEnComposer;
 }) {
-  // El valor inicial ya hidrata correcto: con `key={telefono}` esto es
-  // SIEMPRE el primer render de una instancia nueva para este teléfono.
-  const [texto, setTexto] = useState(() => leerBorrador(telefono));
+  // El valor inicial ya hidrata correcto: con `key` esto es SIEMPRE el primer
+  // render de una instancia nueva.
+  //
+  // EN MODO REVISIÓN arranca del texto sugerido y **no toca el Map de
+  // borradores**: ese Map guarda lo que la vendedora estaba escribiendo de su
+  // puño. Si la sugerencia se guardara ahí, al salir de la revisión encontraría
+  // el borrador de la máquina en lugar del suyo — que es exactamente el bug que
+  // `borradorComposer.ts` existe para evitar, cometido desde adentro.
+  const [texto, setTexto] = useState(() => (sugerencia ? sugerencia.texto : leerBorrador(telefono)));
   const [adjunto, setAdjunto] = useState<File | null>(null);
   const archivoRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -525,6 +546,8 @@ function ComposerWa({
   // del componente): si esto llega a correr con un `telefono` distinto al
   // que hidrató el `useState`, gana igual — pero con `key` no debería pasar.
   useEffect(() => {
+    // En modo revisión el texto lo manda la sugerencia, no el Map de borradores.
+    if (sugerencia) return;
     setTexto(leerBorrador(telefono));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [telefono]);
@@ -571,8 +594,37 @@ function ComposerWa({
     }
   }
 
+  const editado = Boolean(sugerencia && texto.trim() !== sugerencia.texto.trim());
+
   return (
-    <footer className="shrink-0 border-t border-border p-3">
+    <footer
+      className={
+        'shrink-0 border-t p-3 transition-colors duration-200 ease-house ' +
+        (sugerencia ? 'border-navy/30 bg-navy/[0.04]' : 'border-border')
+      }
+    >
+      {/* ── LA MARCA DE QUE ESTO NO LO ESCRIBIÓ ELLA ──
+          El texto vive en el composer —que es donde se edita— pero el composer
+          es también donde ella escribe de su puño. Sin esta banda, a los cinco
+          minutos de revisar no habría forma de saber cuál de las dos cosas hay
+          en la caja. Por eso la banda, el fondo azulado y el botón que dice
+          «Aprobar» en vez de «Enviar»: tres señales para un solo hecho. */}
+      {sugerencia && (
+        <div className="mb-2 flex items-center gap-2 rounded-xl border border-navy/25 bg-card px-2.5 py-1.5">
+          <Bot size={13} className="shrink-0 text-navy" />
+          <p className="min-w-0 flex-1 truncate text-[11px] font-semibold text-navy">
+            Preparada por Hermes
+            {sugerencia.campana ? <span className="font-normal text-muted-foreground"> · {sugerencia.campana}</span> : null}
+            {editado && (
+              <span className="ml-1.5 rounded bg-navy px-1 py-px font-mono text-[9px] font-bold text-white">editada</span>
+            )}
+          </p>
+          <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
+            {sugerencia.paso.actual}/{sugerencia.paso.total}
+          </span>
+        </div>
+      )}
+
       {(enviar.isError || enviarMedia.isError) && (
         <div className="mb-2 flex items-start gap-1.5 rounded-lg border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">
           <AlertTriangle size={13} className="mt-0.5 shrink-0" />
@@ -623,6 +675,7 @@ function ComposerWa({
           type="button"
           onClick={() => archivoRef.current?.click()}
           disabled={!conectado}
+          hidden={Boolean(sugerencia)}
           title="Adjuntar imagen, video o documento"
           className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 disabled:opacity-40"
         >
@@ -634,9 +687,23 @@ function ComposerWa({
           onChange={(e) => {
             const valor = e.target.value;
             setTexto(valor);
-            guardarBorrador(telefono, valor);
+            // La sugerencia editada NO se guarda como borrador de la vendedora:
+            // es de la máquina hasta que ella la apruebe (y ahí va al server).
+            if (!sugerencia) guardarBorrador(telefono, valor);
           }}
           onKeyDown={(e) => {
+            if (sugerencia) {
+              // ⌘/Ctrl+Enter aprueba; Enter solo, NO. Es la asimetría a
+              // propósito: acá el texto viene escrito y el dedo está editando,
+              // así que un Enter perdido mandaría algo que nadie terminó de
+              // leer. En el composer normal Enter manda, porque ahí lo que hay
+              // en la caja lo escribió ella entera.
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                if (texto.trim()) sugerencia.onAprobar(texto.trim());
+              }
+              return;
+            }
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               void onEnviar();
@@ -653,25 +720,45 @@ function ComposerWa({
           }
           className="max-h-28 min-h-[2.5rem] flex-1 resize-none rounded-xl border border-border bg-muted px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50"
         />
-        <button
-          type="button"
-          onClick={() => void onEnviar()}
-          disabled={!conectado || (!texto.trim() && !adjunto) || enviando}
-          className="group flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_2px_10px_-2px_rgba(37,99,235,0.5)] transition-[background-color,box-shadow,transform] duration-200 ease-house hover:bg-primary-hover hover:shadow-[0_4px_16px_-2px_rgba(37,99,235,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 active:scale-[0.94] disabled:opacity-40 disabled:shadow-none"
-        >
-          {enviando ? (
-            <Loader2 size={16} className="animate-spin" />
-          ) : (
-            <Send size={16} className="transition-transform duration-200 ease-house group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-          )}
-        </button>
+        {sugerencia ? (
+          <AccionesSugerencia
+            sugerencia={sugerencia}
+            texto={texto}
+            editado={editado}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => void onEnviar()}
+            disabled={!conectado || (!texto.trim() && !adjunto) || enviando}
+            className="group flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_2px_10px_-2px_rgba(37,99,235,0.5)] transition-[background-color,box-shadow,transform] duration-200 ease-house hover:bg-primary-hover hover:shadow-[0_4px_16px_-2px_rgba(37,99,235,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 active:scale-[0.94] disabled:opacity-40 disabled:shadow-none"
+          >
+            {enviando ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Send size={16} className="transition-transform duration-200 ease-house group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+            )}
+          </button>
+        )}
       </div>
       {/* La promesa sigue siendo la misma para lo que sale de acá. Lo único
           automático que existe (el acuse fuera de horario, ADR 0015) no sale
           por esta caja y viene marcado en su burbuja — decir «nada automático»
-          a secas ya no sería verdad, y esta línea existe para ser verdad. */}
+          a secas ya no sería verdad, y esta línea existe para ser verdad.
+
+          En revisión la línea dice OTRA cosa, y tiene que decirla: acá aprobar
+          no manda. Si dijera «lo mandás vos», la vendedora esperaría ver el
+          mensaje en el hilo al instante, no lo vería, y volvería a apretar. */}
       <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
-        Se envía solo a esta persona, con tu nombre. Nada masivo: lo que escribís acá lo mandás vos.
+        {sugerencia ? (
+          <>
+            Aprobar <b className="font-semibold text-foreground">no manda ahora</b>: entra a la cola espaciada y sale
+            con tu nombre. <span className="font-mono">⌘↵</span> aprobar · <span className="font-mono">⌘D</span>{' '}
+            descartar · <span className="font-mono">⌘↓</span> saltar
+          </>
+        ) : (
+          <>Se envía solo a esta persona, con tu nombre. Nada masivo: lo que escribís acá lo mandás vos.</>
+        )}
       </p>
     </footer>
   );
@@ -741,6 +828,80 @@ function BannerSesion({ sesion }: { sesion: EstadoSesionWa | undefined }) {
   return (
     <div className="flex items-center gap-2 border-b border-border bg-warning/10 px-4 py-2.5 text-xs text-warning-foreground">
       <WifiOff size={14} className="shrink-0" /> {TEXTO_ESTADO[sesion.estado] ?? `WhatsApp ${sesion.estado}.`} {motivo}
+    </div>
+  );
+}
+
+/**
+ * LO QUE HERMES PREPARÓ PARA ESTA CONVERSACIÓN — el contrato del modo revisión
+ * (ADR 0018), inyectado desde el shell.
+ *
+ * Que sea una prop opcional y no un hook adentro del composer es deliberado: el
+ * composer no tiene que saber que existe una bandeja de auto-respuestas. Recibe
+ * un texto, un par de acciones y en qué número de la fila va. Sin la prop es el
+ * composer de siempre, línea por línea.
+ */
+export interface SugerenciaEnComposer {
+  id: number;
+  /** El texto tal como lo preparó la máquina. Se compara contra el editado. */
+  texto: string;
+  campana: string | null;
+  paso: { actual: number; total: number };
+  trabajando: boolean;
+  /** Aprueba ESTE texto (el editado si lo tocó). No manda: programa. */
+  onAprobar: (texto: string) => void;
+  onDescartar: () => void;
+}
+
+/**
+ * APROBAR Y DESCARTAR — las dos salidas, con su peso visual invertido respecto
+ * de lo que uno esperaría.
+ *
+ * «Aprobar» es azul sólido y ancho porque es lo que se hace treinta y ocho veces
+ * de cuarenta. «Descartar» es un botón de borde, chico: se usa dos veces y
+ * equivocarse ahí cuesta trabajo perdido, no un mensaje a un cliente. La
+ * jerarquía sigue la FRECUENCIA, y la seguridad la ponen los acordes —las dos
+ * acciones piden ⌘, así que ninguna se dispara con un dedo suelto.
+ *
+ * No hay confirmación modal en ninguna de las dos. Un «¿estás segura?» cada
+ * cuarenta veces no enseña a mirar: enseña a apretar «sí».
+ */
+function AccionesSugerencia({
+  sugerencia,
+  texto,
+  editado,
+}: {
+  sugerencia: SugerenciaEnComposer;
+  texto: string;
+  editado: boolean;
+}) {
+  const listo = texto.trim().length > 0 && !sugerencia.trabajando;
+
+  return (
+    <div className="flex shrink-0 items-center gap-1.5">
+      <button
+        type="button"
+        onClick={sugerencia.onDescartar}
+        disabled={sugerencia.trabajando}
+        title="Esta no va — no se le manda nada · ⌘D"
+        className="flex h-10 items-center gap-1.5 rounded-xl border border-border px-2.5 text-xs font-bold text-muted-foreground transition-[color,border-color,transform] duration-200 ease-house hover:border-destructive hover:text-destructive active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:opacity-40"
+      >
+        <Trash2 size={14} /> Descartar
+      </button>
+      <button
+        type="button"
+        onClick={() => listo && sugerencia.onAprobar(texto.trim())}
+        disabled={!listo}
+        title={
+          editado
+            ? 'Aprobar el texto como quedó (queda marcado «editada») · ⌘↵'
+            : 'Aprobar la plantilla tal cual · ⌘↵'
+        }
+        className="flex h-10 items-center gap-2 rounded-xl bg-navy px-4 text-xs font-bold text-white shadow-[0_2px_10px_-2px_rgba(14,42,82,0.5)] transition-[background-color,box-shadow,transform] duration-200 ease-house hover:bg-navy/90 hover:shadow-[0_4px_16px_-2px_rgba(14,42,82,0.55)] active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:opacity-40 disabled:shadow-none disabled:active:scale-100"
+      >
+        {sugerencia.trabajando ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+        {textoDelBoton({ editado })}
+      </button>
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { MessageSquareText } from 'lucide-react';
 import { useEstadoConversacion, type Conversacion } from './conversaciones';
-import { HiloWhatsapp } from '../whatsapp/HiloWhatsapp';
+import { HiloWhatsapp, type SugerenciaEnComposer } from '../whatsapp/HiloWhatsapp';
 import { HiloMessenger } from './HiloMessenger';
 import ResponderPanel from './ResponderPanel';
 import { BarraGestion } from '../gestion/BarraGestion';
@@ -22,9 +22,17 @@ import type { Interaccion } from './types';
 export function ConversacionActiva({
   conversacion,
   onCerrar,
+  sugerencia,
 }: {
   conversacion: Conversacion | null;
   onCerrar: () => void;
+  /**
+   * MODO REVISIÓN (ADR 0018): la auto-respuesta que Hermes preparó para ESTA
+   * conversación, para que el composer la muestre como borrador aprobable.
+   * Viaja como prop y no por contexto a propósito — así se lee, en el shell,
+   * quién decide que hay algo que revisar.
+   */
+  sugerencia?: SugerenciaEnComposer;
 }) {
   const qc = useQueryClient();
 
@@ -64,7 +72,7 @@ export function ConversacionActiva({
 
   // WhatsApp: el hilo nativo. La razón de ser de este panel.
   if (conversacion.canal === 'whatsapp') {
-    return conBarra(<HiloWhatsapp conversacion={conversacion} />);
+    return conBarra(<HiloWhatsapp conversacion={conversacion} sugerencia={sugerencia} />);
   }
 
   // Comentario de Facebook/Instagram: el flujo de respuesta pública + privada, que
