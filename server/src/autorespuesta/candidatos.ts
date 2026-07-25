@@ -57,7 +57,11 @@ export async function consultarCandidatos(
 
   const filas = await base.execute<FilaCandidata>(sql`
     WITH msg AS (
-      SELECT i.canal, i.persona_id, i.persona_nombre, i.texto, i.direccion, i.occurred_at, i.origen,
+      -- El origen vive en el CRUDO del evento, no en una columna de
+      -- interactions (misma lectura que cola/consultarCola.ts): el event store
+      -- haciendo su trabajo, sin columna nueva para un dato que ya está.
+      SELECT i.canal, i.persona_id, i.persona_nombre, i.texto, i.direccion, i.occurred_at,
+             e.payload->'origen'                      AS origen,
              COALESCE(e.payload->>'numeroPropio', '') AS numero_propio
       FROM interactions i
       JOIN events e ON e.id = i.event_id
