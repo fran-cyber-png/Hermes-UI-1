@@ -1,3 +1,4 @@
+import { cuerpoParaCerberus } from './latin1.js';
 import { obtenerSesionCerberus } from './sesionStore.js';
 
 /**
@@ -123,7 +124,13 @@ export async function crearVenta(vendedoraId: string, orden: OrdenVenta): Promis
     })),
   );
 
-  const body = new URLSearchParams({
+  // Cada valor sale saneado para el MySQL latin1 de Cerberus (regla dura #4,
+  // #108). Va acá, al armar el cuerpo, y no campo por campo: hoy solo
+  // `venta_request_key` lleva texto de origen humano —el username de la
+  // vendedora—, pero el día que alguien agregue `observacion` (el
+  // `mostrar_observacion_pdf` de abajo delata que Cerberus la tiene esperando)
+  // o el nombre del cliente, nace cubierto sin que nadie se acuerde.
+  const body = cuerpoParaCerberus({
     csrfmiddlewaretoken: csrf,
     cliente: String(orden.clienteId),
     moneda: orden.monedaId,

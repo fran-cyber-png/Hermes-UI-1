@@ -66,6 +66,13 @@ export async function autenticarEnCerberus(username: string, password: string): 
     }
 
     // 2. Las credenciales. El Referer es obligatorio para el CSRF de Django en HTTPS.
+    //
+    // Acá NO se sanea con `aLatin1` (#108), y es a propósito: la contraseña no
+    // se guarda en el MySQL latin1 —Django la hashea— así que limpiarla no
+    // protege ningún INSERT, y en cambio la CORROMPERÍA en silencio: una
+    // vendedora con un carácter raro en la clave quedaría afuera sin entender
+    // por qué. El `csrfmiddlewaretoken` es un opaco de Cerberus y tampoco se
+    // toca. El saneo va donde se escribe: `cerberus/venta.ts`.
     const r2 = await fetch(`${BASE}/ingresar/`, {
       method: 'POST',
       redirect: 'manual',

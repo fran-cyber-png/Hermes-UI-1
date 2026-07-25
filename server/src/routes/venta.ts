@@ -3,6 +3,7 @@ import { requiereVendedora } from '../auth/sesion.js';
 import { asentarVentaEnEmbudo } from './gestiones.js';
 import { cargarFormulario, crearVenta, type OrdenVenta } from '../cerberus/venta.js';
 import { mapearProducto } from '../cerberus/productos.js';
+import { aLatin1 } from '../cerberus/latin1.js';
 
 /**
  * REGISTRAR VENTA — el formulario de venta, dentro de Hermes.
@@ -27,7 +28,9 @@ ventaRouter.get('/formulario', requiereVendedora, async (req, res) => {
 
 /** Buscador de cursos (API pública de Cerberus, solo lectura). */
 ventaRouter.get('/productos', requiereVendedora, async (req, res) => {
-  const q = typeof req.query.q === 'string' ? req.query.q : '';
+  // Saneado aunque sea solo lectura: es un borde saliente hacia Cerberus (#108),
+  // y un emoji en el buscador no encuentra nada de todos modos.
+  const q = aLatin1(typeof req.query.q === 'string' ? req.query.q : '');
   try {
     const r = await fetch(
       `${BASE}/productos/api/public/productos-cursos/?estado=1${q ? `&q=${encodeURIComponent(q)}` : ''}`,
