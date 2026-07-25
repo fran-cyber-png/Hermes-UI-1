@@ -15,6 +15,8 @@ import { BadgeCanal } from '../canales/BadgeCanal';
 import { formatoTelefono } from '../../lib/formato';
 import { useSesionWa } from '../whatsapp/conversacionWa';
 import { conversacionDeRecordatorio, opcionesRapidas, useAgenda, type Recordatorio } from './agenda';
+import { aLocal, horaDe, indiceTrasAhora, inicioDeSemana, mismaFecha, traducirCuando } from './fechas';
+import { BARRA_TIPO, barraDeNota, estiloDeNota, tipoDominante } from './tipoDeNota';
 
 /**
  * LA AGENDA — el calendario de la vendedora, estilo Google Calendar pero de
@@ -32,104 +34,6 @@ const DIAS_SEMANA = ['LU', 'MA', 'MI', 'JU', 'VI', 'SÁ', 'DO'];
 const MODOS = ['mes', 'semana', 'dia'] as const;
 type Modo = (typeof MODOS)[number];
 const MODO_LABEL: Record<Modo, string> = { mes: 'Mes', semana: 'Semana', dia: 'Día' };
-
-// ── El tipo de acción (viene en el prefijo de la nota) y sus colores ───────
-
-type TipoNota = 'llamada' | 'wsp' | 'correo' | 'reunion' | 'otro';
-
-function tipoDeNota(nota: string): TipoNota {
-  const n = nota.toLowerCase();
-  if (n.startsWith('llamada')) return 'llamada';
-  if (n.startsWith('wsp')) return 'wsp';
-  if (n.startsWith('correo')) return 'correo';
-  if (n.startsWith('reunión') || n.startsWith('reunion')) return 'reunion';
-  return 'otro';
-}
-
-const CHIP_TIPO: Record<TipoNota, string> = {
-  llamada: 'bg-primary/10 text-primary',
-  wsp: 'bg-success/10 text-success',
-  correo: 'bg-secondary text-secondary-foreground',
-  reunion: 'bg-navy text-white',
-  otro: 'bg-secondary text-navy',
-};
-
-/** Color sólido del tipo, para la barrita de FilaDia y los puntitos del mes. */
-const BARRA_TIPO: Record<TipoNota, string> = {
-  llamada: 'bg-primary',
-  wsp: 'bg-success',
-  correo: 'bg-navy-muted',
-  reunion: 'bg-navy',
-  otro: 'bg-navy/30',
-};
-
-/** El color del chip según el tipo de acción. El dorado no vive acá: es solo tiempo. */
-function estiloDeNota(nota: string, vencido: boolean, hecho: boolean): string {
-  if (hecho) return 'bg-muted text-muted-foreground line-through';
-  if (vencido) return 'bg-destructive/10 text-destructive ring-1 ring-destructive/30';
-  return CHIP_TIPO[tipoDeNota(nota)];
-}
-
-function barraDeNota(nota: string, vencido: boolean, hecho: boolean): string {
-  if (hecho) return 'bg-muted-foreground/40';
-  if (vencido) return 'bg-destructive';
-  return BARRA_TIPO[tipoDeNota(nota)];
-}
-
-function tipoDominante(rs: Recordatorio[]): TipoNota {
-  const cuenta: Partial<Record<TipoNota, number>> = {};
-  let mejor: TipoNota = 'otro';
-  for (const r of rs) {
-    const t = tipoDeNota(r.nota);
-    cuenta[t] = (cuenta[t] ?? 0) + 1;
-    if ((cuenta[t] ?? 0) > (cuenta[mejor] ?? 0)) mejor = t;
-  }
-  return mejor;
-}
-
-// ── Fechas ─────────────────────────────────────────────────────────────────
-
-function mismaFecha(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-}
-
-function inicioDeSemana(d: Date): Date {
-  const r = new Date(d);
-  r.setDate(r.getDate() - ((r.getDay() + 6) % 7));
-  r.setHours(0, 0, 0, 0);
-  return r;
-}
-
-function horaDe(r: Recordatorio): string {
-  return new Date(r.cuando).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
-}
-
-/** Date → valor de un input datetime-local, en hora local. */
-function aLocal(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours() || 9)}:${p(d.getMinutes())}`;
-}
-
-/** La línea viva del crear: 'mañana jueves 23, 9:00'. Vacío si no parsea. */
-function traducirCuando(cuando: string): string {
-  const d = new Date(cuando);
-  if (Number.isNaN(d.getTime())) return '';
-  const hoy0 = new Date();
-  hoy0.setHours(0, 0, 0, 0);
-  const dia0 = new Date(d);
-  dia0.setHours(0, 0, 0, 0);
-  const dias = Math.round((dia0.getTime() - hoy0.getTime()) / 86_400_000);
-  const prefijo = dias === 0 ? 'hoy ' : dias === 1 ? 'mañana ' : '';
-  const fecha = d.toLocaleDateString('es', { weekday: 'long', day: 'numeric' });
-  const hora = d.toLocaleTimeString('es', { hour: 'numeric', minute: '2-digit' });
-  return `${prefijo}${fecha}, ${hora}`;
-}
-
-/** Dónde cae el ahora dentro de una lista ordenada por hora (índice del primer futuro). */
-function indiceTrasAhora(rs: Recordatorio[], ahora: Date): number {
-  const i = rs.findIndex((r) => new Date(r.cuando) > ahora);
-  return i === -1 ? rs.length : i;
-}
 
 // ── La línea del ahora: el único oro estructural — tiempo pasando ──────────
 
