@@ -70,9 +70,28 @@ npm install && npm run dev:app                     # Vite :5173 + la app de escr
   credencial de la cuenta, NUNCA se commitea**). La app de la vendedora **no vincula, solo ve**.
 - **El webview viejo** (`src/features/whatsapp/PanelWhatsapp.tsx`) está **retirado** por D13. No se usa;
   archivar con ADR cuando se limpie.
-- **Nada de automatización**: no envío masivo, no auto-respuesta, no warmup, no anti-ban. Un envío = una
-  acción humana, por `EnvioControlado` (la única puerta hacia `enviarTexto`). El `temporary_ban` **se
-  muestra siempre**, nunca se esconde.
+- **Nada de automatización, con UNA excepción escrita**: no envío masivo, no warmup, **no anti-ban**.
+  Un envío = una acción humana, por `EnvioControlado` (la única puerta hacia `enviarTexto`). El
+  `temporary_ban` **se muestra siempre**, nunca se esconde.
+  La excepción es la **auto-respuesta fuera de horario** (#125, **ADR 0015**), y es del tamaño exacto
+  del agujero que tapa: 44% de los leads llega fuera de horario y el 44% de esos nunca recibe
+  respuesta. Solo puede mandar **un acuse de una plantilla registrada** a quien **escribió primero**,
+  **fuera de la franja de atención**, tras **30 min sin respuesta humana**, **una vez por día**, y
+  **nunca a quien dijo que no**. Nada de eso se negocia en un `if`: vive en `server/src/autorespuesta/`.
+  - **Apagada por default y con dos llaves**: `AUTO_RESPUESTA=on` (entorno) **y** el interruptor de la
+    base (`auto_respuesta_estado`), que es el **kill-switch sin deploy** —
+    `PUT /api/autorespuesta/interruptor` con el Bearer de cualquier vendedora.
+  - **El ritmo es el contrato**: un envío a la vez, 60–240 s entre uno y otro, lo de la madrugada
+    sale recién a partir de las 7:30, techos de 20/hora y 60/día por número. Freno TOTAL ante
+    `temporary_ban`, error de envío o desconexión; cancelación si la vendedora responde antes; la
+    cola se cancela entera al empezar el horario.
+  - **Antes de prenderla, siempre**: `cd server && npm run auto:simulacro` — imprime el plan de
+    despacho real (a quién, qué plantilla, a qué hora) **sin mandar nada**. `--hora 03:00` mueve el
+    reloj; `--demo` corre sin base.
+  - Los envíos automáticos quedan marcados en `envios_wa.automatico` y **se ven en la burbuja** del
+    hilo. **Lo que sigue prohibido**: generar texto libre, iniciar conversaciones y cualquier
+    mecanismo cuyo fin sea que el tráfico no se detecte (ADR 0015 §«Lo que deliberadamente no se
+    hizo»).
 
 ## Auth
 
@@ -173,7 +192,8 @@ gane) + `docs/adr/` con los ADR 0001–0005. Ver `docs/agents/domain.md`.
 Solo en `server/.env` (gitignored). **Se referencian por nombre, jamás se pegan** (regla dura #1):
 `DATABASE_URL`, `META_ACCESS_TOKEN`, `CERBERUS_BASE_URL`, `HERMES_SESSION_SECRET`,
 `WHATSAPP_TRANSPORTE`, `WHATSAPP_NUMERO`, `IVI_URL`, `IVI_SERVICE_TOKEN`,
-`HERMES_ADMIN_SERVICE_TOKEN`. Ver `server/.env.example` (solo nombres).
+`HERMES_ADMIN_SERVICE_TOKEN`, `AUTO_RESPUESTA` (+ sus `AUTO_RESPUESTA_*`, todos con default
+sensato). Ver `server/.env.example` (solo nombres).
 
 ## Reglas duras (Goberna)
 
@@ -187,7 +207,10 @@ Solo en `server/.env` (gitignored). **Se referencian por nombre, jamás se pegan
 ## Gotchas
 
 - **Drizzle sin migraciones versionadas**: el schema se aplica con `npm run db:push` (drizzle-kit). Al
-  tocar `server/src/db/schema.ts`, push contra la DB.
+  tocar `server/src/db/schema.ts`, push contra la DB. Pendiente de push hoy: las dos tablas de la
+  auto-respuesta (`auto_respuestas_pendientes`, `auto_respuesta_estado`) y `envios_wa.automatico`
+  (#125). Sin el push, esas funciones **degradan** (hilo sin marca, ruta del interruptor en 503), no
+  rompen.
 - **El transporte falso repite ids entre reinicios** (`falso-1`, `falso-2`…): reprocesar colisiona con la
   idempotencia (`wa:falso-N` ya existe) y el mensaje no entra. Para demos limpias, borrar los
   `external_id LIKE 'wa:falso-%'` primero. El transporte real usa ids reales de WhatsApp (únicos).
