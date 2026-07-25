@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Check,
   ChevronDown,
@@ -11,6 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import { sectionLabel } from '../../lib/styles';
+import { useEscape } from '../../lib/teclado/useEscape';
 import { useCategorias, useMutacionesCategorias, type Categoria } from './categorias';
 import {
   CLASE_BORDE,
@@ -218,16 +219,11 @@ export function GestorCategorias({ onCerrar }: { onCerrar: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Escape cierra el gestor (el chat de atrás no lo intercepta: capture + stop).
-  useEffect(() => {
-    const fn = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onCerrar();
-      }
-    };
-    window.addEventListener('keydown', fn, true);
-    return () => window.removeEventListener('keydown', fn, true);
-  }, [onCerrar]);
+  // Era una copia a mano a la que le faltaba la guarda de campos, y eso rompía
+  // el renombrar: el listener de window va en captura y le gana al `onKeyDown`
+  // del input (React delega en burbuja), así que Escape mientras se editaba el
+  // nombre de una etiqueta cerraba el modal entero y se llevaba lo tipeado.
+  useEscape(onCerrar);
 
   function crearNueva() {
     const limpio = normalizarNombre(nombre);

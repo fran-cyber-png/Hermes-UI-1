@@ -3,6 +3,7 @@ import { AlertTriangle, FileText, Loader2, Megaphone, Paperclip, Phone, Play, Qr
 import { ErrorApi } from '../../lib/datos/cliente';
 import { useBlobAutenticado } from '../../lib/datos/blobAutenticado';
 import { formatoTelefono, tempClass } from '../../lib/formato';
+import { usePopover } from '../../lib/teclado/usePopover';
 import { ejecutarEnvioComposer, guardarBorrador, leerBorrador } from './borradorComposer';
 import { TextoWhatsapp } from './TextoWhatsapp';
 import { Avatar } from '../canales/Avatar';
@@ -129,17 +130,10 @@ function ImagenEnBurbuja({ media }: { media: MediaHilo }) {
   const { url: src, fallo } = useBlobAutenticado(urlMedia(media.archivo));
   const [ampliada, setAmpliada] = useState(false);
 
-  useEffect(() => {
-    if (!ampliada) return;
-    const alTeclear = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation(); // que no cierre también la conversación
-        setAmpliada(false);
-      }
-    };
-    window.addEventListener('keydown', alTeclear, true);
-    return () => window.removeEventListener('keydown', alTeclear, true);
-  }, [ampliada]);
+  // El lightbox trae su propio scrim visible (el fondo oscuro es parte del
+  // diseño, no una capa invisible), así que de `usePopover` solo usa el teclado:
+  // Escape cierra la foto y NO la conversación de atrás.
+  usePopover(ampliada, () => setAmpliada(false));
 
   if (fallo) return <AdjuntoRoto />;
   if (!src) {

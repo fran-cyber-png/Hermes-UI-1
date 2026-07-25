@@ -3,6 +3,7 @@ import { AlertTriangle, Check, ExternalLink, Lock, MessageCircle, Send, Trash2, 
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { sectionLabel } from '../../lib/styles';
 import { iniciales } from '../../lib/iniciales';
+import { useEscape } from '../../lib/teclado/useEscape';
 import type { Interaccion } from './types';
 import { TIPO_META, tipoDe } from './tipos';
 import { daysSince } from '../leads/temperature';
@@ -59,16 +60,10 @@ export default function ResponderPanel({ interaccion, onCerrar, onRespondido, on
   }, [id]);
 
   // Escape no destructivo: con el foco en un campo, Escape es del campo — jamás
-  // cierra el panel con media respuesta escrita.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if ((e.target as HTMLElement)?.closest('input, textarea, select')) return;
-      onCerrar();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onCerrar]);
+  // cierra el panel con media respuesta escrita. Iba en burbuja y sin cortar el
+  // evento, así que el mismo Escape seguía hasta el shell y cerraba TAMBIÉN la
+  // conversación de atrás; `useEscape` va en captura y lo frena.
+  useEscape(onCerrar);
 
   // Mesa de despacho: respondido + Enter = siguiente de la cola (si App la cableó).
   useEffect(() => {
