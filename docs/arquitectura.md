@@ -210,6 +210,29 @@ Zod es la fuente única: valida en runtime, tipa en compilación y **genera el J
 catálogo con `z.toJSONSchema()`. Nadie escribe el schema a mano. Los nombres están regulados
 (`/^governa\.[a-z]+\.[a-zA-Z]+$/`) y registrar dos veces lanza a propósito.
 
+### 5.5b El cierre de un popover (`src/lib/teclado/`)
+
+El shell (`App.tsx`) escucha `keydown` en **burbuja** y se adueña del Escape: cierra la libreta, la
+cabina, la conversación abierta. Para cerrarse sin arrastrar lo de atrás, un popover tiene que
+ganarle — escuchar en **captura** (que por el DOM corre siempre antes que la burbuja) y cortar el
+evento ahí. Ese acuerdo estaba copiado a mano en nueve componentes y **cuatro copias ya habían
+divergido** (#12): dos escuchaban en burbuja sin cortar (cerraban el popover *y* la conversación),
+tres no oían Escape en absoluto, y una se olvidó la guarda de campos, así que Escape mientras se
+escribía el nombre de una etiqueta cerraba el modal y se llevaba lo tipeado.
+
+Hoy la decisión vive **una vez**, como función pura, y los dos wrappers la comparten:
+
+| Puro | Con IO |
+|---|---|
+| `teclado/escapeDePopover.ts` (`reaccionDelPopover`, `SELECTOR_CAMPOS`) | `teclado/usePopover.ts` (popover con overlay) · `teclado/useEscape.ts` (modal) |
+
+- **`usePopover(abierto, cerrar, { z })`** — para lo que flota sobre la pantalla: registra el listener
+  solo mientras está abierto y devuelve `propsOverlay`, la capa invisible del clic-afuera. El
+  z-index lo pone cada sitio (conviven tres escalas: menús 20/30, avisos 30/40, cabeceras 40/50).
+- **`useEscape(onCerrar)`** — para modales, que traen su propio scrim visible y solo se montan abiertos.
+- **`SELECTOR_CAMPOS`** es la guarda única de «¿estoy escribiendo?», también para el shell. Con el
+  foco en un campo, Escape es del campo.
+
 ### 5.6 Métricas derivadas en consulta, nunca precalculadas
 
 El Dashboard tiene **dos lecturas**: el radar de la vendedora («¿a quién atiendo ahora?») y el panel

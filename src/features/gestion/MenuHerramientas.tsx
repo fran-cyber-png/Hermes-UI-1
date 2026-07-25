@@ -14,12 +14,11 @@ import { GestorCategorias } from './GestorCategorias';
  * — el día que existan, `MenuHerramientas` le pasa su callback a
  * `armarItemsMenu` y el item se habilita solo.
  *
- * Patrón de popover calcado de `BotonLlamar`/`AgendarRapido` (mismo archivo
- * de referencia, `BarraGestion.tsx`): overlay `fixed inset-0` + panel
- * `absolute` con `shadow-panel` (sombra, sin borde), Escape con capture +
- * stopPropagation para no chocar con el composer del chat. Botones planos
- * con `aria-label`/`title`, sin roles de menú — igual que las referencias:
- * son botones en un panel, no un `<menu>` con navegación por flechas.
+ * El cierre —Escape y clic afuera, sin chocar con el composer del chat— lo
+ * pone `usePopover` (`src/lib/teclado/`). Lo propio de acá: panel `absolute`
+ * con `shadow-panel` (sombra, sin borde) y botones planos con
+ * `aria-label`/`title`, sin roles de menú — son botones en un panel, no un
+ * `<menu>` con navegación por flechas.
  */
 export function MenuHerramientas({ clave }: { clave: string }) {
   const [abierto, setAbierto] = useState(false);

@@ -14,10 +14,10 @@ import { ALTO_MENU_PX, armarAccionesFila, ladoDelMenu, type EstadoPersonalFila }
  * no salta cuando aparece y desaparece— y las acciones se leen con nombre y
  * apellido en un menú, como en WhatsApp Web.
  *
- * Patrón de popover calcado de `MenuHerramientas` (el `···` de la BarraGestion):
- * overlay `fixed inset-0` + panel `absolute` con `shadow-panel`, Escape con
- * capture + stopPropagation, foco al primer item al abrir, y cierre forzado si
- * cambia la conversación de abajo. Botones planos, sin roles de menú.
+ * El cierre —Escape y clic afuera— lo pone `usePopover` (`src/lib/teclado/`),
+ * el mismo de todos los popovers. Lo propio de acá: panel `absolute` con
+ * `shadow-panel`, foco al primer item al abrir, y cierre forzado si cambia la
+ * conversación de abajo. Botones planos, sin roles de menú.
  *
  * Lo único distinto —y por eso `accionesFila.ts` es un módulo aparte con tests— es
  * que la cola VIVE DENTRO de un `overflow-y-auto`: en las últimas filas, abrir
