@@ -3,27 +3,30 @@
  *
  * ══ POR QUÉ ESTE MÓDULO EXISTE ═══════════════════════════════════════════════
  *
- * La misma cabeza tiene que decidir en dos lugares: de día, cuando la vendedora
- * mira el panel y quiere despachar de un clic; de noche, cuando la
- * auto-respuesta (#125, rama `feat/auto-respuesta`) atiende sola. Si cada uno
- * tuviera su propio criterio, la vendedora vería sugerida una cosa y el sistema
- * mandaría otra — y nadie podría explicar por qué.
+ * La misma cabeza decide en dos lugares: de día, cuando la vendedora mira el
+ * panel y quiere despachar de un clic; de noche, cuando la auto-respuesta
+ * (#125) atiende sola. Si cada uno tuviera su propio criterio, la vendedora
+ * vería sugerida una cosa y el sistema mandaría otra — y nadie podría explicar
+ * por qué.
  *
- * Así que el criterio vive UNA vez, acá, puro y sin IO.
+ * Así que el criterio vive UNA vez, acá, puro y sin IO. Los dos consumidores:
  *
- * **Punto de unión con `feat/auto-respuesta`**: `autorespuesta/plantillas.ts`
- * define `ContextoPlantilla { esPrimerContacto, curso }` — que es exactamente el
- * subconjunto de `EstadoDeVenta` marcado abajo. Al mergear las dos ramas, ese
- * archivo importa `ContextoPlantilla` de acá y borra el suyo (tres líneas), y
- * `elegir()` puede pasar a filtrar por `intencionesSugeridas()` en vez de por su
- * propio `aplica()`. Nada más cambia: ni la decisión de #125, ni su cola, ni su
- * despachador.
+ *   · **de día** — `sugerencias/sugerir.ts` traduce `intencionesSugeridas()` a
+ *     las dos secuencias del panel derecho;
+ *   · **de noche** — `autorespuesta/plantillas.ts` elige el acuse fuera de
+ *     horario con `momentoDeVenta()` y el `ContextoPlantilla` de acá.
+ *
+ * Los dos hablan del mismo estado y usan el mismo clasificador. Lo que cambia
+ * es qué hacen con él, que es exactamente lo que debe cambiar.
  */
 
 /**
- * El contexto mínimo de una conversación de venta. **Es el mismo tipo que
- * `ContextoPlantilla` de `autorespuesta/plantillas.ts`** (mismos nombres de
- * campo, a propósito): al unir las ramas, uno de los dos desaparece.
+ * El contexto MÍNIMO de una conversación: lo único que la auto-respuesta sabe
+ * cuando decide, a las 3 de la mañana, qué acuse mandar.
+ *
+ * Vive acá y no en `autorespuesta/` porque es vocabulario, no implementación: si
+ * cada lado tuviera su copia, un campo agregado de un lado no llegaría al otro y
+ * las dos cabezas empezarían a divergir sin que nadie lo note.
  */
 export interface ContextoPlantilla {
   /** Nadie le habló nunca desde Hermes. */
@@ -75,61 +78,108 @@ export interface Sugerido {
 }
 
 /**
+ * EL MOMENTO DE LA VENTA — el clasificador compartido, y la única lista de
+ * «dónde está esta conversación».
+ *
+ * Es lo que de verdad se comparte entre el día y la noche: los dos preguntan lo
+ * mismo («¿en qué punto está?») y responden distinto («qué le mando» vs. «qué
+ * acuse le doy»). Separarlo del `qué mandar` es lo que permite que la
+ * auto-respuesta lo use sabiendo la mitad de las cosas.
+ *
+ * El orden es el de la venta, de lo más avanzado a lo más nuevo: lo específico
+ * gana. Una conversación fría es fría aunque además sea el primer contacto de
+ * la semana.
+ */
+export type MomentoDeVenta =
+  | "enfriada"
+  | "cotizada"
+  | "material-sin-precio"
+  | "primer-contacto"
+  | "pidiendo-info"
+  | "en-conversacion";
+
+export function momentoDeVenta(e: EstadoDeVenta): MomentoDeVenta {
+  if (e.enfriada) return "enfriada";
+  if (e.cotizada) return "cotizada";
+  if (e.vioMaterial) return "material-sin-precio";
+  if (e.esPrimerContacto) return "primer-contacto";
+  if (e.pidioInfo) return "pidiendo-info";
+  return "en-conversacion";
+}
+
+/**
+ * Completa el estado con lo que la NOCHE no sabe.
+ *
+ * La auto-respuesta decide con `ContextoPlantilla` —dos campos— porque a las 3
+ * a. m. no consulta las señales: su trabajo es acusar recibo, no vender. Los
+ * campos que no conoce se asumen `false`, y esa suposición es la correcta:
+ * ante la duda, el momento menos avanzado. Nunca al revés — creerla cotizada
+ * sin saberlo la mandaría al acuse equivocado.
+ */
+export function estadoDesdeContexto(ctx: ContextoPlantilla): EstadoDeVenta {
+  return {
+    esPrimerContacto: ctx.esPrimerContacto,
+    curso: ctx.curso,
+    pidioInfo: false,
+    cotizada: false,
+    enfriada: false,
+    vioMaterial: false,
+  };
+}
+
+/**
  * LAS DOS COSAS QUE CORRESPONDEN, en orden. Siempre dos, y siempre **caminos
  * distintos**: el pedido del dueño es *«2 opciones»*, no dos variantes de la
- * misma. Por eso las reglas devuelven siempre un par que se lee distinto de un
- * vistazo — mandar material vs. pedir una respuesta, precio vs. temario.
+ * misma. Por eso cada momento devuelve un par que se lee distinto de un vistazo
+ * — mandar material vs. pedir una respuesta, precio vs. temario.
  *
- * El orden de las reglas es el de la venta, de lo más avanzado a lo más nuevo:
- * lo específico gana. Una conversación fría es fría aunque además sea primer
- * contacto de la semana.
+ * El `switch` es exhaustivo sobre `MomentoDeVenta` a propósito: agregar un
+ * momento y olvidarse de decir qué mandar en él no compila.
  */
 export function intencionesSugeridas(e: EstadoDeVenta): [Sugerido, Sugerido] {
-  // 1. Se enfrió: le pasaste el precio y desapareció. Lo urgente es traerla de
-  //    vuelta, no repetirle lo mismo.
-  if (e.enfriada) {
-    return [
-      { intencion: "reactivar", porque: "le pasaste el precio y no contestó" },
-      { intencion: "precio", porque: "repetirle la inversión, por si se perdió el mensaje" },
-    ];
-  }
+  switch (momentoDeVenta(e)) {
+    // Le pasaste el precio y desapareció. Lo urgente es traerla de vuelta, no
+    // repetirle lo mismo.
+    case "enfriada":
+      return [
+        { intencion: "reactivar", porque: "le pasaste el precio y no contestó" },
+        { intencion: "precio", porque: "repetirle la inversión, por si se perdió el mensaje" },
+      ];
 
-  // 2. Cotizada y todavía tibia: la pelota está de su lado.
-  if (e.cotizada) {
-    return [
-      { intencion: "seguimiento", porque: "ya tiene el precio: falta que decida" },
-      { intencion: "temario", porque: "el temario suele ser lo que termina de convencer" },
-    ];
-  }
+    // Cotizada y todavía tibia: la pelota está de su lado.
+    case "cotizada":
+      return [
+        { intencion: "seguimiento", porque: "ya tiene el precio: falta que decida" },
+        { intencion: "temario", porque: "el temario suele ser lo que termina de convencer" },
+      ];
 
-  // 3. Vio el material pero nunca le pasaste el precio. Es el hueco más caro
-  //    del embudo: 696 conversaciones con precio, y muchas más sin él.
-  if (e.vioMaterial) {
-    return [
-      { intencion: "precio", porque: "ya vio el material y todavía no sabe cuánto cuesta" },
-      { intencion: "temario", porque: "si pide más detalle antes de decidir" },
-    ];
-  }
+    // Vio el material pero nunca le pasaste el precio. Es el hueco más caro del
+    // embudo: 696 conversaciones con precio, y muchas más sin él.
+    case "material-sin-precio":
+      return [
+        { intencion: "precio", porque: "ya vio el material y todavía no sabe cuánto cuesta" },
+        { intencion: "temario", porque: "si pide más detalle antes de decidir" },
+      ];
 
-  // 4. Primer contacto: lo que la vendedora manda 415 veces es el flyer.
-  if (e.esPrimerContacto) {
-    return [
-      { intencion: "flyer", porque: "primer mensaje: es lo que mandás siempre" },
-      { intencion: "presentarse", porque: "si preferís abrir presentándote" },
-    ];
-  }
+    // Lo que la vendedora manda 415 veces en el primer mensaje es el flyer.
+    case "primer-contacto":
+      return [
+        { intencion: "flyer", porque: "primer mensaje: es lo que mandás siempre" },
+        { intencion: "presentarse", porque: "si preferís abrir presentándote" },
+      ];
 
-  // 5. Está preguntando ahora mismo.
-  if (e.pidioInfo) {
-    return [
-      { intencion: "flyer", porque: "está pidiendo información" },
-      { intencion: "temario", porque: "si lo que quiere es el detalle del curso" },
-    ];
-  }
+    // Está preguntando ahora mismo.
+    case "pidiendo-info":
+      return [
+        { intencion: "flyer", porque: "está pidiendo información" },
+        { intencion: "temario", porque: "si lo que quiere es el detalle del curso" },
+      ];
 
-  // 6. Ninguna señal fuerte: seguir la conversación o mandarle el material.
-  return [
-    { intencion: "seguimiento", porque: "para retomar la conversación" },
-    { intencion: "flyer", porque: "por si todavía no vio el material" },
-  ];
+    // Ninguna señal fuerte: seguir la conversación o mandarle el material.
+    case "en-conversacion":
+      return [
+        { intencion: "seguimiento", porque: "para retomar la conversación" },
+        { intencion: "flyer", porque: "por si todavía no vio el material" },
+      ];
+  }
 }

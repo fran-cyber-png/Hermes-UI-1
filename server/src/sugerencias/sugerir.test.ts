@@ -2,7 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { Plantilla } from "../plantillas/repositorio.js";
 import { intencionesDePlantilla } from "./clasificar.js";
-import { intencionesSugeridas, type EstadoDeVenta } from "./estado.js";
+import {
+  estadoDesdeContexto,
+  intencionesSugeridas,
+  momentoDeVenta,
+  type EstadoDeVenta,
+} from "./estado.js";
 import { sugerirDos } from "./sugerir.js";
 
 const base: EstadoDeVenta = {
@@ -166,6 +171,41 @@ test("a igual intención gana la más usada", () => {
   const poco = plantilla({ id: 8, nombre: "Temario viejo", usos: 1, pasos: TEMARIO.pasos });
   const r = sugerirDos({ ...base, vioMaterial: true }, [PRECIO, TEMARIO, poco]);
   assert.equal(r[1].plantilla.id, TEMARIO.id);
+});
+
+test("el clasificador es UNO, y la auto-respuesta usa ese mismo", () => {
+  // La unión con #125: `autorespuesta/plantillas.ts` ya no tiene su propia
+  // versión de «dónde está esta conversación» — importa esta. Lo que se fija acá
+  // es que el contexto reducido de la noche (dos campos) entre a la misma
+  // función y salga con un momento válido, sin inventarse uno más avanzado.
+  assert.equal(momentoDeVenta(estadoDesdeContexto({ esPrimerContacto: true, curso: null })), "primer-contacto");
+  assert.equal(momentoDeVenta(estadoDesdeContexto({ esPrimerContacto: false, curso: null })), "en-conversacion");
+  assert.equal(
+    momentoDeVenta(estadoDesdeContexto({ esPrimerContacto: false, curso: "Diploma" })),
+    "en-conversacion",
+    "saber el curso no adelanta el momento: sigue siendo una conversación en curso",
+  );
+});
+
+test("cada momento de venta tiene su par de intenciones — ninguno queda sin respuesta", () => {
+  const vistos = new Set<string>();
+  const estados: EstadoDeVenta[] = [
+    { ...base, enfriada: true },
+    { ...base, cotizada: true },
+    { ...base, vioMaterial: true },
+    { ...base, esPrimerContacto: true },
+    { ...base, pidioInfo: true },
+    base,
+  ];
+  for (const e of estados) {
+    vistos.add(momentoDeVenta(e));
+    assert.equal(intencionesSugeridas(e).length, 2);
+  }
+  assert.deepEqual(
+    [...vistos].sort(),
+    ["cotizada", "en-conversacion", "enfriada", "material-sin-precio", "pidiendo-info", "primer-contacto"],
+    "los seis momentos quedan cubiertos por los estados de prueba",
+  );
 });
 
 test("las reglas siempre dan dos caminos distintos", () => {

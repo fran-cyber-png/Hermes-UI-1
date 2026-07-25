@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { catalogo, elegir, horaEnCriollo, render, saludoDe } from './plantillas.js';
+import { estadoDesdeContexto, momentoDeVenta } from '../sugerencias/estado.js';
 
 /**
  * EL CATÁLOGO. Lo que se fija acá no es estética: es el contrato de contenido
@@ -36,6 +37,37 @@ describe('elegir', () => {
 
   test('con el catálogo vacío no hay nada que mandar', () => {
     assert.equal(elegir({ esPrimerContacto: true, curso: null }, []), null);
+  });
+
+  /**
+   * La unión con #101: el «dónde está esta conversación» lo decide UN
+   * clasificador (`sugerencias/estado.ts`), el mismo que de día elige qué le
+   * sugiere el panel a la vendedora. Este test es la costura: si alguien cambia
+   * el clasificador, la elección del acuse nocturno se mueve con él — que es
+   * justamente lo que queremos, y por eso queda fijado.
+   */
+  test('la noche clasifica con la MISMA cabeza que el día', () => {
+    for (const ctx of [
+      { esPrimerContacto: true, curso: null },
+      { esPrimerContacto: false, curso: null },
+    ]) {
+      const momento = momentoDeVenta(estadoDesdeContexto(ctx));
+      const esperado =
+        momento === 'primer-contacto'
+          ? 'fuera-de-horario-primer-contacto'
+          : 'fuera-de-horario-seguimiento';
+      assert.equal(elegir(ctx)?.id, esperado, JSON.stringify(ctx));
+    }
+  });
+
+  test('lo que la noche NO sabe se asume en el momento menos avanzado', () => {
+    // A las 3 a. m. no se consultan las señales: sin datos, jamás se la trata
+    // como cotizada o fría — eso mandaría el acuse equivocado.
+    const e = estadoDesdeContexto({ esPrimerContacto: false, curso: null });
+    assert.equal(e.cotizada, false);
+    assert.equal(e.enfriada, false);
+    assert.equal(e.vioMaterial, false);
+    assert.equal(momentoDeVenta(e), 'en-conversacion');
   });
 });
 

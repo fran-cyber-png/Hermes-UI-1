@@ -51,7 +51,42 @@ import type { Campana } from './campana.js';
  * Hasta entonces, las de este archivo son el mínimo honesto, escritas a partir
  * de las que la vendedora ya usa (flyer 671x, seguimiento 658x, temario 261x —
  * medido en 14 días, issue #125).
+ *
+ * ── UNA SOLA CABEZA, dos horarios (unión con #101) ──
+ * «Dónde está esta conversación» ya no se decide acá: el vocabulario
+ * (`ContextoPlantilla`) y el clasificador (`momentoDeVenta`) viven en
+ * `sugerencias/estado.ts`, y son los MISMOS que usa el panel derecho para
+ * sugerirle a la vendedora qué mandar de día. Antes había dos definiciones
+ * gemelas —una acá, otra allá— y ese es exactamente el arreglo del que nadie se
+ * entera hasta que divergen: la vendedora vería sugerida una cosa y el sistema
+ * mandaría otra a las 3 a. m., sin que nadie pueda explicar por qué.
+ *
+ * Lo que sigue siendo propio de este archivo es lo que debe serlo: QUÉ SE DICE.
+ * El día vende; la noche acusa recibo. Mismo diagnóstico, distinta respuesta.
  */
+import {
+  estadoDesdeContexto,
+  momentoDeVenta,
+  type ContextoPlantilla as ContextoBase,
+} from '../sugerencias/estado.js';
+
+/**
+ * El contexto con el que se decide de noche.
+ *
+ * Los dos campos que COMPARTE con el día —`esPrimerContacto` y `curso`— se
+ * definen una sola vez, en `sugerencias/estado.ts`: son el vocabulario del
+ * clasificador que usan los dos horarios. Acá se le suma lo que es propio de la
+ * noche y que el panel no necesita: la **campaña** de la que vino (ADR 0016),
+ * que decide qué gancho lleva el acuse.
+ *
+ * Extender en vez de redeclarar es lo que impide que las dos definiciones
+ * gemelas vuelvan a separarse — el arreglo del que nadie se entera hasta que
+ * la vendedora ve sugerida una cosa y el sistema manda otra a las 3 a. m.
+ */
+export interface ContextoPlantilla extends ContextoBase {
+  /** La campaña de la que vino, con su familia reconocida (`campana.ts`). */
+  campana?: Campana | null;
+}
 
 export interface DatosPlantilla {
   /** «Hola Ana» o «Hola» a secas: WhatsApp no siempre da el nombre. */
@@ -62,15 +97,6 @@ export interface DatosPlantilla {
   horaApertura: string;
   /** Lo que la asesora manda al abrir, propio de esa familia de cursos. */
   gancho?: string | null;
-}
-
-export interface ContextoPlantilla {
-  /** Primer mensaje de esta persona: nadie le habló nunca desde Hermes. */
-  esPrimerContacto: boolean;
-  /** El curso registrado como interés, si lo hay. */
-  curso: string | null;
-  /** La campaña de la que vino, con su familia reconocida (`campana.ts`). */
-  campana?: Campana | null;
 }
 
 export interface Plantilla {
@@ -85,8 +111,9 @@ export interface Plantilla {
 
 /**
  * El catálogo, en orden de prioridad. La más específica primero: si sabemos qué
- * curso quiere, se lo nombramos; si no, distinguimos primer contacto de
- * seguimiento.
+ * curso quiere, se lo nombramos; si no, el MOMENTO DE VENTA compartido
+ * (`momentoDeVenta`) distingue primer contacto de conversación en curso — el
+ * mismo que de día decide si el panel sugiere el flyer o un seguimiento.
  */
 export function catalogo(): Plantilla[] {
   return [
@@ -122,7 +149,7 @@ export function catalogo(): Plantilla[] {
         'Te escribe un mensaje automático: en este momento estamos fuera del horario de atención. ' +
         'Una asesora te responde personalmente a partir de las {{hora_apertura}}. ' +
         'Cuéntanos qué curso o diplomado te interesa y al abrir te enviamos el temario completo.',
-      aplica: (ctx) => ctx.esPrimerContacto,
+      aplica: (ctx) => momentoDeVenta(estadoDesdeContexto(ctx)) === 'primer-contacto',
     },
     {
       id: 'fuera-de-horario-seguimiento',
@@ -132,6 +159,9 @@ export function catalogo(): Plantilla[] {
         'Te escribe un mensaje automático: en este momento estamos fuera del horario de atención. ' +
         'Tu consulta ya quedó registrada y la asesora que te viene atendiendo te responde ' +
         'a partir de las {{hora_apertura}}.',
+      // El catch-all queda explícito: cualquier momento que no sea primer
+      // contacto es «ya veníamos hablando». Si mañana aparece un momento nuevo,
+      // cae acá — que es el acuse más neutro, no el más específico.
       aplica: () => true,
     },
   ];
