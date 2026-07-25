@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type Ref } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, Mail, MailOpen, MessageSquarePlus, Pin, Search, Star, Tags, X } from 'lucide-react';
+import { ChevronLeft, MessageSquarePlus, Search, Tags, X } from 'lucide-react';
 import { useLocalStorage } from '../../lib/useLocalStorage';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { hace, useFrescura } from '../../lib/datos/frescura';
@@ -23,6 +23,7 @@ import {
 } from './cola';
 import { useConversaciones, useEstadoConversacion, type Conversacion } from './conversaciones';
 import { FilaConversacion } from './FilaConversacion';
+import { MenuFila } from './MenuFila';
 import { ListaCategorias } from './ListaCategorias';
 import { nombreCanal } from './BadgeCanal';
 
@@ -615,54 +616,19 @@ export function ColaUnificada({
                 }}
               />
               {/* Acciones de organización: fuera del <button> de la fila (HTML no
-                  anida botones). Aparecen al pasar el mouse; el estado activo
-                  (fijada/favorita) queda visible siempre.
-
-                  `pointer-events-none` mientras están invisibles, y `-auto` al
-                  aparecer: si no, la esquina derecha de CADA fila se come el clic
-                  con botones que no se ven — tocás para abrir la conversación y
-                  terminás fijándola. El foco de teclado también los reactiva
-                  (`focus-within` prende la opacidad y el hijo recupera el clic). */}
-              <div
-                data-activo={c.fijada || c.favorita || undefined}
-                className="pointer-events-none absolute right-2.5 top-2 flex items-center gap-0.5 opacity-0 transition-opacity focus-within:pointer-events-auto focus-within:opacity-100 group-hover/fila:pointer-events-auto group-hover/fila:opacity-100 data-[activo=true]:pointer-events-auto data-[activo=true]:opacity-100"
-              >
-                <button
-                  type="button"
-                  aria-label={c.fijada ? 'Soltar' : 'Fijar arriba'}
-                  aria-pressed={c.fijada}
-                  title={c.fijada ? 'Soltar' : 'Fijar arriba'}
-                  onClick={() => togglear(c, 'fijada')}
-                  className={
-                    'rounded-md bg-card/90 p-1 shadow-sm transition-colors ' +
-                    (c.fijada ? 'text-navy' : 'text-muted-foreground/60 hover:text-navy')
-                  }
-                >
-                  <Pin size={13} fill={c.fijada ? 'currentColor' : 'none'} />
-                </button>
-                <button
-                  type="button"
-                  aria-label={c.favorita ? 'Quitar de favoritos' : 'Marcar favorita'}
-                  aria-pressed={c.favorita}
-                  title={c.favorita ? 'Favorita' : 'Marcar favorita'}
-                  onClick={() => togglear(c, 'favorita')}
-                  className={
-                    'rounded-md bg-card/90 p-1 shadow-sm transition-colors ' +
-                    (c.favorita ? 'text-navy' : 'text-muted-foreground/60 hover:text-navy')
-                  }
-                >
-                  <Star size={13} fill={c.favorita ? 'currentColor' : 'none'} />
-                </button>
-                <button
-                  type="button"
-                  aria-label={c.no_leido ? 'Marcar leído' : 'Marcar sin leer'}
-                  title={c.no_leido ? 'Marcar leído' : 'Marcar sin leer'}
-                  onClick={() => marcarLeido(c, Boolean(c.no_leido))}
-                  className="rounded-md bg-card/90 p-1 text-muted-foreground/60 shadow-sm transition-colors hover:text-primary"
-                >
-                  {c.no_leido ? <MailOpen size={13} /> : <Mail size={13} />}
-                </button>
-              </div>
+                  anida botones). Una sola flechita ▼ que abre el menú con las
+                  tres acciones escritas — antes eran tres iconos sueltos que al
+                  hover se pintaban encima de la hora y la escondían. El espacio
+                  se lo reserva `FilaConversacion` (`pr-9`), así la fila no salta
+                  cuando la flechita aparece y desaparece. */}
+              <MenuFila
+                clave={c.clave}
+                estado={c}
+                tabIndex={i === idxSeguro ? 0 : -1}
+                onFijar={() => togglear(c, 'fijada')}
+                onFavorita={() => togglear(c, 'favorita')}
+                onLeido={() => marcarLeido(c, Boolean(c.no_leido))}
+              />
             </div>
           ))
         )}

@@ -128,7 +128,11 @@ export function FilaConversacion({
       onFocus={onFocus}
       onClick={() => onAbrir(c)}
       className={
-        'group relative flex w-full items-start gap-3 border-b border-border py-3 pl-4 pr-3 text-left transition-colors last:border-b-0 ' +
+        // `pr-9`: el canal reservado para la flechita ▼ del menú de la fila
+        // (`MenuFila`, se monta afuera del botón). Se reserva SIEMPRE, esté la
+        // flechita visible o no — así el contenido no se corre al pasar el
+        // mouse, y sobre todo la hora nunca queda debajo de un botón.
+        'group relative flex w-full items-start gap-3 border-b border-border py-3 pl-4 pr-9 text-left transition-colors last:border-b-0 ' +
         (seleccionada
           ? 'bg-secondary shadow-[inset_-3px_0_0_var(--color-primary)] active:bg-muted'
           : c.respondida
