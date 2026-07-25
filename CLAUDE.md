@@ -202,6 +202,28 @@ sesión nunca deja VPS1). Endpoint central: `PUT /api/admin/numeros/:numero` (up
 vendedora. Contrato de los dos lados en **`docs/multi-numero/`**; decisión en **ADR 0010**. El ruteo
 multi-número real (N transportes vivos) es el Frente A, **issue #50**, todavía pendiente.
 
+## «Es la misma persona que…» — la unificación de contactos
+
+La misma persona escribe desde dos números, o desde WhatsApp y desde Instagram. La vendedora lo
+afirma desde la ficha y **se une la FICHA, no los hilos**: la clave `conv:<canal>:<persona>:<numeroPropio>`
+no se toca, la cola no cambia. Server en `server/src/identidad/`, UI en `src/features/identidad/`,
+ruta `/api/enlaces` (`GET` grupo · `POST` enlazar · `DELETE` deshacer), detrás de `requiereVendedora`.
+Decisión completa en **ADR 0017**; issue #58.
+
+- **El puente** es `identidadDeClave` (`identidad/clave.ts`, puro): la clave del CRM se traduce a una
+  identidad de canal **`wa_id` / `ig_user` / `psid`** (DÉBIL), nunca a `email`/`telefono`. El **número
+  propio de Goberna se cae del identificador**: quien le escribe a dos números nuestros es un solo
+  humano y su ficha se une sola. Un comentario suelto (`int:<id>`) **no es enlazable**.
+- **La persona se crea perezosamente**, al enlazar. Leer una ficha JAMÁS escribe en el grafo.
+- Enlazar es una **estrella** (dos identidades → una persona): simetría, idempotencia y «sin ciclos»
+  salen de la forma del grafo, no de código defensivo. Techo de 10 identidades por persona.
+- **Deshacer revoca, no borra** (`revocado_*` + índice parcial `vinculos_identidad_activo_uq`).
+- ⚠️ **El rebuild de `ontologia/poblarIdentidad.ts` ya NO borra los enlaces manuales** (era una bomba
+  anunciada en su propio comentario). Borra `WHERE regla <> 'manual'`, borra identidades por orfandad,
+  y el derivado **cede** ante lo que una persona afirmó. Además los dos mundos usan espacios de nombres
+  disjuntos, así que no hay fila que los dos quieran escribir. Fijado por `poblarIdentidad.test.db.ts`.
+- **No hay cambio de schema**: `db/ontologia.ts` no se tocó y esas tablas ya existen en VPS1 (vacías).
+
 ## Deploy
 
 **VPS1** (`deploy@161.132.39.165`), en `/srv/hermes` — **EJECUTADO 2026-07-21**: servicio systemd
