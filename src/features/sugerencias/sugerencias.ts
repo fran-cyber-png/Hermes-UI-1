@@ -39,12 +39,19 @@ export interface EstadoDeVenta {
 export function useSugerencias(clave: string | null, nombre: string | null, activo: boolean) {
   return useQuery({
     queryKey: ['sugerencias', clave],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       api<{ sugerencias: Sugerencia[]; estado: EstadoDeVenta }>(
         `/api/sugerencias?clave=${encodeURIComponent(clave ?? '')}` +
           (nombre ? `&nombre=${encodeURIComponent(nombre)}` : ''),
+        // Techo de espera, igual que la ficha. Sin esto el bloque se queda en
+        // dos rectángulos grises para siempre cuando la conexión se traba —
+        // verificado el 25-jul, con el proxy de fotos colgado comiéndose el cupo
+        // de conexiones del navegador. Un esqueleto eterno no dice nada; el
+        // error sí, y encima ofrece la salida a las secuencias.
+        { signal: AbortSignal.any([signal, AbortSignal.timeout(12_000)]) },
       ),
     enabled: activo && Boolean(clave?.startsWith('conv:')),
     staleTime: 60_000,
+    retry: false,
   });
 }

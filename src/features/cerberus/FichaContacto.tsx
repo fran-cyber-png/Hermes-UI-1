@@ -36,13 +36,27 @@ import type { Ficha } from './ficha';
 
 export type { Ficha, VentaFicha } from './ficha';
 
-/** Exportado para el modal de Cierre del Pipeline (#60): misma query, mismo caché. */
+/**
+ * Exportado para el modal de Cierre del Pipeline (#60): misma query, mismo caché.
+ *
+ * **Con techo de espera, y no es un detalle.** La ficha viaja a Cerberus (Django,
+ * sin API REST) y Cerberus a veces no cuelga la llamada: la deja abierta. Sin
+ * techo, el panel se queda en «Buscando en Cerberus…» para siempre —verificado
+ * en producción el 25-jul— y la vendedora nunca ve la acción primaria ni el
+ * aviso de que algo falló. A los 12 s se corta y el estado pasa a «No se pudo
+ * saber», que es la verdad y además ofrece salida. `retry: false` porque un
+ * reintento duplica la espera antes de decirlo.
+ */
 export function useFicha(telefono: string | null, activo: boolean) {
   return useQuery({
     queryKey: ['ficha', telefono],
-    queryFn: () => api<Ficha>(`/api/contactos/ficha?telefono=${encodeURIComponent(telefono ?? '')}`),
+    queryFn: ({ signal }) =>
+      api<Ficha>(`/api/contactos/ficha?telefono=${encodeURIComponent(telefono ?? '')}`, {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(12_000)]),
+      }),
     enabled: activo && Boolean(telefono),
     staleTime: 60_000,
+    retry: false,
   });
 }
 
@@ -147,7 +161,7 @@ export function FichaContacto({
           <div className="flex flex-col items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-[11px] leading-relaxed text-warning-foreground">
             <span className="flex items-start gap-2">
               <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-              Cerberus no devolvió la ficha. Suele ser pasajero.
+              Cerberus cortó la consulta a los 12 segundos. Suele ser pasajero.
             </span>
             <button
               type="button"
