@@ -106,6 +106,70 @@ export class ErrorIvi extends Error {
   }
 }
 
+// ── Las dos traducciones de la costura ──────────────────────────────────────
+//
+// El contrato de Ivi es snake_case y está PUBLICADO (ivi-cerebro/docs/integracion-hermes.md,
+// fijado por 16 tests de aquel lado). Este cliente lo había adivinado en camelCase, así que
+// `safeParse` fallaba SIEMPRE y la ruta devolvía 502 en el 100 % de las llamadas (#141).
+//
+// Se traduce ACÁ, en el borde, una sola vez. La forma interna de Hermes no cambia: hacia adentro
+// seguimos hablando camelCase, y hacia la app el historial sigue siendo {rol, texto}, que es lo
+// correcto para un chat. Solo el hilo que cruza a Ivi habla el dialecto de Ivi.
+
+/** La respuesta de Ivi, en snake_case. Laxo a propósito: validar es tarea de `respuestaIviSchema`. */
+const respuestaCrudaSchema = z
+  .object({
+    texto: z.unknown(),
+    tipo: z.unknown(),
+    fuentes: z.unknown(),
+    grounding_ok: z.unknown(),
+    edad_del_dato: z.unknown(),
+  })
+  .partial();
+
+/**
+ * Traduce la respuesta snake_case de Ivi a la forma camelCase del contrato interno.
+ *
+ * Si el cuerpo no es un objeto, lo devuelve tal cual: que falle en `safeParse` con el error real
+ * en vez de convertirse acá en un objeto vacío que parece casi válido. Fail-closed también acá.
+ */
+export function aCamelCase(crudo: unknown): unknown {
+  const r = respuestaCrudaSchema.safeParse(crudo);
+  if (!r.success) return crudo;
+  const { texto, tipo, fuentes, grounding_ok: groundingOk, edad_del_dato: edadDelDato } = r.data;
+  return { texto, tipo, fuentes, groundingOk, edadDelDato };
+}
+
+/**
+ * Empareja los turnos {rol, texto} de la app a los pares {q, a} que Ivi espera.
+ *
+ * `responder()` de Ivi lee `h["q"]` y `h["a"]` (rag/responder.py:350,356). Mandarle {rol, texto}
+ * NO da error: lee cadena vacía y el contexto se pierde EN SILENCIO — el follow-up corto
+ * («¿y en México?») queda sin antecedente y la respuesta sale plausible y descolgada (#142).
+ *
+ * Casos reales que el emparejado tiene que aguantar:
+ *   - vendedora -> ivi                 un par completo
+ *   - vendedora sin respuesta todavía  {q, a: ''}
+ *   - dos de vendedora seguidas        dos pares (mandó dos mensajes)
+ *   - un `ivi` sin pregunta previa     se descarta: no hay a qué colgarlo
+ *
+ * Ivi solo usa los últimos 3 turnos, pero el recorte lo hace él: acá se manda lo que llegó,
+ * ya acotado por el tope del router (MAX_TURNOS_HISTORIAL).
+ */
+export function aParesQA(historial: TurnoHistorial[]): { q: string; a: string }[] {
+  const pares: { q: string; a: string }[] = [];
+  for (const turno of historial) {
+    if (turno.rol === ROL_TURNO.VENDEDORA) {
+      pares.push({ q: turno.texto, a: '' });
+      continue;
+    }
+    // Un turno de Ivi completa el último par que todavía no tiene respuesta.
+    const ultimo = pares[pares.length - 1];
+    if (ultimo && ultimo.a === '') ultimo.a = turno.texto;
+  }
+  return pares;
+}
+
 // ── El cliente ──────────────────────────────────────────────────────────────
 
 /** Costuras inyectables para los tests: sin esto lee del env y usa `fetch` global. */
@@ -162,7 +226,12 @@ export async function preguntarleAIvi(
         'content-type': 'application/json',
         authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ pregunta, usuario, ...(historial ? { historial } : {}) }),
+      // El historial viaja como [{q, a}]: es lo que `responder()` de Ivi lee (#142).
+      body: JSON.stringify({
+        pregunta,
+        usuario,
+        ...(historial?.length ? { historial: aParesQA(historial) } : {}),
+      }),
     });
   } catch (err) {
     console.error('ivi: fetch falló', err);
@@ -215,7 +284,7 @@ export async function preguntarleAIvi(
     throw new ErrorIvi(CODIGO_ERROR_IVI.RESPUESTA_INVALIDA, 'Ivi respondió con un cuerpo que no es JSON.', undefined, err);
   }
 
-  const parseado = respuestaIviSchema.safeParse(crudo);
+  const parseado = respuestaIviSchema.safeParse(aCamelCase(crudo));
   if (!parseado.success) {
     console.error('ivi: la respuesta no cumple el contrato RespuestaIvi', parseado.error.issues);
     throw new ErrorIvi(
