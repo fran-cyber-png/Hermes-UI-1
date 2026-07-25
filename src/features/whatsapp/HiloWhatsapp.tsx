@@ -638,8 +638,12 @@ function ComposerWa({
           )}
         </button>
       </div>
+      {/* La promesa sigue siendo la misma para lo que sale de acá. Lo único
+          automático que existe (el acuse fuera de horario, ADR 0015) no sale
+          por esta caja y viene marcado en su burbuja — decir «nada automático»
+          a secas ya no sería verdad, y esta línea existe para ser verdad. */}
       <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
-        Se envía solo a esta persona, con tu nombre. Nada masivo, nada automático.
+        Se envía solo a esta persona, con tu nombre. Nada masivo: lo que escribís acá lo mandás vos.
       </p>
     </footer>
   );
