@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { db } from "../db/client.js";
 import { plantillaPasos, plantillas } from "../db/schema.js";
 import type { SecuenciaPropuesta } from "./proponer.js";
@@ -54,52 +54,48 @@ export interface EntradaPlantilla {
   pasos: PasoPlantilla[];
 }
 
-interface FilaPaso {
-  plantilla_id: number;
-  orden: number;
-  texto: string | null;
-  media_archivo: string | null;
-  media_mime: string | null;
-  media_clase: string | null;
-  media_nombre: string | null;
-}
+type FilaPaso = typeof plantillaPasos.$inferSelect;
 
 function aPaso(f: FilaPaso): PasoPlantilla {
   return {
     orden: f.orden,
     texto: f.texto,
-    media: f.media_archivo
+    media: f.mediaArchivo
       ? {
-          archivo: f.media_archivo,
-          mime: f.media_mime ?? "application/octet-stream",
-          clase: f.media_clase ?? "documento",
-          nombre: f.media_nombre,
+          archivo: f.mediaArchivo,
+          mime: f.mediaMime ?? "application/octet-stream",
+          clase: f.mediaClase ?? "documento",
+          nombre: f.mediaNombre,
         }
       : null,
-    mediaPendiente: !f.media_archivo && f.media_clase !== null,
+    mediaPendiente: !f.mediaArchivo && f.mediaClase !== null,
   };
 }
 
-/** Los pasos de un lote de plantillas, en una sola consulta (nada de N+1). */
+/**
+ * Los pasos de un lote de plantillas, en una sola consulta (nada de N+1).
+ *
+ * Con el SELECT TIPADO de drizzle y no con `execute(sql…)` crudo, y no es un
+ * detalle de estilo: `plantilla_id` es un `bigint`, y en crudo postgres.js lo
+ * devuelve como **string**. Agrupar por esa clave contra ids numéricos daba un
+ * mapa que nunca matcheaba y plantillas con CERO pasos — verde en los tests
+ * puros, roto en los tests con base. Drizzle hace la conversión porque conoce
+ * el `mode: 'number'` de la columna.
+ */
 async function pasosDe(base: typeof db, ids: number[]): Promise<Map<number, PasoPlantilla[]>> {
   const mapa = new Map<number, PasoPlantilla[]>();
   if (ids.length === 0) return mapa;
 
-  const lista = sql.join(
-    ids.map((id) => sql`${id}`),
-    sql`, `,
-  );
-  const filas = (await base.execute(sql`
-    SELECT plantilla_id, orden, texto, media_archivo, media_mime, media_clase, media_nombre
-    FROM plantilla_pasos
-    WHERE plantilla_id IN (${lista})
-    ORDER BY plantilla_id, orden
-  `)) as unknown as FilaPaso[];
+  const filas = await base
+    .select()
+    .from(plantillaPasos)
+    .where(inArray(plantillaPasos.plantillaId, ids))
+    .orderBy(asc(plantillaPasos.plantillaId), asc(plantillaPasos.orden));
 
   for (const f of filas) {
-    const lote = mapa.get(f.plantilla_id);
+    const lote = mapa.get(f.plantillaId);
     if (lote) lote.push(aPaso(f));
-    else mapa.set(f.plantilla_id, [aPaso(f)]);
+    else mapa.set(f.plantillaId, [aPaso(f)]);
   }
   return mapa;
 }
