@@ -2,7 +2,7 @@ import type { EstadoSesion } from '../whatsapp/transporte.js';
 import type { OrdenEnvio, ResultadoControlado } from '../whatsapp/envioControlado.js';
 import type { ConfigAutoRespuesta } from './config.js';
 import { diaLocal, dentroDe } from './franja.js';
-import type { Pendiente, RepositorioAutoRespuesta } from './repositorio.js';
+import { faltaEsquema, type Pendiente, type RepositorioAutoRespuesta } from './repositorio.js';
 
 /**
  * EL DESPACHADOR — el único lugar de esta feature que manda algo, y el que
@@ -98,8 +98,16 @@ export class Despachador {
     // Llave 1: el entorno. Sin esto ni se pregunta a la base.
     if (!cfg.habilitada) return { accion: 'apagada', detalle: 'AUTO_RESPUESTA no está en `on`' };
 
-    // Llave 2: el interruptor de la base (el kill-switch sin deploy).
-    const interruptor = await repo.leerInterruptor();
+    // Llave 2: el interruptor de la base (el kill-switch sin deploy). Si las
+    // tablas todavía no están (el `db:push` es manual, ADR 0015), esto se
+    // comporta como apagada en vez de tirar un error cada 30 segundos.
+    let interruptor;
+    try {
+      interruptor = await repo.leerInterruptor();
+    } catch (e) {
+      if (!faltaEsquema(e)) throw e;
+      return { accion: 'apagada', detalle: 'faltan las tablas: corré `npm run db:push` (ADR 0015)' };
+    }
     if (!interruptor.encendida) {
       return { accion: 'apagada', detalle: interruptor.motivo ?? 'el interruptor está apagado' };
     }

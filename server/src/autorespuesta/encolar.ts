@@ -3,7 +3,7 @@ import { consultarCandidatos } from './candidatos.js';
 import type { ConfigAutoRespuesta } from './config.js';
 import { diaLocal, dentroDe } from './franja.js';
 import { planificar, type PlanCompleto } from './planificar.js';
-import type { RepositorioAutoRespuesta } from './repositorio.js';
+import { faltaEsquema, type RepositorioAutoRespuesta } from './repositorio.js';
 
 /**
  * EL ENCOLADO — la corrida que mira quién quedó esperando y le reserva una hora.
@@ -56,7 +56,15 @@ export async function correrEncolado(deps: DepsEncolado): Promise<ResumenEncolad
 
   if (!cfg.habilitada) return { corrio: false, motivo: 'AUTO_RESPUESTA no está en `on`', ...NADA };
 
-  const interruptor = await repo.leerInterruptor();
+  // Sin las tablas (el `db:push` es manual, ADR 0015) esto es «apagada», no un
+  // error repetido cada cinco minutos.
+  let interruptor;
+  try {
+    interruptor = await repo.leerInterruptor();
+  } catch (e) {
+    if (!faltaEsquema(e)) throw e;
+    return { corrio: false, motivo: 'faltan las tablas: corré `npm run db:push` (ADR 0015)', ...NADA };
+  }
   if (!interruptor.encendida) {
     return { corrio: false, motivo: interruptor.motivo ?? 'el interruptor está apagado', ...NADA };
   }
