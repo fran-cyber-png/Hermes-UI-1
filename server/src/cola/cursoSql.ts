@@ -10,8 +10,9 @@ import { cursoDeLeadSql, sufijoTelefonoSql } from "../gente/leadDeTelefono.js";
  * EN EL LISTADO (nunca un fetch por fila):
  *
  *   · `interesUltimoCteSql` — el interés más reciente asentado para la clave.
- *   · `leadCursoCteSql`     — el curso del formulario que la persona llenó,
- *                             emparejado por teléfono contra `leads`.
+ *   · `leadCursoCteSql`     — el curso del formulario que la persona llenó —y el
+ *                             NOMBRE con el que lo llenó—, emparejado por
+ *                             teléfono contra `leads`.
  *
  * La PRECEDENCIA entre las dos (y el anuncio) NO vive acá: es una decisión de
  * presentación y vive pura en el front (`src/features/canales/curso.ts`), donde
@@ -56,18 +57,29 @@ export const sufijosDeLaColaCteSql: SQL = sql`
 `;
 
 /**
- * EL CURSO DEL LEAD, UNO POR SUFIJO. Se arranca desde `sufijos` (los ~1.900 de
- * la cola) y no desde `leads` (26.000) para que el planner haga UNA pasada por
- * `leads` y no una por fila.
+ * EL CURSO DEL LEAD —Y SU NOMBRE—, UNO POR SUFIJO. Se arranca desde `sufijos`
+ * (los ~1.900 de la cola) y no desde `leads` (26.000) para que el planner haga
+ * UNA pasada por `leads` y no una por fila.
  *
  * DESEMPATE: el lead MÁS RECIENTE con curso. Es a propósito distinto de
  * `elegirMejorLead` (`gente/emparejar.ts`), que prioriza el que trae email:
  * son dos preguntas distintas. La ficha pregunta «¿de dónde saco un email para
  * cotizar?»; la cola pregunta «¿qué pidió esta persona la última vez?», y ahí lo
  * viejo no manda sobre lo nuevo.
+ *
+ * `nombre` (#137) es UNA COLUMNA MÁS de la fila que este `DISTINCT ON` ya elige:
+ * el join a `leads` ya está hecho, así que no cuesta ninguna pasada nueva. Y es
+ * lo que convierte «🦋W», «.» o «10 ❤️L» —el pushname que la persona eligió en
+ * WhatsApp— en la persona real que llenó el formulario. Sale del MISMO lead que
+ * el curso: nombre y curso no pueden venir de dos personas distintas.
+ *
+ * ⚠️ BORDE: un lead que no dice ningún curso no entra a este CTE, así que
+ * tampoco aporta su nombre. Es el borde conocido de `cursoDeLeadSql` (sin
+ * `campaign_name` ni `form_name` no hay nada que decir) y hoy son un puñado: no
+ * se abre una segunda pasada por ellos.
  */
 export const leadCursoCteSql: SQL = sql`
-  SELECT DISTINCT ON (s.sufijo) s.sufijo, (${cursoDeLeadSql}) AS curso
+  SELECT DISTINCT ON (s.sufijo) s.sufijo, (${cursoDeLeadSql}) AS curso, l.full_name AS nombre
   FROM sufijos s
   JOIN leads l ON (${sufijoTelefonoSql("l.phone")}) = s.sufijo
   WHERE (${cursoDeLeadSql}) IS NOT NULL AND (${cursoDeLeadSql}) <> ''

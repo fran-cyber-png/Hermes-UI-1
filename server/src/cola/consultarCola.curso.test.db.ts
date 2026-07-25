@@ -10,6 +10,10 @@ import { consultarCola } from "./consultarCola.js";
  * asentado y el curso del formulario que la persona llenó) sin romper nada de lo
  * que ya servía: el origen del anuncio, la etapa efectiva, el estado personal.
  *
+ * Junto al curso viaja `lead_nombre` (#137): el nombre con el que la persona
+ * llenó ese MISMO formulario. Es lo que la tarjeta del Pipeline muestra en vez
+ * del pushname de WhatsApp, que en producción suele ser «🦋W», «.» o «10 ❤️L».
+ *
  * La precedencia entre candidatos NO se testea acá: vive pura en el front
  * (`src/features/canales/curso.ts`, vitest). Acá se fija de dónde sale cada uno.
  */
@@ -18,6 +22,7 @@ type Fila = {
   clave: string;
   interes_curso: string | null;
   lead_curso: string | null;
+  lead_nombre: string | null;
   ultima_origen: { fuente: string; titulo?: string | null } | null;
   etapa_efectiva: string | null;
 };
@@ -71,6 +76,57 @@ test("el curso del lead se empareja por el sufijo de 9 dígitos, aunque el telé
 
   const fila = (await consultarCola(db, {})).conversaciones[0] as Fila;
   assert.equal(fila.lead_curso, "Diploma Internacional del Consultor Político");
+});
+
+test("con el curso viaja el NOMBRE del formulario: el pushname de WhatsApp no dice quién es", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarMensaje(db, { personaId: "51987654321", personaNombre: "🦋W", texto: "hola" });
+  await sembrarLead(db, {
+    phone: "+51 987 654 321",
+    fullName: "Luz Esteban Bezares",
+    platform: "web",
+    formName: "icarus:Datos",
+    campaignName: "Diploma Internacional de Inteligencia y Contrainteligencia",
+  });
+
+  const fila = (await consultarCola(db, {})).conversaciones[0] as Fila;
+  assert.equal(fila.lead_nombre, "Luz Esteban Bezares");
+  assert.equal(fila.lead_curso, "Diploma Internacional de Inteligencia y Contrainteligencia");
+});
+
+test("el nombre sale del MISMO lead que el curso, nunca de dos personas distintas", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarMensaje(db, { personaId: "51900123", texto: "hola" });
+  // Dos formularios del mismo teléfono. Manda el más reciente — y su nombre.
+  await sembrarLead(db, {
+    phone: "51900123",
+    fullName: "Nombre Viejo",
+    platform: "web",
+    formName: "icarus:landing",
+    campaignName: "Oratoria para Políticos",
+    createdTime: new Date("2026-05-01T12:00:00Z"),
+  });
+  await sembrarLead(db, {
+    phone: "51900123",
+    fullName: "Nombre Nuevo",
+    platform: "web",
+    formName: "icarus:landing",
+    campaignName: "OSINT & SOCMINT",
+    createdTime: new Date("2026-07-20T12:00:00Z"),
+  });
+
+  const fila = (await consultarCola(db, {})).conversaciones[0] as Fila;
+  assert.equal(fila.lead_curso, "OSINT & SOCMINT");
+  assert.equal(fila.lead_nombre, "Nombre Nuevo", "el nombre acompaña al curso que ganó, no al otro");
+});
+
+test("sin lead que matchee, el nombre no se inventa", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarMensaje(db, { personaId: "51900321", personaNombre: "🦋W", texto: "hola" });
+
+  const fila = (await consultarCola(db, {})).conversaciones[0] as Fila;
+  assert.equal(fila.lead_nombre, null);
+  assert.equal(fila.lead_curso, null);
 });
 
 test("el curso del lead es el MISMO que ve el panel de negocio: manda la campaña", async (t) => {

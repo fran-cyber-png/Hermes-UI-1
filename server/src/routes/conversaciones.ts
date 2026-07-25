@@ -18,10 +18,10 @@ import { ETAPAS } from "../gestiones/registrarGestion.js";
  * del perímetro (`auth/perimetro.ts`): `req.vendedoraId` ya está puesto acá, y el
  * pin/favorita/no-leído son POR VENDEDORA (el pin de A no lo ve B).
  *
- * `?precio=1` y `?lead=1`: los dos ejes del Pipeline rediseñado. El primero
- * recorta la columna a las que ya tienen un precio encima (la cotización de
- * hecho); el segundo pide el cruce contra `leads` —nombre real y curso del
- * formulario— que NO se le cobra a Mensajes (ver `cola/enriquecerConLead.ts`).
+ * `?precio=1`: el recorte del Pipeline rediseñado — solo las que ya tienen un
+ * precio encima (la cotización de hecho). El nombre real y el curso del
+ * formulario NO son opt-in: viajan siempre, en la misma pasada del listado
+ * (`cola/cursoSql.ts`), así que no hay ningún `?lead=1` que pedir.
  */
 export const conversacionesRouter = Router();
 
@@ -39,7 +39,6 @@ conversacionesRouter.get("/", async (req, res) => {
       tab: typeof req.query.tab === "string" ? req.query.tab : "",
       categoria: typeof req.query.categoria === "string" ? req.query.categoria : "",
       precio: req.query.precio === "1",
-      conLead: req.query.lead === "1",
       vendedoraId: req.vendedoraId,
       limit: Number(req.query.limit) || 40,
       offset: Number(req.query.offset) || 0,

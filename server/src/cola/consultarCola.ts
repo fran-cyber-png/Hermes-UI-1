@@ -15,7 +15,6 @@ import { precioEnviadoSql } from "./precio.js";
 import {
   bandaPinOrdenSql,
   categoriasCteSql,
-  cursosCteSql,
   esTablaAusente,
   estadoJoinSql,
   noLeidoSql,
@@ -27,7 +26,6 @@ import {
   leadCursoJoinSql,
   sufijosDeLaColaCteSql,
 } from "./cursoSql.js";
-import { enriquecerConLead } from "./enriquecerConLead.js";
 
 /**
  * LA COLA UNIFICADA — una fila por CONVERSACIÓN, no por mensaje. Extraída de la
@@ -65,11 +63,18 @@ import { enriquecerConLead } from "./enriquecerConLead.js";
  *
  * CURSO (#72): `interes_curso` y `lead_curso` son los CANDIDATOS del chip de
  * curso de la fila — el interés más reciente y el curso del formulario que la
- * persona llenó (emparejado por teléfono). Salen del listado, no de un fetch por
- * fila. Los fragmentos viven en `cola/cursoSql.ts`; la PRECEDENCIA entre ellos y
- * el anuncio (`ultima_origen`) la decide el front, puro y testeado. Solo se
+ * persona llenó (emparejado por teléfono); `lead_nombre` es el nombre con el que
+ * lo llenó, del MISMO lead. Salen del listado, no de un fetch por fila. Los
+ * fragmentos viven en `cola/cursoSql.ts`; la PRECEDENCIA entre ellos y el
+ * anuncio (`ultima_origen`) la decide el front, puro y testeado. Solo se
  * calculan en la consulta de la PÁGINA: ni el total ni los conteos del embudo
  * pagan el join a `leads`.
+ *
+ * Son la ÚNICA fuente del curso de una fila (#137). El Pipeline llegó a este
+ * mismo dato por otro camino —un cruce contra `leads` después del `LIMIT`, más
+ * un `cursos[]` con todos los intereses— y esa segunda escritura se borró antes
+ * de nacer: la misma persona no puede salir con un curso en Mensajes y con otro
+ * en su tarjeta del Pipeline (la lección de #37, ADR 0016).
  */
 
 /** La ventana de 7 días de Meta para el privado. IG también la tiene, no solo FB. */
@@ -202,12 +207,6 @@ export interface OpcionesCola {
   categoria?: string;
   /** La vendedora del token: sin ella el estado personal (pin/fav/leído) queda en defaults. */
   vendedoraId?: string;
-  /**
-   * Cruzar la página contra `leads` para traer el nombre real y el curso del
-   * formulario (`cola/enriquecerConLead.ts`). OPT-IN: lo pide el Pipeline, no
-   * Mensajes — el cruce no tiene índice y no se le cobra a quien no lo usa.
-   */
-  conLead?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -349,9 +348,6 @@ async function ejecutarCola(
     ),
     lead_curso AS (
       ${leadCursoCteSql}
-    ),
-    cursos_interes AS (
-      ${cursosCteSql}
     )
     SELECT todo.clave AS clave, canal, tipo, persona_id, persona_nombre, numero_propio,
            texto, contexto_texto, ultima_clase, ultima_origen, respondida, ya_le_hablamos,
@@ -360,6 +356,7 @@ async function ejecutarCola(
            etapa_manual,
            iu.curso AS interes_curso,
            lc.curso AS lead_curso,
+           lc.nombre AS lead_nombre,
            (${etapaEfectivaSql}) AS etapa_efectiva,
            extract(day from now() - referencia)::int AS dias,
            (${nivelUrgenciaSql}) AS nivel,
@@ -368,8 +365,7 @@ async function ejecutarCola(
            ec.fijada_at,
            COALESCE(ec.favorita, false) AS favorita,
            (${noLeidoSql})              AS no_leido,
-           COALESCE(cats.categorias, '{}'::text[]) AS categorias,
-           COALESCE(cursos_interes.cursos, '{}'::text[]) AS cursos
+           COALESCE(cats.categorias, '{}'::text[]) AS categorias
     FROM todo
     LEFT JOIN seguimientos USING (clave)
     LEFT JOIN ultimas_gestiones USING (clave)
@@ -377,7 +373,6 @@ async function ejecutarCola(
     LEFT JOIN cats ON cats.clave = todo.clave
     LEFT JOIN interes_ultimo iu ON iu.clave = todo.clave
     ${leadCursoJoinSql}
-    LEFT JOIN cursos_interes ON cursos_interes.clave = todo.clave
     ${donde(condiciones)}
     ORDER BY ${bandaPinOrdenSql}, nivel ASC, orden ASC
     LIMIT ${limit} OFFSET ${offset}
@@ -413,13 +408,14 @@ async function ejecutarCola(
     conteos = plegarConteos(desglose);
   }
 
-  // El cruce contra `leads` va DESPUÉS del LIMIT y solo si se pidió: ver
-  // `enriquecerConLead.ts` (el match por sufijo no tiene índice).
-  const conversaciones = opciones.conLead
-    ? await enriquecerConLead(base, filas as { persona_id?: string | null; canal?: string | null }[])
-    : (filas as unknown[]);
-
-  return { conversaciones, total, conteos, conteosFiltro, desglose, hayMas: filas.length === limit };
+  return {
+    conversaciones: filas as unknown[],
+    total,
+    conteos,
+    conteosFiltro,
+    desglose,
+    hayMas: filas.length === limit,
+  };
 }
 
 /**
