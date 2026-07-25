@@ -99,6 +99,27 @@ describe('el lote se reparte, no se dispara', () => {
   });
 });
 
+describe('dos preparadas de la misma conversación no se pisan', () => {
+  test('cada fila recibe SU hora, aunque compartan clave', () => {
+    // Pasa un instante real: la de anoche que el barrido todavía no caducó y la
+    // de esta madrugada. Con un mapa por clave, una se aprobaría dos veces y la
+    // otra quedaría colgada para siempre.
+    const [a] = lote(1);
+    const b: ParaAprobar = { ...a, id: 99, disparadaPor: new Date(a.disparadaPor.getTime() + 60_000) };
+    const r = repartirAprobadas([a, b], cfg, LAS_OCHO, azarMedio);
+
+    assert.deepEqual(
+      r.aprobadas.map((x) => x.id).sort((x, y) => x - y),
+      [1, 99],
+    );
+    assert.notEqual(
+      r.aprobadas[0].programadoPara.getTime(),
+      r.aprobadas[1].programadoPara.getTime(),
+      'y las dos horas son distintas: el espaciado también vale acá',
+    );
+  });
+});
+
 describe('aprobar es una acción humana: el horario de la vendedora no la bloquea', () => {
   test('aprobar a las 9:05, ya en su turno, PROGRAMA igual', () => {
     // La ventana automática (07:30–09:00 y 20:00–21:00) existe para que la

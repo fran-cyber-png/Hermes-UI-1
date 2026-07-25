@@ -166,7 +166,10 @@ autorespuestaRouter.post('/aprobar', requiereVendedora, async (req, res) => {
     // vendedora pudo haber dejado la bandeja abierta desde hace tres horas.
     const vivas: ParaAprobar[] = [];
     const rechazadas: { id: number; motivo: string }[] = [];
-    for (const id of ids) {
+    // Sin `Set`, un id repetido en el body ocuparía DOS ranuras del ritmo para
+    // un solo mensaje: el techo por hora contaría de más y alguien real se
+    // quedaría afuera.
+    for (const id of new Set(ids)) {
       const p = porId.get(id);
       if (!p) {
         rechazadas.push({ id, motivo: 'ya no está esperando aprobación (la aprobó o descartó alguien más)' });

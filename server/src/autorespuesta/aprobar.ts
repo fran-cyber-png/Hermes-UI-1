@@ -85,10 +85,15 @@ export function repartirAprobadas(
     return { aprobadas: [], noEntran: items.map((i) => ({ id: i.id, motivo })) };
   }
 
-  const porId = new Map<string, number>();
+  // EL PUENTE candidato→id VA POR IDENTIDAD DEL OBJETO, no por `clave`. Dos
+  // preparadas de la MISMA conversación pueden convivir un instante (la de
+  // anoche que el barrido todavía no caducó y la de esta madrugada): con un mapa
+  // por clave, la segunda pisaría a la primera y el reparto aprobaría una fila
+  // dos veces y dejaría la otra colgada para siempre. `programar` devuelve las
+  // MISMAS referencias que recibe, así que la identidad alcanza y es exacta.
+  const porCandidato = new Map<Candidato, number>();
   const candidatos: Candidato[] = items.map((i) => {
-    porId.set(i.clave, i.id);
-    return {
+    const c: Candidato = {
       clave: i.clave,
       telefono: i.telefono,
       numeroPropio: i.numeroPropio,
@@ -97,12 +102,14 @@ export function repartirAprobadas(
       texto: i.texto,
       desde: i.disparadaPor,
     };
+    porCandidato.set(c, i.id);
+    return c;
   });
 
   const plan = programar(candidatos, cfg, ahora, azar, ocupadas, ventanas);
 
   return {
-    aprobadas: plan.ranuras.map((r) => ({ id: porId.get(r.candidato.clave)!, programadoPara: r.programadoPara })),
-    noEntran: plan.postergados.map((p) => ({ id: porId.get(p.candidato.clave)!, motivo: p.motivo })),
+    aprobadas: plan.ranuras.map((r) => ({ id: porCandidato.get(r.candidato)!, programadoPara: r.programadoPara })),
+    noEntran: plan.postergados.map((p) => ({ id: porCandidato.get(p.candidato)!, motivo: p.motivo })),
   };
 }
