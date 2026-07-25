@@ -474,7 +474,11 @@ export default function App() {
             revisión no es un modal: un modal tapa justamente lo que hay que
             mirar para poder decidir. */}
         <div className={vista === 'bandeja' ? 'flex min-h-0 flex-1 gap-3 p-3' : 'hidden'}>
-          <main className="min-h-0 w-[25rem] shrink-0">
+          {/* La lista de revisión pide MENOS ancho que la cola: no tiene
+              búsqueda, ni tabs, ni chips de categoría — solo quién y cuánto
+              hace que espera. Devolverle esos 80 px al chat importa a 1280,
+              donde el panel derecho ya se lleva 22,5rem. */}
+          <main className={'min-h-0 shrink-0 ' + (revision.activo ? 'w-[20rem]' : 'w-[25rem]')}>
             {revision.activo ? (
               <ColaRevision
                 grupos={revision.grupos}

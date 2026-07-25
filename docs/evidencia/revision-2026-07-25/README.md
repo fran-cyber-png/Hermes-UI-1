@@ -52,7 +52,7 @@ teclado:   { entroConTeclaA: true, llevoAMensajes: true,
 
 edición:   { boton: 1, marca: 1 }                ← «Aprobar lo editado» + chip «editada»
 
-1280:      { scrollHorizontal1280: 0, anchoDelBorradorEn1280: 444 }
+1280:      { scrollHorizontal1280: 0, anchoDelBorradorEn1280: 452 }
 
 sin tocar
 prod:      bloqueadas: ["TICKS-AZULES-BLOQUEADOS /api/whatsapp/leido/51921911132",
@@ -81,7 +81,23 @@ certificado **y avisando que va a pagar**, a punto de recibir un acuse genérico
 1. **El borrador se veía en renglón y medio** (el `textarea` heredaba `rows={1}` del composer normal).
    Se supervisa leyendo: en revisión arranca en 5 renglones y hasta `max-h-56`.
 2. **A 1280 los dos botones aplastaban el borrador a ~150 px.** En revisión las acciones bajan a su
-   propia fila; el borrador quedó en 444 px.
+   propia fila; el borrador quedó en 452 px.
+3. **A 1280, con el panel derecho nuevo (22,5rem) el chat quedaba en una tira.** En revisión la
+   columna izquierda baja de 25rem a 20rem: la lista de revisión no tiene búsqueda, ni tabs, ni chips
+   de categoría, así que no los necesita — y esos 80 px vuelven al chat, que es lo que hay que leer.
 
 Y un tercero, funcional: **`Escape` no salía del modo**, porque el foco vive en el composer y la
 guarda global de «no pises un input» se comía la tecla. Ahora sale, acotado al `textarea`.
+
+
+## Convivencia con el panel derecho nuevo (ADR 0017)
+
+Las capturas se re-sacaron **después de rebasar sobre `main`**, así que muestran el panel multifunción
+ya mergeado. El bloque «Por qué esta respuesta» queda **arriba** de él y ninguno se pisa:
+
+En `03-revision-completa-1440.png` se ve el caso que justifica la pantalla entera. La persona que
+está por recibir un acuse genérico es, según el panel de abajo, **un cliente de Cerberus con 2
+compras** — y lo último que escribió, arriba, es *«Quiero saber si se recibe diploma del diplomado…
+Mis transferencias / Para el pago»*. O sea: alguien que ya compró, preguntando por el certificado y
+avisando que va a pagar. El panel lo marca como `propio` y dice «Si la plantilla no se lo contesta,
+editala antes de aprobar». Sin esas dos cosas juntas a la vista, esa aprobación se daba a ciegas.
