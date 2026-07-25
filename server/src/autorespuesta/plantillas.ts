@@ -66,7 +66,7 @@ export function catalogo(): Plantilla[] {
       cuerpo:
         '{{saludo}}, gracias por escribirnos a la Escuela de Goberna. ' +
         'Te escribe un mensaje automático: en este momento estamos fuera del horario de atención. ' +
-        'Tengo anotado tu interés en {{curso}} y una asesora te responde personalmente ' +
+        'Tenemos anotado tu interés en {{curso}} y una asesora te responde personalmente ' +
         'a partir de las {{hora_apertura}} con el temario, las fechas y el costo. ' +
         'Si deseas, déjanos aquí tu consulta y ya la tenemos a mano al abrir.',
       aplica: (ctx) => Boolean(ctx.curso),
@@ -130,10 +130,14 @@ export function saludoDe(personaNombre: string | null | undefined): string {
   return usable ? `Hola ${nombre}` : 'Hola';
 }
 
-/** `09:00` → `9:00 a. m.` — cómo lo diría una persona, no un reloj de 24 h. */
+/**
+ * `09:00` → `9:00 de la mañana` — cómo lo diría una persona, no un reloj de
+ * 24 h. Sin punto final a propósito: si devolviera «9:00 a. m.» y la plantilla
+ * cierra la frase, al cliente le llega «a partir de las 9:00 a. m..».
+ */
 export function horaEnCriollo(hhmm: string): string {
   const [h, m] = hhmm.split(':').map(Number);
-  const sufijo = h < 12 ? 'a. m.' : 'p. m.';
+  const momento = h < 12 ? 'de la mañana' : h < 19 ? 'de la tarde' : 'de la noche';
   const hora12 = h % 12 === 0 ? 12 : h % 12;
-  return `${hora12}:${String(m).padStart(2, '0')} ${sufijo}`;
+  return `${hora12}:${String(m).padStart(2, '0')} ${momento}`;
 }
