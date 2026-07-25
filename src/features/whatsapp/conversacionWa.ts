@@ -22,6 +22,12 @@ export interface MensajeHilo {
   media?: MediaHilo | null;
   /** Si este mensaje trajo el origen del lead (anuncio/landing). Solo el primero suele traerlo. */
   origen?: { fuente: string; titulo?: string | null } | null;
+  /**
+   * Lo mandó la AUTO-RESPUESTA fuera de horario, no una persona (#125, ADR 0015).
+   * Sale de `envios_wa.automatico`. La vendedora TIENE que poder distinguirlo de
+   * un vistazo: sin la marca, abre el chat creyendo que ella escribió eso.
+   */
+  automatico?: boolean;
 }
 
 /**

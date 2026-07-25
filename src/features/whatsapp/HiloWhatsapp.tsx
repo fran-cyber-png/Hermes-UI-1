@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, FileText, Loader2, Megaphone, Paperclip, Phone, Play, QrCode, Send, Link2, WifiOff, X } from 'lucide-react';
+import { AlertTriangle, Bot, FileText, Loader2, Megaphone, Paperclip, Phone, Play, QrCode, Send, Link2, WifiOff, X } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
 import { useBlobAutenticado } from '../../lib/datos/blobAutenticado';
 import { formatoTelefono, tempClass } from '../../lib/formato';
@@ -411,8 +411,27 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
                         ) : (
                           <span className="italic text-muted-foreground">(no es texto — velo en el teléfono)</span>
                         )}
-                        <div className={'mt-0.5 text-right font-mono text-[11px] text-muted-foreground ' + (m.media ? 'px-2 pb-1' : '')}>
-                          {new Date(m.occurred_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                        <div
+                          className={
+                            'mt-0.5 flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground ' +
+                            (m.automatico ? 'justify-between ' : 'justify-end ') +
+                            (m.media ? 'px-2 pb-1' : '')
+                          }
+                        >
+                          {/* La marca de automático (#125): sin esto, la vendedora
+                              abre el chat creyendo que ese mensaje lo escribió ella. */}
+                          {m.automatico && (
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full bg-navy/10 px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide text-navy"
+                              title="Respuesta automática fuera de horario — no la escribió una persona"
+                            >
+                              <Bot size={11} className="shrink-0" />
+                              Automático
+                            </span>
+                          )}
+                          <span>
+                            {new Date(m.occurred_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
                         </div>
                       </div>
                     </div>
