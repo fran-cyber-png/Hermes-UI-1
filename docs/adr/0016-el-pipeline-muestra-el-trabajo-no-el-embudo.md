@@ -3,13 +3,9 @@
 - **Fecha:** 2026-07-25
 - **Estado:** aceptado
 - **Decide:** el rediseño de `VistaEmbudo` (rama `redesign/pipeline`, PR #137)
-- **Se apoya en:** ADR 0009 (una definición, jamás espejos) · ADR 0013 (etapa efectiva)
-- **Coordina con:** ADR 0015 / PR #135 (la barra de filtros de la cola), que lleva el curso a
-  la fila **en SQL** (`cola/cursoSql.ts`). Este ADR lo lleva **después del `LIMIT`**
-  (`cola/enriquecerConLead.ts`) porque nació sin saber del otro frente. **Son la misma idea
-  dicha dos veces y no pueden convivir**: al mergear, gana el fragmento SQL de #135 (sirve
-  también a Mensajes y entra en la misma pasada) y este PR pasa a consumir su columna —
-  el único punto de contacto del front es `vistas/tarjeta.ts#cursoDeTarjeta`.
+- **Se apoya en:** ADR 0009 (una definición, jamás espejos) · ADR 0013 (etapa efectiva) ·
+  ADR 0015 «barra de filtros y curso en la fila» / PR #135, del que este ADR **consume** el
+  curso en vez de calcularlo (ver §«De dónde sale el curso»).
 
 ## Contexto
 
@@ -73,12 +69,48 @@ De ahí salen cinco decisiones concretas:
    columnas vacías explican cómo se llenan en vez de ser un hueco blanco.
 
 Del lado del server, todo lo nuevo entra por el seam que ya existía (`cola/consultarCola.ts`)
-y **es aditivo**: `precio_enviado`, `ya_le_hablamos`, `cursos[]`, y —opt-in con `?lead=1`—
-`lead_nombre` / `lead_curso`. El cruce contra `leads` va **después del `LIMIT`**
-(`cola/enriquecerConLead.ts`): el match es por sufijo de teléfono y no tiene índice, así
-que Mensajes no paga lo que no usa. El `desglose` (etapa × ya-le-hablamos × precio × viva)
-sale de la misma pasada que los conteos de #89, y esos conteos ahora se **pliegan** de él:
-si algún día no cerraran sería un bug, no una diferencia de definición.
+y **es aditivo**: `precio_enviado`, `ya_le_hablamos` y el recorte `?precio=1`. El `desglose`
+(etapa × ya-le-hablamos × precio × viva) sale de la misma pasada que los conteos de #89, y
+esos conteos ahora se **pliegan** de él: si algún día no cerraran sería un bug, no una
+diferencia de definición.
+
+## De dónde sale el curso: una sola fuente, la de #135
+
+Dos frentes llegaron al mismo dato la misma semana. #135 (ADR 0015) lo resolvió **en SQL**,
+dentro de la misma pasada del listado (`cola/cursoSql.ts` → `interes_curso`, `lead_curso`);
+este rediseño lo había resuelto **después del `LIMIT`**, con un cruce propio contra `leads`
+(`cola/enriquecerConLead.ts` → `lead_nombre`, `lead_curso`) más un `cursos[]` con todos los
+intereses de la conversación. Son la misma idea escrita dos veces, y dos escrituras de la
+misma regla es exactamente la divergencia que ya costó cara (#37, ADR 0009): la misma
+persona saldría con un curso en Mensajes y con otro en su tarjeta del Pipeline.
+
+**Gana la de #135 y la otra se borra.** Sirve a las dos pantallas, entra en la misma pasada
+y ya tiene sus tests con base. Concretamente:
+
+- Se borran `cola/enriquecerConLead.ts`, `gente/emparejar.ts#cursoDelLead`, la opción
+  `conLead`, el query-param `?lead=1` y el `cursos[]` (`cola/estadoSql.ts#cursosCteSql`).
+  El `interes_curso` de #135 —el interés **más reciente**— ya es el candidato que la
+  compuerta necesita; la lista entera de intereses es la línea de tiempo de la ficha (#57),
+  no un dato de tarjeta.
+- El fragmento de #135 se **extiende con el nombre real**: `l.full_name` es una columna más
+  del `DISTINCT ON` que ya hace el join a `leads`, así que no cuesta ninguna pasada nueva.
+  Ese nombre es lo que convierte «🦋W», «.» o «10 ❤️L» en la persona que llenó el
+  formulario, y sale del **mismo lead** que el curso: nombre y curso no pueden venir de dos
+  personas distintas.
+- Del lado del front el único punto de contacto es `vistas/tarjeta.ts#cursoDeTarjeta`, que
+  **delega** en `canales/curso.ts#cursoDeFila` (la precedencia interés › formulario ›
+  anuncio, el acortado con `familiaDeProducto` de #129 y el color determinista por familia)
+  y solo le agrega `registrado = fuente === 'interes'`, que es lo único que la tarjeta
+  necesita y la fila no.
+
+**El chip acorta; el POST no.** `familiaDeProducto` poda «Diploma de Especialización en
+Inteligencia y Contrainteligencia 14» hasta «Inteligencia y Contrainteligencia» para que
+entre en 230 px. Ese texto **no existe en el catálogo de la Escuela**: registrar el interés
+con él asienta una fila que nadie puede casar con un producto de Cerberus. Por eso
+`cotizarEnUnClic` devuelve las dos formas con nombres distintos —`crudo` (lo que se guarda,
+tal cual vino del server) y `etiqueta` (lo que se lee)— y hay un test que falla si vuelven a
+ser la misma. Por la misma razón el **anuncio** pinta el chip pero **no** habilita el clic:
+el título de un anuncio es de dónde vino la persona, no un curso del catálogo.
 
 ## Qué reemplaza
 
@@ -91,6 +123,10 @@ si algún día no cerraran sería un bug, no una diferencia de definición.
 - **El camino único a Cotizado** (arrastrar → rebote del server → modal → buscador →
   reintento). Sigue existiendo para el caso en que de verdad no sabemos el curso; deja de
   ser el único.
+- **El cruce contra `leads` propio de este PR** (`cola/enriquecerConLead.ts`, opt-in con
+  `?lead=1`, apoyado en `gente/emparejar.ts#cursoDelLead`) y el **`cursos[]` de la fila**
+  (`cola/estadoSql.ts#cursosCteSql`). Los reemplaza el fragmento SQL de #135, extendido con
+  `l.full_name`. Ver §«De dónde sale el curso».
 
 ## Consecuencias
 
@@ -99,10 +135,12 @@ si algún día no cerraran sería un bug, no una diferencia de definición.
 - «Ya le pasaste precio» es una **heurística sobre texto**: puede errar. Por eso no asienta
   ninguna etapa por su cuenta — solo marca la tarjeta y ofrece la acción. Si el regex hay
   que ajustarlo, se ajusta en un solo lugar y el test de paridad SQL≡TS es el candado.
-- El curso del formulario **solo sale de los leads web** (en ICARUS `campaign_name` ES el
-  producto de la landing). En los leads de Meta el mismo campo es el nombre de una campaña
-  publicitaria: se sigue mostrando como contexto en la ficha, pero no se hace pasar por el
-  curso que la persona eligió.
+- El curso del formulario sale de `cursoDeLeadSql` (`gente/leadDeTelefono.ts`), que es el
+  ÚNICO lugar donde se decide qué curso dice un lead — lo comparten el panel de negocio
+  (#128), el chip de la fila (#72) y esta tarjeta. Se hereda también su borde conocido: un
+  lead sin `campaign_name` ni `form_name` no dice ningún curso, y como el nombre viaja en la
+  misma fila del `DISTINCT ON`, ese puñado de leads tampoco aporta su nombre. No se abre una
+  segunda pasada por ellos.
 - El front puede salir a producción **antes** que el server (N4 sin reinicio, N5 con
   botón). Mientras tanto el tablero cuenta con los conteos de #89 y **calla** el detalle
   que todavía no puede saber, en vez de pintar ceros.

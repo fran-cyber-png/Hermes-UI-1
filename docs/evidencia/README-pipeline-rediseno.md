@@ -16,7 +16,13 @@ además que a 1280 **no hay scroll horizontal** (`scrollWidth - clientWidth === 
 ## El DESPUÉS — dos juegos, por una razón
 
 El server de producción todavía **no tiene** las señales nuevas (`precio_enviado`,
-`cursos[]`, `lead_*`, `desglose`): se despliegan con el botón N5. Por eso hay dos:
+`ya_le_hablamos`, `desglose`, y el curso/nombre del formulario): se despliegan con el botón
+N5. Por eso hay dos:
+
+> Las capturas son del **25-jul, antes del rebase sobre #135**. La pantalla no cambió: lo
+> que cambió es de dónde llega el curso —ahora del fragmento SQL de #135
+> (`interes_curso`/`lead_curso`/`lead_nombre`) en vez del cruce propio que este PR traía—.
+> Ver ADR 0016 §«De dónde sale el curso».
 
 ### 1. Contra producción — datos reales, server viejo
 
