@@ -17,6 +17,7 @@
     "ingest:interactions": "tsx src/scripts/ingestInteractions.ts",
     "ingest:icarus": "tsx src/scripts/ingestIcarus.ts",
     "medir:correo": "tsx src/scripts/medirCorreoFichas.ts",
+    "medir:cotizaciones": "tsx src/scripts/medirCotizaciones.ts",
     "wa:vincular": "tsx src/whatsapp/vincular.ts",
     "auto:simulacro": "tsx src/scripts/autoSimulacro.ts",
     "cerberus:ingestar": "tsx src/scripts/cerberus.ts ingestar",

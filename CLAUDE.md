@@ -133,6 +133,23 @@ referenciado por nombre, regla dura #1). El cliente vive en `server/src/ivi/clie
 - **Env**: `IVI_URL` + `IVI_SERVICE_TOKEN` (solo nombres en `.env.example`). Del lado geografo,
   `POST /api/preguntar` puede **no estar vivo aún**: hasta entonces la ruta responde 502 honesto.
 
+## Señales automáticas — «Cotizado» y «Se enfrió»
+
+`server/src/senales/` calcula, sobre el hilo, dos cosas que hoy nadie ve: si a esa persona ya le
+mandaron el **precio** y si **se enfrió** después. `GET /api/senales?claves=a,b,c`
+(`routes/senales.ts`, detrás de `requiereVendedora`, solo lectura).
+
+- **No se guardan** (ADR 0015): no hay fila, no hay job. Se derivan en cada consulta, como la etapa
+  efectiva (0013) y `no_leido` (0014). Conviven con las **categorías manuales** (#48) sin ser una:
+  la manual es píldora de **borde**, la automática de **fondo** tenue; misma paleta `--cat-*`, sin oro.
+- **El criterio vive UNA vez**, puro: `senales/cotizacion.ts` (monto con moneda plausible, veto a la
+  instrucción de pago) y `senales/enfriamiento.ts` (cotizada + sin respuesta + N días, con reloj
+  inyectado). El SQL de `consultarSenales.ts` solo hace un **prefiltro superconjunto** y el veredicto
+  lo da la función pura — así no hay segunda implementación que pueda divergir (lección de #37).
+- **Umbral**: `SENALES_DIAS_ENFRIAMIENTO` (default 3; un valor inválido se ignora).
+- **Medir la precisión sobre datos reales**: `cd server && npm run medir:cotizaciones [días]`
+  (read-only) — imprime ingenuo vs. detector vs. corroboradas y la muestra de falsos positivos evitados.
+
 ## Administración de números (para Cerberus)
 
 `/api/admin/*` (`server/src/routes/admin.ts`), detrás de **`requiereServicio`**

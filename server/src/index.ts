@@ -18,6 +18,7 @@ import { contactosRouter } from "./routes/contactos.js";
 import { agendaRouter } from "./routes/agenda.js";
 import { gestionesRouter } from "./routes/gestiones.js";
 import { categoriasRouter } from "./routes/categorias.js";
+import { senalesRouter } from "./routes/senales.js";
 import { dashboardRouter } from "./routes/dashboard.js";
 import { landingRouter } from "./webhook/landing.js";
 import { correosRouter } from "./routes/correos.js";
@@ -77,6 +78,7 @@ app.use("/api/contactos", contactosRouter); // la ficha del contacto contra Cerb
 app.use("/api/agenda", agendaRouter); // los seguimientos agendados de cada vendedora
 app.use("/api/gestiones", gestionesRouter); // bitácora comercial: etapas, próximas acciones, etiquetas
 app.use("/api/categorias", categoriasRouter); // catálogo de categorías con color, por vendedora (#48)
+app.use("/api/senales", senalesRouter); // cotizado / se enfrió: etiquetas derivadas, no guardadas (ADR 0015)
 app.use("/api/dashboard", dashboardRouter); // el radar: leads cayendo + números por vendedora
 app.use("/webhook/landing", landingRouter); // los leads de las landings, reenviados por Bravo
 app.use("/api/correos", correosRouter); // email 1-a-1, auditado — sin listas, sin campañas
