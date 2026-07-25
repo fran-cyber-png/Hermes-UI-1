@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type Ref } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, MessageSquarePlus, Search, Tags, X } from 'lucide-react';
+import { ChevronLeft, Filter, MessageSquarePlus, Search, X } from 'lucide-react';
 import { useLocalStorage } from '../../lib/useLocalStorage';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { hace, useFrescura } from '../../lib/datos/frescura';
@@ -10,17 +10,17 @@ import { useSesionWa } from '../whatsapp/conversacionWa';
 import { pendientesQueApuran, useAgenda } from '../agenda/agenda';
 import { useCategorias } from '../gestion/categorias';
 import { GestorCategorias } from '../gestion/GestorCategorias';
-import { CLASE_FONDO, esColorCategoria } from '../gestion/paletaCategorias';
 import type { DatosDashboard } from '../dashboard/dashboard';
 import {
-  FILTROS_SEC,
   KEY_TAB,
   TABS,
+  filtrosActivos,
   migracionDesdeKeyVieja,
   migrarFiltroViejo,
   type FiltroSec,
   type Tab,
 } from './cola';
+import { BarraFiltros } from './BarraFiltros';
 import { useConversaciones, useEstadoConversacion, type Conversacion } from './conversaciones';
 import { FilaConversacion } from './FilaConversacion';
 import { MenuFila } from './MenuFila';
@@ -108,8 +108,18 @@ export function ColaUnificada({
   const estadoMut = useEstadoConversacion();
   const [avisoPin, setAvisoPin] = useState<string | null>(null);
 
-  const { items, total, hayMas, cargando, cargandoMas, cargarMas, traidoEn, actualizando, sinEstado } =
-    useConversaciones({ tab, filtroSec, categoria: categoriaActiva?.nombre ?? null });
+  const {
+    items,
+    total,
+    conteosFiltro,
+    hayMas,
+    cargando,
+    cargandoMas,
+    cargarMas,
+    traidoEn,
+    actualizando,
+    sinEstado,
+  } = useConversaciones({ tab, filtroSec, categoria: categoriaActiva?.nombre ?? null });
   // Al abrir la app la cola viene del caché persistido: hasta que llegue lo
   // fresco hay que decir de cuándo es lo que se está mirando.
   const deAntes = useSelloDeViejo(traidoEn);
@@ -249,7 +259,13 @@ export function ColaUnificada({
   // Fila pin de orientación: la conversación abierta no aparece bajo el filtro
   // (o la búsqueda) activo — se fija arriba para que la vendedora no la pierda.
   const noEstaEnLista = seleccionada != null && !cargando && !visibles.some((c) => c.clave === seleccionada);
-  const hayFiltroActivo = tab !== 'todo' || filtroSec !== '' || categoriaActiva != null;
+  // Los recortes activos, nombrados: es lo que la cabecera muestra y lo que
+  // decide si «Ver todo» tiene sentido (lógica pura, `cola.ts`).
+  const recortes = filtrosActivos({ tab, filtroSec, categoria: categoriaActiva?.nombre ?? null, busqueda });
+  const hayFiltroActivo = recortes.some((r) => r.clave !== 'busqueda');
+  // Con búsqueda el recorte lo hace el front sobre lo cargado, así que el número
+  // honesto es el que se ve; sin ella manda el total que contó el server.
+  const nVisibles = busqueda ? visibles.length : total;
   const pinVisible = noEstaEnLista && (busqueda !== '' || hayFiltroActivo);
   const canalPin =
     conversacionAbierta?.canal ?? (seleccionada?.startsWith('conv:') ? seleccionada.split(':')[1] : null);
@@ -331,15 +347,9 @@ export function ColaUnificada({
               </button>
             )}
           </div>
-          <button
-            type="button"
-            title="Listas (organizá por categoría)"
-            aria-label="Listas por categoría"
-            onClick={() => setModoListas(true)}
-            className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:border-primary hover:text-primary"
-          >
-            <Tags size={15} />
-          </button>
+          {/* El botón de Listas que vivía acá se fue a la barra de filtros: dos
+              puertas a lo mismo era redundancia, y la barra es donde ahora se
+              ven las categorías con su color. */}
           <button
             type="button"
             title={conectado ? 'Chat nuevo (a un número que no está en la cola)' : 'WhatsApp no está conectado'}
@@ -385,87 +395,76 @@ export function ColaUnificada({
           </div>
         )}
 
-        {categoriaActiva ? (
-          /* Drill-down de categoría: cabecera de «volver» en vez de tabs. */
-          <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2">
+          {/* Tabs: el eje de la cola. No se encogen: son el control principal. */}
+          <div className="flex shrink-0 gap-0.5 rounded-lg bg-muted/60 p-0.5" role="tablist" aria-label="Filtrar la cola">
+            {TABS.map((t) => (
+              <button
+                key={t.valor}
+                type="button"
+                role="tab"
+                aria-selected={tab === t.valor}
+                onClick={() => setTab(t.valor)}
+                className={
+                  'rounded-md px-2.5 py-1 text-xs font-bold transition-colors ' +
+                  (tab === t.valor ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')
+                }
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {deAntes ? (
+            <SelloDeAntes texto={deAntes} actualizando={actualizando} />
+          ) : (
+            !cargando &&
+            total > 0 &&
+            !hayFiltroActivo && (
+              <span className="pr-1 font-mono text-[11px] tabular-nums text-muted-foreground">
+                {total.toLocaleString('es')} en cola
+              </span>
+            )
+          )}
+        </div>
+
+        {/* La barra que se corre: los filtros que sirven + las listas de la vendedora. */}
+        <div className="mt-2">
+          <BarraFiltros
+            filtroSec={filtroSec}
+            onFiltro={setFiltroSec}
+            conteos={conteosFiltro}
+            catalogo={catalogo}
+            categoriaActiva={categoriaActiva?.nombre ?? null}
+            /* Desde la BARRA la categoría afina lo que ya se está mirando (el tab
+               sigue puesto, y se ve). Desde el modo LISTAS se entra limpio: ahí
+               la cabecera del drill-down no mostraba el tab, y «Precio (12)»
+               abría con 2 filas sin decir por qué. */
+            onCategoria={setCategoriaActiva}
+            onListas={() => {
+              setCategoriaActiva(null);
+              setModoListas(true);
+            }}
+          />
+        </div>
+
+        {/* QUÉ ESTÁ FILTRADO AHORA MISMO. Una cola de 1.866 que muestra 12 sin
+            decir por qué hace creer que no hay trabajo: acá se nombra cada
+            recorte y se sale de todos con un gesto. */}
+        {recortes.length > 0 && (
+          <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <Filter size={11} className="shrink-0" aria-hidden="true" />
+            <p className="min-w-0 flex-1 truncate">
+              <span className="font-mono tabular-nums text-foreground">{nVisibles.toLocaleString('es')}</span>{' '}
+              {nVisibles === 1 ? 'conversación' : 'conversaciones'} con {recortes.map((r) => r.label).join(' + ')}
+            </p>
             <button
               type="button"
-              onClick={() => setCategoriaActiva(null)}
-              className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-xs font-bold text-primary transition-colors hover:bg-primary/10"
+              onClick={limpiarFiltros}
+              className="shrink-0 rounded-md px-1.5 py-0.5 font-bold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
-              <ChevronLeft size={14} /> Listas
+              Ver todo
             </button>
-            <span className="flex min-w-0 flex-1 items-center gap-1.5">
-              <span
-                className={
-                  'size-2.5 shrink-0 rounded-full ' +
-                  (esColorCategoria(categoriaActiva.color) ? CLASE_FONDO[categoriaActiva.color] : 'bg-muted')
-                }
-              />
-              <span className="truncate text-sm font-bold capitalize text-navy">{categoriaActiva.nombre}</span>
-            </span>
-            {!cargando && total > 0 && (
-              <span className="pr-1 font-mono text-[11px] tabular-nums text-muted-foreground">
-                {total.toLocaleString('es')}
-              </span>
-            )}
           </div>
-        ) : (
-          <>
-            <div className="flex items-center justify-between gap-2">
-              {/* Tabs: el eje de la cola. No se encogen: son el control principal. */}
-              <div className="flex shrink-0 gap-0.5 rounded-lg bg-muted/60 p-0.5" role="tablist" aria-label="Filtrar la cola">
-                {TABS.map((t) => (
-                  <button
-                    key={t.valor}
-                    type="button"
-                    role="tab"
-                    aria-selected={tab === t.valor}
-                    onClick={() => setTab(t.valor)}
-                    className={
-                      'rounded-md px-2.5 py-1 text-xs font-bold transition-colors ' +
-                      (tab === t.valor ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')
-                    }
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-              {deAntes ? (
-                <SelloDeAntes texto={deAntes} actualizando={actualizando} />
-              ) : (
-                !cargando &&
-                total > 0 && (
-                  <span className="pr-1 font-mono text-[11px] tabular-nums text-muted-foreground">
-                    {total.toLocaleString('es')} en cola
-                  </span>
-                )
-              )}
-            </div>
-
-            {/* Filtros secundarios: angostan dentro del tab. Chips sobrios, apagables. */}
-            <div className="mt-2 flex items-center gap-1.5">
-              {FILTROS_SEC.map((f) => {
-                const activo = filtroSec === f.valor;
-                return (
-                  <button
-                    key={f.valor}
-                    type="button"
-                    aria-pressed={activo}
-                    onClick={() => setFiltroSec(activo ? '' : f.valor)}
-                    className={
-                      'rounded-full border px-2 py-0.5 text-[11px] font-semibold transition-colors ' +
-                      (activo
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground')
-                    }
-                  >
-                    {f.label}
-                  </button>
-                );
-              })}
-            </div>
-          </>
         )}
       </div>
 

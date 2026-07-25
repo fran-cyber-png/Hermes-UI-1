@@ -246,6 +246,21 @@
   background-clip: content-box;
 }
 
+/* La excepción: una tira que se corre de lado (la barra de filtros de la cola)
+   NO lleva barra de scroll. En 400 px de panel, 9 px de riel gris debajo de los
+   chips es ruido y come una fila; que hay más a los lados lo dice el degradado
+   del borde, no un riel. Va acá y no como variante arbitraria de Tailwind
+   porque `[&::-webkit-scrollbar]:hidden` no llega a pisar el `*::-webkit-scrollbar`
+   global de arriba. */
+.sin-riel {
+  scrollbar-width: none;
+}
+.sin-riel::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
 @layer base {
   /* Seleccionar texto también es de la marca. */
   ::selection {

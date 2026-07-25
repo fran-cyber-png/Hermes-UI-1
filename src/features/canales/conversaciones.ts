@@ -51,6 +51,11 @@ export interface Conversacion {
   no_leido?: boolean;
   /** Las categorías (etiquetas) asignadas, en minúsculas — para la píldora de color. */
   categorias?: string[];
+  /** CANDIDATOS del chip de curso (#72). La precedencia la decide `curso.ts`, no el server. */
+  /** El interés más reciente asentado para esta conversación. */
+  interes_curso?: string | null;
+  /** El curso del formulario que la persona llenó (lead emparejado por teléfono). */
+  lead_curso?: string | null;
 }
 
 type Pagina = {
@@ -61,6 +66,8 @@ type Pagina = {
   sinEstado?: boolean;
   /** Conteos reales por etapa efectiva sobre la misma ventana (#89). Solo primera página. */
   conteos?: Record<string, number>;
+  /** Cuántas filas daría cada filtro secundario dentro del recorte actual. Primera página. */
+  conteosFiltro?: { pideInfo: number; sinResponder: number };
 };
 
 /**
@@ -87,7 +94,7 @@ export function useConversaciones(
     typeof estado === 'string'
       ? {
           tab: 'todo',
-          filtroSec: estado === 'pide-info' || estado === 'por-vencer' ? estado : '',
+          filtroSec: estado === 'pide-info' || estado === 'sin-responder' ? estado : '',
           categoria: null,
           canal: canal || undefined,
           etapa: etapa || undefined,
@@ -116,6 +123,8 @@ export function useConversaciones(
     total: q.data?.pages[0]?.total ?? 0,
     /** Los conteos del embudo (primera página): el total real de cada columna del tablero. */
     conteos: q.data?.pages[0]?.conteos,
+    /** Cuántas daría cada chip de filtro sin salir del recorte actual (#72). */
+    conteosFiltro: q.data?.pages[0]?.conteosFiltro,
     hayMas: Boolean(q.hasNextPage),
     cargando: q.isPending,
     cargandoMas: q.isFetchingNextPage,
