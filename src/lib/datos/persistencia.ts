@@ -42,6 +42,14 @@ import { hace } from './frescura';
  * lista sea esta corta, la garantía de que ninguna credencial toca el disco no
  * necesita auditoría — se lee de un vistazo.
  *
+ * `dashboard` cubre las DOS lecturas del Dashboard: el radar (`['dashboard']`) y
+ * el panel del negocio (`['dashboard','negocio',…]`, #128). Que la segunda entre
+ * es una decisión, no un descuido de la lista blanca: el panel escanea la
+ * historia entera, así que abrirlo contra un spinner es justo lo que ADR 0007
+ * vino a evitar — y un panel viejo no puede mentir sobre CUÁNDO es, porque
+ * imprime su rango de fechas en pantalla. Si la respuesta guardada venció, la
+ * consulta ya está stale y se refresca sola al abrir.
+ *
  * Lo que queda afuera y por qué:
  *   · `wa/sesion`, `wa/conversacion` — ya son en vivo por SSE. Un estado de
  *     sesión guardado puede decir "conectado" sobre un número que se cayó.

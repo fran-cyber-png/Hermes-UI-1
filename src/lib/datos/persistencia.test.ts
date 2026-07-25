@@ -46,6 +46,16 @@ describe('debePersistir — qué sobrevive al cierre de la app', () => {
     expect(debePersistir(['conversaciones', { intencion: '', canal: '' }], 'success')).toBe(true);
   });
 
+  it('el panel del negocio también, con sus filtros en la clave (#128)', () => {
+    // Está adentro POR DECISIÓN, no porque la clave empiece con «dashboard» de
+    // casualidad: el panel escanea la historia entera y abrirlo contra un
+    // spinner es lo que ADR 0007 vino a evitar. Cada combinación de filtros
+    // guarda la suya, y ninguna puede mentir sobre cuándo es — la pantalla
+    // imprime su rango de fechas.
+    expect(debePersistir(['dashboard', 'negocio', '7d', null, 'curso'], 'success')).toBe(true);
+    expect(debePersistir(['dashboard', 'negocio', '30d', '51986394450', 'anuncio'], 'success')).toBe(true);
+  });
+
   it('lo que ya es en vivo por SSE no: guardarlo sería mostrar un estado que quizá ya no existe', () => {
     expect(debePersistir(['wa', 'sesion'], 'success')).toBe(false);
     expect(debePersistir(['wa', 'conversacion', '51986394450'], 'success')).toBe(false);
