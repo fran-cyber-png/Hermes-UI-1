@@ -148,3 +148,7 @@ Si algún día el dueño quiere volver sobre esto, es un ADR nuevo, no un parám
 - **Una plantilla nunca va a ser tan buena como la vendedora.** Por eso la auto-respuesta se
   apaga sola en cuanto ella entra, y por eso lo que no entra en la ventana se le deja a ella
   en vez de forzarlo.
+- **El «un envío a la vez» es un cerrojo DE PROCESO** (`enVuelo` en el despachador), y alcanza
+  porque hoy Hermes corre como un solo servicio de systemd en VPS1. El día que haya dos
+  instancias, ese cerrojo deja de valer y hay que tomar la fila con `FOR UPDATE SKIP LOCKED`
+  antes de mandar. Queda escrito acá para que no se descubra por accidente.
