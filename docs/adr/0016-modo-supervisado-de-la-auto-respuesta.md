@@ -97,9 +97,15 @@ por curso — 38 textos no los mantiene nadie. Agregar un curso es una entrada e
 pauta y las mayúsculas de campaña, en un WhatsApp, son un grito. Un nombre ya escrito con minúsculas
 («Diplomado en Gestión Pública») se respeta tal cual: lo escribió una persona.
 
-**Punto de integración con #138** (plantillas-secuencia con media, todavía sin mergear): cuando su
-tabla esté en `main`, `catalogo()` la consume y las familias se mapean a sus secuencias por id — el
-primer mensaje de la secuencia es el acuse y el resto queda para la vendedora. No se duplica su modelo.
+**Punto de integración con las plantillas-secuencia (#138, ya en `main`)**: `server/src/plantillas/`
+es el hogar del contenido que manda la vendedora —secuencias con media, precio en vivo de Cerberus,
+familia por prefijo de SKU—. Este ADR **no duplica ese modelo y tampoco lo consume todavía**, por tres
+diferencias que son de producto y las cierra el dueño: (1) una secuencia son N mensajes y un acuse es
+UNO —mandar solo el paso 1 de cuatro le cambia el sentido a la plantilla—; (2) son **por vendedora** y
+la auto-respuesta no tiene vendedora; (3) su `{precio}` se resuelve en vivo, y un acuse que cotiza sin
+que nadie lo mire es otra feature con otro riesgo. **La costura, cuando se decida**: `catalogo()` lee
+de `plantillas/repositorio.ts` las marcadas como aptas, conservando la firma (`Plantilla[]`) y el
+contrato de `elegir()`, y las familias de `campana.ts` se mapean a `plantillas.familia_curso`.
 
 ### Dónde vive la bandeja
 

@@ -26,18 +26,27 @@ import type { Campana } from './campana.js';
  * mensaje es el mismo, y sigue avisando que es automático. Agregar un curso es
  * agregar una entrada en `FAMILIAS`, no escribir una plantilla.
  *
- * ── Los dos puntos de integración pendientes ──
- * · **#45** (mensajes predeterminados de la vendedora, «insertar con / en el
- *   composer»): cuando lleguen, `catalogo()` pasa a leer de esa tabla las
- *   marcadas como «apta para auto-respuesta», conservando la firma
- *   (`Plantilla[]`) y el contrato de `elegir()`.
- * · **#138** (plantillas-secuencia con media, todavía sin mergear): esas traen
- *   varios mensajes y adjuntos, que es más de lo que esta feature puede mandar
- *   sola —un acuse es UN mensaje de texto— pero es el modelo correcto para el
- *   contenido. Cuando su tabla esté en `main`, `catalogo()` la consume y las
- *   familias de `campana.ts` se mapean a sus secuencias por id; el primer
- *   mensaje de la secuencia es el acuse y el resto queda para la vendedora. NO
- *   se duplica su modelo acá.
+ * ── El punto de integración con las plantillas-secuencia (#138, YA en `main`) ──
+ * `server/src/plantillas/` existe y es el hogar del contenido que manda la
+ * vendedora: secuencias de pasos con media, precio en vivo desde Cerberus,
+ * familia por prefijo de SKU. **Este archivo NO duplica ese modelo, y tampoco lo
+ * consume todavía**, por tres diferencias que son de producto, no de código, y
+ * que las tiene que cerrar el dueño:
+ *
+ *   1. **Una secuencia son N mensajes; un acuse es UNO.** ADR 0015 permite «un
+ *      acuse», no cuatro mensajes con flyer a las 3 de la mañana. Mandar solo el
+ *      paso 1 de una secuencia de cuatro es cambiarle el sentido a la plantilla.
+ *   2. **Son POR VENDEDORA** (`plantillas.vendedora_id`) y la auto-respuesta no
+ *      tiene vendedora: habría que elegir de quién, y esa es una decisión de
+ *      negocio.
+ *   3. **Su `{precio}` se resuelve en vivo contra Cerberus.** Un acuse fuera de
+ *      horario que cotiza sin que nadie lo mire es otra feature, con otro riesgo.
+ *
+ * **La costura, cuando se decida**: `catalogo()` pasa a leer de
+ * `plantillas/repositorio.ts` las marcadas como aptas —conservando la firma
+ * (`Plantilla[]`) y el contrato de `elegir()`— y las familias de `campana.ts` se
+ * mapean a `plantillas.familia_curso`. Nada más cambia: ni la decisión, ni la
+ * cola, ni el despachador. Lo mismo vale para #45.
  *
  * Hasta entonces, las de este archivo son el mínimo honesto, escritas a partir
  * de las que la vendedora ya usa (flyer 671x, seguimiento 658x, temario 261x —
