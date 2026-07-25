@@ -150,6 +150,28 @@ mandaron el **precio** y si **se enfrió** después. `GET /api/senales?claves=a,
 - **Medir la precisión sobre datos reales**: `cd server && npm run medir:cotizaciones [días]`
   (read-only) — imprime ingenuo vs. detector vs. corroboradas y la muestra de falsos positivos evitados.
 
+## Plantillas-secuencia — «varios mensajes, con imágenes y todo en orden»
+
+Una plantilla es una **lista ordenada de pasos** (tablas `plantillas` + `plantilla_pasos`), no un
+texto: la venta real son cuatro mensajes (flyer → seguimiento → temario → duración) y el 42 % lleva
+imagen. UI en `src/features/plantillas/`, colgada del `···` («Mensajes predeterminados»).
+
+- **No hay un endpoint que mande la secuencia entera.** `POST /api/plantillas/:id/enviar-paso` manda
+  **un** mensaje por llamada; el bucle, el espaciado (1,5 s) y el botón de cancelar viven en la
+  pantalla de la vendedora (`useEnvioSecuencia.ts`). Si cierra la app, no queda nada mandándose solo.
+  Todo sale por `EnvioControlado` vía `whatsapp/enviarYProyectar.ts` (mandar + persistir el saliente,
+  el par que ninguna ruta puede hacer a medias).
+- **Cancelar no des-envía**: el que está en vuelo sale. La máquina pura (`secuencia.ts`) distingue los
+  dos momentos del corte y cuenta distinto («salieron 2 de 4» vs «1 de 4»). Decir de más sería mentir.
+- **Dos guardas**: una plantilla `propuesta` **no se manda** (alguien la aprueba primero) y un paso con
+  imagen pendiente tampoco (no se manda medio mensaje).
+- **`{nombre}` `{curso}` `{precio}`** se resuelven en el SERVER al preparar/enviar. `{precio}` sale de
+  Cerberus en el instante, por **familia de curso** (#129: prefijo de SKU → última edición activa), y
+  si falta la moneda queda el hueco `[precio]`. Nunca un número cacheado (el caché de IndexedDB
+  rehidrata precios de ayer, ADR 0007).
+- **Sembrar desde el histórico**: `cd server && npm run plantillas:proponer [-- --dias 14]` (dry-run) ·
+  `-- --aplicar <vendedoraId>` las guarda **como propuestas**. El minado propone, una persona aprueba.
+
 ## Administración de números (para Cerberus)
 
 `/api/admin/*` (`server/src/routes/admin.ts`), detrás de **`requiereServicio`**
@@ -230,8 +252,9 @@ sensato). Ver `server/.env.example` (solo nombres).
 - **Drizzle sin migraciones versionadas**: el schema se aplica con `npm run db:push` (drizzle-kit). Al
   tocar `server/src/db/schema.ts`, push contra la DB. Pendiente de push hoy: las dos tablas de la
   auto-respuesta (`auto_respuestas_pendientes`, `auto_respuesta_estado`) y `envios_wa.automatico`
-  (#125). Sin el push, esas funciones **degradan** (hilo sin marca, ruta del interruptor en 503), no
-  rompen.
+  (#125) — sin el push esas funciones **degradan** (hilo sin marca, ruta del interruptor en 503), no
+  rompen —; y `plantillas` + `plantilla_pasos` (plantillas-secuencia), sin las cuales
+  `/api/plantillas` **no funciona** en un server ya desplegado.
 - **El transporte falso repite ids entre reinicios** (`falso-1`, `falso-2`…): reprocesar colisiona con la
   idempotencia (`wa:falso-N` ya existe) y el mensaje no entra. Para demos limpias, borrar los
   `external_id LIKE 'wa:falso-%'` primero. El transporte real usa ids reales de WhatsApp (únicos).
