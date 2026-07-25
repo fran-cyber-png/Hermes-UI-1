@@ -6,7 +6,14 @@ import { repartirAprobadas, type ParaAprobar } from '../autorespuesta/aprobar.js
 import { caducoSinAprobar, cuandoCaduca } from '../autorespuesta/caducidad.js';
 import { configDesdeEnv, ventanasEfectivas } from '../autorespuesta/config.js';
 import { diaLocal } from '../autorespuesta/franja.js';
-import { MODOS, nombreDeModo, type ModoAutoRespuesta } from '../autorespuesta/modo.js';
+import {
+  MODOS,
+  MODOS_ELEGIBLES,
+  PORQUE_NO_AUTOMATICA,
+  modoDelBooleano,
+  nombreDeModo,
+  type ModoAutoRespuesta,
+} from '../autorespuesta/modo.js';
 import { faltaEsquema, repositorioDrizzle, type PendienteVista } from '../autorespuesta/repositorio.js';
 
 /**
@@ -237,21 +244,38 @@ autorespuestaRouter.post('/descartar', requiereVendedora, async (req, res) => {
   }
 });
 
-/** Cambiar de modo: apagada · supervisada · automática. */
+/**
+ * Cambiar de modo: apagada · supervisada. **Automática ya no** (ADR 0018).
+ *
+ * El `enum` del cuerpo sigue aceptando los tres nombres a propósito: quien
+ * mande `automatica` merece leer POR QUÉ no se puede, no un «valor inválido»
+ * que se lee como un typo. La puerta se cierra abajo, contra `MODOS_ELEGIBLES`,
+ * que es una lista blanca con su test — no un `if` que el primer atajo borra.
+ */
 autorespuestaRouter.put('/modo', requiereVendedora, async (req, res) => {
   const parseo = cuerpoModo.safeParse(req.body);
   if (!parseo.success) {
-    res.status(400).json({ ok: false, message: 'mandá `{ modo: "apagada" | "supervisada" | "automatica" }`' });
+    res.status(400).json({ ok: false, message: 'mandá `{ modo: "apagada" | "supervisada" }`' });
+    return;
+  }
+  if (!MODOS_ELEGIBLES.includes(parseo.data.modo as never)) {
+    // 409 y no 400: el pedido está bien escrito, el estado que pide es el que ya
+    // no existe. Un 400 haría pensar que falta arreglar el JSON.
+    res.status(409).json({ ok: false, codigo: 'modo_retirado', message: PORQUE_NO_AUTOMATICA });
     return;
   }
   await fijar(req.vendedoraId!, parseo.data.modo, parseo.data.motivo, res);
 });
 
 /**
- * La ruta de ADR 0015, intacta por fuera: `{ encendida: boolean }`. Prender por
- * acá deja el modo AUTOMÁTICO, que es lo que ese booleano siempre quiso decir.
- * Sigue viva porque es el kill-switch que alguien puede tener a mano en un
- * `curl` de emergencia, y romperlo el día que se necesite sería el peor momento.
+ * La ruta de ADR 0015, intacta por fuera: `{ encendida: boolean }`. Sigue viva
+ * porque es el kill-switch que alguien puede tener a mano en un `curl` de
+ * emergencia, y romperlo el día que se necesite sería el peor momento.
+ *
+ * Lo que cambia adentro (ADR 0018): prender por acá deja **supervisada**, no
+ * automática. Era la puerta trasera —un `curl` con el Bearer de cualquier
+ * vendedora dejaba prod mandando sola sin que la UI lo ofreciera jamás—. Apagar,
+ * que es para lo que esta ruta existe, no cambia ni un carácter.
  */
 autorespuestaRouter.put('/interruptor', requiereVendedora, async (req, res) => {
   const parseo = cuerpoInterruptor.safeParse(req.body);
@@ -259,7 +283,7 @@ autorespuestaRouter.put('/interruptor', requiereVendedora, async (req, res) => {
     res.status(400).json({ ok: false, message: 'mandá `{ encendida: boolean, motivo?: string }`' });
     return;
   }
-  await fijar(req.vendedoraId!, parseo.data.encendida ? 'automatica' : 'apagada', parseo.data.motivo, res);
+  await fijar(req.vendedoraId!, modoDelBooleano(parseo.data.encendida), parseo.data.motivo, res);
 });
 
 async function fijar(

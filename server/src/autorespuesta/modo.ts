@@ -31,6 +31,49 @@ export function esModo(v: unknown): v is ModoAutoRespuesta {
   return typeof v === 'string' && (MODOS as readonly string[]).includes(v);
 }
 
+/**
+ * LOS MODOS QUE SE PUEDEN ELEGIR HOY — dos, no tres (ADR 0018).
+ *
+ * `automatica` sigue arriba, en `MODOS`, porque una fila guardada puede tenerla
+ * y `leerModo` tiene que devolverla TAL CUAL: reinterpretarla en silencio sería
+ * decirle a la pantalla «apagada» mientras el despachador manda. Lo que se cierra
+ * no es la representación, es **la puerta**: nadie puede entrar ahí.
+ *
+ * Que sean dos conjuntos distintos —lo que existe y lo que se elige— es toda la
+ * decisión, y por eso vive acá arriba y no adentro de un `if` de la ruta. La
+ * misma forma que el salto prohibido `preparada → enviada` de `estados.ts`: una
+ * lista blanca con su test, no una condición que el primer atajo futuro borra.
+ *
+ * Por qué se cierra, en una línea: Hermes nunca manda solo. El modo automático
+ * es la única configuración en la que el mensaje es genuinamente de una máquina,
+ * y el estudio aleatorizado que cita #152 (n>6.200, *Marketing Science*) midió
+ * que revelar que es un bot baja la compra 79,7%. Con una persona aprobando, ese
+ * problema no existe — y la burbuja del hilo puede decir «Aprobado · ana» en vez
+ * de «Automático», que es la verdad.
+ */
+export const MODOS_ELEGIBLES = ['apagada', 'supervisada'] as const satisfies readonly ModoAutoRespuesta[];
+export type ModoElegible = (typeof MODOS_ELEGIBLES)[number];
+
+export function esModoElegible(v: unknown): v is ModoElegible {
+  return typeof v === 'string' && (MODOS_ELEGIBLES as readonly string[]).includes(v);
+}
+
+/** El texto que se le devuelve a quien intente entrar en automática. */
+export const PORQUE_NO_AUTOMATICA =
+  'el modo automático se retiró (ADR 0018): Hermes no manda solo. Usá «supervisada» — prepara igual y espera tu OK.';
+
+/**
+ * EL BOOLEANO VIEJO DE ADR 0015, traducido. `PUT /interruptor {encendida:true}`
+ * dejaba el modo AUTOMÁTICO: era una puerta trasera a un estado que la UI ya no
+ * ofrecía, alcanzable con un `curl` y el Bearer de cualquier vendedora.
+ *
+ * Ahora prender por ahí deja **supervisada**. Lo que esa ruta existe para hacer
+ * —frenar en una emergencia, con `false`— no cambia ni un carácter.
+ */
+export function modoDelBooleano(encendida: boolean): ModoElegible {
+  return encendida ? 'supervisada' : 'apagada';
+}
+
 /** ¿Este modo hace que el encolado corra? Los dos encendidos, sí. */
 export function prepara(modo: ModoAutoRespuesta): boolean {
   return modo !== 'apagada';
