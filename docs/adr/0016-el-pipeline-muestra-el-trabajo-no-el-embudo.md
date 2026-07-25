@@ -1,9 +1,15 @@
-# ADR 0015 — El Pipeline muestra el TRABAJO, no la forma del embudo
+# ADR 0016 — El Pipeline muestra el TRABAJO, no la forma del embudo
 
 - **Fecha:** 2026-07-25
 - **Estado:** aceptado
-- **Decide:** el rediseño de `VistaEmbudo` (rama `redesign/pipeline`)
+- **Decide:** el rediseño de `VistaEmbudo` (rama `redesign/pipeline`, PR #137)
 - **Se apoya en:** ADR 0009 (una definición, jamás espejos) · ADR 0013 (etapa efectiva)
+- **Coordina con:** ADR 0015 / PR #135 (la barra de filtros de la cola), que lleva el curso a
+  la fila **en SQL** (`cola/cursoSql.ts`). Este ADR lo lleva **después del `LIMIT`**
+  (`cola/enriquecerConLead.ts`) porque nació sin saber del otro frente. **Son la misma idea
+  dicha dos veces y no pueden convivir**: al mergear, gana el fragmento SQL de #135 (sirve
+  también a Mensajes y entra en la misma pasada) y este PR pasa a consumir su columna —
+  el único punto de contacto del front es `vistas/tarjeta.ts#cursoDeTarjeta`.
 
 ## Contexto
 

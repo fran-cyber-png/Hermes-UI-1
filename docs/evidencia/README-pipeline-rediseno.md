@@ -1,4 +1,4 @@
-# Evidencia — rediseño del Pipeline (ADR 0015)
+# Evidencia — rediseño del Pipeline (ADR 0016)
 
 Regla dura #2: nada se reporta listo sin verlo. Estas capturas son de Playwright, a **1440
 y 1280** (el Pipeline es una app de escritorio: los tres paneles no reflowean). Verificado
