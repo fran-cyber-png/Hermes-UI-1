@@ -33,6 +33,8 @@ import { sdkRouter } from "./routes/sdk.js";
 import { structureRouter } from "./routes/structure.js";
 import { arrancarReloj } from "./pauta/reloj.js";
 import { arrancarRelojDelLazo } from "./lazo/reloj.js";
+import { arrancarAutoRespuesta } from "./autorespuesta/reloj.js";
+import { autorespuestaRouter } from "./routes/autorespuesta.js";
 import { webhookRouter } from "./webhook/ruta.js";
 import { arrancarWhatsapp } from "./whatsapp/wiring.js";
 import { rutaDevWhatsapp } from "./whatsapp/rutaDev.js";
@@ -104,6 +106,7 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 const { falso } = arrancarWhatsapp();
 app.use("/api/stream", streamRouter);     // tiempo real: push de cambios (SSE)
 app.use("/api/whatsapp", whatsappRouter); // conversación nativa: hilo + enviar
+app.use("/api/autorespuesta", autorespuestaRouter); // el interruptor sin deploy de la auto-respuesta (#125)
 // ⚠ /vincular queda FUERA del perímetro /api y sigue abierto: la consola del
 // operador no tiene auth propia todavía (su HTML no manda Bearer). Contenerlo
 // es decisión aparte (auth de operador, o bloquear /vincular en nginx) — ver #36.
@@ -139,4 +142,8 @@ app.listen(port, () => {
   // Sin esto, Meta no se entera de una venta hasta que alguien corre `npm run lazo` a mano.
   // Costaba 273 ventas / $32.926 confirmadas y nunca reportadas. Ver lazo/reloj.ts.
   arrancarRelojDelLazo();
+  // Lo único que le escribe a un CLIENTE sin que nadie apriete enviar (#125, ADR 0015).
+  // Por eso son dos llaves y las dos arrancan apagadas: `AUTO_RESPUESTA=on` acá, y el
+  // interruptor de la base que se apaga sin deploy. Ver autorespuesta/reloj.ts.
+  arrancarAutoRespuesta();
 });

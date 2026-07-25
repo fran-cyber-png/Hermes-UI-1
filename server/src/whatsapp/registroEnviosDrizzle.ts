@@ -20,6 +20,9 @@ export const registroEnviosDrizzle: RegistroEnvios = {
         texto: orden.texto,
         referencia: orden.referencia,
         estado: 'pendiente',
+        // La marca de la excepción (#125): sin esto, un envío automático y uno
+        // humano son indistinguibles en la auditoría.
+        automatico: orden.automatico ?? false,
       })
       .returning({ id: enviosWa.id });
     return fila.id;

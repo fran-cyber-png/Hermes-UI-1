@@ -13,6 +13,7 @@ import { resolverAnuncio } from '../meta/anuncio.js';
 import { RUTA_MEDIA, nombreSeguro } from '../whatsapp/mediaDir.js';
 import { normalizarTelefono } from '../whatsapp/identidadWa.js';
 import { FotoNoDisponibleError, type FotoPerfil, type MediaSaliente } from '../whatsapp/transporte.js';
+import { cancelarPorRespuestaHumana, faltaEsquema } from '../autorespuesta/repositorio.js';
 
 /**
  * LA CONVERSACIÓN NATIVA DE WHATSAPP dentro de Hermes: ver el hilo y responder,
@@ -20,6 +21,51 @@ import { FotoNoDisponibleError, type FotoPerfil, type MediaSaliente } from '../w
  * la ruta no llama nunca a `enviarTexto` directo.
  */
 export const whatsappRouter = Router();
+
+/**
+ * El hilo, con la MARCA DE AUTOMÁTICO en cada burbuja (#125, ADR 0015).
+ *
+ * El adjunto vive en el crudo del evento (`payload->media`): el JOIN lo trae sin
+ * columna nueva — el event store haciendo su trabajo. Lo automático sale de la
+ * auditoría de envíos (`envios_wa.automatico`), atada al mensaje por el id que
+ * devolvió WhatsApp: la vendedora tiene que poder ver de un vistazo qué salió
+ * sin que nadie apretara enviar.
+ *
+ * Como el `db:push` de esa columna es MANUAL, la consulta degrada: si la columna
+ * todavía no está, el hilo se sirve igual (sin marca) en vez de tirar 500.
+ */
+async function hiloDe(telefono: string, conMarca = true) {
+  const marca = conMarca
+    ? sql`COALESCE(ew.automatico, false) AS automatico`
+    : sql`false AS automatico`;
+  const join = conMarca
+    ? sql`LEFT JOIN envios_wa ew
+            ON ew.id_externo IS NOT NULL
+           AND ('wa:' || ew.id_externo) = i.external_id
+           AND ew.automatico`
+    : sql``;
+
+  try {
+    return await db.execute(sql`
+      SELECT i.id, i.direccion, i.autor, i.texto, i.occurred_at, i.external_id,
+             e.payload->'media' AS media,
+             e.payload->'origen' AS origen,
+             ${marca}
+      FROM interactions i
+      LEFT JOIN events e ON e.id = i.event_id
+      ${join}
+      WHERE i.canal = 'whatsapp' AND i.persona_id = ${telefono}
+      ORDER BY i.occurred_at ASC
+      LIMIT 200
+    `);
+  } catch (e) {
+    if (conMarca && faltaEsquema(e)) {
+      console.warn('[whatsapp] `envios_wa.automatico` no existe: sirvo el hilo sin la marca. Corré `npm run db:push` (ADR 0015).');
+      return hiloDe(telefono, false);
+    }
+    throw e;
+  }
+}
 
 /** El estado de la sesión, para el banner (conectado / sin-vincular / baneado…). */
 whatsappRouter.get('/sesion', (_req, res) => {
@@ -29,18 +75,7 @@ whatsappRouter.get('/sesion', (_req, res) => {
 /** El hilo completo de una conversación, en orden cronológico + de dónde vino el lead. */
 whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
   const telefono = req.params.telefono.replace(/\D/g, '');
-  // El adjunto vive en el crudo del evento (payload->media): el JOIN lo trae sin
-  // columna nueva — el event store haciendo su trabajo.
-  const mensajes = await db.execute(sql`
-    SELECT i.id, i.direccion, i.autor, i.texto, i.occurred_at, i.external_id,
-           e.payload->'media' AS media,
-           e.payload->'origen' AS origen
-    FROM interactions i
-    LEFT JOIN events e ON e.id = i.event_id
-    WHERE i.canal = 'whatsapp' AND i.persona_id = ${telefono}
-    ORDER BY i.occurred_at ASC
-    LIMIT 200
-  `);
+  const mensajes = await hiloDe(telefono);
 
   // La captura del embudo: si algún mensaje trajo el origen (anuncio/landing), se
   // devuelve — enriquecido con el nombre del anuncio y la campaña si vino de Meta.
@@ -101,6 +136,11 @@ whatsappRouter.post('/enviar', requiereVendedora, async (req, res) => {
     res.status(409).json({ ok: false, message: r.motivo });
     return;
   }
+
+  // La persona ganó de mano a la máquina: si había una auto-respuesta en cola
+  // para esta conversación, se cancela (#125). Va acá, en el momento exacto en
+  // que deja de hacer falta, y no rompe el envío si el esquema no está.
+  await cancelarPorRespuestaHumana(db, String(referencia ?? ''));
 
   // Persistimos el saliente (idempotente) para que aparezca en el hilo aunque el
   // transporte no haga eco. D10: SOLO con el idExterno del envío real.
@@ -267,6 +307,9 @@ whatsappRouter.post(
       res.status(409).json({ ok: false, message: r.motivo });
       return;
     }
+
+    // Mandar un adjunto también es responder: cancela la automática en cola.
+    await cancelarPorRespuestaHumana(db, String(referencia ?? ''));
 
     const proy = proyectarMensaje({
       idExterno: r.idExterno,

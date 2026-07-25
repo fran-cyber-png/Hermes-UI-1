@@ -179,3 +179,43 @@ describe('EnvioControlado — media', () => {
     assert.equal(registro.fallidos.length, 1);
   });
 });
+
+/**
+ * LA EXCEPCIÓN DECLARADA (#125, ADR 0015): la auto-respuesta fuera de horario
+ * pasa por esta MISMA puerta. Lo que estos tests fijan es que se note.
+ */
+describe('EnvioControlado — la marca de automático', () => {
+  test('un envío humano NO viaja marcado: el default es «lo apretó una persona»', async () => {
+    const transporte = new TransporteFalso({ telefono: '51987654321' });
+    const registro = new RegistroFalso();
+    const envio = new EnvioControlado(transporte, registro);
+
+    await envio.enviar(orden());
+
+    assert.equal(registro.intentos[0].automatico, undefined);
+  });
+
+  test('un envío automático queda marcado en la auditoría, con las mismas guardas', async () => {
+    const transporte = new TransporteFalso({ telefono: '51987654321' });
+    const registro = new RegistroFalso();
+    const envio = new EnvioControlado(transporte, registro);
+
+    const r = await envio.enviar(orden({ vendedoraId: 'auto-respuesta', automatico: true }));
+
+    assert.ok(r.ok);
+    assert.equal(registro.intentos[0].automatico, true);
+    assert.equal(registro.intentos[0].vendedoraId, 'auto-respuesta', 'el autor no finge ser una vendedora');
+  });
+
+  test('automático NO es un pase libre: el corta-corriente lo frena igual', async () => {
+    const transporte = new TransporteFalso({ telefono: '51987654321' });
+    const registro = new RegistroFalso();
+    const envio = new EnvioControlado(transporte, registro, () => true);
+
+    const r = await envio.enviar(orden({ vendedoraId: 'auto-respuesta', automatico: true }));
+
+    assert.equal(r.ok, false);
+    assert.equal(transporte.enviados.length, 0);
+    assert.equal(registro.fallidos.length, 1);
+  });
+});

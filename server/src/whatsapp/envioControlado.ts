@@ -29,6 +29,18 @@ export interface OrdenEnvio {
   texto: string;
   /** La conversación de referencia: ata el envío a un contexto, no es un disparo suelto. */
   referencia: string;
+  /**
+   * LA EXCEPCIÓN, DECLARADA (#125, ADR 0015). `true` solo para la auto-respuesta
+   * fuera de horario: acuses a gente que escribió PRIMERO, en la franja en que
+   * no hay nadie, con techos y freno.
+   *
+   * Está acá y no en un camino paralelo a propósito: la excepción tiene que
+   * pasar por la MISMA puerta que todo lo demás —mismo corta-corriente, mismo
+   * chequeo de ban, misma auditoría— y quedar marcada en `envios_wa` para que
+   * dentro de un mes se pueda distinguir qué mandó una persona y qué la
+   * máquina. Ausente o `false` = lo apretó un humano, como siempre.
+   */
+  automatico?: boolean;
 }
 
 /** Una orden de adjunto: mismas exigencias que el texto + el archivo a mandar. */
