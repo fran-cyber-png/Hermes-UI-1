@@ -20,6 +20,7 @@ import type { Conversacion } from './features/canales/conversaciones';
 import { PanelContexto } from './features/canales/PanelContexto';
 import BarraFrescura from './features/canales/BarraFrescura';
 import { EstadoWhatsapp } from './features/whatsapp/EstadoWhatsapp';
+import { InterruptorAutoRespuesta } from './features/autorespuesta/InterruptorAutoRespuesta';
 import { FichaContacto } from './features/cerberus/FichaContacto';
 import { VistaDashboard } from './features/dashboard/VistaDashboard';
 import { VistaEmbudo } from './features/vistas/VistaEmbudo';
@@ -350,6 +351,10 @@ export default function App() {
                 bloquea plata, así que va antes que la salud de los datos. */}
             {cerberusVivo === false && <AvisoCerberus usuario={vendedora.id} entrar={entrar} />}
             <BarraFrescura />
+            {/* El interruptor va PEGADO al semáforo de WhatsApp: los dos hablan
+                del estado del canal. Que la máquina esté contestando sola es
+                parte de la misma pregunta que «¿el número está vivo?» (#125). */}
+            <InterruptorAutoRespuesta />
             <EstadoWhatsapp />
           </div>
         </header>

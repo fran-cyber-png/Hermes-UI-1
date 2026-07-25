@@ -92,6 +92,24 @@ madrugada→mañana, el reparto sin ráfaga, el espaciado dentro del rango y los
   cualquier vendedora. Apagar una máquina que le escribe a tus clientes no puede costar un
   `systemctl restart` — que además le tira la sesión de Cerberus a cada vendedora logueada.
 
+**El interruptor vive en la CABECERA**, pegado al semáforo de WhatsApp
+(`src/features/autorespuesta/InterruptorAutoRespuesta.tsx`), y no en una pantalla de
+ajustes. Dos razones:
+
+1. Es el mismo tipo de dato que el chip de al lado: el **estado del canal**. «¿El número
+   está vivo?» y «¿la máquina está contestando sola?» se miran juntas o no se miran.
+2. Un ajuste que se abre una vez por mes no sirve de kill-switch. Acá apagar cuesta **un
+   click**, sin modal de confirmación a propósito — frenar tiene que ser más barato que
+   dudar.
+
+Y la asimetría es deliberada: **apagada se ve discreta, encendida grita**. El chip
+encendido se pinta entero de azul de marca, con punto vivo, y dice cuántas hay en cola y a
+qué hora sale la próxima. Nadie la prende sin darse cuenta, y nadie pasa una jornada sin
+notar que está prendida. El estado **frenada** (el freno automático) es rojo y muestra el
+motivo: no se puede confundir con «apagada» a secas. Si el `db:push` todavía no corrió, el
+chip dice «falta la migración» en vez de mostrar un estado falso. Evidencia visual de los
+cuatro estados en `docs/evidencia/125-interruptor-*.png`.
+
 ### Todo pasa por `EnvioControlado`
 
 La excepción no abre un camino paralelo: usa la **misma puerta** que la vendedora, con las

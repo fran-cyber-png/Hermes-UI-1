@@ -80,7 +80,11 @@ npm install && npm run dev:app                     # Vite :5173 + la app de escr
   **nunca a quien dijo que no**. Nada de eso se negocia en un `if`: vive en `server/src/autorespuesta/`.
   - **Apagada por default y con dos llaves**: `AUTO_RESPUESTA=on` (entorno) **y** el interruptor de la
     base (`auto_respuesta_estado`), que es el **kill-switch sin deploy** —
-    `PUT /api/autorespuesta/interruptor` con el Bearer de cualquier vendedora.
+    `PUT /api/autorespuesta/interruptor` con el Bearer de cualquier vendedora. Se maneja desde el
+    **chip de la cabecera**, al lado del semáforo de WhatsApp
+    (`src/features/autorespuesta/`): apagada se ve discreta, **encendida se pinta de azul y dice
+    cuántas hay en cola y a qué hora sale la próxima**; frenada (freno automático) sale en rojo con
+    el motivo, y sin `db:push` dice «falta la migración» en vez de un estado falso.
   - **El ritmo es el contrato**: un envío a la vez, 60–240 s entre uno y otro, lo de la madrugada
     sale recién a partir de las 7:30, techos de 20/hora y 60/día por número. Freno TOTAL ante
     `temporary_ban`, error de envío o desconexión; cancelación si la vendedora responde antes; la
