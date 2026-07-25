@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import {
+  MODOS,
+  MODOS_ELEGIBLES,
+  NOMBRE_MODO,
   horaCorta,
   modoDe,
+  puertaDeRevision,
   resumenCola,
   resumenDeCola,
   verAutoRespuesta,
@@ -105,10 +109,16 @@ describe('los estados que puede tener', () => {
     expect(v.detalle).toMatch(/no hay nada esperando/);
   });
 
-  test('AUTOMÁTICA avisa que nadie las mira antes y que apagar frena en seco', () => {
+  test('AUTOMÁTICA se muestra como lo que es desde ADR 0018: un modo RETIRADO del que hay que salir', () => {
+    // Ya no se llega acá eligiéndolo: se hereda. Si la pantalla dijera
+    // «automática» a secas, nadie entendería por qué el selector no la tiene —
+    // y lo importante (está mandando sola) quedaría dicho igual que antes.
     const v = verAutoRespuesta(en('automatica', { pendientes: [pendiente(1, '2026-07-26T12:40:00Z')] }));
     expect(v.clase).toBe('automatica');
-    expect(v.detalle).toMatch(/en seco/);
+    expect(v.etiqueta).toMatch(/RETIRADO/);
+    expect(v.detalle).toMatch(/manda sola/);
+    // La salida tiene que estar abierta: heredarlo no puede ser una trampa.
+    expect(v.puedeCambiar).toBe(true);
   });
 
   test('encendida pero sin `AUTO_RESPUESTA=on` en el server: NO manda nada y lo dice', () => {
@@ -170,6 +180,49 @@ describe('el resumen de la cola', () => {
   });
 
   test('supervisada sin nada que revisar lo dice, en vez de un cero mudo', () => {
-    expect(resumenDeCola(verAutoRespuesta(en('supervisada')))).toBe('sin nada que revisar');
+    expect(resumenDeCola(verAutoRespuesta(en('supervisada')))).toBe('nada esperando');
+  });
+
+  test('supervisada con lo aprobado en cola dice cuándo sale la próxima', () => {
+    // Antes decía solo «N aprobadas en cola». La hora es la mitad que importa:
+    // es lo que se puede frenar, y sin ella hay que abrir otra cosa para saberlo.
+    const v = verAutoRespuesta(
+      en('supervisada', { pendientes: [pendiente(1, '2026-07-26T12:31:00Z', 'aprobada')] }),
+    );
+    expect(resumenDeCola(v)).toBe(`1 aprobadas en cola · próxima ${horaCorta(new Date('2026-07-26T12:31:00Z'))}`);
+  });
+});
+
+/**
+ * LA PUERTA (ADR 0018) — el renglón del número ES el botón de entrar a revisar.
+ * El dueño: «esa etiqueta … al tocarla se entra a revisarlas».
+ */
+describe('la puerta a la revisión', () => {
+  test('con gente esperando, el renglón abre y dice cuántas', () => {
+    const p = puertaDeRevision(verAutoRespuesta(en('supervisada', { esperandoAprobacion: 12 })));
+    expect(p).toEqual({ abre: true, cuantas: 12, texto: '12 esperando tu OK' });
+  });
+
+  test('sin nada esperando NO abre: un botón que no hace nada enseña que ahí no se toca', () => {
+    const p = puertaDeRevision(verAutoRespuesta(en('supervisada')));
+    expect(p.abre).toBe(false);
+    expect(p.cuantas).toBe(0);
+    expect(p.texto).toBe('nada esperando');
+  });
+
+  test('apagada no abre nada y no inventa texto', () => {
+    const p = puertaDeRevision(verAutoRespuesta(en('apagada')));
+    expect(p).toEqual({ abre: false, cuantas: 0, texto: '' });
+  });
+});
+
+describe('qué modos se pueden elegir', () => {
+  test('dos, no tres: a automática ya no se entra (ADR 0018)', () => {
+    expect([...MODOS_ELEGIBLES]).toEqual(['apagada', 'supervisada']);
+  });
+
+  test('los tres se siguen pudiendo NOMBRAR: el server puede informar el retirado', () => {
+    expect([...MODOS]).toEqual(['apagada', 'supervisada', 'automatica']);
+    for (const m of MODOS) expect(NOMBRE_MODO[m]).toBeTruthy();
   });
 });

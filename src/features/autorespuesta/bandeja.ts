@@ -23,6 +23,12 @@ export interface MensajeBandeja {
   plantillaId: string;
   texto: string;
   campana: string | null;
+  /**
+   * De cuál de los tres eslabones salió esa campaña (ADR 0018): `interes` ·
+   * `lead` · `anuncio`. Es lo que el panel de la derecha convierte en «por qué
+   * se sugiere esto». `null` en las filas anteriores a la columna.
+   */
+  campanaFuente: string | null;
   editada: boolean;
   /** ISO: cuándo escribió la persona. */
   disparadaPor: string;

@@ -17,6 +17,16 @@ export type ModoAutoRespuesta = 'apagada' | 'supervisada' | 'automatica';
 
 export const MODOS: readonly ModoAutoRespuesta[] = ['apagada', 'supervisada', 'automatica'];
 
+/**
+ * LO QUE SE PUEDE ELEGIR — dos, no tres (ADR 0018). `automatica` sigue arriba
+ * porque el server puede informarla (una fila vieja la tiene) y la pantalla
+ * tiene que poder decir la verdad sobre lo que hay; pero ya no es un destino:
+ * el selector no la ofrece y `PUT /modo` la rechaza con 409.
+ *
+ * Hermes no manda solo. Siempre hay una persona aprobando.
+ */
+export const MODOS_ELEGIBLES: readonly ModoAutoRespuesta[] = ['apagada', 'supervisada'];
+
 /** Cómo se llama cada modo en la pantalla. Una palabra: entra en un segmento. */
 export const NOMBRE_MODO: Record<ModoAutoRespuesta, string> = {
   apagada: 'Apagada',
@@ -27,8 +37,9 @@ export const NOMBRE_MODO: Record<ModoAutoRespuesta, string> = {
 /** Qué hace cada modo, en una línea. Va en el `title` de cada segmento. */
 export const QUE_HACE: Record<ModoAutoRespuesta, string> = {
   apagada: 'Nadie recibe respuestas automáticas.',
-  supervisada: 'La cola prepara las respuestas y esperan tu OK. No sale nada sin que vos lo apruebes.',
-  automatica: 'La cola prepara Y manda sola, con su ritmo. Nadie las mira antes.',
+  supervisada:
+    'La cola prepara las respuestas fuera de horario y esperan tu OK. Las revisás en el chat, con la conversación a la vista. No sale nada sin que vos lo apruebes.',
+  automatica: 'Modo retirado (ADR 0018): mandaba sola, sin que nadie las mirara. Ya no se puede elegir.',
 };
 
 export interface InterruptorApi {
@@ -58,6 +69,18 @@ export interface RespuestaAutoRespuesta {
   modo?: ModoAutoRespuesta;
   /** Cuántas esperan el OK de una persona (modo supervisado). */
   esperandoAprobacion?: number;
+  /**
+   * El ritmo con el que sale lo aprobado. Se muestra en el panel de la derecha,
+   * al lado de lo que se está por aprobar: la promesa de la casa —un envío a la
+   * vez, espaciado, en hora creíble— tiene que estar donde se decide, no en un
+   * doc. Todo opcional: el server puede degradar.
+   */
+  limites?: {
+    espaciadoSegundos?: [number, number];
+    techoPorHora?: number;
+    techoPorDia?: number;
+    ventanaDespacho?: { desde: string; hasta: string };
+  };
   dia?: string;
   pendientes?: PendienteApi[];
 }
@@ -231,14 +254,18 @@ export function verAutoRespuesta(
     };
   }
 
+  // MODO RETIRADO (ADR 0018). No se llega acá eligiéndolo —ya no se puede— sino
+  // heredándolo: una fila guardada antes del cambio. Se muestra como lo que es,
+  // una anomalía que hay que sacar, y NO como un modo más: si dijera «automática»
+  // a secas, nadie entendería por qué el selector no la tiene.
   return {
     clase: 'automatica',
     modo,
-    etiqueta: 'auto-respuesta automática',
+    etiqueta: 'auto-respuesta en modo RETIRADO',
     detalle:
-      enCola > 0
-        ? `${enCola} mensaje(s) esperando turno, y salen solos. Apagar frena la cola en seco.`
-        : 'manda sola, sin que nadie las mire antes. No hay nada en cola ahora mismo.',
+      `este server quedó en el modo automático, que se retiró (ADR 0018): manda sola, sin que nadie las mire. ` +
+      (enCola > 0 ? `Hay ${enCola} esperando turno y van a salir solas. ` : '') +
+      'Pasala a supervisada o apagala.',
     puedeCambiar: true,
     enCola,
     proxima,
@@ -260,11 +287,41 @@ export function horaCorta(fecha: Date): string {
  */
 export function resumenDeCola(vista: VistaAutoRespuesta): string | null {
   if (vista.clase === 'supervisada' || (vista.clase === 'sin-efecto' && vista.modo === 'supervisada')) {
-    if (vista.esperandoAprobacion === 0) return vista.enCola > 0 ? `${vista.enCola} aprobadas en cola` : 'sin nada que revisar';
+    if (vista.esperandoAprobacion === 0) {
+      return vista.enCola > 0
+        ? `${vista.enCola} aprobadas en cola${vista.proxima ? ` · próxima ${horaCorta(vista.proxima)}` : ''}`
+        : 'nada esperando';
+    }
     return `${vista.esperandoAprobacion} esperando tu OK`;
   }
   if (vista.clase !== 'automatica' && vista.clase !== 'sin-efecto') return null;
   if (vista.enCola === 0) return 'sin cola';
   const cuantas = `${vista.enCola} en cola`;
   return vista.proxima ? `${cuantas} · próxima ${horaCorta(vista.proxima)}` : cuantas;
+}
+
+/**
+ * LA PUERTA — el pedido literal del dueño: «esa etiqueta … al tocarla se entra a
+ * revisarlas».
+ *
+ * Hasta ahora el número vivía en un renglón muerto («12 esperando tu OK») y la
+ * acción en un botón aparte al lado. Son la misma cosa: el que lee el número es
+ * el que quiere hacer algo con él, y ponerle un segundo blanco al lado es
+ * pedirle que apunte dos veces. Ahora el renglón ES el botón.
+ *
+ * Solo abre cuando hay algo. Un renglón que parece un botón y no hace nada es
+ * peor que un renglón: enseña que ahí no se toca, y al día siguiente, cuando sí
+ * haya doce esperando, ya nadie lo toca.
+ */
+export interface Puerta {
+  /** ¿El renglón es un botón? */
+  abre: boolean;
+  cuantas: number;
+  /** Lo que dice, sea botón o no. */
+  texto: string;
+}
+
+export function puertaDeRevision(vista: VistaAutoRespuesta): Puerta {
+  const texto = resumenDeCola(vista) ?? '';
+  return { abre: vista.esperandoAprobacion > 0, cuantas: vista.esperandoAprobacion, texto };
 }

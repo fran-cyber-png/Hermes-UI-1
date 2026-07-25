@@ -29,6 +29,7 @@ const mensaje = (over: Partial<MensajeBandeja> = {}): MensajeBandeja => ({
   plantillaId: 'fuera-de-horario-campana',
   texto: 'Hola Ana, gracias por escribirnos…',
   campana: 'Inteligencia y Contrainteligencia',
+  campanaFuente: 'anuncio',
   editada: false,
   disparadaPor: '2026-07-26T05:00:00Z',
   programadoPara: '2026-07-26T12:30:00Z',

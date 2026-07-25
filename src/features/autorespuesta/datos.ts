@@ -28,6 +28,8 @@ export const CLAVE_BANDEJA = ['autorespuesta', 'bandeja'] as const;
 
 export function useAutoRespuesta(): {
   vista: VistaAutoRespuesta;
+  /** El ritmo, para mostrarlo donde se aprueba (ADR 0018). */
+  limites: RespuestaAutoRespuesta['limites'];
   cargando: boolean;
   cambiando: boolean;
   errorAlCambiar: string | null;
@@ -65,6 +67,7 @@ export function useAutoRespuesta(): {
 
   return {
     vista: verAutoRespuesta(consulta.data, { sinRuta }),
+    limites: consulta.data?.limites,
     cargando: consulta.isPending,
     cambiando: mutar.isPending,
     errorAlCambiar,
