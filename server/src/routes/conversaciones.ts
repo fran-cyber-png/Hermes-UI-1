@@ -2,8 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
 import { consultarCola } from "../cola/consultarCola.js";
-import { ETAPAS } from "../gestiones/registrarGestion.js";
 import { PinLleno, upsertEstado } from "../cola/estado.js";
+import { ETAPAS } from "../gestiones/registrarGestion.js";
 
 /**
  * LA COLA UNIFICADA — la ruta es una cáscara fina. Todo el SQL vive en el seam
@@ -14,10 +14,9 @@ import { PinLleno, upsertEstado } from "../cola/estado.js";
  * del tablero. Solo acepta las etapas canónicas; cualquier otra cosa es un 400,
  * no un filtro silenciosamente ignorado.
  *
- * Va DETRÁS del perímetro (`auth/perimetro.ts`): `req.vendedoraId` ya está puesto
- * cuando llega acá. Lo usa el estado personal de la cola potenciada (#49, ADR
- * 0014): el pin, la favorita y el «no leído» son POR VENDEDORA (el pin de A no
- * lo ve B).
+ * `?tab=` / `?categoria=` (#49): el eje personal de la cola potenciada. Va DETRÁS
+ * del perímetro (`auth/perimetro.ts`): `req.vendedoraId` ya está puesto acá, y el
+ * pin/favorita/no-leído son POR VENDEDORA (el pin de A no lo ve B).
  */
 export const conversacionesRouter = Router();
 
@@ -46,8 +45,9 @@ conversacionesRouter.get("/", async (req, res) => {
 
 /**
  * El estado personal de una conversación (pin / favorita / leído). Upsert por
- * (vendedora, clave). `leido:true` avanza el cursor a ahora; `leido:false` lo
- * borra (vuelve a «sin leer»). Fijar con el tope lleno → 409 con mensaje.
+ * (vendedora, clave). `leido:true` avanza el cursor al último mensaje visible;
+ * `leido:false` lo deja justo antes del último entrante (vuelve a «sin leer»).
+ * Fijar con el tope lleno → 409 con mensaje.
  */
 const estadoSchema = z
   .object({
