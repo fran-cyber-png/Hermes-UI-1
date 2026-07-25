@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import type { db } from "../db/client.js";
 import { sufijoTelefono } from "../whatsapp/identidadWa.js";
 import { emparejarLeads, type FilaLead, type LeadDerivado } from "./emparejar.js";
@@ -22,6 +22,24 @@ import { emparejarLeads, type FilaLead, type LeadDerivado } from "./emparejar.js
 /** La fila cruda de `leads`, con el sufijo con el que matcheó. */
 type FilaLeadRow = FilaLead;
 
+/**
+ * EL SUFIJO DE 9 DÍGITOS, DICHO EN SQL — espejo de `sufijoTelefono`
+ * (`whatsapp/identidadWa.ts`): los últimos 9 dígitos de lo que quede después de
+ * tirar todo lo que no sea número. Así un teléfono guardado con código de país,
+ * con espacios o con guiones matchea igual del lado de `leads`.
+ *
+ * Exportado a propósito: el panel de negocio (`dashboard/negocio.ts`) cruza las
+ * conversaciones con `leads` por esta MISMA llave, y dos escrituras de la misma
+ * regla de match es exactamente la clase de divergencia silenciosa que ya costó
+ * caro (#37, #96). Si la llave cambia, cambia acá y cambia para todos.
+ *
+ * Vive con `leadDeTelefono` porque este es el módulo que la inventó; quien la
+ * necesite la importa de acá.
+ */
+export function sufijoTelefonoSql(columna: string): SQL {
+  return sql`right(regexp_replace(coalesce(${sql.raw(columna)}, ''), '[^0-9]', '', 'g'), 9)`;
+}
+
 export async function leadDeTelefono(
   base: typeof db,
   telefonos: string[],
@@ -41,7 +59,7 @@ export async function leadDeTelefono(
   );
   const filas = await base.execute<FilaLeadRow>(sql`
     SELECT
-      right(regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g'), 9) AS sufijo,
+      ${sufijoTelefonoSql("phone")} AS sufijo,
       full_name    AS "fullName",
       email,
       campaign_name AS "campaignName",
@@ -50,7 +68,7 @@ export async function leadDeTelefono(
       platform,
       created_time AS "createdTime"
     FROM leads
-    WHERE right(regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g'), 9) IN (${enLista})
+    WHERE ${sufijoTelefonoSql("phone")} IN (${enLista})
   `);
 
   return emparejarLeads(telefonos, filas);

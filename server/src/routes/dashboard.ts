@@ -7,6 +7,8 @@ import { consultarRadar } from '../cola/consultarRadar.js';
 import { contarPorEtapaEfectiva } from '../cola/consultarCola.js';
 import { consultarSeriesDashboard } from '../dashboard/series.js';
 import { consultarPorVendedora } from '../dashboard/porVendedora.js';
+import { consultarNegocio, DIMENSIONES, type Dimension } from '../dashboard/negocio.js';
+import { rangoLibre, resolverRango } from '../dashboard/periodo.js';
 
 /**
  * EL DASHBOARD — el radar de la mesa: los leads CAYENDO, de todas las fuentes.
@@ -24,6 +26,46 @@ import { consultarPorVendedora } from '../dashboard/porVendedora.js';
  */
 export const dashboardRouter = Router();
 dashboardRouter.use(requiereVendedora);
+
+/**
+ * EL PANEL DEL NEGOCIO — la segunda lectura del Dashboard (#128, #126).
+ *
+ * Aparte de `GET /` a propósito: el radar se pide cada 30 s y lo invalida el SSE;
+ * esto se pide cuando alguien MIRA el panel y cambia de período. Meterlo en la
+ * misma respuesta le pondría el costo del escaneo completo a cada refresco del
+ * radar, para un dato que nadie estaba mirando.
+ *
+ * Query (todo opcional): `periodo` = hoy|7d|30d|90d · `desde`/`hasta` =
+ * YYYY-MM-DD (rango libre, gana sobre el preset) · `numero` = número propio ·
+ * `dimension` = curso|anuncio. Un rango libre mal escrito es un **400**, no un
+ * silencioso «te muestro otra cosa»: la pantalla nunca enseña un período que
+ * nadie pidió.
+ */
+dashboardRouter.get('/negocio', async (req, res) => {
+  const q = req.query as Record<string, string | undefined>;
+
+  if (q.desde && q.hasta && rangoLibre(q.desde, q.hasta) === null) {
+    return res.status(400).json({
+      error: 'rango_invalido',
+      detalle: 'desde/hasta tienen que ser días YYYY-MM-DD y desde no puede ser posterior a hasta.',
+    });
+  }
+  if (q.dimension && !(DIMENSIONES as readonly string[]).includes(q.dimension)) {
+    return res.status(400).json({ error: 'dimension_invalida', detalle: `dimension: ${DIMENSIONES.join(' | ')}` });
+  }
+
+  const ahora = new Date();
+  const rango = resolverRango(ahora, q);
+  const negocio = await consultarNegocio(db, {
+    desde: rango.desde,
+    hasta: rango.hasta,
+    ahora,
+    dimension: (q.dimension as Dimension | undefined) ?? 'curso',
+    numeroPropio: q.numero?.trim() || null,
+  });
+
+  res.json({ ...negocio, periodo: rango.clave });
+});
 
 dashboardRouter.get('/', async (_req, res) => {
   // ── Lo que cayó por CHAT: el seam `cola/consultarRadar.ts` (testeable contra
