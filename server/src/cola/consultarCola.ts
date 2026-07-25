@@ -18,6 +18,12 @@ import {
   noLeidoSql,
   pinsCteSql,
 } from "./estadoSql.js";
+import {
+  interesUltimoCteSql,
+  leadCursoCteSql,
+  leadCursoJoinSql,
+  sufijosDeLaColaCteSql,
+} from "./cursoSql.js";
 
 /**
  * LA COLA UNIFICADA — una fila por CONVERSACIÓN, no por mensaje. Extraída de la
@@ -52,6 +58,14 @@ import {
  * `categorias` conviven con la etapa efectiva en el MISMO SELECT — ninguno pisa
  * al otro. El estado sale de `estado_conversacion` (tabla con `db:push` manual):
  * si todavía no existe, la cola DEGRADA (sirve sin pin/no-leído) en vez de 500.
+ *
+ * CURSO (#72): `interes_curso` y `lead_curso` son los CANDIDATOS del chip de
+ * curso de la fila — el interés más reciente y el curso del formulario que la
+ * persona llenó (emparejado por teléfono). Salen del listado, no de un fetch por
+ * fila. Los fragmentos viven en `cola/cursoSql.ts`; la PRECEDENCIA entre ellos y
+ * el anuncio (`ultima_origen`) la decide el front, puro y testeado. Solo se
+ * calculan en la consulta de la PÁGINA: ni el total ni los conteos del embudo
+ * pagan el join a `leads`.
  */
 
 /** La ventana de 7 días de Meta para el privado. IG también la tiene, no solo FB. */
@@ -185,6 +199,14 @@ export interface ResultadoCola {
    * la primera página, como `total`.
    */
   conteos?: Record<string, number>;
+  /**
+   * Cuántas filas daría cada filtro secundario DENTRO del recorte actual (tab +
+   * categoría + etapa), sin aplicar el filtro mismo. Es lo que hace que el chip
+   * diga «Piden info · 311» en vez de ser una lotería: un filtro sin su número
+   * obliga a probarlo para saber si vale la pena, y con 1.867 conversaciones eso
+   * es un salto al vacío. Sale de la MISMA consulta que el total, sin costo extra.
+   */
+  conteosFiltro?: { pideInfo: number; sinResponder: number };
   /** true = la cola vino SIN estado personal (la tabla no existe todavía, #49). */
   sinEstado?: boolean;
 }
@@ -234,19 +256,30 @@ async function ejecutarCola(
   // página y el total (los conteos son del embudo, no de la vendedora).
   const condicionesBase: SQL[] = [];
   if (intencion === "pide-info") condicionesBase.push(sql`pide_info`);
+  // `sin-responder`: la deuda real de la mesa. Reusa la columna `respondida` que
+  // ya deriva `urgenciaSql.ts` — no define ningún criterio propio.
+  if (intencion === "sin-responder") condicionesBase.push(sql`NOT respondida`);
+  // `por-vencer` sigue aceptándose aunque el panel ya no tenga su chip: el
+  // contrato de la API no se rompe por un cambio de UI (ver `src/features/canales/cola.ts`).
   if (intencion === "por-vencer") condicionesBase.push(sql`ventana_abierta`);
   // Compat: la cola vieja mandaba `puedo-escribirle`; el front nuevo usa tabs.
   if (intencion === "puedo-escribirle") condicionesBase.push(sql`(ventana_abierta OR tipo = 'mensaje')`);
 
-  const condiciones = [...condicionesBase];
-  if (etapa) condiciones.push(sql`(${etapaEfectivaSql}) = ${etapa}`);
+  // El RECORTE (tab, categoría, etapa) es lo que sigue valiendo cuando se apaga
+  // el filtro secundario: por eso va aparte, y por eso los conteos de los chips
+  // pueden decir «cuántas habría si tocás esto» sin una consulta más.
+  const condicionesRecorte: SQL[] = [];
+  if (etapa) condicionesRecorte.push(sql`(${etapaEfectivaSql}) = ${etapa}`);
   // Los tabs personales (#49) solo con la tabla presente; la categoría vive en
   // `etiquetas`, así que filtra igual aunque el estado personal no exista.
-  if (conEstado && tab === "no-leidos") condiciones.push(sql`(${noLeidoSql})`);
-  if (conEstado && tab === "favoritos") condiciones.push(sql`COALESCE(ec.favorita, false)`);
-  if (categoria) condiciones.push(sql`${categoria} = ANY(COALESCE(cats.categorias, '{}'::text[]))`);
+  if (conEstado && tab === "no-leidos") condicionesRecorte.push(sql`(${noLeidoSql})`);
+  if (conEstado && tab === "favoritos") condicionesRecorte.push(sql`COALESCE(ec.favorita, false)`);
+  if (categoria) condicionesRecorte.push(sql`${categoria} = ANY(COALESCE(cats.categorias, '{}'::text[]))`);
+
+  const condiciones = [...condicionesBase, ...condicionesRecorte];
 
   const donde = (c: SQL[]) => (c.length ? sql`WHERE ${sql.join(c, sql` AND `)}` : sql``);
+  const yTodas = (c: SQL[]) => (c.length ? sql.join(c, sql` AND `) : sql`true`);
 
   // El orden es la urgencia canónica (cola/urgenciaSql.ts) con la BANDA DE PIN
   // encima (#49): las fijadas arriba de todo, dentro de la banda sigue mandando
@@ -262,11 +295,22 @@ async function ejecutarCola(
     ),
     cats AS (
       ${categoriasCteSql}
+    ),
+    interes_ultimo AS (
+      ${interesUltimoCteSql}
+    ),
+    sufijos AS (
+      ${sufijosDeLaColaCteSql}
+    ),
+    lead_curso AS (
+      ${leadCursoCteSql}
     )
     SELECT todo.clave AS clave, canal, tipo, persona_id, persona_nombre, numero_propio,
            texto, contexto_texto, ultima_clase, ultima_origen, respondida, ventana_abierta, pide_info, n,
            referencia, ultimo_at, seguimiento_en,
            etapa_manual,
+           iu.curso AS interes_curso,
+           lc.curso AS lead_curso,
            (${etapaEfectivaSql}) AS etapa_efectiva,
            extract(day from now() - referencia)::int AS dias,
            (${nivelUrgenciaSql}) AS nivel,
@@ -281,6 +325,8 @@ async function ejecutarCola(
     LEFT JOIN ultimas_gestiones USING (clave)
     ${estadoJoinSql(vendedoraId, conEstado)}
     LEFT JOIN cats ON cats.clave = todo.clave
+    LEFT JOIN interes_ultimo iu ON iu.clave = todo.clave
+    ${leadCursoJoinSql}
     ${donde(condiciones)}
     ORDER BY ${bandaPinOrdenSql}, nivel ASC, orden ASC
     LIMIT ${limit} OFFSET ${offset}
@@ -291,23 +337,30 @@ async function ejecutarCola(
   // incremental por columna del tablero (#90) es honesta por construcción.
   let total: number | undefined;
   let conteos: Record<string, number> | undefined;
+  let conteosFiltro: { pideInfo: number; sinResponder: number } | undefined;
   if (offset === 0) {
-    const [r] = await base.execute<{ n: number }>(sql`
+    // Una sola pasada da las tres cifras: el total del recorte actual (con el
+    // filtro secundario puesto) y cuántas daría cada chip dentro del MISMO
+    // recorte. El `FILTER` es lo que evita una consulta por chip.
+    const [r] = await base.execute<{ n: number; pide_info: number; sin_responder: number }>(sql`
       ${conTodo(filtroCanal, pins)},
       ultimas_gestiones AS (${ultimasGestionesSql}),
       cats AS (${categoriasCteSql})
-      SELECT count(*)::int AS n
+      SELECT count(*) FILTER (WHERE ${yTodas(condicionesBase)})::int AS n,
+             count(*) FILTER (WHERE pide_info)::int                 AS pide_info,
+             count(*) FILTER (WHERE NOT respondida)::int            AS sin_responder
       FROM todo
       LEFT JOIN ultimas_gestiones USING (clave)
       ${estadoJoinSql(vendedoraId, conEstado)}
       LEFT JOIN cats ON cats.clave = todo.clave
-      ${donde(condiciones)}
+      ${donde(condicionesRecorte)}
     `);
     total = r?.n;
+    conteosFiltro = { pideInfo: r?.pide_info ?? 0, sinResponder: r?.sin_responder ?? 0 };
     conteos = await conteosPorEtapa(base, filtroCanal, condicionesBase);
   }
 
-  return { conversaciones: filas as unknown[], total, conteos, hayMas: filas.length === limit };
+  return { conversaciones: filas as unknown[], total, conteos, conteosFiltro, hayMas: filas.length === limit };
 }
 
 /** El GROUP BY del embudo: una pasada, la misma definición y la misma ventana. */
