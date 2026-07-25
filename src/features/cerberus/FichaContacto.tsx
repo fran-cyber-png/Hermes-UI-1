@@ -71,12 +71,20 @@ export function FichaContacto({
   conversacion,
   onCorreo,
   onAgendarBienvenida,
+  embebida = false,
 }: {
   conversacion: Conversacion;
   /** Puente a Correos: prellena el Para con el correo de la ficha. Sin esto, la acción no se muestra. */
   onCorreo?: (para: string) => void;
   /** Puente a la Agenda desde el recibo de venta. Sin esto, el botón no se muestra. */
   onAgendarBienvenida?: (telefono: string | null) => void;
+  /**
+   * Dentro del panel multifunción: el marco, el encabezado con la persona y las
+   * notas los pone el panel (las notas tienen su propia pestaña). Sin esto,
+   * habría dos tarjetas anidadas, el nombre repetido dos veces y las notas
+   * apareciendo en la pestaña equivocada. `false` = como siempre.
+   */
+  embebida?: boolean;
 }) {
   // La ficha se resuelve por teléfono. Solo aplica a WhatsApp (ahí el persona_id
   // ES el teléfono); en comentarios el persona_id es un id de Meta, no un número.
@@ -106,23 +114,31 @@ export function FichaContacto({
   const resumen = data?.estado === 'cliente' ? resumenCompras(data.ventas) : null;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
-      <header className="shrink-0 border-b border-border px-4 py-3">
-        <div className={sectionLabel}>Ficha del contacto</div>
-        <div className="mt-1 flex items-center gap-2.5">
-          <Avatar
-            nombre={conversacion.persona_nombre ?? telefono}
-            telefono={esTelefono ? telefono : null}
-            conFoto={esTelefono}
-            className="size-8 shrink-0 rounded-[11px] bg-secondary text-xs font-bold text-navy"
-          />
-          <div className="min-w-0 truncate text-sm font-bold text-foreground">
-            {conversacion.persona_nombre ?? telefono ?? 'Contacto'}
+    <div
+      className={
+        embebida
+          ? 'flex h-full min-h-0 flex-col'
+          : 'flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel'
+      }
+    >
+      {!embebida && (
+        <header className="shrink-0 border-b border-border px-4 py-3">
+          <div className={sectionLabel}>Ficha del contacto</div>
+          <div className="mt-1 flex items-center gap-2.5">
+            <Avatar
+              nombre={conversacion.persona_nombre ?? telefono}
+              telefono={esTelefono ? telefono : null}
+              conFoto={esTelefono}
+              className="size-8 shrink-0 rounded-[11px] bg-secondary text-xs font-bold text-navy"
+            />
+            <div className="min-w-0 truncate text-sm font-bold text-foreground">
+              {conversacion.persona_nombre ?? telefono ?? 'Contacto'}
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
+      )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+      <div className={embebida ? 'min-h-0 flex-1 overflow-y-auto' : 'min-h-0 flex-1 overflow-y-auto p-4'}>
         {!esTelefono ? (
           <p className="text-xs text-muted-foreground">
             La ficha por teléfono aplica a WhatsApp. Para este canal, la ficha cruzada está en camino.
@@ -251,8 +267,9 @@ export function FichaContacto({
 
       {/* La bitácora comercial: próxima acción (cae en la Agenda). */}
       <RegistrarGestion conversacion={conversacion} />
-      {/* Las notas de ESTA conversación (#47) — editables, se archivan, no derivan nada. */}
-      <PanelNotas clave={conversacion.clave} />
+      {/* Las notas de ESTA conversación (#47) — editables, se archivan, no derivan
+          nada. Embebida NO: tienen su propia pestaña en el panel multifunción. */}
+      {!embebida && <PanelNotas clave={conversacion.clave} />}
 
       {/* Registrar venta — el formulario vive DENTRO de Hermes (la vendedora no
           entra a Cerberus). Para un cliente existente, abre el form; para un lead

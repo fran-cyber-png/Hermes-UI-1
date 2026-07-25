@@ -25,7 +25,18 @@ import { PersonaUnificada } from '../identidad/PersonaUnificada';
  * disimula: cada hueco de datos se declara.
  */
 
-export function PanelContexto({ conversacion }: { conversacion: Conversacion }) {
+export function PanelContexto({
+  conversacion,
+  embebida = false,
+}: {
+  conversacion: Conversacion;
+  /**
+   * Dentro del panel multifunción: el marco, el encabezado con la persona y las
+   * notas los pone el panel (las notas tienen pestaña propia). `false` = como
+   * siempre.
+   */
+  embebida?: boolean;
+}) {
   // Los comentarios llegan con clave `int:<id>` — con ese id se resuelven el
   // permalink y el historial. Las conversaciones de Messenger agrupan varios
   // mensajes y no traen un id único: esas piezas quedan honestas hasta S8.
@@ -46,9 +57,15 @@ export function PanelContexto({ conversacion }: { conversacion: Conversacion }) 
   const esComentario = conversacion.tipo === 'comentario';
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
+    <div
+      className={
+        embebida
+          ? 'flex h-full min-h-0 flex-col'
+          : 'flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel'
+      }
+    >
       {/* El avatar-header ES el título del panel — sin cintillo «Contexto». */}
-      <header className="shrink-0 border-b border-border px-4 py-3">
+      <header className={embebida ? 'hidden' : 'shrink-0 border-b border-border px-4 py-3'}>
         <div className="flex items-center gap-2.5">
           <span className="relative shrink-0">
             <Avatar
@@ -73,7 +90,7 @@ export function PanelContexto({ conversacion }: { conversacion: Conversacion }) 
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+      <div className={embebida ? 'min-h-0 flex-1 overflow-y-auto' : 'min-h-0 flex-1 overflow-y-auto px-4 py-4'}>
         {esComentario ? (
           <>
             <div className={kicker}>Comentó en</div>
@@ -154,8 +171,8 @@ export function PanelContexto({ conversacion }: { conversacion: Conversacion }) 
 
       {/* La bitácora comercial: etapa + próxima acción (cae en la Agenda). */}
       <RegistrarGestion conversacion={conversacion} />
-      {/* Las notas de ESTA conversación (#47) — editables, se archivan, no derivan nada. */}
-      <PanelNotas clave={conversacion.clave} />
+      {/* Las notas de ESTA conversación (#47). Embebida NO: tienen pestaña propia. */}
+      {!embebida && <PanelNotas clave={conversacion.clave} />}
     </div>
   );
 }

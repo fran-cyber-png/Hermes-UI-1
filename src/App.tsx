@@ -17,12 +17,11 @@ import { Escudo } from './components/Marca';
 import { ColaUnificada } from './features/canales/ColaUnificada';
 import { ConversacionActiva } from './features/canales/ConversacionActiva';
 import type { Conversacion } from './features/canales/conversaciones';
-import { PanelContexto } from './features/canales/PanelContexto';
 import BarraFrescura from './features/canales/BarraFrescura';
 import { EstadoWhatsapp } from './features/whatsapp/EstadoWhatsapp';
 import { InterruptorAutoRespuesta } from './features/autorespuesta/InterruptorAutoRespuesta';
 import { BandejaRevision } from './features/autorespuesta/BandejaRevision';
-import { FichaContacto } from './features/cerberus/FichaContacto';
+import { PanelDerecho } from './features/panel/PanelDerecho';
 import { VistaDashboard } from './features/dashboard/VistaDashboard';
 import { VistaEmbudo } from './features/vistas/VistaEmbudo';
 import { VistaPersonas } from './features/vistas/VistaPersonas';
@@ -393,16 +392,14 @@ export default function App() {
             <ConversacionActiva conversacion={abierta} onCerrar={() => setAbierta(null)} />
           </section>
           {abierta && (
-            <aside className="min-h-0 w-72 shrink-0">
-              {abierta.canal === 'whatsapp' ? (
-                <FichaContacto
-                  conversacion={abierta}
-                  onCorreo={mandarCorreoA}
-                  onAgendarBienvenida={agendarBienvenida}
-                />
-              ) : (
-                <PanelContexto conversacion={abierta} />
-              )}
+            // 22.5rem = 360 px: el ancho para el que está diseñado el panel
+            // multifunción (antes 18rem, que solo daba para la ficha).
+            <aside className="min-h-0 w-[22.5rem] shrink-0">
+              <PanelDerecho
+                conversacion={abierta}
+                onCorreo={mandarCorreoA}
+                onAgendarBienvenida={agendarBienvenida}
+              />
             </aside>
           )}
         </div>

@@ -93,6 +93,24 @@ export const CLASE_FONDO: Record<ColorCategoria, string> = {
   rosa: 'bg-cat-rosa',
 };
 
+/**
+ * Clase de FONDO TENUE por color — la píldora de las etiquetas AUTOMÁTICAS
+ * («Cotizado», «Se enfrió»; ADR 0015). Fondo, no borde, y ahí está el punto:
+ * la manual se dibuja con borde y la automática con relleno, así «esta no la
+ * puedo borrar» se entiende sin leer un tooltip. Literales completos porque
+ * Tailwind escanea el código y no vería una clase armada en runtime.
+ */
+export const CLASE_FONDO_TENUE: Record<ColorCategoria, string> = {
+  pizarra: 'bg-cat-pizarra/12',
+  rojo: 'bg-cat-rojo/12',
+  naranja: 'bg-cat-naranja/12',
+  verde: 'bg-cat-verde/12',
+  azul: 'bg-cat-azul/12',
+  cian: 'bg-cat-cian/12',
+  morado: 'bg-cat-morado/12',
+  rosa: 'bg-cat-rosa/12',
+};
+
 /** El borde neutro para una etiqueta sin categoría del que mira. */
 export const CLASE_BORDE_NEUTRO = 'border-border';
 

@@ -5,6 +5,7 @@ import { useBlobAutenticado } from '../../lib/datos/blobAutenticado';
 import { formatoTelefono, tempClass } from '../../lib/formato';
 import { usePopover } from '../../lib/teclado/usePopover';
 import { ejecutarEnvioComposer, guardarBorrador, leerBorrador } from './borradorComposer';
+import { alPonerEnComposer } from './puenteComposer';
 import { TextoWhatsapp } from './TextoWhatsapp';
 import { Avatar } from '../canales/Avatar';
 import type { Conversacion } from '../canales/conversaciones';
@@ -534,6 +535,22 @@ function ComposerWa({
     if (conectado) textareaRef.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conectado]);
+
+  // El panel derecho puede dejar una respuesta sugerida acá para editarla antes
+  // de mandar (#101). Poner texto en la caja NO es enviar: la vendedora lo
+  // revisa y aprieta Enter, como con cualquier otro borrador.
+  useEffect(
+    () =>
+      alPonerEnComposer((v) => {
+        if (v.telefono !== telefono) return;
+        setTexto(v.texto);
+        const caja = textareaRef.current;
+        caja?.focus();
+        // El cursor al final: se sigue escribiendo, no se pisa lo que llegó.
+        requestAnimationFrame(() => caja?.setSelectionRange(v.texto.length, v.texto.length));
+      }),
+    [telefono],
+  );
 
   async function onEnviar() {
     try {
