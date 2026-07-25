@@ -15,8 +15,29 @@ import { conversiones, identidades, personas, vinculosIdentidad } from "../db/on
  *   DÉBIL   → psid / usuario de IG (un comentario). Vincula, pero NUNCA une dos personas.
  *
  * La unión de identidades FUERTES se hace con union-find en memoria (rápido, sin miles de idas a la
- * base) y recién después se persiste. Es un rebuild: el grafo es derivado. El día que haya
- * des-fusiones manuales, esto pasa a incremental; hoy está vacío, así que rehacerlo entero es limpio.
+ * base) y recién después se persiste. Es un rebuild: el grafo derivado se rehace entero.
+ *
+ * ── LO QUE EL REBUILD NO PUEDE TOCAR (issue #58, ADR 0017) ──
+ *
+ * Este archivo decía «el día que haya des-fusiones manuales, esto pasa a incremental; hoy está
+ * vacío, así que rehacerlo entero es limpio». Ese día llegó: la vendedora ya puede afirmar
+ * «esta persona es la misma que aquella» desde la ficha, y esa afirmación **no es derivada** —
+ * no se puede recalcular desde `leads` ni desde Cerberus. Un `DELETE FROM vinculos_identidad`
+ * a secas la borraría, en silencio, en la próxima corrida de un script de mantenimiento.
+ *
+ * La regla queda escrita en el SQL, no en un comentario: **se rehace lo que este poblador
+ * fabricó, y nada más**. Concretamente:
+ *
+ *   · se borran las aristas cuya `regla <> 'manual'` — las manuales sobreviven, revocadas o no;
+ *   · se borran las identidades que quedaron SIN NINGUNA arista, no todas: las que sostienen
+ *     un enlace manual conservan su fila y su id;
+ *   · las personas sin ancla se borran solo si además nadie cuelga de ellas.
+ *
+ * Y hay una segunda garantía, más fuerte que la disciplina: los dos mundos usan espacios de
+ * nombres DISJUNTOS. El poblador solo fabrica identidades `email`/`telefono` y personas
+ * ancladas en `email:`/`telefono:`; el enlace manual solo fabrica identidades de canal
+ * (`wa_id`/`ig_user`/`psid`) y personas ancladas en `wa_id:`/`ig_user:`/`psid:`
+ * (`identidad/clave.ts`). No hay fila que los dos quieran escribir.
  */
 
 // ── Normalización: la clave del grafo es el valor NORMALIZADO, nunca el crudo ──
@@ -65,9 +86,21 @@ export type ResumenIdentidad = {
   conversionesVinculadas: number;
   /** Cuántas claves quedaron afuera por estar en `identidades_bloqueadas`. Se reporta, no se esconde. */
   vetadasDescartadas: number;
+  /** Aristas manuales que el rebuild NO tocó. Se cuenta para que «no las borró» sea verificable. */
+  manualesPreservados: number;
+  /**
+   * Aristas derivadas que NO se escribieron porque esa identidad ya tenía un vínculo activo
+   * afirmado por una persona. La afirmación humana gana; que gane en silencio, no.
+   */
+  derivadosCedidos: number;
 };
 
-export async function poblarIdentidad(): Promise<ResumenIdentidad> {
+/**
+ * Recibe `base` INYECTADA (patrón de la casa, ADR 0008): el script le pasa el singleton, el
+ * test su base aislada. Sin esto, «el rebuild no borra los enlaces manuales» no se podía
+ * probar — y una garantía que no se puede probar es una intención.
+ */
+export async function poblarIdentidad(base: typeof db = db): Promise<ResumenIdentidad> {
   // ── 0. LAS CLAVES BLOQUEADAS — el arma de seguridad que estaba declarada y desconectada ──
   //
   // `ontologia.identidades_bloqueadas` existía desde el día uno con su comentario y todo, y NADIE la
@@ -80,17 +113,17 @@ export async function poblarIdentidad(): Promise<ResumenIdentidad> {
   //
   // Hoy los datos están limpios (ningún correo se repite en más de 2 clientes). El día que no lo
   // estén, esto es una fila insertada en una tabla, no una migración de emergencia.
-  const bloqueadas = (await db.execute(sql`
+  const bloqueadas = (await base.execute(sql`
     SELECT tipo, valor FROM ontologia.identidades_bloqueadas
   `)) as unknown as { tipo: string; valor: string }[];
   const vetadas = new Set(bloqueadas.map((b) => `${b.tipo}:${b.valor}`));
 
   // ── 1. Juntar los registros con identidad FUERTE: clientes + leads ──
-  const clientes = (await db.execute(sql`
+  const clientes = (await base.execute(sql`
     SELECT codigo, nombre, apellido, email, telefono FROM ontologia.cliente
   `)) as unknown as { codigo: string; nombre: string | null; apellido: string | null; email: string | null; telefono: string | null }[];
 
-  const leads = (await db.execute(sql`
+  const leads = (await base.execute(sql`
     SELECT full_name, email, phone FROM leads
   `)) as unknown as { full_name: string | null; email: string | null; phone: string | null }[];
 
@@ -138,20 +171,38 @@ export async function poblarIdentidad(): Promise<ResumenIdentidad> {
     if (!nombrePorRaiz.has(raiz)) nombrePorRaiz.set(raiz, r.nombre);
   }
 
-  // ── 3. Rebuild del grafo ──
-  // Los VÍNCULOS y las IDENTIDADES se rehacen (son derivados puros). Las PERSONAS **no**: se hace
-  // UPSERT sobre su `clave_raiz`, para que su id sobreviva al rebuild. Si se borraran y recrearan,
-  // la misma persona tendría un id nuevo cada vez y todo link guardado (/gente/7083) se rompería.
+  // ── 3. Rebuild del grafo DERIVADO (y solo del derivado) ──
+  // Los VÍNCULOS y las IDENTIDADES que este poblador fabricó se rehacen (son derivados puros).
+  // Las PERSONAS **no**: se hace UPSERT sobre su `clave_raiz`, para que su id sobreviva al
+  // rebuild. Si se borraran y recrearan, la misma persona tendría un id nuevo cada vez y todo
+  // link guardado (/gente/7083) se rompería.
   //
   // DELETE en orden, NO truncate CASCADE: `conversiones` tiene FK a `personas` y un CASCADE se
   // llevaría puesto el lazo.
-  await db.execute(sql`UPDATE ontologia.conversiones SET persona_id = NULL`);
-  await db.execute(sql`UPDATE ontologia.cliente SET persona_id = NULL`);
-  await db.execute(sql`DELETE FROM ontologia.vinculos_identidad`);
-  await db.execute(sql`DELETE FROM ontologia.identidades`);
+  await base.execute(sql`UPDATE ontologia.conversiones SET persona_id = NULL`);
+  await base.execute(sql`UPDATE ontologia.cliente SET persona_id = NULL`);
+
+  // LO MANUAL NO ES DERIVADO. Un enlace que hizo una vendedora («esta persona es la misma que
+  // aquella», #58) no se puede recalcular desde `leads` ni desde Cerberus: si se borra, se
+  // perdió. Se queda, revocado o no — el historial es append-only.
+  const [{ n: manualesPreservados }] = (await base.execute(sql`
+    SELECT count(*)::int AS n FROM ontologia.vinculos_identidad WHERE regla = 'manual'
+  `)) as unknown as { n: number }[];
+  await base.execute(sql`DELETE FROM ontologia.vinculos_identidad WHERE regla <> 'manual'`);
+
+  // Y las identidades se borran por ORFANDAD, no por lista: la que todavía sostiene un enlace
+  // manual conserva su fila y su id. Un `DELETE FROM identidades` a secas rompería su FK.
+  await base.execute(sql`
+    DELETE FROM ontologia.identidades i
+    WHERE NOT EXISTS (SELECT 1 FROM ontologia.vinculos_identidad v WHERE v.identidad_id = i.id)
+  `);
   // Limpieza única de las personas viejas sin ancla (las de antes de que existiera `clave_raiz`).
-  // Ya no las referencia nadie, y sus ids nunca fueron estables.
-  await db.execute(sql`DELETE FROM ontologia.personas WHERE clave_raiz IS NULL`);
+  // Con la misma cautela: solo si además no cuelga nadie de ellas.
+  await base.execute(sql`
+    DELETE FROM ontologia.personas p
+    WHERE p.clave_raiz IS NULL
+      AND NOT EXISTS (SELECT 1 FROM ontologia.vinculos_identidad v WHERE v.persona_id = p.id)
+  `);
 
   const grupos = uf.raices();
   const personaPorRaiz = new Map<string, number>();
@@ -164,7 +215,7 @@ export async function poblarIdentidad(): Promise<ResumenIdentidad> {
   const raices = [...grupos.keys()];
   for (let i = 0; i < raices.length; i += 1000) {
     const chunk = raices.slice(i, i + 1000);
-    const ids = await db
+    const ids = await base
       .insert(personas)
       .values(
         chunk.map((raiz) => ({
@@ -194,12 +245,20 @@ export async function poblarIdentidad(): Promise<ResumenIdentidad> {
       identKeys.push(k);
     }
   }
-  const identIdPorKey = new Map<string, number>();
+  // Se inserta sin pisar: una identidad que sobrevivió por sostener un enlace manual ya está.
+  // Y el id se resuelve DESPUÉS, por clave — no por la posición del `returning`, que con
+  // `DO NOTHING` deja de tener una fila por cada valor enviado y desalinearía todo el mapa.
   for (let i = 0; i < filasIdent.length; i += 1000) {
-    const chunk = filasIdent.slice(i, i + 1000);
-    const ids = await db.insert(identidades).values(chunk).returning({ id: identidades.id });
-    chunk.forEach((_f, j) => identIdPorKey.set(identKeys[i + j], ids[j].id));
+    await base
+      .insert(identidades)
+      .values(filasIdent.slice(i, i + 1000))
+      .onConflictDoNothing();
   }
+  const identIdPorKey = new Map<string, number>();
+  const idsIdent = (await base.execute(sql`
+    SELECT id, tipo, valor FROM ontologia.identidades WHERE tipo IN ('email', 'telefono')
+  `)) as unknown as { id: number; tipo: string; valor: string }[];
+  for (const f of idsIdent) identIdPorKey.set(`${f.tipo}:${f.valor}`, Number(f.id));
 
   const filasVinculo = identKeys.map((k) => ({
     identidadId: identIdPorKey.get(k)!,
@@ -209,9 +268,19 @@ export async function poblarIdentidad(): Promise<ResumenIdentidad> {
     actor: "sistema",
     confianza: "alta",
   }));
+  // `DO NOTHING` sobre `vinculos_identidad_activo_uq`: si una identidad ya tiene un vínculo
+  // activo porque una persona lo afirmó, el derivado CEDE. Quien lo afirmó tiene un nombre;
+  // la regla no. Y se cuenta, para que ceder no sea invisible.
+  let vinculosEscritos = 0;
   for (let i = 0; i < filasVinculo.length; i += 1000) {
-    await db.insert(vinculosIdentidad).values(filasVinculo.slice(i, i + 1000));
+    const escritos = await base
+      .insert(vinculosIdentidad)
+      .values(filasVinculo.slice(i, i + 1000))
+      .onConflictDoNothing()
+      .returning({ id: vinculosIdentidad.id });
+    vinculosEscritos += escritos.length;
   }
+  const derivadosCedidos = filasVinculo.length - vinculosEscritos;
 
   // ── 4. Anclar los clientes a su persona ──
   let clientesVinculados = 0;
@@ -219,13 +288,13 @@ export async function poblarIdentidad(): Promise<ResumenIdentidad> {
     if (!r.clienteCodigo) continue;
     const pid = personaPorRaiz.get(uf.find(clave(r.claims[0])));
     if (pid) {
-      await db.update(cliente).set({ personaId: pid }).where(sql`codigo = ${r.clienteCodigo}`);
+      await base.update(cliente).set({ personaId: pid }).where(sql`codigo = ${r.clienteCodigo}`);
       clientesVinculados++;
     }
   }
 
   // ── 5. Anclar las conversiones (el lazo) a la persona, vía la venta → cliente ──
-  const convVinc = await db.execute(sql`
+  const convVinc = await base.execute(sql`
     UPDATE ontologia.conversiones cv
     SET persona_id = v.cliente_persona
     FROM (
@@ -243,5 +312,7 @@ export async function poblarIdentidad(): Promise<ResumenIdentidad> {
     clientesVinculados,
     conversionesVinculadas: (convVinc as unknown as unknown[]).length,
     vetadasDescartadas,
+    manualesPreservados: Number(manualesPreservados),
+    derivadosCedidos,
   };
 }
