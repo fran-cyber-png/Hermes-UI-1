@@ -21,6 +21,7 @@ import { PanelContexto } from './features/canales/PanelContexto';
 import BarraFrescura from './features/canales/BarraFrescura';
 import { EstadoWhatsapp } from './features/whatsapp/EstadoWhatsapp';
 import { InterruptorAutoRespuesta } from './features/autorespuesta/InterruptorAutoRespuesta';
+import { BandejaRevision } from './features/autorespuesta/BandejaRevision';
 import { FichaContacto } from './features/cerberus/FichaContacto';
 import { VistaDashboard } from './features/dashboard/VistaDashboard';
 import { VistaEmbudo } from './features/vistas/VistaEmbudo';
@@ -93,6 +94,7 @@ const ATAJOS: { tecla: string; que: string }[] = [
   { tecla: '↑↓ ⏎', que: 'Recorrer la cola' },
   { tecla: 'Esc', que: 'Cerrar la conversación' },
   { tecla: 'n', que: 'Tu libreta personal' },
+  { tecla: 'a', que: 'Revisar las auto-respuestas' },
   { tecla: '?', que: 'Esta ayuda' },
 ];
 
@@ -124,6 +126,10 @@ export default function App() {
   const [telefonoPersonas, setTelefonoPersonas] = useState<string | null>(null);
   const [cabina, setCabina] = useState(false);
   const [libreta, setLibreta] = useState(false);
+  // La bandeja de revisión (#125, ADR 0016) es una TAREA, no un lugar: se abre
+  // sobre cualquier vista y se cierra. Por eso vive en un estado suelto y no en
+  // el riel — ver `BandejaRevision.tsx`.
+  const [bandejaAuto, setBandejaAuto] = useState(false);
   // El puente (§2.9): una vista le pasa el mando a otra; la destinataria lo consume y lo limpia.
   const [puente, setPuente] = useState<Puente | null>(null);
   const busquedaRef = useRef<HTMLInputElement>(null);
@@ -169,6 +175,10 @@ export default function App() {
           setCabina(false);
           return;
         }
+        if (bandejaAuto) {
+          setBandejaAuto(false);
+          return;
+        }
         if (vista === 'bandeja') setAbierta(null);
         return;
       }
@@ -190,6 +200,13 @@ export default function App() {
         setLibreta((v) => !v);
         return;
       }
+      // La bandeja de revisión de la auto-respuesta: «a» sola. Es lo que se hace
+      // a las 9 de la mañana, desde donde sea que estés parada.
+      if (e.key === 'a' || e.key === 'A') {
+        e.preventDefault();
+        setBandejaAuto((v) => !v);
+        return;
+      }
       if (e.key === '/') {
         e.preventDefault();
         cambiarVista('bandeja');
@@ -201,7 +218,7 @@ export default function App() {
     window.addEventListener('keydown', alTeclear);
     return () => window.removeEventListener('keydown', alTeclear);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vista, cabina, abierta, libreta]);
+  }, [vista, cabina, abierta, libreta, bandejaAuto]);
 
   if (cargando) {
     // El esqueleto con la anatomía del shell: riel, header, tres placas.
@@ -354,7 +371,7 @@ export default function App() {
             {/* El interruptor va PEGADO al semáforo de WhatsApp: los dos hablan
                 del estado del canal. Que la máquina esté contestando sola es
                 parte de la misma pregunta que «¿el número está vivo?» (#125). */}
-            <InterruptorAutoRespuesta />
+            <InterruptorAutoRespuesta onAbrirBandeja={() => setBandejaAuto(true)} />
             <EstadoWhatsapp />
           </div>
         </header>
@@ -427,6 +444,7 @@ export default function App() {
       </div>
 
       {cabina && <Cabina onCerrar={() => setCabina(false)} />}
+      <BandejaRevision abierta={bandejaAuto} onCerrar={() => setBandejaAuto(false)} />
       <LibretaPersonal abierta={libreta} onCerrar={() => setLibreta(false)} />
     </div>
   );

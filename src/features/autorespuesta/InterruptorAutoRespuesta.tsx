@@ -1,53 +1,66 @@
-import { AlertTriangle, Bot, Loader2, Power } from 'lucide-react';
+import { AlertTriangle, Bot, Inbox, Loader2 } from 'lucide-react';
 import { useAutoRespuesta } from './datos';
-import { resumenDeCola, type ClaseAutoRespuesta } from './estado';
+import { MODOS, NOMBRE_MODO, QUE_HACE, resumenDeCola, type ClaseAutoRespuesta, type ModoAutoRespuesta } from './estado';
 
 /**
- * EL INTERRUPTOR DE LA AUTO-RESPUESTA, en la cabecera (#125, ADR 0015).
+ * EL INTERRUPTOR DE LA AUTO-RESPUESTA, en la cabecera (#125, ADR 0015 y 0016).
  *
  * ── Por qué acá y no en un panel de ajustes ──
  * Está al lado del semáforo de WhatsApp porque es lo mismo: el estado del
  * CANAL. Ahí ya se mira para saber si el número está vivo; que la máquina esté
- * contestando sola es parte de esa misma pregunta. Un ajuste escondido en una
- * pantalla que se abre una vez por mes no sirve de kill-switch — y esto es,
- * antes que nada, un kill-switch (el freno sin deploy del ADR 0015).
+ * contestando sola —o preparando cosas que esperan tu OK— es parte de esa misma
+ * pregunta. Un ajuste escondido en una pantalla que se abre una vez por mes no
+ * sirve de kill-switch, y esto es, antes que nada, un kill-switch.
  *
- * ── Por qué el estado ENCENDIDO grita y el apagado no ──
- * Prender esto tiene consecuencias: una máquina le escribe a clientes reales.
- * Apagado es el estado normal y se ve discreto; encendido pinta el chip entero
- * de azul con su punto vivo y dice cuántas hay en cola y a qué hora sale la
- * próxima. Nadie puede prenderlo sin darse cuenta, y nadie puede pasar una
- * jornada sin notar que está prendido. Sin confirmación modal a propósito:
- * apagar tiene que costar UN click, no dos.
+ * ── Por qué tres segmentos y no un botón que cicla ──
+ * Con tres estados, un botón que avanza al siguiente haría que apagar desde
+ * «supervisada» costara dos clicks. El contrato de ADR 0015 es que apagar cuesta
+ * UNO, siempre: por eso los tres modos están los tres a la vista y cada uno es
+ * su propio destino. De paso, el control dice qué opciones existen sin tener que
+ * probarlas — nadie descubre el modo supervisado apretando dos veces.
  *
- * El oro no aparece: en Hermes el dorado significa tiempo que se acaba, y esto
- * no es eso. Azul de marca para lo encendido, rojo solo para el freno.
+ * ── La asimetría visual ──
+ * **Apagada** es discreta: es el estado normal. **Supervisada** es azul
+ * delineada — está trabajando, pero no habla sin vos. **Automática** es azul
+ * SÓLIDA con punto vivo: le está escribiendo a clientes reales sin que nadie
+ * mire, y nadie puede pasar una jornada sin notarlo. **Frenada** es roja con el
+ * motivo. Sin confirmación modal a propósito: frenar tiene que ser más barato
+ * que dudar.
+ *
+ * El oro no aparece acá: en Hermes el dorado significa tiempo que se acaba, y
+ * un modo no es eso. (Sí aparece adentro de la bandeja, sobre lo que está por
+ * caducar — ahí sí lo es.)
  */
-export function InterruptorAutoRespuesta() {
-  const { vista, cargando, cambiando, errorAlCambiar, cambiar } = useAutoRespuesta();
+export function InterruptorAutoRespuesta({ onAbrirBandeja }: { onAbrirBandeja: () => void }) {
+  const { vista, cargando, cambiando, errorAlCambiar, cambiarModo } = useAutoRespuesta();
 
-  if (cargando) return <div className="h-7 w-40 animate-pulse rounded-lg bg-muted" />;
+  if (cargando) return <div className="h-9 w-64 animate-pulse rounded-xl bg-muted" />;
   // El server viejo (front desplegado antes del restart) no tiene la ruta: en
   // ese server esta feature no existe, así que el chip tampoco.
   if (vista.clase === 'ausente') return null;
 
   const resumen = resumenDeCola(vista);
-  const encendida = vista.clase === 'encendida' || vista.clase === 'encendida-sin-efecto';
+  const revisables = vista.esperandoAprobacion > 0;
 
   return (
     <div
-      className={'flex items-center gap-2 rounded-lg border px-2.5 py-1.5 ' + envoltura(vista.clase)}
+      className={'flex items-center gap-2 rounded-xl border px-2 py-1 transition-colors duration-200 ease-house ' + envoltura(vista.clase)}
       title={vista.detalle}
     >
       <Icono clase={vista.clase} />
 
-      <div className="flex min-w-0 flex-col leading-tight">
-        <span className={'font-mono text-[11px] ' + tono(vista.clase)}>{vista.etiqueta}</span>
+      <div className="flex min-w-0 flex-col gap-1">
+        {vista.puedeCambiar ? (
+          <SelectorDeModo actual={vista.modo} deshabilitado={cambiando} onElegir={cambiarModo} />
+        ) : (
+          <span className="font-mono text-[11px] text-muted-foreground">{vista.etiqueta}</span>
+        )}
+
         {(resumen || errorAlCambiar) && (
           <span
             className={
-              'truncate font-mono text-[10px] ' +
-              (errorAlCambiar ? 'font-semibold text-destructive' : encendida ? 'text-white/75' : 'text-muted-foreground')
+              'truncate font-mono text-[10px] leading-none ' +
+              (errorAlCambiar ? 'font-semibold text-destructive' : 'text-muted-foreground')
             }
           >
             {errorAlCambiar ?? resumen}
@@ -55,80 +68,110 @@ export function InterruptorAutoRespuesta() {
         )}
       </div>
 
-      {vista.puedeCambiar && (
+      {/* La puerta a la bandeja. Aparece SOLO cuando hay algo que revisar: un
+          botón que no hace nada es ruido, y acá el ruido tapa el kill-switch. */}
+      {revisables && (
         <button
           type="button"
-          role="switch"
-          aria-checked={encendida}
-          aria-label={vista.accion === 'apagar' ? 'Apagar la auto-respuesta' : 'Prender la auto-respuesta'}
-          disabled={cambiando}
-          onClick={() => cambiar(vista.accion === 'prender')}
-          className={
-            'flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors ' +
-            'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:opacity-60 ' +
-            (encendida
-              ? 'bg-white/15 text-white hover:bg-white/25'
-              : 'bg-secondary text-navy hover:bg-navy hover:text-white')
-          }
+          onClick={onAbrirBandeja}
+          title={`Revisar y aprobar (${vista.esperandoAprobacion}) · tecla A`}
+          className="flex shrink-0 items-center gap-1 rounded-lg bg-navy px-2 py-1 text-[11px] font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
         >
-          {cambiando ? <Loader2 size={11} className="animate-spin" /> : <Power size={11} />}
-          {vista.accion === 'apagar' ? 'Apagar' : 'Prender'}
+          <Inbox size={12} />
+          Revisar
+          <span className="ml-0.5 rounded-full bg-white/20 px-1.5 font-mono tabular-nums">
+            {vista.esperandoAprobacion}
+          </span>
         </button>
       )}
+
+      {cambiando && <Loader2 size={12} className="shrink-0 animate-spin text-muted-foreground" />}
     </div>
   );
 }
 
-/** El fondo del chip. Encendida = azul de marca, sólido: no se puede ignorar. */
+/**
+ * LOS TRES MODOS, los tres a la vista. Es un `radiogroup` de verdad (no tres
+ * botones sueltos) para que un lector de pantalla lo lea como lo que es: una
+ * elección entre tres, con una puesta.
+ */
+function SelectorDeModo({
+  actual,
+  deshabilitado,
+  onElegir,
+}: {
+  actual: ModoAutoRespuesta;
+  deshabilitado: boolean;
+  onElegir: (m: ModoAutoRespuesta) => void;
+}) {
+  return (
+    <div role="radiogroup" aria-label="Modo de la auto-respuesta" className="flex items-center rounded-lg bg-muted p-0.5">
+      {MODOS.map((m) => {
+        const activo = m === actual;
+        return (
+          <button
+            key={m}
+            type="button"
+            role="radio"
+            aria-checked={activo}
+            disabled={deshabilitado || activo}
+            title={QUE_HACE[m]}
+            onClick={() => onElegir(m)}
+            className={
+              'rounded-[6px] px-2 py-0.5 text-[10px] font-semibold tracking-wide transition-[background-color,color,box-shadow] duration-200 ease-house ' +
+              'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:cursor-default ' +
+              (activo
+                ? colorActivo(m)
+                : 'text-muted-foreground hover:bg-card hover:text-navy disabled:opacity-60')
+            }
+          >
+            {NOMBRE_MODO[m]}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * El segmento puesto. La escala es deliberada: apagada neutra, supervisada
+ * delineada (trabaja, no habla), automática sólida (habla sola). El peso visual
+ * crece con la consecuencia.
+ */
+function colorActivo(m: ModoAutoRespuesta): string {
+  if (m === 'apagada') return 'bg-card text-foreground shadow-[0_1px_2px_rgba(14,42,82,0.10)]';
+  if (m === 'supervisada') return 'bg-card text-navy ring-1 ring-navy shadow-[0_1px_2px_rgba(14,42,82,0.10)]';
+  return 'bg-navy text-white shadow-[0_2px_8px_-2px_rgba(14,42,82,0.55)]';
+}
+
+/** El fondo del chip entero. Solo grita cuando manda sola o cuando está frenada. */
 function envoltura(clase: ClaseAutoRespuesta): string {
   switch (clase) {
-    case 'encendida':
-      return 'border-navy bg-navy shadow-[0_4px_14px_-4px_rgba(14,42,82,0.55)]';
-    case 'encendida-sin-efecto':
-      return 'border-warning bg-navy/90';
+    case 'automatica':
+      return 'border-navy/40 bg-navy/5';
+    case 'supervisada':
+      return 'border-navy/25 bg-card';
+    case 'sin-efecto':
+      return 'border-warning bg-warning/5';
     case 'frenada':
       return 'border-destructive/40 bg-destructive/10';
     default:
-      return 'border-border';
-  }
-}
-
-function tono(clase: ClaseAutoRespuesta): string {
-  switch (clase) {
-    case 'encendida':
-    case 'encendida-sin-efecto':
-      return 'font-bold text-white';
-    case 'frenada':
-      return 'font-bold text-destructive';
-    case 'sin-migracion':
-    case 'desconocida':
-      return 'text-muted-foreground';
-    default:
-      return 'text-muted-foreground';
+      return 'border-border bg-card';
   }
 }
 
 function Icono({ clase }: { clase: ClaseAutoRespuesta }) {
-  if (clase === 'frenada') return <AlertTriangle size={13} className="shrink-0 text-destructive" />;
-  if (clase === 'sin-migracion' || clase === 'desconocida')
-    return <AlertTriangle size={13} className="shrink-0 text-muted-foreground" />;
+  if (clase === 'frenada') return <AlertTriangle size={14} className="shrink-0 text-destructive" />;
+  if (clase === 'sin-migracion' || clase === 'desconocida' || clase === 'sin-efecto')
+    return <AlertTriangle size={14} className="shrink-0 text-warning" />;
 
-  const encendida = clase === 'encendida' || clase === 'encendida-sin-efecto';
   return (
-    <span className="flex shrink-0 items-center gap-1.5">
-      <Bot size={13} className={encendida ? 'text-white' : 'text-muted-foreground'} />
-      {/* El punto vivo solo cuando de verdad puede mandar: verde de «fresco»,
-          nunca oro (el oro es tiempo que se acaba, no actividad). */}
-      <span
-        className={
-          'size-2 rounded-full ' +
-          (clase === 'encendida'
-            ? 'bg-temp-fresco animate-pulse'
-            : clase === 'encendida-sin-efecto'
-              ? 'bg-warning'
-              : 'bg-muted-foreground')
-        }
-      />
+    <span className="flex shrink-0 items-center gap-1">
+      <Bot size={14} className={clase === 'automatica' ? 'text-navy' : 'text-muted-foreground'} />
+      {/* El punto vivo SOLO cuando manda sola: verde de «fresco», nunca oro (el
+          oro es tiempo que se acaba, no actividad). En supervisada no hay punto
+          vivo porque no hay nada saliendo sin permiso. */}
+      {clase === 'automatica' && <span className="size-2 animate-pulse rounded-full bg-temp-fresco" />}
     </span>
   );
 }

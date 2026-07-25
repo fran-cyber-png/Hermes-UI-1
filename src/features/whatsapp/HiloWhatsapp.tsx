@@ -419,14 +419,25 @@ export function HiloWhatsapp({ conversacion }: { conversacion: Conversacion }) {
                           }
                         >
                           {/* La marca de automático (#125): sin esto, la vendedora
-                              abre el chat creyendo que ese mensaje lo escribió ella. */}
+                              abre el chat creyendo que ese mensaje lo escribió ella.
+                              Y desde ADR 0016 distingue las dos clases: la que salió
+                              sola de la que alguien aprobó. Aprobada se ve MÁS firme
+                              (azul sólido): tiene una persona atrás, y eso es lo que
+                              vale saber tres días después. */}
                           {m.automatico && (
                             <span
-                              className="inline-flex items-center gap-1 rounded-full bg-navy/10 px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide text-navy"
-                              title="Respuesta automática fuera de horario — no la escribió una persona"
+                              className={
+                                'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide ' +
+                                (m.aprobada_por ? 'bg-navy text-white' : 'bg-navy/10 text-navy')
+                              }
+                              title={
+                                m.aprobada_por
+                                  ? `Respuesta automática que aprobó ${m.aprobada_por} antes de salir (modo supervisado)`
+                                  : 'Respuesta automática fuera de horario — no la escribió ni la miró una persona'
+                              }
                             >
                               <Bot size={11} className="shrink-0" />
-                              Automático
+                              {m.aprobada_por ? `Aprobado · ${m.aprobada_por}` : 'Automático'}
                             </span>
                           )}
                           <span>

@@ -28,6 +28,14 @@ export interface MensajeHilo {
    * un vistazo: sin la marca, abre el chat creyendo que ella escribió eso.
    */
   automatico?: boolean;
+  /**
+   * Quién le dio el OK antes de que saliera (modo supervisado, ADR 0016). Null
+   * en modo automático, donde justamente no lo miró nadie. La distinción no es
+   * cosmética: «esto lo mandó la máquina sola» y «esto lo mandó la máquina
+   * porque Ana lo aprobó» son dos cosas distintas para quien lee el hilo tres
+   * días después.
+   */
+  aprobada_por?: string | null;
 }
 
 /**

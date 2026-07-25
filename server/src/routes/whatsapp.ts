@@ -35,13 +35,20 @@ export const whatsappRouter = Router();
  */
 async function hiloDe(telefono: string, conMarca = true) {
   const marca = conMarca
-    ? sql`COALESCE(ew.automatico, false) AS automatico`
-    : sql`false AS automatico`;
+    ? sql`COALESCE(ew.automatico, false) AS automatico, arp.aprobada_por AS aprobada_por`
+    : sql`false AS automatico, NULL::text AS aprobada_por`;
   const join = conMarca
     ? sql`LEFT JOIN envios_wa ew
             ON ew.id_externo IS NOT NULL
            AND ('wa:' || ew.id_externo) = i.external_id
-           AND ew.automatico`
+           AND ew.automatico
+          -- QUIÉN LO APROBÓ (ADR 0016). Un automático que una persona miró y
+          -- autorizó no es lo mismo que uno que salió solo, y la vendedora que
+          -- abre el chat tres días después tiene que poder distinguirlos: si no,
+          -- el modo supervisado es invisible justo donde importa.
+          LEFT JOIN auto_respuestas_pendientes arp
+            ON arp.id_externo IS NOT NULL
+           AND ('wa:' || arp.id_externo) = i.external_id`
     : sql``;
 
   try {
