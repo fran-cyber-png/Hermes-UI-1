@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { KeyRound, Loader2 } from 'lucide-react';
+import { usePopover } from '../../lib/teclado/usePopover';
 
 /**
  * «PERDISTE LA LLAVE DE CERBERUS» — el aviso que llega ANTES de la venta.
@@ -35,6 +36,11 @@ export function AvisoCerberus({
   const [yendo, setYendo] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // El panel solo oía el Escape del campo de contraseña. Con el foco en el chip
+  // ámbar, Escape no lo cerraba y se lo quedaba el shell — cerrando la
+  // conversación de atrás y dejando el aviso colgado sobre otra pantalla.
+  const { propsOverlay } = usePopover(abierto, () => setAbierto(false), { z: 'z-40' });
+
   async function reconectar() {
     if (!clave || yendo) return;
     setYendo(true);
@@ -65,7 +71,7 @@ export function AvisoCerberus({
 
       {abierto && (
         <>
-          <button type="button" aria-label="Cerrar" onClick={() => setAbierto(false)} className="fixed inset-0 z-40 cursor-default" />
+          <span {...propsOverlay} />
           <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-xl bg-card p-4 shadow-panel animate-entrar">
             <p className="text-xs font-bold text-foreground">Hermes perdió tu sesión de Cerberus.</p>
             <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">

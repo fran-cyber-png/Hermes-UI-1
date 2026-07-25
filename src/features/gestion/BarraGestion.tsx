@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlarmClock, Check, Loader2, Plus, Tag, X } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
+import { usePopover } from '../../lib/teclado/usePopover';
 import type { Conversacion } from '../canales/conversaciones';
 import { opcionesRapidas, useAgenda } from '../agenda/agenda';
 import { BotonLlamar } from './BotonLlamar';
@@ -60,6 +61,12 @@ function EtiquetasInline({ clave }: { clave: string }) {
   const [abierto, setAbierto] = useState(false);
   const [nuevo, setNuevo] = useState('');
   const [colorNuevo, setColorNuevo] = useState<ColorCategoria>('azul');
+
+  // Antes solo cerraba con clic afuera: con el foco en el «+» (no en el input),
+  // Escape no lo tocaba y llegaba al shell, que cerraba la conversación de atrás
+  // y dejaba el panel flotando sobre otra cosa. El Escape de ADENTRO del input
+  // lo sigue manejando el input, que es de quien es.
+  const { propsOverlay } = usePopover(abierto, () => setAbierto(false), { z: 'z-20' });
 
   const invalidar = () => {
     void qc.invalidateQueries({ queryKey: ['etiquetas', clave] });
@@ -141,7 +148,7 @@ function EtiquetasInline({ clave }: { clave: string }) {
 
       {abierto && (
         <>
-          <span className="fixed inset-0 z-20" onClick={() => setAbierto(false)} aria-hidden="true" />
+          <span {...propsOverlay} />
           <div className="absolute left-4 top-6 z-30 w-56 rounded-xl bg-card p-2 shadow-panel">
             {disponibles.length > 0 && (
               <div className="mb-2 flex flex-wrap gap-1">
@@ -235,6 +242,10 @@ function AgendarRapido({ conversacion }: { conversacion: Conversacion }) {
   /** Qué quedó agendado («Mañana 9:00») — el botón lo confirma hasta el próximo gesto. */
   const [listo, setListo] = useState<string | null>(null);
 
+  // Mismo agujero que en las etiquetas: sin el foco en la nota, Escape no cerraba
+  // este panel y se lo llevaba el shell (adiós conversación de atrás).
+  const { propsOverlay } = usePopover(abierto, () => setAbierto(false), { z: 'z-20' });
+
   async function agendar(o: { etiqueta: string; cuando: Date }) {
     setPendiente(o.etiqueta);
     try {
@@ -276,7 +287,7 @@ function AgendarRapido({ conversacion }: { conversacion: Conversacion }) {
       </button>
       {abierto && (
         <>
-          <span className="fixed inset-0 z-20" onClick={() => setAbierto(false)} aria-hidden="true" />
+          <span {...propsOverlay} />
           <div className="absolute right-0 top-7 z-30 w-60 rounded-xl bg-card p-2.5 shadow-panel">
             <input
               value={nota}
