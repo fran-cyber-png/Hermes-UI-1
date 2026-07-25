@@ -29,7 +29,7 @@
  *
  * La tabla `alias_curso` (schema.ts) es la que manda en tiempo de ejecución —
  * se edita sin deploy. `ALIAS_SEMILLA` es con lo que nace: los cursos reales del
- * catálogo, sembrados de forma idempotente (`semilla.ts`).
+ * catálogo, sembrados de forma idempotente (`repositorio.ts`).
  */
 
 export interface AliasCurso {

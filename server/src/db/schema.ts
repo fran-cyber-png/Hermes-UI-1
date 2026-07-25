@@ -844,7 +844,7 @@ export const plantillaPasos = pgTable(
  * mintiendo.
  *
  * Nace sembrada con `ALIAS_SEMILLA` (`cursos/alias.ts`) de forma idempotente
- * (`cursos/semilla.ts`, `ON CONFLICT DO NOTHING`): la siembra NO pisa lo editado
+ * (`cursos/repositorio.ts`, `ON CONFLICT DO NOTHING`): la siembra NO pisa lo editado
  * a mano. Para sacar un alias de circulación se pone `activo = false` en vez de
  * borrarlo — un DELETE vuelve en el próximo arranque, y además se pierde el
  * porqué.
