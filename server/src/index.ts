@@ -30,6 +30,7 @@ import { metaAssetsRouter } from "./routes/metaAssets.js";
 import { overviewRouter } from "./routes/overview.js";
 import { personaRouter } from "./routes/persona.js";
 import { genteRouter } from "./routes/gente.js";
+import { enlacesRouter } from "./routes/enlaces.js";
 import { responderRouter } from "./routes/responder.js";
 import { sdkRouter } from "./routes/sdk.js";
 import { structureRouter } from "./routes/structure.js";
@@ -91,6 +92,7 @@ app.use("/api/conversaciones", conversacionesRouter); // la cola unificada: una 
 app.use("/api/responder", responderRouter);
 app.use("/api/persona", personaRouter);
 app.use("/api/gente", genteRouter); // la persona canónica del grafo: su 360 y la búsqueda
+app.use("/api/enlaces", enlacesRouter); // «es la misma persona que…»: el enlace manual, reversible (#58)
 app.use("/api/meta", metaAssetsRouter);
 app.use("/api/audiences", audiencesRouter);
 app.use("/api/decisions", decisionsRouter); // el feed: qué requiere atención
