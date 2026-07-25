@@ -824,3 +824,52 @@ export const plantillaPasos = pgTable(
     index("plantilla_pasos_idx").on(t.plantillaId, t.orden),
   ],
 );
+
+/**
+ * EL DICCIONARIO CAMPAÑA/ANUNCIO → FAMILIA DE CURSO (#102/#129).
+ *
+ * La pauta le pone al mismo diploma tres nombres distintos según dónde lo
+ * escriba: la campaña dice `[JUL] INTELIGENCIA | WSP`, el formulario dice
+ * «Diploma técnico en Osint & Socmint» y Cerberus dice «Diploma de
+ * Especialización en Inteligencia y Contrainteligencia 14». Esta tabla es la
+ * traducción, y está en la BASE —no en el código— por una razón concreta: la
+ * pauta lanza campañas nuevas todas las semanas y **agregar un alias no puede
+ * exigir un deploy** (menos con el server, que al reiniciar tira las sesiones de
+ * Cerberus de las vendedoras).
+ *
+ * Lo que guarda es la IDENTIDAD, no el producto: `familia` es el prefijo de SKU
+ * (`DIPICOT`), que sobrevive a las ediciones; qué edición se vende hoy se le
+ * pregunta a Cerberus en el momento de confirmar (`cursos/catalogo.ts`). Si acá
+ * se guardara el nombre del producto, cada edición nueva dejaría la tabla
+ * mintiendo.
+ *
+ * Nace sembrada con `ALIAS_SEMILLA` (`cursos/alias.ts`) de forma idempotente
+ * (`cursos/semilla.ts`, `ON CONFLICT DO NOTHING`): la siembra NO pisa lo editado
+ * a mano. Para sacar un alias de circulación se pone `activo = false` en vez de
+ * borrarlo — un DELETE vuelve en el próximo arranque, y además se pierde el
+ * porqué.
+ */
+export const aliasCurso = pgTable(
+  "alias_curso",
+  {
+    id: bigserial({ mode: "number" }).primaryKey(),
+    /**
+     * El texto que se busca dentro del nombre de la campaña, del anuncio o del
+     * formulario. Se compara normalizado (sin acentos, sin mayúsculas, sin
+     * puntuación) y por PALABRA ENTERA — ver `cursos/alias.ts`.
+     */
+    alias: text("alias").notNull(),
+    /** El prefijo alfabético del SKU de Cerberus: `DIPICOT014` → `DIPICOT`. */
+    familia: text("familia").notNull(),
+    /** El nombre legible del curso — lo que ve la vendedora en el chip de la propuesta. */
+    nombreCurso: text("nombre_curso").notNull(),
+    /** Fuera de circulación sin perder el rastro. La consulta solo lee los activos. */
+    activo: boolean("activo").notNull().default(true),
+    creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Un mismo texto no puede mapear a dos familias: la propuesta sería un volado.
+    unique("alias_curso_alias_uq").on(t.alias),
+    index("alias_curso_familia_idx").on(t.familia),
+  ],
+);

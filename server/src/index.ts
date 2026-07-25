@@ -48,6 +48,8 @@ import { simularRouter } from "./routes/simular.js";
 import { iviRouter } from "./routes/ivi.js";
 import { adminRouter } from "./routes/admin.js";
 import { requiereServicio } from "./auth/servicio.js";
+import { db } from "./db/client.js";
+import { sembrarAliasCurso } from "./cursos/repositorio.js";
 
 const app = express();
 const port = process.env.PORT ? Number(process.env.PORT) : 4100;
@@ -152,4 +154,15 @@ app.listen(port, () => {
   // Por eso son dos llaves y las dos arrancan apagadas: `AUTO_RESPUESTA=on` acá, y el
   // interruptor de la base que se apaga sin deploy. Ver autorespuesta/reloj.ts.
   arrancarAutoRespuesta();
+  // El diccionario campaña → curso (#102) nace sembrado: sin filas, la propuesta
+  // «vino por INTELIGENCIA» no existe y el deploy parecería no haber hecho nada.
+  // Es idempotente y NO pisa lo editado a mano (`cursos/repositorio.ts`); si la
+  // tabla todavía no está (falta `db:push`), avisa y sigue.
+  sembrarAliasCurso(db)
+    .then((n) => n > 0 && console.log(`[cursos] ${n} alias de curso sembrados`))
+    .catch((err) =>
+      console.error(
+        `[cursos] no se pudo sembrar la tabla de alias (¿falta \`npm run db:push\`?): ${(err as Error).message}`,
+      ),
+    );
 });
