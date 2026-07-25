@@ -8,12 +8,14 @@ import {
   referenciaSql,
   respondidaSql,
   seguimientosPendientesSql,
+  vivaSql,
 } from "./urgenciaSql.js";
 import { etapaEfectivaSql, ultimasGestionesSql } from "./etapaEfectivaSql.js";
 import { precioEnviadoSql } from "./precio.js";
 import {
   bandaPinOrdenSql,
   categoriasCteSql,
+  cursosCteSql,
   esTablaAusente,
   estadoJoinSql,
   noLeidoSql,
@@ -25,6 +27,7 @@ import {
   leadCursoJoinSql,
   sufijosDeLaColaCteSql,
 } from "./cursoSql.js";
+import { enriquecerConLead } from "./enriquecerConLead.js";
 
 /**
  * LA COLA UNIFICADA — una fila por CONVERSACIÓN, no por mensaje. Extraída de la
@@ -102,6 +105,7 @@ const comentariosCte = (filtroCanal: SQL, incluirPins: boolean) => sql`
     occurred_at                                 AS ultimo_at,
     occurred_at                                 AS ultimo_entrante_at,
     (status <> 'nuevo')                         AS respondida,
+    (status <> 'nuevo')                         AS ya_le_hablamos,
     (${VENTANA_ABIERTA})                        AS ventana_abierta,
     (${pideInfoSql("texto")})                    AS pide_info,
     1                                           AS n
@@ -150,6 +154,11 @@ const conversacionesCte = sql`
     max(occurred_at)                                                AS ultimo_at,
     max(occurred_at) FILTER (WHERE direccion = 'entrante')          AS ultimo_entrante_at,
     (${respondidaSql})                                              AS respondida,
+    -- ¿Alguna vez le hablamos? Distinto de respondida, que es de quién es el
+    -- turno HOY: una persona a la que ya atendimos y que volvió a escribir
+    -- vuelve a ser deuda, pero no es una desconocida. La bandeja necesita
+    -- separarlas — hoy les dice a las dos «nadie te respondió».
+    COALESCE(bool_or(direccion = 'saliente'), false)                 AS ya_le_hablamos,
     false                                                          AS ventana_abierta,
     -- «Pide info» del ÚLTIMO entrante con texto, no un bool_or histórico (#49):
     -- mismo fragmento que el radar — una sola semántica (ADR 0014).
@@ -185,12 +194,20 @@ export interface OpcionesCola {
   intencion?: string;
   /** Filtra por ETAPA EFECTIVA (#89, ADR 0013): la del seam, no la asentada a mano. */
   etapa?: string;
+  /** Solo las que YA tienen precio enviado (cola/precio.ts). El recorte del negocio. */
+  precio?: boolean;
   /** El tab de la cola potenciada (#49): `todo` (default) · `no-leidos` · `favoritos`. */
   tab?: string;
   /** Filtra por una categoría asignada (modo Listas de #49). Se compara en minúsculas. */
   categoria?: string;
   /** La vendedora del token: sin ella el estado personal (pin/fav/leído) queda en defaults. */
   vendedoraId?: string;
+  /**
+   * Cruzar la página contra `leads` para traer el nombre real y el curso del
+   * formulario (`cola/enriquecerConLead.ts`). OPT-IN: lo pide el Pipeline, no
+   * Mensajes — el cruce no tiene índice y no se le cobra a quien no lo usa.
+   */
+  conLead?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -213,9 +230,28 @@ export interface ResultadoCola {
    * es un salto al vacío. Sale de la MISMA consulta que el total, sin costo extra.
    */
   conteosFiltro?: { pideInfo: number; sinResponder: number };
+  /**
+   * La MISMA foto, abierta por las preguntas que el tablero no sabía responder —
+   * de una sola pasada. Es lo que hace navegables 1.389 tarjetas: cuántas de la
+   * bandeja son gente a la que ya le hablamos, cuántas están escribiendo AHORA,
+   * y cuántos silencios ya tienen un precio encima. NO se recorta con el filtro
+   * de la columna (si no, la banda diría el tamaño del recorte, no el suyo).
+   */
+  desglose?: FilaDesglose[];
   /** true = la cola vino SIN estado personal (la tabla no existe todavía, #49). */
   sinEstado?: boolean;
 }
+
+/** Una celda del desglose: etapa × ya-le-hablamos × precio × viva, con su conteo. */
+export type FilaDesglose = {
+  etapa: string;
+  /** ¿Alguna vez salió un mensaje nuestro? Distinto de `respondida` (eso es el turno de HOY). */
+  yaLeHablamos: boolean;
+  precio: boolean;
+  /** Nivel 0 de la urgencia: entrante sin responder de menos de 24 h. Alguien está hablando. */
+  viva: boolean;
+  n: number;
+};
 
 /**
  * La cola, con degradación honesta (#49, ADR 0014): si `estado_conversacion`
@@ -271,11 +307,14 @@ async function ejecutarCola(
   // Compat: la cola vieja mandaba `puedo-escribirle`; el front nuevo usa tabs.
   if (intencion === "puedo-escribirle") condicionesBase.push(sql`(ventana_abierta OR tipo = 'mensaje')`);
 
-  // El RECORTE (tab, categoría, etapa) es lo que sigue valiendo cuando se apaga
-  // el filtro secundario: por eso va aparte, y por eso los conteos de los chips
-  // pueden decir «cuántas habría si tocás esto» sin una consulta más.
+  // El RECORTE (tab, categoría, etapa, precio) es lo que sigue valiendo cuando se
+  // apaga el filtro secundario: por eso va aparte, y por eso los conteos de los
+  // chips pueden decir «cuántas habría si tocás esto» sin una consulta más.
   const condicionesRecorte: SQL[] = [];
   if (etapa) condicionesRecorte.push(sql`(${etapaEfectivaSql}) = ${etapa}`);
+  // El recorte «Con precio» del Pipeline: es una columna más del tablero, no un
+  // filtro secundario — el total tiene que decir el tamaño de LO RECORTADO.
+  if (opciones.precio) condicionesRecorte.push(sql`precio_enviado`);
   // Los tabs personales (#49) solo con la tabla presente; la categoría vive en
   // `etiquetas`, así que filtra igual aunque el estado personal no exista.
   if (conEstado && tab === "no-leidos") condicionesRecorte.push(sql`(${noLeidoSql})`);
@@ -310,10 +349,13 @@ async function ejecutarCola(
     ),
     lead_curso AS (
       ${leadCursoCteSql}
+    ),
+    cursos_interes AS (
+      ${cursosCteSql}
     )
     SELECT todo.clave AS clave, canal, tipo, persona_id, persona_nombre, numero_propio,
-           texto, contexto_texto, ultima_clase, ultima_origen, respondida, precio_enviado,
-           ventana_abierta, pide_info, n,
+           texto, contexto_texto, ultima_clase, ultima_origen, respondida, ya_le_hablamos,
+           precio_enviado, ventana_abierta, pide_info, n,
            referencia, ultimo_at, seguimiento_en,
            etapa_manual,
            iu.curso AS interes_curso,
@@ -326,7 +368,8 @@ async function ejecutarCola(
            ec.fijada_at,
            COALESCE(ec.favorita, false) AS favorita,
            (${noLeidoSql})              AS no_leido,
-           COALESCE(cats.categorias, '{}'::text[]) AS categorias
+           COALESCE(cats.categorias, '{}'::text[]) AS categorias,
+           COALESCE(cursos_interes.cursos, '{}'::text[]) AS cursos
     FROM todo
     LEFT JOIN seguimientos USING (clave)
     LEFT JOIN ultimas_gestiones USING (clave)
@@ -334,6 +377,7 @@ async function ejecutarCola(
     LEFT JOIN cats ON cats.clave = todo.clave
     LEFT JOIN interes_ultimo iu ON iu.clave = todo.clave
     ${leadCursoJoinSql}
+    LEFT JOIN cursos_interes ON cursos_interes.clave = todo.clave
     ${donde(condiciones)}
     ORDER BY ${bandaPinOrdenSql}, nivel ASC, orden ASC
     LIMIT ${limit} OFFSET ${offset}
@@ -345,6 +389,7 @@ async function ejecutarCola(
   let total: number | undefined;
   let conteos: Record<string, number> | undefined;
   let conteosFiltro: { pideInfo: number; sinResponder: number } | undefined;
+  let desglose: FilaDesglose[] | undefined;
   if (offset === 0) {
     // Una sola pasada da las tres cifras: el total del recorte actual (con el
     // filtro secundario puesto) y cuántas daría cada chip dentro del MISMO
@@ -364,29 +409,59 @@ async function ejecutarCola(
     `);
     total = r?.n;
     conteosFiltro = { pideInfo: r?.pide_info ?? 0, sinResponder: r?.sin_responder ?? 0 };
-    conteos = await conteosPorEtapa(base, filtroCanal, condicionesBase);
+    desglose = await desglosarEmbudo(base, filtroCanal, condicionesBase);
+    conteos = plegarConteos(desglose);
   }
 
-  return { conversaciones: filas as unknown[], total, conteos, conteosFiltro, hayMas: filas.length === limit };
+  // El cruce contra `leads` va DESPUÉS del LIMIT y solo si se pidió: ver
+  // `enriquecerConLead.ts` (el match por sufijo no tiene índice).
+  const conversaciones = opciones.conLead
+    ? await enriquecerConLead(base, filas as { persona_id?: string | null; canal?: string | null }[])
+    : (filas as unknown[]);
+
+  return { conversaciones, total, conteos, conteosFiltro, desglose, hayMas: filas.length === limit };
 }
 
-/** El GROUP BY del embudo: una pasada, la misma definición y la misma ventana. */
-async function conteosPorEtapa(
+/**
+ * EL GROUP BY DEL EMBUDO: una pasada, la misma definición y la misma ventana.
+ *
+ * Devuelve el desglose completo (etapa × turno × precio). El `conteos` de toda la
+ * vida se pliega de acá — no es otra consulta: si algún día no cerraran, sería un
+ * bug de verdad y no una diferencia de definición (la lección de #37).
+ */
+async function desglosarEmbudo(
   base: typeof db,
   filtroCanal: SQL,
   condiciones: SQL[],
-): Promise<Record<string, number>> {
+): Promise<FilaDesglose[]> {
   const donde = condiciones.length ? sql`WHERE ${sql.join(condiciones, sql` AND `)}` : sql``;
-  const filas = await base.execute<{ etapa: string; n: number }>(sql`
+  const filas = await base.execute<FilaDesglose>(sql`
     ${conTodo(filtroCanal, null)},
     ultimas_gestiones AS (${ultimasGestionesSql})
-    SELECT (${etapaEfectivaSql}) AS etapa, count(*)::int AS n
+    SELECT (${etapaEfectivaSql})        AS etapa,
+           ya_le_hablamos               AS "yaLeHablamos",
+           precio_enviado               AS precio,
+           (${vivaSql})                 AS viva,
+           count(*)::int                AS n
     FROM todo
     LEFT JOIN ultimas_gestiones USING (clave)
     ${donde}
-    GROUP BY 1
+    GROUP BY 1, 2, 3, 4
   `);
-  return Object.fromEntries(filas.map((f) => [f.etapa, f.n]));
+  return filas.map((f) => ({
+    etapa: f.etapa,
+    yaLeHablamos: f.yaLeHablamos,
+    precio: f.precio,
+    viva: f.viva,
+    n: f.n,
+  }));
+}
+
+/** El conteo por etapa, plegado del desglose. El contrato de #89, intacto. */
+export function plegarConteos(desglose: readonly FilaDesglose[]): Record<string, number> {
+  const conteos: Record<string, number> = {};
+  for (const fila of desglose) conteos[fila.etapa] = (conteos[fila.etapa] ?? 0) + fila.n;
+  return conteos;
 }
 
 /**
@@ -397,5 +472,5 @@ async function conteosPorEtapa(
  * bug de verdad, no una diferencia de definición.
  */
 export async function contarPorEtapaEfectiva(base: typeof db): Promise<Record<string, number>> {
-  return conteosPorEtapa(base, sql``, []);
+  return plegarConteos(await desglosarEmbudo(base, sql``, []));
 }

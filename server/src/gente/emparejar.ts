@@ -54,6 +54,23 @@ export function fuenteDeLead(fila: FilaLead): FuenteLead {
   return "meta";
 }
 
+/**
+ * EL CURSO QUE LA PERSONA ELIGIÓ EN EL FORMULARIO — la sugerencia con la que el
+ * Pipeline registra el interés SIN que la vendedora tipee nada.
+ *
+ * Solo los leads WEB lo tienen: en las landings de ICARUS, `campaign_name` ES el
+ * producto de la landing (`icarus/mapeo.ts` lo mapea desde `product_name`), así
+ * que sale exacto — «Diploma Internacional de Inteligencia y Contrainteligencia».
+ *
+ * En los leads de META, `campaign_name` es el nombre de la campaña publicitaria
+ * («PE | Julio | Advantage+ | Leads»): puede parecerse a un curso o no ser uno en
+ * absoluto. Ofrecerlo como «el curso que quiere» sería inventar. Ahí la campaña
+ * sigue viajando como CONTEXTO (la ficha ya la muestra), no como curso.
+ */
+export function cursoDelLead(lead: LeadDerivado): string | null {
+  return lead.fuente === "web" ? lead.campana : null;
+}
+
 function conFecha(fila: FilaLead): number {
   const t = new Date(fila.createdTime).getTime();
   return Number.isNaN(t) ? 0 : t;

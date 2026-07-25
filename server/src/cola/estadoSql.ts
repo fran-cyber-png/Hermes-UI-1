@@ -108,3 +108,19 @@ export const categoriasCteSql: SQL = sql`
   FROM etiquetas
   GROUP BY clave
 `;
+
+/**
+ * Los CURSOS DE INTERÉS registrados de cada conversación, en el orden en que se
+ * registraron (la línea de tiempo de #57). Es la palabra de la vendedora y lo que
+ * la compuerta de Cotizado exige.
+ *
+ * Viaja EN la fila porque el tablero lo pedía de a uno: cada tarjeta montaba su
+ * propio `GET /api/gestiones/intereses?claves=<una>` — 30 tarjetas, 30 requests
+ * para una tabla que hoy tiene un puñado de filas. La lista y el editor no son la
+ * misma altitud: la fila muestra, la ficha edita.
+ */
+export const cursosCteSql: SQL = sql`
+  SELECT clave, array_agg(curso ORDER BY creado_at, id) AS cursos
+  FROM intereses
+  GROUP BY clave
+`;

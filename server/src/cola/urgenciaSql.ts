@@ -34,6 +34,14 @@ const EXPIRA = sql`(tipo = 'comentario' AND ventana_abierta AND NOT respondida)`
 const ESPERA = sql`(tipo = 'mensaje' AND NOT respondida)`;
 const SILENCIO = sql`(tipo = 'mensaje' AND respondida)`;
 
+/**
+ * VIVO suelto — «alguien está escribiendo AHORA»: el nivel 0, sin el resto del
+ * CASE. Se exporta para poder contarlo donde no hay `seguimiento_en` a mano (el
+ * desglose del embudo): reusar el fragmento es la única forma de que «viva» y el
+ * nivel 0 no se separen en silencio.
+ */
+export const vivaSql: SQL = VIVO;
+
 /** El nivel 0–5 — espejo verificado de `claveUrgencia(...).nivel`. */
 export const nivelUrgenciaSql: SQL = sql`CASE
   WHEN ${VIVO} THEN 0
