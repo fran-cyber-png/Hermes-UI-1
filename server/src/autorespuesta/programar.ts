@@ -60,6 +60,15 @@ export interface Ocupacion {
   cuando: Date;
 }
 
+/**
+ * Una ventana de despacho en minutos desde la medianoche local. Se puede pasar
+ * a mano (`programar(..., ventanas)`) en vez de derivarla de la config: es lo
+ * que hace la aprobación en lote del modo supervisado, que reparte con ESTE
+ * mismo repartidor pero sobre la banda horaria entera —07:30–21:00— en vez de
+ * los huecos que le quedan a la máquina. La razón está en `aprobar.ts`.
+ */
+export type VentanaMinutos = { desde: number; hasta: number };
+
 /** Cuántas vueltas puede dar la búsqueda de hueco antes de rendirse. */
 const MAX_SALTOS = 48;
 
@@ -69,8 +78,8 @@ export function programar(
   ahora: Date,
   azar: () => number = Math.random,
   ocupadas: readonly Ocupacion[] = [],
+  ventanas: readonly VentanaMinutos[] = ventanasEfectivas(cfg),
 ): Plan {
-  const ventanas = ventanasEfectivas(cfg);
   const ranuras: Ranura[] = [];
   const postergados: Postergado[] = [];
 
@@ -94,11 +103,11 @@ export function programar(
 
   // El cursor arranca en la ventana en la que estamos, o en la próxima que
   // abra. Es POR NÚMERO: cada número propio es un canal distinto.
-  const arranque = inicioDeDespacho(ahora, cfg);
+  const arranque = inicioDeDespacho(ahora, cfg, ventanas);
   const cursores = new Map<string, Date>();
   // El final de la ventana en la que se está trabajando: más allá de eso no se
   // programa (se reevalúa en la próxima corrida, ya con datos frescos).
-  const limite = finDeVentana(arranque, cfg);
+  const limite = finDeVentana(arranque, cfg, ventanas);
 
   // El que más esperó, primero. `clave` desempata para que dos corridas con los
   // mismos datos den el mismo plan.
@@ -112,6 +121,7 @@ export function programar(
 
     const hueco = buscarHueco(cursor, {
       cfg,
+      ventanas,
       limite,
       numero,
       porDia,
@@ -141,6 +151,7 @@ export function programar(
 
 interface ContextoHueco {
   cfg: ConfigAutoRespuesta;
+  ventanas: readonly VentanaMinutos[];
   limite: Date;
   numero: string;
   porDia: Map<string, number>;
@@ -165,8 +176,8 @@ function buscarHueco(desde: Date, ctx: ContextoHueco): ResultadoHueco {
       return { ok: false, motivo: 'no entra en la ventana de despacho: a esa hora ya responde la vendedora' };
     }
 
-    if (!enVentana(t, cfg)) {
-      t = inicioDeDespacho(t, cfg);
+    if (!enVentana(t, cfg, ctx.ventanas)) {
+      t = inicioDeDespacho(t, cfg, ctx.ventanas);
       continue;
     }
 
@@ -186,23 +197,35 @@ function buscarHueco(desde: Date, ctx: ContextoHueco): ResultadoHueco {
 }
 
 /** ¿Este instante cae en alguna ventana efectiva de despacho? */
-export function enVentana(t: Date, cfg: ConfigAutoRespuesta): boolean {
+export function enVentana(
+  t: Date,
+  cfg: ConfigAutoRespuesta,
+  ventanas: readonly VentanaMinutos[] = ventanasEfectivas(cfg),
+): boolean {
   const m = minutosLocales(t, cfg.zona);
-  return ventanasEfectivas(cfg).some((v) => m >= v.desde && m < v.hasta);
+  return ventanas.some((v) => m >= v.desde && m < v.hasta);
 }
 
 /** Si ya estamos en una ventana, ahora; si no, el próximo momento en que abra. */
-export function inicioDeDespacho(t: Date, cfg: ConfigAutoRespuesta): Date {
-  if (enVentana(t, cfg)) return t;
-  const proximos = ventanasEfectivas(cfg).map((v) => proximoMomento(t, hhmm(v.desde), cfg.zona));
+export function inicioDeDespacho(
+  t: Date,
+  cfg: ConfigAutoRespuesta,
+  ventanas: readonly VentanaMinutos[] = ventanasEfectivas(cfg),
+): Date {
+  if (enVentana(t, cfg, ventanas)) return t;
+  const proximos = ventanas.map((v) => proximoMomento(t, hhmm(v.desde), cfg.zona));
   return proximos.reduce((a, b) => (a.getTime() <= b.getTime() ? a : b));
 }
 
 /** El cierre de la ventana en la que cae `t` (o de la próxima, si está afuera). */
-export function finDeVentana(t: Date, cfg: ConfigAutoRespuesta): Date {
-  const dentro = inicioDeDespacho(t, cfg);
+export function finDeVentana(
+  t: Date,
+  cfg: ConfigAutoRespuesta,
+  ventanas: readonly VentanaMinutos[] = ventanasEfectivas(cfg),
+): Date {
+  const dentro = inicioDeDespacho(t, cfg, ventanas);
   const m = minutosLocales(dentro, cfg.zona);
-  const ventana = ventanasEfectivas(cfg).find((v) => m >= v.desde && m < v.hasta);
+  const ventana = ventanas.find((v) => m >= v.desde && m < v.hasta);
   // `inicioDeDespacho` siempre cae dentro de una ventana; el fallback es por si
   // alguien configura algo degenerado (ventana de ancho cero, ya filtrada).
   if (!ventana) return dentro;

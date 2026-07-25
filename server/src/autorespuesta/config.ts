@@ -61,6 +61,13 @@ export interface ConfigAutoRespuesta {
   /** Techo por hora y por día, POR NÚMERO propio. */
   techoPorHora: number;
   techoPorDia: number;
+  /**
+   * MODO SUPERVISADO: cuánto sigue valiendo una preparada después de la hora que
+   * el reparto le reservó. Es el margen para que la vendedora llegue, abra la
+   * bandeja y apruebe — no el atraso tolerable de un envío (eso es
+   * `MAX_ATRASO_MINUTOS`, y son 90). Ver `caducidad.ts`.
+   */
+  graciaAprobacionMinutos: number;
   /** Cada cuánto mira el despachador si hay algo que mandar. */
   tickSegundos: number;
   /** Cada cuánto se recalcula la cola (decidir + programar). */
@@ -83,6 +90,9 @@ export const CONFIG_POR_DEFECTO: ConfigAutoRespuesta = {
   espaciadoSegundos: [60, 240],
   techoPorHora: 20,
   techoPorDia: 60,
+  // Tres horas: lo preparado a las 07:30 sigue esperando cuando la vendedora
+  // llega a las 9 y se apaga a las 10:30. A las 3 de la tarde no queda nada.
+  graciaAprobacionMinutos: 180,
   tickSegundos: 30,
   encoladoMinutos: 5,
 };
@@ -114,6 +124,9 @@ export function configDesdeEnv(env: NodeJS.ProcessEnv = process.env): ConfigAuto
     techoPorDia: env.AUTO_RESPUESTA_TECHO_DIA
       ? numeroPositivo('AUTO_RESPUESTA_TECHO_DIA').parse(env.AUTO_RESPUESTA_TECHO_DIA)
       : CONFIG_POR_DEFECTO.techoPorDia,
+    graciaAprobacionMinutos: env.AUTO_RESPUESTA_GRACIA_MIN
+      ? numeroPositivo('AUTO_RESPUESTA_GRACIA_MIN').parse(env.AUTO_RESPUESTA_GRACIA_MIN)
+      : CONFIG_POR_DEFECTO.graciaAprobacionMinutos,
   };
 
   // La zona tiene que existir: un typo («America/Perú») haría que todos los
