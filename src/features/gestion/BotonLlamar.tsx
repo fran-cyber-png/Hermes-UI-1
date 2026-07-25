@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Check, Copy, Phone } from 'lucide-react';
 import { abrirExterno } from '../../lib/enlacesExternos';
+import { usePopover } from '../../lib/teclado/usePopover';
 
 /**
  * LLAMAR — con red de seguridad.
@@ -17,17 +18,7 @@ export function BotonLlamar({ telefono, compacto = false }: { telefono: string; 
   const [copiado, setCopiado] = useState(false);
   const digitos = telefono.replace(/\D/g, '');
 
-  useEffect(() => {
-    if (!abierto) return;
-    const fn = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        setAbierto(false);
-      }
-    };
-    window.addEventListener('keydown', fn, true);
-    return () => window.removeEventListener('keydown', fn, true);
-  }, [abierto]);
+  const { propsOverlay } = usePopover(abierto, () => setAbierto(false), { z: 'z-30' });
 
   if (digitos.length < 8) return null;
 
@@ -72,14 +63,7 @@ export function BotonLlamar({ telefono, compacto = false }: { telefono: string; 
 
       {abierto && (
         <>
-          <span
-            className="fixed inset-0 z-30"
-            onClick={(e) => {
-              e.stopPropagation();
-              setAbierto(false);
-            }}
-            aria-hidden="true"
-          />
+          <span {...propsOverlay} />
           <span
             onClick={(e) => e.stopPropagation()}
             className="absolute right-0 top-7 z-40 flex w-56 items-center gap-2 rounded-xl bg-card p-2.5 shadow-panel"

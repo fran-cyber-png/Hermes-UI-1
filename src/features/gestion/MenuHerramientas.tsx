@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { MoreVertical } from 'lucide-react';
+import { usePopover } from '../../lib/teclado/usePopover';
 import { armarItemsMenu } from './itemsHerramientas';
 import { GestorCategorias } from './GestorCategorias';
 
@@ -32,17 +33,7 @@ export function MenuHerramientas({ clave }: { clave: string }) {
     setAbierto(false);
   }, [clave]);
 
-  useEffect(() => {
-    if (!abierto) return;
-    const fn = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        setAbierto(false);
-      }
-    };
-    window.addEventListener('keydown', fn, true);
-    return () => window.removeEventListener('keydown', fn, true);
-  }, [abierto]);
+  const { propsOverlay } = usePopover(abierto, () => setAbierto(false), { z: 'z-20' });
 
   // Al abrir, el foco va al primer item (regla del issue). Los items
   // deshabilitados usan aria-disabled en vez de `disabled` para seguir
@@ -72,7 +63,7 @@ export function MenuHerramientas({ clave }: { clave: string }) {
 
       {abierto && (
         <>
-          <span className="fixed inset-0 z-20" onClick={() => setAbierto(false)} aria-hidden="true" />
+          <span {...propsOverlay} />
           <div className="absolute right-0 top-7 z-30 w-56 rounded-xl bg-card p-1.5 shadow-panel">
             {items.map((item, i) => (
               <button

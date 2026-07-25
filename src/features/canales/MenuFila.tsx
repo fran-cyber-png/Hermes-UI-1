@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
+import { usePopover } from '../../lib/teclado/usePopover';
 import { ALTO_MENU_PX, armarAccionesFila, ladoDelMenu, type EstadoPersonalFila } from './accionesFila';
 
 /**
@@ -51,18 +52,14 @@ export function MenuFila({
     setAbierto(false);
   }, [clave]);
 
-  useEffect(() => {
-    if (!abierto) return;
-    const fn = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        setAbierto(false);
-        disparadorRef.current?.focus();
-      }
-    };
-    window.addEventListener('keydown', fn, true);
-    return () => window.removeEventListener('keydown', fn, true);
-  }, [abierto]);
+  // Cerrar devuelve el foco a la flechita: al abrir se lo llevó el primer item,
+  // y si el menú se va sin devolverlo, el foco cae al body y el Tab reempieza
+  // desde arriba de la app. Vale para el Escape y para el clic afuera (que pega
+  // en el overlay, no en un campo, así que no le roba el foco a nadie).
+  const { propsOverlay } = usePopover(abierto, () => {
+    setAbierto(false);
+    disparadorRef.current?.focus();
+  }, { z: 'z-20' });
 
   useEffect(() => {
     if (abierto) primerItemRef.current?.focus();
@@ -138,14 +135,7 @@ export function MenuFila({
 
       {abierto && (
         <>
-          <span
-            className="fixed inset-0 z-20"
-            onClick={(e) => {
-              e.stopPropagation();
-              setAbierto(false);
-            }}
-            aria-hidden="true"
-          />
+          <span {...propsOverlay} />
           <div
             className={
               'absolute right-0 z-30 w-52 rounded-xl bg-card p-1.5 shadow-panel ' +

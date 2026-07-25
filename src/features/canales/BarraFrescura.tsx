@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { AlertTriangle, Check } from 'lucide-react';
 import { hace, useFrescura } from '../../lib/datos/frescura';
+import { usePopover } from '../../lib/teclado/usePopover';
 
 /**
  * La línea de salud de los datos: de cuándo es lo que la vendedora está mirando.
@@ -21,14 +22,9 @@ export default function BarraFrescura() {
   const [abierto, setAbierto] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!abierto) return;
-    const alTeclear = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setAbierto(false);
-    };
-    window.addEventListener('keydown', alTeclear);
-    return () => window.removeEventListener('keydown', alTeclear);
-  }, [abierto]);
+  // Su listener propio iba en BURBUJA y sin cortar el evento: el mismo Escape
+  // llegaba después al shell y cerraba TAMBIÉN la conversación de atrás (#12).
+  const { propsOverlay } = usePopover(abierto, () => setAbierto(false), { z: 'z-40' });
 
   if (isPending) return <div className="h-6 w-28 animate-pulse rounded-lg bg-muted" />;
   if (isError || !data) {
@@ -60,7 +56,7 @@ export default function BarraFrescura() {
 
       {abierto && (
         <>
-          <button type="button" aria-label="Cerrar" onClick={() => setAbierto(false)} className="fixed inset-0 z-40 cursor-default" />
+          <span {...propsOverlay} />
           <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl bg-card p-4 shadow-panel animate-entrar">
             <p className="text-xs font-bold text-foreground">
               {data.ultimaIngesta == null ? 'Nunca se capturaron datos.' : `La captura está detenida ${hace(data.horasDesdeIngesta)}.`}
