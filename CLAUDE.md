@@ -73,35 +73,52 @@ npm install && npm run dev:app                     # Vite :5173 + la app de escr
 - **Nada de automatización, con UNA excepción escrita**: no envío masivo, no warmup, **no anti-ban**.
   Un envío = una acción humana, por `EnvioControlado` (la única puerta hacia `enviarTexto`). El
   `temporary_ban` **se muestra siempre**, nunca se esconde.
-  La excepción es la **auto-respuesta fuera de horario** (#125, **ADR 0015** + **ADR 0016**), y es del
+  La excepción es la **auto-respuesta fuera de horario** (#125, **ADR 0015** + **0016** + **0018**), y es del
   tamaño exacto del agujero que tapa: 44% de los leads llega fuera de horario y el 44% de esos nunca
   recibe respuesta. Solo puede mandar **un acuse de una plantilla registrada** a quien **escribió
   primero**, **fuera de la franja de atención**, tras **30 min sin respuesta humana**, **una vez por
   día**, y **nunca a quien dijo que no**. Nada de eso se negocia en un `if`: vive en
   `server/src/autorespuesta/`.
-  - **TRES MODOS, no un booleano** (ADR 0016): **apagada** (el default) · **supervisada** (la cola
-    prepara igual —misma decisión, mismo ritmo— pero **nada sale sin el OK de una persona**) ·
-    **automática** (lo de ADR 0015: prepara y manda sola). La garantía del modo supervisado es una
-    sola línea: lo preparado queda en estado `preparada`, y `EN_COLA_DE_ENVIO` (`autorespuesta/estados.ts`)
-    no lo incluye — el despachador **no lo ve**. La máquina de estados completa y el salto prohibido
-    (`preparada → enviada` no existe) viven ahí, con su test.
-  - **La bandeja de revisión** (`src/features/autorespuesta/BandejaRevision.tsx`) es una **hoja sobre
-    la app**, no una vista del riel: se abre desde el chip o con la tecla **`a`**, agrupa por campaña,
-    muestra el texto una vez por grupo y **aprobar en lote es de primera clase**. Lo aprobado NO sale
-    junto: se reparte con el MISMO `programar.ts` del modo automático. Lo que nadie aprueba **caduca
-    solo** (3 h de gracia desde su turno, nunca cruza el día — `autorespuesta/caducidad.ts`).
+  - **DOS MODOS: apagada · supervisada** (ADR 0018). **Hermes no manda solo: siempre hay una persona
+    aprobando.** El tercer modo, `automatica`, **se retiró de la UI y de la API**: `PUT /modo` con
+    `automatica` responde **409 `modo_retirado`**, y `PUT /interruptor {encendida:true}` —la puerta
+    trasera— ahora deja **supervisada** (apagar, para lo único que esa ruta existe, no cambió). El
+    valor sigue siendo **representable** a propósito (`MODOS` lo tiene, `MODOS_ELEGIBLES` no): una
+    fila vieja puede tenerlo y `leerModo` debe devolverlo tal cual, o la pantalla diría «apagada»
+    mientras el despachador manda. Un server que quedó ahí se ve como **«modo RETIRADO»** en rojo,
+    con las dos salidas a un click.
+    La garantía del modo supervisado sigue siendo una sola línea: lo preparado queda en estado
+    `preparada`, y `EN_COLA_DE_ENVIO` (`autorespuesta/estados.ts`) no lo incluye — el despachador
+    **no lo ve**. La máquina de estados y el salto prohibido (`preparada → enviada` no existe) viven
+    ahí, con su test.
+  - **El MODO REVISIÓN pasa DENTRO del chat** (ADR 0018) — ya no es una hoja encima de la app
+    (`BandejaRevision.tsx` está archivada). Es la vista **Mensajes** filtrada: a la izquierda
+    `ColaRevision.tsx` (la fila, agrupada por campaña, con el **lote** en cada cabecera), al centro
+    **la conversación real sin tocar**, a la derecha `PorQueEstaSugerencia.tsx` **arriba** de la
+    ficha, y el **borrador en el composer**, editable y marcado. El botón dice **Aprobar**, no
+    Enviar: acá no se manda, se programa.
+    Se entra por el **renglón del chip** (que ES la puerta: «12 esperando tu OK →») o con la tecla
+    **`a`**. Teclado: **`⌘↵`** aprobar y seguir · **`⌘D`** descartar y seguir · **`⌘↓`/`⌘↑`** saltar ·
+    **`Esc`** salir. Todos acordes porque el foco vive en el composer (una tecla suelta escribiría).
+    Ojo con dos cosas: la sugerencia **no** se guarda en el Map de `borradorComposer.ts` (ese es el
+    texto de la vendedora), y en revisión **Enter no manda** (en el composer normal sí).
+    El estado del modo vive en `useModoRevision.ts`; el «a cuál voy» al resolver es puro y con tests
+    (`revision.ts`). Lo aprobado NO sale junto: se reparte con el MISMO `programar.ts`. Lo que nadie
+    aprueba **caduca solo** (3 h de gracia desde su turno, nunca cruza el día — `caducidad.ts`).
   - **Apagada por default y con dos llaves**: `AUTO_RESPUESTA=on` (entorno) **y** el interruptor de la
     base (`auto_respuesta_estado.modo`), que es el **kill-switch sin deploy** —
     `PUT /api/autorespuesta/modo` con el Bearer de cualquier vendedora (la ruta vieja
-    `/interruptor`, booleana, sigue viva para un `curl` de emergencia). Se maneja desde el **chip de la
-    cabecera**, al lado del semáforo de WhatsApp: **tres segmentos a la vista** (apagar cuesta UN click
-    desde cualquier modo), apagada discreta · supervisada delineada · automática sólida con punto vivo;
-    frenada sale en rojo con el motivo, y sin `db:push` dice «falta la migración» en vez de un estado
-    falso.
+    `/interruptor`, booleana, sigue viva para un `curl` de emergencia; desde ADR 0018 prende en
+    supervisada). Se maneja desde el **chip de la cabecera**, al lado del semáforo de WhatsApp:
+    **los dos segmentos a la vista** (apagar cuesta UN click desde donde estés), apagada discreta ·
+    supervisada delineada. Frenada sale en rojo con el motivo, el modo retirado también, y sin
+    `db:push` dice «falta la migración» en vez de un estado falso.
   - **La plantilla depende de la CAMPAÑA** (`autorespuesta/campana.ts`): interés asentado > formulario
     que llenó > anuncio del que vino — la MISMA precedencia del chip de curso de la cola (#72), para que
     la fila y el mensaje no digan dos cosas distintas. Lo que cambia por campaña es una frase
-    (`FAMILIAS[].gancho`), no una plantilla por curso.
+    (`FAMILIAS[].gancho`), no una plantilla por curso. **Cuál de los tres eslabones ganó se GUARDA**
+    (`campana_fuente`, ADR 0018): es el «por qué» que el panel derecho muestra, y sin él una
+    recomendación no se puede supervisar, solo obedecer.
   - **El ritmo es el contrato**: un envío a la vez, 60–240 s entre uno y otro, lo de la madrugada
     sale recién a partir de las 7:30, techos de 20/hora y 60/día por número. Freno TOTAL ante
     `temporary_ban`, error de envío o desconexión; cancelación si la vendedora responde antes; la
@@ -388,7 +405,8 @@ sensato). Ver `server/.env.example` (solo nombres).
   tocar `server/src/db/schema.ts`, push contra la DB. Pendiente de push hoy: las dos tablas de la
   auto-respuesta (`auto_respuestas_pendientes`, `auto_respuesta_estado`), `envios_wa.automatico`
   (#125), las cinco columnas del modo supervisado (`auto_respuesta_estado.modo` +
-  `auto_respuestas_pendientes.aprobada_por/.aprobada_at/.editada/.campana`, ADR 0016) y `alias_curso`
+  `auto_respuestas_pendientes.aprobada_por/.aprobada_at/.editada/.campana`, ADR 0016),
+  `auto_respuestas_pendientes.campana_fuente` (ADR 0018) y `alias_curso`
   (#102) — sin el push esas funciones **degradan** (hilo sin marca, ruta del interruptor en 503,
   bandeja vacía con el motivo escrito, ficha sin propuesta de curso), no rompen —; y `plantillas` +
   `plantilla_pasos` (plantillas-secuencia), sin las cuales `/api/plantillas` **no funciona** en un
