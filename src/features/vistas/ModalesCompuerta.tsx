@@ -133,10 +133,13 @@ export function ModalInteresCotizado({
           </div>
         )}
 
+        {/* La propuesta del anuncio (#102) llega DENTRO de `Intereses`: cuando la
+            hay, no hay nada que buscar — se confirma ahí. El modal no puede saber
+            cuál de los dos casos le tocó, así que el texto cubre los dos. */}
         <p className="text-xs text-muted-foreground">
           {sugerido?.hayQueRegistrar
             ? 'O buscá otro curso: al guardarlo, la tarjeta pasa sola a Cotizados.'
-            : 'Buscá el curso y agregalo: al guardarlo, la tarjeta pasa sola a Cotizados.'}
+            : 'Confirmá el curso con el que llegó, o buscalo y agregalo: al guardarlo, la tarjeta pasa sola a Cotizados.'}
         </p>
         <Intereses clave={c.clave} senalAbrir={1} onAgregado={onGuardado} />
       </div>

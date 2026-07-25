@@ -190,6 +190,26 @@ imagen. UI en `src/features/plantillas/`, colgada del `···` («Mensajes prede
 - **Sembrar desde el histórico**: `cd server && npm run plantillas:proponer [-- --dias 14]` (dry-run) ·
   `-- --aplicar <vendedoraId>` las guarda **como propuestas**. El minado propone, una persona aprueba.
 
+## Interés derivado del anuncio — el lead ya llegó diciendo qué quiere
+
+`server/src/cursos/` traduce el texto con el que llegó la persona (la campaña del anuncio de
+Click-to-WhatsApp, el curso del formulario que llenó) a una **familia de curso** y lo propone en la
+ficha: «📣 Inteligencia y Contrainteligencia · del anuncio [Confirmar]» (#102/#129).
+
+- **Se deriva, no se guarda**: la propuesta se calcula en cada consulta y viaja en `derivados` dentro
+  de `GET /api/gestiones/intereses` — misma decisión que las señales (ADR 0015). **Lo único que
+  escribe una fila en `intereses` es el clic humano** en `POST /api/gestiones/intereses/derivado`.
+- **Precedencia** (la de #72, no se reinventa): interés registrado > curso del formulario > campaña
+  del anuncio. Sin alias que matchee **no se inventa**: se muestra el título crudo, sin botón.
+- **El diccionario vive en la base** (`alias_curso`, editable sin deploy) y nace sembrado con
+  `ALIAS_SEMILLA` (`cursos/alias.ts`, idempotente y sin pisar lo editado a mano). Para sacar un alias
+  de circulación: `activo = false`, nunca DELETE.
+- **Lo que se registra es el nombre CRUDO del producto de Cerberus** (la última edición activa de la
+  familia, resuelta contra el catálogo vivo al confirmar), no el nombre corto del chip: `intereses.curso`
+  es lo que después se cotiza. Falla ruidoso (502/409), nunca inventa un nombre parecido.
+- **La compuerta de Cotizado no se relaja, se satisface**: el modal llega con el curso preseleccionado
+  y confirmar completa el arrastre.
+
 ## Administración de números (para Cerberus)
 
 `/api/admin/*` (`server/src/routes/admin.ts`), detrás de **`requiereServicio`**
@@ -294,11 +314,12 @@ sensato). Ver `server/.env.example` (solo nombres).
 - **Drizzle sin migraciones versionadas**: el schema se aplica con `npm run db:push` (drizzle-kit). Al
   tocar `server/src/db/schema.ts`, push contra la DB. Pendiente de push hoy: las dos tablas de la
   auto-respuesta (`auto_respuestas_pendientes`, `auto_respuesta_estado`), `envios_wa.automatico`
-  (#125) y las cinco columnas del modo supervisado (`auto_respuesta_estado.modo` +
-  `auto_respuestas_pendientes.aprobada_por/.aprobada_at/.editada/.campana`, ADR 0016) — sin el push
-  esas funciones **degradan** (hilo sin marca, ruta del interruptor en 503, bandeja vacía con el
-  motivo escrito), no rompen —; y `plantillas` + `plantilla_pasos` (plantillas-secuencia), sin las
-  cuales `/api/plantillas` **no funciona** en un server ya desplegado.
+  (#125), las cinco columnas del modo supervisado (`auto_respuesta_estado.modo` +
+  `auto_respuestas_pendientes.aprobada_por/.aprobada_at/.editada/.campana`, ADR 0016) y `alias_curso`
+  (#102) — sin el push esas funciones **degradan** (hilo sin marca, ruta del interruptor en 503,
+  bandeja vacía con el motivo escrito, ficha sin propuesta de curso), no rompen —; y `plantillas` +
+  `plantilla_pasos` (plantillas-secuencia), sin las cuales `/api/plantillas` **no funciona** en un
+  server ya desplegado.
 - **El transporte falso repite ids entre reinicios** (`falso-1`, `falso-2`…): reprocesar colisiona con la
   idempotencia (`wa:falso-N` ya existe) y el mensaje no entra. Para demos limpias, borrar los
   `external_id LIKE 'wa:falso-%'` primero. El transporte real usa ids reales de WhatsApp (únicos).
