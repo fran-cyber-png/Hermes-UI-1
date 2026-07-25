@@ -12,3 +12,13 @@ import { sql, type SQL } from "drizzle-orm";
 export function diaLimaSql(columna: string): SQL {
   return sql`(${sql.raw(columna)} AT TIME ZONE 'America/Lima')::date`;
 }
+
+/**
+ * LA HORA DE PARED de Lima (0–23) — el eje del gráfico de cobertura horaria y
+ * la frontera del horario de atención (#126). Espejo SQL de `horaLimaDelDia`
+ * (`horaLima.ts`); vive acá, pegado a `diaLimaSql`, para que la zona horaria se
+ * escriba en UN archivo y no en cada consulta que la necesite.
+ */
+export function horaDelDiaLimaSql(columna: string): SQL {
+  return sql`extract(hour from (${sql.raw(columna)} AT TIME ZONE 'America/Lima'))::int`;
+}

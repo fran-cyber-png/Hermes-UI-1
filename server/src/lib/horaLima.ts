@@ -21,6 +21,16 @@ export function diaLimaISO(instante: Date): string {
   return horaDeParedLima.toISOString().slice(0, 10);
 }
 
+/**
+ * La HORA DE PARED de Lima (0–23) para un instante dado — el eje del gráfico de
+ * cobertura horaria (#126) y la frontera del horario de atención.
+ * Misma aritmética que `diaLimaISO`, por el mismo motivo: Lima es UTC-5 fijo.
+ */
+export function horaLimaDelDia(instante: Date): number {
+  const horaDeParedLima = new Date(instante.getTime() - OFFSET_LIMA_MINUTOS * 60_000);
+  return horaDeParedLima.getUTCHours();
+}
+
 /** La medianoche de un día de Lima (YYYY-MM-DD), como el instante UTC exacto que es. */
 export function medianocheLima(diaISO: string): Date {
   return new Date(`${diaISO}T00:00:00-05:00`);
