@@ -31,9 +31,10 @@ export function decidirDrop(v: {
   canal: string;
   /**
    * ¿La conversación ya tiene un interés registrado? La cola lo trae en la fila
-   * (`cursos[]`), así que el front puede saber ANTES de viajar que la compuerta
-   * de Cotizado va a rebotar — y preguntar en vez de rebotar. `undefined` = no
-   * se sabe: se intenta, como siempre, y `decidirRebote` atrapa el rechazo.
+   * (`interes_curso`, #72), así que el front puede saber ANTES de viajar que la
+   * compuerta de Cotizado va a rebotar — y preguntar en vez de rebotar.
+   * `undefined` = no se sabe: se intenta, como siempre, y `decidirRebote` atrapa
+   * el rechazo.
    */
   tieneInteres?: boolean;
   /** ¿Ya hay un modal de compuerta abierto? Los modales NO se apilan. */

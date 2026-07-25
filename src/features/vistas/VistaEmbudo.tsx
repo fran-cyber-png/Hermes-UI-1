@@ -71,19 +71,18 @@ export function VistaEmbudo({
   /** El recorte de Contactados: solo las que ya tienen un precio encima. */
   const [soloConPrecio, setSoloConPrecio] = useState(false);
 
-  // Cada columna carga LO SUYO (#89) y pide el cruce con el formulario (`lead`):
-  // el nombre real y el curso que la persona eligió salen de ahí.
+  // Cada columna carga LO SUYO (#89). El nombre real y el curso del formulario
+  // no se piden: la cola los sirve siempre, en la misma pasada (#72).
   const contactados = useConversaciones({
     tab: 'todo',
     filtroSec: '',
     categoria: null,
     etapa: 'contactado',
     precio: soloConPrecio,
-    lead: true,
   });
-  const cotizados = useConversaciones({ tab: 'todo', filtroSec: '', categoria: null, etapa: 'cotizado', lead: true });
-  const cierres = useConversaciones({ tab: 'todo', filtroSec: '', categoria: null, etapa: 'cierre', lead: true });
-  const perdidos = useConversaciones({ tab: 'todo', filtroSec: '', categoria: null, etapa: 'perdido', lead: true });
+  const cotizados = useConversaciones({ tab: 'todo', filtroSec: '', categoria: null, etapa: 'cotizado' });
+  const cierres = useConversaciones({ tab: 'todo', filtroSec: '', categoria: null, etapa: 'cierre' });
+  const perdidos = useConversaciones({ tab: 'todo', filtroSec: '', categoria: null, etapa: 'perdido' });
   const porColumna: Record<EtapaTrabajo, ReturnType<typeof useConversaciones>> = {
     contactado: contactados,
     cotizado: cotizados,
@@ -246,7 +245,10 @@ export function VistaEmbudo({
       setPendienteInteres(c);
       return;
     }
-    mover.mutate({ c, etapa: 'cotizado', curso: unClic.hayQueRegistrar ? unClic.curso : undefined });
+    // El interés se asienta con el texto CRUDO del catálogo (`unClic.crudo`), no
+    // con el nombre corto del chip: registrar «Inteligencia y Contrainteligencia»
+    // guardaría un curso que no existe en Cerberus (ver `tarjeta.ts`).
+    mover.mutate({ c, etapa: 'cotizado', curso: unClic.hayQueRegistrar ? unClic.crudo : undefined });
   }
 
   function empezarArrastre(c: Conversacion) {
@@ -271,9 +273,10 @@ export function VistaEmbudo({
       actual,
       destino: etapa,
       canal: c.canal,
-      // La cola trae los intereses en la fila: se sabe ANTES de viajar si la
-      // compuerta de Cotizado va a rebotar (undefined = server viejo, se intenta).
-      tieneInteres: c.cursos ? c.cursos.length > 0 : undefined,
+      // La cola trae el interés asentado en la fila (`interes_curso`, #72): se
+      // sabe ANTES de viajar si la compuerta de Cotizado va a rebotar. Ausente
+      // (undefined) = server viejo que no lo sirve: se intenta, como siempre.
+      tieneInteres: c.interes_curso === undefined ? undefined : Boolean(c.interes_curso),
       // Con un modal de compuerta abierto no se suelta nada: no se apilan.
       modalAbierto: pendienteInteres != null || ventaPara != null,
     });
@@ -487,7 +490,7 @@ export function VistaEmbudo({
                       // El camino corto solo desde Contactados, y solo donde hay
                       // algo que asentar: un botón en toda tarjeta es ruido.
                       onCotizar={
-                        esContactados && (c.precio_enviado || (c.cursos?.length ?? 0) > 0)
+                        esContactados && (c.precio_enviado || Boolean(c.interes_curso))
                           ? cotizarDesdeTarjeta
                           : undefined
                       }

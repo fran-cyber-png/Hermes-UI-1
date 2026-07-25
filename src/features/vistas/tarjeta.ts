@@ -1,4 +1,5 @@
 import { formatoTelefono } from '../../lib/formato';
+import { cursoDeFila, type CursoDeFila, type EntradaCurso } from '../canales/curso';
 
 /**
  * QUÉ DICE UNA TARJETA DEL PIPELINE — la política, sin DOM.
@@ -18,17 +19,20 @@ import { formatoTelefono } from '../../lib/formato';
  * componente solo pinta.
  */
 
-/** Lo que la tarjeta necesita saber de una conversación. Todo lo demás es ruido. */
-export interface DatosTarjeta {
+/**
+ * Lo que la tarjeta necesita saber de una conversación. Todo lo demás es ruido.
+ *
+ * Los candidatos de curso (`interes_curso`, `lead_curso`, `ultima_origen`) NO se
+ * enumeran acá: son `EntradaCurso` (`features/canales/curso.ts`), el MISMO
+ * contrato que come la fila de la cola. Una sola definición del dato, una sola
+ * precedencia — ver `cursoDeTarjeta`.
+ */
+export interface DatosTarjeta extends EntradaCurso {
   canal: string;
   persona_id: string | null;
   persona_nombre: string | null;
-  /** El nombre del formulario (`?lead=1`). Le gana al pushname. */
+  /** El nombre con el que llenó el formulario (`lead_nombre`). Le gana al pushname. */
   lead_nombre?: string | null;
-  /** El curso que eligió en la landing. Sugerencia, no interés registrado. */
-  lead_curso?: string | null;
-  /** Los intereses REGISTRADOS: la palabra de la vendedora, la que abre la compuerta. */
-  cursos?: string[];
   /** Derivada: hay un saliente posterior al último entrante. */
   respondida: boolean;
   /** La urgencia canónica de la casa (0 vivo · 1 vencido · … · 5 resto). */
@@ -80,26 +84,24 @@ export function turnoDeTarjeta(c: DatosTarjeta): { turno: Turno; apremia: boolea
 }
 
 /**
- * De qué le vas a hablar. Dos fuentes con precedencia clara:
+ * DE QUÉ LE VAS A HABLAR — y es EXACTAMENTE el mismo cálculo que hace el chip de
+ * la fila de la cola (#72): `canales/curso.ts#cursoDeFila`, que ya conoce la
+ * precedencia cerrada por el dueño (interés registrado › formulario › anuncio),
+ * ya acorta el nombre con `familiaDeProducto` (#129) y ya elige un color
+ * determinista por familia.
  *
- *   1. el interés REGISTRADO — la palabra de la vendedora, y lo que la compuerta
- *      de Cotizado exige;
- *   2. el curso que la persona eligió en el formulario — una sugerencia, todavía
- *      no un hecho.
+ * El Pipeline llegó a este dato por su cuenta y con su propia precedencia; esa
+ * segunda escritura se borró (ADR 0016). Acá solo se AGREGA lo que la tarjeta
+ * necesita y la fila no: `registrado`, que es lo que deja pintar la diferencia
+ * sin mentir — el mismo texto no significa lo mismo si lo dijo la vendedora o si
+ * lo dijo un formulario.
  *
- * `registrado` es lo que deja pintar la diferencia sin mentir: el mismo texto no
- * significa lo mismo si lo dijo la vendedora o si lo dijo un formulario.
+ * ⚠️ Lo que devuelve es el nombre CORTO (para leerse en 230 px). Para REGISTRAR
+ * el interés hace falta el texto crudo del catálogo: eso es `cotizarEnUnClic`.
  */
-export function cursoDeTarjeta(
-  c: DatosTarjeta,
-): { curso: string; registrado: boolean; otros: number } | null {
-  const registrados = (c.cursos ?? []).filter((x) => x.trim() !== '');
-  if (registrados.length > 0) {
-    return { curso: registrados[0], registrado: true, otros: registrados.length - 1 };
-  }
-  const delForm = (c.lead_curso ?? '').trim();
-  if (delForm) return { curso: delForm, registrado: false, otros: 0 };
-  return null;
+export function cursoDeTarjeta(c: DatosTarjeta): (CursoDeFila & { registrado: boolean }) | null {
+  const curso = cursoDeFila(c);
+  return curso && { ...curso, registrado: curso.fuente === 'interes' };
 }
 
 /**
@@ -122,11 +124,26 @@ export function haceCorto(horas: number): string {
  * no tiene que tipear nada. `hayQueRegistrar` dice si además de mover hay que
  * asentar el interés primero.
  *
- * Sin curso devuelve `null`: ahí no hay un clic honesto, hay que preguntar (y de
- * eso se encarga el modal de la compuerta).
+ * ⚠️ EL POST VA CON `crudo`, NUNCA CON `etiqueta`. `etiqueta` es el nombre corto
+ * del chip —«Inteligencia y Contrainteligencia», podado por `familiaDeProducto`
+ * (#129)—; el catálogo de la Escuela dice «Diploma de Especialización en
+ * Inteligencia y Contrainteligencia 14». Registrar el interés con el nombre
+ * corto asienta en la base un curso QUE NO EXISTE, y esa es exactamente la fila
+ * que después nadie puede casar con un producto de Cerberus. `crudo` es el
+ * `interes_curso`/`lead_curso` tal cual vino del server, sin tocar.
+ *
+ * Y por eso el ANUNCIO no habilita este camino aunque el chip lo muestre: el
+ * título de un anuncio es de dónde vino la persona, no un curso del catálogo
+ * (`canales/curso.ts`). Sin `interes_curso` ni `lead_curso` no hay un clic
+ * honesto: se devuelve `null` y pregunta el modal de la compuerta.
  */
-export function cotizarEnUnClic(c: DatosTarjeta): { curso: string; hayQueRegistrar: boolean } | null {
+export function cotizarEnUnClic(
+  c: DatosTarjeta,
+): { crudo: string; etiqueta: string; hayQueRegistrar: boolean } | null {
+  const registrado = (c.interes_curso ?? '').trim();
+  const delFormulario = (c.lead_curso ?? '').trim();
+  const crudo = registrado || delFormulario;
+  if (!crudo) return null;
   const curso = cursoDeTarjeta(c);
-  if (!curso) return null;
-  return { curso: curso.curso, hayQueRegistrar: !curso.registrado };
+  return { crudo, etiqueta: curso?.nombre ?? crudo, hayQueRegistrar: registrado === '' };
 }

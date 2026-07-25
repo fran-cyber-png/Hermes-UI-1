@@ -15,7 +15,7 @@ import { useEscape } from '../../lib/teclado/useEscape';
 import { Intereses } from '../gestion/Intereses';
 import { FormularioVenta } from '../venta/FormularioVenta';
 import { useFicha } from '../cerberus/FichaContacto';
-import { cursoDeTarjeta, nombreDeTarjeta } from './tarjeta';
+import { cotizarEnUnClic, nombreDeTarjeta } from './tarjeta';
 
 /**
  * LOS MODALES DE LAS COMPUERTAS DEL PIPELINE (#60).
@@ -86,7 +86,11 @@ export function ModalInteresCotizado({
   const nombre = nombreDeTarjeta(c);
   // El curso que la persona eligió en el formulario: la respuesta más probable a
   // la pregunta de este modal, y ya la sabemos. Un clic en vez de una búsqueda.
-  const sugerido = cursoDeTarjeta(c);
+  //
+  // `cotizarEnUnClic` da las DOS formas del mismo curso y no las confunde: se
+  // MUESTRA `etiqueta` (el nombre corto del chip) y se GUARDA `crudo` (el texto
+  // del catálogo). Al revés, este botón asentaría un curso inexistente.
+  const sugerido = cotizarEnUnClic(c);
   const guardar = useMutation({
     mutationFn: (curso: string) =>
       api('/api/gestiones/intereses', { method: 'POST', body: JSON.stringify({ clave: c.clave, curso }) }),
@@ -106,7 +110,7 @@ export function ModalInteresCotizado({
           se cotiza lo que no se sabe qué es.
         </p>
 
-        {sugerido && !sugerido.registrado && (
+        {sugerido?.hayQueRegistrar && (
           <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
             <p className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
               <ClipboardList size={12} className="shrink-0" />
@@ -115,11 +119,11 @@ export function ModalInteresCotizado({
             <button
               type="button"
               disabled={guardar.isPending}
-              onClick={() => guardar.mutate(sugerido.curso)}
+              onClick={() => guardar.mutate(sugerido.crudo)}
               className="mt-1.5 flex w-full items-center gap-2 rounded-lg bg-primary px-3 py-2 text-left text-sm font-bold text-primary-foreground transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 active:scale-[0.99] disabled:opacity-60"
             >
               <Check size={14} className="shrink-0" />
-              <span className="min-w-0 flex-1">{sugerido.curso}</span>
+              <span className="min-w-0 flex-1">{sugerido.etiqueta}</span>
             </button>
             {guardar.isError && (
               <p className="mt-1.5 text-[11px] text-destructive">
@@ -130,7 +134,7 @@ export function ModalInteresCotizado({
         )}
 
         <p className="text-xs text-muted-foreground">
-          {sugerido && !sugerido.registrado
+          {sugerido?.hayQueRegistrar
             ? 'O buscá otro curso: al guardarlo, la tarjeta pasa sola a Cotizados.'
             : 'Buscá el curso y agregalo: al guardarlo, la tarjeta pasa sola a Cotizados.'}
         </p>

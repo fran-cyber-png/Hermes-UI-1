@@ -33,11 +33,6 @@ export interface Conversacion {
   ya_le_hablamos?: boolean;
   /** Derivada (`cola/precio.ts`): ya le pasamos el precio o la forma de pagarlo. */
   precio_enviado?: boolean;
-  /** Los cursos de interés REGISTRADOS de la conversación — lo que abre la
-   *  compuerta de Cotizado. Antes se pedían de a uno por tarjeta. */
-  cursos?: string[];
-  /** El nombre real del formulario (solo con `?lead=1`). Le gana al pushname. */
-  lead_nombre?: string | null;
   /** La etapa del embudo dicha por el SERVER (ADR 0013): max(manual, derivada),
    *  `perdido` terminal. Opcional hasta que el server desplegado la sirva (#88). */
   etapa_efectiva?: string | null;
@@ -68,6 +63,9 @@ export interface Conversacion {
   interes_curso?: string | null;
   /** El curso del formulario que la persona llenó (lead emparejado por teléfono). */
   lead_curso?: string | null;
+  /** El nombre con el que llenó ESE formulario. Le gana al pushname de WhatsApp,
+   *  que en producción suele ser «🦋W», «.» o «10 ❤️L» (#137). */
+  lead_nombre?: string | null;
 }
 
 type Pagina = {

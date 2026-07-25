@@ -7,11 +7,13 @@ import {
   ClipboardList,
   GraduationCap,
   Loader2,
+  Megaphone,
   MessageSquareText,
 } from 'lucide-react';
 import type { Conversacion } from '../canales/conversaciones';
 import { Avatar } from '../canales/Avatar';
 import { BadgeCanal } from '../canales/BadgeCanal';
+import { detalleDeCurso } from '../canales/curso';
 import { esPrioritaria, quiereFoto, siguienteConFoto } from '../canales/fotoVisible';
 import { hace } from '../../lib/datos/frescura';
 import { etiquetaDeMedia } from '../../lib/etiquetaMedia';
@@ -229,20 +231,22 @@ export function TarjetaEmbudo({
             <Chip
               tono="marca"
               encoge
+              // El icono dice DE DÓNDE salió el curso, que es lo que decide
+              // cuánto vale: birrete = lo asentó la vendedora · portapapeles = lo
+              // eligió ella en el formulario · megáfono = solo es el anuncio por
+              // el que entró. El `title` lo dice con todas las letras.
               icono={
-                curso.registrado ? (
+                curso.fuente === 'interes' ? (
                   <GraduationCap size={10} className="shrink-0" />
-                ) : (
+                ) : curso.fuente === 'lead' ? (
                   <ClipboardList size={10} className="shrink-0" />
+                ) : (
+                  <Megaphone size={10} className="shrink-0" />
                 )
               }
-              titulo={
-                curso.registrado
-                  ? `Interés registrado: ${curso.curso}`
-                  : `Eligió este curso en el formulario: ${curso.curso}`
-              }
+              titulo={detalleDeCurso(curso)}
             >
-              {curso.curso}
+              {curso.nombre}
             </Chip>
           )}
           {c.precio_enviado && (
@@ -263,7 +267,7 @@ export function TarjetaEmbudo({
               onClick={() => onCotizar(c)}
               title={
                 unClic
-                  ? `Marcar cotizado por «${unClic.curso}»`
+                  ? `Marcar cotizado por «${unClic.etiqueta}»`
                   : 'Marcar cotizado — te va a pedir el curso'
               }
               // Quieta por defecto: son 611 tarjetas con este botón y 611 CTAs
