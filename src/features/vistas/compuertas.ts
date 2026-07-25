@@ -20,6 +20,8 @@ export type AccionDrop =
   | { accion: 'mover'; etapa: Etapa }
   /** Cierre + WhatsApp: el modal de Registrar venta, con la conversación precargada. */
   | { accion: 'modal-venta' }
+  /** Cotizados sin interés registrado: el modal lo pide (y ofrece el del formulario). */
+  | { accion: 'modal-interes' }
   /** Cierre + comentario FB/IG: sin teléfono no hay ficha ni venta — se abre la conversación. */
   | { accion: 'abrir' };
 
@@ -27,6 +29,13 @@ export function decidirDrop(v: {
   actual: Etapa;
   destino: Etapa;
   canal: string;
+  /**
+   * ¿La conversación ya tiene un interés registrado? La cola lo trae en la fila
+   * (`cursos[]`), así que el front puede saber ANTES de viajar que la compuerta
+   * de Cotizado va a rebotar — y preguntar en vez de rebotar. `undefined` = no
+   * se sabe: se intenta, como siempre, y `decidirRebote` atrapa el rechazo.
+   */
+  tieneInteres?: boolean;
   /** ¿Ya hay un modal de compuerta abierto? Los modales NO se apilan. */
   modalAbierto?: boolean;
 }): AccionDrop {
@@ -35,8 +44,12 @@ export function decidirDrop(v: {
   if (v.destino === 'cierre') {
     return v.canal === 'whatsapp' ? { accion: 'modal-venta' } : { accion: 'abrir' };
   }
-  // Cotizados también «intenta»: la compuerta la valida el server, no la UI.
-  // Si rebota, `decidirRebote` convierte ese rechazo en el modal del interés.
+  // Cotizado sin interés: el viaje al server era un rebote seguro. Se pregunta
+  // acá — y el modal ofrece el curso del formulario, así la respuesta es un clic.
+  // La compuerta del server no se relaja ni se saltea: se satisface antes.
+  if (v.destino === 'cotizado' && v.tieneInteres === false) return { accion: 'modal-interes' };
+  // Si no se sabe, se intenta igual: la compuerta la valida el server, no la UI,
+  // y `decidirRebote` convierte el rechazo en el mismo modal.
   return { accion: 'mover', etapa: v.destino };
 }
 

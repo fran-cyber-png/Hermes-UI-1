@@ -271,10 +271,20 @@ export function VistaEmbudo({
       actual,
       destino: etapa,
       canal: c.canal,
+      // La cola trae los intereses en la fila: se sabe ANTES de viajar si la
+      // compuerta de Cotizado va a rebotar (undefined = server viejo, se intenta).
+      tieneInteres: c.cursos ? c.cursos.length > 0 : undefined,
       // Con un modal de compuerta abierto no se suelta nada: no se apilan.
       modalAbierto: pendienteInteres != null || ventaPara != null,
     });
     if (d.accion === 'nada') return;
+    if (d.accion === 'modal-interes') {
+      // La tarjeta espera en Cotizados (override puesto) mientras el modal pide
+      // el curso — y ofrece el del formulario como un botón.
+      setOverrides((o) => ({ ...o, [c.clave]: 'cotizado' }));
+      setPendienteInteres(c);
+      return;
+    }
     if (d.accion === 'modal-venta') {
       // El cierre no se declara: se gana registrando la venta (la compuerta del
       // server queda intacta). El modal abre el formulario con la conversación
@@ -287,10 +297,7 @@ export function VistaEmbudo({
       onAbrir(c);
       return;
     }
-    // Soltar en Cotizados con el curso ya sabido evita el rebote: se asienta el
-    // interés en el mismo movimiento (la compuerta se satisface, no se saltea).
-    const unClic = d.etapa === 'cotizado' ? cotizarEnUnClic(c) : null;
-    mover.mutate({ c, etapa: d.etapa, curso: unClic?.hayQueRegistrar ? unClic.curso : undefined });
+    mover.mutate({ c, etapa: d.etapa });
   }
 
   const etapaArrastrada = arrastrada ? etapaDeTarjeta(arrastrada, overrides) : null;

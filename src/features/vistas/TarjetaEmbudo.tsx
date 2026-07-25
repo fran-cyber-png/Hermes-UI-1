@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlarmClock, ArrowLeft, BadgeDollarSign, Check, GraduationCap, Loader2, MessageSquareText } from 'lucide-react';
+import {
+  AlarmClock,
+  ArrowLeft,
+  BadgeDollarSign,
+  Check,
+  ClipboardList,
+  GraduationCap,
+  Loader2,
+  MessageSquareText,
+} from 'lucide-react';
 import type { Conversacion } from '../canales/conversaciones';
 import { Avatar } from '../canales/Avatar';
 import { BadgeCanal } from '../canales/BadgeCanal';
@@ -60,22 +69,25 @@ function Chip({
   children,
   titulo,
   tono = 'neutro',
+  encoge = false,
 }: {
   icono?: React.ReactNode;
   children: React.ReactNode;
   titulo?: string;
-  tono?: 'neutro' | 'marca' | 'plazo';
+  tono?: 'neutro' | 'marca';
+  /** Quién cede el ancho cuando no alcanza. Solo el curso encoge; los rótulos cortos, nunca. */
+  encoge?: boolean;
 }) {
   const tonos = {
     neutro: 'border-border text-muted-foreground',
     marca: 'border-navy/20 bg-secondary text-secondary-foreground',
-    plazo: 'border-gold/40 bg-gold/15 text-gold-ink',
   };
   return (
     <span
       title={titulo}
       className={
-        'inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border px-1.5 py-px text-[11px] font-semibold ' +
+        'inline-flex items-center gap-1 rounded-full border px-1.5 py-px text-[11px] font-semibold ' +
+        (encoge ? 'min-w-0 shrink ' : 'shrink-0 ') +
         tonos[tono]
       }
     >
@@ -165,9 +177,11 @@ export function TarjetaEmbudo({
             {nombre.texto}
           </span>
           {nombre.delFormulario && (
-            <span title="Nombre del formulario que llenó" className="shrink-0 text-[9px] leading-none">
-              📋
-            </span>
+            <ClipboardList
+              size={10}
+              className="shrink-0 text-muted-foreground"
+              aria-label="Nombre del formulario que llenó"
+            />
           )}
         </span>
 
@@ -214,7 +228,14 @@ export function TarjetaEmbudo({
           {curso && (
             <Chip
               tono="marca"
-              icono={curso.registrado ? <GraduationCap size={10} className="shrink-0" /> : <span className="shrink-0 text-[9px]">📋</span>}
+              encoge
+              icono={
+                curso.registrado ? (
+                  <GraduationCap size={10} className="shrink-0" />
+                ) : (
+                  <ClipboardList size={10} className="shrink-0" />
+                )
+              }
               titulo={
                 curso.registrado
                   ? `Interés registrado: ${curso.curso}`
@@ -225,7 +246,10 @@ export function TarjetaEmbudo({
             </Chip>
           )}
           {c.precio_enviado && (
-            <Chip icono={<BadgeDollarSign size={10} className="shrink-0" />} titulo="Ya le mandaste el precio o la forma de pagar">
+            <Chip
+              icono={<BadgeDollarSign size={10} className="shrink-0" />}
+              titulo="Ya le mandaste el precio o la forma de pagar"
+            >
               Precio
             </Chip>
           )}
@@ -242,7 +266,9 @@ export function TarjetaEmbudo({
                   ? `Marcar cotizado por «${unClic.curso}»`
                   : 'Marcar cotizado — te va a pedir el curso'
               }
-              className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2 py-px text-[11px] font-bold text-primary transition-[background-color,transform] duration-200 ease-house hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.97] disabled:opacity-50"
+              // Quieta por defecto: son 611 tarjetas con este botón y 611 CTAs
+              // gritando son ruido. Se enciende al pasar por encima.
+              className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-px text-[11px] font-bold text-primary/70 transition-[background-color,color,transform] duration-200 ease-house group-hover:bg-primary/10 group-hover:text-primary focus-visible:bg-primary/10 focus-visible:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.97] disabled:opacity-50"
             >
               {cotizando ? <Loader2 size={10} className="animate-spin" /> : <GraduationCap size={10} />}
               Cotizado

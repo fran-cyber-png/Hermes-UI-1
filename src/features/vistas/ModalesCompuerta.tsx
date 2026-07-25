@@ -1,5 +1,14 @@
 import { useMutation } from '@tanstack/react-query';
-import { AlertTriangle, Check, GraduationCap, MessageSquareText, ShoppingCart, UserPlus, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  Check,
+  ClipboardList,
+  GraduationCap,
+  MessageSquareText,
+  ShoppingCart,
+  UserPlus,
+  X,
+} from 'lucide-react';
 import type { Conversacion } from '../canales/conversaciones';
 import { api } from '../../lib/datos/cliente';
 import { useEscape } from '../../lib/teclado/useEscape';
@@ -99,8 +108,9 @@ export function ModalInteresCotizado({
 
         {sugerido && !sugerido.registrado && (
           <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
-            <p className="text-[11px] font-semibold text-muted-foreground">
-              📋 Esto eligió en el formulario que llenó
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+              <ClipboardList size={12} className="shrink-0" />
+              Esto eligió en el formulario que llenó
             </p>
             <button
               type="button"

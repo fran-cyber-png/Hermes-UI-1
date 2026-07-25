@@ -37,6 +37,18 @@ describe('decidirDrop — qué hace el Pipeline con cada destino', () => {
     });
   });
 
+  it('Cotizados SIN interés registrado pregunta antes de ir al server: el viaje era un rebote seguro', () => {
+    expect(
+      decidirDrop({ actual: 'contactado', destino: 'cotizado', canal: 'whatsapp', tieneInteres: false }),
+    ).toEqual({ accion: 'modal-interes' });
+  });
+
+  it('Cotizados CON interés registrado no pregunta nada: la compuerta ya está satisfecha', () => {
+    expect(
+      decidirDrop({ actual: 'contactado', destino: 'cotizado', canal: 'whatsapp', tieneInteres: true }),
+    ).toEqual({ accion: 'mover', etapa: 'cotizado' });
+  });
+
   it('las etapas sin compuerta se mueven directo', () => {
     expect(decidirDrop({ actual: 'interesado', destino: 'contactado', canal: 'whatsapp' })).toEqual({
       accion: 'mover',
