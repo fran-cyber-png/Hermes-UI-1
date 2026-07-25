@@ -33,6 +33,7 @@ import { AvisoCerberus } from './features/auth/AvisoCerberus';
 import { useSesionWa } from './features/whatsapp/conversacionWa';
 import { useDashboard } from './features/dashboard/dashboard';
 import { useTiempoReal } from './lib/datos/tiempoReal';
+import { SELECTOR_CAMPOS } from './lib/teclado/escapeDePopover';
 import type { Puente } from './lib/puente';
 import { LibretaPersonal } from './features/notas/PanelNotas';
 import { esAtajoLibreta } from './features/notas/notas';
@@ -75,10 +76,14 @@ function iniciales(nombre: string): string {
   return nombre.slice(0, 2).toUpperCase();
 }
 
-/** ¿El teclado está "ocupado" escribiendo? Ningún atajo global pisa un input. */
+/**
+ * ¿El teclado está "ocupado" escribiendo? Ningún atajo global pisa un input.
+ * El selector es el mismo que usan los popovers (`src/lib/teclado/`): dos listas
+ * distintas significaban que la misma tecla se juzgaba distinto según quién la oyera.
+ */
 function tecleandoEn(e: KeyboardEvent): boolean {
   const t = e.target;
-  return t instanceof HTMLElement && Boolean(t.closest('input, textarea, select, [contenteditable]'));
+  return t instanceof HTMLElement && Boolean(t.closest(SELECTOR_CAMPOS));
 }
 
 const ATAJOS: { tecla: string; que: string }[] = [

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, CalendarPlus, Check, Copy, Loader2, Megaphone, Plus, Search, ShoppingCart, Trash2, X } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { sectionLabel } from '../../lib/styles';
-import { useEscape } from '../../lib/useEscape';
+import { useEscape } from '../../lib/teclado/useEscape';
 import { ETAPAS, colorSegmento } from '../../lib/etapas';
 import { BarraSegmentada } from '../../components/graficos/BarraSegmentada';
 import { useDashboard } from '../dashboard/dashboard';
@@ -107,7 +107,7 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
     }
   }, [form, paisNombre]);
 
-  // Escape cierra el modal — contrato compartido de los modales (src/lib/useEscape).
+  // Escape cierra el modal — contrato compartido de los modales (src/lib/teclado/).
   useEscape(onCerrar);
 
   const { data: prods } = useProductos(busqueda, busqueda.length >= 2);

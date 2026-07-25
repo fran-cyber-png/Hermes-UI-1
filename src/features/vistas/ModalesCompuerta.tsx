@@ -1,6 +1,6 @@
 import { AlertTriangle, GraduationCap, MessageSquareText, ShoppingCart, UserPlus, X } from 'lucide-react';
 import type { Conversacion } from '../canales/conversaciones';
-import { useEscape } from '../../lib/useEscape';
+import { useEscape } from '../../lib/teclado/useEscape';
 import { Intereses } from '../gestion/Intereses';
 import { FormularioVenta } from '../venta/FormularioVenta';
 import { useFicha } from '../cerberus/FichaContacto';
