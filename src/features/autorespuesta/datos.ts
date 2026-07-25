@@ -50,8 +50,12 @@ export function useAutoRespuesta(): {
         ? 'no se pudo cambiar el interruptor'
         : null;
 
+  // 404 = el server no tiene la ruta (versión anterior a esta feature). No es
+  // «sin señal»: es que ahí esto todavía no existe, y el chip no se muestra.
+  const sinRuta = consulta.error instanceof ErrorApi && consulta.error.status === 404;
+
   return {
-    vista: verAutoRespuesta(consulta.data),
+    vista: verAutoRespuesta(consulta.data, { sinRuta }),
     cargando: consulta.isPending,
     cambiando: mutar.isPending,
     errorAlCambiar,

@@ -36,6 +36,15 @@ describe('los estados que puede tener', () => {
     expect(v.puedeCambiar).toBe(false);
   });
 
+  test('contra un server VIEJO (404) no muestra nada: ahí la feature no existe', () => {
+    // El front se despliega solo y el server necesita restart a mano: entre uno
+    // y otro, la app nueva le habla a un server sin esta ruta. «Sin señal»
+    // asustaría por algo que en ese server ni siquiera está.
+    const v = verAutoRespuesta(undefined, { sinRuta: true });
+    expect(v.clase).toBe('ausente');
+    expect(v.puedeCambiar).toBe(false);
+  });
+
   test('sin la migración lo dice, y no deja prender', () => {
     const v = verAutoRespuesta({ sinTablas: true, mensaje: 'faltan las tablas: corré `npm run db:push`' });
     expect(v.clase).toBe('sin-migracion');

@@ -40,7 +40,9 @@ export interface RespuestaAutoRespuesta {
 }
 
 export type ClaseAutoRespuesta =
-  /** No se sabe: el server no contestó (o es viejo y no tiene la ruta). */
+  /** El server no tiene la ruta: es viejo. No hay nada que mostrar. */
+  | 'ausente'
+  /** No se sabe: el server no contestó. */
   | 'desconocida'
   /** Faltan las tablas: no se puede prender ni mentir que está apagada. */
   | 'sin-migracion'
@@ -82,8 +84,34 @@ function esFreno(motivo: string | null | undefined): boolean {
   return Boolean(motivo && motivo.toLowerCase().includes('freno automático'));
 }
 
-export function verAutoRespuesta(datos: RespuestaAutoRespuesta | undefined): VistaAutoRespuesta {
+export interface Contexto {
+  /**
+   * El server contestó 404: no tiene la ruta, o sea que corre una versión
+   * anterior a esta feature. Importa porque el front se despliega SOLO y el
+   * server necesita restart a mano (ver `docs/despliegue-continuo.md`): entre
+   * un deploy y el otro hay una ventana real en la que la app nueva le habla a
+   * un server viejo. Ahí no hay nada que decir — mostrar «sin señal» sería
+   * alarmar por una feature que en ese server todavía no existe.
+   */
+  sinRuta?: boolean;
+}
+
+export function verAutoRespuesta(
+  datos: RespuestaAutoRespuesta | undefined,
+  ctx: Contexto = {},
+): VistaAutoRespuesta {
   const vacia = { enCola: 0, proxima: null };
+
+  if (!datos && ctx.sinRuta) {
+    return {
+      clase: 'ausente',
+      etiqueta: '',
+      detalle: 'este server todavía no tiene la auto-respuesta',
+      puedeCambiar: false,
+      accion: null,
+      ...vacia,
+    };
+  }
 
   if (!datos) {
     return {

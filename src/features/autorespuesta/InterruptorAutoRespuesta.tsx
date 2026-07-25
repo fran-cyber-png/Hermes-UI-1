@@ -27,6 +27,9 @@ export function InterruptorAutoRespuesta() {
   const { vista, cargando, cambiando, errorAlCambiar, cambiar } = useAutoRespuesta();
 
   if (cargando) return <div className="h-7 w-40 animate-pulse rounded-lg bg-muted" />;
+  // El server viejo (front desplegado antes del restart) no tiene la ruta: en
+  // ese server esta feature no existe, así que el chip tampoco.
+  if (vista.clase === 'ausente') return null;
 
   const resumen = resumenDeCola(vista);
   const encendida = vista.clase === 'encendida' || vista.clase === 'encendida-sin-efecto';
