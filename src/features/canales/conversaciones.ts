@@ -1,6 +1,7 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/datos/cliente';
 import { parametrosDeCola, type EstadoCola } from './cola';
+import type { FilaDesglose } from '../vistas/tablero';
 
 /**
  * Una fila de la cola unificada: o un comentario suelto (FB/IG) o una
@@ -26,6 +27,17 @@ export interface Conversacion {
   ultima_origen?: { fuente: string; titulo?: string | null } | null;
   /** Derivada: hay un saliente posterior al último entrante. Nunca estado de fila. */
   respondida: boolean;
+  /** Derivada: alguna vez salió un mensaje nuestro. Distinto de `respondida`
+   *  (que es de quién es el turno HOY): quien volvió a escribir después de que
+   *  la atendimos no es una desconocida. */
+  ya_le_hablamos?: boolean;
+  /** Derivada (`cola/precio.ts`): ya le pasamos el precio o la forma de pagarlo. */
+  precio_enviado?: boolean;
+  /** Los cursos de interés REGISTRADOS de la conversación — lo que abre la
+   *  compuerta de Cotizado. Antes se pedían de a uno por tarjeta. */
+  cursos?: string[];
+  /** El nombre real del formulario (solo con `?lead=1`). Le gana al pushname. */
+  lead_nombre?: string | null;
   /** La etapa del embudo dicha por el SERVER (ADR 0013): max(manual, derivada),
    *  `perdido` terminal. Opcional hasta que el server desplegado la sirva (#88). */
   etapa_efectiva?: string | null;
@@ -68,6 +80,8 @@ type Pagina = {
   conteos?: Record<string, number>;
   /** Cuántas filas daría cada filtro secundario dentro del recorte actual. Primera página. */
   conteosFiltro?: { pideInfo: number; sinResponder: number };
+  /** La misma foto abierta por «ya le hablamos» × precio × viva. Solo primera página. */
+  desglose?: FilaDesglose[];
 };
 
 /**
@@ -125,6 +139,8 @@ export function useConversaciones(
     conteos: q.data?.pages[0]?.conteos,
     /** Cuántas daría cada chip de filtro sin salir del recorte actual (#72). */
     conteosFiltro: q.data?.pages[0]?.conteosFiltro,
+    /** El desglose (primera página): las bandas de la bandeja y el recorte por precio. */
+    desglose: q.data?.pages[0]?.desglose,
     hayMas: Boolean(q.hasNextPage),
     cargando: q.isPending,
     cargandoMas: q.isFetchingNextPage,

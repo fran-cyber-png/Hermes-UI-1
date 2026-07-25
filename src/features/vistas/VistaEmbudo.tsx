@@ -1,98 +1,60 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, ArrowRight, Check, Inbox, MessageSquareText, X } from 'lucide-react';
+import { AlertTriangle, BadgeDollarSign, Check, X } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { useConversaciones, type Conversacion } from '../canales/conversaciones';
-import { BadgeCanal } from '../canales/BadgeCanal';
-import { Intereses } from '../gestion/Intereses';
-import { hace } from '../../lib/datos/frescura';
 import type { Etapa } from '../../lib/etapas';
-import { tempBorde, tempClass } from '../../lib/formato';
 import { decidirDrop, decidirRebote, reintentoTrasInteres } from './compuertas';
 import { ModalInteresCotizado, ModalVentaCierre } from './ModalesCompuerta';
+import { BandejaDeuda } from './BandejaDeuda';
+import { TarjetaEmbudo } from './TarjetaEmbudo';
+import { cotizarEnUnClic } from './tarjeta';
 import {
   COLUMNAS_TRABAJO,
   etapaDeTarjeta,
   quedanPorTraer,
   repartirColumnas,
+  resumirColumna,
   type EtapaTrabajo,
 } from './tablero';
 
 /**
- * EL TABLERO HONESTO (#90) — el Pipeline que cuenta de verdad.
+ * EL PIPELINE — el tablero de venta de la vendedora.
  *
- * Interesados DEJÓ de ser columna: es la bandeja compacta de arriba (contador
- * real + acceso a Mensajes, donde ese trabajo se hace de verdad). Las columnas
- * de trabajo — Contactados · Cotizados · Cierre · Perdidos — cargan POR columna
- * (`?etapa=`, #89) con su conteo real por etapa efectiva (ADR 0013) sobre la
- * ventana de 30 días. Murieron el fallback client-side a 'interesado', el
- * «N de M» que mezclaba universos y el «hay N más» que traía 30 del feed
- * entero (#9).
+ * QUÉ PASABA (medido en producción el 2026-07-25, 1.865 conversaciones): de 300
+ * Contactadas muestreadas, las 300 estaban respondidas —es decir, TODA la única
+ * columna con tarjetas era gente cuya pelota no es nuestra— mientras las 476 que
+ * sí esperan respuesta vivían apretadas en un contador gris de una línea que
+ * además decía algo falso («nadie les respondió aún») para 218 de ellas. Las
+ * otras tres columnas estaban en cero sobre 1.366 px de ancho, y 611
+ * conversaciones con el precio ya mandado no figuraban en Cotizados porque la
+ * compuerta pide un interés tipeado a mano que nadie tipea (uno en toda la base).
  *
- * Lo que NO cambió (#60): se ARRASTRA igual, y las compuertas GUÍAN en vez de
- * rebotar — a Cotizados sin curso de interés, un modal lo pide ahí mismo; a
- * Cierre no se pasa declarándolo, se llega registrando la venta (la compuerta
- * del server queda intacta). El movimiento optimista vive en `overrides`
- * (tablero.ts) hasta que la verdad del server refresca las columnas.
+ * QUÉ HACE AHORA, en el mismo orden en que se lee:
+ *
+ *   1. LA BANDEJA (`BandejaDeuda`) encabeza el tablero y dice la verdad: cuántas
+ *      esperan, cuántas están escribiendo AHORA, cuántas nunca abrimos y cuántas
+ *      volvieron a escribir. Sigue sin ser columna (decisión del dueño, #87).
+ *   2. LAS COLUMNAS pesan lo que trabajan: Contactados se lleva el ancho, y las
+ *      vacías explican cómo se llenan en vez de ser un hueco blanco.
+ *   3. EL RECORTE «Con precio» convierte las 1.389 en la lista que importa: las
+ *      que ya están cotizadas de hecho y no figuran como tales.
+ *   4. EL BOTÓN «Cotizado» de la tarjeta cierra el hueco: cuando ya sabemos el
+ *      curso (registrado o del formulario), un clic asienta el interés y mueve.
+ *      La compuerta del server NO se relaja — se satisface (`registrarGestion`).
+ *
+ * Lo que NO cambió: se arrastra igual, las compuertas guían con sus modales
+ * (#60), el cierre se sigue ganando solo con una venta registrada, y la etapa la
+ * dice el server (ADR 0013) — el front no inventa ninguna.
  */
 
-function TarjetaEmbudo({
-  c,
-  onAbrir,
-  alArrastrar,
-  alTerminar,
-  arrastrando,
-  rebotada,
-}: {
-  c: Conversacion;
-  onAbrir: (c: Conversacion) => void;
-  alArrastrar: (c: Conversacion) => void;
-  alTerminar: () => void;
-  arrastrando: boolean;
-  rebotada: boolean;
-}) {
-  const horas = (Date.now() - new Date(c.referencia).getTime()) / 3_600_000;
-  return (
-    <div
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.effectAllowed = 'move';
-        alArrastrar(c);
-      }}
-      onDragEnd={alTerminar}
-      className={
-        'group cursor-grab rounded-xl border-l-2 bg-card px-3 py-2.5 shadow-[0_1px_2px_rgba(14,42,82,0.06)] transition-[box-shadow,opacity,transform] duration-200 ease-house hover:shadow-panel active:cursor-grabbing ' +
-        tempBorde(c.referencia) +
-        (arrastrando ? ' scale-[0.98] opacity-40' : '') +
-        (rebotada ? ' ring-1 ring-temp-frio' : '')
-      }
-    >
-      <div className="flex items-center gap-2">
-        <BadgeCanal canal={c.canal} />
-        <span className="min-w-0 truncate font-heading text-[13px] font-semibold text-foreground">
-          {c.persona_nombre ?? c.persona_id ?? 'Sin nombre'}
-        </span>
-        <span className={'ml-auto shrink-0 font-mono text-[11px] tabular-nums ' + tempClass(c.referencia)}>
-          {hace(horas)}
-        </span>
-        <button
-          type="button"
-          title="Abrir en la Bandeja"
-          onClick={() => onAbrir(c)}
-          className="shrink-0 rounded-md p-1 text-muted-foreground opacity-0 transition-[color,background-color,opacity] duration-200 group-hover:opacity-100 hover:bg-secondary hover:text-navy focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.96]"
-        >
-          <MessageSquareText size={13} />
-        </button>
-      </div>
-      {c.texto && <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{c.texto}</p>}
-      <Intereses clave={c.clave} compacto />
-    </div>
-  );
-}
-
-/** La grilla real: 3 columnas de trabajo + Perdidos como cajón angosto. */
+/**
+ * La grilla: el ancho es una declaración de dónde está el trabajo. Contactados
+ * casi el doble que las de tránsito; Perdidos, un cajón. Aguanta 1280 sin
+ * reflow (es una app de escritorio, no una página).
+ */
 const GRID =
-  'grid min-h-0 flex-1 grid-cols-[repeat(3,minmax(200px,1fr))_minmax(150px,0.7fr)] gap-2.5 overflow-x-auto';
+  'grid min-h-0 flex-1 grid-cols-[minmax(320px,1.45fr)_minmax(235px,1.05fr)_minmax(235px,1.05fr)_minmax(180px,0.72fr)] gap-2.5 overflow-x-auto';
 
 export function VistaEmbudo({
   onAbrir,
@@ -102,15 +64,26 @@ export function VistaEmbudo({
   onAbrir: (c: Conversacion) => void;
   /** La siguiente jugada del recibo de venta (cae en la Agenda vía puente). */
   onAgendarBienvenida?: (telefono: string | null) => void;
-  /** La bandeja de Interesados no se trabaja acá: este botón lleva a Mensajes. */
+  /** La bandeja no se trabaja acá: este botón lleva a Mensajes. */
   onIrAMensajes?: () => void;
 }) {
   const qc = useQueryClient();
-  // Cada columna carga LO SUYO (#89): traer más de Contactados trae Contactados.
-  const contactados = useConversaciones('', '', 'contactado');
-  const cotizados = useConversaciones('', '', 'cotizado');
-  const cierres = useConversaciones('', '', 'cierre');
-  const perdidos = useConversaciones('', '', 'perdido');
+  /** El recorte de Contactados: solo las que ya tienen un precio encima. */
+  const [soloConPrecio, setSoloConPrecio] = useState(false);
+
+  // Cada columna carga LO SUYO (#89) y pide el cruce con el formulario (`lead`):
+  // el nombre real y el curso que la persona eligió salen de ahí.
+  const contactados = useConversaciones({
+    tab: 'todo',
+    filtroSec: '',
+    categoria: null,
+    etapa: 'contactado',
+    precio: soloConPrecio,
+    lead: true,
+  });
+  const cotizados = useConversaciones({ tab: 'todo', filtroSec: '', categoria: null, etapa: 'cotizado', lead: true });
+  const cierres = useConversaciones({ tab: 'todo', filtroSec: '', categoria: null, etapa: 'cierre', lead: true });
+  const perdidos = useConversaciones({ tab: 'todo', filtroSec: '', categoria: null, etapa: 'perdido', lead: true });
   const porColumna: Record<EtapaTrabajo, ReturnType<typeof useConversaciones>> = {
     contactado: contactados,
     cotizado: cotizados,
@@ -118,10 +91,13 @@ export function VistaEmbudo({
     perdido: perdidos,
   };
 
-  // Los conteos reales por etapa (misma ventana, mismo seam): vienen en la
-  // primera página de cualquier columna. El de `interesado` es la bandeja.
-  const conteos =
-    contactados.conteos ?? cotizados.conteos ?? cierres.conteos ?? perdidos.conteos;
+  // El desglose (conteos reales por etapa × turno × precio) viene en la primera
+  // página de cualquier columna: es la MISMA foto, contada una vez.
+  const desglose =
+    contactados.desglose ?? cotizados.desglose ?? cierres.desglose ?? perdidos.desglose;
+  // El respaldo mientras el server desplegado no sirva el desglose: el front sale
+  // a producción sin reinicio (N4) y el server recién en el botón (N5).
+  const conteos = contactados.conteos ?? cotizados.conteos ?? cierres.conteos ?? perdidos.conteos;
 
   const [arrastrada, setArrastrada] = useState<Conversacion | null>(null);
   const [sobre, setSobre] = useState<EtapaTrabajo | null>(null);
@@ -168,9 +144,21 @@ export function VistaEmbudo({
     timerRebote.current = window.setTimeout(() => setRebotada(null), 1500);
   }
 
+  /**
+   * Mover una tarjeta de etapa. `curso` (opcional) es el camino corto a
+   * Cotizados: asienta el interés ANTES de mover, así la compuerta del server
+   * —que no se toca— encuentra lo que exige. Las dos llamadas son consecuencia
+   * de UN clic humano; nada se mueve solo.
+   */
   const mover = useMutation({
-    mutationFn: (v: { c: Conversacion; etapa: Etapa }) =>
-      api('/api/gestiones', {
+    mutationFn: async (v: { c: Conversacion; etapa: Etapa; curso?: string }) => {
+      if (v.curso) {
+        await api('/api/gestiones/intereses', {
+          method: 'POST',
+          body: JSON.stringify({ clave: v.c.clave, curso: v.curso }),
+        });
+      }
+      return api('/api/gestiones', {
         method: 'POST',
         body: JSON.stringify({
           clave: v.c.clave,
@@ -180,7 +168,8 @@ export function VistaEmbudo({
           numeroPropio: v.c.numero_propio,
           etapa: v.etapa,
         }),
-      }),
+      });
+    },
     // Optimista: la tarjeta se muda al soltar (override). Si algo falla, NO se
     // restaura ninguna foto local: se levanta el override y la verdad del
     // server pinta el mapa.
@@ -195,6 +184,7 @@ export function VistaEmbudo({
         qc.invalidateQueries({ queryKey: ['conversaciones'] }),
         qc.invalidateQueries({ queryKey: ['embudo'] }),
         qc.invalidateQueries({ queryKey: ['gestiones'] }),
+        qc.invalidateQueries({ queryKey: ['intereses', v.c.clave] }),
         qc.invalidateQueries({ queryKey: ['dashboard'] }),
       ]);
       quitarOverride(v.c.clave);
@@ -242,6 +232,23 @@ export function VistaEmbudo({
     if (vars) mover.mutate(vars);
   }
 
+  /**
+   * EL CAMINO CORTO A COTIZADO — el botón de la tarjeta. Si ya sabemos el curso
+   * (registrado, o el que la persona eligió en el formulario), un clic asienta el
+   * interés y mueve. Si no lo sabemos, no se inventa: se abre el modal que lo
+   * pregunta, que es exactamente el mismo camino del arrastre.
+   */
+  function cotizarDesdeTarjeta(c: Conversacion) {
+    setAviso(null);
+    const unClic = cotizarEnUnClic(c);
+    if (!unClic) {
+      setOverrides((o) => ({ ...o, [c.clave]: 'cotizado' }));
+      setPendienteInteres(c);
+      return;
+    }
+    mover.mutate({ c, etapa: 'cotizado', curso: unClic.hayQueRegistrar ? unClic.curso : undefined });
+  }
+
   function empezarArrastre(c: Conversacion) {
     setArrastrada(c);
     setAviso(null); // el próximo arrastre limpia el aviso de compuerta
@@ -280,41 +287,29 @@ export function VistaEmbudo({
       onAbrir(c);
       return;
     }
-    mover.mutate({ c, etapa: d.etapa });
+    // Soltar en Cotizados con el curso ya sabido evita el rebote: se asienta el
+    // interés en el mismo movimiento (la compuerta se satisface, no se saltea).
+    const unClic = d.etapa === 'cotizado' ? cotizarEnUnClic(c) : null;
+    mover.mutate({ c, etapa: d.etapa, curso: unClic?.hayQueRegistrar ? unClic.curso : undefined });
   }
 
-  const interesados = conteos?.interesado ?? 0;
   const etapaArrastrada = arrastrada ? etapaDeTarjeta(arrastrada, overrides) : null;
+  const resumenContactados = resumirColumna(desglose, 'contactado', conteos);
   const tableroVacio =
-    !cargando && conteos != null && COLUMNAS_TRABAJO.every((c) => (conteos[c.id] ?? 0) === 0) && interesados === 0;
+    !cargando &&
+    (desglose != null || conteos != null) &&
+    (desglose?.length ?? Object.keys(conteos ?? {}).length) === 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col p-3">
-      {/* ── LA BANDEJA DE INTERESADOS: contador real, no una pila infinita. ── */}
-      <div className="mb-2.5 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl bg-card px-4 py-2.5 shadow-panel">
-        <Inbox size={16} className="shrink-0 text-navy" />
-        <div className="flex min-w-0 flex-1 items-baseline gap-2">
-          <span className="font-heading text-xl font-bold tabular-nums text-foreground">
-            {conteos ? interesados.toLocaleString('es-PE') : '—'}
-          </span>
-          <h3 className="font-heading text-[13px] font-bold text-foreground">Interesados</h3>
-          <p className="hidden min-w-0 truncate text-[11px] text-muted-foreground sm:block">
-            Levantaron la mano y nadie les respondió aún. Responder los pasa solos a Contactados.
-          </p>
-        </div>
-        {onIrAMensajes && (
-          <button
-            type="button"
-            onClick={onIrAMensajes}
-            className="flex shrink-0 basis-full items-center justify-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 active:scale-[0.98] sm:basis-auto sm:justify-start"
-          >
-            Responder en Mensajes
-            <ArrowRight size={12} />
-          </button>
-        )}
-      </div>
+      <BandejaDeuda
+        desglose={desglose}
+        conteos={conteos}
+        cargando={cargando}
+        onIrAMensajes={onIrAMensajes}
+      />
 
-      <div className="mb-2.5 flex min-h-5 shrink-0 items-center gap-3 px-1">
+      <div className="mb-2 flex min-h-4 shrink-0 items-center gap-3 px-1">
         {arrastrada != null && (
           <p className="text-xs text-muted-foreground">
             A <span className="font-semibold">Cotizados</span> con curso de interés; a{' '}
@@ -354,11 +349,11 @@ export function VistaEmbudo({
 
       {cargando ? (
         <div className={GRID}>
-          {[3, 2, 2, 2].map((bloques, i) => (
+          {[4, 2, 2, 2].map((bloques, i) => (
             <div key={i} className="flex min-h-0 flex-col gap-2 rounded-2xl bg-secondary/30 p-2">
               <div className="h-6 w-3/5 animate-pulse rounded-md bg-secondary/70" />
               {Array.from({ length: bloques }, (_, j) => (
-                <div key={j} className="h-16 animate-pulse rounded-xl bg-secondary/60" />
+                <div key={j} className="h-12 animate-pulse rounded-xl bg-secondary/60" />
               ))}
             </div>
           ))}
@@ -367,8 +362,8 @@ export function VistaEmbudo({
         <div className="flex flex-1 flex-col items-center justify-center gap-1 px-6 text-center">
           <p className="text-sm font-semibold text-foreground">El embudo está vacío.</p>
           <p className="max-w-sm text-xs text-muted-foreground">
-            Cuando alguien escriba por WhatsApp, Facebook o Instagram, cae solo en Interesados — y
-            al responderle, pasa solo a Contactados.
+            Cuando alguien escriba por WhatsApp, Facebook o Instagram, cae solo en la bandeja — y al
+            responderle, pasa solo a Contactados.
           </p>
         </div>
       ) : (
@@ -376,11 +371,15 @@ export function VistaEmbudo({
           {COLUMNAS_TRABAJO.map((col) => {
             const enEtapa = repartidas.get(col.id) ?? [];
             const columna = porColumna[col.id];
-            const total = conteos?.[col.id] ?? columna.total;
+            const resumen = resumirColumna(desglose, col.id, conteos);
+            // Con el recorte puesto, el «Ver más» cuenta lo recortado — no el total.
+            const total =
+              col.id === 'contactado' && soloConPrecio ? columna.total : resumen.total || columna.total;
             const faltan = quedanPorTraer(total, columna.items.length);
             const esDestino = sobre === col.id && arrastrada != null;
             const esPerdidos = col.id === 'perdido';
             const esCierre = col.id === 'cierre';
+            const esContactados = col.id === 'contactado';
             const fondo = esDestino ? 'bg-secondary' : esPerdidos ? 'bg-transparent' : 'bg-secondary/50';
             return (
               <section
@@ -431,24 +430,80 @@ export function VistaEmbudo({
                   ) : (
                     <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">{col.pista}</p>
                   )}
+
+                  {/* EL RECORTE que convierte 1.389 en la lista que importa. */}
+                  {esContactados && resumenContactados.conPrecio > 0 && (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setSoloConPrecio(false)}
+                        aria-pressed={!soloConPrecio}
+                        className={
+                          'rounded-full border px-2 py-px text-[11px] font-semibold transition-colors ' +
+                          (soloConPrecio
+                            ? 'border-border text-muted-foreground hover:text-foreground'
+                            : 'border-navy bg-navy text-white')
+                        }
+                      >
+                        Todas
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSoloConPrecio(true)}
+                        aria-pressed={soloConPrecio}
+                        title="Ya les mandaste el precio o la forma de pagar: están cotizadas de hecho"
+                        className={
+                          'inline-flex items-center gap-1 rounded-full border px-2 py-px text-[11px] font-semibold transition-colors ' +
+                          (soloConPrecio
+                            ? 'border-navy bg-navy text-white'
+                            : 'border-border text-muted-foreground hover:text-foreground')
+                        }
+                      >
+                        <BadgeDollarSign size={10} />
+                        Con precio {resumenContactados.conPrecio.toLocaleString('es-PE')}
+                      </button>
+                    </div>
+                  )}
                 </header>
-                <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-0.5">
-                  {enEtapa.map((c) => (
+
+                <div data-scroll-columna className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-0.5">
+                  {enEtapa.map((c, i) => (
                     <TarjetaEmbudo
                       key={c.clave}
                       c={c}
+                      indice={i}
                       onAbrir={onAbrir}
                       alArrastrar={empezarArrastre}
                       alTerminar={terminarArrastre}
                       arrastrando={arrastrada?.clave === c.clave}
                       rebotada={rebotada === c.clave}
+                      // El camino corto solo desde Contactados, y solo donde hay
+                      // algo que asentar: un botón en toda tarjeta es ruido.
+                      onCotizar={
+                        esContactados && (c.precio_enviado || (c.cursos?.length ?? 0) > 0)
+                          ? cotizarDesdeTarjeta
+                          : undefined
+                      }
+                      cotizando={mover.isPending && mover.variables?.c.clave === c.clave}
                     />
                   ))}
+
+                  {enEtapa.length === 0 && !esDestino && (
+                    <div className="flex flex-1 items-center justify-center px-3 pb-10">
+                      <p className="max-w-[24ch] text-center text-[11px] leading-relaxed text-muted-foreground">
+                        {soloConPrecio && esContactados
+                          ? 'Ninguna con precio enviado en esta ventana.'
+                          : col.vacio}
+                      </p>
+                    </div>
+                  )}
+
                   {esDestino && (
                     <div className="rounded-xl border border-dashed border-primary/60 p-3 text-center text-[11px] text-primary">
                       Soltá acá
                     </div>
                   )}
+
                   {columna.hayMas && (
                     <button
                       type="button"

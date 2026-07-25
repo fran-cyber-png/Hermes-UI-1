@@ -4,7 +4,10 @@ import {
   etapaDeTarjeta,
   quedanPorTraer,
   repartirColumnas,
+  resumirBandeja,
+  resumirColumna,
   type EtapaTrabajo,
+  type FilaDesglose,
 } from './tablero';
 
 /**
@@ -81,6 +84,71 @@ describe('etapaDeTarjeta — de dónde sale la etapa actual para las compuertas'
 
   test('sin dato del server no se inventa nada: null, jamás el fallback interesado', () => {
     expect(etapaDeTarjeta({ clave: 'a' }, {})).toBeNull();
+  });
+});
+
+describe('resumirBandeja — la bandeja deja de ser un número gris', () => {
+  // La foto real de producción (2026-07-25), a escala: la bandeja son 476 y NO
+  // son todas «gente que levantó la mano y nadie contestó».
+  const desglose: FilaDesglose[] = [
+    { etapa: 'interesado', yaLeHablamos: false, precio: false, viva: true, n: 40 },
+    { etapa: 'interesado', yaLeHablamos: false, precio: false, viva: false, n: 218 },
+    { etapa: 'interesado', yaLeHablamos: true, precio: false, viva: true, n: 41 },
+    { etapa: 'interesado', yaLeHablamos: true, precio: true, viva: false, n: 177 },
+    { etapa: 'contactado', yaLeHablamos: true, precio: true, viva: false, n: 611 },
+  ];
+
+  test('el total de la bandeja son los interesados, y nada más', () => {
+    expect(resumirBandeja(desglose).total).toBe(476);
+  });
+
+  test('separa a quien nunca contestamos de quien nos volvió a escribir', () => {
+    const r = resumirBandeja(desglose);
+    expect(r.nuevas).toBe(258);
+    expect(r.retomadas).toBe(218);
+  });
+
+  test('las que están escribiendo AHORA: el número que decide el día', () => {
+    expect(resumirBandeja(desglose).vivas).toBe(81);
+  });
+
+  test('sin desglose todavía, ceros — nunca un número inventado', () => {
+    expect(resumirBandeja(undefined)).toEqual({
+      total: 0,
+      nuevas: 0,
+      retomadas: 0,
+      vivas: 0,
+      hayDetalle: false,
+    });
+  });
+
+  test('el front va adelante del server (N4 antes que N5): cuenta con los conteos y CALLA el detalle', () => {
+    const r = resumirBandeja(undefined, { interesado: 476, contactado: 1389 });
+    expect(r.total).toBe(476);
+    expect(r.hayDetalle).toBe(false);
+  });
+});
+
+describe('resumirColumna — el tamaño real de la columna y el de su recorte', () => {
+  const desglose: FilaDesglose[] = [
+    { etapa: 'contactado', yaLeHablamos: true, precio: true, viva: false, n: 611 },
+    { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, n: 778 },
+    { etapa: 'cotizado', yaLeHablamos: true, precio: true, viva: false, n: 3 },
+  ];
+
+  test('el total y cuántas ya tienen precio encima', () => {
+    expect(resumirColumna(desglose, 'contactado')).toEqual({ total: 1389, conPrecio: 611 });
+  });
+
+  test('una columna sin filas cuenta cero, no undefined', () => {
+    expect(resumirColumna(desglose, 'cierre')).toEqual({ total: 0, conPrecio: 0 });
+  });
+
+  test('sin desglose (server viejo) el total sale de los conteos y el recorte no se ofrece', () => {
+    expect(resumirColumna(undefined, 'contactado', { contactado: 1389 })).toEqual({
+      total: 1389,
+      conPrecio: 0,
+    });
   });
 });
 

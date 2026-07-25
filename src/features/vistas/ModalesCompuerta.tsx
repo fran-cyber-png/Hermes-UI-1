@@ -1,9 +1,12 @@
-import { AlertTriangle, GraduationCap, MessageSquareText, ShoppingCart, UserPlus, X } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
+import { AlertTriangle, Check, GraduationCap, MessageSquareText, ShoppingCart, UserPlus, X } from 'lucide-react';
 import type { Conversacion } from '../canales/conversaciones';
+import { api } from '../../lib/datos/cliente';
 import { useEscape } from '../../lib/teclado/useEscape';
 import { Intereses } from '../gestion/Intereses';
 import { FormularioVenta } from '../venta/FormularioVenta';
 import { useFicha } from '../cerberus/FichaContacto';
+import { cursoDeTarjeta, nombreDeTarjeta } from './tarjeta';
 
 /**
  * LOS MODALES DE LAS COMPUERTAS DEL PIPELINE (#60).
@@ -71,6 +74,16 @@ export function ModalInteresCotizado({
   /** La vendedora desistió: la tarjeta vuelve a su columna, explícitamente. */
   onCancelar: () => void;
 }) {
+  const nombre = nombreDeTarjeta(c);
+  // El curso que la persona eligió en el formulario: la respuesta más probable a
+  // la pregunta de este modal, y ya la sabemos. Un clic en vez de una búsqueda.
+  const sugerido = cursoDeTarjeta(c);
+  const guardar = useMutation({
+    mutationFn: (curso: string) =>
+      api('/api/gestiones/intereses', { method: 'POST', body: JSON.stringify({ clave: c.clave, curso }) }),
+    onSuccess: onGuardado,
+  });
+
   return (
     <Cascara
       titulo="¿Qué curso está cotizando?"
@@ -80,11 +93,36 @@ export function ModalInteresCotizado({
     >
       <div className="space-y-3 p-5">
         <p className="text-sm text-foreground">
-          Para pasar a <b>{c.persona_nombre ?? c.persona_id ?? 'este contacto'}</b> a Cotizados hay
-          que registrar qué curso le interesa — no se cotiza lo que no se sabe qué es.
+          Para pasar a <b>{nombre.texto}</b> a Cotizados hay que registrar qué curso le interesa — no
+          se cotiza lo que no se sabe qué es.
         </p>
+
+        {sugerido && !sugerido.registrado && (
+          <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
+            <p className="text-[11px] font-semibold text-muted-foreground">
+              📋 Esto eligió en el formulario que llenó
+            </p>
+            <button
+              type="button"
+              disabled={guardar.isPending}
+              onClick={() => guardar.mutate(sugerido.curso)}
+              className="mt-1.5 flex w-full items-center gap-2 rounded-lg bg-primary px-3 py-2 text-left text-sm font-bold text-primary-foreground transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 active:scale-[0.99] disabled:opacity-60"
+            >
+              <Check size={14} className="shrink-0" />
+              <span className="min-w-0 flex-1">{sugerido.curso}</span>
+            </button>
+            {guardar.isError && (
+              <p className="mt-1.5 text-[11px] text-destructive">
+                No se guardó el interés — probá con el buscador de abajo.
+              </p>
+            )}
+          </div>
+        )}
+
         <p className="text-xs text-muted-foreground">
-          Buscá el curso y agregalo: al guardarlo, la tarjeta pasa sola a Cotizados.
+          {sugerido && !sugerido.registrado
+            ? 'O buscá otro curso: al guardarlo, la tarjeta pasa sola a Cotizados.'
+            : 'Buscá el curso y agregalo: al guardarlo, la tarjeta pasa sola a Cotizados.'}
         </p>
         <Intereses clave={c.clave} senalAbrir={1} onAgregado={onGuardado} />
       </div>

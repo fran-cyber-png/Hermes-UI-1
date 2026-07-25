@@ -176,6 +176,11 @@ export interface EstadoCola {
    *  (#89/#90). Solo entra a la queryKey/URL cuando se pide, así las queries de
    *  siempre (Mensajes) conservan su clave y su caché persistido. */
   etapa?: string;
+  /** Solo las que ya tienen un precio encima — el recorte del Pipeline. */
+  precio?: boolean;
+  /** Pedir el cruce contra `leads` (nombre real + curso del formulario). Cuesta
+   *  una pasada sin índice: lo pide el Pipeline, no Mensajes. */
+  lead?: boolean;
 }
 
 /**
@@ -190,5 +195,7 @@ export function parametrosDeCola(e: EstadoCola): Record<string, string> {
   if (e.categoria) p.categoria = e.categoria;
   if (e.canal) p.canal = e.canal;
   if (e.etapa) p.etapa = e.etapa;
+  if (e.precio) p.precio = '1';
+  if (e.lead) p.lead = '1';
   return p;
 }
