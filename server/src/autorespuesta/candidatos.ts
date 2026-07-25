@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm';
 import type { db } from '../db/client.js';
+import { cursoDeLeadSql, sufijoTelefonoSql } from '../gente/leadDeTelefono.js';
+import { RESERVAN_EL_DIA } from './estados.js';
 import type { ConversacionCandidata } from './decidir.js';
 
 /**
@@ -40,15 +42,22 @@ interface FilaCandidata extends Record<string, unknown> {
   salientes: number;
   auto_hoy: number;
   curso: string | null;
+  lead_curso: string | null;
+  anuncio: string | null;
 }
 
 export async function consultarCandidatos(
   base: typeof db,
   diaLima: string,
 ): Promise<ConversacionCandidata[]> {
+  const estadosQueReservan = sql.join(
+    RESERVAN_EL_DIA.map((e) => sql`${e}`),
+    sql`, `,
+  );
+
   const filas = await base.execute<FilaCandidata>(sql`
     WITH msg AS (
-      SELECT i.canal, i.persona_id, i.persona_nombre, i.texto, i.direccion, i.occurred_at,
+      SELECT i.canal, i.persona_id, i.persona_nombre, i.texto, i.direccion, i.occurred_at, i.origen,
              COALESCE(e.payload->>'numeroPropio', '') AS numero_propio
       FROM interactions i
       JOIN events e ON e.id = i.event_id
@@ -67,6 +76,11 @@ export async function consultarCandidatos(
         max(occurred_at) FILTER (WHERE direccion = 'entrante')              AS ultimo_entrante_at,
         max(occurred_at) FILTER (WHERE direccion = 'saliente')              AS ultimo_saliente_at,
         count(*) FILTER (WHERE direccion = 'saliente')::int                 AS salientes,
+        -- El anuncio por el que escribió: el título del ÚLTIMO mensaje que
+        -- traiga origen de anuncio. Es la tercera fuente de campaña (#72), la
+        -- que respalda cuando no hay interés asentado ni formulario.
+        (array_agg(origen->>'titulo' ORDER BY occurred_at DESC)
+           FILTER (WHERE origen->>'fuente' = 'anuncio' AND origen->>'titulo' IS NOT NULL))[1] AS anuncio,
         (array_agg(texto ORDER BY occurred_at DESC)
            FILTER (WHERE direccion = 'entrante' AND texto IS NOT NULL)
         )[1:${sql.raw(String(TEXTOS_PARA_RECHAZO))}]                        AS textos_cliente
@@ -78,11 +92,25 @@ export async function consultarCandidatos(
       -- a las 7:30 y esa fila se guarda con el día del ENVÍO. Con igualdad
       -- estricta, la conversación volvería a parecer «sin auto-respuesta» al
       -- pasar la medianoche, y esa persona recibiría dos.
+      --
+      -- Los estados que cuentan salen de estados.ts (RESERVAN_EL_DIA), no de una
+      -- lista escrita acá: incluyen «preparada» y «descartada», o sea que una
+      -- que la vendedora ya rechazó esta noche no se le vuelve a proponer cinco
+      -- minutos después.
       (SELECT count(*)::int FROM auto_respuestas_pendientes a
         WHERE a.clave = c.clave AND a.dia_lima >= ${diaLima}
-          AND a.estado IN ('pendiente', 'enviada'))                         AS auto_hoy,
+          AND a.estado IN (${estadosQueReservan}))                          AS auto_hoy,
       (SELECT i2.curso FROM intereses i2
-        WHERE i2.clave = c.clave ORDER BY i2.creado_at DESC LIMIT 1)        AS curso
+        WHERE i2.clave = c.clave ORDER BY i2.creado_at DESC LIMIT 1)        AS curso,
+      -- El curso del formulario que llenó, emparejado por los 9 dígitos finales
+      -- del teléfono. La llave y el «qué curso dice un lead» vienen de
+      -- gente/leadDeTelefono.ts, que es su único hogar: si la cola, la ficha y
+      -- esto se escribieran cada uno el suyo, la MISMA persona saldría con un
+      -- curso en la fila y con otro en el mensaje que recibe.
+      (SELECT (${cursoDeLeadSql}) FROM leads l
+        WHERE (${sufijoTelefonoSql('l.phone')}) = (${sufijoTelefonoSql('c.telefono')})
+          AND (${cursoDeLeadSql}) IS NOT NULL
+        ORDER BY l.created_time DESC LIMIT 1)                               AS lead_curso
     FROM conv c
     WHERE c.ultimo_entrante_at IS NOT NULL
       AND c.numero_propio <> ''
@@ -101,5 +129,7 @@ export async function consultarCandidatos(
     autoRespuestasHoy: f.auto_hoy,
     salientes: f.salientes,
     curso: f.curso,
+    cursoLead: f.lead_curso,
+    cursoAnuncio: f.anuncio,
   }));
 }

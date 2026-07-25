@@ -2,6 +2,7 @@ import type { db } from '../db/client.js';
 import { consultarCandidatos } from './candidatos.js';
 import type { ConfigAutoRespuesta } from './config.js';
 import { diaLocal, dentroDe } from './franja.js';
+import { estadoAlEncolar, type ModoAutoRespuesta } from './modo.js';
 import { planificar, type PlanCompleto } from './planificar.js';
 import { faltaEsquema, type RepositorioAutoRespuesta } from './repositorio.js';
 
@@ -31,6 +32,8 @@ export interface ResumenEncolado {
   corrio: boolean;
   /** Por qué no corrió, cuando no corrió. */
   motivo?: string;
+  /** En qué modo corrió: es lo que decide si lo escrito sale solo o espera el OK. */
+  modo?: ModoAutoRespuesta;
   candidatas: number;
   encoladas: number;
   /** Las que ya tenían la suya hoy: el UNIQUE las rebotó. */
@@ -65,7 +68,12 @@ export async function correrEncolado(deps: DepsEncolado): Promise<ResumenEncolad
     if (!faltaEsquema(e)) throw e;
     return { corrio: false, motivo: 'faltan las tablas: corré `npm run db:push` (ADR 0015)', ...NADA };
   }
-  if (!interruptor.encendida) {
+  // EL MODO decide UNA sola cosa acá: en qué estado nace lo que se escribe.
+  // Todo lo demás —a quién, con qué plantilla, a qué hora— es idéntico en
+  // supervisada y en automática, y tiene que seguir siéndolo: lo que la
+  // vendedora aprueba es exactamente lo que la automática habría mandado.
+  const estado = estadoAlEncolar(interruptor.modo);
+  if (!estado) {
     return { corrio: false, motivo: interruptor.motivo ?? 'el interruptor está apagado', ...NADA };
   }
 
@@ -91,6 +99,8 @@ export async function correrEncolado(deps: DepsEncolado): Promise<ResumenEncolad
       personaNombre: ranura.candidato.personaNombre,
       plantillaId: ranura.candidato.plantillaId,
       texto: ranura.candidato.texto,
+      campana: ranura.candidato.campana,
+      estado,
       disparadaPor: ranura.candidato.desde,
       programadoPara: ranura.programadoPara,
       // EL DÍA ES EL DEL ENVÍO, no el de la corrida. A las 21:30 ya no queda
@@ -105,13 +115,15 @@ export async function correrEncolado(deps: DepsEncolado): Promise<ResumenEncolad
 
   if (encoladas > 0 || plan.postergados.length > 0) {
     registrar(
-      `[auto-respuesta] encolado ${dia}: ${candidatas.length} candidatas · ${encoladas} programadas · ` +
+      `[auto-respuesta] encolado ${dia} (${interruptor.modo}): ${candidatas.length} candidatas · ` +
+        `${encoladas} ${estado === 'preparada' ? 'esperando aprobación' : 'programadas'} · ` +
         `${duplicadas} ya tenían la suya · ${plan.postergados.length} postergadas · ${plan.descartadas.length} descartadas`,
     );
   }
 
   return {
     corrio: true,
+    modo: interruptor.modo,
     candidatas: candidatas.length,
     encoladas,
     duplicadas,

@@ -1,3 +1,5 @@
+import type { Campana } from './campana.js';
+
 /**
  * LO QUE SE DICE — un catálogo cerrado de plantillas. La auto-respuesta ELIGE
  * entre estos textos; no genera ni una palabra propia.
@@ -16,15 +18,30 @@
  * cualquier disfraz: si el mensaje no finge ser humano, no hay nada que
  * disimular.
  *
- * ── El punto de integración con #45 ──
- * Los mensajes predeterminados de la vendedora (issue #45: «insertar con / en el
- * composer») todavía no están en `main`. Cuando lleguen, ESTE archivo es el
- * lugar: `catalogo()` pasa a leer las plantillas marcadas como «apta para
- * auto-respuesta» de esa tabla, conservando la firma (`Plantilla[]`) y el
- * contrato de `elegir()`. Nada más cambia — ni la decisión, ni la cola, ni el
- * despachador. Hasta entonces, las tres de acá son el mínimo honesto, escritas
- * a partir de las que la vendedora ya usa (flyer 671x, seguimiento 658x,
- * temario 261x — medido en 14 días, issue #125).
+ * ── Por campaña, no una sola para todos (ADR 0016) ──
+ * «Si vino de "[JUL] INTELIGENCIA", responde lo de Inteligencia» (dueño,
+ * 2026-07-25). Lo que cambia por campaña NO es una plantilla entera por curso —
+ * eso serían 38 textos que nadie mantiene— sino **una frase**: el `gancho` de la
+ * familia (`campana.ts`), que dice qué manda la asesora al abrir. El resto del
+ * mensaje es el mismo, y sigue avisando que es automático. Agregar un curso es
+ * agregar una entrada en `FAMILIAS`, no escribir una plantilla.
+ *
+ * ── Los dos puntos de integración pendientes ──
+ * · **#45** (mensajes predeterminados de la vendedora, «insertar con / en el
+ *   composer»): cuando lleguen, `catalogo()` pasa a leer de esa tabla las
+ *   marcadas como «apta para auto-respuesta», conservando la firma
+ *   (`Plantilla[]`) y el contrato de `elegir()`.
+ * · **#138** (plantillas-secuencia con media, todavía sin mergear): esas traen
+ *   varios mensajes y adjuntos, que es más de lo que esta feature puede mandar
+ *   sola —un acuse es UN mensaje de texto— pero es el modelo correcto para el
+ *   contenido. Cuando su tabla esté en `main`, `catalogo()` la consume y las
+ *   familias de `campana.ts` se mapean a sus secuencias por id; el primer
+ *   mensaje de la secuencia es el acuse y el resto queda para la vendedora. NO
+ *   se duplica su modelo acá.
+ *
+ * Hasta entonces, las de este archivo son el mínimo honesto, escritas a partir
+ * de las que la vendedora ya usa (flyer 671x, seguimiento 658x, temario 261x —
+ * medido en 14 días, issue #125).
  */
 
 export interface DatosPlantilla {
@@ -34,6 +51,8 @@ export interface DatosPlantilla {
   curso: string | null;
   /** A qué hora abre la atención humana, en criollo: «9:00 a. m.». */
   horaApertura: string;
+  /** Lo que la asesora manda al abrir, propio de esa familia de cursos. */
+  gancho?: string | null;
 }
 
 export interface ContextoPlantilla {
@@ -41,6 +60,8 @@ export interface ContextoPlantilla {
   esPrimerContacto: boolean;
   /** El curso registrado como interés, si lo hay. */
   curso: string | null;
+  /** La campaña de la que vino, con su familia reconocida (`campana.ts`). */
+  campana?: Campana | null;
 }
 
 export interface Plantilla {
@@ -60,6 +81,19 @@ export interface Plantilla {
  */
 export function catalogo(): Plantilla[] {
   return [
+    {
+      id: 'fuera-de-horario-campana',
+      titulo: 'Fuera de horario — por la campaña de la que vino',
+      cuerpo:
+        '{{saludo}}, gracias por escribirnos a la Escuela de Goberna. ' +
+        'Te escribe un mensaje automático: en este momento estamos fuera del horario de atención. ' +
+        'Vemos que te interesa {{curso}}: a partir de las {{hora_apertura}} una asesora {{gancho}}. ' +
+        'Si deseas, déjanos aquí tu consulta y ya la tenemos a mano al abrir.',
+      // Solo cuando RECONOZCO la familia: sin `gancho` esta plantilla no
+      // renderiza, y una respuesta «de campaña» sobre una campaña que no
+      // entiendo sería exactamente el invento que esta feature no hace.
+      aplica: (ctx) => Boolean(ctx.campana?.familia),
+    },
     {
       id: 'fuera-de-horario-interes',
       titulo: 'Fuera de horario — ya sabemos qué curso le interesa',
@@ -106,10 +140,11 @@ const MARCADOR = /\{\{\s*([a-z_]+)\s*\}\}/g;
  * mandar nada que mandarle «{{curso}}» a un cliente.
  */
 export function render(cuerpo: string, datos: DatosPlantilla): string {
-  const valores: Record<string, string | null> = {
+  const valores: Record<string, string | null | undefined> = {
     saludo: datos.saludo,
     curso: datos.curso,
     hora_apertura: datos.horaApertura,
+    gancho: datos.gancho,
   };
 
   return cuerpo.replace(MARCADOR, (_todo, clave: string) => {

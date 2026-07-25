@@ -4,10 +4,14 @@ import type { EstadoSesion } from '../whatsapp/transporte.js';
 import type { OrdenEnvio, ResultadoControlado } from '../whatsapp/envioControlado.js';
 import { CONFIG_POR_DEFECTO, type ConfigAutoRespuesta } from './config.js';
 import { AUTOR_AUTOMATICO, Despachador } from './despachador.js';
+import { EN_COLA_DE_ENVIO } from './estados.js';
+import type { ModoAutoRespuesta } from './modo.js';
 import type {
+  Aprobacion,
   EstadoInterruptor,
   NuevaPendiente,
   Pendiente,
+  PendienteVista,
   RepositorioAutoRespuesta,
 } from './repositorio.js';
 
@@ -26,21 +30,36 @@ const MANIANA = new Date('2026-07-25T12:35:00Z');
 const conectado = (): EstadoSesion => ({ estado: 'conectado', telefono: '51986394450' });
 
 class RepoFalso implements RepositorioAutoRespuesta {
-  filas: (Pendiente & { estado: string; motivo: string | null; idExterno?: string })[] = [];
-  interruptor: EstadoInterruptor = { encendida: true, motivo: null, actualizadoPor: 'ana', actualizadoAt: null };
+  filas: (PendienteVista & { idExterno?: string })[] = [];
+  interruptor: EstadoInterruptor = {
+    encendida: true,
+    modo: 'automatica',
+    motivo: null,
+    actualizadoPor: 'ana',
+    actualizadoAt: null,
+  };
   respuestaHumana = false;
   private siguiente = 1;
 
   async encolar(p: NuevaPendiente): Promise<Pendiente | null> {
     if (this.filas.some((f) => f.clave === p.clave && f.diaLima === p.diaLima)) return null;
-    const fila = { ...p, id: this.siguiente++, estado: 'pendiente', motivo: null };
+    const fila: PendienteVista = {
+      ...p,
+      id: this.siguiente++,
+      estado: p.estado ?? 'pendiente',
+      motivo: null,
+      campana: p.campana ?? null,
+      aprobadaPor: null,
+      aprobadaAt: null,
+      editada: false,
+    };
     this.filas.push(fila);
     return fila;
   }
   async proximaVencida(ahora: Date): Promise<Pendiente | null> {
     return (
       this.filas
-        .filter((f) => f.estado === 'pendiente' && f.programadoPara.getTime() <= ahora.getTime())
+        .filter((f) => EN_COLA_DE_ENVIO.includes(f.estado as never) && f.programadoPara.getTime() <= ahora.getTime())
         .sort((a, b) => a.programadoPara.getTime() - b.programadoPara.getTime())[0] ?? null
     );
   }
@@ -53,18 +72,46 @@ class RepoFalso implements RepositorioAutoRespuesta {
     if (f) Object.assign(f, { estado: 'fallida', motivo });
   }
   async cancelar(id: number, motivo: string): Promise<void> {
-    const f = this.filas.find((x) => x.id === id && x.estado === 'pendiente');
+    const f = this.filas.find((x) => x.id === id && EN_COLA_DE_ENVIO.includes(x.estado as never));
     if (f) Object.assign(f, { estado: 'cancelada', motivo });
   }
   async cancelarDeConversacion(clave: string, motivo: string): Promise<number> {
-    const afectadas = this.filas.filter((f) => f.clave === clave && f.estado === 'pendiente');
+    const afectadas = this.filas.filter(
+      (f) => f.clave === clave && (EN_COLA_DE_ENVIO.includes(f.estado as never) || f.estado === 'preparada'),
+    );
     for (const f of afectadas) Object.assign(f, { estado: 'cancelada', motivo });
     return afectadas.length;
   }
-  async cancelarTodas(motivo: string): Promise<number> {
+  async cancelarAutomaticas(motivo: string): Promise<number> {
     const afectadas = this.filas.filter((f) => f.estado === 'pendiente');
     for (const f of afectadas) Object.assign(f, { estado: 'cancelada', motivo });
     return afectadas.length;
+  }
+  async listarEsperandoAprobacion(): Promise<PendienteVista[]> {
+    return this.filas
+      .filter((f) => f.estado === 'preparada')
+      .sort((a, b) => a.programadoPara.getTime() - b.programadoPara.getTime());
+  }
+  async aprobar(a: Aprobacion): Promise<boolean> {
+    const f = this.filas.find((x) => x.id === a.id && x.estado === 'preparada');
+    if (!f) return false;
+    Object.assign(f, {
+      estado: 'aprobada',
+      programadoPara: a.programadoPara,
+      aprobadaPor: a.quien,
+      aprobadaAt: a.ahora,
+      ...(a.texto !== undefined ? { texto: a.texto, editada: true } : {}),
+    });
+    return true;
+  }
+  async descartar(ids: readonly number[], quien: string, motivo: string): Promise<number> {
+    const afectadas = this.filas.filter((f) => ids.includes(f.id) && f.estado === 'preparada');
+    for (const f of afectadas) Object.assign(f, { estado: 'descartada', motivo: `${motivo} (${quien})` });
+    return afectadas.length;
+  }
+  async caducar(id: number, motivo: string): Promise<void> {
+    const f = this.filas.find((x) => x.id === id && x.estado === 'preparada');
+    if (f) Object.assign(f, { estado: 'caducada', motivo });
   }
   async ocupacionDesde() {
     return this.filas.map((f) => ({ numeroPropio: f.numeroPropio, cuando: f.programadoPara }));
@@ -78,8 +125,8 @@ class RepoFalso implements RepositorioAutoRespuesta {
   async leerInterruptor(): Promise<EstadoInterruptor> {
     return this.interruptor;
   }
-  async fijarInterruptor(encendida: boolean, motivo: string | null, quien: string): Promise<EstadoInterruptor> {
-    this.interruptor = { encendida, motivo, actualizadoPor: quien, actualizadoAt: new Date() };
+  async fijarModo(modo: ModoAutoRespuesta, motivo: string | null, quien: string): Promise<EstadoInterruptor> {
+    this.interruptor = { encendida: modo !== 'apagada', modo, motivo, actualizadoPor: quien, actualizadoAt: new Date() };
     return this.interruptor;
   }
 }
@@ -200,7 +247,13 @@ describe('las dos llaves y el freno', () => {
 
   test('con el interruptor de la base apagado, tampoco', async () => {
     const repo = new RepoFalso();
-    repo.interruptor = { encendida: false, motivo: 'la apagó Estephano', actualizadoPor: 'arky', actualizadoAt: null };
+    repo.interruptor = {
+      encendida: false,
+      modo: 'apagada',
+      motivo: 'la apagó Estephano',
+      actualizadoPor: 'arky',
+      actualizadoAt: null,
+    };
     const { envio, despachador } = armar({ repo });
     await repo.encolar(pendiente());
 
@@ -251,6 +304,112 @@ describe('las dos llaves y el freno', () => {
     await repo.encolar(pendiente({ clave: 'conv:whatsapp:51999:51986394450', telefono: '51999' }));
     assert.equal((await despachador.tick()).accion, 'apagada');
     assert.equal(envio.ordenes.length, 1);
+  });
+});
+
+describe('modo supervisado: el despachador NO toca lo que no aprobó una persona', () => {
+  const supervisada = (): EstadoInterruptor => ({
+    encendida: true,
+    modo: 'supervisada',
+    motivo: 'la puso en supervisada ana',
+    actualizadoPor: 'ana',
+    actualizadoAt: null,
+  });
+
+  test('una preparada vencida NO se manda: el despachador ni la ve', async () => {
+    const repo = new RepoFalso();
+    repo.interruptor = supervisada();
+    const { envio, despachador } = armar({ repo });
+    await repo.encolar(pendiente({ estado: 'preparada' }));
+
+    const r = await despachador.tick();
+
+    assert.equal(r.accion, 'sin-pendientes');
+    assert.equal(envio.ordenes.length, 0, 'sin OK humano no sale nada');
+    assert.equal(repo.filas[0].estado, 'preparada', 'y queda esperando, no se cancela');
+  });
+
+  test('la misma fila, ya aprobada, sale igual que siempre', async () => {
+    const repo = new RepoFalso();
+    repo.interruptor = supervisada();
+    const { envio, despachador } = armar({ repo });
+    await repo.encolar(pendiente({ estado: 'preparada' }));
+    await repo.aprobar({ id: 1, programadoPara: MANIANA, quien: 'ana', ahora: MANIANA });
+
+    const r = await despachador.tick();
+
+    assert.equal(r.accion, 'enviada');
+    assert.equal(envio.ordenes.length, 1);
+    assert.equal(envio.ordenes[0].automatico, true, 'sigue marcado como automático: lo escribió la máquina');
+    assert.equal(repo.filas[0].estado, 'enviada');
+    assert.equal(repo.filas[0].aprobadaPor, 'ana', 'y queda quién lo autorizó');
+  });
+
+  test('lo APROBADO sale también dentro del horario: la vendedora ya decidió', async () => {
+    const repo = new RepoFalso();
+    repo.interruptor = supervisada();
+    const envio = new EnvioFalso();
+    const despachador = new Despachador({
+      repo,
+      envio,
+      estadoSesion: conectado,
+      cfg,
+      ahora: () => new Date('2026-07-25T14:05:00Z'), // 09:05 de Lima: su turno
+      registrar: () => {},
+    });
+    await repo.encolar(pendiente({ estado: 'preparada' }));
+    await repo.aprobar({
+      id: 1,
+      programadoPara: new Date('2026-07-25T14:05:00Z'),
+      quien: 'ana',
+      ahora: new Date('2026-07-25T14:05:00Z'),
+    });
+
+    const r = await despachador.tick();
+
+    assert.equal(r.accion, 'enviada');
+    assert.equal(envio.ordenes.length, 1);
+  });
+
+  test('empezado el horario, lo preparado sobrevive: la bandeja es para ella', async () => {
+    const repo = new RepoFalso();
+    repo.interruptor = supervisada();
+    const envio = new EnvioFalso();
+    const despachador = new Despachador({
+      repo,
+      envio,
+      estadoSesion: conectado,
+      cfg,
+      ahora: () => new Date('2026-07-25T14:05:00Z'), // 09:05 de Lima
+      registrar: () => {},
+    });
+    await repo.encolar(pendiente({ estado: 'preparada' }));
+
+    await despachador.tick();
+
+    assert.equal(repo.filas[0].estado, 'preparada', 'que llegue la vendedora no le vacía la bandeja');
+  });
+
+  test('pasada la gracia sin que nadie la apruebe, caduca sola', async () => {
+    const repo = new RepoFalso();
+    repo.interruptor = supervisada();
+    const envio = new EnvioFalso();
+    const despachador = new Despachador({
+      repo,
+      envio,
+      estadoSesion: conectado,
+      cfg,
+      ahora: () => new Date('2026-07-25T20:00:00Z'), // 15:00 de Lima
+      registrar: () => {},
+    });
+    await repo.encolar(pendiente({ estado: 'preparada' })); // reservada 07:30
+
+    const r = await despachador.tick();
+
+    assert.equal(r.accion, 'caducadas');
+    assert.equal(r.accion === 'caducadas' && r.cuantas, 1);
+    assert.equal(repo.filas[0].estado, 'caducada');
+    assert.equal(envio.ordenes.length, 0);
   });
 });
 

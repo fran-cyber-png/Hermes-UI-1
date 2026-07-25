@@ -42,11 +42,36 @@ describe('la auto-respuesta corresponde', () => {
     assert.equal(d.elegible && d.plantillaId, 'fuera-de-horario-primer-contacto');
   });
 
-  test('si sabemos qué curso quiere, se elige la plantilla que lo nombra', () => {
+  test('si reconozco la campaña, se responde LO DE ESA campaña (ADR 0016)', () => {
     const d = decidir(candidata({ curso: 'Diplomado en Gestión Pública' }), cfg, MADRUGADA);
     assert.equal(d.elegible, true);
+    assert.equal(d.elegible && d.plantillaId, 'fuera-de-horario-campana');
+    assert.ok(d.elegible && d.texto.includes('Diplomado en Gestión Pública'), 'la nombra como está escrita');
+    assert.ok(d.elegible && d.texto.includes('temario de gestión pública'), 'y promete lo de esa familia');
+    assert.equal(d.elegible && d.campana?.familia?.id, 'gestion-publica');
+  });
+
+  test('si vino de «[JUL] INTELIGENCIA», responde lo de Inteligencia', () => {
+    const d = decidir(candidata({ curso: null, cursoAnuncio: '[JUL] INTELIGENCIA' }), cfg, MADRUGADA);
+    assert.equal(d.elegible && d.plantillaId, 'fuera-de-horario-campana');
+    assert.ok(d.elegible && d.texto.includes('Inteligencia y Contrainteligencia'), 'y no le grita «[JUL] INTELIGENCIA»');
+    assert.equal(d.elegible && d.campana?.fuente, 'anuncio');
+  });
+
+  test('un curso que NO reconozco cae en la genérica, que igual lo nombra', () => {
+    const d = decidir(candidata({ curso: 'Taller de oratoria' }), cfg, MADRUGADA);
     assert.equal(d.elegible && d.plantillaId, 'fuera-de-horario-interes');
-    assert.ok(d.elegible && d.texto.includes('Diplomado en Gestión Pública'));
+    assert.ok(d.elegible && d.texto.includes('Taller de oratoria'));
+    assert.equal(d.elegible && d.campana?.familia, null, 'no se inventa una familia');
+  });
+
+  test('el interés asentado le gana al anuncio: es lo que dijo, no de dónde vino', () => {
+    const d = decidir(
+      candidata({ curso: 'OSINT & SOCMINT', cursoAnuncio: '[JUL] INTELIGENCIA' }),
+      cfg,
+      MADRUGADA,
+    );
+    assert.equal(d.elegible && d.campana?.familia?.id, 'osint');
   });
 
   test('si ya veníamos hablando, la plantilla es la de seguimiento', () => {

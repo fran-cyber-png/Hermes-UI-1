@@ -1,5 +1,6 @@
 import type { EstadoSesion } from '../whatsapp/transporte.js';
 import type { OrdenEnvio, ResultadoControlado } from '../whatsapp/envioControlado.js';
+import { caducoSinAprobar } from './caducidad.js';
 import type { ConfigAutoRespuesta } from './config.js';
 import { diaLocal, dentroDe } from './franja.js';
 import { faltaEsquema, type Pendiente, type RepositorioAutoRespuesta } from './repositorio.js';
@@ -67,6 +68,7 @@ export type ResultadoTick =
   | { accion: 'horario-laboral'; canceladas: number }
   | { accion: 'frenada'; motivo: string }
   | { accion: 'sin-pendientes' }
+  | { accion: 'caducadas'; cuantas: number }
   | { accion: 'cancelada'; clave: string; motivo: string }
   | { accion: 'enviada'; clave: string; idExterno: string };
 
@@ -112,13 +114,26 @@ export class Despachador {
       return { accion: 'apagada', detalle: interruptor.motivo ?? 'el interruptor está apagado' };
     }
 
-    // Entró la vendedora: la cola se cancela entera. No es un freno de
-    // emergencia, es que ya no hace falta — ella responde en 10 minutos.
+    // Entró la vendedora: la cola AUTOMÁTICA se cancela entera. No es un freno
+    // de emergencia, es que ya no hace falta — ella responde en 10 minutos.
+    //
+    // Lo que NO se cancela (ADR 0016): lo que una persona aprobó y lo que espera
+    // su OK. La regla existe para callar a la máquina cuando está la humana; si
+    // la que decidió mandar fue ella, la regla no tiene a quién callar. Por eso
+    // acá no se corta el paso: si no había nada automático que cancelar, se
+    // sigue de largo y lo aprobado sale con su ritmo.
     if (dentroDe(ahora, cfg.franja, cfg.zona)) {
-      const canceladas = await repo.cancelarTodas('empezó el horario de atención: responde la vendedora');
-      if (canceladas > 0) this.registrar(`[auto-respuesta] entró el horario: ${canceladas} pendientes canceladas`);
-      return { accion: 'horario-laboral', canceladas };
+      const canceladas = await repo.cancelarAutomaticas('empezó el horario de atención: responde la vendedora');
+      if (canceladas > 0) {
+        this.registrar(`[auto-respuesta] entró el horario: ${canceladas} pendientes canceladas`);
+        return { accion: 'horario-laboral', canceladas };
+      }
     }
+
+    // El barrido de lo que nadie aprobó a tiempo. Va antes que el envío para que
+    // una bandeja llena de cosas viejas no tape lo que sí hay que mandar.
+    const caducadas = await this.barrerCaducadas(ahora);
+    if (caducadas > 0) return { accion: 'caducadas', cuantas: caducadas };
 
     // La sesión tiene que estar sana. Un ban o una desconexión frenan TODO: no
     // se reintenta contra un número que WhatsApp ya está mirando de reojo.
@@ -186,9 +201,33 @@ export class Despachador {
     return { accion: 'enviada', clave: p.clave, idExterno: r.idExterno };
   }
 
+  /**
+   * EL BARRIDO DE LO CADUCADO (ADR 0016) — lo que se preparó, nadie aprobó y ya
+   * no sirve.
+   *
+   * El veredicto lo da la función PURA (`caducidad.ts`) sobre las filas que
+   * devuelve el repositorio, no un `WHERE` con la misma cuenta escrita en SQL.
+   * Es a propósito y es la lección de #37: dos escrituras de la misma regla
+   * divergen, y acá divergir significa o borrar de la bandeja algo que la
+   * vendedora todavía podía aprobar, o dejarle aprobar algo que ya no debía
+   * salir. El volumen lo permite de sobra (60 al día como techo).
+   */
+  private async barrerCaducadas(ahora: Date): Promise<number> {
+    const esperando = await this.deps.repo.listarEsperandoAprobacion();
+    let cuantas = 0;
+    for (const p of esperando) {
+      const v = caducoSinAprobar(p.programadoPara, this.deps.cfg, ahora);
+      if (!v.caduco) continue;
+      await this.deps.repo.caducar(p.id, v.motivo);
+      cuantas++;
+    }
+    if (cuantas > 0) this.registrar(`[auto-respuesta] ${cuantas} preparada(s) caducaron sin aprobación`);
+    return cuantas;
+  }
+
   /** Apaga el interruptor con el motivo escrito. No cancela: deja ver qué quedó. */
   private async frenar(motivo: string): Promise<ResultadoTick> {
-    await this.deps.repo.fijarInterruptor(false, motivo, 'sistema');
+    await this.deps.repo.fijarModo('apagada', motivo, 'sistema');
     this.registrar(`[auto-respuesta] FRENO TOTAL — ${motivo}`);
     return { accion: 'frenada', motivo };
   }

@@ -35,6 +35,8 @@ export interface Candidato {
   personaNombre: string | null;
   plantillaId: string;
   texto: string;
+  /** Cómo se nombra la campaña de la que vino. Es por lo que agrupa la bandeja. */
+  campana?: string | null;
   /** El mensaje que la disparó: ordena la cola (el que más esperó, primero). */
   desde: Date;
 }

@@ -161,8 +161,12 @@ async function main(): Promise<void> {
 
   const interruptor = await repo.leerInterruptor().catch(() => null);
   encabezado.push(
-    `Interruptor · ${interruptor ? (interruptor.encendida ? 'ENCENDIDO' : 'apagado') : 'sin tabla (falta `npm run db:push`)'}` +
-      `${interruptor?.motivo ? ` — ${interruptor.motivo}` : ''}`,
+    `Interruptor · ${interruptor ? interruptor.modo.toUpperCase() : 'sin tabla (falta `npm run db:push`)'}` +
+      `${interruptor?.motivo ? ` — ${interruptor.motivo}` : ''}` +
+      // En supervisada, el plan de abajo es lo que va a QUEDAR ESPERANDO el OK
+      // de la vendedora, no lo que va a salir. Decirlo acá evita leer el
+      // simulacro como una amenaza cuando es una propuesta.
+      (interruptor?.modo === 'supervisada' ? ' (lo de abajo queda esperando aprobación, no sale solo)' : ''),
   );
 
   const candidatas = await consultarCandidatos(db, dia);

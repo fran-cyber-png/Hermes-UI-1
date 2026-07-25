@@ -1,3 +1,4 @@
+import { campanaDe, type Campana } from './campana.js';
 import type { ConfigAutoRespuesta } from './config.js';
 import { dentroDe } from './franja.js';
 import { elegir, horaEnCriollo, render, saludoDe, type Plantilla } from './plantillas.js';
@@ -39,8 +40,12 @@ export interface ConversacionCandidata {
   autoRespuestasHoy: number;
   /** Cuántas veces le escribimos alguna vez. 0 = primer contacto. */
   salientes: number;
-  /** El curso que ya sabemos que le interesa, si está registrado. */
+  /** El curso que ya sabemos que le interesa, si está registrado (`intereses`). */
   curso: string | null;
+  /** El curso del formulario que llenó (lead emparejado por teléfono). */
+  cursoLead?: string | null;
+  /** El anuncio/campaña por el que escribió. Respalda, no manda. */
+  cursoAnuncio?: string | null;
 }
 
 export type MotivoNoElegible =
@@ -53,7 +58,7 @@ export type MotivoNoElegible =
   | 'sin_plantilla';
 
 export type Decision =
-  | { elegible: true; plantillaId: string; texto: string }
+  | { elegible: true; plantillaId: string; texto: string; campana: Campana | null }
   | { elegible: false; motivo: MotivoNoElegible; detalle: string };
 
 export function decidir(
@@ -104,8 +109,11 @@ export function decidir(
     return { elegible: false, motivo: 'rechazo', detalle: 'la persona pidió que no le escribamos' };
   }
 
-  // (e) Contenido: se ELIGE de un catálogo cerrado, nunca se genera.
-  const plantilla = elegir({ esPrimerContacto: c.salientes === 0, curso: c.curso }, plantillas);
+  // (e) Contenido: se ELIGE de un catálogo cerrado, nunca se genera. De qué
+  // campaña vino decide QUÉ de ese catálogo (ADR 0016): las tres fuentes con su
+  // precedencia viven en `campana.ts`, no acá.
+  const campana = campanaDe({ interes: c.curso, lead: c.cursoLead ?? null, anuncio: c.cursoAnuncio ?? null });
+  const plantilla = elegir({ esPrimerContacto: c.salientes === 0, curso: campana?.nombre ?? null, campana }, plantillas);
   if (!plantilla) {
     return { elegible: false, motivo: 'sin_plantilla', detalle: 'ninguna plantilla registrada aplica' };
   }
@@ -114,8 +122,9 @@ export function decidir(
   try {
     texto = render(plantilla.cuerpo, {
       saludo: saludoDe(c.personaNombre),
-      curso: c.curso,
+      curso: campana?.nombre ?? null,
       horaApertura: horaEnCriollo(cfg.franja.desde),
+      gancho: campana?.familia?.gancho ?? null,
     });
   } catch (e) {
     // Un marcador sin valor es un bug de datos, no un mensaje a medias: se
@@ -123,5 +132,5 @@ export function decidir(
     return { elegible: false, motivo: 'sin_plantilla', detalle: (e as Error).message };
   }
 
-  return { elegible: true, plantillaId: plantilla.id, texto };
+  return { elegible: true, plantillaId: plantilla.id, texto, campana };
 }

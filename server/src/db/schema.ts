@@ -645,7 +645,15 @@ export const autoRespuestasPendientes = pgTable(
     disparadaPor: timestamp("disparada_por", { withTimezone: true }).notNull(),
     /** La hora que le tocó en el reparto. El despachador no manda nada antes. */
     programadoPara: timestamp("programado_para", { withTimezone: true }).notNull(),
-    /** pendiente → enviada | cancelada | fallida. */
+    /**
+     * El estado de la fila. La máquina completa vive en
+     * `autorespuesta/estados.ts` (una sola escritura, con su test):
+     *   · automática — `pendiente` → enviada | cancelada | fallida
+     *   · supervisada — `preparada` → aprobada → enviada | fallida | cancelada,
+     *     y las dos salidas humanas/temporales: `descartada` y `caducada`.
+     * El default sigue siendo `pendiente` para no cambiarle el significado a
+     * ninguna fila escrita antes de ADR 0016.
+     */
     estado: text("estado").notNull().default("pendiente"),
     /** Por qué se canceló o falló — en criollo, para leerlo sin abrir el código. */
     motivo: text("motivo"),
@@ -666,6 +674,30 @@ export const autoRespuestasPendientes = pgTable(
     creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
     /** Cuándo salió DE VERDAD. Contra `programado_para` se mide si el ritmo se cumplió. */
     resueltoAt: timestamp("resuelto_at", { withTimezone: true }),
+
+    // ── MODO SUPERVISADO (ADR 0016) — se agregan al final a propósito ─────────
+    /**
+     * QUIÉN dio el OK. Es el dato que hace que un mes después se pueda contestar
+     * «¿esto lo mandó la máquina sola o alguien lo aprobó?». Null en modo
+     * automático: ahí no aprobó nadie, y eso también es la respuesta.
+     */
+    aprobadaPor: text("aprobada_por"),
+    aprobadaAt: timestamp("aprobada_at", { withTimezone: true }),
+    /**
+     * La vendedora tocó el texto antes de aprobar. Importa para leer la
+     * auditoría sin adivinar: `texto` guarda SIEMPRE lo que se manda, así que
+     * sin esta marca un texto editado sería indistinguible de una plantilla que
+     * cambió. También dice qué plantillas conviene reescribir — si a la misma la
+     * editan todas las noches, la plantilla está mal.
+     */
+    editada: boolean("editada").notNull().default(false),
+    /**
+     * La campaña/curso con la que se eligió la plantilla («INTELIGENCIA»). Se
+     * GUARDA en vez de recalcularse porque la bandeja agrupa por esto y porque
+     * el interés de la persona puede cambiar entre que se preparó y que se
+     * aprueba: lo que se muestra tiene que ser lo que decidió el texto.
+     */
+    campana: text("campana"),
   },
   (t) => [
     unique("auto_respuestas_una_por_dia_uq").on(t.clave, t.diaLima),
@@ -699,6 +731,19 @@ export const autoRespuestaEstado = pgTable("auto_respuesta_estado", {
   /** Quién lo tocó por última vez: el username de la vendedora, o `sistema`. */
   actualizadoPor: text("actualizado_por"),
   actualizadoAt: timestamp("actualizado_at", { withTimezone: true }).notNull().defaultNow(),
+
+  // ── MODO SUPERVISADO (ADR 0016) — se agrega al final a propósito ────────────
+  /**
+   * `apagada` · `supervisada` · `automatica`. El interruptor dejó de ser un
+   * booleano cuando el dueño pidió el punto del medio (la máquina prepara, la
+   * vendedora aprueba), y de un `true` no sale «supervisada».
+   *
+   * `encendida` de arriba SIGUE escribiéndose, derivada de acá
+   * (`modo !== 'apagada'`): es lo que lee el código de ADR 0015 y lo que
+   * sobrevive si algún día hay que volver atrás. La verdad es `modo`; el
+   * booleano es su sombra, y la dirección no se invierte.
+   */
+  modo: text("modo").notNull().default("apagada"),
 });
 
 /**

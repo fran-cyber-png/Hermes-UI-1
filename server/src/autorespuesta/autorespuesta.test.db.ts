@@ -38,7 +38,7 @@ const clave = (telefono: string) => `conv:whatsapp:${telefono}:${NUMERO_PROPIO}`
 
 /** Deja el interruptor de la base encendido (la segunda llave). */
 async function encender(db: DbDePrueba) {
-  await repositorioDrizzle(db).fijarInterruptor(true, 'encendida por el test', 'test');
+  await repositorioDrizzle(db).fijarModo('automatica', 'encendida por el test', 'test');
 }
 
 async function contarPendientes(db: DbDePrueba): Promise<number> {
@@ -310,12 +310,12 @@ test('el interruptor arranca apagado y guarda quién y por qué', async (t) => {
   const inicial = await repo.leerInterruptor();
   assert.equal(inicial.encendida, false, 'apagada por defecto, sin fila que la prenda');
 
-  await repo.fijarInterruptor(true, 'simulacro revisado, la prendemos', 'estephano');
+  await repo.fijarModo('automatica', 'simulacro revisado, la prendemos', 'estephano');
   const prendida = await repo.leerInterruptor();
   assert.equal(prendida.encendida, true);
   assert.equal(prendida.actualizadoPor, 'estephano');
 
-  await repo.fijarInterruptor(false, 'freno automático: el número está suspendido', 'sistema');
+  await repo.fijarModo('apagada', 'freno automático: el número está suspendido', 'sistema');
   const frenada = await repo.leerInterruptor();
   assert.equal(frenada.encendida, false);
   assert.match(frenada.motivo ?? '', /suspendido/);
