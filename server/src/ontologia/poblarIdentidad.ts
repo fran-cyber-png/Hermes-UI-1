@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db/client.js";
+import type { db } from "../db/client.js";
 import { cliente } from "../db/canonico.js";
 import { conversiones, identidades, personas, vinculosIdentidad } from "../db/ontologia.js";
 
@@ -99,8 +99,13 @@ export type ResumenIdentidad = {
  * Recibe `base` INYECTADA (patrón de la casa, ADR 0008): el script le pasa el singleton, el
  * test su base aislada. Sin esto, «el rebuild no borra los enlaces manuales» no se podía
  * probar — y una garantía que no se puede probar es una intención.
+ *
+ * Es OBLIGATORIA, y `db` se importa solo como TIPO. Un default `= db` obligaría a importar el
+ * singleton, y `db/client.ts` arma la conexión al importarse: cualquier test que tocara este
+ * archivo moriría con «DATABASE_URL no está configurado» antes de correr una línea. Es el
+ * mismo motivo por el que `leadDeTelefono` pide su `base` sin default.
  */
-export async function poblarIdentidad(base: typeof db = db): Promise<ResumenIdentidad> {
+export async function poblarIdentidad(base: typeof db): Promise<ResumenIdentidad> {
   // ── 0. LAS CLAVES BLOQUEADAS — el arma de seguridad que estaba declarada y desconectada ──
   //
   // `ontologia.identidades_bloqueadas` existía desde el día uno con su comentario y todo, y NADIE la
