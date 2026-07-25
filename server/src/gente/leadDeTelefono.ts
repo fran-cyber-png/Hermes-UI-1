@@ -40,6 +40,37 @@ export function sufijoTelefonoSql(columna: string): SQL {
   return sql`right(regexp_replace(coalesce(${sql.raw(columna)}, ''), '[^0-9]', '', 'g'), 9)`;
 }
 
+/**
+ * EL CURSO QUE LA PERSONA ELIGIÓ, según su formulario.
+ *
+ * `campaign_name` primero porque es donde cae el curso en las dos fuentes que
+ * hoy tienen volumen: en las landings de icarus el ingestor mapea ahí el
+ * `product_name` (`icarus/mapeo.ts`), y en los lead-forms de Meta la campaña es
+ * la que nombra el diploma. `form_name` es el respaldo, sin el namespace
+ * `icarus:` —que es plomería, no un curso— para que no aparezca como si lo fuera.
+ *
+ * Es el nombre CRUDO del formulario, no un id canónico: dos escrituras del mismo
+ * diploma son hoy dos filas. La tabla de alias hacia el `producto_id` de Cerberus
+ * es el T1 de #128; hasta entonces la pantalla muestra lo que dice el dato.
+ *
+ * Exportado por la misma razón que `sufijoTelefonoSql`, y con más urgencia: lo
+ * leen el panel de negocio (`dashboard/negocio.ts`, #128) y el chip de curso de
+ * la cola (`cola/cursoSql.ts`, #72). Si cada uno se escribe su versión, la MISMA
+ * persona aparece con un curso en el Dashboard y con otro en la fila de la cola
+ * — la divergencia de #37, otra vez, con otro nombre.
+ *
+ * ⚠️ BORDE CONOCIDO: un lead de icarus SIN `campaign_name` devuelve el resto del
+ * `form_name` («landing», «Datos»), que no es un curso. No se parchea acá de un
+ * lado solo: es una decisión de #128/#129 y se cambia en este único lugar.
+ */
+export const cursoDeLeadSql: SQL = sql`NULLIF(
+  btrim(COALESCE(
+    NULLIF(btrim(campaign_name), ''),
+    regexp_replace(COALESCE(form_name, ''), '^icarus:', '')
+  )),
+  ''
+)`;
+
 export async function leadDeTelefono(
   base: typeof db,
   telefonos: string[],

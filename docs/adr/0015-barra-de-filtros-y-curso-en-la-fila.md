@@ -113,5 +113,14 @@ mismo módulo que **#129** necesita para agrupar el autocompletado de intereses:
 - **Dos preguntas distintas sobre el mismo lead**: la ficha elige el lead con email
   (`elegirMejorLead`, para poder cotizar); la cola elige el **más reciente** (qué pidió la última
   vez). Está escrito en `cola/cursoSql.ts` para que no se lea como una divergencia.
+- **Qué curso dice un lead se escribe UNA vez** (`gente/leadDeTelefono.ts`, `cursoDeLeadSql`), igual
+  que la llave de emparejamiento por teléfono. Al rebasar sobre el panel de negocio (#128) las dos
+  ramas habían escrito su propia versión del mismo criterio, y no coincidían: la del panel prefiere
+  `campaign_name`, la de la cola prefería `form_name`. Con dos definiciones, la MISMA persona salía
+  con un curso en el Dashboard y con otro en su fila — la divergencia de #37 con otro nombre. Se
+  adoptó la del panel (que ya estaba en `main`) y la cola la consume.
+  **Borde conocido, anotado en el único lugar donde se puede arreglar**: un lead de icarus sin
+  `campaign_name` devuelve el resto del `form_name` («landing»), que no es un curso. Es una decisión
+  de #128/#129, no un parche de un lado solo.
 - **Colisiones de color**: siete colores para 38 familias. Dos familias pueden compartir color; el
   texto es el dato, el color es la ayuda.

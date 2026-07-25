@@ -2,7 +2,7 @@ import { sql, type SQL } from "drizzle-orm";
 import type { db } from "../db/client.js";
 import { respondidaSql } from "../cola/urgenciaSql.js";
 import { etapaEfectivaSql, ultimasGestionesSql } from "../cola/etapaEfectivaSql.js";
-import { sufijoTelefonoSql } from "../gente/leadDeTelefono.js";
+import { cursoDeLeadSql, sufijoTelefonoSql } from "../gente/leadDeTelefono.js";
 import { horaDelDiaLimaSql } from "../lib/horaLimaSql.js";
 import { HORA_APERTURA, HORA_CIERRE, horasDelDia } from "./horarioAtencion.js";
 
@@ -56,26 +56,6 @@ import { HORA_APERTURA, HORA_CIERRE, horasDelDia } from "./horarioAtencion.js";
  */
 const PRECIO_REGEX_SQL = `'(s/\\.?\\s*[0-9]|us\\$|usd|\\$\\s*[0-9]|precio|costo|inversi[óo]n|matr[íi]cula)'`;
 
-/**
- * EL CURSO QUE LA PERSONA ELIGIÓ, según su formulario.
- *
- * `campaign_name` primero porque es donde cae el curso en las dos fuentes que
- * hoy tienen volumen: en las landings de icarus el ingestor mapea ahí el
- * `product_name` (`icarus/mapeo.ts`), y en los lead-forms de Meta la campaña es
- * la que nombra el diploma. `form_name` es el respaldo, sin el namespace
- * `icarus:` —que es plomería, no un curso— para que no aparezca como si lo fuera.
- *
- * Es el nombre CRUDO del formulario, no un id canónico: dos escrituras del mismo
- * diploma son hoy dos filas. La tabla de alias hacia el `producto_id` de Cerberus
- * es el T1 de #128; hasta entonces la pantalla muestra lo que dice el dato.
- */
-const CURSO_DE_LEAD = sql`NULLIF(
-  btrim(COALESCE(
-    NULLIF(btrim(campaign_name), ''),
-    regexp_replace(COALESCE(form_name, ''), '^icarus:', '')
-  )),
-  ''
-)`;
 
 // ── El contrato ──────────────────────────────────────────────────────────────
 
@@ -306,7 +286,7 @@ export async function consultarNegocio(base: typeof db, o: OpcionesNegocio): Pro
           SELECT DISTINCT ON (sufijo) sufijo, curso
           FROM (
             SELECT ${sufijoTelefonoSql("phone")} AS sufijo,
-                   ${CURSO_DE_LEAD}              AS curso,
+                   ${cursoDeLeadSql}              AS curso,
                    created_time
             FROM leads
             WHERE phone IS NOT NULL

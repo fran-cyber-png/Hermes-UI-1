@@ -73,18 +73,35 @@ test("el curso del lead se empareja por el sufijo de 9 dígitos, aunque el telé
   assert.equal(fila.lead_curso, "Diploma Internacional del Consultor Político");
 });
 
-test("en un lead de Meta el curso es el nombre del FORMULARIO, no el de la campaña", async (t) => {
+test("el curso del lead es el MISMO que ve el panel de negocio: manda la campaña", async (t) => {
   const db = await baseDePrueba(t);
   await sembrarMensaje(db, { personaId: "51900444", texto: "hola" });
   await sembrarLead(db, {
     phone: "51900444",
     platform: "fb",
     formName: "Diploma técnico en Osint & Socmint",
-    campaignName: "[JUL] INTELIGENCIA",
+    campaignName: "Diploma Internacional de Inteligencia y Contrainteligencia",
+  });
+
+  // La regla vive UNA vez (`gente/leadDeTelefono.ts`, `cursoDeLeadSql`) y la
+  // comparten el panel de negocio (#128) y este chip: la misma persona no puede
+  // salir con un curso en el Dashboard y con otro en su fila de la cola.
+  const fila = (await consultarCola(db, {})).conversaciones[0] as Fila;
+  assert.equal(fila.lead_curso, "Diploma Internacional de Inteligencia y Contrainteligencia");
+});
+
+test("sin campaña, el respaldo es el formulario sin el namespace de plomería", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarMensaje(db, { personaId: "51900777", texto: "hola" });
+  await sembrarLead(db, {
+    phone: "51900777",
+    platform: "web",
+    formName: "icarus:Diploma en Gestión Parlamentaria",
+    campaignName: null,
   });
 
   const fila = (await consultarCola(db, {})).conversaciones[0] as Fila;
-  assert.equal(fila.lead_curso, "Diploma técnico en Osint & Socmint");
+  assert.equal(fila.lead_curso, "Diploma en Gestión Parlamentaria", "el `icarus:` es plomería, no curso");
 });
 
 test("con dos leads del mismo teléfono manda el MÁS RECIENTE: lo que pidió la última vez", async (t) => {
@@ -109,10 +126,10 @@ test("con dos leads del mismo teléfono manda el MÁS RECIENTE: lo que pidió la
   assert.equal(fila.lead_curso, "Diploma Internacional de Inteligencia y Contrainteligencia");
 });
 
-test("un lead sin curso no ensucia la fila", async (t) => {
+test("un lead sin nada que decir no ensucia la fila", async (t) => {
   const db = await baseDePrueba(t);
   await sembrarMensaje(db, { personaId: "51900666", texto: "hola" });
-  await sembrarLead(db, { phone: "51900666", platform: "web", formName: "icarus:landing", campaignName: null });
+  await sembrarLead(db, { phone: "51900666", platform: "web", formName: null, campaignName: null });
 
   const fila = (await consultarCola(db, {})).conversaciones[0] as Fila;
   assert.equal(fila.lead_curso, null);
