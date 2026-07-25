@@ -1,16 +1,29 @@
 /**
  * LA LÓGICA PURA DE LA COLA POTENCIADA (#49) — sin React, testeable con vitest.
  *
- * Los tabs (`Todo · No leídos · Favoritos`) son el EJE de la cola; «Piden info»
- * y «Por vencer» son filtros SECUNDARIOS que angostan dentro del tab, y la
- * categoría es el tercer eje (modo Listas). Acá vive el mapeo tab/filtro →
- * query-params y la migración del valor viejo de localStorage.
+ * Los tabs (`Todo · No leídos · Favoritos`) son el EJE de la cola; los filtros
+ * SECUNDARIOS angostan dentro del tab, y la categoría es el tercer eje (modo
+ * Listas). Acá vive el mapeo tab/filtro → query-params, la migración del valor
+ * viejo de localStorage y el resumen de qué está recortando la cola ahora mismo.
+ *
+ * ── QUÉ PASÓ CON «POR VENCER» (censo de producción, 25-jul-2026) ──
+ * «Por vencer» filtraba `ventana_abierta`, que solo es cierto para comentarios
+ * de FB/IG de menos de 7 días. En las 1.867 conversaciones de la ventana de 30
+ * días había **0** (la cola es 100% WhatsApp). Un filtro que siempre devuelve
+ * cero no es un filtro: es un callejón sin salida con nombre confuso —«por
+ * vencer» nunca dijo QUÉ vence—. Se retira del panel. La ventana de Meta sigue
+ * viéndose donde importa: el reloj dorado de la fila, que dice los días que
+ * quedan. El server sigue aceptando `intencion=por-vencer` (el contrato no se
+ * rompe), simplemente ya no hay chip que lo dispare.
+ *
+ * En su lugar entra **«Sin responder»** (`NOT respondida`): 478 de 1.867 en el
+ * mismo censo — la deuda real de la mesa, y se entiende sin explicación.
  */
 
 export type Tab = 'todo' | 'no-leidos' | 'favoritos';
 
-/** Los filtros secundarios: reencarnan a los viejos por intención (#49, §Nada se tira). */
-export type FiltroSec = '' | 'pide-info' | 'por-vencer';
+/** Los filtros secundarios: angostan dentro del tab (#49). */
+export type FiltroSec = '' | 'pide-info' | 'sin-responder';
 
 export const TABS: { valor: Tab; label: string; vacio: string }[] = [
   { valor: 'todo', label: 'Todo', vacio: 'No entró nada por ningún canal.' },
@@ -18,9 +31,9 @@ export const TABS: { valor: Tab; label: string; vacio: string }[] = [
   { valor: 'favoritos', label: 'Favoritos', vacio: 'No marcaste favoritos.' },
 ];
 
-export const FILTROS_SEC: { valor: Exclude<FiltroSec, ''>; label: string }[] = [
-  { valor: 'pide-info', label: 'Piden info' },
-  { valor: 'por-vencer', label: 'Por vencer' },
+export const FILTROS_SEC: { valor: Exclude<FiltroSec, ''>; label: string; ayuda: string }[] = [
+  { valor: 'pide-info', label: 'Piden info', ayuda: 'Lo último que escribió fue un pedido de información' },
+  { valor: 'sin-responder', label: 'Sin responder', ayuda: 'Nadie del equipo contestó todavía' },
 ];
 
 const TABS_VALIDOS: readonly string[] = TABS.map((t) => t.valor);
@@ -53,7 +66,9 @@ export const KEY_TAB = 'hermes.colaTab';
  * pisar lo que la vendedora elija después.
  *
  *   · `pide-info`        → tab Todo + el filtro secundario «Piden info» (existe).
- *   · `puedo-escribirle` → tab Todo + «Por vencer», su reencarnación (#49).
+ *   · `puedo-escribirle` → tab Todo, SIN filtro. Su reencarnación de #49 era
+ *     «Por vencer», que hoy devuelve cero filas en producción: aterrizar en una
+ *     cola vacía es peor que aterrizar en la cola entera.
  *   · cualquier otra cosa → Todo, sin filtro.
  *
  * Devuelve `null` si no hay nada que migrar (usuaria nueva, o ya migrada).
@@ -76,8 +91,79 @@ export function migracionDesdeKeyVieja(
   }
 
   if (valor === 'pide-info') return { tab: 'todo', filtroSec: 'pide-info' };
-  if (valor === 'puedo-escribirle') return { tab: 'todo', filtroSec: 'por-vencer' };
   return { tab: 'todo', filtroSec: '' };
+}
+
+/** Un recorte activo sobre la cola, con el rótulo que la vendedora ve. */
+export interface FiltroActivo {
+  clave: 'tab' | 'filtro' | 'categoria' | 'busqueda';
+  label: string;
+}
+
+/**
+ * QUÉ ESTÁ RECORTANDO LA COLA AHORA MISMO — la lista de recortes activos, en el
+ * orden en que se aplican.
+ *
+ * Existe porque una cola de 1.867 filas que muestra 12 sin decir por qué es una
+ * trampa: la vendedora cree que no hay trabajo. Con esto la cabecera puede
+ * nombrar cada recorte y ofrecer salir de todos con un gesto. El tab `todo` y
+ * una búsqueda en blanco NO son recortes: no esconden nada.
+ */
+export function filtrosActivos(e: {
+  tab: Tab | string;
+  filtroSec: FiltroSec | string;
+  categoria: string | null;
+  busqueda: string;
+}): FiltroActivo[] {
+  const activos: FiltroActivo[] = [];
+  const tab = TABS.find((t) => t.valor === e.tab);
+  if (tab && tab.valor !== 'todo') activos.push({ clave: 'tab', label: tab.label });
+  const filtro = FILTROS_SEC.find((f) => f.valor === e.filtroSec);
+  if (filtro) activos.push({ clave: 'filtro', label: filtro.label });
+  if (e.categoria) activos.push({ clave: 'categoria', label: e.categoria });
+  const q = e.busqueda.trim();
+  if (q) activos.push({ clave: 'busqueda', label: `«${q}»` });
+  return activos;
+}
+
+/** Lo mínimo que la barra necesita de una categoría del catálogo (#48). */
+export interface CategoriaEnBarra {
+  nombre: string;
+  color: string;
+  orden: number;
+  esFavorito: boolean;
+  conteo: number;
+}
+
+/** Cuántos chips de categoría entran antes de que la barra deje de ser una barra. */
+export const TOPE_CATEGORIAS_BARRA = 12;
+
+/**
+ * QUÉ CATEGORÍAS VAN EN LA BARRA, Y EN QUÉ ORDEN.
+ *
+ * Las FAVORITAS primero: para eso existe `es_favorito` en #48 —marcar cuáles
+ * merecen estar a un clic—. Dentro de cada grupo manda el orden manual de la
+ * vendedora. Se corta en un tope: una barra de 30 chips deja de ser navegable y
+ * para eso está el modo Listas, que las muestra todas.
+ *
+ * La categoría ACTIVA entra siempre, aunque el tope la dejara afuera: si se está
+ * filtrando por ella, tiene que verse y tiene que poder apagarse desde la barra.
+ */
+export function categoriasDeLaBarra(
+  catalogo: readonly CategoriaEnBarra[] | undefined,
+  activa?: string | null,
+): CategoriaEnBarra[] {
+  if (!catalogo || catalogo.length === 0) return [];
+  const ordenadas = [...catalogo].sort((a, b) => {
+    if (a.esFavorito !== b.esFavorito) return a.esFavorito ? -1 : 1;
+    return a.orden - b.orden || a.nombre.localeCompare(b.nombre, 'es');
+  });
+  const visibles = ordenadas.slice(0, TOPE_CATEGORIAS_BARRA);
+  if (activa && !visibles.some((c) => c.nombre === activa)) {
+    const suelta = ordenadas.find((c) => c.nombre === activa);
+    if (suelta) return [suelta, ...visibles.slice(0, TOPE_CATEGORIAS_BARRA - 1)];
+  }
+  return visibles;
 }
 
 export interface EstadoCola {

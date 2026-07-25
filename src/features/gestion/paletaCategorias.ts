@@ -63,6 +63,24 @@ export const CLASE_TEXTO: Record<ColorCategoria, string> = {
   rosa: 'text-cat-rosa',
 };
 
+/**
+ * Clase de FONDO SUAVE por color — el chip de categoría ENCENDIDO en la barra de
+ * filtros de la cola. Un chip activo tiene que gritar que está activo (si no, la
+ * vendedora no sabe por qué ve 12 filas de 1.866); con el borde solo no alcanza,
+ * y llenarlo del color entero taparía el texto. Literales completos: Tailwind
+ * escanea el código, un `bg-cat-${color}/10` armado en runtime no existiría.
+ */
+export const CLASE_FONDO_SUAVE: Record<ColorCategoria, string> = {
+  pizarra: 'bg-cat-pizarra/10',
+  rojo: 'bg-cat-rojo/10',
+  naranja: 'bg-cat-naranja/10',
+  verde: 'bg-cat-verde/10',
+  azul: 'bg-cat-azul/10',
+  cian: 'bg-cat-cian/10',
+  morado: 'bg-cat-morado/10',
+  rosa: 'bg-cat-rosa/10',
+};
+
 /** Clase de FONDO por color (los swatches del selector). */
 export const CLASE_FONDO: Record<ColorCategoria, string> = {
   pizarra: 'bg-cat-pizarra',

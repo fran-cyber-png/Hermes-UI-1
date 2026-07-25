@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  categoriasDeLaBarra,
+  filtrosActivos,
   KEY_FILTRO_VIEJO,
   migracionDesdeKeyVieja,
   migrarFiltroViejo,
@@ -21,9 +23,13 @@ describe('migracionDesdeKeyVieja', () => {
     expect(migracionDesdeKeyVieja(a.leer, a.borrar)).toEqual({ tab: 'todo', filtroSec: 'pide-info' });
   });
 
-  it('«puedo-escribirle» se traduce a su reencarnación «Por vencer»', () => {
+  it('«puedo-escribirle» NO revive como «Por vencer»: eso abría la cola vacía', () => {
+    // Medido contra producción el 25-jul-2026: `ventana_abierta` es true en 0 de
+    // 1.867 conversaciones (la cola es 100% WhatsApp y la ventana es de
+    // comentarios FB/IG). Mandar a la vendedora que volvía a un filtro que da
+    // cero filas es peor que no migrar nada.
     const a = almacen({ [KEY_FILTRO_VIEJO]: JSON.stringify('puedo-escribirle') });
-    expect(migracionDesdeKeyVieja(a.leer, a.borrar)).toEqual({ tab: 'todo', filtroSec: 'por-vencer' });
+    expect(migracionDesdeKeyVieja(a.leer, a.borrar)).toEqual({ tab: 'todo', filtroSec: '' });
   });
 
   it('borra la key vieja para no volver a pisar lo que la vendedora elija después', () => {
@@ -79,12 +85,83 @@ describe('parametrosDeCola', () => {
 
   it('el filtro secundario viaja como `intencion` (compat con el server)', () => {
     expect(parametrosDeCola({ tab: 'todo', filtroSec: 'pide-info', categoria: null })).toEqual({ intencion: 'pide-info' });
-    expect(parametrosDeCola({ tab: 'todo', filtroSec: 'por-vencer', categoria: null })).toEqual({ intencion: 'por-vencer' });
+    expect(parametrosDeCola({ tab: 'todo', filtroSec: 'sin-responder', categoria: null })).toEqual({
+      intencion: 'sin-responder',
+    });
   });
 
   it('los tres ejes se combinan (tab + filtro + categoría)', () => {
     expect(
       parametrosDeCola({ tab: 'no-leidos', filtroSec: 'pide-info', categoria: 'precio' }),
     ).toEqual({ tab: 'no-leidos', intencion: 'pide-info', categoria: 'precio' });
+  });
+});
+
+describe('filtrosActivos — qué está recortando la cola AHORA MISMO', () => {
+  const limpia = { tab: 'todo', filtroSec: '', categoria: null, busqueda: '' } as const;
+
+  it('la cola sin recortes no tiene nada activo', () => {
+    expect(filtrosActivos(limpia)).toEqual([]);
+  });
+
+  it('el tab «Todo» no cuenta como recorte, los otros sí', () => {
+    expect(filtrosActivos({ ...limpia, tab: 'no-leidos' })).toEqual([{ clave: 'tab', label: 'No leídos' }]);
+    expect(filtrosActivos({ ...limpia, tab: 'favoritos' })).toEqual([{ clave: 'tab', label: 'Favoritos' }]);
+  });
+
+  it('nombra el filtro secundario con su rótulo visible, no con su valor', () => {
+    expect(filtrosActivos({ ...limpia, filtroSec: 'pide-info' })).toEqual([{ clave: 'filtro', label: 'Piden info' }]);
+    expect(filtrosActivos({ ...limpia, filtroSec: 'sin-responder' })).toEqual([
+      { clave: 'filtro', label: 'Sin responder' },
+    ]);
+  });
+
+  it('la categoría y la búsqueda también son recortes, y se acumulan en orden', () => {
+    expect(filtrosActivos({ tab: 'no-leidos', filtroSec: 'pide-info', categoria: 'precio', busqueda: ' juan ' })).toEqual([
+      { clave: 'tab', label: 'No leídos' },
+      { clave: 'filtro', label: 'Piden info' },
+      { clave: 'categoria', label: 'precio' },
+      { clave: 'busqueda', label: '«juan»' },
+    ]);
+  });
+
+  it('una búsqueda de puros espacios no recorta nada', () => {
+    expect(filtrosActivos({ ...limpia, busqueda: '   ' })).toEqual([]);
+  });
+});
+
+describe('categoriasDeLaBarra — el orden de los chips de categoría', () => {
+  const cat = (nombre: string, orden: number, esFavorito = false, conteo = 0) => ({
+    nombre,
+    color: 'azul',
+    orden,
+    esFavorito,
+    conteo,
+  });
+
+  it('las favoritas van primero, y dentro de cada grupo manda el orden manual', () => {
+    const barra = categoriasDeLaBarra([
+      cat('reclamo', 2),
+      cat('precio', 5, true),
+      cat('interesada', 1),
+      cat('urgente', 0, true),
+    ]);
+    expect(barra.map((c) => c.nombre)).toEqual(['urgente', 'precio', 'interesada', 'reclamo']);
+  });
+
+  it('la categoría ACTIVA entra siempre, aunque quede fuera del tope', () => {
+    const muchas = Array.from({ length: 20 }, (_, i) => cat(`c${i}`, i));
+    const barra = categoriasDeLaBarra(muchas, 'c19');
+    expect(barra.map((c) => c.nombre)).toContain('c19');
+  });
+
+  it('no muestra una lista infinita: corta en el tope', () => {
+    const muchas = Array.from({ length: 30 }, (_, i) => cat(`c${i}`, i));
+    expect(categoriasDeLaBarra(muchas).length).toBeLessThanOrEqual(12);
+  });
+
+  it('sin catálogo no hay chips (y no revienta)', () => {
+    expect(categoriasDeLaBarra([])).toEqual([]);
+    expect(categoriasDeLaBarra(undefined)).toEqual([]);
   });
 });
