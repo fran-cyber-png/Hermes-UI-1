@@ -221,7 +221,17 @@ export default function App() {
         // Escape cierra en orden: libreta → cabina → revisión → conversación
         // abierta (solo en Mensajes). La revisión sale ANTES que la
         // conversación: adentro del modo, Escape significa «salime de acá».
-        if (tecleandoEn(e)) return;
+        //
+        // Y sale AUN CON EL FOCO EN EL COMPOSER, que es la única excepción a la
+        // guarda de «no pises un input». Sin esto Escape no funcionaba nunca en
+        // revisión: ahí el foco vive siempre en el borrador, así que la guarda
+        // se comía la tecla y la única salida era el botón. Se acota al
+        // `textarea` a propósito —los popovers de la barra usan `input` y
+        // siguen manejando su propio Escape— y libreta/cabina se atienden
+        // antes, así que nunca se le roba el Escape a algo abierto encima.
+        const enElBorrador =
+          revision.activo && e.target instanceof HTMLElement && e.target.tagName === 'TEXTAREA';
+        if (tecleandoEn(e) && !enElBorrador) return;
         if (libreta) {
           setLibreta(false);
           return;
@@ -529,7 +539,8 @@ export default function App() {
                 <PorQueEstaSugerencia sugerencia={revision.actual} limites={limitesAuto} />
               )}
               {/* El panel se queda con lo que sobra y scrollea adentro, como
-                  siempre: el bloque del porqué es `shrink-0` y él `flex-1`. */}
+                  siempre: el bloque del porqué es `shrink-0` y él `flex-1`. Sin
+                  esto, apilarlos dejaba al de abajo aplastado a media frase. */}
               <div className="min-h-0 flex-1">
                 <PanelDerecho
                   conversacion={abierta}

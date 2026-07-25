@@ -195,3 +195,8 @@ registrada, en vez de inventar una.
   (no marcar algo que sí se leyó) rompe el contador de la cola.
 - **Queda una asimetría deliberada**: hay «Descartar todo» global y no «Aprobar todo» global. El lote
   de aprobación existe **dentro** de una campaña, que es donde acaba de leerse el texto.
+- **Costo del teclado, dicho**: `⌘↓`/`⌘↑` le ganan a «ir al final / al principio del texto», que es lo
+  que esas teclas hacen en un textarea de macOS. Se aceptó a sabiendas: adentro de la revisión navegar
+  es la acción frecuente y el borrador son cuatro renglones, así que moverse dentro del texto se hace
+  con las flechas normales. Fuera del modo revisión el atajo no existe y el textarea se porta como
+  siempre.

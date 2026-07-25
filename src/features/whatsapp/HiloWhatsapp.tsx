@@ -659,7 +659,12 @@ function ComposerWa({
         </div>
       )}
 
-      <div className="flex items-end gap-2">
+      {/* EN REVISIÓN LA CAJA VA SOLA Y LOS BOTONES ABAJO. Al lado, «Descartar» +
+          «Aprobar lo editado» se comen 260 px fijos y a 1280 el borrador queda
+          en una columna de siete palabras — o sea, ilegible justo en la pantalla
+          que existe para leerlo. Apilar además ordena la lectura: primero lo que
+          se va a mandar, después qué hacer con eso. */}
+      <div className={sugerencia ? 'flex flex-col gap-2' : 'flex items-end gap-2'}>
         <input
           ref={archivoRef}
           type="file"
@@ -709,8 +714,13 @@ function ComposerWa({
               void onEnviar();
             }
           }}
-          disabled={!conectado}
-          rows={1}
+          disabled={!conectado && !sugerencia}
+          // En revisión la caja arranca ALTA. El texto ya está escrito y hay
+          // que LEERLO entero para poder supervisarlo: mostrarlo en un renglón
+          // y medio obliga a scrollear adentro de una caja de 40 px, que es la
+          // forma más rápida de que se apruebe sin leer. En el composer normal
+          // sigue arrancando en una línea, porque ahí todavía no hay nada.
+          rows={sugerencia ? 5 : 1}
           placeholder={
             !conectado
               ? 'La sesión no está conectada'
@@ -718,14 +728,15 @@ function ComposerWa({
                 ? 'Leyenda del adjunto (opcional)…'
                 : `Escribile a ${personaNombre ?? telefono}…`
           }
-          className="max-h-28 min-h-[2.5rem] flex-1 resize-none rounded-xl border border-border bg-muted px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50"
+          className={
+            'min-h-[2.5rem] flex-1 resize-none rounded-xl border bg-muted px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50 ' +
+            (sugerencia ? 'max-h-56 border-navy/30 bg-card leading-relaxed' : 'max-h-28 border-border')
+          }
         />
         {sugerencia ? (
-          <AccionesSugerencia
-            sugerencia={sugerencia}
-            texto={texto}
-            editado={editado}
-          />
+          <div className="flex justify-end">
+            <AccionesSugerencia sugerencia={sugerencia} texto={texto} editado={editado} />
+          </div>
         ) : (
           <button
             type="button"
