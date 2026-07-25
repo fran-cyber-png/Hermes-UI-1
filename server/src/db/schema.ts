@@ -700,3 +700,82 @@ export const autoRespuestaEstado = pgTable("auto_respuesta_estado", {
   actualizadoPor: text("actualizado_por"),
   actualizadoAt: timestamp("actualizado_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * PLANTILLAS-SECUENCIA — «varios mensajes, con imágenes y todo en orden».
+ *
+ * Pedido del dueño (2026-07-25): que la vendedora tenga cargado lo que ya hace,
+ * en vez de tipearlo veinte veces al día. La minería de prod mostró que la venta
+ * NO es un mensaje: es una secuencia (flyer → seguimiento → temario → duración),
+ * que el 42 % de los mensajes lleva imagen, y que las ráfagas de 6, 7 y 8
+ * salientes seguidos son frecuentes (98× / 78× / 63× en 14 días).
+ *
+ * Por eso una plantilla es una LISTA ORDENADA DE PASOS y no un `cuerpo` de
+ * texto: modelarla como un texto largo obligaría a mandar el flyer como un
+ * párrafo, y el flyer es una imagen.
+ *
+ * `estado` es la garantía de que nada se publica solo: lo que sale del minado
+ * nace `propuesta` y **una propuesta no se puede enviar** — alguien la lee, la
+ * corrige y la aprueba. `familia_curso` (no un `sku`) ata el `{precio}` a la
+ * ÚLTIMA edición activa del diploma (#129): cuando la Escuela abre la edición
+ * 27, ninguna plantilla queda cotizando la 26.
+ */
+export const plantillas = pgTable(
+  "plantillas",
+  {
+    id: bigserial({ mode: "number" }).primaryKey(),
+    /** Personal, como `categorias`/`recordatorios`. La 2ª vendedora arranca vacía. */
+    vendedoraId: text("vendedora_id").notNull(),
+    nombre: text("nombre").notNull(),
+    /** Prefijo de SKU (`DIPICOT`), no un producto: resuelve `{curso}`/`{precio}` a la última edición. */
+    familiaCurso: text("familia_curso"),
+    /** `propuesta` (minada, no enviable) | `aprobada` (revisada por una persona). */
+    estado: text("estado").notNull().default("propuesta"),
+    /** `minado` (salió del histórico) | `manual` (la escribió la vendedora). */
+    origen: text("origen").notNull().default("manual"),
+    /** Cuántas conversaciones del histórico respaldan la propuesta. 0 si es manual. */
+    respaldo: integer("respaldo").notNull().default(0),
+    /** Cuántas veces se mandó. Ordena la lista: la más usada arriba. */
+    usos: bigint("usos", { mode: "number" }).notNull().default(0),
+    creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+    actualizadoAt: timestamp("actualizado_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Soft-delete: `null` = viva. No hay borrado físico (patrón de `notas`). */
+    archivadoAt: timestamp("archivado_at", { withTimezone: true }),
+  },
+  (t) => [index("plantillas_vendedora_idx").on(t.vendedoraId, t.archivadoAt)],
+);
+
+/**
+ * LOS PASOS de una plantilla: uno por mensaje que sale. Texto, media, o las dos
+ * cosas (una imagen con pie es UN mensaje de WhatsApp, no dos).
+ *
+ * La media se referencia por NOMBRE DE ARCHIVO dentro de `RUTA_MEDIA`, el mismo
+ * directorio por el que ya pasa todo adjunto saliente — no se guardan bytes en
+ * la base ni se re-sube el flyer por cada plantilla.
+ *
+ * `unique(plantilla_id, orden)` es lo que hace que «en orden» sea una propiedad
+ * del modelo y no una convención: no existe una plantilla con dos pasos 3.
+ */
+export const plantillaPasos = pgTable(
+  "plantilla_pasos",
+  {
+    id: bigserial({ mode: "number" }).primaryKey(),
+    plantillaId: bigint("plantilla_id", { mode: "number" })
+      .notNull()
+      .references(() => plantillas.id, { onDelete: "cascade" }),
+    /** 1-based: el orden en que salen. */
+    orden: integer("orden").notNull(),
+    /** El cuerpo, con `{nombre}` `{curso}` `{precio}`. Los emojis SÍ pasan (esto nunca va a Cerberus). */
+    texto: text("texto"),
+    /** Nombre del archivo en `RUTA_MEDIA`. `null` = paso de solo texto. */
+    mediaArchivo: text("media_archivo"),
+    mediaMime: text("media_mime"),
+    /** imagen | video | audio | documento — la clase que espera el transporte. */
+    mediaClase: text("media_clase"),
+    mediaNombre: text("media_nombre"),
+  },
+  (t) => [
+    unique().on(t.plantillaId, t.orden),
+    index("plantilla_pasos_idx").on(t.plantillaId, t.orden),
+  ],
+);
