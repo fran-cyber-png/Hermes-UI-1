@@ -23,11 +23,27 @@ import {
   type LeadChat,
   type LeadFormulario,
 } from './dashboard';
+import { useNegocio } from './negocio';
+import { FiltrosNegocio, PanelNegocio, type FiltrosNegocioState } from './PanelNegocio';
 import { BotonLlamar } from '../gestion/BotonLlamar';
 
 /**
- * EL DASHBOARD — la página de las 9am (spec «Cierre de edición» §3.3).
+ * EL DASHBOARD — DOS LECTURAS de la misma mesa, en un conmutador (#128, #126).
  *
+ * · **Mi turno** — el radar de la vendedora: «¿a quién atiendo ahora?». Es lo
+ *   que sigue abajo y es el default: quien abre Hermes casi siempre viene a eso.
+ * · **El negocio** — la del que pone la plata: «¿qué curso se está vendiendo,
+ *   cuál estoy dejando pasar, y en qué anuncio conviene invertir?»
+ *   (`PanelNegocio.tsx`).
+ *
+ * Son dos pantallas y no dos mitades de una porque son dos personas con dos
+ * ritmos, y esta app NO scrollea: apiladas, ninguna de las dos se lee. La BANDA
+ * de arriba es la bisagra — mantiene el conmutador siempre en el mismo lugar y
+ * NO cambia de altura al conmutar (h-16 fija): a la izquierda el conmutador, a
+ * la derecha lo que cada lectura necesita — el titular y la agenda en «Mi
+ * turno», la fila de filtros en «El negocio». Cero salto de layout.
+ *
+ * ─── MI TURNO ──────────────────────────────────────────────────────────────
  * Orden vertical = orden de urgencia:
  *   A · TU MAÑANA (banda fija h-16): abre con EL TITULAR — la cifra héroe de
  *       calientes calculada sobre la MISMA unión chats+formularios que el
@@ -164,6 +180,11 @@ export function VistaDashboard({
   const [soloCalientes, setSoloCalientes] = useState(false);
   const [periodo, setPeriodo] = useState<'hoy' | '7d'>('hoy');
   const [correoCopiado, setCorreoCopiado] = useState<string | null>(null);
+
+  // ── Las dos lecturas. El default es el radar: quien abre Hermes viene a atender. ──
+  const [lectura, setLectura] = useState<'turno' | 'negocio'>('turno');
+  const [filtros, setFiltros] = useState<FiltrosNegocioState>({ periodo: '7d', numero: null, dimension: 'curso' });
+  const negocio = useNegocio({ ...filtros, activo: lectura === 'negocio' });
 
   // ── A · Tu mañana: la deuda personal, de la Agenda ya cargada. ──
   const { vencidas, deHoy } = useMemo(() => {
@@ -306,8 +327,36 @@ export function VistaDashboard({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden p-3">
-      {/* ═══ A · TU MAÑANA — abre con el titular; altura fija, cero layout-shift ═══ */}
+      {/* ═══ A · LA BANDA — el conmutador fijo + lo que cada lectura necesita.
+              Altura fija h-16 en las DOS: conmutar no mueve nada de lugar. ═══ */}
       <section className="flex h-16 shrink-0 items-center gap-3 overflow-hidden rounded-2xl bg-card px-4 shadow-panel">
+        <div className="flex shrink-0 rounded-full bg-muted p-0.5">
+          {(
+            [
+              ['turno', 'Mi turno'],
+              ['negocio', 'El negocio'],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setLectura(id)}
+              aria-pressed={lectura === id}
+              className={
+                'rounded-full px-3 py-1 text-xs font-bold transition-[background-color,color] duration-200 ease-house ' +
+                (lectura === id ? 'bg-card text-navy shadow-panel' : 'text-muted-foreground hover:text-foreground')
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <span className="h-7 w-px shrink-0 bg-border" aria-hidden="true" />
+
+        {lectura === 'negocio' ? (
+          <FiltrosNegocio valor={filtros} onCambio={setFiltros} datos={negocio.data} />
+        ) : (
+          <>
         {isPending ? (
           <div className="h-8 w-44 shrink-0 animate-pulse rounded-lg bg-muted" />
         ) : (
@@ -371,10 +420,21 @@ export function VistaDashboard({
             <ArrowRight size={13} />
           </button>
         )}
+          </>
+        )}
       </section>
 
-      {/* ═══ B + C ═══ */}
-      <div className="flex min-h-0 flex-1 gap-2.5">
+      {lectura === 'negocio' && (
+        <PanelNegocio
+          datos={negocio.data}
+          cargando={negocio.isPending || (negocio.isFetching && !negocio.data)}
+          actualizando={negocio.isFetching && Boolean(negocio.data)}
+          dimension={filtros.dimension}
+        />
+      )}
+
+      {/* ═══ B + C — MI TURNO ═══ */}
+      <div className={'min-h-0 flex-1 gap-2.5 ' + (lectura === 'turno' ? 'flex' : 'hidden')}>
         {/* ── B · EL RADAR — el punto vivo + el contador identifican la zona ── */}
         <section aria-label="El radar" className="flex min-h-0 min-w-0 flex-1 flex-col rounded-2xl bg-card shadow-panel">
           <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
@@ -672,7 +732,14 @@ export function VistaDashboard({
               </div>
             ) : (data?.cursos.length ?? 0) === 0 ? (
               <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-                Nadie mencionó un curso todavía — los intereses se registran desde el chat o al cotizar.
+                {/* Honestidad: esto lee `intereses`, que se llena TIPEANDO. En prod
+                    tiene un solo registro, así que este vacío es lo normal, no una
+                    falla — y el dato bueno (el curso que la persona eligió en el
+                    formulario) ya está, del otro lado del conmutador. */}
+                Nadie tipeó un curso todavía — los intereses se registran a mano desde el chat o al cotizar.{' '}
+                <button type="button" onClick={() => setLectura('negocio')} className="font-semibold text-primary hover:underline">
+                  El curso que eligieron en el formulario está en El negocio →
+                </button>
               </p>
             ) : (
               <div className="mt-2 flex flex-col gap-1.5">
