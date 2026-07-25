@@ -1,6 +1,9 @@
 import { inArray } from "drizzle-orm";
 import type { db } from "../db/client.js";
 import { intereses } from "../db/schema.js";
+import { consultarInteresesDerivados } from "../cursos/consultarDerivados.js";
+import type { InteresDerivado } from "../cursos/derivar.js";
+import type { AliasCurso } from "../cursos/alias.js";
 
 /**
  * LA LÍNEA DE TIEMPO DEL INTERÉS (#57) — el server.
@@ -32,6 +35,13 @@ export interface PayloadIntereses {
   intereses: Record<string, string[]>;
   /** NUEVO: cada interés con su fecha, para pintar la línea de tiempo (#57). */
   interesesDetalle: Record<string, InteresConFecha[]>;
+  /**
+   * LA PROPUESTA (#102): el curso que se deduce del anuncio o del formulario,
+   * para las conversaciones que todavía NO tienen ninguno asentado. No es un
+   * interés: es lo que la ficha muestra marcado «del anuncio» con un botón para
+   * confirmarlo. Una clave ausente = nada que proponer.
+   */
+  derivados: Record<string, InteresDerivado>;
 }
 
 /**
@@ -40,7 +50,10 @@ export interface PayloadIntereses {
  * primero: la línea de tiempo se lee de izquierda a derecha) y agrupa por
  * conversación.
  */
-export function armarPayloadIntereses(filas: readonly FilaInteres[]): PayloadIntereses {
+export function armarPayloadIntereses(
+  filas: readonly FilaInteres[],
+  derivados: Record<string, InteresDerivado> = {},
+): PayloadIntereses {
   const orden = [...filas].sort(
     (a, b) => new Date(a.creadoAt).getTime() - new Date(b.creadoAt).getTime(),
   );
@@ -53,7 +66,7 @@ export function armarPayloadIntereses(filas: readonly FilaInteres[]): PayloadInt
       creadoAt: new Date(f.creadoAt).toISOString(),
     });
   }
-  return { intereses: planos, interesesDetalle: detalle };
+  return { intereses: planos, interesesDetalle: detalle, derivados };
 }
 
 /**
@@ -65,6 +78,8 @@ export function armarPayloadIntereses(filas: readonly FilaInteres[]): PayloadInt
 export async function consultarIntereses(
   base: typeof db,
   claves: readonly string[],
+  /** Los alias del derivado. Por defecto, los activos de la tabla (el test le pasa los suyos). */
+  aliases?: readonly AliasCurso[],
 ): Promise<PayloadIntereses> {
   const filas = claves.length
     ? await base
@@ -73,5 +88,20 @@ export async function consultarIntereses(
         .where(inArray(intereses.clave, [...claves]))
         .orderBy(intereses.creadoAt)
     : await base.select().from(intereses).orderBy(intereses.creadoAt);
-  return armarPayloadIntereses(filas);
+  const payload = armarPayloadIntereses(filas);
+
+  // La propuesta se calcula SOLO cuando se preguntó por conversaciones
+  // concretas. Sin claves, esto es «traeme todos los intereses de la base»
+  // (retrocompat) y derivar ahí sería cruzar la base entera contra `leads` para
+  // una pantalla que ni lo pide.
+  if (claves.length === 0) return payload;
+
+  return {
+    ...payload,
+    derivados: await consultarInteresesDerivados(base, {
+      claves,
+      registradosPorClave: payload.intereses,
+      aliases,
+    }),
+  };
 }
