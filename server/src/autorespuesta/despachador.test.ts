@@ -66,7 +66,7 @@ class RepoFalso implements RepositorioAutoRespuesta {
     for (const f of afectadas) Object.assign(f, { estado: 'cancelada', motivo });
     return afectadas.length;
   }
-  async ocupacionDelDia() {
+  async ocupacionDesde() {
     return this.filas.map((f) => ({ numeroPropio: f.numeroPropio, cuando: f.programadoPara }));
   }
   async huboRespuestaHumana(): Promise<boolean> {

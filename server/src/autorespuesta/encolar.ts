@@ -77,7 +77,7 @@ export async function correrEncolado(deps: DepsEncolado): Promise<ResumenEncolad
 
   const dia = diaLocal(ahora, cfg.zona);
   const candidatas = await consultarCandidatos(base, dia);
-  const ocupadas = await repo.ocupacionDelDia(dia);
+  const ocupadas = await repo.ocupacionDesde(dia);
   const plan = planificar(candidatas, cfg, ahora, deps.azar, ocupadas);
 
   let encoladas = 0;
@@ -93,7 +93,11 @@ export async function correrEncolado(deps: DepsEncolado): Promise<ResumenEncolad
       texto: ranura.candidato.texto,
       disparadaPor: ranura.candidato.desde,
       programadoPara: ranura.programadoPara,
-      diaLima: dia,
+      // EL DÍA ES EL DEL ENVÍO, no el de la corrida. A las 21:30 ya no queda
+      // ventana hoy y el reparto cae mañana a las 7:30: si la fila se guardara
+      // con el día de hoy, al pasar la medianoche la conversación volvería a
+      // parecer «sin auto-respuesta hoy» y esa persona recibiría DOS.
+      diaLima: diaLocal(ranura.programadoPara, cfg.zona),
     });
     if (fila) encoladas++;
     else duplicadas++;

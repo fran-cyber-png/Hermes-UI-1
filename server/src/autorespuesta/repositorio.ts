@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import type { db } from '../db/client.js';
 import { autoRespuestaEstado, autoRespuestasPendientes } from '../db/schema.js';
 import type { Ocupacion } from './programar.js';
@@ -26,7 +26,7 @@ export interface NuevaPendiente {
   texto: string;
   disparadaPor: Date;
   programadoPara: Date;
-  /** El día LOCAL al que cuenta (`YYYY-MM-DD`): la clave del «una por día». */
+  /** El día LOCAL del ENVÍO (`YYYY-MM-DD`): la clave del «una por día». */
   diaLima: string;
 }
 
@@ -56,8 +56,13 @@ export interface RepositorioAutoRespuesta {
   cancelarDeConversacion(clave: string, motivo: string): Promise<number>;
   /** Frena la cola entera: entró el horario laboral, o hubo que parar. */
   cancelarTodas(motivo: string): Promise<number>;
-  /** Lo que ya ocupa lugar hoy (programado o enviado): alimenta los techos. */
-  ocupacionDelDia(diaLima: string): Promise<Ocupacion[]>;
+  /**
+   * Lo que ya ocupa lugar de hoy en adelante (programado o enviado): alimenta
+   * los techos. Es «desde» y no «de hoy» porque una corrida de las 21:30
+   * programa para MAÑANA a las 7:30 — si los techos solo miraran el día de la
+   * corrida, esa mañana se llenaría dos veces.
+   */
+  ocupacionDesde(diaLima: string): Promise<Ocupacion[]>;
   /** ¿Alguien de la casa escribió en esa conversación después de `desde`? */
   huboRespuestaHumana(p: { canal: string; telefono: string; numeroPropio: string; desde: Date }): Promise<boolean>;
   /** Las pendientes de hoy, para el simulacro y la pantalla de estado. */
@@ -175,7 +180,7 @@ export function repositorioDrizzle(base: typeof db): RepositorioAutoRespuesta {
       return filas.length;
     },
 
-    async ocupacionDelDia(diaLima) {
+    async ocupacionDesde(diaLima) {
       const filas = await base
         .select({
           numeroPropio: autoRespuestasPendientes.numeroPropio,
@@ -184,7 +189,7 @@ export function repositorioDrizzle(base: typeof db): RepositorioAutoRespuesta {
         .from(autoRespuestasPendientes)
         .where(
           and(
-            eq(autoRespuestasPendientes.diaLima, diaLima),
+            gte(autoRespuestasPendientes.diaLima, diaLima),
             inArray(autoRespuestasPendientes.estado, ['pendiente', 'enviada']),
           ),
         );
@@ -195,6 +200,11 @@ export function repositorioDrizzle(base: typeof db): RepositorioAutoRespuesta {
       // El saliente puede no haber pasado por Hermes: si la vendedora contesta
       // desde su teléfono, whatsmeow lo ingesta igual. Por eso se mira la
       // conversación (interactions), no `envios_wa`.
+      //
+      // El corte viaja como STRING ISO con cast explícito: un `Date` como
+      // parámetro de `execute()` revienta en el bind (gotcha ya documentado en
+      // `dashboard/series.ts`; lo confirmó CI en este mismo PR).
+      const corte = desde.toISOString();
       const filas = await base.execute<{ hay: number }>(sql`
         SELECT 1 AS hay
         FROM interactions i
@@ -204,7 +214,7 @@ export function repositorioDrizzle(base: typeof db): RepositorioAutoRespuesta {
           AND i.persona_id = ${telefono}
           AND i.direccion = 'saliente'
           AND COALESCE(e.payload->>'numeroPropio', '') = ${numeroPropio}
-          AND i.occurred_at > ${desde}
+          AND i.occurred_at > ${corte}::timestamptz
         LIMIT 1
       `);
       return filas.length > 0;

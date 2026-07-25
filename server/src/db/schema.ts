@@ -649,7 +649,13 @@ export const autoRespuestasPendientes = pgTable(
     estado: text("estado").notNull().default("pendiente"),
     /** Por qué se canceló o falló — en criollo, para leerlo sin abrir el código. */
     motivo: text("motivo"),
-    /** El día LOCAL (`YYYY-MM-DD`) al que cuenta: la clave del «una por día». */
+    /**
+     * El día LOCAL (`YYYY-MM-DD`) del ENVÍO —el de `programado_para`, no el de
+     * la corrida que la encoló—: la clave del «una por día». A las 21:30 ya no
+     * queda ventana y el reparto cae mañana a las 7:30; guardarla con el día de
+     * hoy haría que al pasar la medianoche esa conversación pareciera «sin
+     * auto-respuesta» y la persona recibiera DOS.
+     */
     diaLima: text("dia_lima").notNull(),
     /**
      * El id que devolvió WhatsApp al mandarla. Es el puente con las otras dos

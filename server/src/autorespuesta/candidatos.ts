@@ -74,8 +74,12 @@ export async function consultarCandidatos(
       GROUP BY canal, persona_id, numero_propio
     )
     SELECT c.*,
+      -- Mayor-o-igual, no igual: una corrida de las 21:30 programa para MAÑANA
+      -- a las 7:30 y esa fila se guarda con el día del ENVÍO. Con igualdad
+      -- estricta, la conversación volvería a parecer «sin auto-respuesta» al
+      -- pasar la medianoche, y esa persona recibiría dos.
       (SELECT count(*)::int FROM auto_respuestas_pendientes a
-        WHERE a.clave = c.clave AND a.dia_lima = ${diaLima}
+        WHERE a.clave = c.clave AND a.dia_lima >= ${diaLima}
           AND a.estado IN ('pendiente', 'enviada'))                         AS auto_hoy,
       (SELECT i2.curso FROM intereses i2
         WHERE i2.clave = c.clave ORDER BY i2.creado_at DESC LIMIT 1)        AS curso

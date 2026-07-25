@@ -89,6 +89,42 @@ test('no duplica: una conversación recibe UNA auto-respuesta por día, la garan
   assert.equal(await contarPendientes(db), 1);
 });
 
+test('la medianoche no duplica: lo encolado a las 21:30 para mañana sigue contando después de las 00:00', async (t) => {
+  const db = await baseDePrueba(t);
+  await encender(db);
+
+  // 21:30 de Lima: ya no queda ventana hoy (cierra 21:00), así que el reparto
+  // cae MAÑANA a las 7:30 — y la fila se guarda con el día del ENVÍO.
+  const anoche = proximoMomento(new Date(), '21:30', cfg.zona);
+  const pasadaLaMedianoche = proximoMomento(anoche, '00:30', cfg.zona);
+
+  await sembrarMensaje(db, {
+    personaId: '51961506674',
+    texto: 'hola, quiero información',
+    occurredAt: haceHoras(anoche, 2),
+    numeroPropio: NUMERO_PROPIO,
+  });
+
+  const primera = await correrEncolado({ base: db, repo: repositorioDrizzle(db), cfg, ahora: () => anoche, azar: azarFijo, registrar: () => {} });
+  assert.equal(primera.encoladas, 1);
+
+  const [fila] = await db.execute<{ dia_lima: string; programado_para: Date }>(
+    sql`SELECT dia_lima, programado_para FROM auto_respuestas_pendientes`,
+  );
+  assert.equal(
+    fila.dia_lima,
+    diaLocal(new Date(fila.programado_para), cfg.zona),
+    'el día guardado es el del envío, no el de la corrida',
+  );
+
+  // Media hora después de medianoche: para el reloj ya es otro día.
+  const segunda = await correrEncolado({ base: db, repo: repositorioDrizzle(db), cfg, ahora: () => pasadaLaMedianoche, azar: azarFijo, registrar: () => {} });
+
+  assert.equal(segunda.encoladas, 0, 'la conversación NO vuelve a calificar al cambiar el día');
+  assert.equal(segunda.plan?.descartadas[0]?.motivo, 'ya_recibio_hoy');
+  assert.equal(await contarPendientes(db), 1, 'una sola auto-respuesta para esa persona');
+});
+
 test('respeta los techos: lleno el de la hora, el resto queda postergado con motivo', async (t) => {
   const db = await baseDePrueba(t);
   const ahora = ahoraDePrueba();

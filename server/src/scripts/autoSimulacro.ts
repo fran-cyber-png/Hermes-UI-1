@@ -166,7 +166,7 @@ async function main(): Promise<void> {
   );
 
   const candidatas = await consultarCandidatos(db, dia);
-  const ocupadas = await repo.ocupacionDelDia(dia).catch(() => []);
+  const ocupadas = await repo.ocupacionDesde(dia).catch(() => []);
   encabezado.push(`Datos     · ${candidatas.length} conversación(es) esperando · ${ocupadas.length} ya en la cola de hoy`);
 
   imprimir(planificar(candidatas, cfg, ahora, undefined, ocupadas), cfg, ahora, encabezado);
