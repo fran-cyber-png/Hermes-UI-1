@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, Plus, X } from 'lucide-react';
+import { Check, ChevronRight, Megaphone, Plus, X } from 'lucide-react';
 import { api } from '../../lib/datos/cliente';
 import {
   agruparInteresesPorDia,
   normalizarIntereses,
+  propuestaDeCurso,
+  type PropuestaCurso,
   type RespuestaIntereses,
 } from './lineaDeTiempo';
 
@@ -31,7 +33,12 @@ export function useIntereses(clave: string) {
     queryFn: () =>
       api<RespuestaIntereses>(`/api/gestiones/intereses?claves=${encodeURIComponent(clave)}`),
     // Tolera la forma nueva (con fecha) y la vieja/cacheada (plana): ver `lineaDeTiempo.ts`.
-    select: (d) => normalizarIntereses(d, clave),
+    // La `propuesta` (#102) sale del MISMO payload: el interés derivado del
+    // anuncio viaja con los registrados, así la ficha no hace un request más.
+    select: (d) => {
+      const lista = normalizarIntereses(d, clave);
+      return { lista, propuesta: propuestaDeCurso(d, clave, lista) };
+    },
   });
 }
 
@@ -52,18 +59,24 @@ export function Intereses({
   onAgregado?: (curso: string) => void;
 }) {
   const qc = useQueryClient();
-  const { data: lista = [] } = useIntereses(clave);
+  const { data } = useIntereses(clave);
+  const lista = data?.lista ?? [];
+  const propuesta = data?.propuesta ?? null;
   const [abierto, setAbierto] = useState(false);
   const [q, setQ] = useState('');
   const [idx, setIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // La compuerta de Cotizado abre el buscador… salvo que ya haya una propuesta
+  // para confirmar (#102): ahí no hay nada que tipear, y un input abierto encima
+  // de la respuesta sería mandar a buscar lo que ya está resuelto.
+  const hayQueConfirmar = propuesta?.confirmable === true;
   useEffect(() => {
-    if (senalAbrir > 0) {
+    if (senalAbrir > 0 && !hayQueConfirmar) {
       setAbierto(true);
       inputRef.current?.focus();
     }
-  }, [senalAbrir]);
+  }, [senalAbrir, hayQueConfirmar]);
 
   const sugerencias = useQuery({
     queryKey: ['productos', q],
@@ -91,6 +104,23 @@ export function Intereses({
     mutationFn: (curso: string) =>
       api('/api/gestiones/intereses', { method: 'DELETE', body: JSON.stringify({ clave, curso }) }),
     onSuccess: invalidar,
+  });
+  /**
+   * Confirmar la propuesta (#102). El body lleva SOLO la conversación: el curso
+   * lo recalcula el server y lo resuelve contra el catálogo de Cerberus, así lo
+   * que queda asentado es el nombre del producto —el que se puede cotizar— y no
+   * el nombre corto que se lee en el chip.
+   */
+  const confirmar = useMutation({
+    mutationFn: () =>
+      api<{ ok: true; curso: string }>('/api/gestiones/intereses/derivado', {
+        method: 'POST',
+        body: JSON.stringify({ clave }),
+      }),
+    onSuccess: (r) => {
+      invalidar();
+      onAgregado?.(r.curso);
+    },
   });
 
   const sugs = sugerencias.data ?? [];
@@ -137,6 +167,14 @@ export function Intereses({
             ))}
           </div>
         ))}
+        {propuesta && (
+          <PropuestaDelAnuncio
+            propuesta={propuesta}
+            compacto={compacto}
+            confirmando={confirmar.isPending}
+            onConfirmar={() => confirmar.mutate()}
+          />
+        )}
         <button
           type="button"
           onClick={(e) => {
@@ -147,10 +185,15 @@ export function Intereses({
           className="rounded-md border border-dashed border-border px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
         >
           <Plus size={10} className="inline" />
-          {lista.length === 0 && <span className="ml-0.5">interés</span>}
+          {lista.length === 0 && !propuesta && <span className="ml-0.5">interés</span>}
         </button>
       </div>
 
+      {confirmar.isError && (
+        <p className="mt-1 text-[11px] text-destructive">
+          {(confirmar.error as Error).message}
+        </p>
+      )}
       {(agregar.isError || quitar.isError) && (
         <p className="mt-1 text-[11px] text-destructive">No se guardó el interés — sin esto, Cotizado no abre.</p>
       )}
@@ -210,5 +253,63 @@ export function Intereses({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * EL INTERÉS QUE VINO DEL ANUNCIO (#102) — una PROPUESTA, y se ve como tal.
+ *
+ * La persona ya dijo qué quiere («vino del anuncio, campaña [JUL] INTELIGENCIA»)
+ * y hasta hoy eso moría como texto de contexto: 1 interés registrado en 1.876
+ * conversaciones. Acá se sube a la ficha, al lado de los intereses de verdad
+ * pero **sin disfrazarse de uno**:
+ *
+ *   · **borde punteado** y fondo apenas teñido — la misma gramática que el botón
+ *     «+ interés»: punteado = todavía no es un hecho. Los registrados son
+ *     píldoras sólidas.
+ *   · el megáfono y el «· del anuncio» dicen de dónde salió, siempre. Un chip que
+ *     no dijera su fuente sería indistinguible de lo que una vendedora escuchó.
+ *   · **nada se registra solo**: sin el clic en Confirmar no hay fila. Y si el
+ *     anuncio no mapea a ningún curso, no hay botón — se muestra el título crudo
+ *     y se busca a mano.
+ *
+ * Sin oro: esto es contexto, no tiempo que se acaba (el dorado significa una sola
+ * cosa en Hermes).
+ */
+function PropuestaDelAnuncio({
+  propuesta,
+  compacto,
+  confirmando,
+  onConfirmar,
+}: {
+  propuesta: PropuestaCurso;
+  compacto: boolean;
+  confirmando: boolean;
+  onConfirmar: () => void;
+}) {
+  const corto = compacto && propuesta.texto.length > 22;
+  return (
+    <span
+      className="inline-flex max-w-full items-center gap-1 rounded-md border border-dashed border-navy/40 bg-navy/[0.04] px-1.5 py-0.5 text-[11px] font-semibold text-navy"
+      title={propuesta.detalle}
+    >
+      <Megaphone size={10} aria-hidden className="shrink-0" />
+      <span className="truncate">{corto ? propuesta.texto.slice(0, 22) + '…' : propuesta.texto}</span>
+      <span className="shrink-0 font-medium text-muted-foreground">· {propuesta.origen}</span>
+      {propuesta.confirmable && (
+        <button
+          type="button"
+          disabled={confirmando}
+          aria-label={`Confirmar interés: ${propuesta.texto}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onConfirmar();
+          }}
+          className="ml-0.5 inline-flex shrink-0 items-center gap-0.5 rounded bg-navy px-1.5 py-[1px] text-[10px] font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] disabled:opacity-60"
+        >
+          <Check size={9} aria-hidden /> {confirmando ? 'Guardando…' : 'Confirmar'}
+        </button>
+      )}
+    </span>
   );
 }

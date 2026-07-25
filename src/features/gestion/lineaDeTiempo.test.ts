@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { agruparInteresesPorDia, normalizarIntereses } from './lineaDeTiempo';
+import { agruparInteresesPorDia, normalizarIntereses, propuestaDeCurso } from './lineaDeTiempo';
 
 /**
  * LA LÍNEA DE TIEMPO DEL INTERÉS (#57) — la lógica pura, sin DOM.
@@ -40,6 +40,74 @@ describe('normalizarIntereses — tolera las dos formas del endpoint', () => {
 
   it('clave sin intereses → lista vacía', () => {
     expect(normalizarIntereses({}, 'conv:x')).toEqual([]);
+  });
+});
+
+describe('propuestaDeCurso — el interés que se deduce del anuncio (#102)', () => {
+  const derivadoAnuncio = {
+    derivados: {
+      'conv:1': {
+        curso: 'Inteligencia y Contrainteligencia',
+        familia: 'DIPICOT',
+        fuente: 'anuncio' as const,
+        textoOrigen: '[JUL] INTELIGENCIA | WSP',
+      },
+    },
+  };
+
+  it('propone el curso y dice de dónde salió', () => {
+    const p = propuestaDeCurso(derivadoAnuncio, 'conv:1', []);
+    expect(p?.texto).toBe('Inteligencia y Contrainteligencia');
+    expect(p?.origen).toBe('del anuncio');
+    expect(p?.confirmable).toBe(true);
+    expect(p?.detalle).toContain('[JUL] INTELIGENCIA | WSP');
+  });
+
+  it('un interés ya registrado manda: no se propone nada', () => {
+    const p = propuestaDeCurso(derivadoAnuncio, 'conv:1', [{ curso: 'OSINT', creadoAt: null }]);
+    expect(p).toBeNull();
+  });
+
+  it('si el anuncio no mapea a ningún curso, muestra el título crudo y NO se puede confirmar', () => {
+    const p = propuestaDeCurso(
+      {
+        derivados: {
+          'conv:1': {
+            curso: null,
+            familia: null,
+            fuente: 'anuncio' as const,
+            textoOrigen: 'Reel spot antiguo',
+          },
+        },
+      },
+      'conv:1',
+      [],
+    );
+    expect(p?.texto).toBe('Reel spot antiguo');
+    expect(p?.confirmable).toBe(false);
+  });
+
+  it('cuando salió del formulario lo dice: el chip nunca miente sobre su fuente', () => {
+    const p = propuestaDeCurso(
+      {
+        derivados: {
+          'conv:1': {
+            curso: 'OSINT & SOCMINT',
+            familia: 'DIPOSOC',
+            fuente: 'lead' as const,
+            textoOrigen: 'Diploma técnico en Osint & Socmint',
+          },
+        },
+      },
+      'conv:1',
+      [],
+    );
+    expect(p?.origen).toBe('del formulario');
+  });
+
+  it('un caché viejo (sin `derivados`) no rompe: simplemente no propone', () => {
+    expect(propuestaDeCurso({ intereses: { 'conv:1': [] } }, 'conv:1', [])).toBeNull();
+    expect(propuestaDeCurso(derivadoAnuncio, 'conv:otra', [])).toBeNull();
   });
 });
 
