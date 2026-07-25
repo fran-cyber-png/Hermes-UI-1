@@ -25,6 +25,20 @@ export interface NombreDelContacto {
   fuente: FuenteNombre;
 }
 
+/**
+ * DE DÓNDE SALE EL NOMBRE QUE SE MUESTRA. Va a la vista, chiquito, al lado del
+ * alias: decisión del dueño (#118) — «el nombre del formulario manda», pero la
+ * ficha tiene que **decir de dónde sale**, porque no es lo mismo un nombre que
+ * alguien tipeó en un anuncio que uno que firmó una compra. Sin la procedencia,
+ * el panel afirmaría con la misma cara un dato verificado y uno declarado.
+ */
+export const PROCEDENCIA: Record<FuenteNombre, string | null> = {
+  cerberus: 'de Cerberus',
+  formulario: 'del formulario',
+  whatsapp: null, // el alias YA se muestra como «en WhatsApp: …»: decirlo dos veces sobra
+  ninguna: null,
+};
+
 const canon = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
 
 function util(v: string | null | undefined): string | null {

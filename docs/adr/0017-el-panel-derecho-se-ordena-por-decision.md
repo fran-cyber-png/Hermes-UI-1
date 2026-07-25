@@ -67,20 +67,42 @@ y el frío se dice con su etiqueta al lado. Ante la duda manda el hecho más fue
 El filete está **siempre**, aunque sea gris: si apareciera solo cuando hay algo que decir, su
 ausencia sería un dato y habría que aprenderlo.
 
-### 3. Si el sistema ya sabe el curso, se PROPONE con un clic — nunca se asienta solo
+### 3. El interés sube de lugar, y la propuesta se confirma con un clic — nunca se asienta sola
 
-`panel/interes.ts` reusa la precedencia de `canales/curso.ts` (#72, cerrada por el dueño): interés
-registrado > curso del formulario > campaña del anuncio. Si no hay interés asentado y alguna de las
-otras dos habla, el bloque muestra ese curso con **borde punteado** (todavía no es un hecho) y un
-botón «Es este».
+*«Los intereses mejor posicionados, también es progresivo y ayuda a dar contexto a todo»* (dueño,
+2026-07-25). Progresivo quiere decir que la lista no es un campo con un valor: es una historia corta
+—«el 1 de julio preguntó por Inteligencia, el 15 por OSINT»— y esa evolución es lo que le dice a la
+vendedora si la persona está explorando o ya sabe qué quiere. Por eso el bloque va **segundo, fuera
+de las pestañas**, y por eso lleva su lectura en una línea (`panel/resumenInteres.ts`, pura y con
+tests): «2 cursos anotados · el último, 15 jul».
+
+**Los chips no los pinta este panel**: los pinta `gestion/Intereses`, el mismo componente que usan la
+cola, el Pipeline y el modal de la compuerta — incluida **la propuesta derivada del anuncio o del
+formulario con su botón «Confirmar»** (#102, ya en `main`). Este bloque **compone, no duplica**: una
+versión propia de esa lógica sería el segundo lugar que empieza igual y se separa en tres semanas (la
+lección de #37). Lo que agrega es el escenario: el rótulo, el acceso al buscador, el resumen y —
+cuando no hay nada— un vacío que dice **por qué importa** en vez de un `+` mudo.
 
 **No se asienta automáticamente**, y eso es deliberado: el interés abre la compuerta de «Cotizado».
 Un embudo que se mueve solo deja de ser evidencia de nada. La máquina propone, una persona firma.
 
-Reusar `cursoDeFila` en vez de escribir la precedencia otra vez es lo que garantiza que el chip de la
-cola y esta propuesta **nunca digan cosas distintas** (la lección de #37). Cuando
-`feat/interes-derivado` enriquezca el curso que llega del anuncio, entra por `ultima_origen` y este
-bloque lo hereda sin tocar una línea.
+### 3-bis. El nombre del formulario manda, y la ficha dice de dónde sale (#118)
+
+Decisión del dueño, no preferencia: **(a) cliente verificado en Cerberus → (b) nombre del formulario
+→ (c) alias de WhatsApp**. El alias («🦋W», «.», o un «Juan Pérez» que en realidad es otra persona)
+deja de ser la identidad. `panel/identidad.ts` lo resuelve, con tests.
+
+Dos cuidados que hacen que la regla no se vuelva un problema nuevo:
+
+- **El alias no se pierde.** Es como se llama la persona en el chat y en la cola: si el panel dijera
+  «Javier Zeballos» mientras el chat dice «javier», nadie sabría si son la misma. Va de segunda línea.
+- **La procedencia está a la vista** («de Cerberus · en WhatsApp: …», «del formulario · …»). No es lo
+  mismo un nombre que alguien firmó comprando que uno que tipeó en un anuncio, y el panel no puede
+  afirmar los dos con la misma cara.
+
+Y el nombre legal va en **dos líneas, no truncado**: «DR EN DERECHO IGNACIO ALEJAND…» no identifica a
+nadie. Las iniciales del avatar, en cambio, salen del nombre de la COLA — «AV» de «Alejandro Vila»
+es la cara que la vendedora ya vio en la fila; «DE» de «DR EN DERECHO» no le dice nada.
 
 ### 4. Los datos que cierran ventas se ofrecen, y el catálogo se edita sin deploy
 
@@ -142,6 +164,10 @@ mira mientras escribe.
   capturarla**. Lo único que entra en este PR es la frase (`proxima-edicion`) y el lugar donde se
   ofrece; la lista real —con edición, fecha y disparo automático cuando abra la siguiente— es un
   frente propio, no un chip. Queda como follow-up declarado.
+- **No se construyó el timeline unificado (#148).** El bloque de interés lee la evolución en una
+  línea y le da un escenario decente, pero la historia completa —intereses + compras + formulario +
+  conversaciones + quién atendió, en un solo hilo— es un frente propio. El lugar está previsto: es la
+  bandeja del detalle, donde hoy vive la pestaña Ficha.
 - **No se construyó la UI de edición del catálogo.** Los endpoints están (`POST` / `PUT` / `DELETE`
   sobre `/api/hechos`), pero la pantalla para que el dueño agregue los suyos es otro frente. Hasta
   entonces se edita por API o sembrando.

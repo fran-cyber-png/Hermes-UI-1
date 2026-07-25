@@ -4,7 +4,7 @@ import type { Conversacion } from '../canales/conversaciones';
 import { Avatar } from '../canales/Avatar';
 import { BadgeCanal, nombreCanal } from '../canales/BadgeCanal';
 import { FranjaEtiquetas } from '../senales/FranjaEtiquetas';
-import { nombreDelContacto } from './identidad';
+import { nombreDelContacto, PROCEDENCIA } from './identidad';
 import type { AcentoContacto, EstadoContacto, TonoContacto } from './estadoContacto';
 
 /**
@@ -73,6 +73,7 @@ export function BandaEstado({
     cerberusNombre,
   });
   const arroba = conversacion.canal === 'instagram' && nombre.fuente === 'whatsapp' ? '@' : '';
+  const procedencia = PROCEDENCIA[nombre.fuente];
 
   return (
     <header className="shrink-0">
@@ -97,21 +98,31 @@ export function BandaEstado({
           </span>
 
           <div className="min-w-0 flex-1">
+            {/* Dos líneas, no una truncada: un nombre legal («DR EN DERECHO
+                IGNACIO ALEJANDRO VILA CHÁVEZ») cortado en «DR EN DERECHO
+                IGNACIO ALEJAND…» no identifica a nadie. */}
             <h2
               title={nombre.principal ?? undefined}
-              className="truncate font-heading text-sm font-bold leading-tight text-navy"
+              className="line-clamp-2 font-heading text-sm font-bold leading-tight text-navy"
             >
               {arroba}
               {nombre.principal ?? 'Contacto sin nombre'}
             </h2>
+            {/* LA PROCEDENCIA A LA VISTA (#118): el nombre del formulario manda
+                sobre el alias de WhatsApp, pero la ficha dice de dónde sale — no
+                es lo mismo un nombre que alguien firmó comprando que uno que
+                tipeó en un anuncio. Y el alias no se pierde: es como se llama la
+                persona en el chat y en la cola. */}
             <p className="mt-0.5 truncate text-[11px] leading-tight text-muted-foreground">
               {nombre.alias ? (
                 <>
+                  {procedencia && <span className="text-muted-foreground/70">{procedencia} · </span>}
                   <span className="text-muted-foreground/70">en WhatsApp: </span>
                   {nombre.alias}
                 </>
               ) : (
                 <>
+                  {procedencia ? procedencia + ' · ' : ''}
                   {nombreCanal(conversacion.canal)}
                   {conversacion.tipo === 'comentario' ? ' · comentario' : ''}
                 </>

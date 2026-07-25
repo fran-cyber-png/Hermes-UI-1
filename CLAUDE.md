@@ -176,17 +176,20 @@ que se CONSULTA, nunca lo que se DECIDE.**
 
 1. **Quién es** — `panel/BandaEstado`. El estado **se ve, no se lee**: filete de 3 px + fondo tenue,
    verde cliente · `--temp-frio` conversación fría · ámbar «no se pudo saber» · gris lead nuevo.
-   **Sin oro** (el oro es tiempo que se acaba). Encabeza con el **nombre real** (Cerberus >
-   formulario > pushname, `panel/identidad.ts`) y deja el pushname de alias. La cifra de compras va
-   en una línea. El arbitraje entre «quién es» y «cómo va el hilo» vive puro en
+   **Sin oro** (el oro es tiempo que se acaba). Encabeza con el **nombre real** —decisión cerrada del
+   dueño, #118: **Cerberus > formulario > alias de WhatsApp** (`panel/identidad.ts`)— con **la
+   procedencia a la vista** («del formulario · en WhatsApp: javier»); el alias no se pierde, es como
+   se llama en el chat. Nombre en dos líneas, no truncado. La cifra de compras va en la misma línea
+   que la pastilla «Cliente». El arbitraje entre «quién es» y «cómo va el hilo» vive puro en
    `panel/estadoContacto.ts`: **un cliente que se enfrió sigue siendo cliente**. Cierra con
-   `FranjaEtiquetas` (automáticas de fondo tenue ADR 0016 + categorías manuales de borde #48; el
+   `FranjaEtiquetas` (automáticas de fondo tenue ADR 0015 + categorías manuales de borde #48; el
    dibujo las distingue, y son solo lectura — se editan en la `BarraGestion`).
 2. **Qué quiere** — `panel/BloqueInteres`, **fuera de las pestañas**. 611 conversaciones con precio
-   enviado y 1 interés registrado: acá se destraba. Si el interés no está pero el sistema lo sabe
-   (formulario o anuncio), **lo propone con borde punteado y un botón «Es este»** — nunca lo asienta
-   solo: abre la compuerta de «Cotizado». La precedencia la manda `canales/curso.ts` (#72), la misma
-   del chip de la cola, así panel y fila nunca dicen cosas distintas.
+   enviado y 1 interés registrado: acá se destraba. Es **progresivo** y da contexto a todo, así que
+   va segundo y lleva su lectura en una línea (`panel/resumenInteres.ts`, pura). Los chips —
+   registrados y **la propuesta del anuncio/formulario con «Confirmar»** (#102)— los pinta
+   `gestion/Intereses`, el mismo componente de la cola/Pipeline/compuerta: este bloque **compone, no
+   duplica**.
 3. **Qué mandarle** — dos calibres de la misma pregunta:
    - `DosRespuestas`: **dos** respuestas listas, un clic manda la secuencia entera (espaciada, con
      progreso, cancelable); tocar el texto lo abre en el composer para editarlo.
