@@ -324,7 +324,14 @@ es por `external_sale_id`, **nunca por `event_id`** — el de Cerberus lleva mic
 cada reenvío de la misma venta.
 
 **latin1**: el enemigo son los **emojis**, no los acentos (á/é/ñ pasan; el emoji revienta el INSERT en
-MySQL). Se sanitiza en el borde.
+MySQL). Se sanitiza en el borde — **`cerberus/latin1.ts`** (#108; hasta entonces esta línea decía lo
+mismo sobre código que no existía). `aLatin1` normaliza a **NFC antes de filtrar**: sin eso una `ñ`
+descompuesta pierde la tilde y «Muñoz» sale «Munoz». `cuerpoParaCerberus` lo aplica a **todos** los
+campos del POST, no a los que uno se acuerda, así el campo que se agregue mañana nace cubierto.
+
+> El **login queda afuera a propósito** (`auth.ts`): sanear la contraseña no protege ningún INSERT
+> —Django la hashea— y la corrompería en silencio. El saneo va donde se escribe, no donde se
+> autentica.
 
 ### Meta
 

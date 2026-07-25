@@ -245,7 +245,9 @@ sensato). Ver `server/.env.example` (solo nombres).
    (Playwright/Electron) o `curl` a la URL viva.
 3. **Toda reescritura documenta qué reemplaza** (ADR en `docs/adr/`) y archiva al predecesor.
 4. **latin1 de Cerberus**: el enemigo son los **emojis**, no los acentos (á/é/ñ pasan; el emoji revienta
-   el INSERT en MySQL). Sanitizar en el borde.
+   el INSERT en MySQL). Sanitizar en el borde: **`server/src/cerberus/latin1.ts`** (#108). Todo POST a
+   Cerberus se arma con `cuerpoParaCerberus`, que sanea cada campo — nunca a mano, campo por campo.
+   El login es la única excepción, y el porqué está escrito en `auth.ts`.
 
 ## Gotchas
 
