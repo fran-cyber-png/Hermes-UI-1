@@ -228,6 +228,15 @@ export const enviosWa = pgTable(
     referencia: text("referencia").notNull(),
     /** pendiente → enviado | fallido. */
     estado: text("estado").notNull().default("pendiente"),
+    /**
+     * ¿Lo mandó la AUTO-RESPUESTA fuera de horario (#125, ADR 0015) en vez de
+     * una persona? Default `false`: todo lo que existía es humano, y lo sigue
+     * siendo salvo que se diga lo contrario. Esta columna es la que hace
+     * auditable la excepción a «un envío = una acción humana»: sin ella,
+     * dentro de un mes nadie podría distinguir qué mandó la máquina. También
+     * es la que le pone la marca a la burbuja en el hilo.
+     */
+    automatico: boolean("automatico").notNull().default(false),
     /** El id que devolvió el transporte cuando el envío salió (null si falló). */
     idExterno: text("id_externo"),
     /** El motivo cuando falló o quedó bloqueado. */
@@ -596,3 +605,92 @@ export const estadoConversacion = pgTable(
     index("estado_conversacion_fav_idx").on(t.vendedoraId, t.favorita),
   ],
 );
+
+/**
+ * LA COLA DE AUTO-RESPUESTAS (#125, ADR 0015) — lo que se le va a decir a
+ * alguien que escribió fuera de horario, y a qué hora exacta.
+ *
+ * Existe como TABLA y no como un `setTimeout` por tres razones que son el
+ * contrato de esta feature:
+ *
+ *   · **Se puede mirar antes de que pase.** El simulacro (`npm run
+ *     auto:simulacro`) imprime el plan sin mandar nada; acá queda el plan que
+ *     de verdad se va a ejecutar.
+ *   · **Sobrevive a un restart.** Un proceso que se reinicia a las 7:29 no
+ *     puede olvidarse de la cola ni —peor— mandarla toda de golpe al volver.
+ *   · **Es auditable después.** Queda la hora PROGRAMADA y la REAL, el estado
+ *     final y el motivo: se puede mirar el patrón desde afuera y ajustarlo.
+ *
+ * `UNIQUE (clave, dia_lima)` es la garantía dura de «una auto-respuesta por
+ * conversación por día»: no depende de que el código se acuerde de chequear.
+ * El día es el LOCAL de Lima (`dia_lima`), no el UTC: en UTC el día cambia a
+ * las 7 p. m. de Lima y partiría la noche justo en la mitad del problema.
+ */
+export const autoRespuestasPendientes = pgTable(
+  "auto_respuestas_pendientes",
+  {
+    id: bigserial({ mode: "number" }).primaryKey(),
+    /** La conversación (clave de la cola): `conv:whatsapp:<persona>:<numeroPropio>`. */
+    clave: text("clave").notNull(),
+    canal: text("canal").notNull().default("whatsapp"),
+    telefono: text("telefono").notNull(),
+    /** Desde qué número propio sale. Los techos por hora/día son POR NÚMERO. */
+    numeroPropio: text("numero_propio").notNull(),
+    personaNombre: text("persona_nombre"),
+    /** Qué plantilla del catálogo se eligió (`autorespuesta/plantillas.ts`). */
+    plantillaId: text("plantilla_id").notNull(),
+    /** El texto EXACTO que se va a mandar, ya renderizado. Nada se improvisa después. */
+    texto: text("texto").notNull(),
+    /** El mensaje de la persona que la disparó: ordena la cola y ancla la cancelación. */
+    disparadaPor: timestamp("disparada_por", { withTimezone: true }).notNull(),
+    /** La hora que le tocó en el reparto. El despachador no manda nada antes. */
+    programadoPara: timestamp("programado_para", { withTimezone: true }).notNull(),
+    /** pendiente → enviada | cancelada | fallida. */
+    estado: text("estado").notNull().default("pendiente"),
+    /** Por qué se canceló o falló — en criollo, para leerlo sin abrir el código. */
+    motivo: text("motivo"),
+    /** El día LOCAL (`YYYY-MM-DD`) al que cuenta: la clave del «una por día». */
+    diaLima: text("dia_lima").notNull(),
+    /**
+     * El id que devolvió WhatsApp al mandarla. Es el puente con las otras dos
+     * huellas del mismo hecho: la fila de `envios_wa` (`id_externo`) y la
+     * burbuja del hilo (`interactions.external_id` = `wa:` + este).
+     */
+    idExterno: text("id_externo"),
+    creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Cuándo salió DE VERDAD. Contra `programado_para` se mide si el ritmo se cumplió. */
+    resueltoAt: timestamp("resuelto_at", { withTimezone: true }),
+  },
+  (t) => [
+    unique("auto_respuestas_una_por_dia_uq").on(t.clave, t.diaLima),
+    // El barrido del despachador: «lo pendiente que ya venció».
+    index("auto_respuestas_pendientes_idx").on(t.estado, t.programadoPara),
+    // Los techos por número y los conteos del día.
+    index("auto_respuestas_numero_idx").on(t.numeroPropio, t.diaLima),
+  ],
+);
+
+/**
+ * EL INTERRUPTOR — una sola fila, y la única forma de apagar esto sin deploy.
+ *
+ * Hay DOS llaves y las dos tienen que estar puestas: `AUTO_RESPUESTA=on` en el
+ * entorno (que exige tocar el server) y `encendida = true` acá. La de la base
+ * existe para lo que importa cuando algo sale mal: apagar en segundos, desde la
+ * app, sin esperar un deploy ni un restart que además tiraría las sesiones de
+ * Cerberus de las vendedoras.
+ *
+ * Es también donde queda el FRENO AUTOMÁTICO: ante un `temporary_ban`, un error
+ * de envío o una desconexión, el despachador escribe acá `encendida = false` con
+ * el motivo y la hora, y no vuelve a intentar por su cuenta. Volver a prender es
+ * una decisión humana, con el motivo a la vista.
+ */
+export const autoRespuestaEstado = pgTable("auto_respuesta_estado", {
+  /** Siempre 1: es un singleton, y el PK lo hace imposible de duplicar. */
+  id: integer("id").primaryKey().default(1),
+  encendida: boolean("encendida").notNull().default(false),
+  /** Por qué está como está: «freno automático: el número está suspendido…». */
+  motivo: text("motivo"),
+  /** Quién lo tocó por última vez: el username de la vendedora, o `sistema`. */
+  actualizadoPor: text("actualizado_por"),
+  actualizadoAt: timestamp("actualizado_at", { withTimezone: true }).notNull().defaultNow(),
+});
