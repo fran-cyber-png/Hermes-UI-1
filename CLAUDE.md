@@ -73,18 +73,35 @@ npm install && npm run dev:app                     # Vite :5173 + la app de escr
 - **Nada de automatización, con UNA excepción escrita**: no envío masivo, no warmup, **no anti-ban**.
   Un envío = una acción humana, por `EnvioControlado` (la única puerta hacia `enviarTexto`). El
   `temporary_ban` **se muestra siempre**, nunca se esconde.
-  La excepción es la **auto-respuesta fuera de horario** (#125, **ADR 0015**), y es del tamaño exacto
-  del agujero que tapa: 44% de los leads llega fuera de horario y el 44% de esos nunca recibe
-  respuesta. Solo puede mandar **un acuse de una plantilla registrada** a quien **escribió primero**,
-  **fuera de la franja de atención**, tras **30 min sin respuesta humana**, **una vez por día**, y
-  **nunca a quien dijo que no**. Nada de eso se negocia en un `if`: vive en `server/src/autorespuesta/`.
+  La excepción es la **auto-respuesta fuera de horario** (#125, **ADR 0015** + **ADR 0016**), y es del
+  tamaño exacto del agujero que tapa: 44% de los leads llega fuera de horario y el 44% de esos nunca
+  recibe respuesta. Solo puede mandar **un acuse de una plantilla registrada** a quien **escribió
+  primero**, **fuera de la franja de atención**, tras **30 min sin respuesta humana**, **una vez por
+  día**, y **nunca a quien dijo que no**. Nada de eso se negocia en un `if`: vive en
+  `server/src/autorespuesta/`.
+  - **TRES MODOS, no un booleano** (ADR 0016): **apagada** (el default) · **supervisada** (la cola
+    prepara igual —misma decisión, mismo ritmo— pero **nada sale sin el OK de una persona**) ·
+    **automática** (lo de ADR 0015: prepara y manda sola). La garantía del modo supervisado es una
+    sola línea: lo preparado queda en estado `preparada`, y `EN_COLA_DE_ENVIO` (`autorespuesta/estados.ts`)
+    no lo incluye — el despachador **no lo ve**. La máquina de estados completa y el salto prohibido
+    (`preparada → enviada` no existe) viven ahí, con su test.
+  - **La bandeja de revisión** (`src/features/autorespuesta/BandejaRevision.tsx`) es una **hoja sobre
+    la app**, no una vista del riel: se abre desde el chip o con la tecla **`a`**, agrupa por campaña,
+    muestra el texto una vez por grupo y **aprobar en lote es de primera clase**. Lo aprobado NO sale
+    junto: se reparte con el MISMO `programar.ts` del modo automático. Lo que nadie aprueba **caduca
+    solo** (3 h de gracia desde su turno, nunca cruza el día — `autorespuesta/caducidad.ts`).
   - **Apagada por default y con dos llaves**: `AUTO_RESPUESTA=on` (entorno) **y** el interruptor de la
-    base (`auto_respuesta_estado`), que es el **kill-switch sin deploy** —
-    `PUT /api/autorespuesta/interruptor` con el Bearer de cualquier vendedora. Se maneja desde el
-    **chip de la cabecera**, al lado del semáforo de WhatsApp
-    (`src/features/autorespuesta/`): apagada se ve discreta, **encendida se pinta de azul y dice
-    cuántas hay en cola y a qué hora sale la próxima**; frenada (freno automático) sale en rojo con
-    el motivo, y sin `db:push` dice «falta la migración» en vez de un estado falso.
+    base (`auto_respuesta_estado.modo`), que es el **kill-switch sin deploy** —
+    `PUT /api/autorespuesta/modo` con el Bearer de cualquier vendedora (la ruta vieja
+    `/interruptor`, booleana, sigue viva para un `curl` de emergencia). Se maneja desde el **chip de la
+    cabecera**, al lado del semáforo de WhatsApp: **tres segmentos a la vista** (apagar cuesta UN click
+    desde cualquier modo), apagada discreta · supervisada delineada · automática sólida con punto vivo;
+    frenada sale en rojo con el motivo, y sin `db:push` dice «falta la migración» en vez de un estado
+    falso.
+  - **La plantilla depende de la CAMPAÑA** (`autorespuesta/campana.ts`): interés asentado > formulario
+    que llenó > anuncio del que vino — la MISMA precedencia del chip de curso de la cola (#72), para que
+    la fila y el mensaje no digan dos cosas distintas. Lo que cambia por campaña es una frase
+    (`FAMILIAS[].gancho`), no una plantilla por curso.
   - **El ritmo es el contrato**: un envío a la vez, 60–240 s entre uno y otro, lo de la madrugada
     sale recién a partir de las 7:30, techos de 20/hora y 60/día por número. Freno TOTAL ante
     `temporary_ban`, error de envío o desconexión; cancelación si la vendedora responde antes; la
@@ -93,9 +110,10 @@ npm install && npm run dev:app                     # Vite :5173 + la app de escr
     despacho real (a quién, qué plantilla, a qué hora) **sin mandar nada**. `--hora 03:00` mueve el
     reloj; `--demo` corre sin base.
   - Los envíos automáticos quedan marcados en `envios_wa.automatico` y **se ven en la burbuja** del
-    hilo. **Lo que sigue prohibido**: generar texto libre, iniciar conversaciones y cualquier
-    mecanismo cuyo fin sea que el tráfico no se detecte (ADR 0015 §«Lo que deliberadamente no se
-    hizo»).
+    hilo — y desde ADR 0016 la burbuja distingue **«Automático»** (salió solo) de **«Aprobado · ana»**
+    (lo autorizó una persona). **Lo que sigue prohibido**: generar texto libre, iniciar conversaciones
+    y cualquier mecanismo cuyo fin sea que el tráfico no se detecte (ADR 0015 §«Lo que
+    deliberadamente no se hizo»).
 
 ## Auth
 
@@ -253,10 +271,12 @@ sensato). Ver `server/.env.example` (solo nombres).
 
 - **Drizzle sin migraciones versionadas**: el schema se aplica con `npm run db:push` (drizzle-kit). Al
   tocar `server/src/db/schema.ts`, push contra la DB. Pendiente de push hoy: las dos tablas de la
-  auto-respuesta (`auto_respuestas_pendientes`, `auto_respuesta_estado`) y `envios_wa.automatico`
-  (#125) — sin el push esas funciones **degradan** (hilo sin marca, ruta del interruptor en 503), no
-  rompen —; y `plantillas` + `plantilla_pasos` (plantillas-secuencia), sin las cuales
-  `/api/plantillas` **no funciona** en un server ya desplegado.
+  auto-respuesta (`auto_respuestas_pendientes`, `auto_respuesta_estado`), `envios_wa.automatico`
+  (#125) y las cinco columnas del modo supervisado (`auto_respuesta_estado.modo` +
+  `auto_respuestas_pendientes.aprobada_por/.aprobada_at/.editada/.campana`, ADR 0016) — sin el push
+  esas funciones **degradan** (hilo sin marca, ruta del interruptor en 503, bandeja vacía con el
+  motivo escrito), no rompen —; y `plantillas` + `plantilla_pasos` (plantillas-secuencia), sin las
+  cuales `/api/plantillas` **no funciona** en un server ya desplegado.
 - **El transporte falso repite ids entre reinicios** (`falso-1`, `falso-2`…): reprocesar colisiona con la
   idempotencia (`wa:falso-N` ya existe) y el mensaje no entra. Para demos limpias, borrar los
   `external_id LIKE 'wa:falso-%'` primero. El transporte real usa ids reales de WhatsApp (únicos).
