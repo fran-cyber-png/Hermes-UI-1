@@ -1,4 +1,5 @@
-import { AlertTriangle, Image as Icono, Loader2, Pencil, Send } from 'lucide-react';
+import { AlertTriangle, Image as Icono, Loader2, Pencil, Send, ServerCrash } from 'lucide-react';
+import { ErrorApi } from '../../lib/datos/cliente';
 import { sectionLabel } from '../../lib/styles';
 import type { Conversacion } from '../canales/conversaciones';
 import { useEnvioSecuencia } from '../plantillas/useEnvioSecuencia';
@@ -121,7 +122,7 @@ export function DosRespuestas({
   onIrAPlantillas: () => void;
 }) {
   const esWa = conversacion.canal === 'whatsapp';
-  const { data, isPending } = useSugerencias(
+  const { data, isPending, error } = useSugerencias(
     conversacion.clave,
     conversacion.persona_nombre,
     esWa,
@@ -140,18 +141,44 @@ export function DosRespuestas({
     );
   }
 
+  // FALLAR NO ES «NO HAY NADA QUE DECIR». Un 404 significa que este servidor
+  // todavía no tiene la ruta desplegada; mostrarlo como «no hay respuesta clara»
+  // haría que la vendedora deje de buscar el botón que sí existe. La misma regla
+  // que la ficha: nunca un fallo disfrazado de dato vacío.
+  if (error) {
+    const status = error instanceof ErrorApi ? error.status : 0;
+    return (
+      <div className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 p-2.5 text-[11px] leading-relaxed text-warning-foreground">
+        <ServerCrash size={13} className="mt-0.5 shrink-0" />
+        <span>
+          {status === 404
+            ? 'Este servidor todavía no sirve respuestas sugeridas: falta desplegar.'
+            : 'No se pudieron traer las respuestas sugeridas.'}{' '}
+          <button
+            type="button"
+            onClick={onIrAPlantillas}
+            className="font-bold text-primary hover:underline"
+          >
+            Ver tus secuencias
+          </button>
+        </span>
+      </div>
+    );
+  }
+
   const sugerencias = data?.sugerencias ?? [];
 
   if (sugerencias.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-border p-3 text-center">
+      <div className="rounded-xl border border-dashed border-border p-2.5">
         <p className="text-[11px] leading-relaxed text-muted-foreground">
-          No hay una respuesta clara para esta conversación todavía.
+          Ninguna secuencia encaja con el momento de esta conversación, así que no se propone una a
+          ciegas.
         </p>
         <button
           type="button"
           onClick={onIrAPlantillas}
-          className="mt-1.5 text-[11px] font-bold text-primary hover:underline"
+          className="mt-1 text-[11px] font-bold text-primary hover:underline"
         >
           Elegir de tus secuencias
         </button>

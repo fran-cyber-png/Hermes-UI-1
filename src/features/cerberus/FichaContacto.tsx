@@ -1,43 +1,40 @@
-import { useEffect, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, BadgeCheck, ExternalLink, Loader2, ShoppingBag, ShoppingCart, UserPlus } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, ExternalLink, Mail, RefreshCw, ShoppingBag, UserPlus } from 'lucide-react';
 import { api } from '../../lib/datos/cliente';
 import { fechaCorta } from '../../lib/formato';
 import { sectionLabel } from '../../lib/styles';
 import type { Conversacion } from '../canales/conversaciones';
 import { Avatar } from '../canales/Avatar';
-import { FormularioVenta } from '../venta/FormularioVenta';
-import { RegistrarGestion } from '../gestion/RegistrarGestion';
-import { Intereses } from '../gestion/Intereses';
-import { PanelNotas } from '../notas/PanelNotas';
-import { BloqueLeadForm } from './BloqueLeadForm';
+import { BloqueLeadForm, useLeadForm } from './BloqueLeadForm';
 import { PersonaUnificada } from '../identidad/PersonaUnificada';
+import type { Ficha } from './ficha';
 
 /**
- * LA FICHA DEL CONTACTO — la razón de ser de Hermes.
+ * LA FICHA DEL CONTACTO — el DETALLE de Cerberus, dentro de su pestaña.
  *
- * Al lado del chat, quién es esta persona en Cerberus: ¿ya es cliente? ¿cuánto
- * compró? Saberlo antes de escribir cambia todo — no le hablás igual a un lead
- * nuevo que a alguien que ya pagó tres cursos. La cifra héroe de la ficha es
- * ESA: cuánto compró.
+ * ── Qué cambió con el rediseño del panel ──
+ * El veredicto («¿ya compró? ¿cuánto?») subió a la banda de estado: arriba de
+ * todo, siempre visible, con color. Es lo que se lee en el primer segundo y lo
+ * que cambia el tono de la conversación. Acá abajo queda el DETALLE que se
+ * consulta cuando hace falta —código de cliente, DNI, correo, la lista de
+ * compras con folio y fecha— más lo que declaró el formulario.
+ *
+ * Lo que esta pestaña YA NO pone (y por eso el panel dejó de repetirse):
+ *   · el encabezado con el nombre → `panel/BandaEstado`
+ *   · la cifra héroe de compras   → `panel/BandaEstado` (una línea, no un titular)
+ *   · «Le interesa»               → `panel/BloqueInteres`, fuera de las pestañas
+ *   · próxima acción y registrar venta → `panel/AccionesContacto`
+ *
+ * Ese último movimiento arregla un bug real: «Registrar venta» vivía adentro de
+ * esta pestaña, así que abrir «Notas» hacía desaparecer el botón que cierra la
+ * venta.
  *
  * Cuatro estados, porque colapsarlos miente: cliente / persona nueva / cargando /
- * Cerberus caído. JAMÁS mostrar "no figura" cuando lo que pasó es que la API
+ * Cerberus caído. JAMÁS mostrar «no figura» cuando lo que pasó es que la API
  * falló: son cosas opuestas.
  */
 
-interface VentaFicha {
-  folio: string;
-  estado: string;
-  monto: string;
-  moneda: string;
-  fecha: string;
-}
-
-export type Ficha =
-  | { estado: 'cliente'; id: number; nombre: string; codigo: string; dni: string; pais: string; correo: string; ventasCount: number; ventas: VentaFicha[] }
-  | { estado: 'nuevo' }
-  | { estado: 'error'; motivo: string };
+export type { Ficha, VentaFicha } from './ficha';
 
 /** Exportado para el modal de Cierre del Pipeline (#60): misma query, mismo caché. */
 export function useFicha(telefono: string | null, activo: boolean) {
@@ -51,38 +48,48 @@ export function useFicha(telefono: string | null, activo: boolean) {
 
 const CERBERUS = import.meta.env.VITE_CERBERUS_URL ?? 'https://app.goberna.us';
 
-/** Cuánto compró: suma de las ventas no anuladas de la moneda principal. */
-function resumenCompras(ventas: VentaFicha[]): { moneda: string; total: number; n: number } | null {
-  const validas = ventas.filter((v) => !/anul/i.test(v.estado));
-  if (validas.length === 0) return null;
-  const moneda = validas[0].moneda;
-  const mismas = validas.filter((v) => v.moneda === moneda);
-  const total = mismas.reduce((s, v) => s + (Number.parseFloat(v.monto) || 0), 0);
-  return { moneda, total, n: mismas.length };
-}
-
 function claseEstadoVenta(estado: string): string {
   if (/pagad/i.test(estado)) return 'text-success';
   if (/anul/i.test(estado)) return 'text-destructive';
   return 'text-muted-foreground';
 }
 
+/**
+ * EL VACÍO HONESTO — cuando de esta persona no sabemos nada: ni ficha de
+ * Cerberus ni formulario. Un hueco en blanco haría pensar que algo no cargó.
+ * Este dice las dos cosas que hacen falta: **que no hay nada** y **qué hacer**
+ * —lo que averigües en el chat, anotalo, porque nadie más lo va a anotar—.
+ * Si el formulario SÍ matcheó, esto no aparece: el bloque de abajo ya habla.
+ */
+function SinNadaQueMostrar({ telefono, pushname }: { telefono: string | null; pushname: string | null }) {
+  const { data, isPending } = useLeadForm(telefono, true);
+  if (isPending || data?.lead) return null;
+  return (
+    <div className="rounded-xl border border-dashed border-border bg-card p-3">
+      <p className="flex items-start gap-2 text-[11px] leading-relaxed text-muted-foreground">
+        <UserPlus size={13} className="mt-0.5 shrink-0" />
+        <span>
+          De {pushname ? <span className="font-semibold text-foreground">{pushname}</span> : 'esta persona'} no
+          sabemos nada más: no compró nunca y tampoco llenó un formulario. Todo lo que averigües en el
+          chat —el curso, el nombre real, cuándo puede pagar— anotalo en <b>Notas</b>: es el único
+          lugar donde va a quedar.
+        </span>
+      </p>
+    </div>
+  );
+}
+
 export function FichaContacto({
   conversacion,
   onCorreo,
-  onAgendarBienvenida,
   embebida = false,
 }: {
   conversacion: Conversacion;
   /** Puente a Correos: prellena el Para con el correo de la ficha. Sin esto, la acción no se muestra. */
   onCorreo?: (para: string) => void;
-  /** Puente a la Agenda desde el recibo de venta. Sin esto, el botón no se muestra. */
-  onAgendarBienvenida?: (telefono: string | null) => void;
   /**
-   * Dentro del panel multifunción: el marco, el encabezado con la persona y las
-   * notas los pone el panel (las notas tienen su propia pestaña). Sin esto,
-   * habría dos tarjetas anidadas, el nombre repetido dos veces y las notas
-   * apareciendo en la pestaña equivocada. `false` = como siempre.
+   * Dentro del panel multifunción: el marco y el encabezado con la persona los
+   * pone el panel. `false` = con su propia tarjeta (uso suelto).
    */
   embebida?: boolean;
 }) {
@@ -91,27 +98,7 @@ export function FichaContacto({
   const esTelefono = conversacion.canal === 'whatsapp';
   const telefono = conversacion.persona_id;
   const { data, isPending, isError } = useFicha(telefono, esTelefono);
-  const [mostrarForm, setMostrarForm] = useState(false);
   const qc = useQueryClient();
-
-  // Cambiar de conversación desarma cualquier form pendiente de la anterior.
-  // (La señal `senalVenta` del drop en Cierre del kanban se retiró en #60: ese
-  // drop ahora abre su modal DENTRO del Pipeline, sin viajar a la Bandeja.)
-  useEffect(() => {
-    setMostrarForm(false);
-  }, [conversacion.clave]);
-
-  // Para un lead NUEVO (todavía no cliente) registramos la conversión (el dato de
-  // embudo) — la venta necesita primero crear el cliente en Cerberus.
-  const registrarConversion = useMutation({
-    mutationFn: () =>
-      api('/api/contactos/registrar-venta', {
-        method: 'POST',
-        body: JSON.stringify({ telefono, nombre: conversacion.persona_nombre }),
-      }),
-  });
-
-  const resumen = data?.estado === 'cliente' ? resumenCompras(data.ventas) : null;
 
   return (
     <div
@@ -140,70 +127,69 @@ export function FichaContacto({
 
       <div className={embebida ? 'min-h-0 flex-1 overflow-y-auto' : 'min-h-0 flex-1 overflow-y-auto p-4'}>
         {!esTelefono ? (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs leading-relaxed text-muted-foreground">
             La ficha por teléfono aplica a WhatsApp. Para este canal, la ficha cruzada está en camino.
           </p>
         ) : isPending ? (
-          // Skeleton con la anatomía de la ficha — nunca un flash de "no es cliente".
+          // Skeleton con la anatomía de la ficha — nunca un flash de «no es cliente».
           <div className="space-y-3">
-            <div className="h-5 w-[60px] animate-pulse rounded-full bg-muted" />
-            <div className="h-6 w-3/4 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
             <div className="flex gap-2">
               <div className="h-3 w-16 animate-pulse rounded bg-muted" />
               <div className="h-3 w-20 animate-pulse rounded bg-muted" />
-              <div className="h-3 w-12 animate-pulse rounded bg-muted" />
             </div>
-            <div className="h-12 animate-pulse rounded-lg bg-muted" />
-            <div className="h-12 animate-pulse rounded-lg bg-muted" />
+            <div className="h-11 animate-pulse rounded-lg bg-muted" />
+            <div className="h-11 animate-pulse rounded-lg bg-muted" />
           </div>
         ) : isError || data?.estado === 'error' ? (
-          <div className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-xs text-warning-foreground">
-            <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-            <span>Cerberus no responde — no se puede saber si ya es cliente. No es que sea nuevo: es que la ficha no cargó.</span>
+          // La banda de arriba ya dijo QUÉ pasó. Repetir la frase acá sería
+          // gritar dos veces; lo que falta es la salida, así que acá va la salida.
+          <div className="flex flex-col items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-[11px] leading-relaxed text-warning-foreground">
+            <span className="flex items-start gap-2">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+              Cerberus no devolvió la ficha. Suele ser pasajero.
+            </span>
+            <button
+              type="button"
+              onClick={() => void qc.invalidateQueries({ queryKey: ['ficha', telefono] })}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-warning/50 bg-card px-2 py-1 text-[11px] font-bold text-warning-foreground transition-colors hover:bg-warning/10"
+            >
+              <RefreshCw size={11} /> Buscar de nuevo
+            </button>
           </div>
         ) : data?.estado === 'nuevo' ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <UserPlus size={14} className="shrink-0" />
-            No figura en Cerberus todavía. Es un lead nuevo.
-          </div>
+          // La banda de arriba ya dijo «Lead nuevo»: repetirlo acá sería llenar
+          // el panel con la misma frase dos veces. Lo que agrega esta pestaña es
+          // lo ÚNICO que sí sabemos de ella — el formulario, abajo. Si tampoco
+          // hay, `SinNadaQueMostrar` dice qué hacer en vez de dejar el hueco.
+          <SinNadaQueMostrar telefono={telefono} pushname={conversacion.persona_nombre} />
         ) : data?.estado === 'cliente' ? (
-          <div className="flex flex-col gap-4">
-            {/* La cifra héroe: cuánto compró. */}
-            {resumen && (
-              <div>
-                <div className="font-heading text-2xl font-bold tabular-nums text-navy">
-                  {resumen.moneda} {resumen.total.toLocaleString('es', { maximumFractionDigits: 2 })}
-                </div>
-                <div className="text-[11px] text-muted-foreground">
-                  en {resumen.n} {resumen.n === 1 ? 'compra' : 'compras'}
-                </div>
-              </div>
-            )}
-
+          <div className="flex flex-col gap-3.5">
             <div>
-              <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs font-bold text-success">
-                <BadgeCheck size={12} /> Cliente
-              </span>
-              <div className="mt-2 text-sm font-bold text-foreground">{data.nombre}</div>
-              <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-xs text-muted-foreground">
+              {!embebida && (
+                <div className="text-sm font-bold leading-snug text-foreground">{data.nombre}</div>
+              )}
+              {/* El nombre legal ya está en la banda de estado: acá van los datos
+                  que la banda no puede llevar. */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[11px] text-muted-foreground">
                 <span>{data.codigo}</span>
                 {data.dni && <span>DNI {data.dni}</span>}
                 {data.pais && <span>{data.pais}</span>}
-                {data.correo && (
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    <span className="truncate">{data.correo}</span>
-                    {onCorreo && (
-                      <button
-                        type="button"
-                        onClick={() => onCorreo(data.correo)}
-                        className="shrink-0 font-sans font-semibold text-primary hover:underline"
-                      >
-                        Mandar correo
-                      </button>
-                    )}
-                  </span>
-                )}
               </div>
+              {data.correo && (
+                <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
+                  <span className="min-w-0 truncate font-mono text-[11px] text-foreground">{data.correo}</span>
+                  {onCorreo && (
+                    <button
+                      type="button"
+                      onClick={() => onCorreo(data.correo)}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] font-semibold text-primary transition-colors hover:bg-secondary"
+                    >
+                      <Mail size={10} /> Escribirle
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             <div>
@@ -211,35 +197,43 @@ export function FichaContacto({
                 <ShoppingBag size={12} /> Compras ({data.ventasCount})
               </div>
               {data.ventas.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Es cliente, pero sin ventas cargadas.</p>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Figura como cliente pero no tiene ventas cargadas. Suele pasar cuando la venta se
+                  cargó a otro documento: revisala en Cerberus antes de cotizarle de cero.
+                </p>
               ) : (
-                <ul className="flex flex-col gap-1.5">
+                <ul className="flex flex-col">
                   {data.ventas.map((v) => (
-                    <li key={v.folio} className="rounded-lg border border-border bg-muted/40 px-2.5 py-1.5 text-xs">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono font-semibold text-foreground">{v.folio}</span>
-                        <span className="font-semibold tabular-nums text-navy">
-                          {v.moneda} {v.monto}
-                        </span>
-                      </div>
-                      <div className="mt-0.5 flex items-center justify-between">
-                        <span className={'font-medium ' + claseEstadoVenta(v.estado)}>{v.estado}</span>
-                        <span className="font-mono text-[11px] tabular-nums text-muted-foreground">{fechaCorta(v.fecha)}</span>
-                      </div>
+                    <li
+                      key={v.folio}
+                      className="flex items-baseline gap-2 border-b border-border/60 py-1.5 text-[11px] last:border-0"
+                    >
+                      <span className="font-mono font-semibold text-foreground">{v.folio}</span>
+                      <span className={'font-medium ' + claseEstadoVenta(v.estado)}>{v.estado}</span>
+                      <span className="ml-auto shrink-0 font-mono tabular-nums text-muted-foreground">
+                        {fechaCorta(v.fecha)}
+                      </span>
+                      <span className="shrink-0 font-semibold tabular-nums text-navy">
+                        {v.moneda} {v.monto}
+                      </span>
                     </li>
                   ))}
                 </ul>
               )}
             </div>
 
-            <a
-              href={`${CERBERUS}/clientes/${data.id}/`}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline"
-            >
-              Ver en Cerberus <ExternalLink size={11} />
-            </a>
+            {/* El link a Cerberus vive en la banda de estado, siempre visible.
+                Acá solo cuando esta ficha se usa suelta, fuera del panel. */}
+            {!embebida && (
+              <a
+                href={`${CERBERUS}/clientes/${data.id}/`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 self-start text-[11px] font-bold text-primary transition-colors hover:text-primary-hover hover:underline"
+              >
+                Ver la ficha completa en Cerberus <ExternalLink size={10} />
+              </a>
+            )}
           </div>
         ) : null}
 
@@ -247,101 +241,22 @@ export function FichaContacto({
             nombre real, EMAIL y campaña, marcados por origen. Va SIEMPRE (es dato
             de Hermes, no de Cerberus); se auto-oculta si el teléfono no matcheó
             ningún lead. */}
-        <BloqueLeadForm telefono={telefono} activo={esTelefono} pushname={conversacion.persona_nombre} />
+        <BloqueLeadForm
+          telefono={telefono}
+          activo={esTelefono}
+          pushname={conversacion.persona_nombre}
+          // Dentro del panel el nombre real ya encabeza la banda de estado: acá
+          // sería la tercera vez que se lee el mismo nombre en la misma columna.
+          sinNombre={embebida}
+        />
 
-        {/* La línea de tiempo del interés: qué cursos pidió y cuándo (#57). Va
-            SIEMPRE (sea cliente, lead nuevo o Cerberus caído): el interés es dato
-            de Hermes, no de la ficha de Cerberus. */}
-        <div className={'mt-5 ' + sectionLabel}>Le interesa</div>
-        <div className="mt-2">
-          <Intereses clave={conversacion.clave} compacto />
-        </div>
-
-        {/* «Es la misma persona que…» (#58): une la FICHA con la de otro número u otra red.
-            Los hilos siguen separados. Todo el bloque vive en su propio archivo. */}
+        {/* «Es la misma persona que…» (#58): une la FICHA con la de otro número u
+            otra red. Los hilos siguen separados. Vive en su propio archivo. */}
         <PersonaUnificada
           clave={conversacion.clave}
           nombreActual={conversacion.persona_nombre ?? telefono ?? 'este contacto'}
         />
       </div>
-
-      {/* La bitácora comercial: próxima acción (cae en la Agenda). */}
-      <RegistrarGestion conversacion={conversacion} />
-      {/* Las notas de ESTA conversación (#47) — editables, se archivan, no derivan
-          nada. Embebida NO: tienen su propia pestaña en el panel multifunción. */}
-      {!embebida && <PanelNotas clave={conversacion.clave} />}
-
-      {/* Registrar venta — el formulario vive DENTRO de Hermes (la vendedora no
-          entra a Cerberus). Para un cliente existente, abre el form; para un lead
-          nuevo, registra la conversión (crear el cliente es el paso previo). */}
-      {esTelefono && data?.estado === 'cliente' && (
-        <footer className="shrink-0 border-t border-border p-3">
-          <button
-            type="button"
-            onClick={() => setMostrarForm(true)}
-            className="group flex w-full items-center justify-center gap-2 rounded-xl bg-navy py-2.5 text-sm font-bold text-white shadow-[0_4px_16px_-4px_rgba(14,42,82,0.5)] transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98]"
-          >
-            <ShoppingCart size={15} /> Registrar venta
-          </button>
-          <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
-            El formulario se llena acá. Medio y Origen salen solos de por dónde vino el lead.
-          </p>
-        </footer>
-      )}
-      {esTelefono && data?.estado === 'nuevo' && (
-        <footer className="shrink-0 border-t border-border p-3">
-          <button
-            type="button"
-            onClick={() => registrarConversion.mutate()}
-            disabled={registrarConversion.isPending || registrarConversion.isSuccess}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-border py-2.5 text-sm font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
-          >
-            {registrarConversion.isPending ? <Loader2 size={15} className="animate-spin" /> : <ShoppingCart size={15} />}
-            {registrarConversion.isSuccess ? 'Conversión registrada' : 'Marcar como interesado'}
-          </button>
-          {registrarConversion.isError && (
-            <p className="mt-1.5 text-center text-[11px] text-destructive">No se registró la conversión — probá de nuevo.</p>
-          )}
-          <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
-            Todavía no es cliente en Cerberus. Se guarda la conversión con el origen del lead.
-          </p>
-          {/* La salida honesta mientras no exista el alta proxy: crear el cliente allá. */}
-          <a
-            href={`${CERBERUS}/clientes/nuevo/`}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-2 inline-flex w-full items-center justify-center gap-1.5 text-xs font-bold text-primary hover:underline"
-          >
-            Crear cliente en Cerberus <ExternalLink size={11} />
-          </a>
-          <p className="mt-1 text-center text-[11px] text-muted-foreground">
-            Al volver,{' '}
-            <button
-              type="button"
-              onClick={() => void qc.invalidateQueries({ queryKey: ['ficha', telefono] })}
-              className="font-semibold text-primary underline decoration-dotted underline-offset-2 hover:decoration-solid"
-            >
-              refrescá la ficha
-            </button>
-            .
-          </p>
-        </footer>
-      )}
-
-      {mostrarForm && data?.estado === 'cliente' && (
-        <FormularioVenta
-          clienteId={data.id}
-          clienteNombre={data.nombre}
-          telefono={telefono ?? ''}
-          canal={conversacion.canal}
-          clave={conversacion.clave}
-          personaNombre={conversacion.persona_nombre}
-          numeroPropio={conversacion.numero_propio}
-          paisNombre={data.pais}
-          onAgendarBienvenida={onAgendarBienvenida}
-          onCerrar={() => setMostrarForm(false)}
-        />
-      )}
     </div>
   );
 }

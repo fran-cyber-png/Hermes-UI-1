@@ -153,12 +153,18 @@ export function PanelContexto({
           pushname={conversacion.persona_nombre}
         />
 
-        {/* La línea de tiempo del interés: qué cursos pidió y cuándo (#57). Es la
-            ficha del contacto en el aside — acá se lee la evolución de un vistazo. */}
-        <div className={'mt-5 ' + sectionLabel}>Le interesa</div>
-        <div className="mt-2">
-          <Intereses clave={conversacion.clave} compacto />
-        </div>
+        {/* «Le interesa» ya NO va acá cuando esto vive dentro del panel: allá
+            está fuera de las pestañas (`panel/BloqueInteres`), porque es lo que
+            decide una venta y no puede depender de qué pestaña quedó abierta.
+            Suelto sigue mostrándose, que es lo que este componente hacía. */}
+        {!embebida && (
+          <>
+            <div className={'mt-5 ' + sectionLabel}>Le interesa</div>
+            <div className="mt-2">
+              <Intereses clave={conversacion.clave} compacto />
+            </div>
+          </>
+        )}
 
         {/* «Es la misma persona que…» (#58) — acá es donde más falta hace: un DM de
             Instagram no trae teléfono, y unirlo al WhatsApp de la misma persona es la
@@ -169,9 +175,9 @@ export function PanelContexto({
         />
       </div>
 
-      {/* La bitácora comercial: etapa + próxima acción (cae en la Agenda). */}
-      <RegistrarGestion conversacion={conversacion} />
-      {/* Las notas de ESTA conversación (#47). Embebida NO: tienen pestaña propia. */}
+      {/* La bitácora comercial y las notas: en el panel las pone el panel
+          (`AccionesContacto` y la pestaña Notas). Acá quedan para el uso suelto. */}
+      {!embebida && <RegistrarGestion conversacion={conversacion} />}
       {!embebida && <PanelNotas clave={conversacion.clave} />}
     </div>
   );

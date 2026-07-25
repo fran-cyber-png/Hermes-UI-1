@@ -57,7 +57,19 @@ interface NuevaGestion {
   proximaFecha: string | null;
 }
 
-export function RegistrarGestion({ conversacion }: { conversacion: Conversacion }) {
+export function RegistrarGestion({
+  conversacion,
+  compacta = false,
+}: {
+  conversacion: Conversacion;
+  /**
+   * En el panel derecho el pie compite con la acción primaria («Registrar
+   * venta»), y en un laptop de 720 px cada fila de más se la come al detalle.
+   * Compacta pone la etapa y el disparador de «Próxima acción» en UNA fila.
+   * `false` = el bloque de siempre.
+   */
+  compacta?: boolean;
+}) {
   const qc = useQueryClient();
   const [abierto, setAbierto] = useState(false);
   const [accion, setAccion] = useState<string | null>(null);
@@ -118,35 +130,46 @@ export function RegistrarGestion({ conversacion }: { conversacion: Conversacion 
     'rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ' +
     (activo ? 'bg-navy text-white' : 'border border-border bg-card text-muted-foreground hover:text-foreground');
 
+  const etapaChip = (
+    <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-semibold text-secondary-foreground">
+      {etapaActual ? (ETAPA_LABEL[etapaActual] ?? etapaActual) : 'Sin gestión'}
+    </span>
+  );
+  const disparador = (
+    <button
+      type="button"
+      onClick={() => {
+        setAbierto(true);
+        setGuardado(false);
+      }}
+      className={
+        'flex items-center justify-center gap-1.5 rounded-xl border border-border bg-card font-bold text-navy transition-[background-color,transform] duration-200 ease-house hover:bg-muted active:scale-[0.98] ' +
+        (compacta ? 'ml-auto shrink-0 px-2.5 py-1 text-[11px]' : 'w-full py-2 text-xs')
+      }
+    >
+      <ClipboardList size={compacta ? 12 : 14} /> Próxima acción
+    </button>
+  );
+
   return (
-    <div className="border-t border-border p-3">
+    <div className={compacta ? 'px-3 pb-2 pt-2.5' : 'border-t border-border p-3'}>
       {/* La etapa actual, SIEMPRE visible — solo lectura: se cambia en la barra del chat. */}
-      <div className="mb-2 flex items-center gap-2 text-[11px] text-muted-foreground">
-        <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-semibold text-secondary-foreground">
-          {etapaActual ? (ETAPA_LABEL[etapaActual] ?? etapaActual) : 'Sin gestión'}
-        </span>
-        {ultimaNota && <span className="truncate italic">“{ultimaNota.texto.slice(0, 40)}”</span>}
+      <div className={'flex items-center gap-2 text-[11px] text-muted-foreground ' + (compacta ? '' : 'mb-2')}>
+        {etapaChip}
+        {ultimaNota && <span className="min-w-0 truncate italic">“{ultimaNota.texto.slice(0, 40)}”</span>}
+        {compacta && !abierto && disparador}
       </div>
 
       {guardado && !abierto && (
-        <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-success/10 px-2.5 py-1.5 text-xs font-semibold text-success">
+        <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-success/10 px-2.5 py-1.5 text-[11px] font-semibold text-success">
           <Check size={13} /> Gestión registrada{crear.variables?.proximaAccion ? ' — la próxima acción está en tu Agenda' : ''}.
         </div>
       )}
 
       {!abierto ? (
-        <button
-          type="button"
-          onClick={() => {
-            setAbierto(true);
-            setGuardado(false);
-          }}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card py-2 text-xs font-bold text-navy transition-[background-color,transform] duration-200 ease-house hover:bg-muted active:scale-[0.98]"
-        >
-          <ClipboardList size={14} /> Próxima acción
-        </button>
+        compacta ? null : disparador
       ) : (
-        <div className="rounded-xl border border-border bg-muted/30 p-2.5">
+        <div className={'rounded-xl border border-border bg-muted/30 p-2.5 ' + (compacta ? 'mt-2' : '')}>
           <div className={sectionLabel}>Próxima acción</div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {ACCIONES.map((a) => (

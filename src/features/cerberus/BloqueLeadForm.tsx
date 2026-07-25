@@ -20,7 +20,8 @@ import { etiquetaFuente, nombreDistinto, type LeadForm as LeadFormDato } from '.
  * (los canales de Meta no traen número) o si no hubo match.
  */
 
-function useLeadForm(telefono: string | null, activo: boolean) {
+/** Exportada: la banda de estado del panel la usa para el NOMBRE REAL (mismo caché). */
+export function useLeadForm(telefono: string | null, activo: boolean) {
   return useQuery({
     queryKey: ['lead-form', telefono],
     queryFn: () =>
@@ -51,19 +52,30 @@ function EmailCopiable({ email }: { email: string }) {
   );
 }
 
-export function BloqueLeadForm({ telefono, activo, pushname }: { telefono: string | null; activo: boolean; pushname: string | null }) {
+export function BloqueLeadForm({
+  telefono,
+  activo,
+  pushname,
+  sinNombre = false,
+}: {
+  telefono: string | null;
+  activo: boolean;
+  pushname: string | null;
+  /** El nombre real ya se muestra arriba (la banda del panel): no repetirlo acá. */
+  sinNombre?: boolean;
+}) {
   const { data } = useLeadForm(telefono, activo);
   const lead = data?.lead;
   if (!lead) return null; // sin match: nada. Ni placeholder ni hueco.
 
-  const nombre = nombreDistinto(pushname, lead.nombre);
+  const nombre = sinNombre ? null : nombreDistinto(pushname, lead.nombre);
   const etiqueta = etiquetaFuente(lead.fuente);
   const titulo = etiqueta.charAt(0).toUpperCase() + etiqueta.slice(1); // «Del formulario de Meta»
 
   return (
     <div className="mt-5">
       <div className={sectionLabel}>📋 {titulo}</div>
-      <div className="mt-2 flex flex-col gap-2 rounded-xl border border-border bg-muted/40 p-3">
+      <div className="mt-2 flex flex-col gap-2 rounded-xl border border-border bg-card p-3">
         {nombre && (
           <div>
             <div className="text-[11px] text-muted-foreground">Nombre real</div>
