@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import { MoreVertical } from 'lucide-react';
+import { MoreVertical, X } from 'lucide-react';
 import { usePopover } from '../../lib/teclado/usePopover';
 import { armarItemsMenu } from './itemsHerramientas';
 import { GestorCategorias } from './GestorCategorias';
+import type { Conversacion } from '../canales/conversaciones';
+import { PanelPlantillas } from '../plantillas/PanelPlantillas';
 
 /**
  * EL BOTÓN `···` — la puerta única a las herramientas de venta, siempre en
  * el mismo lugar sobre CUALQUIER conversación.
  *
  * De las cinco herramientas (correo rápido, mensajes predeterminados,
- * etiquetas, notas, catálogo), **«Etiquetas» ya aterrizó** (#48): abre el
- * `GestorCategorias`. Las que faltan siguen deshabilitadas con «Próximamente»
+ * etiquetas, notas, catálogo), ya aterrizaron **dos**: «Etiquetas» (#48) abre
+ * el `GestorCategorias` y **«Mensajes predeterminados» (#45/#101)** abre el
+ * cajón de secuencias. Las que faltan siguen deshabilitadas con «Próximamente»
  * — el día que existan, `MenuHerramientas` le pasa su callback a
  * `armarItemsMenu` y el item se habilita solo.
  *
@@ -20,9 +23,11 @@ import { GestorCategorias } from './GestorCategorias';
  * `aria-label`/`title`, sin roles de menú — son botones en un panel, no un
  * `<menu>` con navegación por flechas.
  */
-export function MenuHerramientas({ clave }: { clave: string }) {
+export function MenuHerramientas({ conversacion }: { conversacion: Conversacion }) {
+  const clave = conversacion.clave;
   const [abierto, setAbierto] = useState(false);
   const [gestorAbierto, setGestorAbierto] = useState(false);
+  const [plantillasAbiertas, setPlantillasAbiertas] = useState(false);
   const primerItemRef = useRef<HTMLButtonElement>(null);
 
   // Cambió la conversación (otro lead, otra vista): el menú no puede
@@ -43,7 +48,10 @@ export function MenuHerramientas({ clave }: { clave: string }) {
 
   // «Etiquetas» ya tiene herramienta: abre el gestor de categorías (#48). El
   // resto sigue sin handler (deshabilitado) hasta que su propio issue lo conecte.
-  const items = armarItemsMenu(clave, { etiquetas: () => setGestorAbierto(true) });
+  const items = armarItemsMenu(clave, {
+    etiquetas: () => setGestorAbierto(true),
+    mensajes: () => setPlantillasAbiertas(true),
+  });
 
   return (
     <span className="relative inline-flex">
@@ -92,6 +100,34 @@ export function MenuHerramientas({ clave }: { clave: string }) {
       )}
 
       {gestorAbierto && <GestorCategorias onCerrar={() => setGestorAbierto(false)} />}
+
+      {/* Las secuencias de venta (#45/#101). Panel lateral, no modal: la
+          vendedora sigue viendo el chat mientras elige qué mandar. */}
+      {plantillasAbiertas && (
+        <>
+          <span
+            className="fixed inset-0 z-40 bg-navy/20"
+            onClick={() => setPlantillasAbiertas(false)}
+            aria-hidden="true"
+          />
+          <aside className="fixed right-0 top-0 z-50 flex h-full w-[22rem] max-w-[92vw] flex-col bg-card p-3 shadow-panel">
+            <div className="mb-2 flex shrink-0 items-center gap-2">
+              <h2 className="font-heading text-sm font-bold text-navy">Mensajes predeterminados</h2>
+              <button
+                type="button"
+                onClick={() => setPlantillasAbiertas(false)}
+                aria-label="Cerrar"
+                className="ml-auto rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1">
+              <PanelPlantillas conversacion={conversacion} />
+            </div>
+          </aside>
+        </>
+      )}
     </span>
   );
 }

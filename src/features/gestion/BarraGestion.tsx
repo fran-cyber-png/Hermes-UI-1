@@ -445,7 +445,7 @@ export function BarraGestion({ conversacion }: { conversacion: Conversacion }) {
             <BotonLlamar telefono={conversacion.persona_id} />
           )}
           <AgendarRapido conversacion={conversacion} />
-          <MenuHerramientas clave={conversacion.clave} />
+          <MenuHerramientas conversacion={conversacion} />
         </span>
       </div>
 
