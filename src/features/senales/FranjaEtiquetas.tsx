@@ -52,7 +52,9 @@ export function FranjaEtiquetas({ clave }: { clave: string }) {
             CLASE_TEXTO[e.color]
           }
         >
-          <span className={'size-1.5 rounded-full ' + CLASE_TEXTO[e.color]} style={{ backgroundColor: 'currentColor' }} />
+          {/* El punto hereda el color del texto de la píldora: un solo lugar donde
+              vive el color, y nada que se pueda desincronizar. */}
+          <span className="size-1.5 rounded-full bg-current" />
           {e.rotulo}
         </span>
       ))}

@@ -162,7 +162,7 @@ export function DosRespuestas({
   // Mientras una sale, las tarjetas dejan lugar al progreso: es lo único que
   // importa en ese momento, y el botón que hay es cancelar.
   if (envio.estado.fase !== 'lista') {
-    const total = envio.estado.fase === 'terminada' ? envio.estado.total : (envio.estado as { total: number }).total;
+    const total = 'total' in envio.estado ? envio.estado.total : 0;
     return (
       <div className="rounded-xl border border-primary/35 bg-secondary/40 p-2.5">
         <div className="flex items-center gap-2">
