@@ -117,7 +117,7 @@ mismas guardas (corta-corriente, chequeo de ban, auditoría). Lo nuevo es un cam
 `automatico: true`, que se persiste en `envios_wa.automatico`. Sin esa marca, dentro de un
 mes nadie podría distinguir qué mandó una persona y qué la máquina — y la vendedora abriría
 un chat creyendo que ese saludo lo escribió ella. Por eso también se ve **en la burbuja del
-hilo**.
+hilo** (`docs/evidencia/125-burbuja-automatica.png`).
 
 ## Lo que deliberadamente no se hizo
 
