@@ -438,8 +438,15 @@ export function ColaUnificada({
             /* Desde la BARRA la categoría afina lo que ya se está mirando (el tab
                sigue puesto, y se ve). Desde el modo LISTAS se entra limpio: ahí
                la cabecera del drill-down no mostraba el tab, y «Precio (12)»
-               abría con 2 filas sin decir por qué. */
-            onCategoria={setCategoriaActiva}
+               abría con 2 filas sin decir por qué.
+               `setModoListas(false)`: sin eso, apagar la categoría con la ✕
+               mientras se venía del modo Listas rebotaba a la pantalla de
+               listas en vez de devolver la cola entera, que es lo que la ✕
+               promete. */
+            onCategoria={(c) => {
+              setCategoriaActiva(c);
+              setModoListas(false);
+            }}
             onListas={() => {
               setCategoriaActiva(null);
               setModoListas(true);
