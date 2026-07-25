@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   bucketsDeFila,
+  cuantoMasLento,
   formatearDemora,
   fueraDeHorario,
   pct,
@@ -75,6 +76,24 @@ describe('formatearDemora — minutos en algo que se lee de un vistazo', () => {
 
   test('más de un día se dice en días: 3000 minutos no son «50 h»', () => {
     expect(formatearDemora(3000)).toBe('2 d 2 h');
+  });
+});
+
+describe('cuantoMasLento — el remate de las dos medianas', () => {
+  test('10 min contra 496 son 50 veces más lento', () => {
+    expect(cuantoMasLento(10, 496)).toBe(50);
+  });
+
+  test('sin alguna de las dos medianas no hay comparación que hacer', () => {
+    expect(cuantoMasLento(null, 496)).toBeNull();
+    expect(cuantoMasLento(10, null)).toBeNull();
+    expect(cuantoMasLento(0, 496)).toBeNull();
+  });
+
+  test('si afuera se responde igual o más rápido, no hay remate que dar', () => {
+    expect(cuantoMasLento(30, 30)).toBeNull();
+    expect(cuantoMasLento(30, 20)).toBeNull();
+    expect(cuantoMasLento(30, 44)).toBeNull(); // 1,5× redondea a 2 pero no llega a 2×
   });
 });
 

@@ -138,6 +138,19 @@ export function formatearDemora(minutos: number | null): string {
   return restoH === 0 ? `${dias} d` : `${dias} d ${restoH} h`;
 }
 
+/**
+ * CUÁNTAS VECES MÁS LENTO se responde fuera de horario. Es el remate de las dos
+ * medianas: «10 min» y «8 h 16 min» son dos datos; «50× más lento» es una
+ * decisión. Devuelve `null` cuando la comparación no diría nada —falta una de
+ * las dos, o afuera no es peor— para no llenar el hueco con un «1×» que no
+ * significa nada. Desde 2× para arriba, que es donde deja de ser ruido.
+ */
+export function cuantoMasLento(enHorario: number | null, fuera: number | null): number | null {
+  if (enHorario === null || fuera === null || enHorario <= 0 || fuera <= 0) return null;
+  const veces = Math.round(fuera / enHorario);
+  return veces >= 2 ? veces : null;
+}
+
 /** Porcentaje entero. Sin total no hay porcentaje: 0, nunca un NaN en pantalla. */
 export function pct(parte: number, total: number): number {
   return total > 0 ? Math.round((parte / total) * 100) : 0;

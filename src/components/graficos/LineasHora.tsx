@@ -103,7 +103,10 @@ export function LineasHora({
       </figcaption>
 
       {tabla ? (
-        <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border">
+        // Misma altura EXACTA que el gráfico: conmutar a la tabla no puede
+        // empujar el resto de la pantalla hacia abajo (eso es un salto de layout,
+        // no una vista alternativa). La tabla scrollea adentro.
+        <div className="overflow-y-auto rounded-lg border border-border" style={{ height: alto + 16 }}>
           <table className="w-full text-[11px]">
             <thead className="sticky top-0 bg-card text-muted-foreground">
               <tr className="border-b border-border">

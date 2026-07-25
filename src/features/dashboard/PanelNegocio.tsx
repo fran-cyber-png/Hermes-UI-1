@@ -8,6 +8,7 @@ import {
   HORA_APERTURA,
   HORA_CIERRE,
   bucketsDeFila,
+  cuantoMasLento,
   formatearDemora,
   fueraDeHorario,
   pct,
@@ -150,8 +151,8 @@ export function FiltrosNegocio({
           <ChevronDown size={12} className="pointer-events-none absolute right-2.5 text-muted-foreground" />
         </label>
       ) : numeros.length === 1 ? (
-        <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground" title="El único número propio vinculado">
-          {numeros[0]}
+        <span className="shrink-0 text-[11px] text-muted-foreground" title="El único número propio vinculado (#50 trae los demás)">
+          Número <span className="font-mono tabular-nums text-foreground">{numeros[0]}</span>
         </span>
       ) : null}
     </div>
@@ -191,6 +192,7 @@ export function PanelNegocio({
   }, [datos, orden]);
 
   const hueco = a ? fueraDeHorario(a.cobertura, HORA_APERTURA, HORA_CIERRE) : { entran: 0, salen: 0 };
+  const veces = cuantoMasLento(a?.demora_mediana_en_horario_min ?? null, a?.demora_mediana_fuera_min ?? null);
   const subregistrado = datos ? datos.subregistro.precio_mencionado > datos.subregistro.cotizados : false;
 
   return (
@@ -272,6 +274,13 @@ export function PanelNegocio({
                   );
                 })}
               </div>
+              {/* El remate: dos medianas son dos datos; «50× más lento» es una decisión. */}
+              {veces !== null && (
+                <p className="mt-3 text-xs leading-snug text-foreground">
+                  <span className="font-heading text-xl font-bold tabular-nums">{veces}×</span> más lento cuando la persona
+                  escribe de noche.
+                </p>
+              )}
               <p className="mt-auto border-t border-border pt-2 text-[11px] leading-relaxed text-muted-foreground">
                 <span className="font-mono tabular-nums text-foreground">
                   {pct(a?.llegaron_fuera_de_horario ?? 0, a?.conversaciones ?? 0)}%

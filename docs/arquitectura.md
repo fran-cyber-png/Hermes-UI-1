@@ -210,7 +210,31 @@ Zod es la fuente única: valida en runtime, tipa en compilación y **genera el J
 catálogo con `z.toJSONSchema()`. Nadie escribe el schema a mano. Los nombres están regulados
 (`/^governa\.[a-z]+\.[a-zA-Z]+$/`) y registrar dos veces lanza a propósito.
 
-### 5.6 Cómo se testea
+### 5.6 Métricas derivadas en consulta, nunca precalculadas
+
+El Dashboard tiene **dos lecturas**: el radar de la vendedora («¿a quién atiendo ahora?») y el panel
+del negocio («¿qué curso rinde y dónde se pierde?», `dashboard/negocio.ts` + `GET
+/api/dashboard/negocio`, #128/#126). La segunda **no agrega ni una tabla de métricas, ni un job, ni
+un backfill**: sale de los mismos hechos que ya viven en `interactions` + `events` + `leads` +
+`gestiones`, agrupados de otra manera al leer.
+
+Es la misma decisión que la etapa efectiva (ADR 0013) por el mismo motivo: **una métrica
+materializada es una segunda copia del dato, y las segundas copias divergen**. Derivar al leer
+cuesta un escaneo —el panel se pide cuando alguien lo mira, no en cada refresco de la cola— y a
+cambio nunca puede contradecir a la cola.
+
+De ahí la regla que gobierna el módulo: **no redefine nada que ya exista**. `respondida` viene de
+`cola/urgenciaSql.ts`, la etapa efectiva de `cola/etapaEfectivaSql.ts`, el corte de día y la hora de
+Lima de `lib/horaLimaSql.ts`, y el sufijo de match teléfono↔lead de `gente/leadDeTelefono.ts` (que
+lo exporta como fragmento justamente para esto). Lo poco que sí define —«primera respuesta»,
+«precio mencionado», «el curso de un lead»— lo define **una vez, ahí**, con el porqué escrito al
+lado.
+
+Corolario para la pantalla: donde el dato no alcanza, **se dice**. Las conversaciones que no cruzan
+con ningún formulario viajan como `sin_atribuir` y se muestran en su propia fila; el subregistro de
+cotizaciones (611 con precio contra 3 asentadas) se declara arriba de la tabla, no se maquilla.
+
+### 5.7 Cómo se testea
 
 **285 casos en el server** (`node:test` vía `tsx --test`) + **18 en el front** (vitest, entorno
 `node`, sin DOM). CI en el runner self-hosted de VPS1.
