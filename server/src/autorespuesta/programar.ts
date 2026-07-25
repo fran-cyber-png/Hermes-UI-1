@@ -37,6 +37,8 @@ export interface Candidato {
   texto: string;
   /** Cómo se nombra la campaña de la que vino. Es por lo que agrupa la bandeja. */
   campana?: string | null;
+  /** Cuál de los tres eslabones la eligió: `interes` · `lead` · `anuncio` (ADR 0018). */
+  campanaFuente?: string | null;
   /** El mensaje que la disparó: ordena la cola (el que más esperó, primero). */
   desde: Date;
 }

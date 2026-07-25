@@ -100,6 +100,7 @@ export async function correrEncolado(deps: DepsEncolado): Promise<ResumenEncolad
       plantillaId: ranura.candidato.plantillaId,
       texto: ranura.candidato.texto,
       campana: ranura.candidato.campana,
+      campanaFuente: ranura.candidato.campanaFuente,
       estado,
       disparadaPor: ranura.candidato.desde,
       programadoPara: ranura.programadoPara,

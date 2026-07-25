@@ -44,6 +44,8 @@ export interface NuevaPendiente {
   estado?: EstadoPendiente;
   /** La campaña/curso que eligió la plantilla. Es por lo que agrupa la bandeja. */
   campana?: string | null;
+  /** De cuál de las tres fuentes salió esa campaña. Es el «por qué» (ADR 0018). */
+  campanaFuente?: string | null;
 }
 
 export interface Pendiente extends NuevaPendiente {
@@ -181,7 +183,7 @@ export function repositorioDrizzle(base: typeof db): RepositorioAutoRespuesta {
     async encolar(p) {
       const [fila] = await base
         .insert(autoRespuestasPendientes)
-        .values({ ...p, estado: p.estado ?? 'pendiente', campana: p.campana ?? null })
+        .values({ ...p, estado: p.estado ?? 'pendiente', campana: p.campana ?? null, campanaFuente: p.campanaFuente ?? null })
         // El conflicto NO es un error: es «esta conversación ya tuvo la suya
         // hoy». La garantía vive en el UNIQUE (clave, dia_lima).
         .onConflictDoNothing({ target: [autoRespuestasPendientes.clave, autoRespuestasPendientes.diaLima] })
@@ -425,6 +427,7 @@ function aPendiente(f: FilaPendiente): Pendiente {
     diaLima: f.diaLima,
     estado: esEstado(f.estado) ? f.estado : 'cancelada',
     campana: f.campana,
+    campanaFuente: f.campanaFuente,
   };
 }
 

@@ -46,6 +46,7 @@ export function planificar(
       plantillaId: d.plantillaId,
       texto: d.texto,
       campana: d.campana?.nombre ?? null,
+      campanaFuente: d.campana?.fuente ?? null,
       desde: candidata.ultimoEntranteEn,
     });
   }

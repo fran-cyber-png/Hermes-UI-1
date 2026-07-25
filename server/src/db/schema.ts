@@ -698,6 +698,23 @@ export const autoRespuestasPendientes = pgTable(
      * aprueba: lo que se muestra tiene que ser lo que decidió el texto.
      */
     campana: text("campana"),
+
+    // ── MODO REVISIÓN (ADR 0018) — también al final ───────────────────────────
+    /**
+     * DE DÓNDE SALIÓ ESA CAMPAÑA: `interes` · `lead` · `anuncio` — el eslabón
+     * de la precedencia de `campana.ts` que ganó (interés asentado > formulario
+     * que llenó > anuncio del que vino).
+     *
+     * Se guarda porque es **el porqué**, y el porqué es la mitad del modo
+     * supervisado: una recomendación que no explica de dónde sale no se puede
+     * supervisar, solo obedecer. «Sale del anuncio del que vino» y «sale del
+     * interés que vos asentaste» son dos niveles de confianza distintos, y la
+     * vendedora decide distinto según cuál sea.
+     *
+     * Nullable, como `campana`: una fila escrita antes de esta columna no miente,
+     * dice «no sé de dónde» y el panel muestra la campaña sin la cadena.
+     */
+    campanaFuente: text("campana_fuente"),
   },
   (t) => [
     unique("auto_respuestas_una_por_dia_uq").on(t.clave, t.diaLima),

@@ -330,6 +330,13 @@ function aFila(f: PendienteVista, cfg: ReturnType<typeof configDesdeEnv>, ahora:
     plantillaId: f.plantillaId,
     texto: f.texto,
     campana: f.campana,
+    /**
+     * El eslabón de la precedencia que eligió esta campaña (ADR 0018). Es el
+     * dato que convierte «se le manda lo de Inteligencia» en «se le manda lo de
+     * Inteligencia PORQUE vino del anuncio de Inteligencia» — que es lo único
+     * que se puede supervisar. Null en las filas anteriores a la columna.
+     */
+    campanaFuente: f.campanaFuente ?? null,
     editada: f.editada,
     /** Cuándo escribió la persona. El front dice «hace 6 h» con esto. */
     disparadaPor: f.disparadaPor.toISOString(),
