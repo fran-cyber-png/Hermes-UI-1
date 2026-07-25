@@ -24,6 +24,12 @@ import {
  * resaltado (↑↓ para moverse); el texto libre solo entra cuando la búsqueda no
  * devolvió nada (el curso todavía no existe en Cerberus).
  *
+ * Y muestra **lo que todavía no es un interés**: la propuesta derivada del
+ * anuncio o del formulario con el que la persona llegó (#102), punteada y con su
+ * fuente a la vista. Vive acá porque este componente es el que ya usan la ficha,
+ * la cola, el Pipeline y el modal de la compuerta: la propuesta aparece en los
+ * cuatro sin que ninguno tenga que enterarse.
+ *
  * La línea de tiempo es HISTORIA, no urgencia: neutro, SIN oro.
  */
 
