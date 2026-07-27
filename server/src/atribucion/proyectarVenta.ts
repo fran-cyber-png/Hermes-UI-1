@@ -53,7 +53,7 @@ export async function proyectarVenta(
     return { atribuida: false, motivo };
   }
 
-  await guardarConversion(base, venta, conversacion, ahora);
+  await guardarConversion(base, venta, conversacion);
   // La venta pasó de un lado al otro: si estaba anotada como no atribuida, ya no lo está.
   if (venta.externalSaleId) {
     await base
@@ -82,7 +82,6 @@ async function guardarConversion(
   base: typeof db,
   venta: VentaAtribuible,
   c: ConversacionResuelta,
-  ahora: Date,
 ): Promise<void> {
   // El ANUNCIO del que vino esa conversación: la otra mitad de la atribución (#128). Se lee del
   // primer mensaje del hilo, que es donde `proyectar` deja el `origen` del click-to-WhatsApp.
@@ -122,8 +121,9 @@ async function guardarConversion(
     ocurridaAt: venta.ocurridaAt,
     // `iniciada_at` es lo que los paneles usan como eje del tiempo (`dashboard/series.ts`), así
     // que lleva la fecha de la VENTA y no la de la ingesta: un puente que corre hoy sobre
-    // ventas de marzo no puede dibujar un pico de ventas hoy.
-    iniciadaAt: venta.ocurridaAt ?? ahora,
+    // ventas de marzo no puede dibujar un pico de ventas hoy. `ventaDeEvento` garantiza que
+    // siempre haya una fecha (cae al timestamp del evento antes que quedarse sin ninguna).
+    iniciadaAt: venta.ocurridaAt,
   };
 
   // LA MISMA VENTA POR DOS CAMINOS ES UNA SOLA FILA. La vendedora registra la venta desde el
