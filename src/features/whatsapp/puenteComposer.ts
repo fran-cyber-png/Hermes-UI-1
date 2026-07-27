@@ -29,7 +29,7 @@ export interface TextoParaComposer {
    * Quien ponga texto en la caja desde una superficie nueva y no la declare,
    * ensucia el número contra el que se comparan todas las piezas.
    */
-  pieza?: Omit<PiezaDeclarada, 'editada'>;
+  pieza?: Omit<PiezaDeclarada, 'editada' | 'textoPieza'>;
 }
 
 type Escucha = (v: TextoParaComposer) => void;

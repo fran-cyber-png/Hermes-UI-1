@@ -414,6 +414,12 @@ plantillasRouter.post("/:id/enviar-paso", async (req, res) => {
       plantillaId: plantilla.id,
       orden: paso.orden,
       via: parsed.data.via,
+      // El contenido AUTORAL: el texto GUARDADO (con sus `{nombre}`/`{precio}`
+      // todavía sin resolver) más el archivo. Nunca `texto` —el ya expandido—:
+      // con eso cada destinatario sería una versión distinta de la pieza y el
+      // versionado no mediría nada. Y el archivo entra porque cambiar el flyer
+      // cambia lo que la persona recibe.
+      contenido: { texto: paso.texto, archivo: paso.media?.archivo ?? null },
     }),
   };
 

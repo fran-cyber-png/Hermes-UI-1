@@ -244,7 +244,12 @@ describe('EnvioControlado — de qué pieza salió', () => {
     const registro = new RegistroFalso();
     const envio = new EnvioControlado(transporte, registro);
 
-    const pieza = deUnPasoDePlantilla({ plantillaId: 12, orden: 3, via: 'panel-sugerencia' });
+    const pieza = deUnPasoDePlantilla({
+      plantillaId: 12,
+      orden: 3,
+      via: 'panel-sugerencia',
+      contenido: { texto: 'hola {nombre}' },
+    });
     await envio.enviar(orden({ procedencia: pieza }));
 
     assert.deepEqual(registro.intentos[0].procedencia, pieza);
@@ -258,7 +263,7 @@ describe('EnvioControlado — de qué pieza salió', () => {
     const registro = new RegistroFalso();
     const envio = new EnvioControlado(transporte, registro, () => true);
 
-    const pieza = deUnDato({ clave: 'cuotas', editada: false });
+    const pieza = deUnDato({ clave: 'cuotas', editada: false, contenido: { texto: 'en 2 cuotas' } });
     const r = await envio.enviar(orden({ procedencia: pieza }));
 
     assert.equal(r.ok, false);
@@ -271,7 +276,12 @@ describe('EnvioControlado — de qué pieza salió', () => {
     const registro = new RegistroFalso();
     const envio = new EnvioControlado(transporte, registro);
 
-    const pieza = deUnPasoDePlantilla({ plantillaId: 4, orden: 1, via: 'panel-secuencias' });
+    const pieza = deUnPasoDePlantilla({
+      plantillaId: 4,
+      orden: 1,
+      via: 'panel-secuencias',
+      contenido: { texto: null, archivo: 'flyer.jpg' },
+    });
     await envio.enviarMedia({
       vendedoraId: 'ana',
       numeroPropio: '51987654321',

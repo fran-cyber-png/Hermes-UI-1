@@ -13,6 +13,7 @@ import {
   recordatorios,
 } from "../db/schema.js";
 import { sincronizarLote } from "../clientes/sincronizar.js";
+import { A_MANO, columnasDeProcedencia, type Procedencia } from "../procedencia/pieza.js";
 import type { DbDePrueba } from "./base.js";
 
 /**
@@ -182,22 +183,40 @@ export async function sembrarLead(db: DbDePrueba, l: LeadSembrado = {}): Promise
 export interface EnvioWaSembrado {
   vendedoraId?: string;
   telefono?: string;
+  numeroPropio?: string;
+  /** La conversación. Por defecto se deriva de teléfono + número propio. */
+  referencia?: string;
+  texto?: string;
   estado?: "pendiente" | "enviado" | "fallido";
   creadoAt?: Date;
+  /** Cuándo salió de verdad. Sin esto, el alta (`creadoAt`). */
+  resueltoAt?: Date | null;
+  /**
+   * De qué pieza salió (#169). Se arma con los constructores de
+   * `procedencia/pieza.ts` — omitirla es sembrar la línea de base, que es lo
+   * que corresponde para un envío escrito a mano.
+   */
+  procedencia?: Procedencia;
 }
 
 /** Siembra un envío de WhatsApp (la auditoría de `EnvioControlado`). */
 export async function sembrarEnvioWa(db: DbDePrueba, e: EnvioWaSembrado = {}): Promise<number> {
+  const telefono = e.telefono ?? "51900000000";
+  const numeroPropio = e.numeroPropio ?? "51999999999";
+  const creadoAt = e.creadoAt ?? new Date();
+
   const [row] = await db
     .insert(enviosWa)
     .values({
       vendedoraId: e.vendedoraId ?? "vendedora-prueba",
-      numeroPropio: "51999999999",
-      telefono: e.telefono ?? "51900000000",
-      texto: "hola",
-      referencia: "conv:whatsapp:51900000000:51999999999",
+      numeroPropio,
+      telefono,
+      texto: e.texto ?? "hola",
+      referencia: e.referencia ?? `conv:whatsapp:${telefono}:${numeroPropio}`,
       estado: e.estado ?? "enviado",
-      creadoAt: e.creadoAt ?? new Date(),
+      creadoAt,
+      resueltoAt: e.resueltoAt === undefined ? creadoAt : e.resueltoAt,
+      ...columnasDeProcedencia(e.procedencia ?? A_MANO),
     })
     .returning({ id: enviosWa.id });
 

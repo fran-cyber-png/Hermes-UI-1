@@ -4,7 +4,20 @@ import { caducoSinAprobar } from './caducidad.js';
 import type { ConfigAutoRespuesta } from './config.js';
 import { diaLocal, dentroDe } from './franja.js';
 import { faltaEsquema, type Pendiente, type RepositorioAutoRespuesta } from './repositorio.js';
-import { deUnAcuse } from '../procedencia/pieza.js';
+import { deUnAcuse, type ContenidoDePieza } from '../procedencia/pieza.js';
+import { catalogo } from './plantillas.js';
+
+/**
+ * El cuerpo SIN RENDERIZAR de un acuse, para versionar la pieza (#169).
+ *
+ * Sale del catálogo cerrado por id. Si el id no está —una pendiente vieja de
+ * una plantilla que ya no existe— devuelve `null`, que se lee «no sabemos qué
+ * texto era»: es la respuesta correcta, y mejor que inventar una versión.
+ */
+function cuerpoDeAcuse(plantillaId: string): ContenidoDePieza | null {
+  const p = catalogo().find((x) => x.id === plantillaId);
+  return p ? { texto: p.cuerpo } : null;
+}
 
 /**
  * EL DESPACHADOR — el único lugar de esta feature que manda algo, y el que
@@ -191,7 +204,14 @@ export class Despachador {
       // (`estadoDesdeContexto`: a las 3 a.m. no consulta las señales), así que
       // su momento no es el mismo objeto que el de las demás piezas. Anotarlo
       // junto a ellos los volvería incomparables sin que se note.
-      procedencia: deUnAcuse({ plantillaId: p.plantillaId }),
+      //
+      // El contenido es el CUERPO de la plantilla, sin renderizar: el saludo,
+      // el curso y el gancho de la campaña se resuelven por conversación, así
+      // que hashearlos haría de cada acuse una versión distinta.
+      procedencia: deUnAcuse({
+        plantillaId: p.plantillaId,
+        contenido: cuerpoDeAcuse(p.plantillaId),
+      }),
     });
 
     if (!r.ok) {

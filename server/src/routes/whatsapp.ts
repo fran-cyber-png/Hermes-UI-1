@@ -13,7 +13,7 @@ import { RUTA_MEDIA, nombreSeguro } from '../whatsapp/mediaDir.js';
 import { normalizarTelefono } from '../whatsapp/identidadWa.js';
 import { FotoNoDisponibleError, type FotoPerfil, type MediaSaliente } from '../whatsapp/transporte.js';
 import { cancelarPorRespuestaHumana, faltaEsquema } from '../autorespuesta/repositorio.js';
-import { procedenciaDesdeColumnas } from '../procedencia/pieza.js';
+import { procedenciaDesdeColumnas, versionDePieza } from '../procedencia/pieza.js';
 
 /**
  * LA CONVERSACIÓN NATIVA DE WHATSAPP dentro de Hermes: ver el hilo y responder,
@@ -93,6 +93,16 @@ function procedenciaDelCuerpo(pieza: unknown) {
   const leida = procedenciaDesdeColumnas({
     piezaClase: typeof p.clase === 'string' ? p.clase : null,
     piezaRef: typeof p.ref === 'string' && p.ref.length <= 120 ? p.ref : null,
+    // LA VERSIÓN LA CALCULA EL SERVER, no el cliente: viaja el TEXTO DE LA
+    // PIEZA (el que la pantalla dejó en la caja, sin las ediciones de la
+    // vendedora) y acá se hashea. Que el hash lo hiciera el navegador
+    // significaría que dos clientes con distinta normalización parten en dos la
+    // historia de una pieza sin que nadie lo note.
+    piezaVersion: versionDePieza(
+      typeof p.textoPieza === 'string' && p.textoPieza.length <= 4000
+        ? { texto: p.textoPieza }
+        : null,
+    ),
     piezaVia: typeof p.via === 'string' ? p.via : null,
     piezaEditada: p.editada === true,
     // El momento NO viaja desde el cliente: lo clasifica el server en

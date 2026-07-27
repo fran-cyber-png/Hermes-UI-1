@@ -264,6 +264,21 @@ export const enviosWa = pgTable(
      */
     piezaClase: text("pieza_clase"),
     piezaRef: text("pieza_ref"),
+    /**
+     * QUÉ TEXTO ERA: sha256 del contenido AUTORAL de la pieza (la plantilla sin
+     * resolver + su archivo), en hex.
+     *
+     * Sin esto el lazo mide un blanco móvil y no lo dice: el día que alguien
+     * mejore una frase, los dos textos se suman y una pieza que pasó de 12 % a
+     * 30 % se reporta 21 % para siempre. Y no se puede arreglar después — los
+     * envíos ya escritos no se pueden re-atribuir a la versión que salió.
+     *
+     * Es un hash y no un contador porque un contador se puede olvidar de
+     * incrementar, y el bump que falta no rompe nada: mezcla dos textos en
+     * silencio. El detalle y el «qué es el texto de la pieza» están en
+     * `procedencia/pieza.ts`.
+     */
+    piezaVersion: text("pieza_version"),
     /** Por qué pantalla entró (panel-sugerencia · panel-secuencias · panel-datos · automatica). */
     piezaVia: text("pieza_via"),
     /** ¿Salió reescrito? Un dato que la vendedora tocó no le acredita entero el resultado. */
@@ -274,8 +289,8 @@ export const enviosWa = pgTable(
   (t) => [
     index("envios_wa_vendedora_idx").on(t.vendedoraId),
     index("envios_wa_telefono_idx").on(t.telefono),
-    /** El lazo de resultados agrupa por pieza: sin este índice cada consulta es un seq scan. */
-    index("envios_wa_pieza_idx").on(t.piezaClase, t.piezaRef),
+    /** El lazo de resultados agrupa por pieza Y VERSIÓN: sin el índice, seq scan. */
+    index("envios_wa_pieza_idx").on(t.piezaClase, t.piezaRef, t.piezaVersion),
     /** La derivación mira la ventana reciente por conversación. */
     index("envios_wa_referencia_idx").on(t.referencia, t.creadoAt),
   ],

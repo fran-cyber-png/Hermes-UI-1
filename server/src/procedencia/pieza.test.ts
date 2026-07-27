@@ -12,7 +12,18 @@ import {
   procedenciaDesdeColumnas,
   refDePieza,
   rotuloDePieza,
+  versionDePieza,
 } from "./pieza.js";
+
+const CUOTAS = "Se puede pagar en 2 cuotas.";
+const dato = (texto: string | null, editada = false) =>
+  deUnDato({ clave: "cuotas", editada, contenido: texto === null ? null : { texto } });
+const paso = (
+  plantillaId: number,
+  orden: number,
+  via: "panel-sugerencia" | "panel-secuencias" = "panel-secuencias",
+  contenido: { texto: string | null; archivo?: string | null } | null = { texto: "hola {nombre}" },
+) => deUnPasoDePlantilla({ plantillaId, orden, via, contenido });
 
 /**
  * LA PROCEDENCIA ES UN HECHO — y `null` es la LÍNEA DE BASE, no un hueco.
@@ -25,7 +36,7 @@ import {
 
 describe("la pieza se identifica por (clase, ref) — estable a través del frente 2", () => {
   test("un paso de secuencia: la ref lleva la plantilla Y el orden", () => {
-    const p = deUnPasoDePlantilla({ plantillaId: 12, orden: 3, via: "panel-secuencias" });
+    const p = paso(12, 3);
     assert.equal(p.tipo, "pieza");
     assert.equal(p.clase, "paso");
     assert.equal(p.ref, "12#3");
@@ -34,8 +45,8 @@ describe("la pieza se identifica por (clase, ref) — estable a través del fren
   });
 
   test("dos pasos de la misma secuencia NO son la misma pieza", () => {
-    const uno = deUnPasoDePlantilla({ plantillaId: 12, orden: 1, via: "panel-secuencias" });
-    const dos = deUnPasoDePlantilla({ plantillaId: 12, orden: 2, via: "panel-secuencias" });
+    const uno = paso(12, 1);
+    const dos = paso(12, 2);
     assert.notEqual(refDePieza(uno), refDePieza(dos));
   });
 
@@ -43,26 +54,29 @@ describe("la pieza se identifica por (clase, ref) — estable a través del fren
     // Es la razón de ser de la columna `via`: si la vía formara parte de la
     // identidad, «la secuencia 12 funciona» sería incontestable — quedaría
     // partida en dos piezas que nadie puede sumar.
-    const sugerida = deUnPasoDePlantilla({ plantillaId: 12, orden: 1, via: "panel-sugerencia" });
-    const elegida = deUnPasoDePlantilla({ plantillaId: 12, orden: 1, via: "panel-secuencias" });
+    const sugerida = paso(12, 1, "panel-sugerencia");
+    const elegida = paso(12, 1, "panel-secuencias");
     assert.equal(refDePieza(sugerida), refDePieza(elegida));
     assert.notEqual(sugerida.via, elegida.via);
   });
 
   test("un dato recomendado se identifica por su clave, que es estable al renombrar el rótulo", () => {
-    const p = deUnDato({ clave: "cuotas", editada: false });
+    const p = dato(CUOTAS);
     assert.equal(p.clase, "dato");
     assert.equal(p.ref, "cuotas");
     assert.equal(p.via, "panel-datos");
   });
 
   test("un dato que la vendedora reescribió queda marcado como editado", () => {
-    const p = deUnDato({ clave: "cuotas", editada: true });
+    const p = dato(CUOTAS, true);
     assert.equal(p.editada, true, "lo que salió no es la frase del catálogo, y el número no puede fingir que sí");
   });
 
   test("un acuse de la auto-respuesta lleva el id de su plantilla", () => {
-    const p = deUnAcuse({ plantillaId: "fuera-de-horario-primer-contacto" });
+    const p = deUnAcuse({
+      plantillaId: "fuera-de-horario-primer-contacto",
+      contenido: { texto: "Gracias por escribirnos." },
+    });
     assert.equal(p.clase, "acuse");
     assert.equal(p.ref, "fuera-de-horario-primer-contacto");
     assert.equal(p.via, "automatica");
@@ -77,20 +91,87 @@ describe("la pieza se identifica por (clase, ref) — estable a través del fren
   });
 });
 
+describe("LA VERSIÓN — sin ella el lazo mide un blanco móvil y no lo dice", () => {
+  test("cambiar el texto cambia la versión: los dos textos NO se suman", () => {
+    // El caso que esto existe para impedir: una pieza que rendía 12 % y saltó a
+    // 30 % con el texto nuevo, reportada 21 % para siempre.
+    const vieja = dato("Se puede pagar en 2 cuotas.");
+    const nueva = dato("El pago va en 2 cuotas: una para reservar y otra antes de empezar.");
+    assert.equal(vieja.ref, nueva.ref, "es la misma pieza…");
+    assert.notEqual(vieja.version, nueva.version, "…y son dos versiones distintas");
+  });
+
+  test("el MISMO texto da la MISMA versión, siempre (es contenido, no un contador)", () => {
+    assert.equal(dato(CUOTAS).version, dato(CUOTAS).version);
+    assert.equal(versionDePieza({ texto: CUOTAS }), versionDePieza({ texto: CUOTAS }));
+  });
+
+  test("un cambio de SOLO espacios o saltos de línea NO es una versión nueva", () => {
+    // Un editor que guarda CRLF no puede partir en dos la historia de una pieza.
+    assert.equal(versionDePieza({ texto: "hola\nchau" }), versionDePieza({ texto: "hola\r\nchau" }));
+    assert.equal(versionDePieza({ texto: CUOTAS }), versionDePieza({ texto: `  ${CUOTAS}\n` }));
+  });
+
+  test("EL TEXTO DE LA PIEZA ES LA PLANTILLA SIN RESOLVER, nunca el mensaje final", () => {
+    // Si el hash se calculara sobre lo que salió, CADA DESTINATARIO sería una
+    // versión distinta y el versionado no mediría nada.
+    const plantilla = paso(12, 1, "panel-secuencias", { texto: "Hola {nombre}, cuesta {precio}." });
+    const otroContacto = paso(12, 1, "panel-secuencias", { texto: "Hola {nombre}, cuesta {precio}." });
+    assert.equal(plantilla.version, otroContacto.version);
+    // Y el mensaje YA resuelto es otra cosa: si alguien lo pasara por error, se
+    // notaría — no coincide con la versión de la plantilla.
+    const resuelto = paso(12, 1, "panel-secuencias", { texto: "Hola Ana, cuesta S/ 350." });
+    assert.notEqual(plantilla.version, resuelto.version);
+  });
+
+  test("cambiar la IMAGEN de un paso también es una versión nueva", () => {
+    // El flyer es contenido: cambiarlo cambia lo que la persona recibe.
+    const conFlyerA = paso(12, 1, "panel-secuencias", { texto: "mirá esto", archivo: "flyer-a.jpg" });
+    const conFlyerB = paso(12, 1, "panel-secuencias", { texto: "mirá esto", archivo: "flyer-b.jpg" });
+    assert.notEqual(conFlyerA.version, conFlyerB.version);
+  });
+
+  test("un paso SOLO de imagen tiene versión igual (el texto vacío no lo anula)", () => {
+    const soloImagen = paso(12, 1, "panel-secuencias", { texto: null, archivo: "flyer.jpg" });
+    assert.ok(soloImagen.version, "una imagen es contenido");
+  });
+
+  test("sin contenido conocido, la versión es null — y eso se lee «no sabemos qué texto era»", () => {
+    const p = dato(null);
+    assert.equal(p.version, null);
+    assert.equal(versionDePieza({ texto: "" }), null, "nada de nada tampoco es una versión");
+  });
+
+  test("CRITERIO DE ACEPTACIÓN: un envío ya escrito conserva la versión vieja", () => {
+    // El envío se guarda con SU versión; cambiar la pieza después no puede
+    // re-atribuirlo. Acá se prueba sobre las columnas, que es la forma en que
+    // la fila vive: lo guardado no depende del catálogo de hoy.
+    const guardado = columnasDeProcedencia(dato("Se puede pagar en 2 cuotas."));
+    const hoyLaPiezaDice = dato("Ahora se puede en 3 cuotas.");
+
+    assert.notEqual(guardado.piezaVersion, hoyLaPiezaDice.version);
+    // Y al leerla, la fila vieja sigue apuntando a la versión con la que salió.
+    const leida = procedenciaDesdeColumnas(guardado);
+    assert.equal(leida.tipo, "pieza");
+    assert.equal(
+      (leida as { version: string }).version,
+      versionDePieza({ texto: "Se puede pagar en 2 cuotas." }),
+    );
+  });
+});
+
 describe("«a mano» es un valor, no la ausencia de uno", () => {
   test("A_MANO es la línea de base y se pregunta por su nombre", () => {
     assert.equal(A_MANO.tipo, "a-mano");
     assert.equal(esAMano(A_MANO), true);
-    assert.equal(esAMano(deUnDato({ clave: "cuotas", editada: false })), false);
+    assert.equal(esAMano(dato(CUOTAS)), false);
   });
 
   test("se lee en castellano, y dice lo que es", () => {
     assert.equal(rotuloDePieza(A_MANO), "escrito a mano (la línea de base)");
-    assert.equal(rotuloDePieza(deUnDato({ clave: "cuotas", editada: false })), "dato · cuotas");
-    assert.equal(
-      rotuloDePieza(deUnPasoDePlantilla({ plantillaId: 7, orden: 2, via: "panel-sugerencia" })),
-      "paso · 7#2",
-    );
+    // El rótulo lleva la versión: dos textos distintos NO se leen igual.
+    assert.equal(rotuloDePieza(dato(CUOTAS)), `dato · cuotas @${versionDePieza({ texto: CUOTAS })!.slice(0, 8)}`);
+    assert.ok(rotuloDePieza(paso(7, 2, "panel-sugerencia")).startsWith("paso · 7#2 @"));
   });
 
   test("refDePieza de lo escrito a mano es null — y ese null ES el dato", () => {
@@ -104,12 +185,14 @@ describe("las columnas: ida y vuelta sin perder nada", () => {
       plantillaId: 12,
       orden: 3,
       via: "panel-sugerencia",
+      contenido: { texto: "hola {nombre}" },
       momento: "cotizada",
     });
     const cols = columnasDeProcedencia(p);
     assert.deepEqual(cols, {
       piezaClase: "paso",
       piezaRef: "12#3",
+      piezaVersion: versionDePieza({ texto: "hola {nombre}" }),
       piezaVia: "panel-sugerencia",
       piezaEditada: false,
       momentoVenta: "cotizada",
@@ -125,6 +208,7 @@ describe("las columnas: ida y vuelta sin perder nada", () => {
     assert.deepEqual(cols, {
       piezaClase: null,
       piezaRef: null,
+      piezaVersion: null,
       piezaVia: null,
       piezaEditada: false,
       momentoVenta: "cotizada",
@@ -136,6 +220,7 @@ describe("las columnas: ida y vuelta sin perder nada", () => {
     const leida = procedenciaDesdeColumnas({
       piezaClase: null,
       piezaRef: null,
+      piezaVersion: null,
       piezaVia: null,
       piezaEditada: false,
       momentoVenta: null,
@@ -149,6 +234,7 @@ describe("las columnas: ida y vuelta sin perder nada", () => {
     const leida = procedenciaDesdeColumnas({
       piezaClase: "paso",
       piezaRef: null,
+      piezaVersion: "abc",
       piezaVia: "panel-sugerencia",
       piezaEditada: false,
       momentoVenta: "cotizada",
@@ -160,6 +246,7 @@ describe("las columnas: ida y vuelta sin perder nada", () => {
     const leida = procedenciaDesdeColumnas({
       piezaClase: "pieza-del-futuro",
       piezaRef: "x",
+      piezaVersion: "abc",
       piezaVia: "panel-datos",
       piezaEditada: false,
       momentoVenta: null,
@@ -171,6 +258,7 @@ describe("las columnas: ida y vuelta sin perder nada", () => {
     const leida = procedenciaDesdeColumnas({
       piezaClase: null,
       piezaRef: null,
+      piezaVersion: null,
       piezaVia: null,
       piezaEditada: false,
       momentoVenta: "inventado",

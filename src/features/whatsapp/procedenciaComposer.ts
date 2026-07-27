@@ -32,11 +32,23 @@ export interface PiezaDeclarada {
   ref: string;
   via: 'panel-sugerencia' | 'panel-datos';
   editada: boolean;
+  /**
+   * EL TEXTO DE LA PIEZA — el que la pantalla dejó en la caja, **sin** las
+   * ediciones de la vendedora. Con esto el server calcula la versión (#169):
+   * mejorar una frase tiene que poder verse, y sin versión los dos textos se
+   * suman en un promedio que esconde el cambio.
+   *
+   * Viaja el texto y no un hash **a propósito**: hashear en el navegador
+   * significaría que dos clientes con distinta normalización parten en dos la
+   * historia de una pieza sin que nadie lo note. El hash se hace en un solo
+   * lugar, en el server.
+   */
+  textoPieza: string;
 }
 
 /** Lo que se dejó en la caja: la pieza y el texto con el que llegó. */
 interface Anotacion {
-  pieza: Omit<PiezaDeclarada, 'editada'>;
+  pieza: Omit<PiezaDeclarada, 'editada' | 'textoPieza'>;
   textoOriginal: string;
 }
 
@@ -50,7 +62,7 @@ const anotaciones = new Map<string, Anotacion>();
  */
 export function anotarPieza(
   telefono: string,
-  pieza: Omit<PiezaDeclarada, 'editada'>,
+  pieza: Omit<PiezaDeclarada, 'editada' | 'textoPieza'>,
   texto: string,
 ): void {
   anotaciones.set(telefono, { pieza, textoOriginal: texto });
@@ -74,8 +86,16 @@ export function piezaDelTexto(telefono: string, textoActual: string): PiezaDecla
   const original = anotada.textoOriginal.trim();
   if (!original) return undefined;
 
-  if (actual === original) return { ...anotada.pieza, editada: false };
-  if (actual.includes(original)) return { ...anotada.pieza, editada: true };
+  // `textoPieza` es SIEMPRE el original, nunca lo que ella escribió: la versión
+  // habla de la pieza del catálogo, no del mensaje que salió.
+  const declarar = (editada: boolean): PiezaDeclarada => ({
+    ...anotada.pieza,
+    editada,
+    textoPieza: anotada.textoOriginal,
+  });
+
+  if (actual === original) return declarar(false);
+  if (actual.includes(original)) return declarar(true);
 
   // Ya no queda nada de la pieza: lo que va a salir es de ella.
   return undefined;

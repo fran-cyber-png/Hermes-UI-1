@@ -19,19 +19,25 @@ describe('qué pieza declarar para lo que hay en la caja', () => {
 
   test('el texto tal cual salió del catálogo: la pieza, sin editar', () => {
     anotarPieza(TEL, DATO, FRASE);
-    expect(piezaDelTexto(TEL, FRASE)).toEqual({ ...DATO, editada: false });
+    expect(piezaDelTexto(TEL, FRASE)).toEqual({ ...DATO, editada: false, textoPieza: FRASE });
   });
 
   test('los espacios de más no son una edición', () => {
     anotarPieza(TEL, DATO, FRASE);
-    expect(piezaDelTexto(TEL, `  ${FRASE}\n`)).toEqual({ ...DATO, editada: false });
+    expect(piezaDelTexto(TEL, `  ${FRASE}\n`)).toEqual({ ...DATO, editada: false, textoPieza: FRASE });
   });
 
   test('le agregó un saludo delante: sigue siendo la pieza, pero EDITADA', () => {
     // Trazable a la pieza que se la sugirió, sí; acreditable entera, no —
     // porque parte de lo que salió lo escribió ella.
     anotarPieza(TEL, DATO, FRASE);
-    expect(piezaDelTexto(TEL, `Hola Ana! ${FRASE}`)).toEqual({ ...DATO, editada: true });
+    expect(piezaDelTexto(TEL, `Hola Ana! ${FRASE}`)).toEqual({
+      ...DATO,
+      editada: true,
+      // El texto de la PIEZA sigue siendo el del catálogo, no lo que ella
+      // escribió: la versión habla de la pieza, no del mensaje que salió.
+      textoPieza: FRASE,
+    });
   });
 
   test('reescribió todo: NO hay pieza, el envío cuenta como escrito a mano', () => {
@@ -56,6 +62,7 @@ describe('qué pieza declarar para lo que hay en la caja', () => {
     expect(piezaDelTexto(TEL, 'El acceso lo tenés por todo un año.')).toEqual({
       ...otro,
       editada: false,
+      textoPieza: 'El acceso lo tenés por todo un año.',
     });
   });
 
@@ -68,6 +75,10 @@ describe('qué pieza declarar para lo que hay en la caja', () => {
   test('una sugerencia del panel se declara como paso, con su vía', () => {
     const paso = { clase: 'paso', ref: '12#1', via: 'panel-sugerencia' } as const;
     anotarPieza(TEL, paso, 'Te cuento del diploma…');
-    expect(piezaDelTexto(TEL, 'Te cuento del diploma…')).toEqual({ ...paso, editada: false });
+    expect(piezaDelTexto(TEL, 'Te cuento del diploma…')).toEqual({
+      ...paso,
+      editada: false,
+      textoPieza: 'Te cuento del diploma…',
+    });
   });
 });
