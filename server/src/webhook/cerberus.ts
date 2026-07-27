@@ -28,6 +28,12 @@ export function tokenValido(recibido: string | undefined, secreto: string | unde
 // silenciosa que ya costó caro (#37).
 const TIPOS = new Set<string>(TIPOS_ACEPTADOS);
 
+/**
+ * ⚠️ La RUTA ya no llama a esto: desde #161 el cuerpo entero pasa por `leerEventoCerberus`, que
+ * valida el tipo Y el resto del contrato de una sola vez y devuelve el motivo del rechazo.
+ * Sobrevive porque su test es hoy el que fija la lista canónica de tipos — el mismo array que
+ * el Zod consume. Si se borra, se borra esa red.
+ */
 export function tipoAceptado(tipo: string | undefined): boolean {
   return tipo != null && TIPOS.has(tipo);
 }
