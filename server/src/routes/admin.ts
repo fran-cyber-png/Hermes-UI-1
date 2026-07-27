@@ -10,6 +10,7 @@ import {
   normalizarNumero,
   estadoSesionAContrato,
   estadoVinculacionAContrato,
+  esPareoEnVuelo,
   type SesionContrato,
 } from "../numeros/dominio.js";
 import {
@@ -146,8 +147,13 @@ adminRouter.post("/numeros/:numero/vincular", (req: Request, res: Response) => {
   const numero = normalizarNumero(req.params.numero);
   if (!numero) return responderError(res, 400, "entrada_invalida", "número inválido");
 
+  // Solo un pareo EN VUELO toma el candado. Un `conectado`/`error`/`baneado` viejo
+  // no: el cliente de ese ya está cerrado o muerto, e `iniciar()` arranca cerrando.
+  // Antes bloqueaba cualquier estado, así que una vinculación EXITOSA dejaba el
+  // vinculador en `conectado` para siempre y el próximo número nuevo comía 409
+  // eternamente — el éxito bloqueaba tanto como la falla.
   const enCurso = vinculador.estado();
-  if (enCurso.estado !== "inactivo" && "numero" in enCurso && enCurso.numero !== numero) {
+  if (esPareoEnVuelo(enCurso) && "numero" in enCurso && enCurso.numero !== numero) {
     res.status(409).json({
       error: {
         motivo: "vinculacion_en_curso",
@@ -187,8 +193,10 @@ adminRouter.delete("/numeros/:numero/vincular", async (req: Request, res: Respon
   const numero = normalizarNumero(req.params.numero);
   if (!numero) return responderError(res, 400, "entrada_invalida", "número inválido");
 
+  // Si no hay nada EN VUELO, no hay nada que soltar: un `conectado` terminal ya no
+  // toma el candado, así que cancelarlo no destraba nada que estuviera trabado.
   const enCurso = vinculador.estado();
-  if (enCurso.estado === "inactivo") {
+  if (!esPareoEnVuelo(enCurso)) {
     res.json({ estado: "inactivo", cancelada: false });
     return;
   }

@@ -98,7 +98,7 @@ export interface VinculacionContrato {
 }
 
 /**
- * VIGENCIA DEL QR — la regla que impide ofrecer un pareo muerto.
+ * VIGENCIA DEL PAREO EN VUELO — la regla que impide ofrecer un pareo muerto.
  *
  * whatsmeow rota el QR cada ~20 s MIENTRAS el canal de pareo está abierto. Cuando
  * se cierra (nadie escaneó), deja de llegar: el vinculador se queda con el último
@@ -106,9 +106,13 @@ export interface VinculacionContrato {
  *   1. la pantalla muestra un QR que el teléfono ya no acepta, sin decirlo;
  *   2. el vinculador es UNO A LA VEZ, así que ese pareo muerto **bloquea a todos
  *      los demás números** hasta que alguien reinicie el server.
- * Con la regla, un QR que dejó de refrescarse se lee como `inactivo` → el contrato
- * dice `expirado` → la consola pide uno nuevo y el número que estaba esperando
- * puede entrar. Tres rotaciones perdidas es muerto, no lento.
+ * Con la regla, un pareo que dejó de dar señales se lee como `inactivo` → el
+ * contrato dice `expirado` → la consola pide uno nuevo y el número que estaba
+ * esperando puede entrar. Tres rotaciones perdidas es muerto, no lento.
+ *
+ * Vale para los DOS estados en vuelo: un `esperando` también se puede colgar (si
+ * `client.init()` nunca vuelve, no hay QR que envejecer y el candado quedaba
+ * tomado igual).
  */
 export const VIGENCIA_QR_MS = 60_000;
 
@@ -118,11 +122,31 @@ export const VIGENCIA_QR_MS = 60_000;
  */
 export function estadoVinculacionVigente(
   actual: EstadoVinculacion,
-  qrEn: number | null,
+  actualizadoEn: number | null,
   ahora: number
 ): EstadoVinculacion {
-  if (actual.estado !== "qr" || qrEn === null) return actual;
-  return ahora - qrEn > VIGENCIA_QR_MS ? { estado: "inactivo" } : actual;
+  if (!esPareoEnVuelo(actual) || actualizadoEn === null) return actual;
+  return ahora - actualizadoEn > VIGENCIA_QR_MS ? { estado: "inactivo" } : actual;
+}
+
+/**
+ * ¿HAY UN PAREO EN VUELO? — o sea: ¿el candado del vinculador está tomado?
+ *
+ * Solo `esperando` (whatsmeow arrancando) y `qr` (esperando el teléfono) son un
+ * pareo en curso. Los otros tres son TERMINALES y no tienen por qué tomar nada:
+ *
+ * - **`conectado` es el que muerde.** Al terminar bien, `cerrar()` suelta el
+ *   cliente pero el estado se queda en `conectado` para siempre — así que después
+ *   de una vinculación EXITOSA, el próximo número nuevo recibía 409 «hay otra
+ *   vinculación en curso» eternamente. El éxito bloqueaba tanto como la falla.
+ * - `error` y `baneado`: el cliente está muerto o inservible. `iniciar()` empieza
+ *   por `cerrar()`, así que no hay nada que proteger.
+ *
+ * Con esto el candado se suelta solo en todos los caminos —éxito, falla,
+ * abandono— y no depende de que nadie apriete nada ni de reiniciar el server.
+ */
+export function esPareoEnVuelo(e: EstadoVinculacion): boolean {
+  return e.estado === "esperando" || e.estado === "qr";
 }
 
 /**

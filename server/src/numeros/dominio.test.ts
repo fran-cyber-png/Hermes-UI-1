@@ -7,6 +7,7 @@ import {
   estadoVinculacionAContrato,
   estadoVinculacionVigente,
   VIGENCIA_QR_MS,
+  esPareoEnVuelo,
 } from "./dominio.js";
 
 test("normalizarNumero: dígitos, mínimo 8, y prefija 51 a un móvil peruano de 9", () => {
@@ -103,17 +104,27 @@ test("estadoVinculacionVigente: un QR que dejó de refrescarse deja de tomar el 
   );
 });
 
-test("estadoVinculacionVigente: solo caduca el QR — lo demás pasa intacto", () => {
+test("estadoVinculacionVigente: un arranque colgado también caduca", () => {
+  const t0 = 1_700_000_000_000;
+  const esperando = { estado: "esperando", numero: "519" } as const;
+
+  // Arrancando: whatsmeow tarda unos segundos en dar el primer QR.
+  assert.deepEqual(estadoVinculacionVigente(esperando, t0, t0 + 5_000), esperando);
+
+  // Colgado: `client.init()` nunca volvió. Sin esto el candado quedaba tomado sin
+  // un solo QR de por medio — no había nada que envejeciera.
+  assert.deepEqual(estadoVinculacionVigente(esperando, t0, t0 + VIGENCIA_QR_MS + 1), {
+    estado: "inactivo",
+  });
+});
+
+test("estadoVinculacionVigente: solo caduca lo que está en vuelo — lo demás pasa intacto", () => {
   const t0 = 1_700_000_000_000;
   const viejo = t0 - 60 * 60_000;
 
   // `conectado` no caduca: la sesión quedó hecha, el reloj no la deshace.
   const conectado = { estado: "conectado", numero: "519", jid: "519@s" } as const;
   assert.deepEqual(estadoVinculacionVigente(conectado, viejo, t0), conectado);
-
-  // `esperando` tampoco: todavía no hubo QR que envejecer (whatsmeow está arrancando).
-  const esperando = { estado: "esperando", numero: "519" } as const;
-  assert.deepEqual(estadoVinculacionVigente(esperando, null, t0), esperando);
 
   // Un `error` viejo se sigue reportando: es el motivo que la pantalla muestra.
   const error = { estado: "error", numero: "519", motivo: "boom" } as const;
@@ -122,4 +133,24 @@ test("estadoVinculacionVigente: solo caduca el QR — lo demás pasa intacto", (
   // Un QR sin marca de tiempo no se puede juzgar: se muestra, no se inventa que murió.
   const qr = { estado: "qr", numero: "519", qr: "data:img" } as const;
   assert.deepEqual(estadoVinculacionVigente(qr, null, t0), qr);
+});
+
+test("esPareoEnVuelo: el ÉXITO no toma el candado — era el bloqueo eterno del próximo número", () => {
+  // Lo que muerde: al terminar bien, `cerrar()` suelta el cliente pero el estado
+  // se queda en `conectado`. Con el candado tomado por cualquier estado, vincular
+  // un número NUEVO daba 409 para siempre después de una vinculación exitosa.
+  assert.equal(esPareoEnVuelo({ estado: "conectado", numero: "519", jid: "519@s" }), false);
+
+  // Fallas terminales: el cliente está muerto o inservible, e `iniciar()` empieza
+  // cerrando. No hay nada que proteger.
+  assert.equal(esPareoEnVuelo({ estado: "error", numero: "519", motivo: "boom" }), false);
+  assert.equal(
+    esPareoEnVuelo({ estado: "baneado", numero: "519", codigo: "451", expira: "2026-08-01" }),
+    false
+  );
+  assert.equal(esPareoEnVuelo({ estado: "inactivo" }), false);
+
+  // Los dos que SÍ: hay un cliente vivo esperando al teléfono. Ahí el candado protege.
+  assert.equal(esPareoEnVuelo({ estado: "esperando", numero: "519" }), true);
+  assert.equal(esPareoEnVuelo({ estado: "qr", numero: "519", qr: "data:img" }), true);
 });

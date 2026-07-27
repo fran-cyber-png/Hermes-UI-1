@@ -29,19 +29,19 @@ export type EstadoVinculacion =
 class Vinculador {
   private client: WhatsmeowClient | null = null;
   private actual: EstadoVinculacion = { estado: 'inactivo' };
-  /** Cuándo llegó el último QR. Es lo que distingue un pareo vivo de uno muerto. */
-  private qrEn: number | null = null;
+  /** Cuándo dio señales el pareo en vuelo. Distingue uno vivo de uno colgado. */
+  private actualizadoEn: number | null = null;
 
   constructor(private readonly ahora: () => number = () => Date.now()) {}
 
   /**
-   * El estado que ve el mundo. NO es `this.actual` a secas: un QR que dejó de
-   * refrescarse se lee como `inactivo` (la regla vive en `numeros/dominio.ts`,
-   * pura y con test). Sin eso, un pareo que nadie escaneó deja el vinculador
-   * tomado y ningún otro número se puede vincular hasta reiniciar el server.
+   * El estado que ve el mundo. NO es `this.actual` a secas: un pareo en vuelo que
+   * dejó de dar señales se lee como `inactivo` (la regla vive en
+   * `numeros/dominio.ts`, pura y con test). Sin eso, uno que nadie escaneó deja el
+   * vinculador tomado y ningún otro número se puede vincular hasta reiniciar.
    */
   estado(): EstadoVinculacion {
-    return estadoVinculacionVigente(this.actual, this.qrEn, this.ahora());
+    return estadoVinculacionVigente(this.actual, this.actualizadoEn, this.ahora());
   }
 
   /**
@@ -53,7 +53,7 @@ class Vinculador {
   async cancelar(): Promise<void> {
     await this.cerrar();
     this.actual = { estado: 'inactivo' };
-    this.qrEn = null;
+    this.actualizadoEn = null;
   }
 
   async iniciar(numeroRaw: string): Promise<void> {
@@ -71,13 +71,15 @@ class Vinculador {
     const client = createClient({ store: `${dir}${numero}.db` });
     this.client = client;
     this.actual = { estado: 'esperando', numero };
-    this.qrEn = null;
+    // Se estampa YA: un arranque que se cuelga (init() que nunca vuelve) también
+    // tiene que caducar, o el candado queda tomado sin un solo QR de por medio.
+    this.actualizadoEn = this.ahora();
 
     client.on('qr', async ({ code }) => {
       try {
         const qr = await QRCode.toDataURL(code, { width: 360, margin: 1 });
         this.actual = { estado: 'qr', numero, qr };
-        this.qrEn = this.ahora();
+        this.actualizadoEn = this.ahora();
       } catch {
         /* si un QR puntual no renderiza, el próximo (rota cada ~20s) lo hará */
       }

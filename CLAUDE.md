@@ -629,11 +629,18 @@ multi-número real (N transportes vivos) es el Frente A, **issue #50**, todavía
   escaneó bloqueaba a todos los demás números hasta reiniciar Hermes — o sea tirando las sesiones de
   las vendedoras para destrabar un QR. Cancelar es idempotente (`cancelada: false` si no había nada)
   y cancelar la de OTRO número es 409, nunca un silencio.
-- **Un QR que dejó de refrescarse ya no toma el vinculador** (`VIGENCIA_QR_MS`, 60 s): whatsmeow lo
-  rota cada ~20 s mientras el canal de pareo vive; cuando se cierra, deja de llegar y el último se
-  quedaba en pantalla para siempre —imposible de escanear— **y encima bloqueando**. La regla vive
-  pura en `numeros/dominio.ts` (`estadoVinculacionVigente`, reloj inyectado), no adentro del
-  vinculador: el caso que importa es el minuto que todavía no pasó.
+- **El candado lo toma SOLO un pareo en vuelo** (`esPareoEnVuelo`: `esperando` · `qr`). Los tres
+  terminales no: su cliente ya está cerrado o muerto, e `iniciar()` arranca cerrando. **El que
+  mordía era `conectado`** — al terminar bien, `cerrar()` suelta el cliente pero el estado se queda
+  ahí, así que **después de una vinculación EXITOSA el próximo número nuevo comía 409 para
+  siempre**. El éxito bloqueaba tanto como la falla, y se veía como «no puedo vincular números
+  nuevos».
+- **Un pareo en vuelo que dejó de dar señales ya no toma el vinculador** (`VIGENCIA_QR_MS`, 60 s):
+  whatsmeow rota el QR cada ~20 s mientras el canal de pareo vive; cuando se cierra, deja de llegar
+  y el último se quedaba en pantalla para siempre —imposible de escanear— **y encima bloqueando**.
+  Vale también para `esperando`, porque un `client.init()` colgado no deja ni un QR que envejecer.
+  La regla vive pura en `numeros/dominio.ts` (`estadoVinculacionVigente`, reloj inyectado), no
+  adentro del vinculador: el caso que importa es el minuto que todavía no pasó.
 
 ## «Es la misma persona que…» — la unificación de contactos
 
