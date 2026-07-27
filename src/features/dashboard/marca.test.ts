@@ -99,9 +99,37 @@ describe('marcaDeFila — el Vencido (#23)', () => {
     });
   });
 
-  test('un seguimiento que NO venció no se marca: el nivel es el que manda', () => {
+  test('un seguimiento futuro no se marca: el nivel es el que manda', () => {
     // La fecha futura la descarta `cola/urgencia.ts` antes de llegar acá; la nota
     // puede venir igual y no tiene que disparar nada.
     expect(marcaDeFila({ nivel: 3, ventana_dias: null, seguimiento_nota: 'llamar mañana' })).toBeNull();
+  });
+});
+
+describe('marcaDeFila — el Silencio, y el silencio de la marca (#20)', () => {
+  test('nivel 4: le contestamos y no volvió — «se enfría»', () => {
+    // Es la única de las tres marcas que no se ve de ninguna otra forma en la
+    // fila: la temperatura y el «hace X» dicen CUÁNDO pasó algo, no QUIÉN tiene
+    // el turno. Sin esto, una que se enfría se lee igual que una recién llegada.
+    expect(marcaDeFila({ nivel: 4, ventana_dias: null })).toEqual({ texto: 'se enfría', tono: 'neutro' });
+  });
+
+  test('en neutro: es seguimiento, no una cuenta regresiva', () => {
+    // Ni oro (no hay plazo corriendo) ni rojo (no se perdió nada todavía).
+    expect(marcaDeFila({ nivel: 4, ventana_dias: null })?.tono).toBe('neutro');
+  });
+
+  test('VIVO y ESPERA no llevan marca — y eso es la decisión, no un olvido', () => {
+    // Una marca en TODAS las filas no distingue ninguna: es el defecto que #16
+    // vino a arreglar. La temperatura y el «hace X» ya cuentan estos dos.
+    expect(marcaDeFila({ nivel: 0, ventana_dias: null })).toBeNull();
+    expect(marcaDeFila({ nivel: 3, ventana_dias: null })).toBeNull();
+  });
+
+  test('el silencio NO le gana a la ventana de un comentario', () => {
+    // Un comentario respondido con la ventana todavía abierta: lo que le importa
+    // a la vendedora es que la puerta se cierra, no que la persona no volvió.
+    // El nivel lo decide el server; acá solo se comprueba que no se adelanta.
+    expect(marcaDeFila({ nivel: 2, ventana_dias: 3 })?.texto).toBe('quedan 3 días para escribirle');
   });
 });

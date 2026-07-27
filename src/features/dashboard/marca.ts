@@ -58,6 +58,9 @@ export interface DatosMarca {
 /** El nivel 1 de `cola/urgencia.ts`: un seguimiento agendado cuya fecha ya pasó. */
 const NIVEL_VENCIDO = 1;
 
+/** El nivel 4: le contestamos y la persona no volvió. Es seguimiento, no deuda. */
+const NIVEL_SILENCIO = 4;
+
 /**
  * Hasta dónde se muestra la nota del compromiso. La marca es `shrink-0` en la
  * fila —para que no la coma la atribución— así que una nota larga empujaría todo
@@ -88,6 +91,14 @@ function notaCorta(nota: string): string {
  * EL VENCIDO (#23) es un seguimiento agendado cuya fecha ya pasó: el único plazo
  * duro que la vendedora se pone A SÍ MISMA. Va primero porque el server ya lo
  * puso primero — el orden lo decide `cola/urgencia.ts` y acá solo se lee.
+ *
+ * EL SILENCIO (#20) es cuando le contestamos y la persona no volvió.
+ *
+ * LO QUE DELIBERADAMENTE NO LLEVA MARCA son los niveles 0 (VIVO) y 3 (ESPERA).
+ * No es un olvido: la banda de temperatura y el «hace X» de la fila ya los
+ * cuentan, y una marca en TODAS las filas no distingue ninguna — que es
+ * exactamente el defecto que #16 vino a arreglar («sesenta filas que dicen todas
+ * lo mismo»). Callarse donde no hay nada que agregar es parte del trabajo.
  */
 export function marcaDeFila({ nivel, ventana_dias, seguimiento_nota }: DatosMarca): Marca | null {
   // VENCIDO antes que la Ventana, porque así los ordenó el server: el nivel 1 le
@@ -105,6 +116,13 @@ export function marcaDeFila({ nivel, ventana_dias, seguimiento_nota }: DatosMarc
       tono: 'perdido',
     };
   }
+
+  // SILENCIO (#20): le contestamos y la persona no volvió. Es la única de las
+  // tres que no se ve de ninguna otra forma en la fila — la banda de temperatura
+  // y el «hace X» hablan de cuándo pasó algo, no de QUIÉN tiene el turno. Sin
+  // esta marca, una conversación que se está enfriando se lee igual que una que
+  // recién llegó.
+  if (nivel === NIVEL_SILENCIO) return { texto: 'se enfría', tono: 'neutro' };
 
   // Sin ventana no hay nada que contar. Es el caso de TODO WhatsApp, que es la
   // mayoría del radar: el default correcto es callarse.

@@ -3,7 +3,7 @@ import { Check, Clock, Pin, Star } from 'lucide-react';
 import { temperatureOf, TEMPERATURE_META } from '../leads/temperature';
 import { hace } from '../../lib/datos/frescura';
 import { formatoTelefono } from '../../lib/formato';
-import { etiquetaDeMedia } from '../../lib/etiquetaMedia';
+import { textoDePreview } from '../../lib/preview';
 import { ETAPA_CHIP } from '../../lib/etapas';
 import { CLASE_BORDE, CLASE_FONDO_SUAVE, CLASE_TEXTO, resolverColor } from '../gestion/paletaCategorias';
 import { cursoDeFila, detalleDeCurso } from './curso';
@@ -289,9 +289,7 @@ export function FilaConversacion({
             <span className="shrink-0 text-[11px] font-medium text-muted-foreground">+{categorias.length - 1}</span>
           )}
           <p className={'min-w-0 flex-1 truncate text-sm ' + clasePreview}>
-            {c.texto ||
-              etiquetaDeMedia(c.ultima_clase) ||
-              (c.ultima_origen?.fuente === 'anuncio' ? '📣 Vino del anuncio' : '(sin texto)')}
+            {textoDePreview({ texto: c.texto, clase: c.ultima_clase, origen: c.ultima_origen })}
           </p>
           {/* Conteo de mensajes: neutro y rotulado. El AZUL queda para «sin leer». */}
           {c.n > 1 && !c.respondida && (

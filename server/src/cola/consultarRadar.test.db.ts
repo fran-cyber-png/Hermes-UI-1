@@ -60,6 +60,39 @@ describe("consultarRadar — el seam del Dashboard (#38)", () => {
     assert.ok(filas[1]?.seguimiento_en, "seguimiento_en tiene que llegar desde la base");
   });
 
+  test("un entrante sin texto trae su CLASE de media, para poder decir qué llegó (#20)", async (t) => {
+    const db = await baseDePrueba(t);
+    await sembrarMensaje(db, { personaId: "p-foto", texto: null, mediaClase: "imagen", occurredAt: hace(2) });
+
+    const filas = await consultarRadar(db);
+    const fila = filas.find((f) => f.persona_id === "p-foto");
+
+    assert.equal(fila?.texto, null);
+    assert.equal(fila?.texto_clase, "imagen", "sin esto la fila queda en blanco y se lee como un bug");
+  });
+
+  test("la clase describe el ENTRANTE, nunca una foto que mandó la vendedora (#20)", async (t) => {
+    // El caso que protege el FILTER. La persona escribió, y DESPUÉS la vendedora
+    // le mandó una imagen: sin el filtro, `texto_clase` sería la de la vendedora
+    // y la fila diría «📷 Foto» sobre un texto que sí existe — describiría el
+    // mensaje equivocado, y encima el de la persona equivocada.
+    const db = await baseDePrueba(t);
+    await sembrarMensaje(db, { personaId: "p-mixta", texto: "me interesa el diplomado", occurredAt: hace(5) });
+    await sembrarMensaje(db, {
+      personaId: "p-mixta",
+      direccion: "saliente",
+      texto: null,
+      mediaClase: "imagen",
+      occurredAt: hace(1),
+    });
+
+    const filas = await consultarRadar(db);
+    const fila = filas.find((f) => f.persona_id === "p-mixta");
+
+    assert.equal(fila?.texto, "me interesa el diplomado");
+    assert.equal(fila?.texto_clase, null, "la imagen es de la vendedora: no describe lo que dijo la persona");
+  });
+
   test("el compromiso viaja con su NOTA, no solo con su fecha (#23)", async (t) => {
     // «Vencido» a secas no le dice a la vendedora qué tiene que hacer. Lo que
     // convierte el aviso en una jugada es lo que ella misma escribió.

@@ -20,6 +20,13 @@ export interface LeadChat {
   persona_nombre: string | null;
   numero_propio: string | null;
   texto: string | null;
+  /**
+   * La clase de media y el origen del MISMO mensaje que `texto` (#20) — el
+   * último ENTRANTE, no el último del hilo. Con esto la fila dice «📷 Foto» o
+   * «📣 Vino del anuncio» en vez de quedar en blanco. NULL en comentarios.
+   */
+  texto_clase: string | null;
+  texto_origen: { fuente?: string } | null;
   contexto_texto: string | null;
   telefono: string | null;
   pais_dato: string | null;

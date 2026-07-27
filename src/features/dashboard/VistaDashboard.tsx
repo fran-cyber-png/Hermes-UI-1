@@ -23,6 +23,7 @@ import {
   type LeadChat,
   type LeadFormulario,
 } from './dashboard';
+import { textoDePreview } from '../../lib/preview';
 import { marcaDeFila, TINTA_MARCA } from './marca';
 import { useNegocio } from './negocio';
 import { FiltrosNegocio, PanelNegocio, type FiltrosNegocioState } from './PanelNegocio';
@@ -578,46 +579,56 @@ export function VistaDashboard({
                         (esNueva ? ' animate-entrar bg-secondary' : '')
                       }
                     >
-                      {/* L1: caliente + canal + atribución + etapa */}
+                      {/* L1 · QUIÉN — metadato en voz chica: canal, nombre, país,
+                          etiquetas, la marca que explica la posición, y a la
+                          derecha el reloj y la etapa. Todo esto ANTES ocupaba el
+                          renglón principal y tapaba lo único que contesta el
+                          «por qué a ese» (#20). */}
                       <div className="flex items-center gap-2">
-                        {alta && <span title="caliente" className="size-1.5 shrink-0 rounded-full bg-gold-ink" />}
-                        {esChat ? <BadgeCanal canal={fila.chat.canal} size={13} /> : null}
-                        {esChat && fila.chat.pide_info && (
-                          <span className="shrink-0 rounded bg-primary/10 px-1 py-px text-[11px] font-semibold text-primary">
-                            Pide info
+                        {/* El grupo de la izquierda CEDE espacio (min-w-0): sin esto
+                            la suma de metadatos desborda la fila en una ventana
+                            angosta y el radar aparece con scroll horizontal — que
+                            en esta app no existe, se scrollea solo el riel. */}
+                        <span className="flex min-w-0 flex-1 items-center gap-2">
+                          {alta && <span title="caliente" className="size-1.5 shrink-0 rounded-full bg-gold-ink" />}
+                          {esChat ? <BadgeCanal canal={fila.chat.canal} size={13} /> : null}
+                          <span className="max-w-[40%] shrink truncate text-[11px] font-semibold text-foreground">
+                            {base.persona_nombre ?? (
+                              <span className="font-mono font-normal text-muted-foreground">
+                                {(esChat ? fila.chat.telefono : (fila.form.telefono ?? fila.form.correo)) ?? 'sin dato'}
+                              </span>
+                            )}
                           </span>
-                        )}
-                        <span className="truncate text-[11px] text-muted-foreground">
-                          {esChat
-                            ? `${fila.fuente === 'comentario' ? 'Comentario' : nombreCanal(fila.chat.canal)}${fila.chat.contexto_texto ? ` · “${fila.chat.contexto_texto.slice(0, 48)}”` : ''}`
-                            : `${fila.fuente === 'landing' ? 'Landing' : 'Lead Ad'} · ${fila.form.producto ?? fila.form.campana ?? 'sin campaña'}${fila.form.flyer && fila.form.flyer !== 'ORGANICO' ? ` · ${fila.form.flyer}` : ''}`}
-                        </span>
-                        {marca && (
-                          <span className={'shrink-0 text-[11px] font-semibold ' + TINTA_MARCA[marca.tono]}>
-                            {marca.texto}
+                          {pais && <span className="shrink-0 font-mono text-[11px] text-muted-foreground" title={pais}>{pais}</span>}
+                          {/* El nombre del canal es lo PRIMERO que se sacrifica si
+                              falta lugar: el badge de la izquierda ya lo dice. */}
+                          <span className="min-w-0 shrink truncate font-mono text-[11px] text-muted-foreground">
+                            {esChat
+                              ? fila.fuente === 'comentario'
+                                ? 'Comentario'
+                                : nombreCanal(fila.chat.canal)
+                              : fila.fuente === 'landing'
+                                ? 'Landing'
+                                : 'Lead Ad'}
                           </span>
-                        )}
-                        <span className={'ml-auto shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ' + (ETAPA_CHIP[etapa] ?? ETAPA_CHIP.interesado)}>
-                          {etapa}
-                        </span>
-                      </div>
-                      {/* L2: nombre + país + etiquetas + hace + acciones */}
-                      <div className="mt-0.5 flex items-center gap-2">
-                        <span className="truncate text-[13px] font-medium text-foreground">
-                          {base.persona_nombre ?? (
-                            <span className="font-mono text-xs text-muted-foreground">
-                              {(esChat ? fila.chat.telefono : (fila.form.telefono ?? fila.form.correo)) ?? 'sin dato'}
+                          {tags.map((t) => (
+                            <span key={t} className="shrink-0 rounded-md border border-border px-1.5 text-[11px] leading-4 text-muted-foreground">
+                              {t}
+                            </span>
+                          ))}
+                          <EtiquetaInline clave={clave} />
+                          {/* La marca trunca en vez de empujar: vale más una marca
+                              recortada que una fila que se sale de la pantalla. */}
+                          {marca && (
+                            <span
+                              title={marca.texto}
+                              className={'min-w-0 shrink truncate text-[11px] font-semibold ' + TINTA_MARCA[marca.tono]}
+                            >
+                              {marca.texto}
                             </span>
                           )}
                         </span>
-                        {pais && <span className="shrink-0 font-mono text-[11px] text-muted-foreground" title={pais}>{pais}</span>}
-                        {tags.map((t) => (
-                          <span key={t} className="shrink-0 rounded-md border border-border px-1.5 text-[11px] leading-4 text-muted-foreground">
-                            {t}
-                          </span>
-                        ))}
-                        <EtiquetaInline clave={clave} />
-                        <span className="ml-auto flex shrink-0 items-center gap-1">
+                        <span className="flex shrink-0 items-center gap-2">
                           <span
                             className={
                               'font-mono text-[11px] tabular-nums ' +
@@ -627,6 +638,32 @@ export function VistaDashboard({
                           >
                             {hace(horas)}
                           </span>
+                          <span className={'rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ' + (ETAPA_CHIP[etapa] ?? ETAPA_CHIP.interesado)}>
+                            {etapa}
+                          </span>
+                        </span>
+                      </div>
+
+                      {/* L2 · QUÉ DIJO — el renglón principal. Es el único campo
+                          que contesta «¿por qué a ese?», y viajaba desde el server
+                          sin que nadie lo pintara. Un formulario no tiene mensaje:
+                          su equivalente es el producto que pidió. */}
+                      <div className="mt-0.5 flex items-center gap-2">
+                        {esChat && fila.chat.pide_info && (
+                          <span className="shrink-0 rounded bg-primary/10 px-1 py-px text-[11px] font-semibold text-primary">
+                            Pide info
+                          </span>
+                        )}
+                        <p className="min-w-0 flex-1 truncate text-[13px] text-foreground">
+                          {esChat
+                            ? textoDePreview({
+                                texto: fila.chat.texto,
+                                clase: fila.chat.texto_clase,
+                                origen: fila.chat.texto_origen,
+                              })
+                            : (fila.form.producto ?? fila.form.campana ?? 'sin campaña')}
+                        </p>
+                        <span className="ml-auto flex shrink-0 items-center gap-1">
                           <span className="flex items-center gap-1.5 text-muted-foreground transition-colors focus-within:text-navy group-hover:text-navy">
                             {(esChat ? fila.chat.telefono : fila.form.telefono) && (
                               <BotonLlamar telefono={(esChat ? fila.chat.telefono : fila.form.telefono)!} compacto />
@@ -668,6 +705,16 @@ export function VistaDashboard({
                           </span>
                         </span>
                       </div>
+
+                      {/* L3 · DÓNDE lo dijo — solo para comentarios, y solo si hay
+                          contexto. Antes iba pegado a la atribución en L1, donde
+                          competía con el nombre; acá abajo no le quita renglón a
+                          nada y sigue diciendo bajo qué publicación comentó. */}
+                      {esChat && fila.fuente === 'comentario' && fila.chat.contexto_texto && (
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                          en “{fila.chat.contexto_texto}”
+                        </p>
+                      )}
                     </div>
                   );
                 })}

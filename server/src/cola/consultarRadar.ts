@@ -34,6 +34,13 @@ export type ChatRadar = {
   persona_nombre: string | null;
   numero_propio: string | null;
   texto: string | null;
+  /**
+   * La clase de media y el origen del MISMO mensaje que `texto` —el último
+   * ENTRANTE, no el último del hilo— para poder decir «📷 Foto» o «📣 Vino del
+   * anuncio» en vez de dejar la fila en blanco (#20). NULL en comentarios.
+   */
+  texto_clase: string | null;
+  texto_origen: { fuente?: string } | null;
   contexto_texto: string | null;
   telefono: string | null;
   pais_dato: string | null;
@@ -77,7 +84,11 @@ export async function consultarRadar(
       -- entrante es siempre POSTERIOR a ese entrante: si el último entrante entra
       -- en 7 días, su respuesta entra en 30. Medido con EXPLAIN ANALYZE.
       SELECT i.canal, i.persona_id, i.persona_nombre, i.texto, i.direccion, i.occurred_at,
-             COALESCE(e.payload->>'numeroPropio', '') AS numero_propio
+             COALESCE(e.payload->>'numeroPropio', '') AS numero_propio,
+             -- Para el caso «llegó una foto, no texto» (#20). Salen del payload
+             -- del evento, que ya se lee acá arriba: no agregan ni un JOIN.
+             e.payload->'media'->>'clase'             AS clase,
+             e.payload->'origen'                      AS origen
       FROM interactions i
       JOIN events e ON e.id = i.event_id
       WHERE i.tipo = 'mensaje' AND i.persona_id IS NOT NULL
@@ -93,6 +104,12 @@ export async function consultarRadar(
         -- Lo que dijo la PERSONA, no lo último que se escribió en el hilo: si la
         -- vendedora ya contestó, el mensaje que importa sigue siendo el de ella.
         (array_agg(texto ORDER BY occurred_at DESC) FILTER (WHERE direccion = 'entrante'))[1] AS texto,
+        -- Qué llegó cuando NO llegó texto (#20). El mismo FILTER de entrante que
+        -- texto, y no es un detalle: sin él la fila podría decir «📷 Foto»
+        -- describiendo una foto que mandó LA VENDEDORA. Las tres columnas tienen
+        -- que hablar del MISMO mensaje o la fila miente sobre quién dijo qué.
+        (array_agg(clase ORDER BY occurred_at DESC) FILTER (WHERE direccion = 'entrante'))[1] AS texto_clase,
+        (array_agg(origen ORDER BY occurred_at DESC) FILTER (WHERE direccion = 'entrante'))[1] AS texto_origen,
         NULL::text AS contexto_texto,
         CASE WHEN canal = 'whatsapp' THEN persona_id ELSE NULL END AS telefono,
         NULL::text AS pais_dato,
@@ -121,7 +138,11 @@ export async function consultarRadar(
         'int:' || i.id::text AS clave,
         'comentario'::text AS fuente, i.canal, 'comentario'::text AS tipo,
         i.persona_id, i.persona_nombre, NULL::text AS numero_propio,
-        i.texto, i.contexto_texto,
+        i.texto,
+        -- Un comentario público es texto; no hay media ni referral de anuncio que
+        -- leer. Van en NULL para que las dos ramas del UNION cuadren.
+        NULL::text AS texto_clase, NULL::jsonb AS texto_origen,
+        i.contexto_texto,
         NULL::text AS telefono, NULL::text AS pais_dato,
         (${pideInfoSql("i.texto")}) AS pide_info,
         (${ventanaDiasSql("i.occurred_at", "i.canal")}) AS ventana_dias,
