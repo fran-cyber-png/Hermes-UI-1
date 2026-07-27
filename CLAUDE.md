@@ -181,12 +181,29 @@ nunca directo: **`POST /api/ivi/preguntar`** (`server/src/routes/ivi.ts`), **det
 `Authorization: Bearer IVI_SERVICE_TOKEN` (token de servicio que la vendedora **jamás** ve;
 referenciado por nombre, regla dura #1). El cliente vive en `server/src/ivi/cliente.ts`
 (`preguntarleAIvi`); el contrato de vuelta es `RespuestaIvi` (`texto`, `tipo`, `fuentes`,
-`groundingOk`, `edadDelDato`), validado con Zod.
+`groundingOk`, `numerosNoVerificados`, `edadDelDato`), validado con Zod.
 
 - **Body**: `{ pregunta: string, historial?: {rol,texto}[] }`, con tope de tamaño (4000
   caracteres la pregunta y cada turno, 30 turnos de historial — sin eso, amplificaba sin límite
   lo que Hermes le reenvía a Ivi). El `usuario` sale del token (la vendedora), no del body — no
   se puede suplantar.
+- **La costura habla el dialecto de Ivi** (ADR 0021): hacia afuera `snake_case` y el historial como
+  `[{q,a}]` —`{rol,texto}` se lee como cadena vacía y el follow-up se pierde **en silencio**—;
+  hacia adentro, camelCase. Las dos traducciones (`aCamelCase`, `aParesQA`) viven en `cliente.ts` y
+  en ningún otro lado. **Nada de `.strict()`**: Ivi solo agrega campos, y cerrarlo convertiría cada
+  campo nuevo en un 502. Lo único que rompe es renombrar, y de eso se defiende el fixture literal
+  `CUERPO_REAL_DE_IVI` (copia de `contrato_hermes()` de ivi-cerebro).
+- **Un `200` con `tipo: SIN_EVIDENCIA` NO es un error** (ADR 0021): Ivi funcionó y no sabe, y eso es
+  una respuesta que la app muestra. La contracara de «un 404 no es "no hay respuesta clara"». **Y no
+  se reintenta**: el reintento se decide por `codigo` en `esReintentable` (solo `timeout` y `red`) y
+  el 502 lo dice en `reintentable` para que la app no reimplemente la tabla. El vocabulario de
+  `tipo` (`TIPO_IVI`: `HECHO` · `CONTEXTO` · `SIN_EVIDENCIA`) está publicado para que la UI
+  ramifique, pero el schema **no lo cierra**: un tipo nuevo cae en la rama conservadora, nunca en
+  `HECHO` ni en un throw.
+- **`traza_id`**: cada pregunta lleva uno (`hermes-<uuid>`, generado acá) y vuelve a la app en el
+  éxito **y en el 502**. Hoy no se ve; va igual porque es lo único que une «qué recomendó Ivi» con
+  «qué se mandó y qué resultó», y no se puede reconstruir después. También viaja `superficie:
+  hermes` (tope de salida del lado de Ivi).
 - **FAIL-CLOSED y RUIDOSO**: cualquier fallo es un **502 con `codigo`**, los ocho de
   `CODIGO_ERROR_IVI` (`cliente.ts`): `falta_config` sin `IVI_URL`/`IVI_SERVICE_TOKEN`,
   `config_hermes` en 401, `ivi_no_configurado` en 503, `timeout` (30s, incluye timeout leyendo el
