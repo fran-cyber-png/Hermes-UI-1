@@ -45,6 +45,22 @@ describe('TransporteFalso', () => {
     assert.equal(recibidos[0].nombreVisible, 'Andre');
   });
 
+  test('dos líneas vivas NO se pisan los ids: el id lleva el número propio', () => {
+    // El contador es por instancia, así que las dos arrancan en 1. Con el id
+    // viejo (`falso-1`) las dos emitían el MISMO, y como el id es la clave de
+    // idempotencia (`wa:falso-1`), la ingesta descartaba el de la segunda línea
+    // EN SILENCIO — cinco mensajes sembrados, tres filas en la base.
+    const escuela = new TransporteFalso({ telefono: '51986394450', ahora: RELOJ_FIJO });
+    const walter = new TransporteFalso({ telefono: '51941654039', ahora: RELOJ_FIJO });
+
+    const a = escuela.simularEntrante('51999111001', 'hola');
+    const b = walter.simularEntrante('51999222001', 'hola');
+
+    assert.notEqual(a.idExterno, b.idExterno, 'el primer mensaje de cada línea no puede compartir id');
+    assert.ok(a.idExterno.includes('51986394450'));
+    assert.ok(b.idExterno.includes('51941654039'));
+  });
+
   test('enviar registra el envío y lo emite como esMio=true', async () => {
     const t = new TransporteFalso({ telefono: '51987654321', ahora: RELOJ_FIJO });
     const recibidos: MensajeWhatsapp[] = [];

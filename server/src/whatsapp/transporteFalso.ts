@@ -80,10 +80,24 @@ export class TransporteFalso implements TransporteWhatsapp {
     return this.opciones.ahora ? this.opciones.ahora() : new Date();
   }
 
-  /** Ids monótonos y estables: `falso-1`, `falso-2`… — sirven de clave de idempotencia en los tests. */
+  /**
+   * Ids monótonos y estables: `falso-<línea>-1`, `falso-<línea>-2`… — sirven de
+   * clave de idempotencia en los tests.
+   *
+   * ⚠ **La línea entra en el id, y no es cosmético.** El contador es por
+   * instancia, así que con dos líneas vivas las dos empiezan en 1 y emiten
+   * `falso-1`. Como el id es la clave de idempotencia (`wa:falso-1`), el mensaje
+   * de la SEGUNDA línea se descartaba **en silencio**: la ingesta lo leía como
+   * un repetido del de la primera.
+   *
+   * Se descubrió sembrando las dos líneas en dev — tres mensajes en una, dos en
+   * la otra, cinco `ok:true`, y solo tres filas en la base. O sea que el único
+   * escenario que #50 agregó era también el único que no se podía sembrar para
+   * mirarlo.
+   */
   private nuevoId(): string {
     this.contador += 1;
-    return `falso-${this.contador}`;
+    return `falso-${this.numeroPropio}-${this.contador}`;
   }
 
   async iniciar(): Promise<void> {

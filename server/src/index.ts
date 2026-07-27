@@ -124,9 +124,11 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 // mensaje en el mismo event store que Facebook/Instagram. La ruta de dev para
 // inyectar mensajes solo existe si corre el falso.
 // Desde #50 esto monta N líneas y devuelve el gestor. La ruta de dev que inyecta
-// mensajes trabaja sobre la PRIMERA: es una herramienta de desarrollo, y elegirle
-// la línea a mano es justo lo que se quiere poder hacer desde ella.
-const { falso } = arrancarWhatsapp().primero();
+// mensajes recibe el GESTOR y no una línea: elegirle la línea a mano es lo que
+// se quiere poder hacer desde ella, y sin eso el escenario de dos líneas —lo
+// único que #50 agregó— no se puede reproducir en dev.
+const gestor = arrancarWhatsapp();
+const hayFalso = gestor.todos().some((l) => l.falso);
 app.use("/api/stream", streamRouter);     // tiempo real: push de cambios (SSE)
 app.use("/api/whatsapp", whatsappRouter); // conversación nativa: hilo + enviar
 app.use("/api/autorespuesta", autorespuestaRouter); // el interruptor sin deploy de la auto-respuesta (#125)
@@ -140,7 +142,7 @@ app.use("/api/admin", requiereServicio, adminRouter); // administración de núm
 // que recordar, aunque alguien las montara igual.
 if (process.env.NODE_ENV !== "production") {
   app.use("/api/whatsapp/_sim", simularRouter); // simular detección de origen (dev)
-  if (falso) app.use("/api/whatsapp/_dev", rutaDevWhatsapp(falso));
+  if (hayFalso) app.use("/api/whatsapp/_dev", rutaDevWhatsapp(gestor));
 }
 
 // LA UI SERVIDA DESDE ACÁ (actualización "over the air", estilo EAS Update):
