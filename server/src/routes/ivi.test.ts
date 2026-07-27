@@ -7,9 +7,10 @@ import { firmarSesion } from '../auth/sesion.js';
 import {
   CODIGO_ERROR_IVI,
   ErrorIvi,
+  TIPO_IVI,
   type CodigoErrorIvi,
   type PreguntarAIvi,
-  type RespuestaIvi,
+  type RespuestaIviConTraza,
   type TurnoHistorial,
 } from '../ivi/cliente.js';
 import { iviRouter } from './ivi.js';
@@ -23,8 +24,8 @@ import { iviRouter } from './ivi.js';
 
 const TOKEN = firmarSesion('ana');
 
-function respuestaValida(): RespuestaIvi {
-  return { texto: 'ok', tipo: 'dato', fuentes: [], groundingOk: true, edadDelDato: null };
+function respuestaValida(): RespuestaIviConTraza {
+  return { texto: 'ok', tipo: 'dato', fuentes: [], groundingOk: true, edadDelDato: null, trazaId: 'traza-1' };
 }
 
 interface Respuesta {
@@ -149,5 +150,49 @@ describe('POST /api/ivi/preguntar', () => {
     assert.equal(r.status, 502);
     assert.equal(r.json?.ok, false);
     assert.equal(r.json?.codigo, CODIGO_ERROR_IVI.DESCONOCIDO);
+    assert.equal(r.json?.reintentable, false, 'un bug nuestro no se arregla preguntando otra vez');
+  });
+});
+
+/**
+ * H4 — la mitad que faltaba del fail-closed: que un fallo se vea como fallo NO puede
+ * costar que una respuesta honesta se vea como fallo. Los dos caminos, uno al lado del otro.
+ */
+describe('POST /api/ivi/preguntar — SIN_EVIDENCIA sale por el camino de las respuestas', () => {
+  test('200 con tipo SIN_EVIDENCIA: la app lo recibe como respuesta, no como error', async () => {
+    let llamadas = 0;
+    const preguntar: PreguntarAIvi = async () => {
+      llamadas += 1;
+      return {
+        ...respuestaValida(),
+        texto: 'No tengo datos para responder eso.',
+        tipo: TIPO_IVI.SIN_EVIDENCIA,
+        groundingOk: false,
+      };
+    };
+    const r = await pedir(preguntar, { token: TOKEN, body: { pregunta: '¿ventas en Marte?' } });
+
+    assert.equal(r.status, 200, 'un «no sé» de Ivi NO es un 502');
+    assert.equal(r.json?.ok, true);
+    const respuesta = r.json?.respuesta as Record<string, unknown>;
+    assert.equal(respuesta.tipo, TIPO_IVI.SIN_EVIDENCIA, 'el tipo llega intacto: la UI ramifica con él');
+    assert.equal(respuesta.texto, 'No tengo datos para responder eso.');
+    assert.equal(llamadas, 1, 'la ruta no reintenta: Ivi ya decidió');
+    assert.equal('codigo' in (r.json ?? {}), false, 'sin `codigo`: no es un error');
+  });
+
+  test('la traza vuelve en el éxito y en el 502 — es lo único que cruza los dos logs', async () => {
+    const ok = await pedir(async () => respuestaValida(), { token: TOKEN, body: { pregunta: 'hola' } });
+    assert.equal(ok.json?.trazaId, 'traza-1');
+
+    const falla: PreguntarAIvi = async () => {
+      const e = new ErrorIvi(CODIGO_ERROR_IVI.TIMEOUT, 'tardó');
+      e.trazaId = 'traza-2';
+      throw e;
+    };
+    const mal = await pedir(falla, { token: TOKEN, body: { pregunta: 'hola' } });
+    assert.equal(mal.status, 502);
+    assert.equal(mal.json?.trazaId, 'traza-2');
+    assert.equal(mal.json?.reintentable, true, 'un timeout sí se puede reintentar');
   });
 });

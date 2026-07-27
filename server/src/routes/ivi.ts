@@ -1,7 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requiereVendedora } from '../auth/sesion.js';
-import { CODIGO_ERROR_IVI, ErrorIvi, preguntarleAIvi, turnoHistorialSchema } from '../ivi/cliente.js';
+import {
+  CODIGO_ERROR_IVI,
+  ErrorIvi,
+  esReintentable,
+  preguntarleAIvi,
+  turnoHistorialSchema,
+} from '../ivi/cliente.js';
 import type { PreguntarAIvi } from '../ivi/cliente.js';
 
 /**
@@ -39,17 +45,32 @@ export function iviRouter(preguntar: PreguntarAIvi = preguntarleAIvi): Router {
 
     try {
       // El usuario es la vendedora autenticada (del token), no lo que venga del body.
+      // Un `tipo: SIN_EVIDENCIA` sale POR ACÁ, con 200: Ivi funcionó y no sabe, y eso es una
+      // respuesta —la app la muestra tal cual—. Solo un fallo baja al `catch`.
       const respuesta = await preguntar(cuerpo.data.pregunta, req.vendedoraId!, cuerpo.data.historial);
-      res.json({ ok: true, respuesta });
+      res.json({ ok: true, respuesta, trazaId: respuesta.trazaId });
     } catch (err) {
       // Fail-closed: un fallo se reporta como fallo, con su clase — jamás como «no hay datos».
+      // `reintentable` viaja para que la app no tenga que reimplementar la tabla de códigos
+      // (y para que no reintente un fallo de config, que da lo mismo un minuto después).
       if (err instanceof ErrorIvi) {
-        console.error(`ivi: ${err.codigo} — ${err.message}`, err.cause ?? '');
-        res.status(502).json({ ok: false, codigo: err.codigo, message: err.message });
+        console.error(`ivi: ${err.codigo} — ${err.message} [traza ${err.trazaId ?? '—'}]`, err.cause ?? '');
+        res.status(502).json({
+          ok: false,
+          codigo: err.codigo,
+          message: err.message,
+          reintentable: esReintentable(err.codigo),
+          ...(err.trazaId ? { trazaId: err.trazaId } : {}),
+        });
         return;
       }
       console.error('ivi: error inesperado consultando a Ivi', err);
-      res.status(502).json({ ok: false, codigo: CODIGO_ERROR_IVI.DESCONOCIDO, message: 'No se pudo consultar a Ivi.' });
+      res.status(502).json({
+        ok: false,
+        codigo: CODIGO_ERROR_IVI.DESCONOCIDO,
+        message: 'No se pudo consultar a Ivi.',
+        reintentable: esReintentable(CODIGO_ERROR_IVI.DESCONOCIDO),
+      });
     }
   });
 
