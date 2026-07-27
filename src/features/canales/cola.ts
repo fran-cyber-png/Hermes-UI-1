@@ -23,7 +23,7 @@
 export type Tab = 'todo' | 'no-leidos' | 'favoritos';
 
 /** Los filtros secundarios: angostan dentro del tab (#49). */
-export type FiltroSec = '' | 'pide-info' | 'sin-responder';
+export type FiltroSec = '' | 'pide-info' | 'sin-responder' | 'ya-compraron';
 
 export const TABS: { valor: Tab; label: string; vacio: string }[] = [
   { valor: 'todo', label: 'Todo', vacio: 'No entró nada por ningún canal.' },
@@ -34,6 +34,14 @@ export const TABS: { valor: Tab; label: string; vacio: string }[] = [
 export const FILTROS_SEC: { valor: Exclude<FiltroSec, ''>; label: string; ayuda: string }[] = [
   { valor: 'pide-info', label: 'Piden info', ayuda: 'Lo último que escribió fue un pedido de información' },
   { valor: 'sin-responder', label: 'Sin responder', ayuda: 'Nadie del equipo contestó todavía' },
+  /**
+   * «Ya compraron» (#133) va PRIMERO de los tres cuando la vendedora elige a
+   * quién atender: son 140 de 1.997 y convierten mucho más barato que un frío.
+   * Va último en la barra igual, porque los otros dos son el trabajo del día
+   * (deuda y pedidos) y este es una oportunidad — pero con su número al lado, que
+   * es lo que hace que se lo mire.
+   */
+  { valor: 'ya-compraron', label: 'Ya compraron', ayuda: 'Ya te compró alguna vez: el lead más barato de convertir' },
 ];
 
 const TABS_VALIDOS: readonly string[] = TABS.map((t) => t.valor);

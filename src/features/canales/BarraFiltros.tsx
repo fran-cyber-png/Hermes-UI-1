@@ -45,7 +45,7 @@ export function BarraFiltros({
   filtroSec: FiltroSec;
   onFiltro: (f: FiltroSec) => void;
   /** Cuántas filas daría cada filtro dentro del recorte actual (el server los cuenta). */
-  conteos?: { pideInfo: number; sinResponder: number };
+  conteos?: { pideInfo: number; sinResponder: number; yaCompraron?: number };
   catalogo?: readonly CategoriaEnBarra[];
   categoriaActiva: string | null;
   onCategoria: (c: { nombre: string; color: string } | null) => void;
@@ -114,7 +114,13 @@ export function BarraFiltros({
 
   const categorias = categoriasDeLaBarra(catalogo, categoriaActiva);
   const conteoDe = (valor: string) =>
-    valor === 'pide-info' ? conteos?.pideInfo : valor === 'sin-responder' ? conteos?.sinResponder : undefined;
+    valor === 'pide-info'
+      ? conteos?.pideInfo
+      : valor === 'sin-responder'
+        ? conteos?.sinResponder
+        : valor === 'ya-compraron'
+          ? conteos?.yaCompraron
+          : undefined;
 
   return (
     /* `-mx-3` + `px-3` en la pista: la barra SANGRA hasta el borde del panel. Si
