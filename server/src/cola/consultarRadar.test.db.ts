@@ -60,6 +60,46 @@ describe("consultarRadar — el seam del Dashboard (#38)", () => {
     assert.ok(filas[1]?.seguimiento_en, "seguimiento_en tiene que llegar desde la base");
   });
 
+  test("el compromiso viaja con su NOTA, no solo con su fecha (#23)", async (t) => {
+    // «Vencido» a secas no le dice a la vendedora qué tiene que hacer. Lo que
+    // convierte el aviso en una jugada es lo que ella misma escribió.
+    const db = await baseDePrueba(t);
+    await sembrarMensaje(db, { personaId: "p-prometida", occurredAt: hace(3 * 24) });
+    await sembrarRecordatorio(db, {
+      clave: "conv:whatsapp:p-prometida:51999999999",
+      personaId: "p-prometida",
+      nota: "mandarle el temario del diplomado",
+      cuando: hace(30),
+    });
+
+    const filas = await consultarRadar(db);
+    const fila = filas.find((f) => f.persona_id === "p-prometida");
+
+    assert.equal(fila?.nivel, 1);
+    assert.equal(fila?.seguimiento_nota, "mandarle el temario del diplomado");
+  });
+
+  test("con dos compromisos, la nota es la DEL MÁS VIEJO — la que casa con la fecha", async (t) => {
+    // El caso que un `min(nota)` rompe en silencio: devolvería la nota menor
+    // ALFABÉTICAMENTE, que acá es la del recordatorio más NUEVO. La pantalla
+    // mostraría la fecha de una promesa con el texto de otra, y nadie lo notaría
+    // hasta que una vendedora hiciera lo que no era.
+    const db = await baseDePrueba(t);
+    const clave = "conv:whatsapp:p-dos:51999999999";
+    await sembrarMensaje(db, { personaId: "p-dos", occurredAt: hace(3 * 24) });
+    await sembrarRecordatorio(db, { clave, personaId: "p-dos", nota: "zapatos: cerrar la venta", cuando: hace(48) });
+    await sembrarRecordatorio(db, { clave, personaId: "p-dos", nota: "aaa recordarle el pago", cuando: hace(2) });
+
+    const filas = await consultarRadar(db);
+    const fila = filas.find((f) => f.persona_id === "p-dos");
+
+    assert.equal(
+      fila?.seguimiento_nota,
+      "zapatos: cerrar la venta",
+      "la nota tiene que ser la del compromiso más viejo, no la primera del abecedario",
+    );
+  });
+
   test("la ventana viaja como DÍAS QUE QUEDAN, no como sí/no (#22)", async (t) => {
     // Antes esto era un booleano y encima siempre verdadero: el WHERE ya
     // recortaba a 7 días, así que no podía ser falso ni una vez. De un sí/no no

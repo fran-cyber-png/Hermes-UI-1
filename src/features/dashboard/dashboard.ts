@@ -35,6 +35,14 @@ export interface LeadChat {
   respondida: boolean;
   referencia: string;
   cayo_at: string;
+  /**
+   * El seguimiento agendado más viejo que sigue pendiente, y DE QUÉ se trata
+   * (#23). `seguimiento_nota` es la nota de esa misma fila — sin ella la fila
+   * solo podría decir «vencido», que no dice qué hacer. El server ya mandaba la
+   * fecha desde #38; nadie la leía porque no estaba en este tipo.
+   */
+  seguimiento_en: string | null;
+  seguimiento_nota: string | null;
   /** Nivel de urgencia (0 vivo … 5 archivo). Lo decide el server, ver cola/urgencia.ts. */
   nivel: number;
   /** Desempate dentro del nivel. Con (nivel, orden) alcanza para mezclar las dos listas. */

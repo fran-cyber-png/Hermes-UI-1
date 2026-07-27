@@ -535,9 +535,16 @@ export function VistaDashboard({
                   const tags = data!.etiquetas[clave] ?? [];
                   const pais = paisDe(base.pais_dato, esChat ? fila.chat.telefono : fila.form.telefono);
                   const horas = (Date.now() - new Date(base.cayo_at).getTime()) / 3_600_000;
-                  // Por qué esta fila está donde está (#22). Un formulario no
-                  // tiene Ventana: no hay comentario público del que colgarse.
-                  const marca = esChat ? marcaDeFila({ ventana_dias: fila.chat.ventana_dias }) : null;
+                  // Por qué esta fila está donde está (#22, #23). Un formulario no
+                  // tiene Ventana —no hay comentario público del que colgarse— ni
+                  // agenda, así que no tiene nada que explicar.
+                  const marca = esChat
+                    ? marcaDeFila({
+                        nivel: fila.nivel,
+                        ventana_dias: fila.chat.ventana_dias,
+                        seguimiento_nota: fila.chat.seguimiento_nota,
+                      })
+                    : null;
                   // Con la Ventana cerrada ya no se puede escribir en privado, así
                   // que la fila deja de ofrecerlo: un botón que no lleva a ningún
                   // lado enseña a desconfiar de todos los demás. `null` es WhatsApp,

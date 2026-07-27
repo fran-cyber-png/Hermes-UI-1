@@ -137,10 +137,23 @@ export function ventanaAbiertaSql(ventanaDias: SQL): SQL {
  * promesa. Si el módulo decide que todavía no venció (fecha futura), la fila
  * sigue su curso por los demás niveles — eso lo decide la urgencia, no este JOIN.
  * Sin filtro por vendedora a propósito: la cola es de la mesa, y una promesa
- * hecha por cualquiera marca la conversación para todas.
+ * hecha por cualquiera marca la conversación para todas. Filtrarla haría
+ * desaparecer del radar de TODAS el compromiso de alguien que está de licencia
+ * o que se fue — el criterio contrario de #23 se descartó por eso.
+ *
+ * `seguimiento_nota` es DE QUÉ se trata el compromiso (#23). Sin ella la fila
+ * solo puede decir «vencido», que no le dice a la vendedora qué tiene que hacer.
+ *
+ * Va con `array_agg(... ORDER BY cuando)` y no con `min(nota)` —el mismo patrón
+ * que `pideInfoAgrupadoSql` acá abajo— porque tiene que ser la nota de LA MISMA
+ * FILA que dio el `min(cuando)`. Un `min(nota)` devolvería la menor
+ * alfabéticamente, que puede ser la de otro recordatorio: la pantalla mostraría
+ * una fecha con el texto de otra promesa.
  */
 export const seguimientosPendientesSql: SQL = sql`
-  SELECT clave, min(cuando) AS seguimiento_en
+  SELECT clave,
+         min(cuando)                              AS seguimiento_en,
+         (array_agg(nota ORDER BY cuando))[1]     AS seguimiento_nota
   FROM recordatorios
   WHERE estado = 'pendiente'
   GROUP BY clave

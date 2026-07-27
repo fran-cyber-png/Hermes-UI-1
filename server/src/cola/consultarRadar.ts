@@ -50,6 +50,12 @@ export type ChatRadar = {
   cayo_at: string;
   /** El pendiente más viejo de la agenda para esta clave — NULL si no hay. */
   seguimiento_en: string | null;
+  /**
+   * DE QUÉ se trata ese compromiso (#23). Es la nota de la MISMA fila que dio
+   * `seguimiento_en`. Sin esto la fila solo puede decir «vencido», que no le
+   * dice a la vendedora qué prometió.
+   */
+  seguimiento_nota: string | null;
 };
 
 export async function consultarRadar(
@@ -140,7 +146,8 @@ export async function consultarRadar(
     -- ventana_abierta se DERIVA de los días que quedan, no se calcula aparte:
     -- así el booleano que ordena (nivel EXPIRA) y el número que se muestra no
     -- pueden decir cosas distintas sobre la misma fila.
-    SELECT t.*, (${ventanaAbiertaSql(sql`t.ventana_dias`)}) AS ventana_abierta, s.seguimiento_en
+    SELECT t.*, (${ventanaAbiertaSql(sql`t.ventana_dias`)}) AS ventana_abierta,
+           s.seguimiento_en, s.seguimiento_nota
     FROM (SELECT * FROM conv UNION ALL SELECT * FROM comentarios) t
     LEFT JOIN seguimientos s USING (clave)
     -- Este orden NO es el que ve la vendedora: solo elige QUÉ 60 filas viajan.

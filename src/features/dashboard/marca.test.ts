@@ -2,39 +2,41 @@ import { describe, expect, test } from 'vitest';
 import { marcaDeFila } from './marca';
 
 /**
- * Lo que se fija acá es COMPORTAMIENTO OBSERVABLE: dado el estado de la Ventana,
- * qué le dice la fila a la vendedora. Nada sobre cómo está escrita la función por
- * dentro ni sobre clases de CSS — el color se prueba mirando la pantalla, no acá.
+ * Lo que se fija acá es COMPORTAMIENTO OBSERVABLE: dado el estado de una fila,
+ * qué le dice al vendedor. Nada sobre cómo está escrita la función por dentro ni
+ * sobre clases de CSS — el color se prueba mirando la pantalla, no acá.
+ *
+ * Los niveles son los de `cola/urgencia.ts`: 0 vivo · 1 vencido · 2 expira ·
+ * 3 espera · 4 silencio · 5 archivo.
  */
+
 describe('marcaDeFila — la Ventana de Meta (#22)', () => {
   test('con la ventana abierta, cuenta los días que QUEDAN', () => {
-    expect(marcaDeFila({ ventana_dias: 3 })).toEqual({
+    expect(marcaDeFila({ nivel: 2, ventana_dias: 3 })).toEqual({
       texto: 'quedan 3 días para escribirle',
-      tono: 'oro',
+      tono: 'urgente',
     });
   });
 
   test('el último día habla en singular — es el aviso que más se lee', () => {
-    expect(marcaDeFila({ ventana_dias: 1 })).toEqual({
+    expect(marcaDeFila({ nivel: 2, ventana_dias: 1 })).toEqual({
       texto: 'queda 1 día para escribirle',
-      tono: 'oro',
+      tono: 'urgente',
     });
   });
 
   test('en oro solo mientras se pueda hacer algo: se acaba, todavía no se acabó', () => {
-    // El oro significa «tiempo que se acaba» (CLAUDE.md) y esta es la única fila
-    // del radar donde eso es literal. Si el oro también marcara lo ya perdido, la
+    // El oro significa «tiempo que se acaba» (CLAUDE.md) y es la única fila del
+    // radar donde eso es literal. Si el oro también marcara lo ya perdido, la
     // vendedora aprendería a ignorarlo — que es cómo muere una señal.
-    expect(marcaDeFila({ ventana_dias: 2 })?.tono).toBe('oro');
-    expect(marcaDeFila({ ventana_dias: 0 })?.tono).toBe('apagado');
+    expect(marcaDeFila({ nivel: 2, ventana_dias: 2 })?.tono).toBe('urgente');
+    expect(marcaDeFila({ nivel: 5, ventana_dias: 0 })?.tono).toBe('neutro');
   });
 
   test('con la ventana cerrada lo dice, en vez de callarse', () => {
-    // Callarse sería peor que avisar tarde: la vendedora vería un comentario sin
-    // entender por qué no puede escribirle en privado.
-    expect(marcaDeFila({ ventana_dias: 0 })).toEqual({
+    expect(marcaDeFila({ nivel: 5, ventana_dias: 0 })).toEqual({
       texto: 'se cerró la ventana',
-      tono: 'apagado',
+      tono: 'neutro',
     });
   });
 
@@ -42,6 +44,64 @@ describe('marcaDeFila — la Ventana de Meta (#22)', () => {
     // `null` es «no aplica» y `0` es «se te pasó». Colapsarlos le pondría una
     // cuenta regresiva a todos los chats, donde no hay ninguna puerta que cerrar
     // (CONTEXT.md §Ventana) — y el radar es casi todo WhatsApp.
-    expect(marcaDeFila({ ventana_dias: null })).toBeNull();
+    expect(marcaDeFila({ nivel: 3, ventana_dias: null })).toBeNull();
+  });
+});
+
+describe('marcaDeFila — el Vencido (#23)', () => {
+  test('dice DE QUÉ se trata el compromiso, no solo que existe', () => {
+    // El ticket entero: «vencido» a secas no le dice a la vendedora qué hacer.
+    expect(marcaDeFila({ nivel: 1, ventana_dias: null, seguimiento_nota: 'mandarle el temario' })).toEqual({
+      texto: 'vencido · mandarle el temario',
+      tono: 'perdido',
+    });
+  });
+
+  test('rojo, no oro: el oro es lo que se acaba y esto YA se acabó', () => {
+    const vencido = marcaDeFila({ nivel: 1, ventana_dias: null, seguimiento_nota: 'llamar' });
+    const seAcaba = marcaDeFila({ nivel: 2, ventana_dias: 1 });
+    expect(vencido?.tono).toBe('perdido');
+    expect(seAcaba?.tono).toBe('urgente');
+    expect(vencido?.tono).not.toBe(seAcaba?.tono);
+  });
+
+  test('sin nota avisa igual — callarse sería peor que decir poco', () => {
+    expect(marcaDeFila({ nivel: 1, ventana_dias: null, seguimiento_nota: null })).toEqual({
+      texto: 'vencido',
+      tono: 'perdido',
+    });
+    // Una nota en blanco es lo mismo que no tenerla.
+    expect(marcaDeFila({ nivel: 1, ventana_dias: null, seguimiento_nota: '   ' })?.texto).toBe('vencido');
+  });
+
+  test('una nota larga se recorta: la marca no le come el renglón a la fila', () => {
+    const larga = 'mandarle el temario completo del diplomado y confirmar si quiere la cuota en dos partes';
+    const marca = marcaDeFila({ nivel: 1, ventana_dias: null, seguimiento_nota: larga });
+    expect(marca!.texto.startsWith('vencido · mandarle el temario')).toBe(true);
+    expect(marca!.texto.endsWith('…')).toBe(true);
+    expect(marca!.texto.length).toBeLessThan(60);
+  });
+
+  test('los saltos de línea de la nota no rompen el renglón', () => {
+    // La nota se escribe en un textarea de la Agenda: puede traer saltos.
+    expect(marcaDeFila({ nivel: 1, ventana_dias: null, seguimiento_nota: 'llamar\n  a las 3' })?.texto).toBe(
+      'vencido · llamar a las 3',
+    );
+  });
+
+  test('el VENCIDO le gana a la Ventana, porque así los ordenó el server', () => {
+    // Un comentario de FB con la ventana abierta Y un seguimiento vencido: el
+    // server lo puso en nivel 1, así que la fila explica el vencido. Si acá se
+    // recalculara la precedencia, la marca podría contradecir a la posición.
+    expect(marcaDeFila({ nivel: 1, ventana_dias: 4, seguimiento_nota: 'pasarle el link' })).toEqual({
+      texto: 'vencido · pasarle el link',
+      tono: 'perdido',
+    });
+  });
+
+  test('un seguimiento que NO venció no se marca: el nivel es el que manda', () => {
+    // La fecha futura la descarta `cola/urgencia.ts` antes de llegar acá; la nota
+    // puede venir igual y no tiene que disparar nada.
+    expect(marcaDeFila({ nivel: 3, ventana_dias: null, seguimiento_nota: 'llamar mañana' })).toBeNull();
   });
 });
