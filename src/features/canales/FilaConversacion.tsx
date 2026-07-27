@@ -7,6 +7,7 @@ import { etiquetaDeMedia } from '../../lib/etiquetaMedia';
 import { ETAPA_CHIP } from '../../lib/etapas';
 import { CLASE_BORDE, CLASE_FONDO_SUAVE, CLASE_TEXTO, resolverColor } from '../gestion/paletaCategorias';
 import { cursoDeFila, detalleDeCurso } from './curso';
+import { marcaDeCliente, type NivelCliente } from './cliente';
 import { BadgeCanal } from './BadgeCanal';
 import { Avatar } from './Avatar';
 import { VENTANA_DIAS } from './types';
@@ -46,6 +47,23 @@ function useConFotoVisible(indice: number | undefined, canal: string) {
 
   return { conFoto, elRef };
 }
+
+/**
+ * LA MARCA DE EX-CLIENTE (#133): tres pesos del MISMO verde, que en Hermes ya
+ * significa «cliente» (la banda del panel derecho, ADR 0017 §1 — si acá fuera de
+ * otro color, el mismo hecho tendría dos idiomas). Rampa: contorno → relleno
+ * suave → sólido, del que compró una vez al VIP. **Sin oro**: el oro es tiempo
+ * que se acaba y un cliente no es un reloj.
+ *
+ * Píldora `rounded-full` con borde, distinta de forma del chip de etapa (recto,
+ * sin borde) y del de curso (recto, fondo suave): en una fila de 360 px la forma
+ * desambigua más rápido que el color.
+ */
+const CLASE_MARCA: Record<NivelCliente, string> = {
+  compro: 'border-success/40 text-success',
+  recompro: 'border-success/50 bg-success/10 text-success',
+  vip: 'border-success bg-success text-success-foreground',
+};
 
 /**
  * Una conversación en la cola, en dos renglones: quién (con su urgencia a la
@@ -125,6 +143,16 @@ export function FilaConversacion({
    * «Pide info» queda de respaldo para las filas sin curso conocido.
    */
   const curso = cursoDeFila(c);
+  /**
+   * ¿YA NOS COMPRÓ? (#133) — 140 de las 1.997 conversaciones vivas, hoy
+   * indistinguibles de un desconocido. Va en el renglón 1 porque es identidad
+   * («quién es»), no estado del hilo, y pegada al nombre porque lo califica.
+   *
+   * Lo que cede espacio es el NOMBRE, que ya truncaba: un nombre cortado sigue
+   * reconociéndose, una marca ausente es invisible. Y solo cede en el 7% de las
+   * filas.
+   */
+  const marca = marcaDeCliente(c);
 
   return (
     <button
@@ -181,6 +209,18 @@ export function FilaConversacion({
               <span className="size-2 shrink-0 rounded-full bg-primary" role="img" aria-label="Sin leer" title="Sin leer" />
             )}
             <span className={`truncate text-sm ${pesoNombre} ${tintaNombre}`}>{nombre}</span>
+            {marca && (
+              <span
+                title={marca.titulo}
+                className={
+                  'shrink-0 rounded-full border px-1.5 py-px text-[11px] font-semibold ' +
+                  (marca.nivel === 'compro' ? '' : 'tabular-nums ') +
+                  CLASE_MARCA[marca.nivel]
+                }
+              >
+                {marca.texto}
+              </span>
+            )}
             {/* Favorita: estrella navy (el oro es SOLO tiempo que se acaba). */}
             {c.favorita && <Star size={12} fill="currentColor" className="shrink-0 text-navy" aria-label="Favorita" />}
             {etapa && (

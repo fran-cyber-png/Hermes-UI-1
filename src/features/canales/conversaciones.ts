@@ -66,6 +66,12 @@ export interface Conversacion {
   /** El nombre con el que llenó ESE formulario. Le gana al pushname de WhatsApp,
    *  que en producción suele ser «🦋W», «.» o «10 ❤️L» (#137). */
   lead_nombre?: string | null;
+  /** EX-CLIENTE (#133): `vip` · `recompro` · `compro`, del cruce por teléfono
+   *  contra el padrón local. Ausente = no se sabe (radar/agenda no lo traen, y un
+   *  server sin el `db:push` tampoco). NUNCA se lee como «no es cliente». */
+  cliente_nivel?: 'vip' | 'recompro' | 'compro' | null;
+  /** Cuántas compras registra el padrón — el «×3» de la marca. */
+  cliente_compras?: number | null;
 }
 
 type Pagina = {
@@ -77,7 +83,9 @@ type Pagina = {
   /** Conteos reales por etapa efectiva sobre la misma ventana (#89). Solo primera página. */
   conteos?: Record<string, number>;
   /** Cuántas filas daría cada filtro secundario dentro del recorte actual. Primera página. */
-  conteosFiltro?: { pideInfo: number; sinResponder: number };
+  conteosFiltro?: { pideInfo: number; sinResponder: number; yaCompraron?: number };
+  /** El server sirvió la cola SIN la marca de ex-cliente (falta el `db:push` de #133). */
+  sinPadron?: boolean;
   /** La misma foto abierta por «ya le hablamos» × precio × viva. Solo primera página. */
   desglose?: FilaDesglose[];
 };
