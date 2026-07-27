@@ -65,7 +65,7 @@ cp .env.example .env
 
 ```bash
 cd /srv/hermes/server && npm ci            # baja el binario Go de whatsmeow para linux
-npm run db:push                            # crea events/interactions/leads/envios_wa
+npm run db:migrate                         # crea el schema entero desde `drizzle/` (ADR 0020)
 npx tsc --noEmit                           # sanity
 cd /srv/hermes && npm ci && npm run build  # build del front (dist/)
 ```
@@ -236,26 +236,20 @@ drizzle-kit sigue sin emitirlo, pero ahora el índice está **escrito en la migr
 (`server/drizzle/0000_baseline.sql`), que es la ventaja de tener un archivo: lo que la herramienta no
 sabe generar, se agrega a mano una vez y queda versionado. No hay paso manual.
 
-El contenedor es **`hermes_db`** (no `cartografia_db` — ese es el Postgres de otro servicio, el del
-geovisor/cartografía-electoral, en la MISMA VPS1 pero nada que ver). El usuario/base salen de las
-env vars **del propio contenedor** (`$POSTGRES_USER`/`$POSTGRES_DB`, las que le puso
-`docker-compose.override.yml` al crearlo) en vez de escribirlos a mano acá: así el comando no
-depende de que quien lo corre adivine bien esos dos valores.
+Del párrafo que había acá quedan dos cosas que siguen sirviendo cuando hay que entrar a la base a
+mirar algo:
 
-Por qué la citación es así (para no repetir el bug): el SQL va por **stdin** (heredoc con
-delimitador citado `<<'SQL'`, que no interpola nada localmente) en vez de con `-c "..."`, así no
-hay que escapar comillas simples dentro de comillas simples (que en bash **no se puede** — un
-`\'` dentro de `'...'` no escapa nada, corta la cadena ahí mismo, que era exactamente el bug
-anterior). El `docker exec -i hermes_db sh -c '...'` usa un `sh` DENTRO del contenedor para recién
-ahí expandir `$POSTGRES_USER`/`$POSTGRES_DB` — de ahí el `\"\$POSTGRES_USER\"` en el comando ssh
-(comillas y `$` escapados para que el shell LOCAL los mande literales y no los toque). Verificado
-en seco (sin tocar ningún servidor): `echo` del string que arma el shell local +
-`python3 -c 'import shlex; ...'` confirmando que lo que llega al `sh -c` del contenedor es
-exactamente `psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"`.
+- El contenedor es **`hermes_db`** (no `cartografia_db` — ese es el Postgres del geovisor, en la
+  MISMA VPS1 pero nada que ver). El usuario y la base salen de las env vars **del propio
+  contenedor**, así el comando no depende de que quien lo corre las adivine:
 
-Sin el índice, `GET /api/notas?q=` sigue contestando bien (mismo resultado): la
-expresión del `WHERE` es idéntica a la del índice, así que Postgres solo hace
-seq scan en vez de usar el GIN — más lento con la libreta grande, no roto.
+  ```bash
+  ssh deploy@161.132.39.165 "docker exec -it hermes_db sh -c 'psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\"'"
+  ```
+
+- Sin el índice GIN, `GET /api/notas?q=` sigue dando el **mismo resultado**: la expresión del
+  `WHERE` es idéntica a la del índice, así que Postgres hace seq scan en vez de usarlo. Más lento
+  con la libreta grande, no roto. Por eso el drift pudo durar tanto sin que nadie lo notara.
 
 ### Cuál de las dos me toca
 

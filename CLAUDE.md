@@ -137,7 +137,7 @@ npm install && npm run dev:app                     # Vite :5173 + la app de escr
     supervisada). Se maneja desde el **chip de la cabecera**, al lado del semáforo de WhatsApp:
     **los dos segmentos a la vista** (apagar cuesta UN click desde donde estés), apagada discreta ·
     supervisada delineada. Frenada sale en rojo con el motivo, el modo retirado también, y sin
-    `db:push` dice «falta la migración» en vez de un estado falso.
+    la migración aplicada dice «falta la migración» en vez de un estado falso.
   - **La plantilla depende de la CAMPAÑA** (`autorespuesta/campana.ts`): interés asentado > formulario
     que llenó > anuncio del que vino — la MISMA precedencia del chip de curso de la cola (#72), para que
     la fila y el mensaje no digan dos cosas distintas. Lo que cambia por campaña es una frase
@@ -281,7 +281,7 @@ todo un año» (dicho **1** vez), «se puede pagar en cuotas» (**2**), «es par
 - **El catálogo es editable** (tabla `hechos`): `POST`/`PUT`/`DELETE` sobre `/api/hechos`. Lo que
   cierra ventas cambia, y agregarlo no puede costar un deploy. `hechos/catalogo.ts` es el punto de
   partida medido; se siembra con `cd server && npm run hechos:sembrar -- --aplicar` (sin `--aplicar`
-  es dry-run). **Sin el `db:push` degrada**: sirve el default y avisa que no se puede editar.
+  es dry-run). **Sin la migración aplicada degrada**: sirve el default y avisa que no se puede editar.
 - Ver el catálogo que se serviría, sin base ni red: `npx tsx src/scripts/imprimirHechos.ts`.
 - **Follow-up declarado**: la objeción #1 del informe es el **aplazamiento** (13%, «avisame para la
   próxima edición») y no hay mecanismo para capturarla. Acá solo entra la frase; la lista de espera
@@ -387,7 +387,7 @@ se cuelga (de ahí el techo de 12 s del panel). Por eso nunca estuvo en la fila.
 - En la UI: píldora en la fila (tres pesos del **verde** que ya significa cliente en el panel, ADR
   0017 — **sin oro**), chip **«Ya compraron»** en la barra de filtros con su número, y la banda del
   panel se pinta de entrada («Ya te compró. Confirmando con Cerberus…») en vez de un spinner.
-- **Degrada** si falta el `db:push`: la cola se sirve sin la marca y lo dice (`sinPadron`).
+- **Degrada** si la migración no está aplicada: la cola se sirve sin la marca y lo dice (`sinPadron`).
 
 ## Administración de números (para Cerberus)
 

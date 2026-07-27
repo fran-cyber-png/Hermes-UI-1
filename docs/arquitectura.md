@@ -296,14 +296,18 @@ delete+recreate**, porque un rebuild cambiaba el id de la persona y rompía los 
 ### Tablas que no se llenan
 
 `identidades_bloqueadas` (cero escritores, a propósito: «se llena cuando la realidad la llene») ·
-`rag.documentos` (**no pertenece a Hermes** — es de Ivi, pero `db:push` la crea igual por el glob del
-`drizzle.config.ts`) · `pauta_snapshots`, `configuracion`, `pauta_serie` (sus escritores están detrás
-de rutas que nadie llama).
+`rag.documentos` (**no pertenece a Hermes** — es de Ivi, pero el schema la declara y la migración la
+crea igual, por el glob del `drizzle.config.ts`) · `pauta_snapshots`, `configuracion`, `pauta_serie`
+(sus escritores están detrás de rutas que nadie llama).
 
-### Migraciones: no hay
+### ~~Migraciones: no hay~~ — las hay, desde el 2026-07-24 (ADR 0020)
 
-`db:push` de drizzle-kit, cero migraciones versionadas. Deuda heredada y declarada en ADR 0001. Al
-tocar `db/schema.ts`, push contra la base.
+> Lo que decía acá: «`db:push` de drizzle-kit, cero migraciones versionadas. Deuda heredada y
+> declarada en ADR 0001. Al tocar `db/schema.ts`, push contra la base.»
+
+El schema vive en `server/drizzle/`, un `.sql` por cambio, revisable en el PR que lo introduce. Un
+cambio de `src/db/*.ts` sin su migración **no pasa CI** (la paridad de N2b lo atrapa). `db:push`
+queda solo para las bases efímeras de test. El cómo: **`docs/migraciones.md`**.
 
 ---
 

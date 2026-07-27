@@ -17,29 +17,32 @@
 PR o push          push a main                     botón en Actions
     │                   │                                 │
     ▼                   ▼                                 ▼
- N1 rápido  ──▶  N2 unidad ──┬──▶ N3 STAGING ──▶ N4 front a prod    N5 server a prod
- ~30 s            ~2 min     └──▶ N2b base        ~1 min             ~3 min
- lint             build           tests SQL       sin restart        con restart
- typecheck        tests puros                     cero downtime      respalda, migra,
- journal          secretos        despliega,                         smoke y revierte
- expand-only      audit           migra y smoke                      solo si falla
+ N1 rápido  ──▶  N2 front  ──┬──▶ N3 STAGING ──▶ N4 front a prod    N5 server a prod
+ ~45 s            ~2 min     └──▶ N2b base        ~1 min             ~3 min
+ secretos         lint            tests SQL       sin restart        con restart
+ expand-only      typecheck       PARIDAD del     cero downtime      respalda, migra,
+ journal          build           schema                             smoke y revierte
+ db:check         tests front     despliega,                         solo si falla
+ tests server                     migra y smoke
 ```
 
 | Nivel | Qué verifica | Cuándo | Dónde |
 |---|---|---|---|
-| **N1** | lint · typecheck · journal monótono · migraciones expand-only | toda corrida | `ci.yml` |
-| **N2** | build · tests puros · ningún secreto en el árbol · `npm audit` | toda corrida | `ci.yml` |
-| **N2b** | tests con Postgres efímera — el SQL de la cola y el radar | toda corrida | `ci.yml` |
-| **N3** | **staging**: despliega, migra sobre una base con historia, smoke funcional autenticado | push a `main` | `ci.yml` |
+| **N1** | ningún secreto en el árbol · migraciones expand-only · journal monótono · `db:check` · typecheck y **los 820 tests puros del server** | toda corrida | `ci.yml` |
+| **N2** | lint · typecheck · build · tests del front · `npm audit` | toda corrida | `ci.yml` |
+| **N2b** | tests con Postgres efímera — el SQL de la cola y el radar, **y la paridad del schema** | toda corrida | `ci.yml` |
+| **N3** | **staging**: verifica el estado de la base, despliega, migra sobre una base con historia, smoke funcional autenticado | push a `main` | `ci.yml` |
 | **N4** | front a producción, sin reiniciar el proceso | solo si N3 pasó | `ci.yml` |
-| **N5** | server a producción: respalda, migra, reinicia, smoke, revierte solo si falla | botón | `desplegar-server.yml` |
+| **N5** | server a producción: respalda, verifica, migra, reinicia, smoke, revierte solo si falla | botón | `desplegar-server.yml` |
 
-El orden no es decorativo: **lo barato falla primero**. Un typo no espera cuatro minutos de tests
-para avisar, y nada llega a tocar una base sin haber pasado por los tres niveles anteriores.
+El orden no es decorativo: **lo barato falla primero**. Nada llega a tocar una base sin haber pasado
+por los niveles anteriores.
 
-> El runner self-hosted es **uno solo**: los jobs se serializan aunque el grafo los dibuje en
-> paralelo. Por eso están agrupados así y no en diez jobs chiquitos — cada job extra cuesta un
-> `npm ci`.
+> **Por qué los jobs se agrupan así.** El runner self-hosted es **uno solo**: se serializan aunque
+> el grafo los dibuje en paralelo, y cada job extra paga su propio `npm ci`. Por eso la división es
+> por **conjunto de dependencias** (server / front / base) y no por temática: son tres `npm ci` en
+> vez de cinco. Efecto lateral bienvenido: los 820 tests del server tardan 3 s, así que caben en el
+> nivel «rápido» y la mayor parte de la suite falla en los primeros 45 segundos.
 
 ---
 
@@ -179,14 +182,22 @@ secretos en GitHub: el workflow escribe en el disco local.
 > Era cierto, y significaba que **el caso más común de cambio real era justo el que no se podía
 > automatizar**.
 
+Y era peor que eso: **ese gate no se podía satisfacer.** Comparaba el SHA guardado en
+`~/.hermes-despliegue/server` contra `main`, así que correr `db:push` a mano no cambiaba el diff —
+volvía a frenar, igual. La noche del 26-jul el deploy terminó haciéndose entero por SSH, a mano, por
+eso exactamente. Un gate que no se puede satisfacer no protege: enseña a esquivarlo.
+
 Ahora el schema viaja en **migraciones versionadas**: un `.sql` revisable en el PR que lo introduce.
 El pipeline las aplica solo, pero nunca a ciegas:
 
 1. **N1** verifica el journal (que el `when` sea monótono — si no, drizzle saltea en silencio) y que
    la migración sea **expand-only**.
-2. **N3** la aplica en **staging**, sobre una base con historia, y corre el smoke funcional. Si
+2. **N2b** verifica la **paridad**: migrar desde cero tiene que dar el mismo schema que declara
+   `src/db/*.ts`. O sea, no se puede cambiar el schema sin traer su migración.
+3. **N3** la aplica en **staging**, sobre una base con historia, y corre el smoke funcional. Si
    rompe, rompe ahí.
-3. **N5** respalda la base (`/srv/respaldos-hermes/`) y recién entonces la aplica en producción.
+4. **N5** respalda la base (`/srv/respaldos-hermes/`), verifica con `db:estado` que la base y el
+   repo se correspondan, y recién entonces migra producción.
 
 Lo que sigue siendo humano es **el momento**: N5 es un botón, porque reiniciar el server cuesta las
 sesiones de Cerberus. Pero ya no hay que ir a correr nada por SSH antes de apretarlo.

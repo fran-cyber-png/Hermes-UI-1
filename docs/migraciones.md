@@ -49,21 +49,54 @@ cd server && npm run db:migrate
 Y commitear **`server/drizzle/` completo** —el `.sql` nuevo *y* el `_journal.json`— junto al cambio
 de `src/db/`. El schema y su migración viajan en el mismo PR o no viajan.
 
+> **No te podés olvidar del `db:generate`.** El test `PARIDAD · migrar desde cero da el mismo schema
+> que declara src/db/*.ts` (N2b) monta dos bases —una migrada desde cero, otra con el schema
+> declarado— y las compara entera. Si tocaste `src/db/` sin generar la migración, CI falla con el
+> nombre de la tabla que falta puesto en el mensaje. Es la misma disciplina que la paridad de la
+> urgencia (ADR 0009): dos formas de decir lo mismo, y un test que impide que diverjan.
+
+---
+
+## Un PR que ya venía en camino y todavía usa `db:push`
+
+Es el caso de cualquier rama abierta antes de que existiera este documento. Lo que hay que hacer es
+mecánico y son cinco minutos:
+
+1. **Rebase sobre `main`** — así el `drizzle/` del repo entra a la rama.
+2. **`cd server && npm run db:generate`** con tu `src/db/*.ts` ya rebasado. Sale un
+   `0001_<algo>.sql` con lo que tu PR agrega, y **solo** eso: el baseline ya describe el resto.
+3. **Leer el `.sql`.** Si aparece un `DROP`, un `RENAME`, un `ALTER … TYPE` o un `SET NOT NULL`,
+   CI lo va a rechazar (expand-only, N1) — hay que partirlo en dos deploys, ver abajo.
+   Una columna nueva `NOT NULL` **sin default** es del mismo tipo: falla contra una tabla con filas.
+4. **`goberna-journal-set-when`** después del rebase, siempre.
+5. **`npm run db:migrate` contra tu base local** y commitear `server/drizzle/` completo.
+
+Y **sacar del PR toda instrucción de correr `db:push`** —del cuerpo, del CLAUDE.md, de donde esté—
+porque ya no es lo que hay que hacer y contradice al pipeline.
+
+Lo que **no** cambia: el código, los tests, la UI. La migración es un archivo más en el mismo PR.
+
 ---
 
 ## Qué hace el pipeline con eso
 
 ```
-push a main
+PR / push
   │
-  ├─ N1   journal.test.ts: idx consecutivos, `when` creciente, cada tag con su .sql
-  │       guardia expand-only: la migración nueva no puede tener DROP/RENAME/NOT NULL
+  ├─ N1   journal.test.ts: idx consecutivos, `when` creciente, cada tag con su .sql,
+  │       y que el baseline conserve las dos líneas que drizzle-kit no emite
+  │       db:check: los snapshots de drizzle son coherentes
+  │       guardia expand-only: la migración NUEVA no puede tener DROP/RENAME/NOT NULL
   │
-  ├─ N3   STAGING — `db:migrate` sobre una base CON historia, después smoke funcional
+  ├─ N2b  PARIDAD: migrar desde cero ≡ el schema que declara src/db/*.ts
+  │       (o sea: no se puede cambiar el schema sin traer su migración)
+  │
+  ├─ N3   STAGING — db:estado (¿la base y el repo se corresponden?), después
+  │       `db:migrate` sobre una base CON historia, después smoke funcional.
   │       Si la migración rompe algo, se rompe acá. Nadie se entera.
   │
-  └─ N5   PRODUCCIÓN (botón) — respalda la base, migra, reinicia, smoke, y si algo
-          falla revierte el código solo
+  └─ N5   PRODUCCIÓN (botón) — respalda la base, verifica el estado, migra, reinicia,
+          smoke, y si algo falla revierte el código solo
 ```
 
 El respaldo previo queda en `/srv/respaldos-hermes/` (se conservan los últimos 20).
@@ -97,11 +130,18 @@ Es más lento, a propósito.
 ## Adoptar una base que ya existía
 
 Esto se hace **una vez por base**, cuando una base creada con `db:push` tiene que empezar a usar
-migraciones. Ya se hizo con producción; queda escrito porque hay que repetirlo con cualquier otra.
+migraciones.
 
 El problema: la base ya tiene las tablas, así que `drizzle-kit migrate` moriría en el primer
-`CREATE TABLE`. La solución es registrar el baseline como aplicado **sin ejecutar su SQL** — pero
-antes hay que **probar** que la base está realmente en ese estado, no suponerlo.
+`CREATE TABLE`. La solución es registrar el baseline como aplicado **sin ejecutar su SQL**.
+
+Pero antes hay que **probar** que la base está realmente en ese estado. Si no lo está y se adopta
+igual, la base queda **marcada como al día mintiendo**: drizzle no vuelve a mirar el baseline nunca
+más y la diferencia sobrevive en silencio, para siempre. Es el peor modo de fallo que tiene este
+sistema.
+
+**Esa prueba la hace el script.** Antes la hacía este documento, con dos `pg_dump` y un `diff` a
+mano — un paso manual, y los pasos manuales no se hacen.
 
 ### 1. Respaldar
 
@@ -110,43 +150,111 @@ ssh deploy@161.132.39.165
 docker exec hermes_db pg_dump -U <usuario> -d <base> | gzip > /srv/respaldos-hermes/pre-baseline.sql.gz
 ```
 
-### 2. Probar que el baseline describe esa base
-
-Se aplica el baseline sobre una base **vacía** (staging sirve) y se comparan los dos schemas:
+### 2. Adoptar
 
 ```bash
-# base limpia + baseline
+cd /srv/hermes/server
+npm run db:adoptar          # verifica y dice qué haría — NO escribe nada
+npm run db:adoptar -- --si  # verifica y, si coincide, registra
+```
+
+Lo que hace la verificación, sola, cada vez:
+
+1. levanta una base **temporal en el mismo servidor** (`hermes_verificacion_*`; mismo Postgres,
+   mismo locale — comparar contra otra máquina compararía también las diferencias de la máquina),
+2. le aplica **todas** las migraciones del repo desde cero,
+3. lee las dos estructuras del catálogo —**tablas, columnas con su tipo, su nulabilidad y su
+   default, índices y restricciones**— en los esquemas `public`, `fuentes`, `ontologia` y `rag`,
+4. las resta **en las dos direcciones**, y
+5. borra la base temporal.
+
+Si hay una sola diferencia, **no adopta nada** y las lista con su lado:
+
+```
+✗ 2 diferencia(s). NO se adopta nada.
+
+  [columna] public.notas.parche_de_las_2am :: text NULL
+      ↳ está en la base y el repo no lo describe
+  [índice] CREATE INDEX notas_texto_gin_idx ON public.notas USING gin (to_tsvector('spanish'::regconfig, texto))
+      ↳ lo describe el repo y la base no lo tiene
+```
+
+Las dos direcciones importan igual. «Falta en la base» es obvio; «sobra en la base» significa que
+el repo NO describe algo que existe, y la próxima base nueva no lo va a tener. Así se descubrió el
+`notas_texto_gin_idx`, que vivía en producción y en ningún otro lado porque se creaba a mano por
+SSH después de cada `db:push`. El arreglo fue escribirlo en el `.sql`, no ignorarlo — y ese es el
+arreglo por defecto para cualquier diferencia: **hacia el repo**.
+
+La salida dice **qué comparó**, no solo si coincidió:
+
+```
+Verificando que la base esté EXACTAMENTE en el estado del baseline.
+  esquemas comparados : public, fuentes, ontologia, rag
+  migraciones del repo: 0000_baseline
+  base de referencia: hermes_verificacion_ms2va5hfwkhc5e (temporal, se borra al terminar)
+
+Qué se comparó:
+  · tabla        base viva:   42   baseline:   42
+  · columna      base viva:  377   baseline:  377
+  · índice       base viva:  124   baseline:  124
+  · restricción  base viva:   61   baseline:   61
+```
+
+Un «✓ todo igual» que no dice sobre cuántas tablas es indistinguible de una consulta que devolvió
+vacío. Los números son la parte que se revisa.
+
+Otras dos cosas que el script se rehúsa a hacer:
+
+- **base vacía** → `db:adoptar` no es lo que va; es `db:migrate`. Confundirlos dejaría una base sin
+  tablas creyéndose al día.
+- **el dry-run no escribe nada**, ni siquiera el schema `drizzle`. Un «decime qué harías» que deja
+  objetos atrás no es un dry-run.
+
+### La salida de emergencia
+
+```bash
+npm run db:adoptar -- --si --forzar-sin-verificar --motivo="por qué"
+```
+
+`--si` **no** saltea la verificación: es la confirmación de escribir, no un permiso para no mirar.
+Saltearla es otra bandera, imprime un cartel y **exige un motivo escrito** — que queda en el log de
+quien lo corrió, porque a partir de ahí nada más va a detectar el problema.
+
+Existe para un solo caso realista: la base tiene una diferencia que ya mirás, entendés y aceptás, y
+no podés arreglarla hacia el repo en ese momento. Si la usás, abrí un issue el mismo día.
+
+### Staging: no se adopta, se recrea
+
+Staging **no tiene datos que preservar**, así que ante cualquier lío la respuesta es borrarla:
+
+```bash
+ssh deploy@161.132.39.165
 docker exec hermes_staging_db psql -U hermes_staging -d postgres -c "DROP DATABASE IF EXISTS hermes_staging WITH (FORCE)"
 docker exec hermes_staging_db psql -U hermes_staging -d postgres -c "CREATE DATABASE hermes_staging"
-cd /srv/hermes-staging/server && npm run db:migrate
-
-# los dos schemas, normalizados (sin dueños, sin el schema `drizzle`, sin los tokens
-# aleatorios que pg_dump 17 mete en \restrict)
-docker exec hermes_db pg_dump -U <usuario> -d <base> --schema-only --no-owner --no-privileges -N drizzle \
-  | grep -vE '^(--|SET |SELECT pg_catalog|\\restrict|\\unrestrict|$)' | sed 's/<usuario>/DBUSER/g' | sort > /tmp/prod.txt
-docker exec hermes_staging_db pg_dump -U hermes_staging -d hermes_staging --schema-only --no-owner --no-privileges -N drizzle \
-  | grep -vE '^(--|SET |SELECT pg_catalog|\\restrict|\\unrestrict|$)' | sed 's/hermes_staging/DBUSER/g' | sort > /tmp/base.txt
-
-diff -u /tmp/prod.txt /tmp/base.txt
+cd /srv/hermes-staging/server && npm run db:migrate && npm run db:estado
 ```
 
-**El diff tiene que dar vacío.** Si no da vacío, no adoptes: cada diferencia es algo que existe en
-esa base y que el repo no describe. La primera vez que se corrió esto apareció
-`notas_texto_gin_idx` —creado a mano por SSH, en producción y en ningún otro lado— y el arreglo fue
-agregarlo al `.sql`, no ignorarlo.
-
-### 3. Adoptar
-
-```bash
-cd /srv/hermes-staging/server
-DOTENV_CONFIG_PATH=/srv/hermes/server/.env npm run db:adoptar        # dice qué haría
-DOTENV_CONFIG_PATH=/srv/hermes/server/.env npm run db:adoptar -- --si  # lo hace
-```
-
-`db:adoptar` se rehúsa si la base está vacía: ahí lo correcto es `db:migrate`, y confundirlos
-dejaría una base sin tablas creyéndose al día.
+Hace falta, por ejemplo, cuando el baseline se regeneró: la base vieja quedó registrada contra un
+`.sql` que ya no existe. N3 lo detecta antes de migrar (`db:estado --exigir-coherencia`) y falla
+diciendo esto mismo, en vez de morir con un «relation already exists» a mitad del archivo.
 
 ---
+
+## Ver en qué estado está una base
+
+```bash
+cd /srv/hermes/server && npm run db:estado
+```
+
+Solo lee. Imprime las migraciones del repo, las registradas en la base, y el veredicto:
+
+- **«nunca adoptó el baseline»** — falta correr `db:adoptar` (o `db:migrate`, si está vacía).
+- **«N sin aplicar»** — normal antes de un deploy con migraciones; el deploy las aplica.
+- **«registradas que este repo NO conoce»** — el caso feo: la base se migró contra otro baseline.
+  Drizzle **no lo detecta solo**, porque su migrador compara por `when`, no por hash.
+
+Es lo que hay que mirar después de un deploy con migraciones para saber que salió bien, y lo que
+corre solo —con `--exigir-coherencia`— antes de migrar staging y producción.
 
 ## Cuando algo sale mal
 
@@ -171,6 +279,20 @@ corregir el `when` en `_journal.json` para que supere al máximo aplicado, y vol
 
 ### `db:push` vs `db:migrate`
 
-`db:push` **sigue existiendo** y sigue siendo lo correcto para las bases efímeras de test
-(`montarBase.ts`): no hay datos que preservar ni historia que registrar. Contra producción o
-staging, **nunca**.
+`db:push` **sigue existiendo** y sigue siendo lo correcto para **las bases efímeras de test**
+(`montarBase.ts`): se crean vacías, se usan y se tiran; no hay datos que preservar ni historia que
+registrar. Contra **producción o staging, nunca** — ADR 0020.
+
+Por qué no: `db:push` compara contra la base viva y aplica lo que le parece, sin archivo, sin
+revisión y sin registro. En la práctica pedía cosas peligrosas y las pedía por teclado — al agregar
+`alias_curso.ad_id` ofreció **truncar la tabla** (habría borrado los 30 alias, incluidos los
+editados a mano), y sin TTY se muere a la mitad. Nada de eso es revisable en un PR.
+
+### El `.sql` no se edita después de commiteado
+
+Una migración ya mergeada es historia: cambiarla le cambia el hash, y a partir de ahí toda base que
+ya la aplicó queda con «una migración registrada que este repo no conoce» (`db:estado` lo dice). Si
+hay que corregir algo, va **otra** migración encima.
+
+La única excepción fue regenerar el `0000_baseline` antes de que ninguna base lo hubiera adoptado —
+y ahí hubo que recrear staging a mano, que es exactamente el costo del que estamos hablando.

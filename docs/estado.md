@@ -172,9 +172,12 @@ que escribió cada persona, su antigüedad). Eso se arregla en #166.
 
 ## Contexto técnico para no re-descubrir
 
-- **Actualizar prod (OTA):** `ssh deploy@161.132.39.165 'cd /srv/hermes && git pull && env
-  VITE_API_URL=https://hermes-api.goberna.us npm run build && sudo systemctl restart hermes'`
-  (+ `cd server && npm run db:push` si cambió el schema; `npm ci` si cambiaron deps).
+- **Actualizar prod:** Actions → **Desplegar server (con restart)** (N5). Por SSH corre la MISMA
+  pieza: `ssh deploy@161.132.39.165 'sudo hermes-deploy --dry-run'` para ver el plan,
+  `sudo hermes-deploy` para promover `origin/main`, `sudo hermes-deploy --rollback` para volver.
+  Respalda la base, migra, construye, reinicia, hace el smoke y revierte solo si falla.
+  El schema **ya no se empuja a mano**: viaja en `server/drizzle/` (ADR 0020, `docs/migraciones.md`).
+  Solo front, sin restart: se despliega automático al mergear a `main` (N4).
 - **VPS1:** systemd `hermes` (PORT=4110) · Postgres `hermes_db` 127.0.0.1:5438 · nginx
   `hermes-api` (SSE sin buffering, 64 MB adjuntos) · deploy key `github.com-hermes` · sesión WA en
   `/srv/hermes/server/.wa-sessions/` · media en `.wa-media/` · **la app abre también en navegador**.
