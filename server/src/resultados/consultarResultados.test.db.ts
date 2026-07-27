@@ -146,6 +146,35 @@ describe("los hechos crudos que trae el SQL", () => {
     assert.deepEqual(h.procedencia, pieza);
   });
 
+  test("H5 · un envío ya escrito SIGUE apuntando a la versión vieja cuando la pieza cambia", async (t) => {
+    // El criterio de aceptación literal de Ivi: «cambiar el texto de una pieza y
+    // verificar que los `envios_wa` anteriores siguen apuntando a la versión
+    // vieja». Es el único pedido de todo su plan que no se puede hacer después:
+    // un envío ya escrito no se puede re-atribuir a la versión que salió.
+    //
+    // Se prueba contra la base y no solo en puro porque lo que se afirma es de
+    // la FILA: que lo guardado no dependa del catálogo de hoy.
+    const db = await baseDePrueba(t);
+    const VIEJO = "Se puede pagar en 2 cuotas.";
+    const NUEVO = "El pago va en 2 cuotas: una para reservar y otra antes de empezar.";
+
+    const cuandoSalio = deUnDato({ clave: "cuotas", editada: false, contenido: { texto: VIEJO } });
+    await sembrarEnvioWa(db, { telefono: "51900000021", creadoAt: hace(5), procedencia: cuandoSalio });
+
+    // Hoy la pieza dice otra cosa. Misma clave, misma clase: es la misma pieza.
+    const hoy = deUnDato({ clave: "cuotas", editada: false, contenido: { texto: NUEVO } });
+    assert.equal(hoy.ref, cuandoSalio.ref, "la pieza es la misma…");
+    assert.notEqual(hoy.version, cuandoSalio.version, "…y la versión NO");
+
+    const [h] = await envios(db);
+    assert.deepEqual(h.procedencia, cuandoSalio, "la fila conserva la versión con la que salió");
+    assert.notEqual(
+      claveDeAgrupacion(h.procedencia),
+      claveDeAgrupacion(hoy),
+      "y el reporte las cuenta separadas: sin esto, 12 % y 30 % se promedian en 21 % para siempre",
+    );
+  });
+
   test("un envío sin pieza vuelve como la LÍNEA DE BASE, no como un hueco", async (t) => {
     const db = await baseDePrueba(t);
     await sembrarEnvioWa(db, { telefono: "51900000007", creadoAt: hace(5) });
