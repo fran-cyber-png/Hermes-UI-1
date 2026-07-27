@@ -251,9 +251,12 @@ export interface DepsIvi {
 export const TIMEOUT_MS = 30_000;
 
 /**
- * Qué superficie de Hermes pregunta. Ivi lo usa para el tope de salida (`hermes` = 600 tokens);
- * sin mandarlo asume `chat`, que da lo mismo hoy — se manda igual para que el día que Hermes
- * tenga una superficie de resumen el parámetro ya esté y no haya nada que negociar.
+ * Qué superficie de Hermes pregunta. Ivi lo usa para el tope de salida (`hermes` = 600 tokens).
+ *
+ * Hoy no hace nada: su handler HTTP (`rag/web.py`, /api/preguntar) todavía no lo pasa a
+ * `responder()`, y sin él queda en el tope de `chat` — que para Hermes es el mismo número. Se
+ * manda igual porque el día que lo cableen no hay que tocar nada de este lado, y porque un campo
+ * que Ivi no conoce lo ignora (su handler lee del dict, no valida el cuerpo).
  */
 const SUPERFICIE = 'hermes';
 
