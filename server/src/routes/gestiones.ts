@@ -251,6 +251,7 @@ export async function asentarVentaEnEmbudo(v: {
         nombre: v.personaNombre ?? null,
         dni: null,
         correo: null,
+        pais: null,
         telefonos: [v.telefono],
       },
       conversacion: conversacionDeClave(clave),

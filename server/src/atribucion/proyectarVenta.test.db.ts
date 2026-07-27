@@ -34,6 +34,7 @@ function evento(over: Record<string, unknown> = {}, venta: Record<string, unknow
       nombre_completo: "Persona De Prueba",
       dni: "12345678",
       correo: "persona@ejemplo.test",
+      pais: "Peru",
       telefono: "51987654321",
       telefonos: ["51987654321"],
       ...cliente,
@@ -246,7 +247,14 @@ test("la fila que dejó la vendedora y el webhook de esa misma venta son UNA fil
     origen: null,
     estado: null,
     estadoPago: null,
-    cliente: { cerberusClienteId: null, nombre: "Persona", dni: null, correo: null, telefonos: ["51987654321"] },
+    cliente: {
+      cerberusClienteId: null,
+      nombre: "Persona",
+      dni: null,
+      correo: null,
+      pais: "Peru",
+      telefonos: ["51987654321"],
+    },
     conversacion: { clave, canal: "whatsapp", personaId: "51987654321", numeroPropio: NUMERO_PROPIO },
     ocurridaAt: new Date(),
     fuente: "hermes",
@@ -285,4 +293,46 @@ test("un comentario suelto no es una conversación atribuible por teléfono", as
 
   const r = await proyectar(db, evento());
   assert.deepEqual(r, { atribuida: false, motivo: "sin_conversacion" });
+});
+
+test("la guarda de país: compartir el sufijo con otro país no es ser la misma persona (#119)", async (t) => {
+  const db = await baseDePrueba(t);
+  // Un peruano cuyos últimos 9 dígitos coinciden con los del cliente MEXICANO de la venta.
+  await sembrarMensaje(db, { personaId: "51987654321", numeroPropio: NUMERO_PROPIO });
+
+  const r = await proyectar(
+    db,
+    // Cerberus guarda el número local (10 dígitos) y declara el país.
+    evento({}, {}, { pais: "Mexico", telefono: "1987654321", telefonos: ["1987654321"] }),
+  );
+
+  assert.deepEqual(r, { atribuida: false, motivo: "sin_conversacion" });
+  assert.equal((await conversiones(db)).length, 0, "atribuirle la venta a otra persona es peor que no atribuir");
+});
+
+test("control de la guarda: el MISMO mexicano, con su chat, sí matchea", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarMensaje(db, { personaId: "521987654321", numeroPropio: NUMERO_PROPIO });
+
+  const r = await proyectar(
+    db,
+    evento({}, {}, { pais: "Mexico", telefono: "1987654321", telefonos: ["1987654321"] }),
+  );
+
+  assert.equal(r.atribuida, true);
+  assert.equal((r as { como: string }).como, "telefono_e164");
+});
+
+test("un guatemalteco de 8 dígitos llega a E.164 gracias al país, y deja de ser invisible", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarMensaje(db, { personaId: "50212345678", numeroPropio: NUMERO_PROPIO });
+
+  // Sin el país, «12345678» no llega ni a los 9 dígitos del sufijo: no matchearía nunca.
+  const r = await proyectar(
+    db,
+    evento({}, {}, { pais: "Guatemala", telefono: "12345678", telefonos: ["12345678"] }),
+  );
+
+  assert.equal(r.atribuida, true);
+  assert.equal((r as { clave: string }).clave, `conv:whatsapp:50212345678:${NUMERO_PROPIO}`);
 });

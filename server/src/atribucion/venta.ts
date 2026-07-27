@@ -35,6 +35,12 @@ export interface ClienteDeVenta {
   nombre: string | null;
   dni: string | null;
   correo: string | null;
+  /**
+   * El país declarado en Cerberus («Peru», «Mexico»…). Es la mitad que le falta al teléfono:
+   * Cerberus guarda muchos números en formato LOCAL, y sin el país no se pueden llevar a E.164
+   * — que es la única comparación que no confunde a dos personas (#119).
+   */
+  pais: string | null;
   /** `telefono` + `telefonos[]`, deduplicados y en el orden en que Cerberus los da. */
   telefonos: string[];
 }

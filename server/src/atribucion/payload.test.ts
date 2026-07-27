@@ -67,6 +67,7 @@ test("un evento real de Cerberus se lee entero", () => {
   assert.equal(venta.estadoPago, "pagado_completo");
   assert.equal(venta.cliente.cerberusClienteId, 987);
   assert.equal(venta.cliente.nombre, "Ada Lovelace");
+  assert.equal(venta.cliente.pais, "Peru", "sin el país, un teléfono local no llega a E.164 (#119)");
   assert.deepEqual(venta.cliente.telefonos, ["51987654321", "987654321"]);
   assert.equal(venta.ocurridaAt.toISOString(), "2026-07-27T16:30:00.000Z");
   assert.equal(venta.fuente, "webhook");

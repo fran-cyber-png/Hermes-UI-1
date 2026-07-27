@@ -65,6 +65,7 @@ const clienteSchema = z.object({
   apellidos: texto,
   dni: texto,
   correo: texto,
+  pais: texto,
   telefono: texto,
   telefonos: listaDeTextos,
 });
@@ -172,6 +173,10 @@ export function ventaDeEvento(
       nombre: nombre || null,
       dni: c?.dni ?? null,
       correo: c?.correo ?? null,
+      // El país declarado del cliente. No es decoración: es lo que permite llevar a E.164 un
+      // teléfono que Cerberus guardó en formato local. Sin él, un guatemalteco de 8 dígitos no
+      // llega nunca a 9 y un mexicano de 10 se compara mal (#119).
+      pais: c?.pais ?? null,
       telefonos,
     },
     // LA ATRIBUCIÓN DETERMINISTA: la conversación viaja en la llave de idempotencia y vuelve

@@ -63,12 +63,23 @@ etiqueta** (columna `conversiones_wa.atribucion`) para saber cuánto confiar en 
 
 ⚠️ **El sufijo es más débil de lo que parece** (issue #119). Medido el 27-jul: de las **143** ventas
 que matchean por sufijo, **29 (20 %) tienen un E.164 distinto**. Con clientes de MX/GT/EC en el
-padrón, un sufijo compartido puede ser dos personas. Por eso el E.164 completo **gana siempre** y el
-sufijo queda marcado aparte, para poder excluirlo de un reporte si hace falta.
+padrón, un sufijo compartido puede ser dos personas. Tres defensas, en este orden:
+
+1. **El E.164 se arma con el país declarado del cliente** — `normalizarDelPadron`
+   (`clientes/padron.ts`, la misma función que usa la marca de ex-cliente de la cola). Cerberus
+   guarda muchos teléfonos en formato **local**: sin el país, un guatemalteco de 8 dígitos no llega
+   ni a los 9 del sufijo (los **393 clientes invisibles** de #133) y un mexicano de 10 se compara mal.
+2. **El E.164 completo gana siempre** sobre el sufijo.
+3. **Guarda de país en el respaldo**: si el match es *solo* por sufijo y sabemos el país del cliente,
+   el teléfono del chat tiene que **empezar con ese código**. Un mexicano de Veracruz y un peruano
+   comparten los últimos 9 dígitos; no comparten el código.
+
+Y lo que igual entra por sufijo queda **etiquetado** `telefono_sufijo`, para poder excluirlo de un
+reporte sin tocar código.
 
 El SQL solo hace un **prefiltro superconjunto** por sufijo; el veredicto lo dan las funciones puras
-que ya existían (`whatsapp/identidadWa.ts`). No hay una segunda definición de «qué dos teléfonos son
-el mismo» — la lección de #37.
+que ya existían (`whatsapp/identidadWa.ts`, `clientes/padron.ts`). No hay una segunda definición de
+«qué dos teléfonos son el mismo» — la lección de #37.
 
 ## 3. Dónde aterriza
 
