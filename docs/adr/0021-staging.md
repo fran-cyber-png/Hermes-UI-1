@@ -1,4 +1,4 @@
-# ADR 0014 — Hay un staging entre `main` y las vendedoras
+# ADR 0021 — Hay un staging entre `main` y las vendedoras
 
 - **Fecha:** 2026-07-24
 - **Estado:** aceptado
@@ -22,7 +22,7 @@ abre una pantalla vacía.
 
 Dicho de otra forma: **el primer entorno que ejecutaba el código nuevo era el de las vendedoras.**
 
-Con migraciones automáticas (ADR 0013) eso pasaba de incómodo a inaceptable: una migración que se
+Con migraciones automáticas (ADR 0020) eso pasaba de incómodo a inaceptable: una migración que se
 aplica sola sobre producción sin haberse aplicado antes en ningún lado es exactamente el cambio que
 no se puede deshacer con un `mv`.
 
@@ -85,7 +85,7 @@ prueba y llegue a las rutas de verdad sin abrir un agujero.
 - El smoke funcional prueba lo que `/health` no puede: la cola, el radar, la agenda, el SSE, el
   perímetro ruta por ruta.
 - Ya encontró algo real en su primer uso: `notas_texto_gin_idx` estaba en producción y en ninguna
-  base nueva (ADR 0013).
+  base nueva (ADR 0020).
 
 **En contra**
 

@@ -1,7 +1,7 @@
 # Migraciones — cómo cambiar el schema sin romper producción
 
 > Desde el 2026-07-24 el schema de Hermes vive en migraciones versionadas, no en `db:push`.
-> El *por qué* está en **ADR 0013**; esto es el *cómo*.
+> El *por qué* está en **ADR 0020**; esto es el *cómo*.
 
 ---
 

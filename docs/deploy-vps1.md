@@ -220,7 +220,7 @@ ssh deploy@161.132.39.165 'cd /srv/hermes && git pull && \
 - `npm ci` **solo si cambiaron dependencias** (`git diff --stat <sha-viejo>..main -- package.json`).
 - `ELECTRON_SKIP_BINARY_DOWNLOAD=1` evita bajar ~100 MB que el VPS nunca usa.
 - `cd server && npm run db:migrate` **solo si hay migraciones nuevas** en `server/drizzle/`.
-  (Antes era `db:push`; ver ADR 0013.)
+  (Antes era `db:push`; ver ADR 0020.)
 
 </details>
 
@@ -230,7 +230,7 @@ ssh deploy@161.132.39.165 'cd /srv/hermes && git pull && \
 > `notas_texto_gin_idx` había que crearlo **a mano por SSH después de cada `db:push`**.
 >
 > Eso produjo deriva real: el índice existía en producción y en ninguna base nueva. Lo encontró el
-> `pg_dump` comparativo al montar staging (ADR 0013).
+> `pg_dump` comparativo al montar staging (ADR 0020).
 
 drizzle-kit sigue sin emitirlo, pero ahora el índice está **escrito en la migración**
 (`server/drizzle/0000_baseline.sql`), que es la ventaja de tener un archivo: lo que la herramienta no

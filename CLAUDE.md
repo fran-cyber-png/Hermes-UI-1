@@ -429,7 +429,7 @@ Decisión completa en **ADR 0017**; issue #58.
 propio `hermes_db` (127.0.0.1:5438), API pública **`https://hermes-api.goberna.us`** (nginx + certbot
 dns-cloudflare; el 4110 no se expone), número 51986394450 vinculado ALLÁ.
 
-**Hay CD, en cinco niveles** (`docs/despliegue-continuo.md`; ADR 0013 y 0014). Todo corre en el
+**Hay CD, en cinco niveles** (`docs/despliegue-continuo.md`; ADR 0020 y 0021). Todo corre en el
 **runner self-hosted de VPS1** (label `vps1-hermes`, servicio
 `actions.runner.Goberna-Lab-hermes.vps1-hermes`, dir `~deploy/actions-runner-hermes`), que es uno
 solo: los jobs se serializan.
@@ -447,7 +447,7 @@ N5 es un botón porque reiniciar tira las sesiones de Cerberus de las vendedoras
 `ssh … 'sudo hermes-deploy --dry-run | --rollback'`. `tauri-windows.yml` sigue aparte: necesita host
 Windows.
 
-**El schema va en migraciones versionadas**, no en `db:push` (ADR 0013). Al tocar `src/db/*.ts`:
+**El schema va en migraciones versionadas**, no en `db:push` (ADR 0020). Al tocar `src/db/*.ts`:
 `npm run db:generate` → `goberna-journal-set-when` → commitear `server/drizzle/` completo. Cómo y por
 qué: **`docs/migraciones.md`**. Runbook del server: **`docs/deploy-vps1.md`**.
 

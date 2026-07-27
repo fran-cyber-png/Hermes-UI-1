@@ -1,4 +1,4 @@
-# ADR 0013 — El schema se versiona en migraciones, no se empuja contra la base viva
+# ADR 0020 — El schema se versiona en migraciones, no se empuja contra la base viva
 
 - **Fecha:** 2026-07-24
 - **Estado:** aceptado
@@ -33,7 +33,7 @@ estado actual de producción.**
 - `server/drizzle/NNNN_*.sql` — el SQL, en el repo, revisable en el PR que lo introduce.
 - `server/drizzle/meta/_journal.json` — el índice, con su contador `when`.
 - El CD las aplica solo, **después de respaldar la base** y **después de haberlas aplicado en
-  staging** sobre una base con historia (ADR 0014).
+  staging** sobre una base con historia (ADR 0021).
 
 Cuatro decisiones que la acompañan:
 
