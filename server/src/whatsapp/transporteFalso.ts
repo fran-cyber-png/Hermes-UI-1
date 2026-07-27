@@ -64,8 +64,15 @@ export class TransporteFalso implements TransporteWhatsapp {
     }
   }
 
-  /** El número propio de esta sesión. Es lo que se estampa en cada mensaje. */
-  private get numeroPropio(): string {
+  /**
+   * El número propio de esta sesión. Es lo que se estampa en cada mensaje, y
+   * desde #50 también lo que `EnvioControlado` verifica contra la orden.
+   *
+   * Público (era privado) porque ahora es parte de `TransporteWhatsapp`. Y cae a
+   * `opciones.telefono` cuando la sesión no está conectada a propósito: un
+   * transporte caído no deja de ser el dueño de su número.
+   */
+  get numeroPropio(): string {
     return this.sesion.estado === 'conectado' ? this.sesion.telefono : (this.opciones.telefono ?? '');
   }
 

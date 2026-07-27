@@ -103,6 +103,7 @@ describe('EnvioControlado', () => {
     // el ban que llega justo entre el chequeo de estado y el envío.
     const transporteTraidor: TransporteWhatsapp = {
       nombre: 'falso',
+      numeroPropio: '51987654321',
       async iniciar() {},
       estado(): EstadoSesion {
         return { estado: 'conectado', telefono: '51987654321' };
@@ -308,5 +309,79 @@ describe('EnvioControlado — de qué pieza salió', () => {
     });
 
     assert.deepEqual(registro.intentos[0].procedencia, A_MANO);
+  });
+});
+
+/**
+ * GUARDA #0 — QUE UN ENVÍO NO SALGA POR LA LÍNEA EQUIVOCADA (#50).
+ *
+ * Con un solo transporte esto no se podía ni escribir: había una sola línea. Con
+ * varias vivas, el enrutado lo hace el gestor, y un error de enrutado **no se ve
+ * desde adentro**: el mensaje sale bien y se audita bien. Lo que se rompe está
+ * afuera — le llega al lead desde un número que no conoce, en otro chat, y la
+ * respuesta cae en un hilo que nadie está mirando.
+ *
+ * Se rechaza SIN auditar, como la validación dura: no es un envío que falló, es
+ * una orden mal enrutada. Anotarla ensuciaría `envios_wa` y, con él, la línea de
+ * base del lazo de resultados.
+ */
+describe('EnvioControlado — la línea de la orden y la del transporte', () => {
+  test('T20 — una orden para OTRO número no sale, y no ensucia la auditoría', async () => {
+    const transporte = new TransporteFalso({ telefono: '51987654321' });
+    const registro = new RegistroFalso();
+    const envio = new EnvioControlado(transporte, registro);
+
+    const r = await envio.enviar(orden({ numeroPropio: '51999888777' }));
+
+    assert.equal(r.ok, false);
+    assert.match((r as { motivo: string }).motivo, /línea equivocada/);
+    assert.equal(transporte.enviados.length, 0, 'el transporte no se toca');
+    assert.equal(registro.intentos.length, 0, 'una orden mal enrutada no es un intento de envío');
+  });
+
+  test('T21 — el adjunto pasa por la MISMA guarda: si no, la mitad de los envíos la esquiva', async () => {
+    const transporte = new TransporteFalso({ telefono: '51987654321' });
+    const registro = new RegistroFalso();
+    const envio = new EnvioControlado(transporte, registro);
+
+    const r = await envio.enviarMedia({
+      vendedoraId: 'ana',
+      numeroPropio: '51999888777',
+      telefono: '51961506674',
+      referencia: 'conv:whatsapp:51961506674:51999888777',
+      media: { ruta: '/tmp/flyer.jpg', mime: 'image/jpeg', clase: 'imagen', nombre: 'flyer.jpg' },
+    });
+
+    assert.equal(r.ok, false);
+    assert.match((r as { motivo: string }).motivo, /línea equivocada/);
+    assert.equal(registro.intentos.length, 0);
+  });
+
+  test('T22 — el mismo número con formato distinto NO es otra línea', async () => {
+    // Un guardarraíl que rechaza por un `+` estorba en vez de proteger: el número
+    // propio llega de la app, de la base y del env, y no siempre normalizado.
+    const transporte = new TransporteFalso({ telefono: '51987654321' });
+    const registro = new RegistroFalso();
+    const envio = new EnvioControlado(transporte, registro);
+
+    const r = await envio.enviar(orden({ numeroPropio: '+51 987 654 321' }));
+
+    assert.ok(r.ok, 'el mismo número escrito distinto tiene que salir');
+    assert.equal(transporte.enviados.length, 1);
+  });
+
+  test('T23 — un transporte SIN número propio no inventa un veredicto', async () => {
+    // El falso sin vincular no sabe cuál es su línea. Sin con qué comparar, la
+    // guarda se calla: afirmar «es ajena» sin saberlo bloquearía envíos buenos.
+    const transporte = new TransporteFalso();
+    const registro = new RegistroFalso();
+    const envio = new EnvioControlado(transporte, registro);
+
+    const r = await envio.enviar(orden());
+
+    // No pasa por la guarda #0; la frena la guarda de sesión, que es la correcta acá.
+    assert.equal(r.ok, false);
+    assert.doesNotMatch((r as { motivo: string }).motivo, /línea equivocada/);
+    assert.equal(registro.intentos.length, 1, 'esto SÍ es un intento real: se audita');
   });
 });

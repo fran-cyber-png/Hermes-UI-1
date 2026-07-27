@@ -123,7 +123,10 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 // WhatsApp: engancha el transporte (hoy el falso) a la ingesta, que persiste cada
 // mensaje en el mismo event store que Facebook/Instagram. La ruta de dev para
 // inyectar mensajes solo existe si corre el falso.
-const { falso } = arrancarWhatsapp();
+// Desde #50 esto monta N líneas y devuelve el gestor. La ruta de dev que inyecta
+// mensajes trabaja sobre la PRIMERA: es una herramienta de desarrollo, y elegirle
+// la línea a mano es justo lo que se quiere poder hacer desde ella.
+const { falso } = arrancarWhatsapp().primero();
 app.use("/api/stream", streamRouter);     // tiempo real: push de cambios (SSE)
 app.use("/api/whatsapp", whatsappRouter); // conversación nativa: hilo + enviar
 app.use("/api/autorespuesta", autorespuestaRouter); // el interruptor sin deploy de la auto-respuesta (#125)

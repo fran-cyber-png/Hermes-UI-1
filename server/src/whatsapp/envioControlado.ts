@@ -1,4 +1,5 @@
 import type { MediaSaliente, ResultadoEnvio, TransporteWhatsapp } from './transporte.js';
+import { normalizarTelefono } from './identidadWa.js';
 import { A_MANO, type Procedencia } from '../procedencia/pieza.js';
 
 /**
@@ -92,6 +93,8 @@ export class EnvioControlado {
     if (!orden.vendedoraId || !orden.numeroPropio || !orden.telefono || !orden.texto.trim() || !orden.referencia) {
       return { ok: false, motivo: 'faltan datos obligatorios del envío (vendedora, número, teléfono, texto o referencia)' };
     }
+    const lineaAjena = this.lineaAjena(orden);
+    if (lineaAjena) return lineaAjena;
     return this.conGuardas(
       { ...orden, procedencia: orden.procedencia ?? A_MANO },
       () => this.transporte.enviarTexto(orden.telefono, orden.texto),
@@ -107,11 +110,45 @@ export class EnvioControlado {
     if (!orden.vendedoraId || !orden.numeroPropio || !orden.telefono || !orden.referencia || !orden.media?.ruta) {
       return { ok: false, motivo: 'faltan datos obligatorios del envío (vendedora, número, teléfono, archivo o referencia)' };
     }
+    const lineaAjena = this.lineaAjena(orden);
+    if (lineaAjena) return lineaAjena;
     const descripcion = orden.media.texto?.trim() || `[${orden.media.clase}] ${orden.media.nombre ?? orden.media.mime}`;
     return this.conGuardas(
       { ...orden, texto: descripcion, procedencia: orden.procedencia ?? A_MANO },
       () => this.transporte.enviarMedia(orden.telefono, orden.media),
     );
+  }
+
+  /**
+   * GUARDA #0 — que un envío no salga por la LÍNEA EQUIVOCADA (#50).
+   *
+   * Con un solo transporte esta comprobación no tenía sentido: había una sola
+   * línea y `numeroPropio` no podía discrepar de nada. Con varias vivas a la vez,
+   * el enrutado lo hace el gestor y **un error de enrutado es invisible desde
+   * adentro**: el mensaje sale bien, se audita bien, y llega desde un número que
+   * el lead no conoce. Para él no es «Goberna otra vez», es un desconocido
+   * escribiéndole en otro chat — y la respuesta se pierde en un hilo que la
+   * vendedora que atendía no está mirando.
+   *
+   * Se rechaza **sin auditar**, igual que la validación dura de arriba y por el
+   * mismo motivo: una orden enrutada al transporte equivocado no es un envío que
+   * falló, es un bug de quien llama. Anotarla en `envios_wa` ensuciaría la
+   * auditoría —y la línea de base del lazo— con algo que nunca se intentó mandar.
+   *
+   * La comparación es sobre dígitos normalizados: `+51 986…` y `51986…` son la
+   * misma línea, y hacer fallar un envío por un `+` sería un guardarraíl que
+   * estorba en vez de proteger.
+   */
+  private lineaAjena(orden: { numeroPropio: string }): { ok: false; motivo: string } | null {
+    const delTransporte = normalizarTelefono(this.transporte.numeroPropio);
+    const deLaOrden = normalizarTelefono(orden.numeroPropio);
+    // Un transporte sin número propio (el falso sin vincular) no puede afirmar
+    // que la orden sea ajena: sin con qué comparar, no se inventa un veredicto.
+    if (!delTransporte || !deLaOrden || delTransporte === deLaOrden) return null;
+    return {
+      ok: false,
+      motivo: `la orden sale por ${orden.numeroPropio} y este transporte es ${this.transporte.numeroPropio}: envío enrutado a la línea equivocada`,
+    };
   }
 
   /** El corazón compartido: auditar, frenar (corta-corriente, sesión) y ejecutar. */

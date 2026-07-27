@@ -71,7 +71,9 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
   private susMensaje: ((m: MensajeWhatsapp) => void)[] = [];
   private susEstado: ((e: EstadoSesion) => void)[] = [];
 
-  constructor(private numeroPropio: string, storeDir: string) {
+  // Público y de solo lectura desde #50: `EnvioControlado` lo compara contra el
+  // `numeroPropio` de la orden para que un envío no salga por otra línea.
+  constructor(public readonly numeroPropio: string, storeDir: string) {
     const numero = normalizarTelefono(numeroPropio);
     if (!numero) throw new Error(`Número propio inválido: "${numeroPropio}"`);
     this.numeroPropio = numero;

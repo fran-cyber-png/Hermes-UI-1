@@ -150,6 +150,22 @@ export interface TransporteWhatsapp {
   /** Qué hay del otro lado. Se muestra en la UI: el equipo tiene que saberlo. */
   readonly nombre: 'whatsmeow' | 'cloud-api' | 'falso';
 
+  /**
+   * EL NÚMERO PROPIO DE ESTA SESIÓN — normalizado, solo dígitos.
+   *
+   * Con un solo transporte esto era interno: no había con qué confundirse. Con
+   * varios vivos a la vez (#50) pasa a ser parte del contrato, porque es contra
+   * lo que `EnvioControlado` verifica que una orden no salga por la línea
+   * equivocada — y salir por la línea equivocada, para el lead, es que le
+   * escriba un desconocido en otro chat.
+   *
+   * NO se saca de `estado()`: ahí el teléfono solo existe cuando la sesión está
+   * `conectado`. El número propio de un transporte desconectado sigue siendo el
+   * suyo, y es justo cuando está caído que hace falta saber a quién pertenecía
+   * la orden que se está rechazando.
+   */
+  readonly numeroPropio: string;
+
   /** Levanta la sesión. Idempotente: llamarlo dos veces no vincula dos veces. */
   iniciar(): Promise<void>;
 
