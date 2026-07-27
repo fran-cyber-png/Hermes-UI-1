@@ -114,3 +114,60 @@ test('T-M4 — un adjunto viaja al payload del evento y el caption es el texto d
     assert.equal(r.interaccion.texto, 'les llegó este flyer?');
   }
 });
+
+/**
+ * ── ATRIBUCIÓN DE LÍNEA (#185) ────────────────────────────────────────────────
+ *
+ * Con UNA sola línea con tráfico, "todo lo saliente es de esa vendedora" se
+ * deducía por eliminación. Con dos líneas vivas esa deducción se rompe, y sin
+ * `numeroPropio` proyectado las dos personas quedan en un solo pozo.
+ *
+ * El dato ya viajaba en el crudo del evento; lo que estos tests fijan es que
+ * TAMBIÉN llegue a la interacción, y que las dos copias no puedan discrepar.
+ */
+describe('atribución de línea (#185)', () => {
+  test('un entrante lleva la línea por la que entró', () => {
+    const r = proyectarMensaje(mensaje({ numeroPropio: '51986394450' }));
+    assert.ok('interaccion' in r);
+    if ('interaccion' in r) assert.equal(r.interaccion.numeroPropio, '51986394450');
+  });
+
+  test('un saliente lleva la línea por la que salió — es la mitad que faltaba', () => {
+    // Los salientes son el caso que importa: son los que escribe la vendedora, y
+    // los que hasta ahora quedaban con `autor='pagina'` y nada que dijera cuál.
+    const r = proyectarMensaje(mensaje({ esMio: true, numeroPropio: '51941654039' }));
+    assert.ok('interaccion' in r);
+    if ('interaccion' in r) {
+      assert.equal(r.interaccion.direccion, 'saliente');
+      assert.equal(r.interaccion.numeroPropio, '51941654039');
+    }
+  });
+
+  test('dos líneas hablándole a la MISMA persona quedan distinguibles', () => {
+    // El caso que motiva todo: sin esta columna, estas dos interacciones eran
+    // indistinguibles salvo por el id, y ninguna consulta podía separarlas.
+    const a = proyectarMensaje(mensaje({ idExterno: 'A1', esMio: true, numeroPropio: '51986394450' }));
+    const b = proyectarMensaje(mensaje({ idExterno: 'B1', esMio: true, numeroPropio: '51941654039' }));
+    assert.ok('interaccion' in a && 'interaccion' in b);
+    if ('interaccion' in a && 'interaccion' in b) {
+      assert.equal(a.interaccion.personaId, b.interaccion.personaId, 'la misma persona');
+      assert.notEqual(
+        a.interaccion.numeroPropio,
+        b.interaccion.numeroPropio,
+        'pero por líneas distintas: eso es lo que la columna tiene que preservar',
+      );
+    }
+  });
+
+  test('la línea proyectada y la del crudo son la MISMA — no pueden divergir', () => {
+    // El backfill de las filas viejas deriva `numero_propio` de
+    // `events.payload->>'numeroPropio'`. Si la proyección tomara el número de otro
+    // lado, las filas viejas y las nuevas significarían cosas distintas bajo el
+    // mismo nombre de columna, y la comparación contra la línea de base mentiría.
+    const r = proyectarMensaje(mensaje({ numeroPropio: '51986394450' }));
+    assert.ok('evento' in r && 'interaccion' in r);
+    if ('evento' in r && 'interaccion' in r) {
+      assert.equal(r.interaccion.numeroPropio, r.evento.payload.numeroPropio);
+    }
+  });
+});

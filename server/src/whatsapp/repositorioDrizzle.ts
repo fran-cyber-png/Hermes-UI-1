@@ -41,6 +41,9 @@ export const repositorioDrizzle: RepositorioInteracciones = {
         personaId: interaccion.personaId,
         personaNombre: interaccion.personaNombre,
         texto: interaccion.texto,
+        // De qué línea propia. Lo que en Meta se deduciría de `page_id`, en
+        // WhatsApp es el número: sin esto, dos vendedoras quedan en un solo pozo.
+        numeroPropio: interaccion.numeroPropio,
         // WhatsApp no tiene "publicación" ni conversación-contexto como los
         // comentarios de Meta: estos quedan null y no se inventan.
         pageId: null,

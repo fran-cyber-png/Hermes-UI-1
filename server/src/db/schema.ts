@@ -166,6 +166,33 @@ export const interactions = pgTable(
 
     texto: text("texto"),
 
+    /**
+     * DE QUÉ LÍNEA PROPIA salió o entró el mensaje (WhatsApp). Mismo nombre que en
+     * `envios_wa` y `auto_respuestas_pendientes`, porque es el mismo dato.
+     *
+     * NO se reusó `page_id` a propósito: ahí significa "la publicación comentada"
+     * en los canales de Meta, y la ingesta de WhatsApp lo deja `null` de forma
+     * explícita ("no se inventan"). Meterle el número lo habría vuelto dos cosas
+     * distintas según el canal — la clase de campo que después no se puede
+     * consultar sin preguntar antes de qué fila se trata.
+     *
+     * POR QUÉ EXISTE: con UNA sola línea con tráfico, "todo lo saliente es de esa
+     * vendedora" se deducía por eliminación y ninguna columna hacía falta. Con una
+     * segunda línea viva la deducción se rompe y las dos personas quedan en un solo
+     * pozo, sin nada que las separe. El dato nunca se perdió —el crudo de
+     * `events.payload` siempre trajo `numeroPropio`, y `proyectar.ts` ya declaraba
+     * que "desde qué número tiene que poder reconstruirse desde acá"—, pero
+     * derivarlo con un LIKE sobre JSON en cada consulta es caro y frágil. Esto lo
+     * materializa.
+     *
+     * Nullable a propósito, y con dos significados que no se pueden confundir: las
+     * filas de Facebook/Instagram no tienen línea propia (no aplica), y una de
+     * WhatsApp que no se pudo atribuir queda `NULL` = "no se sabe". Lo que NUNCA
+     * hace es caer a la línea más probable: eso convertiría una laguna en un dato
+     * falso, justo en la columna que existe para separar personas.
+     */
+    numeroPropio: text("numero_propio"),
+
     /** Dónde ocurrió: la publicación comentada, o la conversación. */
     pageId: text("page_id"),
     contextoId: text("contexto_id"),
@@ -200,6 +227,9 @@ export const interactions = pgTable(
     index("interactions_status_idx").on(t.status),
     // Para agrupar por persona: el corazón del contact merge.
     index("interactions_persona_idx").on(t.canal, t.personaId),
+    // "Todo lo de esta línea": la consulta que separa a una vendedora de otra, y
+    // la que compara a la nueva contra la línea de base de la que ya venía.
+    index("interactions_numero_propio_idx").on(t.numeroPropio, t.occurredAt),
     // El filtro más caliente: los pocos que todavía se pueden rescatar.
     index("interactions_ventana_idx").on(t.tipo, t.occurredAt),
   ],

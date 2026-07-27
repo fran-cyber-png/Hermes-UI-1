@@ -36,6 +36,18 @@ export interface InteraccionProyectada {
   personaId: string;
   personaNombre: string | null;
   texto: string | null;
+  /**
+   * DE QUÉ LÍNEA PROPIA. Ya viajaba en el crudo del evento (ver el payload más
+   * abajo); ahora además se proyecta, para no tener que derivarlo con un LIKE
+   * sobre JSON cada vez que haya que separar a una vendedora de otra.
+   *
+   * No es opcional: `proyectarMensaje` es el embudo ÚNICO por el que pasan tanto
+   * la ingesta (entrantes) como `enviarYProyectar` (salientes), y las dos ya
+   * reciben `numeroPropio`. Tipándolo requerido, una interacción de WhatsApp sin
+   * línea no compila — que es exactamente la garantía que esta columna necesita
+   * para servir de algo.
+   */
+  numeroPropio: string;
   occurredAt: Date;
 }
 
@@ -103,6 +115,9 @@ export function proyectarMensaje(m: MensajeWhatsapp): ResultadoProyeccion {
     // El texto viaja siempre: en un mensaje de texto es el mensaje; en un adjunto
     // es el caption (lo que WhatsApp muestra debajo de la foto). Null si no hay.
     texto: m.texto,
+    // La línea propia. Sale del mismo campo que ya se guardaba en el crudo, así
+    // que la proyección y el evento no pueden discrepar.
+    numeroPropio: m.numeroPropio,
     occurredAt: m.ocurridoEn,
   };
 
