@@ -113,9 +113,18 @@ describe('mientras Cerberus responde, el padrón local ya sabe algo', () => {
     expect(e.detalle).toBeNull();
   });
 
-  it('si Cerberus contesta que NO figura, el padrón no lo contradice: manda la fuente de verdad', () => {
+  it('«lead nuevo» NO se dice cuando el padrón lo tiene como cliente: la frase afirma de más', () => {
     const e = estadoDelContacto(entrada({ ficha: { estado: 'nuevo' }, padron: 'compro' }));
-    expect(e.tono).toBe('nuevo');
+    expect(e.titulo).not.toBe('Lead nuevo');
+    expect(e.tono).toBe('sin-saber');
+    expect(e.acento).toBe('alerta');
+    expect(e.detalle).toMatch(/otro teléfono/i);
+  });
+
+  it('sin padrón, un lead nuevo sigue siendo un lead nuevo, sin ruido', () => {
+    const e = estadoDelContacto(entrada({ ficha: { estado: 'nuevo' } }));
+    expect(e.titulo).toBe('Lead nuevo');
+    expect(e.acento).toBe('neutro');
   });
 
   it('sin padrón, cargando sigue siendo cargando (nada cambió para el 93% de las filas)', () => {

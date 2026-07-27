@@ -123,6 +123,26 @@ export function estadoDelContacto(e: EntradaEstadoContacto): EstadoContacto {
   }
 
   if (e.ficha?.estado === 'nuevo') {
+    /**
+     * «ES UN LEAD NUEVO» ES UNA AFIRMACIÓN, Y PUEDE SER FALSA (#133).
+     *
+     * Esa frase habla de UNA fuente —el `buscar?q=` de Cerberus por teléfono— y
+     * la dice como si hablara de todas. Si el padrón lo tiene como cliente y
+     * Cerberus no lo encuentra con ESTE número, lo honesto no es elegir una de
+     * las dos: es decir que no cierran. Tratar como desconocido a alguien que ya
+     * compró cuesta mucho más que hacer verificar diez segundos.
+     */
+    if (e.padron) {
+      return {
+        ...base,
+        tono: 'sin-saber',
+        acento: 'alerta',
+        titulo: 'No figura con este número',
+        detalle:
+          'Pero ya te compró según el padrón: en Cerberus puede estar cargado con otro teléfono. ' +
+          'Verificá antes de tratarlo como nuevo.',
+      };
+    }
     return {
       ...base,
       tono: 'nuevo',
