@@ -52,12 +52,23 @@ export class ErrorApi extends Error {
   readonly tipo?: string;
   /** El detalle que algunos endpoints (responder) mandan junto al error. */
   readonly errores?: string[];
+  /**
+   * La CLASE del fallo, cuando el endpoint la nombra: `codigo` en el cuerpo del error.
+   *
+   * El proxy de Ivi devuelve un 502 con uno de ocho códigos tipados —`timeout` no es lo
+   * mismo que `falta_config`, y ninguno de los dos es «Ivi no encontró datos»— y hasta acá
+   * llegaban todos como el mismo 502 anónimo: el server distinguía ocho clases de problema
+   * con cuidado y el cliente las aplanaba a una. Sin esto, la pantalla solo puede decir
+   * «algo falló», que es justo lo que la regla fail-closed vino a evitar.
+   */
+  readonly codigo?: string;
 
-  constructor(message: string, status: number, tipo?: string, errores?: string[]) {
+  constructor(message: string, status: number, tipo?: string, errores?: string[], codigo?: string) {
     super(message);
     this.status = status;
     this.tipo = tipo;
     this.errores = errores;
+    this.codigo = codigo;
   }
 }
 
@@ -89,7 +100,13 @@ export async function api<T>(ruta: string, init?: RequestInit): Promise<T> {
       : Array.isArray(cuerpo.errors)
         ? cuerpo.errors
         : undefined;
-    throw new ErrorApi(cuerpo.message ?? `Error ${res.status}`, res.status, cuerpo.type, errores);
+    throw new ErrorApi(
+      cuerpo.message ?? `Error ${res.status}`,
+      res.status,
+      cuerpo.type,
+      errores,
+      typeof cuerpo.codigo === 'string' ? cuerpo.codigo : undefined,
+    );
   }
   return res.json() as Promise<T>;
 }

@@ -6,6 +6,7 @@ import '@fontsource/montserrat/800.css';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   AlarmClock,
+  BrainCircuit,
   Columns3,
   LayoutDashboard,
   LogOut,
@@ -42,6 +43,7 @@ import { SELECTOR_CAMPOS } from './lib/teclado/escapeDePopover';
 import type { Puente } from './lib/puente';
 import { LibretaPersonal } from './features/notas/PanelNotas';
 import { esAtajoLibreta } from './features/notas/notas';
+import { ConsultaIvi } from './features/ivi/ConsultaIvi';
 
 /**
  * HERMES — la mesa de la vendedora.
@@ -97,6 +99,7 @@ const ATAJOS: { tecla: string; que: string }[] = [
   { tecla: '↑↓ ⏎', que: 'Recorrer la cola' },
   { tecla: 'Esc', que: 'Cerrar la conversación' },
   { tecla: 'n', que: 'Tu libreta personal' },
+  { tecla: 'i', que: 'Preguntarle a Ivi' },
   { tecla: 'a', que: 'Revisar las auto-respuestas' },
   { tecla: '?', que: 'Esta ayuda' },
 ];
@@ -165,6 +168,9 @@ export default function App() {
   const [telefonoPersonas, setTelefonoPersonas] = useState<string | null>(null);
   const [cabina, setCabina] = useState(false);
   const [libreta, setLibreta] = useState(false);
+  // La consulta a Ivi (H3). Capa aparte, global: se pregunta desde donde sea que estés y
+  // el panel derecho —que es de la persona abierta, no del negocio— no se toca.
+  const [ivi, setIvi] = useState(false);
   // EL MODO REVISIÓN (ADR 0018). No es una hoja encima de la app: es la vista
   // Mensajes con la cola filtrada a lo que hay que decidir, la conversación
   // real en el medio y el porqué a la derecha. Todo su estado vive en el hook,
@@ -280,6 +286,13 @@ export default function App() {
       if (e.key === '?') {
         e.preventDefault();
         setCabina((v) => !v);
+        return;
+      }
+      // Preguntarle a Ivi: «i» sola. La hoja se cierra sola con Escape (contrato de la
+      // casa, `useEscape` en captura), así que acá alcanza con abrir y alternar.
+      if (e.key === 'i' || e.key === 'I') {
+        e.preventDefault();
+        setIvi((v) => !v);
         return;
       }
       // La libreta personal (#47): «n» sola, nunca ⌘N/Ctrl+N (eso es del navegador).
@@ -453,6 +466,18 @@ export default function App() {
         >
           <h1 className="font-heading text-sm font-bold tracking-tight text-navy">{vistaActiva.label}</h1>
           <div className="ml-auto flex items-center gap-2" style={NO_ARRASTRABLE}>
+            {/* Preguntarle a Ivi. Va en la barra y no en el riel porque no es una vista: no
+                se «va» a Ivi, se lo consulta sin soltar lo que estabas haciendo. Y va con
+                rótulo porque una tecla que nadie descubre no existe. */}
+            <button
+              type="button"
+              onClick={() => setIvi(true)}
+              title="Preguntarle a Ivi · i"
+              className="flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-[color,border-color,transform] duration-200 ease-house hover:border-primary/40 hover:text-navy active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <BrainCircuit size={13} strokeWidth={2} />
+              Ivi
+            </button>
             {/* Primero lo que le impide COBRAR: es lo único de esta barra que
                 bloquea plata, así que va antes que la salud de los datos. */}
             {cerberusVivo === false && <AvisoCerberus usuario={vendedora.id} entrar={entrar} />}
@@ -593,6 +618,7 @@ export default function App() {
 
       {cabina && <Cabina onCerrar={() => setCabina(false)} enRevision={revision.activo} />}
       <LibretaPersonal abierta={libreta} onCerrar={() => setLibreta(false)} />
+      <ConsultaIvi abierta={ivi} onCerrar={() => setIvi(false)} />
     </div>
   );
 }
