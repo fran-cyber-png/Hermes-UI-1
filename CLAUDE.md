@@ -229,8 +229,42 @@ referenciado por nombre, regla dura #1). El cliente vive en `server/src/ivi/clie
   estado no esperado) y `desconocido` (un error que no es `ErrorIvi` — bug, no una clase conocida
   de problema). **Nunca** se muestra un fallo como «Ivi no encontró datos». Cada `ErrorIvi` deja
   rastro en los logs del server, con la causa original si la hay.
+- **`200` + `SIN_EVIDENCIA` NO es un error**: Ivi funcionó y no sabe. Sale por el camino normal,
+  no se reintenta (no es transitorio: Ivi ya decidió) y llega a la app como respuesta. Fijado con
+  test en el cliente y en la ruta.
 - **Env**: `IVI_URL` + `IVI_SERVICE_TOKEN` (solo nombres en `.env.example`). Del lado geografo,
   `POST /api/preguntar` puede **no estar vivo aún**: hasta entonces la ruta responde 502 honesto.
+  Al 27-jul da **404**, así que lo que una vendedora ve hoy es el `http_inesperado`.
+
+### La superficie en la app (#169, **ADR 0021**)
+
+`src/features/ivi/`. Se abre con la tecla **`i`** o el botón de la barra, desde cualquier vista:
+es una **hoja a la derecha, encima de la mesa** — el molde de `LibretaPersonal`, no una pestaña
+del panel. El porqué está en el ADR: el panel derecho es de **esa persona**, Ivi es del
+**negocio**, y a 360 px un hilo de preguntas compite por alto con «Registrar venta».
+
+- **Los tres tipos cambian de FORMA, no de color** (un color se aprende, una forma se reconoce
+  sin leer): `HECHO` filete sólido + blanco · `CONTEXTO` filete punteado + hundido (la bandeja de
+  ADR 0017) · `SIN_EVIDENCIA` sin relleno y punteado entero. **Sin oro** — el oro es tiempo que se
+  acaba. Un **`tipo` desconocido cae en `CONTEXTO`**, lo conservador, y lo dice: nunca `HECHO`,
+  nunca un throw.
+- **La regla vive fuera del JSX**, pura y con test: `presentacion.ts`. Un `switch` adentro de un
+  componente no se puede interrogar sobre el tipo que todavía no existe — y ese es el caso que
+  importa, porque el enum de Ivi crece sin coordinar releases con Hermes.
+- **`grounding_ok: false`** marca **las cifras** de `numerosNoVerificados` dentro del texto y no
+  descarta la respuesta. **`edad_del_dato: null` es NO MEDIDO, no «fresco»**: se dice siempre
+  (ámbar en un `HECHO`, donde la edad decide si el número sirve). El silencio ahí es lo que dejó
+  pasar un dato de 12 días como si fuera de hoy.
+- **Los ocho códigos tienen lectura propia** (`errores.ts`): qué pasó, de quién es y si
+  reintentar sirve — «Reintentar» solo aparece en lo transitorio. Un test recorre los ocho y
+  falla si alguna lectura se puede confundir con «Ivi no encontró datos».
+- ⚠️ **No hay puente al composer, a propósito.** Lo que sale hacia un lead viene del catálogo
+  (ADR 0015); esto es prosa de un LLM. Se copia, pero el botón «poner en la caja» no existe.
+- **Ver los estados sin server ni red**: `npx vite --port 5199` →
+  `http://localhost:5199/galeria-ivi.html` (entry aparte, **fuera** del bundle de la app).
+  Capturas en `docs/evidencia/169-ivi-*.png`.
+- **Pendiente**: `traza_id` (la llave del lazo de aprendizaje de Ivi) todavía no viaja, y el
+  ensamblado (`POST /api/ensamblar`) es otra superficie y otro contrato.
 
 ## Señales automáticas — «Cotizado» y «Se enfrió»
 
