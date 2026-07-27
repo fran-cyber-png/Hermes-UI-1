@@ -180,17 +180,30 @@ export function ConsultaIvi({ abierta, onCerrar }: { abierta: boolean; onCerrar:
     return h;
   }
 
-  function lanzar(pregunta: string, previos: Turno[]) {
-    const indice = previos.length;
-    setTurnos([...previos, { pregunta, respuesta: null, error: null }]);
+  /**
+   * Manda la pregunta del turno `indice` y deja el resultado ahí mismo.
+   *
+   * El `indice` es explícito —y no «el último»— porque reintentar tiene que poder rehacer un
+   * turno del medio **sin borrar los de abajo**: si la vendedora siguió preguntando después
+   * de un fallo y después toca «Reintentar» en aquél, perdería todo lo que vino después. El
+   * contexto que viaja, en cambio, sí es solo el de ARRIBA del turno: mandarle a Ivi como
+   * antecedente una respuesta que todavía no existía sería inventarle el orden.
+   */
+  function lanzar(pregunta: string, indice: number, contexto: Turno[]) {
+    setTurnos((t) => {
+      const nuevos = [...t];
+      nuevos[indice] = { pregunta, respuesta: null, error: null };
+      return nuevos;
+    });
+    const dejar = (cambio: Partial<Turno>) =>
+      setTurnos((t) => t.map((x, i) => (i === indice ? { ...x, ...cambio } : x)));
     preguntar.mutate(
-      { pregunta, historial: historial(previos) },
+      { pregunta, historial: historial(contexto) },
       {
-        onSuccess: (respuesta) =>
-          setTurnos((t) => t.map((x, i) => (i === indice ? { ...x, respuesta } : x))),
+        onSuccess: (respuesta) => dejar({ respuesta }),
         // Fail-closed: el fallo se guarda como fallo. NUNCA se convierte en una respuesta
         // vacía ni en un «Ivi no encontró datos».
-        onError: (error) => setTurnos((t) => t.map((x, i) => (i === indice ? { ...x, error } : x))),
+        onError: (error) => dejar({ error }),
       },
     );
   }
@@ -199,13 +212,13 @@ export function ConsultaIvi({ abierta, onCerrar }: { abierta: boolean; onCerrar:
     const pregunta = texto.trim();
     if (!pregunta || preguntar.isPending) return;
     setTexto('');
-    lanzar(pregunta, turnos);
+    lanzar(pregunta, turnos.length, turnos);
   }
 
   function reintentar(indice: number) {
     const turno = turnos[indice];
-    if (!turno) return;
-    lanzar(turno.pregunta, turnos.slice(0, indice));
+    if (!turno || preguntar.isPending) return;
+    lanzar(turno.pregunta, indice, turnos.slice(0, indice));
   }
 
   const sobrante = texto.length - MAX_CARACTERES_PREGUNTA;
