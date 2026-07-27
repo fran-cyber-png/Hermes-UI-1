@@ -6,7 +6,8 @@ import { sql, eq } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { fotosPerfil } from '../db/schema.js';
 import { requiereVendedora } from '../auth/sesion.js';
-import { whatsapp } from '../whatsapp/wiring.js';
+import { gestorWhatsapp, whatsapp } from '../whatsapp/wiring.js';
+import { hiloDe, mismaLinea } from '../whatsapp/hilo.js';
 import { enviarMediaYProyectar, enviarTextoYProyectar } from '../whatsapp/enviarYProyectar.js';
 import { resolverAnuncio } from '../meta/anuncio.js';
 import { RUTA_MEDIA, nombreSeguro } from '../whatsapp/mediaDir.js';
@@ -22,58 +23,6 @@ import { obtenerPlantilla } from '../plantillas/repositorio.js';
  * la ruta no llama nunca a `enviarTexto` directo.
  */
 export const whatsappRouter = Router();
-
-/**
- * El hilo, con la MARCA DE AUTOMÁTICO en cada burbuja (#125, ADR 0015).
- *
- * El adjunto vive en el crudo del evento (`payload->media`): el JOIN lo trae sin
- * columna nueva — el event store haciendo su trabajo. Lo automático sale de la
- * auditoría de envíos (`envios_wa.automatico`), atada al mensaje por el id que
- * devolvió WhatsApp: la vendedora tiene que poder ver de un vistazo qué salió
- * sin que nadie apretara enviar.
- *
- * Como el `db:push` de esa columna es MANUAL, la consulta degrada: si la columna
- * todavía no está, el hilo se sirve igual (sin marca) en vez de tirar 500.
- */
-async function hiloDe(telefono: string, conMarca = true) {
-  const marca = conMarca
-    ? sql`COALESCE(ew.automatico, false) AS automatico, arp.aprobada_por AS aprobada_por`
-    : sql`false AS automatico, NULL::text AS aprobada_por`;
-  const join = conMarca
-    ? sql`LEFT JOIN envios_wa ew
-            ON ew.id_externo IS NOT NULL
-           AND ('wa:' || ew.id_externo) = i.external_id
-           AND ew.automatico
-          -- QUIÉN LO APROBÓ (ADR 0016). Un automático que una persona miró y
-          -- autorizó no es lo mismo que uno que salió solo, y la vendedora que
-          -- abre el chat tres días después tiene que poder distinguirlos: si no,
-          -- el modo supervisado es invisible justo donde importa.
-          LEFT JOIN auto_respuestas_pendientes arp
-            ON arp.id_externo IS NOT NULL
-           AND ('wa:' || arp.id_externo) = i.external_id`
-    : sql``;
-
-  try {
-    return await db.execute(sql`
-      SELECT i.id, i.direccion, i.autor, i.texto, i.occurred_at, i.external_id,
-             e.payload->'media' AS media,
-             e.payload->'origen' AS origen,
-             ${marca}
-      FROM interactions i
-      LEFT JOIN events e ON e.id = i.event_id
-      ${join}
-      WHERE i.canal = 'whatsapp' AND i.persona_id = ${telefono}
-      ORDER BY i.occurred_at ASC
-      LIMIT 200
-    `);
-  } catch (e) {
-    if (conMarca && faltaEsquema(e)) {
-      console.warn('[whatsapp] `envios_wa.automatico` no existe: sirvo el hilo sin la marca. Corré `npm run db:push` (ADR 0015).');
-      return hiloDe(telefono, false);
-    }
-    throw e;
-  }
-}
 
 /**
  * El contenido AUTORAL de un paso, leído de la MISMA fila que lee
@@ -116,7 +65,11 @@ whatsappRouter.get('/sesion', (_req, res) => {
 /** El hilo completo de una conversación, en orden cronológico + de dónde vino el lead. */
 whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
   const telefono = req.params.telefono.replace(/\D/g, '');
-  const mensajes = await hiloDe(telefono);
+  // Con varias líneas vivas, la MISMA persona puede tener dos conversaciones que
+  // para ella son dos chats distintos. Sin este scope las dos se ven como una, y
+  // la respuesta puede salir por el número que el lead no conoce.
+  const numeroPropio = typeof req.query.numeroPropio === 'string' ? req.query.numeroPropio : undefined;
+  const mensajes = await hiloDe(db, telefono, numeroPropio);
 
   // La captura del embudo: si algún mensaje trajo el origen (anuncio/landing), se
   // devuelve — enriquecido con el nombre del anuncio y la campaña si vino de Meta.
@@ -124,6 +77,7 @@ whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
     SELECT e.payload->'origen' AS origen
     FROM interactions i JOIN events e ON e.id = i.event_id
     WHERE i.canal = 'whatsapp' AND i.persona_id = ${telefono}
+      ${mismaLinea(numeroPropio)}
       AND e.payload->>'origen' IS NOT NULL AND e.payload->>'origen' <> 'null'
     ORDER BY i.occurred_at ASC LIMIT 1
   `);
@@ -143,15 +97,24 @@ whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
  */
 whatsappRouter.post('/leido/:telefono', requiereVendedora, async (req, res) => {
   const telefono = req.params.telefono.replace(/\D/g, '');
+  const numeroPropio = typeof req.query.numeroPropio === 'string' ? req.query.numeroPropio : undefined;
+  // El JOIN a `events` existe solo para poder filtrar por línea: `numero_propio`
+  // no es columna de `interactions`.
   const filas = await db.execute<{ external_id: string }>(sql`
-    SELECT external_id FROM interactions
-    WHERE canal = 'whatsapp' AND persona_id = ${telefono} AND direccion = 'entrante'
-    ORDER BY occurred_at DESC LIMIT 50
+    SELECT i.external_id FROM interactions i
+    LEFT JOIN events e ON e.id = i.event_id
+    WHERE i.canal = 'whatsapp' AND i.persona_id = ${telefono} AND i.direccion = 'entrante'
+      ${mismaLinea(numeroPropio)}
+    ORDER BY i.occurred_at DESC LIMIT 50
   `);
   // El external_id se guarda prefijado 'wa:'; el transporte quiere el id crudo.
   const ids = filas.map((f) => f.external_id.replace(/^wa:/, ''));
   try {
-    await whatsapp().transporte.marcarLeido(telefono, ids);
+    // Los tildes azules tienen que salir POR LA LÍNEA a la que la persona
+    // escribió: mandarlos por otra es, para ella, que un número desconocido le
+    // leyó el mensaje. Sin `numeroPropio` se usa la primera, como siempre.
+    const linea = numeroPropio ? gestorWhatsapp().de(numeroPropio) : whatsapp();
+    await linea?.transporte.marcarLeido(telefono, ids);
   } catch {
     // Marcar leído es cortesía: si falla, no rompe la apertura del chat.
   }
