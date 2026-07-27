@@ -38,9 +38,18 @@ SALUD=http://127.0.0.1:4110/health
 CONTENEDOR_DB=hermes_db
 DIR_RESPALDOS=/srv/respaldos-hermes
 BITACORA=/var/log/hermes-deploy.log
-# Fuera del checkout, para no ensuciarlo. Es el MISMO archivo que usa ci.yml: el SHA
-# del server que está corriendo no es el del checkout (el proceso se quedó con el
-# código que había al último restart).
+# Fuera del checkout, para no ensuciarlo. Son los MISMOS archivos que escribe el N4 de
+# ci.yml y los que dejó el último deploy a mano por SSH: el SHA del server que está
+# corriendo no es el del checkout (el proceso se quedó con el código que había al
+# último restart).
+#
+#   server        el SHA que el proceso está EJECUTANDO. Lo escriben este script y N4
+#                 (N4 solo cuando el rango no toca server/, así que la marca es honesta).
+#   front         el SHA del dist/ que se está sirviendo. Igual.
+#   ultimo-sano   a dónde vuelve `--rollback`: el SHA que estaba corriendo y sano ANTES
+#                 del último deploy con restart. Lo escribe SOLO este script — N4 no lo
+#                 toca porque un deploy de front no reinicia el server, así que no
+#                 cambia cuál fue el último server sano.
 ESTADO="/home/$USUARIO/.hermes-despliegue"
 
 REF=origin/main
@@ -70,6 +79,24 @@ fallar() {
 }
 como_deploy() { runuser -u "$USUARIO" -- "$@"; }
 
+# Usuario y base salen del DATABASE_URL, que es la única fuente de verdad de a qué
+# base le habla el server. La contraseña de esa URL NO se toca: `docker exec` entra al
+# contenedor, donde la autenticación local ya está resuelta (regla dura #1).
+leer_datos_de_la_base() {
+  local dbu
+  dbu="$(sed -n 's|^DATABASE_URL=||p' "$RAIZ/server/.env")"
+  DBUSER="$(printf '%s' "$dbu" | sed -E 's|postgresql://([^:]+):.*|\1|')"
+  DBNAME="$(printf '%s' "$dbu" | sed -E 's|.*/([^/?]+)$|\1|')"
+  [ -n "$DBUSER" ] && [ -n "$DBNAME" ] ||
+    fallar "no pude leer usuario/base del DATABASE_URL de $RAIZ/server/.env"
+}
+
+# ¿La base ya adoptó el baseline? `f` = no, `t` = sí, vacío = no se pudo saber.
+registro_de_migraciones() {
+  docker exec "$CONTENEDOR_DB" psql -U "$DBUSER" -d "$DBNAME" -tAc \
+    "select to_regclass('drizzle.__drizzle_migrations') is not null" 2>/dev/null | tr -d '[:space:]'
+}
+
 [ "$(id -u)" -eq 0 ] || fallar "corré con sudo (necesita systemctl y runuser)"
 touch "$BITACORA" 2>/dev/null || true
 mkdir -p "$ESTADO" && chown "$USUARIO": "$ESTADO"
@@ -93,9 +120,20 @@ else
 fi
 
 if [ "$ROLLBACK" -eq 1 ]; then
-  [ -f "$ESTADO/ultimo-sano" ] || fallar "no hay $ESTADO/ultimo-sano — no sé a qué volver"
+  if [ ! -f "$ESTADO/ultimo-sano" ]; then
+    fallar "no hay $ESTADO/ultimo-sano — todavía no hubo un deploy por este script, que es
+       quien lo escribe. Volvé indicando el SHA a mano:
+         sudo hermes-deploy <sha>
+       El SHA anterior sale de: git -C $RAIZ reflog | head, o del resumen del run de Actions."
+  fi
   REF="$(cat "$ESTADO/ultimo-sano")"
   decir "rollback pedido: volviendo a ${REF:0:8}"
+  # UN ROLLBACK NO TOCA LA BASE, a propósito. Las migraciones son expand-only (CI lo
+  # hace cumplir), así que el código viejo funciona contra el schema nuevo: devolver
+  # también el schema sería el paso peligroso e innecesario. Si alguna vez hiciera
+  # falta, es restaurar el dump de /srv/respaldos-hermes a mano, con downtime y con
+  # alguien mirando — nunca automático.
+  MIGRAR=0
 fi
 
 NUEVO="$(como_deploy git -C "$RAIZ" rev-parse "$REF")"
@@ -107,11 +145,46 @@ CAMBIO_DEPS_RAIZ="$(printf '%s\n' "$TOCADOS" | grep -E '^(package\.json|package-
 CAMBIO_DEPS_SERVER="$(printf '%s\n' "$TOCADOS" | grep -E '^server/(package\.json|package-lock\.json)$' || true)"
 
 if [ "$DRY" -eq 1 ]; then
+  # UN DRY-RUN QUE MUESTRA EL RESULTADO Y NO LAS VARIABLES DE LA DECISIÓN NO VERIFICA
+  # NADA. La lección salió cara: el simulacro de la auto-respuesta imprimió un plan
+  # impecable que estaba mal de siete formas, porque decía a quién le iba a escribir y
+  # no de dónde había sacado cada dato. Acá se imprime de dónde sale cada decisión.
   decir "DRY-RUN — ${VIEJO:0:8} → ${NUEVO:0:8}"
-  como_deploy git -C "$RAIZ" --no-pager log --oneline "$VIEJO..$NUEVO" || true
-  if [ -n "$TRAE_MIGRACION" ]; then
-    echo; decir "trae migraciones:"; printf '%s\n' "$TRAE_MIGRACION"
+  echo
+  echo "  ref pedida            : $REF → ${NUEVO:0:8}"
+  if [ -f "$ESTADO/server" ]; then
+    echo "  server corriendo      : ${VIEJO:0:8}  (de $ESTADO/server)"
+  else
+    echo "  server corriendo      : ${VIEJO:0:8}  (no hay marca de estado: es el HEAD del checkout)"
   fi
+  echo "  archivos en el rango  : $(printf '%s\n' "$TOCADOS" | grep -c . || true)"
+  echo "  npm ci del server     : $([ -n "$CAMBIO_DEPS_SERVER" ] && echo 'sí (cambió server/package*.json)' || echo no)"
+  echo "  npm ci del front      : $([ -n "$CAMBIO_DEPS_RAIZ" ] && echo 'sí (cambió package*.json)' || echo no)"
+
+  if [ -n "$TRAE_MIGRACION" ] && [ "$MIGRAR" -eq 1 ]; then
+    leer_datos_de_la_base
+    REGISTRO="$(registro_de_migraciones)"
+    echo "  migraciones           : sí → se respalda la base ANTES de aplicarlas"
+    case "$REGISTRO" in
+      t) echo "  la base ya adoptó     : sí (drizzle.__drizzle_migrations existe)" ;;
+      f) echo "  la base ya adoptó     : NO → este deploy va a FRENAR. Corré antes:
+                          cd $RAIZ/server && npm run db:adoptar" ;;
+      *) echo "  la base ya adoptó     : no se pudo saber (¿el contenedor $CONTENEDOR_DB está arriba?)" ;;
+    esac
+    printf '  %s\n' "$TRAE_MIGRACION"
+  else
+    echo "  migraciones           : $([ -n "$TRAE_MIGRACION" ] && echo 'las trae, pero --sin-migrar las saltea' || echo no)"
+  fi
+
+  echo "  reinicio de $SERVICIO   : sí — cada vendedora logueada pierde su sesión de Cerberus"
+  if [ -f "$ESTADO/ultimo-sano" ]; then
+    echo "  --rollback volvería a : $(cut -c1-8 < "$ESTADO/ultimo-sano")"
+  else
+    echo "  --rollback volvería a : nada todavía; este deploy deja ${VIEJO:0:8} como punto de vuelta"
+  fi
+  echo
+  decir "commits que entran:"
+  como_deploy git -C "$RAIZ" --no-pager log --oneline "$VIEJO..$NUEVO" || true
   exit 0
 fi
 
@@ -123,13 +196,18 @@ fi
 # ── Respaldo de la base, ANTES de migrar ────────────────────────────────────────
 # Solo si el rango trae migraciones: un dump por cada deploy de código sería ruido.
 if [ -n "$TRAE_MIGRACION" ] && [ "$MIGRAR" -eq 1 ]; then
-  # Usuario y base salen del DATABASE_URL, que es la única fuente de verdad de a qué
-  # base le habla el server. La contraseña de esa URL no se toca: `docker exec` entra
-  # al contenedor, donde la autenticación local ya está resuelta.
-  DBU="$(sed -n 's|^DATABASE_URL=||p' "$RAIZ/server/.env")"
-  DBUSER="$(printf '%s' "$DBU" | sed -E 's|postgresql://([^:]+):.*|\1|')"
-  DBNAME="$(printf '%s' "$DBU" | sed -E 's|.*/([^/?]+)$|\1|')"
-  [ -n "$DBUSER" ] && [ -n "$DBNAME" ] || fallar "no pude leer usuario/base del DATABASE_URL de $RAIZ/server/.env"
+  leer_datos_de_la_base
+
+  # La guardia del baseline va ANTES del respaldo: si la base nunca adoptó, este deploy
+  # no puede migrar, y hacerle un dump de 200 MB para después frenar es ruido.
+  REGISTRO="$(registro_de_migraciones)"
+  if [ "$REGISTRO" = "f" ]; then
+    fallar "la base no tiene drizzle.__drizzle_migrations: nunca se adoptó el baseline.
+       Migrar ahora intentaría recrear tablas que ya existen.
+       Corré primero (y leé docs/migraciones.md antes):
+         cd $RAIZ/server && npm run db:adoptar        # verifica y dice qué haría
+         cd $RAIZ/server && npm run db:adoptar -- --si"
+  fi
 
   mkdir -p "$DIR_RESPALDOS"
   chown "$USUARIO":hermes "$DIR_RESPALDOS" 2>/dev/null || true
@@ -158,20 +236,6 @@ if [ -n "$CAMBIO_DEPS_RAIZ" ] || [ "$ROLLBACK" -eq 1 ]; then
 fi
 
 if [ -n "$TRAE_MIGRACION" ] && [ "$MIGRAR" -eq 1 ]; then
-  # Guardia: una base que existía ANTES de las migraciones no tiene la tabla de
-  # registro, así que `migrate` intentaría aplicar el baseline y moriría en el primer
-  # `CREATE TABLE` con un error que no dice nada de lo que pasa. Se detecta antes y se
-  # dice qué hacer. Ver docs/migraciones.md §«Adoptar una base que ya existía».
-  REGISTRO="$(docker exec "$CONTENEDOR_DB" psql -U "$DBUSER" -d "$DBNAME" -tAc \
-    "select to_regclass('drizzle.__drizzle_migrations') is not null" 2>/dev/null | tr -d '[:space:]')"
-  if [ "$REGISTRO" = "f" ]; then
-    fallar "la base no tiene drizzle.__drizzle_migrations: nunca se adoptó el baseline.
-       Migrar ahora intentaría recrear tablas que ya existen.
-       Corré primero (y leé docs/migraciones.md antes):
-         cd $RAIZ/server && npm run db:adoptar        # dice qué haría
-         cd $RAIZ/server && npm run db:adoptar -- --si"
-  fi
-
   decir "aplicando migraciones"
   como_deploy bash -c "cd '$RAIZ/server' && npm run db:migrate" \
     || fallar "la migración falló. La base quedó como estaba salvo lo que alcanzó a aplicar; el respaldo está en $DIR_RESPALDOS. NO reinicié el servicio."

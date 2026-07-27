@@ -85,7 +85,7 @@ async function main(): Promise<void> {
     };
   });
 
-  // ── 3. El perímetro de auth (ADR 0012): todo /api/* cerrado por defecto ────
+  // ── 3. El perímetro de auth (ADR 0011): todo /api/* cerrado por defecto ────
   // Esto no es una formalidad: la API es pública en internet. Si alguna de estas
   // deja de dar 401, hay datos de las vendedoras al aire.
   for (const ruta of [
