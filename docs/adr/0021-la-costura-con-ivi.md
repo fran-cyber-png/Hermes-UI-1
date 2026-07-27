@@ -83,9 +83,9 @@ indexada solo por `codigo`, donde `http_inesperado` está fijo en `false`. O sea
 arreglo acaba de marcar transitorio seguiría sin ofrecer el botón allá.
 
 Lo que este arreglo cierra es el **contrato**: la ruta ya no afirma «permanente» sobre algo que no
-lo es. Cablear la UI a ese contrato —o borrar la tabla duplicada del front— es trabajo aparte, y
-mientras no se haga, la frase «la app dibuja el botón con este flag» es una promesa, no una
-descripción.
+lo es. Cablear la UI a ese contrato —o borrar la tabla duplicada del front— es trabajo aparte, está
+trackeado en **#175**, y mientras no se haga, la frase «la app dibuja el botón con este flag» es una
+promesa, no una descripción.
 
 ### 4 · El `traza_id` nace en Hermes y va desde el día uno
 

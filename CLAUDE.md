@@ -210,7 +210,7 @@ referenciado por nombre, regla dura #1). El cliente vive en `server/src/ivi/clie
   ⚠️ **Hoy nadie lee ese flag**: el front de `main` no tiene pantalla de Ivi, y la del PR #174
   (`feat/superficie-de-ivi@d2045f3`, sin mergear) re-deriva el reintento de su propia tabla por
   `codigo` —`api()` descarta `reintentable` al armar el `ErrorApi`—. Lo arreglado es el contrato;
-  cablearlo a la UI está pendiente. ADR 0021 §3 tiene la medición.
+  cablearlo a la UI está pendiente (**#175**). ADR 0021 §3 tiene la medición.
 - **Los campos informativos degradan, no tumban**: `numerosNoVerificados` acepta ausente, `null` y
   hasta una forma inesperada (se ignora y se loguea) — un campo accesorio no puede convertir una
   respuesta buena en un 502. Los tres que cargan el peso (`texto`, `tipo`, `groundingOk`) **sí**
