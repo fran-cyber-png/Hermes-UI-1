@@ -155,7 +155,15 @@ export function ConsultaIvi({ abierta, onCerrar }: { abierta: boolean; onCerrar:
 
   // El mismo contrato de Escape que todos los modales de la casa: con el foco fuera de un
   // campo, cierra y corta la propagación (así no se lleva puesta la conversación de atrás).
-  useEscape(onCerrar);
+  //
+  // **`abierta` no es opcional acá.** `App.tsx` monta esta hoja SIEMPRE, y este hook
+  // registra en captura sobre `window` y corta el evento: sin la guarda, con Ivi cerrado
+  // —o sea, casi todo el tiempo— el Escape moría acá y dejaban de andar la tecla que cierra
+  // la conversación en Mensajes, la de la Cabina y la de la libreta. El molde que este
+  // componente dice copiar (`LibretaPersonal`) no tiene el problema porque no tiene el
+  // listener; esta hoja sí lo quiere (para no arrastrar la conversación de atrás al
+  // cerrarse), así que lo paga con la condición explícita.
+  useEscape(onCerrar, abierta);
 
   useEffect(() => {
     if (abierta) requestAnimationFrame(() => caja.current?.focus());

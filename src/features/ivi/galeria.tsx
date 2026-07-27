@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import '../../index.css';
@@ -92,8 +92,67 @@ function Caja({ titulo, nota, children }: { titulo: string; nota: string; childr
   );
 }
 
+/**
+ * EL BANCO DE TECLADO — `?teclado=1`.
+ *
+ * La hoja está **cerrada**, como el 99 % del tiempo, y detrás hay un listener en BURBUJA
+ * sobre `window`: el shell de `App.tsx`, reducido a lo único que importa. Si al apretar
+ * Escape el contador de abajo NO se mueve, esta hoja se está comiendo la tecla de toda la
+ * app —cerrar la conversación en Mensajes, cerrar la Cabina, cerrar la libreta— sin tocar
+ * ninguno de esos archivos. Así se vio el defecto en un navegador de verdad, y así se
+ * verifica el arreglo (ADR 0024).
+ */
+function BancoDeTeclado() {
+  const [llegaron, setLlegaron] = useState(0);
+  const [abierta, setAbierta] = useState(false);
+
+  useEffect(() => {
+    const fn = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLlegaron((n) => n + 1);
+    };
+    window.addEventListener('keydown', fn);
+    return () => window.removeEventListener('keydown', fn);
+  }, []);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <div className="min-h-dvh bg-background p-6">
+        <h1 className="font-heading text-lg font-bold text-navy">
+          ¿La hoja cerrada le roba el Escape al shell?
+        </h1>
+        <p className="mt-1 max-w-2xl text-xs leading-snug text-muted-foreground">
+          Detrás de esto hay un listener en burbuja sobre <code>window</code>, igual que el de{' '}
+          <code>App.tsx</code>. Apretá <kbd>Esc</kbd> con la hoja cerrada: el contador tiene que
+          subir. Si no sube, el shell no se enteró y los tres atajos de Escape de la app están
+          rotos.
+        </p>
+        <p className="mt-4 text-sm text-foreground">
+          Escapes que llegaron al shell:{' '}
+          <strong data-banco="llegaron" className="font-heading text-2xl font-bold text-navy">
+            {llegaron}
+          </strong>
+        </p>
+        <p className="mt-1 text-sm text-foreground">
+          Hoja: <strong data-banco="abierta">{abierta ? 'abierta' : 'cerrada'}</strong>
+        </p>
+        <button
+          type="button"
+          data-banco="alternar"
+          onClick={() => setAbierta((v) => !v)}
+          className="mt-3 rounded-lg bg-navy px-3 py-1.5 text-xs font-semibold text-white"
+        >
+          Abrir / cerrar la hoja
+        </button>
+      </div>
+      <ConsultaIvi abierta={abierta} onCerrar={() => setAbierta(false)} />
+    </QueryClientProvider>
+  );
+}
+
 function Galeria() {
-  const sheet = new URLSearchParams(location.search).get('hoja') === '1';
+  const parametros = new URLSearchParams(location.search);
+  if (parametros.get('teclado') === '1') return <BancoDeTeclado />;
+  const sheet = parametros.get('hoja') === '1';
   if (sheet) {
     return (
       <QueryClientProvider client={queryClient}>
