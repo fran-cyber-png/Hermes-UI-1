@@ -339,6 +339,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Clasificar el cambio y desplegar si es solo front
+        id: clasificar
         env:
           SRV: /srv/hermes
           NUEVO: ${{ github.sha }}
@@ -412,6 +413,12 @@ jobs:
           fi
 
           # 3 · Es solo front: se puede desplegar sin tocar el proceso.
+          #
+          # A partir de acá SÍ se despliega, y hay que decirlo: el smoke de abajo se
+          # gatea con esto. Las dos salidas de arriba (`exit 0`) también son éxito
+          # —no desplegar cuando no corresponde es el comportamiento correcto—, así
+          # que `if: success()` no alcanza para distinguirlas.
+          echo "desplegado=true" >> "$GITHUB_OUTPUT"
           git -C "$SRV" checkout --quiet --force "$NUEVO"
           cd "$SRV"
           if [ -n "$CAMBIO_DEPS" ]; then
@@ -461,7 +468,13 @@ jobs:
       # contra la base real. Alcanza para lo que importa acá — que el front nuevo se
       # sirva y que el perímetro de auth siga cerrado ruta por ruta.
       - name: Smoke público contra producción
-        if: success()
+        # `success()` es cierto también cuando la clasificación decidió NO desplegar
+        # —y entonces esto corría `npm run humo` desde el checkout de producción, que
+        # todavía es el viejo y puede no tener ni el script—. Falló así la primera vez
+        # que el pipeline vio un merge que tocaba `server/`: N4 hizo lo correcto
+        # (saltearse) y aun así se puso rojo, que es la peor combinación — un nivel que
+        # miente sobre producción enseña a ignorarlo.
+        if: steps.clasificar.outputs.desplegado == 'true'
         run: BASE_URL=https://hermes-api.goberna.us npm run humo
         working-directory: /srv/hermes/server
 
