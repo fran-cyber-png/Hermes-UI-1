@@ -7,6 +7,9 @@ import {
   referenciaSql,
   respondidaSql,
   seguimientosPendientesSql,
+  VENTANA_META_DIAS,
+  ventanaAbiertaSql,
+  ventanaDiasSql,
 } from "./urgenciaSql.js";
 
 /**
@@ -35,6 +38,12 @@ export type ChatRadar = {
   telefono: string | null;
   pais_dato: string | null;
   pide_info: boolean;
+  /**
+   * Los días que quedan de la ventana de Meta (#22). NULL donde no hay ventana
+   * —WhatsApp y todo lo que no sea un comentario de FB/IG—, 0 cuando ya se
+   * cerró. NULL y 0 NO son lo mismo: «no aplica» contra «se te pasó».
+   */
+  ventana_dias: number | null;
   ventana_abierta: boolean;
   respondida: boolean;
   referencia: string;
@@ -86,8 +95,9 @@ export async function consultarRadar(
         -- siempre. Mismo fragmento que la cola — una sola semántica.
         (${pideInfoAgrupadoSql})                                       AS pide_info,
         -- En WhatsApp no hay ventana: el número está vinculado como dispositivo de
-        -- un teléfono real, no como cuenta de negocio (ver CONTEXT.md).
-        false AS ventana_abierta,
+        -- un teléfono real, no como cuenta de negocio (ver CONTEXT.md). NULL es
+        -- «no aplica» — la fila no muestra cuenta regresiva ninguna.
+        NULL::int AS ventana_dias,
         -- Misma definición que la cola (cola/urgenciaSql.ts, #96): hay un
         -- saliente igual o posterior al último entrante.
         (${respondidaSql})                                             AS respondida,
@@ -108,20 +118,29 @@ export async function consultarRadar(
         i.texto, i.contexto_texto,
         NULL::text AS telefono, NULL::text AS pais_dato,
         (${pideInfoSql("i.texto")}) AS pide_info,
-        (i.occurred_at > now() - interval '7 days') AS ventana_abierta,
+        (${ventanaDiasSql("i.occurred_at", "i.canal")}) AS ventana_dias,
         -- Misma fuente que la cola: status lo persiste responder.ts.
         (i.status <> 'nuevo')                       AS respondida,
         i.occurred_at                               AS referencia,
         i.occurred_at AS cayo_at
       FROM interactions i
-      WHERE i.tipo = 'comentario' AND i.occurred_at > now() - interval '7 days'
+      -- UN DÍA MÁS que la ventana, a propósito: si el scan cortara justo en 7
+      -- días, un comentario con la ventana YA CERRADA no llegaría nunca al radar
+      -- y ventana_dias = 0 sería un estado inalcanzable — la pantalla no podría
+      -- decir «se te cerró» ni aunque supiera. Ese día de gracia es lo que hace
+      -- observable el cierre; no es una ventana de 8 días.
+      WHERE i.tipo = 'comentario'
+        AND i.occurred_at > now() - ${VENTANA_META_DIAS + 1} * interval '1 day'
     ),
     -- La agenda entra al radar por acá (#38): sin este JOIN, el nivel VENCIDO
     -- no se dispara nunca y los seguimientos no influyen en el orden de nada.
     seguimientos AS (
       ${seguimientosPendientesSql}
     )
-    SELECT t.*, s.seguimiento_en
+    -- ventana_abierta se DERIVA de los días que quedan, no se calcula aparte:
+    -- así el booleano que ordena (nivel EXPIRA) y el número que se muestra no
+    -- pueden decir cosas distintas sobre la misma fila.
+    SELECT t.*, (${ventanaAbiertaSql(sql`t.ventana_dias`)}) AS ventana_abierta, s.seguimiento_en
     FROM (SELECT * FROM conv UNION ALL SELECT * FROM comentarios) t
     LEFT JOIN seguimientos s USING (clave)
     -- Este orden NO es el que ve la vendedora: solo elige QUÉ 60 filas viajan.

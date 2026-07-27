@@ -60,6 +60,51 @@ describe("consultarRadar — el seam del Dashboard (#38)", () => {
     assert.ok(filas[1]?.seguimiento_en, "seguimiento_en tiene que llegar desde la base");
   });
 
+  test("la ventana viaja como DÍAS QUE QUEDAN, no como sí/no (#22)", async (t) => {
+    // Antes esto era un booleano y encima siempre verdadero: el WHERE ya
+    // recortaba a 7 días, así que no podía ser falso ni una vez. De un sí/no no
+    // sale una cuenta regresiva, y sin cuenta regresiva se avisa DESPUÉS.
+    const db = await baseDePrueba(t);
+    await sembrarComentario(db, { personaId: "p-quedan-2", occurredAt: hace(5 * 24) });
+
+    const filas = await consultarRadar(db);
+    const fila = filas.find((f) => f.persona_id === "p-quedan-2");
+
+    assert.equal(fila?.ventana_dias, 2, "comentario de hace 5 días → le quedan 2 de los 7");
+    assert.equal(fila?.ventana_abierta, true);
+  });
+
+  test("una ventana ya cerrada llega al radar, en 0 y fuera del nivel EXPIRA (#22)", async (t) => {
+    // El criterio «un Comentario con la Ventana ya cerrada lo dice» solo se puede
+    // cumplir si esa fila EXISTE. Con el scan cortado justo en 7 días era un
+    // estado inalcanzable; por eso el scan mira un día más que la ventana.
+    const db = await baseDePrueba(t);
+    await sembrarComentario(db, { personaId: "p-cerrada", occurredAt: hace(7.5 * 24) });
+
+    const filas = await consultarRadar(db);
+    const fila = filas.find((f) => f.persona_id === "p-cerrada");
+
+    assert.equal(fila?.ventana_dias, 0, "0 es «se cerró», y tiene que ser alcanzable");
+    assert.equal(fila?.ventana_abierta, false);
+    assert.equal(fila?.nivel, 5, "sin ventana no hay urgencia de ventana: cae en el archivo");
+  });
+
+  test("en WhatsApp la ventana es NULL — «no aplica», que no es «se cerró» (#22)", async (t) => {
+    // CONTEXT.md §Ventana: el número está vinculado como dispositivo de un
+    // teléfono real, no como cuenta de negocio. No hay ninguna puerta que cerrar,
+    // y la fila no muestra cuenta regresiva ninguna, tenga la edad que tenga.
+    const db = await baseDePrueba(t);
+    await sembrarMensaje(db, { personaId: "p-nuevo", occurredAt: hace(2) });
+    await sembrarMensaje(db, { personaId: "p-viejo", occurredAt: hace(6 * 24) });
+
+    const filas = await consultarRadar(db);
+
+    for (const fila of filas) {
+      assert.equal(fila.ventana_dias, null, `${fila.persona_id}: un chat no tiene ventana`);
+      assert.equal(fila.ventana_abierta, false);
+    }
+  });
+
   test("un seguimiento futuro NO vence, y uno hecho tampoco", async (t) => {
     const db = await baseDePrueba(t);
     await sembrarMensaje(db, { personaId: "p-futuro", occurredAt: hace(3 * 24) });

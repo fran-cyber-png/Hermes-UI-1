@@ -23,6 +23,7 @@ import {
   type LeadChat,
   type LeadFormulario,
 } from './dashboard';
+import { marcaDeFila, TINTA_MARCA } from './marca';
 import { useNegocio } from './negocio';
 import { FiltrosNegocio, PanelNegocio, type FiltrosNegocioState } from './PanelNegocio';
 import { BotonLlamar } from '../gestion/BotonLlamar';
@@ -534,6 +535,14 @@ export function VistaDashboard({
                   const tags = data!.etiquetas[clave] ?? [];
                   const pais = paisDe(base.pais_dato, esChat ? fila.chat.telefono : fila.form.telefono);
                   const horas = (Date.now() - new Date(base.cayo_at).getTime()) / 3_600_000;
+                  // Por qué esta fila está donde está (#22). Un formulario no
+                  // tiene Ventana: no hay comentario público del que colgarse.
+                  const marca = esChat ? marcaDeFila({ ventana_dias: fila.chat.ventana_dias }) : null;
+                  // Con la Ventana cerrada ya no se puede escribir en privado, así
+                  // que la fila deja de ofrecerlo: un botón que no lleva a ningún
+                  // lado enseña a desconfiar de todos los demás. `null` es WhatsApp,
+                  // donde no hay ventana y siempre se puede escribir.
+                  const puedeEscribirPrivado = !esChat || fila.chat.ventana_dias == null || fila.chat.ventana_dias > 0;
                   const clickeable = esChat || Boolean(fila.form.telefono);
                   const abrir = () => (esChat ? onAbrir(conversacionDeChat(fila.chat)) : onBuscarPersona(fila.form.telefono!));
                   const esNueva = nuevas.has(clave);
@@ -576,6 +585,11 @@ export function VistaDashboard({
                             ? `${fila.fuente === 'comentario' ? 'Comentario' : nombreCanal(fila.chat.canal)}${fila.chat.contexto_texto ? ` · “${fila.chat.contexto_texto.slice(0, 48)}”` : ''}`
                             : `${fila.fuente === 'landing' ? 'Landing' : 'Lead Ad'} · ${fila.form.producto ?? fila.form.campana ?? 'sin campaña'}${fila.form.flyer && fila.form.flyer !== 'ORGANICO' ? ` · ${fila.form.flyer}` : ''}`}
                         </span>
+                        {marca && (
+                          <span className={'shrink-0 text-[11px] font-semibold ' + TINTA_MARCA[marca.tono]}>
+                            {marca.texto}
+                          </span>
+                        )}
                         <span className={'ml-auto shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ' + (ETAPA_CHIP[etapa] ?? ETAPA_CHIP.interesado)}>
                           {etapa}
                         </span>
@@ -611,7 +625,7 @@ export function VistaDashboard({
                               <BotonLlamar telefono={(esChat ? fila.chat.telefono : fila.form.telefono)!} compacto />
                             )}
                             {esChat ? (
-                              <MessageSquareText size={13} />
+                              puedeEscribirPrivado ? <MessageSquareText size={13} /> : null
                             ) : fila.form.telefono ? (
                               <button
                                 type="button"

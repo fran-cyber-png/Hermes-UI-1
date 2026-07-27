@@ -8,6 +8,8 @@ import {
   referenciaSql,
   respondidaSql,
   seguimientosPendientesSql,
+  ventanaAbiertaSql,
+  ventanaDiasSql,
   vivaSql,
 } from "./urgenciaSql.js";
 import { etapaEfectivaSql, ultimasGestionesSql } from "./etapaEfectivaSql.js";
@@ -85,8 +87,14 @@ import { padronCteSql, padronJoinSql, yaComproSql } from "./clienteSql.js";
  * en su tarjeta del Pipeline (la lección de #37, ADR 0016).
  */
 
-/** La ventana de 7 días de Meta para el privado. IG también la tiene, no solo FB. */
-const VENTANA_ABIERTA = sql`(tipo = 'comentario' AND canal IN ('facebook','instagram') AND occurred_at > now() - interval '7 days')`;
+/**
+ * La ventana de 7 días de Meta para el privado. IG también la tiene, no solo FB.
+ * El plazo ya no se escribe acá: sale de `ventanaDiasSql` (`urgenciaSql.ts`), que
+ * es el mismo que usa el radar del Dashboard — antes eran dos literales sueltos y
+ * ya habían divergido. El `tipo = 'comentario'` sí se queda: este CTE también
+ * proyecta chats, y un chat no tiene ventana.
+ */
+const VENTANA_ABIERTA = sql`(tipo = 'comentario' AND ${ventanaAbiertaSql(ventanaDiasSql("occurred_at", "canal"))})`;
 
 /**
  * LA VENTANA DE LA COLA — hasta dónde mira «el trabajo pendiente». 30 días: es el

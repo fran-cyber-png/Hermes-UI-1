@@ -74,6 +74,63 @@ export const ordenUrgenciaSql: SQL = sql`(CASE
 END)::float8`;
 
 /**
+ * LA VENTANA DE META — los 7 días para responder EN PRIVADO un comentario público
+ * de Facebook o Instagram (`CONTEXT.md` §Ventana). Es el único plazo duro que no
+ * se puso la vendedora: cuando se cierra, esa puerta se cierra de verdad.
+ *
+ * ACÁ Y UNA SOLA VEZ. Estaba escrita TRES veces y las copias ya no coincidían:
+ * `consultarCola.ts` exigía `canal IN ('facebook','instagram')` y la del radar
+ * (`consultarRadar.ts`) no, así que un comentario de otro canal contaba como
+ * «ventana abierta» en el Dashboard y no en Mensajes. Es la lección de #37 en
+ * versión chica; se cierra igual que aquella, con un solo hogar.
+ */
+export const VENTANA_META_DIAS = 7;
+
+/**
+ * LOS DÍAS QUE QUEDAN de ventana — el dato del que sale la cuenta regresiva (#22).
+ *
+ * Antes esto viajaba como un SÍ/NO, y encima siempre verdadero: el `WHERE` de la
+ * consulta ya recortaba a 7 días, así que el booleano no podía ser falso ni una
+ * vez. De un sí/no tampoco se puede derivar «quedan 2 días», que es lo único que
+ * permite avisar ANTES del cierre en lugar de después.
+ *
+ * `ceil` y no `floor`: mientras quede una hora, queda un día para la vendedora —
+ * redondear para abajo diría «0 días» con la puerta todavía abierta. `GREATEST`
+ * lo apoya en 0: nunca hay días negativos, hay ventana cerrada.
+ *
+ * NULL donde no hay ventana — WhatsApp y cualquier canal que no sea FB/IG. NULL
+ * es «no aplica», que es distinto de 0 («se cerró»); la pantalla los dice
+ * distinto y por eso no se colapsan acá.
+ *
+ * Toma los nombres de columna como parámetros, igual que `pideInfoSql`: los
+ * call-sites las referencian distinto (`occurred_at` a secas en la cola,
+ * `i.occurred_at` calificado en el CTE del radar).
+ */
+export function ventanaDiasSql(occurredAt: string, canal: string): SQL {
+  return sql`CASE WHEN ${sql.raw(canal)} IN ('facebook','instagram')
+    THEN GREATEST(0, ceil(${VENTANA_META_DIAS} - extract(epoch from (now() - ${sql.raw(occurredAt)})) / 86400))::int
+    ELSE NULL::int
+  END`;
+}
+
+/**
+ * ¿La ventana sigue abierta? — DERIVADA de los días que quedan, nunca calculada
+ * aparte. Es la columna que consume `EXPIRA` (nivel 2) y los filtros de la cola.
+ *
+ * `COALESCE(..., false)`: sin ventana (NULL) no hay ventana abierta. Un chat de
+ * WhatsApp cae acá y tiene que dar `false`, no NULL — el nivel de urgencia lo
+ * lee como booleano.
+ *
+ * Recibe un FRAGMENTO, no un nombre de columna: los dos call-sites llegan por
+ * caminos distintos —el radar ya proyectó `ventana_dias` y la referencia,
+ * la cola la calcula en el mismo SELECT— y con un `string` el segundo no se
+ * podía expresar.
+ */
+export function ventanaAbiertaSql(ventanaDias: SQL): SQL {
+  return sql`COALESCE((${ventanaDias}) > 0, false)`;
+}
+
+/**
  * De dónde sale `seguimiento_en`: el pendiente MÁS VIEJO de la agenda por
  * conversación (`recordatorios.clave` es la misma clave transversal de la cola).
  * El más viejo porque es el compromiso más incumplido; los hechos ya no son una

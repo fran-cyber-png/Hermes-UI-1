@@ -24,6 +24,13 @@ export interface LeadChat {
   telefono: string | null;
   pais_dato: string | null;
   pide_info: boolean;
+  /**
+   * Los días que quedan de la Ventana de Meta (#22). `null` donde no hay ventana
+   * —WhatsApp y todo lo que no sea un comentario de FB/IG—, `0` cuando ya se
+   * cerró. `null` y `0` NO son lo mismo: «no aplica» contra «se te pasó», y la
+   * fila los dice distinto.
+   */
+  ventana_dias: number | null;
   ventana_abierta: boolean;
   respondida: boolean;
   referencia: string;
