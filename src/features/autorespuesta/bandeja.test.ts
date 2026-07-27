@@ -3,7 +3,6 @@ import {
   UMBRAL_APURO_MIN,
   haceCuanto,
   idsDeGrupos,
-  resumenDeSeleccion,
   vencimiento,
   type GrupoBandeja,
   type MensajeBandeja,
@@ -91,26 +90,14 @@ describe('cuánto le queda antes de caducar', () => {
   });
 });
 
-describe('el lote, antes de tocarlo', () => {
+describe('la bandeja entera', () => {
   const grupos = [grupo('Inteligencia y Contrainteligencia', [1, 2, 3]), grupo('OSINT y SOCMINT', [4, 5])];
 
-  test('todos los ids, para el «seleccionar todo»', () => {
+  test('todos los ids, en orden, para el «descartar todo»', () => {
     expect(idsDeGrupos(grupos)).toEqual([1, 2, 3, 4, 5]);
   });
 
-  test('el botón dice cuántos mensajes y de cuántas campañas', () => {
-    expect(resumenDeSeleccion(grupos, new Set([1, 2, 4]))).toBe('3 mensajes de 2 campañas');
-  });
-
-  test('uno solo se dice en singular: un botón que dice «1 mensajes» se ve barato', () => {
-    expect(resumenDeSeleccion(grupos, new Set([1]))).toBe('1 mensaje de 1 campaña');
-  });
-
-  test('sin selección no hay resumen: el botón va deshabilitado', () => {
-    expect(resumenDeSeleccion(grupos, new Set())).toBe(null);
-  });
-
-  test('un id que ya no está en la bandeja no infla la cuenta', () => {
-    expect(resumenDeSeleccion(grupos, new Set([1, 999]))).toBe('1 mensaje de 1 campaña');
-  });
+  // Los cuatro tests de `resumenDeSeleccion` («12 mensajes de 3 campañas») se
+  // fueron con el botón de lote en #166: aprobar en lote no existe en ningún
+  // nivel, así que no hay selección que resumir.
 });

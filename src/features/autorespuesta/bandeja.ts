@@ -95,28 +95,11 @@ export function idsDeGrupos(grupos: readonly GrupoBandeja[]): number[] {
 }
 
 /**
- * Lo que dice el botón de lote ANTES de tocarlo. Nombrar las campañas y no solo
- * el número es lo que evita el «aprobé 40 sin mirar»: si el botón dice «de 4
- * campañas» y creías que era una, parás.
+ * Acá vivía `resumenDeSeleccion` — «12 mensajes de 3 campañas», lo que decía el
+ * botón de lote ANTES de tocarlo. Se fue con el botón (#166): aprobar en lote no
+ * existe en ningún nivel, así que no hay selección que resumir. Queda anotado
+ * porque el helper era bueno y el que lo extrañe tiene que leer por qué no está.
  */
-export function resumenDeSeleccion(
-  grupos: readonly GrupoBandeja[],
-  seleccion: ReadonlySet<number>,
-): string | null {
-  let mensajes = 0;
-  let campanas = 0;
-  for (const g of grupos) {
-    const n = g.mensajes.filter((m) => seleccion.has(m.id)).length;
-    if (n === 0) continue;
-    mensajes += n;
-    campanas++;
-  }
-  if (mensajes === 0) return null;
-  return (
-    `${mensajes} ${mensajes === 1 ? 'mensaje' : 'mensajes'} de ` +
-    `${campanas} ${campanas === 1 ? 'campaña' : 'campañas'}`
-  );
-}
 
 /** El nombre que se muestra: el de WhatsApp si sirve, el teléfono si no. */
 export function comoSeLlama(m: MensajeBandeja): string {

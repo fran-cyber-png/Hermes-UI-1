@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, Clock, Inbox, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, Clock, Inbox, X } from 'lucide-react';
 import { comoSeLlama, haceCuanto, vencimiento, type GrupoBandeja, type MensajeBandeja } from './bandeja';
 import type { ResultadoAprobar } from './datos';
 import { horaCorta } from './estado';
@@ -18,17 +18,24 @@ import { paso } from './revision';
  *
  * ── Por qué sigue agrupada por campaña ──
  * Es el argumento de ADR 0016 y no caducó: mismo texto, misma promesa, misma
- * gente. Lo que cambia es que ahora el texto no se lee en la lista —se lee en el
+ * gente. Lo que cambia es que el texto no se lee en la lista —se lee en el
  * composer, una vez por campaña, mientras se recorre el grupo—. La cabecera del
- * grupo conserva el **lote**, que es de primera clase: «los 8 de Inteligencia»
- * se aprueban de un golpe.
+ * grupo dice cuántas son y **abre la primera**: es la puerta al recorrido, no un
+ * atajo que lo saltea.
  *
- * ── El lote global no existe, y es a propósito ──
- * Hay «Descartar todo» pero **no** «Aprobar todo». No es simetría rota por
- * descuido: descartar no le llega a nadie y se paga con trabajo perdido;
- * aprobar 40 mensajes de 5 campañas sin haber leído 5 textos es el modo
- * automático con pasos de más. El lote existe **dentro** de una campaña, que es
- * donde la vendedora acaba de leer el texto que se manda.
+ * ── APROBAR EN LOTE NO EXISTE, en ningún nivel (#166) ──
+ * Hasta el 27-jul la cabecera ofrecía «Aprobar 32» y ADR 0016 lo defendía: el
+ * texto es el mismo para toda la campaña, así que leerlo una vez alcanzaría. No
+ * alcanza, y el grupo que lo demostró se llamaba «Sin campaña» —32 personas
+ * juntas por no tener nada en común—. Aun con campaña de verdad, el texto es lo
+ * único igual: a quién se le manda, qué preguntó y si ya se despidió cambian de
+ * fila en fila, y eso es justamente lo que hay que mirar antes de mandarle algo
+ * a alguien. La regla de la casa no admite el matiz: **un envío = una acción
+ * humana** (CLAUDE.md §WhatsApp). Que después salgan espaciados no cambia que la
+ * decisión fue una sola para 32 personas.
+ *
+ * Queda «Descartar todo», y la asimetría es deliberada: descartar no le llega a
+ * nadie: se paga con trabajo perdido, no con un mensaje que no debía salir.
  *
  * ── El oro ──
  * En un solo lugar: lo que está por caducar. En Hermes el dorado significa
@@ -44,7 +51,6 @@ export function ColaRevision({
   trabajando,
   recibo,
   onElegir,
-  onAprobarGrupo,
   onDescartarTodo,
   onCerrarRecibo,
   onSalir,
@@ -57,7 +63,6 @@ export function ColaRevision({
   trabajando: boolean;
   recibo: ResultadoAprobar | null;
   onElegir: (m: MensajeBandeja) => void;
-  onAprobarGrupo: (ids: number[], campana: string) => void;
   onDescartarTodo: () => void;
   onCerrarRecibo: () => void;
   onSalir: () => void;
@@ -105,14 +110,7 @@ export function ColaRevision({
         {!cargando && !error && grupos.length === 0 && <Vacio />}
 
         {grupos.map((g) => (
-          <Grupo
-            key={g.campana}
-            grupo={g}
-            actualId={actualId}
-            trabajando={trabajando}
-            onElegir={onElegir}
-            onAprobarGrupo={onAprobarGrupo}
-          />
+          <Grupo key={g.campana} grupo={g} actualId={actualId} onElegir={onElegir} />
         ))}
       </div>
 
@@ -133,22 +131,18 @@ export function ColaRevision({
   );
 }
 
-/** UNA CAMPAÑA: la cabecera con su lote, y adentro la gente. */
+/** UNA CAMPAÑA: la cabecera con la puerta al recorrido, y adentro la gente. */
 function Grupo({
   grupo,
   actualId,
-  trabajando,
   onElegir,
-  onAprobarGrupo,
 }: {
   grupo: GrupoBandeja;
   actualId: number | null;
-  trabajando: boolean;
   onElegir: (m: MensajeBandeja) => void;
-  onAprobarGrupo: (ids: number[], campana: string) => void;
 }) {
-  const ids = grupo.mensajes.map((m) => m.id);
   const ordenados = [...grupo.mensajes].sort((a, b) => b.esperandoMinutos - a.esperandoMinutos);
+  const primera = ordenados[0];
 
   return (
     <section>
@@ -156,18 +150,22 @@ function Grupo({
         <div className="min-w-0 flex-1">
           <h3 className="truncate font-heading text-[11px] font-bold text-navy">{grupo.campana}</h3>
           <p className="font-mono text-[10px] tabular-nums text-muted-foreground">
-            {ids.length} {ids.length === 1 ? 'persona' : 'personas'}
+            {ordenados.length} {ordenados.length === 1 ? 'persona' : 'personas'}
           </p>
         </div>
-        <button
-          type="button"
-          disabled={trabajando}
-          onClick={() => onAprobarGrupo(ids, grupo.campana)}
-          title={`Aprobar las ${ids.length} de ${grupo.campana}. Salen espaciadas, no juntas.`}
-          className="flex shrink-0 items-center gap-1 rounded-lg bg-navy/10 px-2 py-1 text-[10px] font-bold text-navy transition-[background-color,color,transform] duration-200 ease-house hover:bg-navy hover:text-white active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:opacity-50"
-        >
-          <Check size={11} /> Aprobar {ids.length}
-        </button>
+        {/* Donde estaba «Aprobar 8» hay una PUERTA, no un atajo: abre la
+            primera del grupo —la que más esperó— y de ahí se recorre con ⌘↵.
+            El verbo importa: «Revisar» no promete que algo salga. */}
+        {primera && (
+          <button
+            type="button"
+            onClick={() => onElegir(primera)}
+            title={`Revisar las ${ordenados.length} de ${grupo.campana}, una por una. Empieza por la que más esperó.`}
+            className="flex shrink-0 items-center gap-1 rounded-lg bg-navy/10 px-2 py-1 text-[10px] font-bold text-navy transition-[background-color,color,transform] duration-200 ease-house hover:bg-navy hover:text-white active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+          >
+            Revisar {ordenados.length} <ChevronRight size={11} />
+          </button>
+        )}
       </header>
 
       <ul className="divide-y divide-border">

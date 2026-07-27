@@ -72,11 +72,16 @@ export function useModoRevision() {
     setActualId(quedan[0]?.id ?? null);
   }
 
+  /**
+   * El array es el contrato del server (`POST /aprobar` reparte N con el mismo
+   * `programar.ts`), pero desde #166 la UI manda SIEMPRE uno: el botón de lote
+   * de la cabecera se retiró y aprobar es por conversación. Lo de abajo se
+   * queda igual por eso mismo — si algún día vuelve a entrar más de uno, el
+   * texto editado de la abierta no puede viajar para los otros: le pondría a
+   * once personas una respuesta que no era la suya.
+   */
   function aprobarIds(ids: number[], texto?: string) {
     if (ids.length === 0) return;
-    // El texto editado viaja solo cuando es de UNA: en lote no hay un texto que
-    // la vendedora haya tocado, y mandar el de la abierta para las 12 del grupo
-    // le pondría a once personas una respuesta que no era la suya.
     const textos = ids.length === 1 && texto ? { [String(ids[0])]: texto } : undefined;
     correrElFoco(ids);
     aprobar.mutate({ ids, ...(textos ? { textos } : {}) }, { onSuccess: setRecibo });

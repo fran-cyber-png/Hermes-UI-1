@@ -489,7 +489,6 @@ export default function App() {
                 trabajando={revision.trabajando}
                 recibo={revision.recibo}
                 onElegir={revision.abrir}
-                onAprobarGrupo={(ids) => revision.aprobarIds(ids)}
                 onDescartarTodo={revision.descartarTodo}
                 onCerrarRecibo={revision.cerrarRecibo}
                 onSalir={revision.salir}
