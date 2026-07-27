@@ -95,6 +95,22 @@ describe('parametrosDeCola', () => {
       parametrosDeCola({ tab: 'no-leidos', filtroSec: 'pide-info', categoria: 'precio' }),
     ).toEqual({ tab: 'no-leidos', intencion: 'pide-info', categoria: 'precio' });
   });
+
+  it('la línea viaja como `linea`, y «todas» no emite el param', () => {
+    // El vacío TIENE que caerse de la URL: si viajara como `linea=`, el server
+    // vería el param presente y —con la guarda que rechaza lo que no es un
+    // teléfono— respondería 400 sobre la cola completa, que es el caso normal.
+    expect(parametrosDeCola({ tab: 'todo', filtroSec: '', categoria: null, linea: '' })).toEqual({});
+    expect(parametrosDeCola({ tab: 'todo', filtroSec: '', categoria: null, linea: '51941654039' })).toEqual({
+      linea: '51941654039',
+    });
+  });
+
+  it('la línea convive con los recortes: es otro eje, no los reemplaza', () => {
+    expect(
+      parametrosDeCola({ tab: 'no-leidos', filtroSec: 'pide-info', categoria: null, linea: '51941654039' }),
+    ).toEqual({ tab: 'no-leidos', intencion: 'pide-info', linea: '51941654039' });
+  });
 });
 
 describe('filtrosActivos — qué está recortando la cola AHORA MISMO', () => {

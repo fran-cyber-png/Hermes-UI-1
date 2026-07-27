@@ -64,6 +64,13 @@ export function migrarFiltroViejo(raw: string | null | undefined): Tab {
 export const KEY_FILTRO_VIEJO = 'hermes.colaFiltro';
 /** La key nueva: el tab es otro eje, no el mismo valor con otro nombre. */
 export const KEY_TAB = 'hermes.colaTab';
+/**
+ * La línea elegida (#50). PERSISTE, y no por comodidad: quien vende por su
+ * propio número abre la app para trabajar SU cola, y hacérsela elegir cada
+ * mañana es pedirle que se acuerde de un filtro para no leer los chats de otra
+ * persona. Es la misma razón por la que el tab se guarda.
+ */
+export const KEY_LINEA = 'hermes.colaLinea';
 
 /**
  * Qué debería ver, la primera vez, alguien que YA venía usando la cola vieja.
@@ -186,6 +193,12 @@ export interface EstadoCola {
   etapa?: string;
   /** Solo las que ya tienen un precio encima — el recorte del Pipeline. */
   precio?: boolean;
+  /**
+   * Recorta a UNA línea de WhatsApp: el número propio de Goberna por el que
+   * entró la conversación (#50). Vacío/ausente = todas, que es lo que había
+   * cuando había una sola línea.
+   */
+  linea?: string;
 }
 
 /**
@@ -201,5 +214,6 @@ export function parametrosDeCola(e: EstadoCola): Record<string, string> {
   if (e.canal) p.canal = e.canal;
   if (e.etapa) p.etapa = e.etapa;
   if (e.precio) p.precio = '1';
+  if (e.linea) p.linea = e.linea;
   return p;
 }

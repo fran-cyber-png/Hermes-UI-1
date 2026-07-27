@@ -13,6 +13,7 @@ import { GestorCategorias } from '../gestion/GestorCategorias';
 import type { DatosDashboard } from '../dashboard/dashboard';
 import {
   KEY_TAB,
+  KEY_LINEA,
   TABS,
   filtrosActivos,
   migracionDesdeKeyVieja,
@@ -22,6 +23,7 @@ import {
 } from './cola';
 import { BarraFiltros } from './BarraFiltros';
 import { useConversaciones, useEstadoConversacion, type Conversacion } from './conversaciones';
+import { useLineas } from './lineas';
 import { FilaConversacion } from './FilaConversacion';
 import { MenuFila } from './MenuFila';
 import { ListaCategorias } from './ListaCategorias';
@@ -72,6 +74,13 @@ export function ColaUnificada({
   // el caché persistido no abre mostrando un filtro que ya no existe (#49).
   const [tabGuardado, setTab] = useLocalStorage<string>(KEY_TAB, 'todo');
   const tab: Tab = migrarFiltroViejo(tabGuardado);
+  // La línea también se guarda (ver KEY_LINEA). `lineas` son las que están
+  // VIVAS: si la guardada dejó de correr, el filtro se cae a «todas» en vez de
+  // dejar la cola vacía sin explicación — un número que ya no está no puede
+  // seguir escondiendo el trabajo.
+  const [lineaGuardada, setLinea] = useLocalStorage<string>(KEY_LINEA, '');
+  const { lineas } = useLineas();
+  const linea = lineas.some((l) => l.numero === lineaGuardada) ? lineaGuardada : '';
   // Filtros secundarios y modo Listas: efímeros (la sesión arranca en limpio).
   const [filtroSec, setFiltroSec] = useState<FiltroSec>('');
   const [modoListas, setModoListas] = useState(false);
@@ -119,7 +128,7 @@ export function ColaUnificada({
     traidoEn,
     actualizando,
     sinEstado,
-  } = useConversaciones({ tab, filtroSec, categoria: categoriaActiva?.nombre ?? null });
+  } = useConversaciones({ tab, filtroSec, categoria: categoriaActiva?.nombre ?? null, linea });
   // Al abrir la app la cola viene del caché persistido: hasta que llegue lo
   // fresco hay que decir de cuándo es lo que se está mirando.
   const deAntes = useSelloDeViejo(traidoEn);
@@ -271,7 +280,15 @@ export function ColaUnificada({
     conversacionAbierta?.canal ?? (seleccionada?.startsWith('conv:') ? seleccionada.split(':')[1] : null);
   const origenPin = canalPin ? nombreCanal(canalPin) : 'un comentario';
 
-  /** Vuelve a la cola completa: sin búsqueda, sin filtros y fuera del modo Listas. */
+  /**
+   * Vuelve a la cola completa: sin búsqueda, sin filtros y fuera del modo Listas.
+   *
+   * ⚠ **La LÍNEA no se toca acá, a propósito.** Es el universo, no un recorte:
+   * quien vende por su propio número tiene que poder apretar «limpiar» sin que
+   * la cola se le llene con las conversaciones de otra persona. Se cambia solo
+   * desde su segmentado, que dice cuál está puesta — y volver a «Todas» es un
+   * click desde ahí.
+   */
   function limpiarFiltros() {
     setBusqueda('');
     setTab('todo');
@@ -433,6 +450,9 @@ export function ColaUnificada({
             filtroSec={filtroSec}
             onFiltro={setFiltroSec}
             conteos={conteosFiltro}
+            lineas={lineas}
+            lineaActiva={linea}
+            onLinea={setLinea}
             catalogo={catalogo}
             categoriaActiva={categoriaActiva?.nombre ?? null}
             /* Desde la BARRA la categoría afina lo que ya se está mirando (el tab

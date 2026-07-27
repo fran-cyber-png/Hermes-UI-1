@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { Tags, X } from 'lucide-react';
+import { Smartphone, Tags, X } from 'lucide-react';
+import type { LineaWhatsapp } from './lineas';
 import {
   CLASE_BORDE,
   CLASE_FONDO,
@@ -41,6 +42,9 @@ export function BarraFiltros({
   categoriaActiva,
   onCategoria,
   onListas,
+  lineas = [],
+  lineaActiva = '',
+  onLinea,
 }: {
   filtroSec: FiltroSec;
   onFiltro: (f: FiltroSec) => void;
@@ -51,6 +55,11 @@ export function BarraFiltros({
   onCategoria: (c: { nombre: string; color: string } | null) => void;
   /** Abre el modo Listas, donde están TODAS las categorías y su edición. */
   onListas: () => void;
+  /** Las líneas de WhatsApp vivas (#50). Con menos de dos, el selector no se dibuja. */
+  lineas?: readonly LineaWhatsapp[];
+  /** El número propio elegido; `''` = todas. */
+  lineaActiva?: string;
+  onLinea?: (numero: string) => void;
 }) {
   const pista = useRef<HTMLDivElement>(null);
   const [sombra, setSombra] = useState({ izq: false, der: false });
@@ -136,6 +145,58 @@ export function BarraFiltros({
         onKeyDown={onTeclas}
         className="sin-riel flex items-center gap-1.5 overflow-x-auto scroll-smooth px-3 py-0.5"
       >
+        {/* ══ LA LÍNEA VA PRIMERA, Y ES UN SEGMENTADO, NO UN TOGGLE ══════════
+            El resto de esta barra recorta la cola; esto elige QUÉ COLA. Con dos
+            números vendiendo, «Piden info» sobre la cola de todas es una
+            pregunta distinta que sobre la de Walter — así que la línea se decide
+            antes, y por eso va antes.
+            Segmentado y no chips sueltos porque las opciones son excluyentes: en
+            un toggle, «Escuela» y «Walter» apagados a la vez tendrían que
+            significar «ninguna», y significan «todas». Se ven las tres a la vez
+            —volver a «Todas» cuesta un click desde donde estés—, que es lo mismo
+            que hace el chip de la auto-respuesta con sus dos modos.
+            Sin oro: acá no se está acabando ningún tiempo. */}
+        {lineas.length > 1 && onLinea && (
+          <>
+            <div
+              className="flex shrink-0 items-center gap-0.5 rounded-full border border-border bg-muted/40 p-0.5"
+              role="group"
+              aria-label="Línea de WhatsApp"
+            >
+              <Smartphone size={11} className="ml-1.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+              {[{ numero: '', etiqueta: 'Todas' }, ...lineas].map((l) => {
+                const activa = lineaActiva === l.numero;
+                return (
+                  <button
+                    key={l.numero || 'todas'}
+                    data-chip
+                    type="button"
+                    aria-pressed={activa}
+                    title={l.numero ? `Ver solo lo que entró por ${l.etiqueta} (${l.numero})` : 'Ver las dos líneas juntas'}
+                    onClick={() => onLinea(l.numero)}
+                    className={
+                      /* `max-w` + `truncate`: el rótulo lo escribe Cerberus y puede
+                         venir largo («Escuela — línea principal»). En un panel de
+                         360 px eso empujaba «Piden info» fuera de la vista — o sea
+                         que un nombre largo escondía los filtros que sí se usan
+                         todos los días. El nombre entero sigue en el `title`. */
+                      'max-w-[7.5rem] shrink-0 truncate rounded-full px-2.5 py-0.5 text-[11px] font-semibold ' +
+                      'transition-[background-color,color] duration-200 ease-house active:scale-[0.97] ' +
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ' +
+                      (activa
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:text-foreground')
+                    }
+                  >
+                    {l.etiqueta}
+                  </button>
+                );
+              })}
+            </div>
+            <span className="h-4 w-px shrink-0 bg-border" aria-hidden="true" />
+          </>
+        )}
+
         {FILTROS_SEC.map((f) => {
           const activo = filtroSec === f.valor;
           const n = conteoDe(f.valor);
