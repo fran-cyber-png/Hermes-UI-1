@@ -75,6 +75,11 @@ function correr(comando: string, args: string[], url: string): Corrida {
       cwd: SERVER,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
+      // Mismo motivo que en `pruebas/montarBase.ts`: en Windows `npx` es
+      // `npx.cmd` y Node se niega a lanzar un .cmd sin shell desde el parche de
+      // CVE-2024-27980. Sin esto los seis tests de acá fallan con un `spawn` roto
+      // (código -1) que se lee como «la migración falló», y no falló: nunca corrió.
+      shell: process.platform === "win32",
       // DATABASE_URL de este test y nada más: el `.env` del repo no puede filtrarse
       // acá, o el test le hablaría a la base de desarrollo de quien lo corre.
       env: { ...process.env, DATABASE_URL: url, DOTENV_CONFIG_PATH: "/dev/null" },

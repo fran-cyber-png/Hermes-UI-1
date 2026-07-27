@@ -38,8 +38,16 @@ async function main(): Promise<void> {
   }
 
   // Paso 3: aplica el schema. drizzle-kit lee DATABASE_URL de su config.
+  //
+  // En Windows hay que pasar por la shell: `npx` es `npx.cmd`, y desde el parche
+  // de CVE-2024-27980 Node se niega a lanzar un .cmd sin shell (EINVAL) — antes
+  // de eso ni lo encontraba (ENOENT). Sin esto el harness entero muere antes del
+  // primer test. CI corre en el runner Linux de VPS1, así que solo se ve al
+  // levantar los tests con base en una máquina Windows.
+  // Los argumentos son constantes y sin espacios: no hay nada que citar.
   execFileSync("npx", ["drizzle-kit", "push", "--force"], {
     stdio: "inherit",
+    shell: process.platform === "win32",
     env: { ...process.env, DATABASE_URL: urlTemplate },
   });
 
