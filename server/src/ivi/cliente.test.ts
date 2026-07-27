@@ -605,3 +605,64 @@ describe('el 500 de Ivi es transitorio — `reintentable` mira el estado, no sol
     );
   });
 });
+
+/**
+ * UN CAMPO INFORMATIVO NO PUEDE TUMBAR LA RESPUESTA ENTERA.
+ *
+ * `numerosNoVerificados` es el detalle de `groundingOk: false` — dice CUÁLES cifras marcar.
+ * Estaba con `.optional()`, que acepta AUSENTE pero no `null`, así que un emisor que mandara
+ * `null` (la forma canónica de «no lo medí» en el resto de este contrato: `edad_del_dato` es
+ * exactamente eso) se comía un `respuesta_invalida` → 502, y la vendedora perdía una respuesta
+ * buena por un campo accesorio. Quedó MÁS estricto que el emisor, al revés de la laxitud
+ * deliberada del resto del schema.
+ *
+ * Medido: `contrato_hermes()` (ivi-cerebro@1e5d2f3 y árbol de trabajo, idénticos) emite
+ * `r.get("numeros_no_verificados", [])` y `_no_verificados()` devuelve siempre `list[str]` —
+ * o sea que HOY Ivi no manda `null`. Pero su propio `gimnasio.py:106` escribe
+ * `r.get("numeros_no_verificados") or []`: el emisor se defiende de un `None` que él mismo
+ * considera posible. La dirección correcta de la tolerancia es esa.
+ */
+describe('`numerosNoVerificados` degrada, no tumba', () => {
+  test('`null` es «no lo reportó», no un 502', () => {
+    const r = respuestaIviSchema.safeParse(aCamelCase({ ...CUERPO_REAL_DE_IVI, numeros_no_verificados: null }));
+    assert.equal(r.success, true, JSON.stringify(r.error?.issues));
+    assert.equal(r.data?.numerosNoVerificados, undefined, 'null y ausente son el mismo hecho: no se reportó');
+  });
+
+  test('ausente sigue siendo válido (un emisor viejo no es un fallo)', () => {
+    const { numeros_no_verificados: _, ...sinElCampo } = CUERPO_REAL_DE_IVI;
+    const r = respuestaIviSchema.safeParse(aCamelCase(sinElCampo));
+    assert.equal(r.success, true, JSON.stringify(r.error?.issues));
+    assert.equal(r.data?.numerosNoVerificados, undefined);
+  });
+
+  test('un valor con la FORMA equivocada tampoco tumba la respuesta — se cae al lado conservador', () => {
+    // Si llegara una cadena en vez de una lista, la app no puede marcar cifra alguna: desconfía
+    // del párrafo entero. Eso es peor que marcar tres cifras y muchísimo mejor que un 502 que
+    // borra una respuesta correcta. Fail-closed es sobre el TEXTO, no sobre su nota al pie.
+    const r = respuestaIviSchema.safeParse(aCamelCase({ ...CUERPO_REAL_DE_IVI, numeros_no_verificados: '642' }));
+    assert.equal(r.success, true, JSON.stringify(r.error?.issues));
+    assert.equal(r.data?.numerosNoVerificados, undefined);
+  });
+
+  test('de punta a punta: con `null` la respuesta llega, y el texto es el de Ivi', async () => {
+    const { fake } = fetchQueDevuelve({
+      ...CUERPO_REAL_DE_IVI,
+      grounding_ok: false,
+      numeros_no_verificados: null,
+    });
+    const r = await preguntarleAIvi('¿ventas?', 'ana', undefined, { ...CONFIG_OK, fetch: fake });
+    assert.equal(r.texto, CUERPO_REAL_DE_IVI.texto);
+    assert.equal(r.groundingOk, false, 'lo que carga el peso sigue siendo estricto y sigue llegando');
+    assert.equal(r.numerosNoVerificados, undefined);
+  });
+
+  test('pero los tres campos que cargan el peso NO degradan: ahí sí es 502', () => {
+    // La contracara del test de arriba. Si esto se relajara, la laxitud dejaría de ser una
+    // decisión y pasaría a ser un schema que no valida nada.
+    for (const roto of [{ texto: 42 }, { tipo: null }, { grounding_ok: 'sí' }]) {
+      const r = respuestaIviSchema.safeParse(aCamelCase({ ...CUERPO_REAL_DE_IVI, ...roto }));
+      assert.equal(r.success, false, `${JSON.stringify(roto)} tendría que ser respuesta_invalida`);
+    }
+  });
+});

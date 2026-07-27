@@ -52,9 +52,34 @@ export const respuestaIviSchema = z.object({
   /**
    * Las cifras del texto que Ivi NO pudo casar contra los datos. Con `groundingOk: false`,
    * esta lista es la que dice CUÁLES marcar — sin ella la app solo puede desconfiar de todo
-   * el párrafo o de nada. Opcional: un emisor viejo puede no mandarla, y eso no es un fallo.
+   * el párrafo o de nada.
+   *
+   * ⚠️ ES INFORMATIVO, Y UN CAMPO INFORMATIVO NO PUEDE TUMBAR LA RESPUESTA ENTERA. Estaba con
+   * `.optional()`, que acepta AUSENTE pero **no `null`** — más estricto que el emisor, al revés
+   * de la laxitud deliberada del resto del schema. `.nullish()` cubre las dos formas de decir
+   * «no lo reportó» (`null` es la que este contrato ya usa en `edad_del_dato`), y `.catch()`
+   * cubre la tercera: una forma inesperada degrada a «no reportado» en vez de convertir una
+   * respuesta buena en un 502.
+   *
+   * Medido contra ivi-cerebro@1e5d2f3 (y su árbol de trabajo, idénticos en este archivo):
+   * `contrato_hermes()` emite `r.get("numeros_no_verificados", [])` y `_no_verificados()`
+   * devuelve siempre `list[str]`, así que HOY no llega `null`. Pero el propio `gimnasio.py:106`
+   * de Ivi escribe `r.get("numeros_no_verificados") or []`: el emisor ya se defiende de un
+   * `None` que considera posible, y quien recibe no tiene por qué ser más frágil que quien manda.
+   *
+   * La dirección de la degradación es la conservadora: sin lista, la app desconfía del párrafo
+   * entero. Fail-closed es sobre el TEXTO, no sobre su nota al pie.
    */
-  numerosNoVerificados: z.array(z.string()).optional(),
+  numerosNoVerificados: z
+    .array(z.string())
+    .optional()
+    .catch(({ value }) => {
+      // Ruidoso, como todo lo de esta costura: degradar en silencio es cómo se viven meses sin
+      // enterarse de que un campo dejó de llegar. El `null` NO pasa por acá —`aCamelCase` ya lo
+      // normalizó—, así que este log significa «forma inesperada», que sí hay que mirar.
+      console.error('ivi: `numeros_no_verificados` llegó con una forma inesperada; se ignora', value);
+      return undefined;
+    }),
   /** Frescura del dato para mostrar; `null` cuando no aplica (o no se midió). */
   edadDelDato: z.union([z.string(), z.number()]).nullable(),
 });
@@ -229,7 +254,19 @@ export function aCamelCase(crudo: unknown): unknown {
     numeros_no_verificados: numerosNoVerificados,
     edad_del_dato: edadDelDato,
   } = r.data;
-  return { texto, tipo, fuentes, groundingOk, numerosNoVerificados, edadDelDato };
+  return {
+    texto,
+    tipo,
+    fuentes,
+    groundingOk,
+    // `null` y ausente son EL MISMO HECHO cuando el campo es una lista: «no se reportó». Se
+    // normaliza acá, en el borde, porque es una diferencia de DIALECTO —Python manda `None`
+    // donde JS no manda nada— y este es el lugar donde el dialecto de Ivi se vuelve el de
+    // Hermes. Ojo: `edadDelDato` NO se normaliza, y la asimetría es a propósito — ahí `null`
+    // sí significa algo distinto de ausente («no medido», que no es «fresco»).
+    numerosNoVerificados: numerosNoVerificados ?? undefined,
+    edadDelDato,
+  };
 }
 
 /**
