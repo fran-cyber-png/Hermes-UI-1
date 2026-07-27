@@ -27,36 +27,43 @@ ssh deploy@161.132.39.165 'cd /srv/hermes && git log --oneline -1 && systemctl i
 
 ### Cómo se despliega hoy
 
-**Sin cambio de schema** → el workflow: `gh workflow run "Desplegar server (con restart)" --repo
-Goberna-Lab/hermes -f confirmar=reiniciar`.
+**Por el botón**: Actions → **Desplegar server (con restart)** → escribir `reiniciar`. O
+`gh workflow run "Desplegar server (con restart)" --repo Goberna-Lab/hermes -f confirmar=reiniciar`.
 
-**Con cambio de schema** → a mano, porque el workflow frena a propósito (y ese gate **no** se
-satisface migrando la base: compara `~/.hermes-despliegue/server` contra `main`, y ese diff no se
-va). El orden importa — `db:push` lee `schema.ts` **del disco**, así que el checkout va primero:
+Eso corre `deploy/vps1/hermes-deploy.sh`, que hace todo en un solo paso y en el orden correcto:
+respalda la base si hay migraciones · verifica que la base y el repo se correspondan (`db:estado`) ·
+migra · instala dependencias si cambiaron · construye el front aparte y lo cambia de lugar ·
+reinicia · espera `/health` · corre el smoke funcional · y **si algo falla revierte solo y verifica
+lo revertido**. Deja el sha en `~/.hermes-despliegue/{server,front,ultimo-sano}`.
+
+Por SSH corre **exactamente la misma pieza** — no es un camino alternativo:
 
 ```bash
-# 1 · código
-ssh deploy@161.132.39.165 'cd /srv/hermes && git fetch origin main && git checkout --force origin/main \
-  && ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci && cd server && npm ci'
-
-# 2 · schema — DESDE UNA TERMINAL DE VERDAD (pide TTY para sus prompts; ver Gotchas)
-ssh -t deploy@161.132.39.165 'cd /srv/hermes/server && npm run db:push'
-
-# 3 · build con swap (vaciar `dist` daría 404 durante todo el build) + restart + estado de rollback
-ssh deploy@161.132.39.165 'cd /srv/hermes && rm -rf dist.nuevo \
-  && env VITE_API_URL=https://hermes-api.goberna.us npx vite build --outDir dist.nuevo --emptyOutDir \
-  && test -f dist.nuevo/index.html && rm -rf dist.anterior && mv dist dist.anterior && mv dist.nuevo dist \
-  && sudo systemctl restart hermes \
-  && git rev-parse HEAD | tee ~/.hermes-despliegue/server ~/.hermes-despliegue/front'
+ssh deploy@161.132.39.165 'sudo hermes-deploy --dry-run'   # el plan, con las variables de la decisión
+ssh deploy@161.132.39.165 'sudo hermes-deploy'             # promueve origin/main
+ssh deploy@161.132.39.165 'sudo hermes-deploy --rollback'  # vuelve al último sha sano
 ```
 
-**Reiniciar tiene costo**: `sesionStore` vive en memoria, así que el restart tira las sesiones de
-Cerberus y las vendedoras vuelven a loguearse. Va fuera del horario de atención y batcheado.
+> ⚠️ **El schema ya NO se empuja a mano.** Va en migraciones versionadas (`server/drizzle/`), el
+> deploy las aplica solo después de respaldar, y CI verifica que sean expand-only. Lo que decía acá
+> —checkout, `ssh -t … db:push` desde una terminal de verdad porque pide TTY, build con swap,
+> restart, actualizar el archivo de estado a mano— dejó de aplicar con **ADR 0021**. El gate de
+> schema que obligaba a eso tampoco existe más: no se podía satisfacer.
+> El cómo, completo: **`docs/migraciones.md`**.
 
-Rollback: `cat ~/.hermes-despliegue/server` da el sha anterior; `git checkout <sha> && npm ci &&
-npm run build && sudo systemctl restart hermes`. Ojo: **el schema no vuelve solo** — si el deploy
-incluyó un `db:push`, el rollback de código deja la base adelantada (es aditiva, así que degrada en
-vez de romper, pero conviene saberlo).
+**Solo front, sin restart**: se despliega **automático** al mergear a `main` (N4 de `ci.yml`), pero
+solo si el rango sin desplegar no toca `server/`. Cero downtime.
+
+**Reiniciar tiene costo**: `sesionStore` vive en memoria, así que el restart tira las sesiones de
+Cerberus y las vendedoras vuelven a loguearse. Por eso el server es un botón y el front es
+automático. Va fuera del horario de atención y batcheado.
+
+**Rollback**: `sudo hermes-deploy --rollback` (el script sabe a dónde volver: `ultimo-sano`). Solo
+el front, más rápido todavía: `cd /srv/hermes && mv dist dist.roto && mv dist.anterior dist`.
+La base **no vuelve**, y está bien: las migraciones son expand-only, así que el código viejo funciona
+contra el schema nuevo — es justamente lo que hace seguro el rollback automático.
+
+**En qué estado está la base**: `cd /srv/hermes/server && npm run db:estado` (solo lee).
 
 ## Qué hay en `main` (≠ lo que corre en producción)
 
