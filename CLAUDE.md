@@ -300,6 +300,36 @@ ficha: «📣 Inteligencia y Contrainteligencia · del anuncio [Confirmar]» (#1
 - **La compuerta de Cotizado no se relaja, se satisface**: el modal llega con el curso preseleccionado
   y confirmar completa el arrastre.
 
+## Ex-clientes en la cola — el padrón en copia local (#133)
+
+De las **1.997 conversaciones vivas, 140 (7%) son de gente que YA COMPRÓ** (11 VIP), y hasta ahora se
+veían igual que un desconocido. El dato existía —`cerberus/ficha.ts`— pero se pedía **por HTTP, de a
+una, al abrir la conversación**: 1.997 llamadas para pintar un listado, contra un Cerberus que a veces
+se cuelga (de ahí el techo de 12 s del panel). Por eso nunca estuvo en la fila.
+
+- **El padrón se SINCRONIZA**: `cd server && npm run clientes:sincronizar` (`--dry-run` no escribe).
+  Lee **`icarus.contacts`** —icarus recibe el webhook de Cerberus en cada venta— con la conexión
+  read-only `ICARUS_DATABASE_URL`, y guarda en **`clientes_padron`** lo MÍNIMO: sufijo del teléfono,
+  código de país, compras y nivel. **Nombre, correo, DNI y monto NO se copian** (para eso está la
+  ficha viva). Es derivada y descartable: se puede truncar y volver a sincronizar.
+- **La jerarquía vive una vez**, pura, en `clientes/nivel.ts` (`vip` · `recompro` · `compro`) y se
+  **congela** en la tabla al sincronizar. El SQL de la cola **no recalcula**: lee la columna. No hay
+  segunda escritura que pueda divergir (la lección de #37) — el precio es que cambiar la regla obliga
+  a re-sincronizar.
+- **El match** (`cola/clienteSql.ts`) es el sufijo de 9 dígitos de siempre (`sufijoTelefonoSql`) **más
+  una guarda de país**: el sufijo asume que todos son peruanos y casi 2 de cada 3 clientes no lo son
+  (MX 1.987 · EC 1.981 · GT 393). Con largos nacionales distintos, un mexicano de Veracruz y un
+  peruano comparten sufijo (**falso positivo**) y un guatemalteco guardado en local nunca llega a 9
+  dígitos (**393 clientes invisibles**). Se arregla normalizando a E.164 antes de sacar el sufijo y
+  exigiendo que el teléfono de la conversación empiece con el código de país del padrón. Sin país
+  conocido, el match es el de siempre y el script **imprime cuántas filas quedaron así** (#119).
+- **Solo WhatsApp**: en Messenger `persona_id` es un PSID y sus últimos 9 dígitos podrían chocar con
+  un teléfono real.
+- En la UI: píldora en la fila (tres pesos del **verde** que ya significa cliente en el panel, ADR
+  0017 — **sin oro**), chip **«Ya compraron»** en la barra de filtros con su número, y la banda del
+  panel se pinta de entrada («Ya te compró. Confirmando con Cerberus…») en vez de un spinner.
+- **Degrada** si falta el `db:push`: la cola se sirve sin la marca y lo dice (`sinPadron`).
+
 ## Administración de números (para Cerberus)
 
 `/api/admin/*` (`server/src/routes/admin.ts`), detrás de **`requiereServicio`**
@@ -406,7 +436,9 @@ sensato). Ver `server/.env.example` (solo nombres).
   auto-respuesta (`auto_respuestas_pendientes`, `auto_respuesta_estado`), `envios_wa.automatico`
   (#125), las cinco columnas del modo supervisado (`auto_respuesta_estado.modo` +
   `auto_respuestas_pendientes.aprobada_por/.aprobada_at/.editada/.campana`, ADR 0016),
-  `auto_respuestas_pendientes.campana_fuente` (ADR 0018) y `alias_curso`
+  `auto_respuestas_pendientes.campana_fuente` (ADR 0018), **`clientes_padron` (#133 — sin ella la
+  cola sirve sin la marca de ex-cliente y lo dice en `sinPadron`; con ella hay que correr
+  `npm run clientes:sincronizar` o queda vacía y no marca a nadie)** y `alias_curso`
   (#102) — sin el push esas funciones **degradan** (hilo sin marca, ruta del interruptor en 503,
   bandeja vacía con el motivo escrito, ficha sin propuesta de curso), no rompen —; y `plantillas` +
   `plantilla_pasos` (plantillas-secuencia), sin las cuales `/api/plantillas` **no funciona** en un
