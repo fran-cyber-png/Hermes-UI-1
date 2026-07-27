@@ -1,4 +1,5 @@
 import type { MediaSaliente, ResultadoEnvio, TransporteWhatsapp } from './transporte.js';
+import { A_MANO, type Procedencia } from '../procedencia/pieza.js';
 
 /**
  * LA ÚNICA PUERTA DE SALIDA HACIA WHATSAPP.
@@ -41,6 +42,18 @@ export interface OrdenEnvio {
    * máquina. Ausente o `false` = lo apretó un humano, como siempre.
    */
   automatico?: boolean;
+  /**
+   * DE QUÉ PIEZA SALIÓ (épica #169). Ausente = `A_MANO`, que **no es un hueco:
+   * es la línea de base** contra la que se compara todo lo demás.
+   *
+   * Vive en la orden y no en un `update` posterior por la misma razón que
+   * `automatico`: pasa por la MISMA puerta, se audita en la MISMA fila, y un
+   * envío bloqueado también deja escrito qué se iba a mandar. Si la procedencia
+   * se anotara aparte, un fallo entre las dos escrituras dejaría un envío
+   * huérfano — y un envío sin procedencia se cuenta como escrito a mano, o sea
+   * que el error ensuciaría justo la línea de base.
+   */
+  procedencia?: Procedencia;
 }
 
 /** Una orden de adjunto: mismas exigencias que el texto + el archivo a mandar. */
@@ -79,7 +92,10 @@ export class EnvioControlado {
     if (!orden.vendedoraId || !orden.numeroPropio || !orden.telefono || !orden.texto.trim() || !orden.referencia) {
       return { ok: false, motivo: 'faltan datos obligatorios del envío (vendedora, número, teléfono, texto o referencia)' };
     }
-    return this.conGuardas(orden, () => this.transporte.enviarTexto(orden.telefono, orden.texto));
+    return this.conGuardas(
+      { ...orden, procedencia: orden.procedencia ?? A_MANO },
+      () => this.transporte.enviarTexto(orden.telefono, orden.texto),
+    );
   }
 
   /**
@@ -93,7 +109,7 @@ export class EnvioControlado {
     }
     const descripcion = orden.media.texto?.trim() || `[${orden.media.clase}] ${orden.media.nombre ?? orden.media.mime}`;
     return this.conGuardas(
-      { ...orden, texto: descripcion },
+      { ...orden, texto: descripcion, procedencia: orden.procedencia ?? A_MANO },
       () => this.transporte.enviarMedia(orden.telefono, orden.media),
     );
   }

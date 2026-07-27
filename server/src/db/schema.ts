@@ -243,10 +243,41 @@ export const enviosWa = pgTable(
     motivo: text("motivo"),
     creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().default(sql`now()`),
     resueltoAt: timestamp("resuelto_at", { withTimezone: true }),
+
+    /**
+     * ══ LA PROCEDENCIA (épica #169, frente 1) ═══════════════════════════════
+     *
+     * De qué PIEZA salió lo que se mandó. Sin esto, una secuencia con 500 usos
+     * y 0 ventas se ve idéntica a una con 500 usos y 50: contábamos disparos y
+     * nunca blancos.
+     *
+     * **Las cuatro primeras en `null` = lo escribió la vendedora a mano, y eso
+     * es la LÍNEA DE BASE**, no un dato faltante: es contra el texto que ella
+     * habría escrito igual que se compara todo lo demás. El vocabulario y las
+     * reglas viven una vez, puras, en `procedencia/pieza.ts` — nadie arma estas
+     * columnas a mano.
+     *
+     * `pieza_clase` + `pieza_ref` son la identidad de la pieza DENTRO de su
+     * catálogo, a propósito textual y no una FK: el frente 2 de la épica unifica
+     * los cuatro catálogos, y con una FK a `plantilla_pasos.id` esa unificación
+     * obligaría a migrar (o a tirar) todo lo acumulado hasta entonces.
+     */
+    piezaClase: text("pieza_clase"),
+    piezaRef: text("pieza_ref"),
+    /** Por qué pantalla entró (panel-sugerencia · panel-secuencias · panel-datos · automatica). */
+    piezaVia: text("pieza_via"),
+    /** ¿Salió reescrito? Un dato que la vendedora tocó no le acredita entero el resultado. */
+    piezaEditada: boolean("pieza_editada").notNull().default(false),
+    /** El `MomentoDeVenta` (vocabulario de `sugerencias/estado.ts`) cuando salió. */
+    momentoVenta: text("momento_venta"),
   },
   (t) => [
     index("envios_wa_vendedora_idx").on(t.vendedoraId),
     index("envios_wa_telefono_idx").on(t.telefono),
+    /** El lazo de resultados agrupa por pieza: sin este índice cada consulta es un seq scan. */
+    index("envios_wa_pieza_idx").on(t.piezaClase, t.piezaRef),
+    /** La derivación mira la ventana reciente por conversación. */
+    index("envios_wa_referencia_idx").on(t.referencia, t.creadoAt),
   ],
 );
 

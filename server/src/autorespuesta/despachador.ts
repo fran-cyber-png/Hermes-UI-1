@@ -4,6 +4,7 @@ import { caducoSinAprobar } from './caducidad.js';
 import type { ConfigAutoRespuesta } from './config.js';
 import { diaLocal, dentroDe } from './franja.js';
 import { faltaEsquema, type Pendiente, type RepositorioAutoRespuesta } from './repositorio.js';
+import { deUnAcuse } from '../procedencia/pieza.js';
 
 /**
  * EL DESPACHADOR — el único lugar de esta feature que manda algo, y el que
@@ -182,6 +183,15 @@ export class Despachador {
       texto: p.texto,
       referencia: p.clave,
       automatico: true,
+      // De qué pieza salió (#169). El acuse es una pieza como cualquier otra, y
+      // tiene que poder compararse con lo que manda una persona: si el acuse
+      // nocturno consigue menos respuestas que el silencio, eso hay que verlo.
+      //
+      // **Sin momento a propósito.** La auto-respuesta decide con medio contexto
+      // (`estadoDesdeContexto`: a las 3 a.m. no consulta las señales), así que
+      // su momento no es el mismo objeto que el de las demás piezas. Anotarlo
+      // junto a ellos los volvería incomparables sin que se note.
+      procedencia: deUnAcuse({ plantillaId: p.plantillaId }),
     });
 
     if (!r.ok) {

@@ -3,6 +3,7 @@ import { test, describe } from 'node:test';
 import { EnvioControlado, type OrdenEnvio, type RegistroEnvios } from './envioControlado.js';
 import { TransporteFalso } from './transporteFalso.js';
 import type { EstadoSesion, MensajeWhatsapp, ResultadoEnvio, TransporteWhatsapp } from './transporte.js';
+import { A_MANO, deUnDato, deUnPasoDePlantilla } from '../procedencia/pieza.js';
 
 /**
  * EnvioControlado es la puerta por la que sale TODO mensaje. Estos tests fijan las
@@ -217,5 +218,85 @@ describe('EnvioControlado — la marca de automático', () => {
     assert.equal(r.ok, false);
     assert.equal(transporte.enviados.length, 0);
     assert.equal(registro.fallidos.length, 1);
+  });
+});
+
+/**
+ * LA PROCEDENCIA VIAJA EN LA ORDEN (épica #169). No es un `update` posterior:
+ * viaja por la MISMA puerta, se audita en la MISMA fila, y por eso un envío
+ * bloqueado también deja escrito de qué pieza iba a salir.
+ */
+describe('EnvioControlado — de qué pieza salió', () => {
+  test('sin declarar pieza, el intento queda como escrito a mano: LA LÍNEA DE BASE', async () => {
+    const transporte = new TransporteFalso({ telefono: '51987654321' });
+    const registro = new RegistroFalso();
+    const envio = new EnvioControlado(transporte, registro);
+
+    await envio.enviar(orden());
+
+    // No es `undefined` ni un hueco: es un valor con nombre. Contra esto se
+    // compara toda pieza, así que tiene que existir aunque nadie lo declare.
+    assert.deepEqual(registro.intentos[0].procedencia, A_MANO);
+  });
+
+  test('la pieza declarada llega entera a la auditoría', async () => {
+    const transporte = new TransporteFalso({ telefono: '51987654321' });
+    const registro = new RegistroFalso();
+    const envio = new EnvioControlado(transporte, registro);
+
+    const pieza = deUnPasoDePlantilla({ plantillaId: 12, orden: 3, via: 'panel-sugerencia' });
+    await envio.enviar(orden({ procedencia: pieza }));
+
+    assert.deepEqual(registro.intentos[0].procedencia, pieza);
+  });
+
+  test('un envío BLOQUEADO también deja escrita la pieza que se iba a mandar', async () => {
+    // Si la procedencia se anotara recién al confirmar el envío, los bloqueos
+    // quedarían como escritos a mano — o sea, el freno ensuciaría la línea de
+    // base con envíos que ni siquiera salieron.
+    const transporte = new TransporteFalso({ telefono: '51987654321' });
+    const registro = new RegistroFalso();
+    const envio = new EnvioControlado(transporte, registro, () => true);
+
+    const pieza = deUnDato({ clave: 'cuotas', editada: false });
+    const r = await envio.enviar(orden({ procedencia: pieza }));
+
+    assert.equal(r.ok, false);
+    assert.equal(registro.fallidos.length, 1);
+    assert.deepEqual(registro.intentos[0].procedencia, pieza);
+  });
+
+  test('un adjunto declara pieza igual que un texto (misma puerta, misma auditoría)', async () => {
+    const transporte = new TransporteFalso({ telefono: '51987654321' });
+    const registro = new RegistroFalso();
+    const envio = new EnvioControlado(transporte, registro);
+
+    const pieza = deUnPasoDePlantilla({ plantillaId: 4, orden: 1, via: 'panel-secuencias' });
+    await envio.enviarMedia({
+      vendedoraId: 'ana',
+      numeroPropio: '51987654321',
+      telefono: '51961506674',
+      referencia: 'conv:whatsapp:51961506674:51987654321',
+      media: { ruta: '/tmp/flyer.jpg', clase: 'imagen', mime: 'image/jpeg', nombre: 'flyer.jpg', texto: null },
+      procedencia: pieza,
+    });
+
+    assert.deepEqual(registro.intentos[0].procedencia, pieza);
+  });
+
+  test('un adjunto sin pieza también cae a la línea de base, no a `undefined`', async () => {
+    const transporte = new TransporteFalso({ telefono: '51987654321' });
+    const registro = new RegistroFalso();
+    const envio = new EnvioControlado(transporte, registro);
+
+    await envio.enviarMedia({
+      vendedoraId: 'ana',
+      numeroPropio: '51987654321',
+      telefono: '51961506674',
+      referencia: 'conv:whatsapp:51961506674:51987654321',
+      media: { ruta: '/tmp/x.jpg', clase: 'imagen', mime: 'image/jpeg', nombre: 'x.jpg', texto: null },
+    });
+
+    assert.deepEqual(registro.intentos[0].procedencia, A_MANO);
   });
 });

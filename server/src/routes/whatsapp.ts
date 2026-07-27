@@ -13,6 +13,7 @@ import { RUTA_MEDIA, nombreSeguro } from '../whatsapp/mediaDir.js';
 import { normalizarTelefono } from '../whatsapp/identidadWa.js';
 import { FotoNoDisponibleError, type FotoPerfil, type MediaSaliente } from '../whatsapp/transporte.js';
 import { cancelarPorRespuestaHumana, faltaEsquema } from '../autorespuesta/repositorio.js';
+import { procedenciaDesdeColumnas } from '../procedencia/pieza.js';
 
 /**
  * LA CONVERSACIÓN NATIVA DE WHATSAPP dentro de Hermes: ver el hilo y responder,
@@ -71,6 +72,34 @@ async function hiloDe(telefono: string, conMarca = true) {
     }
     throw e;
   }
+}
+
+/**
+ * DE QUÉ PIEZA SALIÓ, cuando el texto pasó por el composer (épica #169).
+ *
+ * El bloque de datos recomendados y las dos respuestas del panel **no envían**:
+ * dejan el texto en la caja y la vendedora manda (la regla de #45). El server no
+ * tiene forma de saber de dónde salió ese texto, así que la pantalla lo declara
+ * acá — incluido si ella lo reescribió antes de mandar.
+ *
+ * **Ante cualquier duda, la línea de base**: un cuerpo raro NO se convierte en
+ * una pieza inventada. `procedenciaDesdeColumnas` es el mismo lector tolerante
+ * que usa la derivación, y ya está probado — perder una atribución es barato,
+ * inventarla es el error que este trabajo existe para no cometer.
+ */
+function procedenciaDelCuerpo(pieza: unknown) {
+  if (!pieza || typeof pieza !== 'object') return undefined;
+  const p = pieza as Record<string, unknown>;
+  const leida = procedenciaDesdeColumnas({
+    piezaClase: typeof p.clase === 'string' ? p.clase : null,
+    piezaRef: typeof p.ref === 'string' && p.ref.length <= 120 ? p.ref : null,
+    piezaVia: typeof p.via === 'string' ? p.via : null,
+    piezaEditada: p.editada === true,
+    // El momento NO viaja desde el cliente: lo clasifica el server en
+    // `enviarYProyectar`, con la misma cabeza que decide qué mandar.
+    momentoVenta: null,
+  });
+  return leida.tipo === 'pieza' ? leida : undefined;
 }
 
 /** El estado de la sesión, para el banner (conectado / sin-vincular / baneado…). */
@@ -139,6 +168,7 @@ whatsappRouter.post('/enviar', requiereVendedora, async (req, res) => {
     telefono: String(telefono ?? ''),
     texto: String(texto ?? ''),
     referencia: String(referencia ?? ''),
+    procedencia: procedenciaDelCuerpo(req.body?.pieza),
   });
 
   if (!r.ok) {

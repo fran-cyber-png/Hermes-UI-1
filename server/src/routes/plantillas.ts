@@ -8,6 +8,7 @@ import { requiereVendedora } from "../auth/sesion.js";
 import { ficha } from "../cerberus/ficha.js";
 import { RUTA_MEDIA, nombreSeguro } from "../whatsapp/mediaDir.js";
 import { enviarMediaYProyectar, enviarTextoYProyectar } from "../whatsapp/enviarYProyectar.js";
+import { deUnPasoDePlantilla } from "../procedencia/pieza.js";
 import { resolverCurso } from "../plantillas/catalogo.js";
 import { agruparEnFamilias } from "../plantillas/familias.js";
 import { catalogoActivo } from "../plantillas/catalogo.js";
@@ -338,6 +339,17 @@ const enviarPasoSchema = z.object({
   personaNombre: z.string().max(120).nullable().optional(),
   /** El último paso suma el uso: la plantilla se usó cuando terminó de salir. */
   ultimo: z.boolean().optional(),
+  /**
+   * POR QUÉ PANTALLA ENTRÓ (épica #169). Las dos respuestas del panel mandan
+   * exactamente el mismo paso que el buscador de secuencias, así que el server
+   * no puede distinguirlas solo: si esto no viajara, «¿las dos respuestas
+   * sirven de algo?» quedaría sin respuesta para siempre.
+   *
+   * Es la VÍA, no la identidad de la pieza: la secuencia 12 es la 12 venga de
+   * donde venga (ver `procedencia/pieza.ts`). Default `panel-secuencias`
+   * porque es de donde salían todos los envíos antes de que el panel existiera.
+   */
+  via: z.enum(["panel-sugerencia", "panel-secuencias"]).default("panel-secuencias"),
 });
 
 plantillasRouter.post("/:id/enviar-paso", async (req, res) => {
@@ -395,6 +407,14 @@ plantillasRouter.post("/:id/enviar-paso", async (req, res) => {
     numeroPropio: parsed.data.numeroPropio,
     telefono: parsed.data.telefono,
     referencia: parsed.data.clave,
+    // El paso es LA pieza (#169): la plantilla Y el orden. El flyer y el
+    // seguimiento de la misma secuencia funcionan distinto, y juntarlos en una
+    // sola pieza escondería justo lo que se quiere ver.
+    procedencia: deUnPasoDePlantilla({
+      plantillaId: plantilla.id,
+      orden: paso.orden,
+      via: parsed.data.via,
+    }),
   };
 
   let r;
