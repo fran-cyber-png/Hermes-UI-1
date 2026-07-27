@@ -109,3 +109,17 @@ test("el baseline crea la extensión vector antes de usar el tipo", () => {
     );
   }
 });
+
+test("el baseline conserva el índice GIN de notas", () => {
+  // La otra línea agregada a mano, y la que ya se perdió una vez: drizzle-orm 0.45 no
+  // emite índices de expresión, así que este GIN se creaba por SSH después de cada
+  // `db:push`. Era el ÚNICO drift real entre producción y una base nueva. Si alguien
+  // regenera el baseline y se olvida de volver a pegarlo, `db:adoptar` va a rehusarse
+  // contra producción (que sí lo tiene) — pero es mejor enterarse acá, en 200 ms.
+  const sql = readFileSync(join(DIR, "0000_baseline.sql"), "utf8");
+  assert.match(
+    sql,
+    /CREATE INDEX IF NOT EXISTS "notas_texto_gin_idx"[\s\S]*to_tsvector\('spanish'/,
+    "el baseline perdió el GIN de `notas` — se agrega A MANO al regenerar, ver src/db/schema.ts",
+  );
+});
