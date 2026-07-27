@@ -214,10 +214,13 @@ referenciado por nombre, regla dura #1). El cliente vive en `server/src/ivi/clie
   `502/504` de nginx/tailnet, que son transitorios. Marcarlos a todos `false` afirmaba «permanente»
   sobre algo que a los 10 s ya andaba. **El código decide primero**: un `503` es
   `ivi_sin_token_configurado`, config y no caída, y ser 5xx no lo vuelve transitorio.
-  ⚠️ **Hoy nadie lee ese flag**: el front de `main` no tiene pantalla de Ivi, y la del PR #174
-  (`feat/superficie-de-ivi@d2045f3`, sin mergear) re-deriva el reintento de su propia tabla por
-  `codigo` —`api()` descarta `reintentable` al armar el `ErrorApi`—. Lo arreglado es el contrato;
-  cablearlo a la UI está pendiente (**#175**). ADR 0021 §3 tiene la medición.
+  **El front LO LEE, y le gana a su propia tabla** (#175): `ErrorApi` lleva `reintentable` y
+  `lecturaDeError()` lo prefiere cuando viene. La tabla de `errores.ts` queda como **respaldo**
+  para un 502 de un server viejo que todavía no manda el campo — las dos tienen que existir, y
+  por eso lo que se fija con test es la **relación** entre ellas, no una sola implementación:
+  `server/src/ivi/paridad-front.test.ts` falla si divergen para el mismo `(codigo, estado)`.
+  Solo un booleano cuenta como opinión del server: `null` o una cadena quedan en `undefined` y
+  decide la tabla — «no se pronunció» tiene que ser distinguible de «no».
 - **Los campos informativos degradan, no tumban**: `numerosNoVerificados` acepta ausente, `null` y
   hasta una forma inesperada (se ignora y se loguea) — un campo accesorio no puede convertir una
   respuesta buena en un 502. Los tres que cargan el peso (`texto`, `tipo`, `groundingOk`) **sí**

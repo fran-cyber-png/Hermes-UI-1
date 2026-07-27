@@ -217,9 +217,10 @@ function estadoTransitorio(estado: number): boolean {
  * funcionaba. El `estado` ya venía en el `ErrorIvi`; solo faltaba mirarlo. El campo se llama
  * `reintentable`: no puede afirmar más de lo que sabe.
  *
- * Y este comentario tampoco: **hoy ningún consumidor lee el flag** —el front no tiene pantalla de
- * Ivi, y la del PR #174 re-deriva el reintento de una tabla propia—, así que lo que se arregló acá
- * es el contrato, no un botón que a alguien le faltara en la pantalla. ADR 0021 §3 lo mide.
+ * Desde **#175 el flag se lee de verdad**: `api()` lo copia al `ErrorApi` y `lecturaDeError()` lo
+ * prefiere sobre la tabla del front, que quedó como respaldo para un server viejo. Esta función
+ * ya no decide solo un campo del contrato: **decide el botón «Reintentar»** que ve una vendedora.
+ * `paridad-front.test.ts` se pone rojo si las dos tablas dejan de coincidir sin estado.
  *
  * El orden importa: **el código decide primero y el estado solo desempata el cajón de sastre**.
  * Un `503` es el `ivi_sin_token_configurado` de `autorizar()` —config de geografo, no una

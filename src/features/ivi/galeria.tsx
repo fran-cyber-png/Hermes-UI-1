@@ -82,6 +82,24 @@ const ERROR_HOY = new ErrorApi(
 );
 const ERROR_TIMEOUT = new ErrorApi('Ivi no respondió a tiempo (30 s).', 502, undefined, undefined, 'timeout');
 
+/**
+ * EL MISMO CÓDIGO QUE `ERROR_HOY`, Y SE VE DISTINTO (#175).
+ *
+ * `http_inesperado` es un cajón de sastre: adentro caen el 404 de «Ivi todavía no desplegó»
+ * (permanente) y el 500 propio de Ivi —pgvector reiniciándose, Bedrock sin credenciales— que a
+ * los 10 s ya anda. El server los separa mirando el estado HTTP y lo dice en `reintentable`.
+ *
+ * Las dos cajas de abajo son la prueba de que el flag llega: mismo `codigo`, distinto botón.
+ */
+const ERROR_TRANSITORIO_DE_IVI = new ErrorApi(
+  'Ivi respondió con un estado inesperado (500).',
+  502,
+  undefined,
+  undefined,
+  'http_inesperado',
+  true,
+);
+
 function Caja({ titulo, nota, children }: { titulo: string; nota: string; children: React.ReactNode }) {
   return (
     <section data-caja={titulo} className="w-[26rem] max-w-full">
@@ -198,6 +216,12 @@ function Galeria() {
         </Caja>
         <Caja titulo="Error — lo que se ve HOY" nota="La ruta de Ivi da 404 en producción. Nunca «no encontró datos».">
           <FalloDeIvi error={ERROR_HOY} onReintentar={() => {}} />
+        </Caja>
+        <Caja
+          titulo="Error transitorio — MISMO código, con reintento"
+          nota="http_inesperado también trae el 500 de Ivi, que a los 10 s ya anda. El botón lo decide el server (#175)."
+        >
+          <FalloDeIvi error={ERROR_TRANSITORIO_DE_IVI} onReintentar={() => {}} />
         </Caja>
         <Caja titulo="Error transitorio" nota="Solo lo que puede dar otro resultado ofrece «Reintentar».">
           <FalloDeIvi error={ERROR_TIMEOUT} onReintentar={() => {}} />

@@ -19,6 +19,23 @@ import { ErrorApi } from '../../lib/datos/cliente';
  *
  * `reintentable` no es un adorno: ofrecer «Reintentar» ante un `falta_config` es hacerle
  * perder el tiempo a alguien con un botón que no puede funcionar nunca.
+ *
+ * ══ QUIÉN DECIDE `reintentable`: EL SERVER, Y ESTA TABLA ES EL RESPALDO ══════
+ *
+ * El 502 trae el flag ya calculado (`esReintentable`, `server/src/ivi/cliente.ts`) y **cuando
+ * viene, gana**. La tabla de abajo solo decide cuando el server no se pronunció.
+ *
+ * No es deferencia: hay una pregunta que esta tabla **no puede** responder. `http_inesperado`
+ * es un cajón de sastre — adentro caen el `404` de «Ivi todavía no desplegó la ruta»
+ * (permanente) y el `500` propio de Ivi o los `502/504` de nginx (transitorios, a los 10 s ya
+ * anda). El server los separa mirando el **estado HTTP**; acá el estado no llega, y una tabla
+ * indexada solo por `codigo` tiene que elegir un valor fijo para los dos casos. Elige el
+ * conservador (`false`), que es correcto para el 404 de hoy y **equivocado** para el 500 —
+ * justo el caso en que la vendedora tendría que poder reintentar.
+ *
+ * Por eso las dos cosas conviven y ninguna sobra: sin la tabla, un server viejo dejaría la
+ * pantalla sin criterio; sin el flag, `http_inesperado` miente en la mitad de los casos.
+ * `server/src/ivi/paridad-front.test.ts` se pone rojo si vuelven a decir cosas distintas.
  */
 
 /** Los ocho de `CODIGO_ERROR_IVI` (server/src/ivi/cliente.ts). El test los recorre a todos. */
@@ -97,9 +114,13 @@ const LECTURAS: Record<CodigoErrorIvi, Omit<LecturaDeError, 'codigo'>> = {
   },
   http_inesperado: {
     titulo: 'Ivi respondió algo que no estaba previsto',
+    // NO nombra un solo estado. Este código es un cajón de sastre: adentro caen el 404 de «la
+    // ruta todavía no está publicada» (permanente) y el 500 de Ivi o el 502 de nginx (a los 10 s
+    // ya anda). Desde #175 el segundo caso SÍ ofrece «Reintentar», así que un detalle que dijera
+    // «(404)» se contradiría con el botón que tiene al lado.
     detalle:
-      'Un estado HTTP que Hermes no espera. Hoy pasa cuando la ruta de Ivi todavía no está publicada (404).',
-    queHacer: 'Es del equipo de Ivi. ' + AVISAR,
+      'Un estado HTTP que Hermes no espera. Puede ser que la ruta de Ivi todavía no esté publicada, o que Ivi se haya caído un momento.',
+    queHacer: 'Si aparece «Reintentar», probá una vez. Si no, es del equipo de Ivi: ' + AVISAR.toLowerCase(),
     culpa: 'ivi',
     reintentable: false,
   },
@@ -146,17 +167,39 @@ function esCodigoConocido(c: string): c is CodigoErrorIvi {
   return (CODIGOS_ERROR_IVI as readonly string[]).includes(c);
 }
 
+/**
+ * Lo que el server dijo sobre reintentar, si dijo algo, pisando lo que haya decidido la tabla.
+ *
+ * Se aplica DESPUÉS de elegir la lectura y no adentro de cada rama, para que no se pueda
+ * agregar un caso nuevo y olvidarse de respetar el flag.
+ */
+function conLoQueDijoElServer(
+  lectura: LecturaDeError,
+  reintentable: boolean | undefined,
+): LecturaDeError {
+  return reintentable === undefined ? lectura : { ...lectura, reintentable };
+}
+
 /** Traduce lo que sea que haya fallado a algo accionable. `null` si no falló nada. */
 export function lecturaDeError(err: unknown): LecturaDeError | null {
   if (!err) return null;
 
   if (err instanceof ErrorApi) {
+    // El 401 se resuelve antes que nada y NO consulta el flag: lo emite el perímetro de auth,
+    // no el proxy de Ivi, y «volvé a entrar» no es un reintento de la misma consulta.
     if (err.status === 401) return { ...SESION, codigo: '401' };
+
     const codigo = err.codigo ?? '';
-    if (esCodigoConocido(codigo)) return { ...LECTURAS[codigo], codigo };
-    if (codigo) return { ...desconocido(codigo), codigo };
-    // Un 502 sin código nombrado: no se puede afinar más, pero sigue sin ser «no hay datos».
-    return { ...LECTURAS.desconocido, codigo: String(err.status) };
+    // Un código que esta versión no conoce es el caso donde el flag más vale: la tabla no
+    // tiene entrada para él y sin el server diría «no reintentes» sobre algo transitorio.
+    const lectura: LecturaDeError = esCodigoConocido(codigo)
+      ? { ...LECTURAS[codigo], codigo }
+      : codigo
+        ? { ...desconocido(codigo), codigo }
+        : // Un 502 sin código nombrado: no se puede afinar más, pero sigue sin ser «no hay datos».
+          { ...LECTURAS.desconocido, codigo: String(err.status) };
+
+    return conLoQueDijoElServer(lectura, err.reintentable);
   }
 
   return { ...SIN_SERVER, codigo: 'sin_server' };

@@ -82,3 +82,63 @@ describe('lecturaDeError — cada código dice qué pasó y qué hacer', () => {
     expect(lecturaDeError(null)).toBeNull();
   });
 });
+
+/**
+ * #175 — CUANDO EL SERVER SE PRONUNCIA, MANDA ÉL.
+ *
+ * El 502 trae `reintentable` ya calculado, con el estado HTTP a la vista. Acá el estado no
+ * llega, así que la tabla de este archivo **no puede** decidir bien `http_inesperado`: adentro
+ * de ese código conviven el 404 permanente y el 500 transitorio.
+ *
+ * Los tests de arriba siguen construyendo el error SIN el flag a propósito: son los que fijan
+ * el respaldo para un server viejo. Estos fijan la preferencia.
+ */
+function error502Con(codigo: string, reintentable: boolean | undefined) {
+  return new ErrorApi('lo que sea que diga el server', 502, undefined, undefined, codigo, reintentable);
+}
+
+describe('lecturaDeError — el flag del server le gana a la tabla del front', () => {
+  it('EL CASO DEL ISSUE: el 500 transitorio de Ivi ofrece reintentar, aunque la tabla diga que no', () => {
+    // `http_inesperado` es el cajón de sastre. Con un 500 de Ivi —pgvector reiniciándose— el
+    // server manda `reintentable: true`; la tabla, que no ve el estado, tiene `false`.
+    expect(leer('http_inesperado').reintentable).toBe(false);
+    expect(lecturaDeError(error502Con('http_inesperado', true))!.reintentable).toBe(true);
+  });
+
+  it('y el 404 del mismo código sigue sin ofrecerlo: no es «siempre true», es lo que dijo el server', () => {
+    expect(lecturaDeError(error502Con('http_inesperado', false))!.reintentable).toBe(false);
+  });
+
+  it('el flag también apaga: un server que dice `false` sobre algo que la tabla cree transitorio', () => {
+    expect(leer('timeout').reintentable).toBe(true);
+    expect(lecturaDeError(error502Con('timeout', false))!.reintentable).toBe(false);
+  });
+
+  it('un código que esta versión no conoce toma el flag — es donde la tabla no tiene NADA que decir', () => {
+    const l = lecturaDeError(error502Con('codigo_del_futuro', true))!;
+    expect(l.codigo).toBe('codigo_del_futuro');
+    expect(l.reintentable).toBe(true);
+    // Y se sigue leyendo como un código desconocido, no como uno inventado.
+    expect(l.titulo.length).toBeGreaterThan(0);
+  });
+
+  it('sin flag manda la tabla: un server viejo no deja la pantalla sin criterio', () => {
+    expect(lecturaDeError(error502Con('timeout', undefined))!.reintentable).toBe(true);
+    expect(lecturaDeError(error502Con('falta_config', undefined))!.reintentable).toBe(false);
+  });
+
+  it('el flag NO toca el resto de la lectura: solo responde «¿sirve reintentar?»', () => {
+    const sin = leer('http_inesperado');
+    const con = lecturaDeError(error502Con('http_inesperado', true))!;
+    expect(con.titulo).toBe(sin.titulo);
+    expect(con.detalle).toBe(sin.detalle);
+    expect(con.culpa).toBe(sin.culpa);
+    expect(con.codigo).toBe(sin.codigo);
+  });
+
+  it('un 401 no consulta el flag: «volvé a entrar» no es reintentar la misma consulta', () => {
+    const l = lecturaDeError(new ErrorApi('no autorizado', 401, undefined, undefined, undefined, true))!;
+    expect(l.culpa).toBe('sesion');
+    expect(l.reintentable).toBe(false);
+  });
+});

@@ -87,6 +87,22 @@ lo es. Cablear la UI a ese contrato —o borrar la tabla duplicada del front— 
 trackeado en **#175**, y mientras no se haga, la frase «la app dibuja el botón con este flag» es una
 promesa, no una descripción.
 
+> **Cerrado el 2026-07-27 (#175).** La promesa pasó a ser descripción: `ErrorApi` lleva
+> `reintentable`, `api()` lo copia del cuerpo y `lecturaDeError()` lo prefiere sobre su tabla.
+>
+> **No se borró la tabla del front**, que era la otra salida que este párrafo ofrecía, y el motivo
+> es el que la medición de arriba no había mirado: sin ella, un 502 de un server viejo —uno que
+> todavía no manda el campo— dejaría la pantalla sin ningún criterio. Las dos tienen que existir,
+> así que lo que se fija con test no es «una sola implementación» (la lección de #37 no aplica tal
+> cual acá) sino **la relación**: `server/src/ivi/paridad-front.test.ts` falla si divergen para el
+> mismo `(codigo, estado)`, y afirma aparte que `http_inesperado` **sí** depende del estado — el
+> día que deje de depender, el flag sobra y el test lo dice.
+>
+> Un detalle que solo se ve al dibujarlo: el texto de `http_inesperado` decía «(404)», y con el
+> botón de reintento al lado se contradecía a sí mismo. La copia dejó de nombrar un solo estado.
+> Evidencia: `docs/evidencia/175-404-sin-reintento.png` y `175-500-con-reintento.png` — **mismo
+> código, distinto botón**.
+
 ### 4 · El `traza_id` nace en Hermes y va desde el día uno
 
 Cada pregunta lleva un `traza_id` (`hermes-<uuid>`) que Hermes devuelve a la app **tanto en el éxito

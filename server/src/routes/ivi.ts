@@ -59,10 +59,10 @@ export function iviRouter(preguntar: PreguntarAIvi = preguntarleAIvi): Router {
       // reiniciando», y le afirma «permanente» al segundo, que a los 10 s ya andaba.
       // Ver `esReintentable`.
       //
-      // Tiempo verbal, a propósito: este flag es para que la app NO tenga que reimplementar la
-      // tabla de códigos, pero HOY NADIE LO LEE. Medido en esta rama, `grep -rn "api/ivi" src/`
-      // no da una línea; el consumidor vive en el PR #174 y, verificado contra
-      // `feat/superficie-de-ivi@d2045f3`, tampoco lee este campo todavía. ADR 0021 §3.
+      // Y desde #175 el flag SÍ se lee: `api()` lo copia al `ErrorApi` y `lecturaDeError()` lo
+      // prefiere sobre su propia tabla, que quedó como respaldo para un server viejo. O sea que
+      // cambiar `esReintentable` acá cambia el botón que ve la vendedora — no es solo contrato.
+      // `server/src/ivi/paridad-front.test.ts` falla si las dos tablas divergen.
       if (err instanceof ErrorIvi) {
         console.error(`ivi: ${err.codigo} — ${err.message} [traza ${err.trazaId ?? '—'}]`, err.cause ?? '');
         res.status(502).json({

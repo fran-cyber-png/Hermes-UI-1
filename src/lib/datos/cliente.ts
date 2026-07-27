@@ -62,13 +62,38 @@ export class ErrorApi extends Error {
    * «algo falló», que es justo lo que la regla fail-closed vino a evitar.
    */
   readonly codigo?: string;
+  /**
+   * SI REINTENTAR PUEDE DAR OTRO RESULTADO — **según el server, que es el que sabe**.
+   *
+   * El proxy de Ivi ya calcula esto (`esReintentable`, `server/src/ivi/cliente.ts`) y lo manda
+   * en cada 502 **exactamente para que la app no reimplemente la tabla de códigos**. Hasta acá
+   * se descartaba en este borde, así que la pantalla la reimplementaba igual — y ya divergía
+   * antes de mergear (#175).
+   *
+   * Lo que el front NO puede reproducir por su cuenta: `http_inesperado` es un cajón de sastre
+   * donde caen el `404` de «todavía no lo desplegaron» (permanente) y el `500` de Ivi o los
+   * `502/504` de nginx (transitorios). El server los distingue mirando el **estado HTTP**, que
+   * no viaja en el cuerpo. Una tabla indexada solo por `codigo` no puede acertar los dos.
+   *
+   * `undefined` = el endpoint no se pronunció (un server viejo, o un error que no es de Ivi).
+   * Ahí manda la tabla del front, que sigue siendo el respaldo — nunca se asume `false` acá.
+   */
+  readonly reintentable?: boolean;
 
-  constructor(message: string, status: number, tipo?: string, errores?: string[], codigo?: string) {
+  constructor(
+    message: string,
+    status: number,
+    tipo?: string,
+    errores?: string[],
+    codigo?: string,
+    reintentable?: boolean,
+  ) {
     super(message);
     this.status = status;
     this.tipo = tipo;
     this.errores = errores;
     this.codigo = codigo;
+    this.reintentable = reintentable;
   }
 }
 
@@ -106,6 +131,9 @@ export async function api<T>(ruta: string, init?: RequestInit): Promise<T> {
       cuerpo.type,
       errores,
       typeof cuerpo.codigo === 'string' ? cuerpo.codigo : undefined,
+      // Solo un booleano de verdad cuenta como que el server se pronunció. Cualquier otra cosa
+      // —ausente, `null`, una cadena— queda en `undefined` y decide la tabla del front.
+      typeof cuerpo.reintentable === 'boolean' ? cuerpo.reintentable : undefined,
     );
   }
   return res.json() as Promise<T>;
