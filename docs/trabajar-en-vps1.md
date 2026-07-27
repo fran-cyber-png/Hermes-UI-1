@@ -135,8 +135,10 @@ deploys — el porqué está en `docs/migraciones.md`.
 **Los secretos se referencian, no se pegan.** Podés leer `/srv/hermes/server/.env`; no lo copies a un
 chat, a un issue ni a un archivo del repo. CI falla si aparece un `.env` versionado.
 
-**Nada de automatizar WhatsApp.** No hay envío masivo, ni auto-respuesta, ni warmup. Un envío es una
-acción humana. Esto no es una preferencia técnica: es política de la casa.
+**Nada de automatizar WhatsApp.** No hay envío masivo, ni warmup, ni anti-ban. Un envío es una acción
+humana. Esto no es una preferencia técnica: es política de la casa. La única excepción escrita es la
+auto-respuesta fuera de horario (ADR 0015/0016/0018), que hoy corre en **modo supervisado**: prepara
+el borrador y espera el OK de una vendedora. Nunca manda sola.
 
 **La sesión de WhatsApp es la credencial de la cuenta.** Vive en `/srv/hermes/server/.wa-sessions/`.
 No la copies, no la muevas, no la commitees.
@@ -153,6 +155,7 @@ No la copies, no la muevas, no la commitees.
 | El server no levanta | `sudo hermes-deploy --rollback` |
 | «cambios locales sin commitear» | `git -C /srv/hermes status --short -uno && git -C /srv/hermes diff` — **mirá qué son antes de descartarlos** |
 | Una migración «se aplicó» pero la tabla no está | Es el `when`. Ver `docs/migraciones.md` § «Cuando algo sale mal» |
+| No sé en qué estado está la base | `cd /srv/hermes/server && npm run db:estado` — solo lee, dice qué le falta o qué le sobra |
 | No sé si prod está viva | `curl -s https://hermes-api.goberna.us/health` |
 
 Un despliegue fallido **abre un issue solo** con el estado del servidor y los logs. No hace falta que
