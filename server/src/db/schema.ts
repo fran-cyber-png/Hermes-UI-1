@@ -934,3 +934,50 @@ export const hechos = pgTable(
   },
   (t) => [index("hechos_orden_idx").on(t.activo, t.orden)],
 );
+
+/**
+ * EL PADRÓN DE CLIENTES, EN COPIA LOCAL (#133) — para que la cola sepa quién ya
+ * compró SIN una llamada por fila.
+ *
+ * ── Por qué existe ──
+ * Hermes ya sabía quién es cliente: `cerberus/ficha.ts` lo pregunta por HTTP…
+ * **de a una, al abrir cada conversación**. Para las 1.997 filas de la cola eso
+ * son 1.997 llamadas a un Cerberus que a veces deja la conexión abierta sin
+ * responder (por eso el techo de 12 s del panel). Inviable. Y sin ese dato en el
+ * listado, las **140 personas que ya le compraron a Goberna se ven exactamente
+ * igual que un desconocido** — siendo el lead más barato de convertir.
+ *
+ * Así que el padrón se SINCRONIZA (`npm run clientes:sincronizar`, mismo patrón
+ * que `ingest:leads` / `ingest:icarus`) y la cola lo cruza por teléfono en la
+ * MISMA pasada, como ya cruza `leads` para el chip de curso.
+ *
+ * ── Qué guarda, y qué no ──
+ * Lo mínimo para marcar una fila: con qué llave cruzar (`sufijo`), con qué
+ * desmentir un cruce mentiroso (`codigo_pais`, el falso positivo de #119) y qué
+ * decir (`nivel`, `compras`). **Nombre, correo, DNI y monto gastado NO se
+ * copian**: para eso está la ficha viva, que es la fuente de verdad y se
+ * consulta cuando la vendedora abre la conversación. Ver `clientes/padron.ts`
+ * §PII.
+ *
+ * ── Es DERIVADA y descartable ──
+ * No es fuente de verdad de nada: se puede truncar y volver a sincronizar. El
+ * `nivel` viene ya decidido por `clientes/nivel.ts` (la jerarquía vive una sola
+ * vez, en TS puro); el SQL de la cola no recalcula, lee.
+ */
+export const clientesPadron = pgTable(
+  "clientes_padron",
+  {
+    /** Id con namespace de la fuente (`icarus:1234`): mañana puede haber otra. */
+    clienteId: text("cliente_id").primaryKey(),
+    /** Los últimos 9 dígitos del E.164 — la MISMA llave de `sufijoTelefonoSql`. */
+    sufijo: text("sufijo").notNull(),
+    /** `51` · `52` · `502`… La guarda contra el cruce entre países. NULL = no se supo. */
+    codigoPais: text("codigo_pais"),
+    /** Cuántas compras registra el padrón. Es lo que dice «×3» en la fila. */
+    compras: integer("compras").notNull().default(0),
+    /** `vip` | `recompro` | `compro`, congelado al sincronizar (`clientes/nivel.ts`). */
+    nivel: text("nivel").notNull(),
+    sincronizadoAt: timestamp("sincronizado_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("clientes_padron_sufijo_idx").on(t.sufijo)],
+);

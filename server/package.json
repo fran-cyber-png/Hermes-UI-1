@@ -16,6 +16,7 @@
     "test:db": "tsx src/pruebas/montarBase.ts && tsx --test src/**/*.test.db.ts",
     "ingest:interactions": "tsx src/scripts/ingestInteractions.ts",
     "ingest:icarus": "tsx src/scripts/ingestIcarus.ts",
+    "clientes:sincronizar": "tsx src/scripts/sincronizarClientes.ts",
     "medir:correo": "tsx src/scripts/medirCorreoFichas.ts",
     "medir:cotizaciones": "tsx src/scripts/medirCotizaciones.ts",
     "plantillas:proponer": "tsx src/scripts/proponerPlantillas.ts",
