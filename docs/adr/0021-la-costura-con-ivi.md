@@ -44,21 +44,53 @@ del otro lado: un fallo nunca se disfraza de «no hay datos», **y un «no sé»
 disfraza de fallo**. Ivi funcionó y decidió que no sabe: eso es un producto, y la app lo muestra.
 
 Reintentarlo sería pedirle la misma respuesta otra vez y cobrarle el tiempo a la vendedora. Por eso
-el reintento se decide por `codigo` y en un solo lugar (`esReintentable`): **solo `timeout` y `red`**
-—los dos transitorios de verdad— son reintentables. Config y contrato roto dan exactamente el mismo
-error un minuto después; reintentarlos es esconder el bug detrás de un spinner más largo. La ruta
-manda `reintentable` en el 502 para que la app no reimplemente esa tabla.
+el reintento se decide en un solo lugar (`esReintentable`), y la ruta manda `reintentable` en el 502
+para que la app no reimplemente esa tabla.
+
+**El `codigo` decide, y el estado HTTP desempata un caso.** `timeout` y `red` son transitorios
+siempre; config y contrato roto dan exactamente el mismo error un minuto después, y reintentarlos es
+esconder el bug detrás de un spinner más largo. Pero `http_inesperado` es un **cajón de sastre** y la
+primera versión de esta regla —que miraba solo el `codigo`— le afirmaba `false` a las tres cosas que
+caen adentro:
+
+| Lo que cae en `http_inesperado` | Vida | Qué decía antes |
+|---|---|---|
+| `404` — el endpoint todavía no está desplegado (I1) | permanente | `false` ✅ |
+| `500` — el `except Exception` de Ivi (pgvector caído, Bedrock sin credenciales) | **transitorio** | `false` ❌ |
+| `502`/`504` — nginx o la tailnet delante de geografo | **transitorio** | `false` ❌ |
+
+El campo se llama `reintentable`: con `false` la app no dibuja el botón, así que un pgvector
+reiniciándose le quitaba a la vendedora la única acción que la habría desbloqueado. El `estado` ya
+viajaba en el `ErrorIvi`; solo faltaba mirarlo. Un `5xx`, un `408` o un `429` en ese cajón son
+transitorios; el resto no. El orden importa: **el código decide primero** — un `503` es el
+`ivi_sin_token_configurado` de Ivi, config y no caída, y ser 5xx no lo vuelve transitorio.
 
 ### 4 · El `traza_id` nace en Hermes y va desde el día uno
 
-Cada pregunta lleva un `traza_id` (`hermes-<uuid>`) que Ivi guarda en su traza y propaga al SDK, y
-que Hermes devuelve a la app **tanto en el éxito como en el 502**.
+Cada pregunta lleva un `traza_id` (`hermes-<uuid>`) que Hermes devuelve a la app **tanto en el éxito
+como en el 502**.
 
-Hoy no se ve. Va igual porque **es el único hilo que une «qué recomendó Ivi» (en la base de Ivi) con
-«qué se mandó y qué resultó» (en la de Hermes)**, y porque es un dato que no se puede reconstruir
-después: la request ya pasó. Es el mismo argumento que Ivi hace por la versión de cada pieza (H5) y
+**Del otro lado todavía no cierra el lazo, y conviene decirlo con la foto en la mano.** Verificado
+contra `ivi-cerebro` **@`1e5d2f3`** (HEAD commiteado, 27-jul): `responder()` es
+`responder(pregunta, usuario=None, historial=None)` — sin `traza_id` ni `superficie` — y `rag/traza.py`
+no existe. En el **árbol de trabajo sin commitear** de ese repo las dos cosas sí están
+(`responder(..., superficie="chat", sesion_id=None, traza_id=None, sensor=True)` y `rag/traza.py`),
+y el handler de `/api/preguntar` ya se lo pasa. O sea: **hoy el uuid nace, viaja y se descarta en los
+dos extremos**, y va a empezar a guardarse cuando Ivi commitee y despliegue ese trabajo.
+
+Se manda igual, y eso no cambia: **es el único hilo que unirá «qué recomendó Ivi» (en la base de Ivi)
+con «qué se mandó y qué resultó» (en la de Hermes)**, y es un dato que no se puede reconstruir
+después — la request ya pasó. Empezar a mandarlo cuando el otro lado esté listo significaría no tener
+traza de nada de lo anterior. Es el mismo argumento que Ivi hace por la versión de cada pieza (H5) y
 el que Hermes hace por `campana_fuente` (ADR 0018) — sin el «por qué», una recomendación no se puede
 supervisar, solo obedecer.
+
+> **Lección de método, que es la parte que vale más que el campo.** La versión anterior de este ADR
+> decía, en presente, que «Ivi lo guarda en su traza y lo propaga al SDK». No era cierto de ninguna
+> de las dos fotos: mezclaba el árbol sucio (de donde salía el tope de tokens) con el HEAD (de donde
+> salía el handler), sin decir de cuál venía cada cosa. **Una afirmación sobre otro repo tiene que
+> decir contra qué snapshot se verificó**, o envejece sin que nadie note cuándo dejó de ser verdad —
+> y el que construye encima la lee como garantía.
 
 La traza se pega al `ErrorIvi` en **un solo lugar** (la salida de `preguntarleAIvi`), para que
 ningún `throw` futuro se olvide de ponerla. Un 502 sin traza no se puede cruzar con nada, y es

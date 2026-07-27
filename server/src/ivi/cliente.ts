@@ -313,24 +313,45 @@ export interface DepsIvi {
 /** El presupuesto de tiempo para toda la ida y vuelta (fetch + lectura del body). Fijado por test. */
 export const TIMEOUT_MS = 30_000;
 
-/**
- * Qué superficie de Hermes pregunta. Ivi lo usa para el tope de salida (`hermes` = 600 tokens).
+/*
+ * ⚠️ LO QUE SIGUE AFIRMA COSAS SOBRE OTRO REPO. Cada una dice contra qué FOTO se verificó, porque
+ * `ivi-cerebro` tiene hoy trabajo sin commitear y las dos fotos NO dicen lo mismo:
  *
- * Hoy no hace nada: su handler HTTP (`rag/web.py`, /api/preguntar) todavía no lo pasa a
- * `responder()`, y sin él queda en el tope de `chat` — que para Hermes es el mismo número. Se
- * manda igual porque el día que lo cableen no hay que tocar nada de este lado, y porque un campo
- * que Ivi no conoce lo ignora (su handler lee del dict, no valida el cuerpo).
+ *   @1e5d2f3 (HEAD commiteado, 27-jul)   `responder(pregunta, usuario=None, historial=None)`.
+ *                                        Ni `traza_id` ni `superficie`. `rag/traza.py` no existe.
+ *   árbol de trabajo (sin commitear)     `responder(..., superficie="chat", sesion_id=None,
+ *                                        traza_id=None, sensor=True)` + `rag/traza.py`, y el
+ *                                        handler de /api/preguntar ya se los pasa.
+ *
+ * Sin ese encabezado, una nota escrita hoy se lee mañana como garantía y nadie sabe cuándo dejó de
+ * ser verdad. La versión anterior de este comentario mezcló las dos fotos y afirmó en presente algo
+ * que no era cierto de ninguna.
+ */
+
+/**
+ * Qué superficie de Hermes pregunta. Ivi la usará para el tope de salida (`hermes` = 600 tokens).
+ *
+ * **Hoy no hace nada.** En `@1e5d2f3`, `responder()` ni siquiera acepta el parámetro; en el árbol de
+ * trabajo de Ivi sí, y el handler ya se lo pasa — o sea que empezará a tener efecto cuando eso se
+ * commitee y despliegue. Se manda desde ya porque el día que llegue no hay que tocar nada de este
+ * lado, y porque un campo que Ivi no conoce lo ignora (su handler lee del dict, no valida el cuerpo).
  */
 const SUPERFICIE = 'hermes';
 
 /**
- * EL `traza_id` — el único hilo que une «qué recomendó Ivi» (en la base de Ivi) con «qué se
- * mandó y qué resultó» (en la de Hermes). Se genera de este lado, en cada pregunta, y viaja
- * en el cuerpo; Ivi lo guarda en su traza y lo propaga al SDK.
+ * EL `traza_id` — el hilo destinado a unir «qué recomendó Ivi» (en la base de Ivi) con «qué se
+ * mandó y qué resultó» (en la de Hermes). Se genera de este lado, en cada pregunta, y viaja en el
+ * cuerpo.
  *
- * Va desde el día uno aunque todavía no se vea: es un dato que no se puede reconstruir después
- * —la request ya pasó— y sin él el lazo de aprendizaje no cierra nunca. El prefijo dice de qué
- * lado nació, que es lo primero que uno quiere saber leyendo un log ajeno.
+ * **HOY NO CIERRA NINGÚN LAZO, y eso hay que saberlo antes de construir encima.** En `@1e5d2f3`
+ * nadie lo lee: el uuid nace acá, viaja y se descarta en los dos extremos, sin error ni log que lo
+ * delate. Del lado de Ivi ya existe el trabajo que lo guardaría (`rag/traza.py` + `traza.encolar(…,
+ * traza_id=…)`), pero está sin commitear y sin desplegar.
+ *
+ * Se manda igual, y esa parte no depende de ellos: es un dato que no se puede reconstruir después
+ * —la request ya pasó—, así que arrancar el día que el otro lado esté listo significaría no tener
+ * traza de nada de lo anterior. El prefijo dice de qué lado nació, que es lo primero que uno quiere
+ * saber leyendo un log ajeno.
  */
 export function nuevaTrazaId(): string {
   return `hermes-${randomUUID()}`;

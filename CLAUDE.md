@@ -195,15 +195,29 @@ referenciado por nombre, regla dura #1). El cliente vive en `server/src/ivi/clie
   `CUERPO_REAL_DE_IVI` (copia de `contrato_hermes()` de ivi-cerebro).
 - **Un `200` con `tipo: SIN_EVIDENCIA` NO es un error** (ADR 0021): Ivi funcionó y no sabe, y eso es
   una respuesta que la app muestra. La contracara de «un 404 no es "no hay respuesta clara"». **Y no
-  se reintenta**: el reintento se decide por `codigo` en `esReintentable` (solo `timeout` y `red`) y
-  el 502 lo dice en `reintentable` para que la app no reimplemente la tabla. El vocabulario de
+  se reintenta**: Ivi ya decidió. El vocabulario de
   `tipo` (`TIPO_IVI`: `HECHO` · `CONTEXTO` · `SIN_EVIDENCIA`) está publicado para que la UI
   ramifique, pero el schema **no lo cierra**: un tipo nuevo cae en la rama conservadora, nunca en
   `HECHO` ni en un throw.
+- **`reintentable` mira el `codigo` Y el estado HTTP** (`esReintentable`), y el 502 lo dice para que
+  la app no reimplemente la tabla. `timeout` y `red` siempre; config y contrato roto nunca (dan el
+  mismo error un minuto después). El caso que obliga a mirar el estado es **`http_inesperado`, que
+  es un cajón de sastre**: adentro caen el `404` de «todavía no lo desplegaron» (permanente) **y**
+  el `500` propio de Ivi —su `except Exception`: pgvector caído, Bedrock sin credenciales— y los
+  `502/504` de nginx/tailnet, que son transitorios. Marcarlos a todos `false` le borraba el botón
+  «Reintentar» a la vendedora justo cuando servía. **El código decide primero**: un `503` es
+  `ivi_sin_token_configurado`, config y no caída, y ser 5xx no lo vuelve transitorio.
+- **Los campos informativos degradan, no tumban**: `numerosNoVerificados` acepta ausente, `null` y
+  hasta una forma inesperada (se ignora y se loguea) — un campo accesorio no puede convertir una
+  respuesta buena en un 502. Los tres que cargan el peso (`texto`, `tipo`, `groundingOk`) **sí**
+  son estrictos: ahí el fail-closed no se negocia.
 - **`traza_id`**: cada pregunta lleva uno (`hermes-<uuid>`, generado acá) y vuelve a la app en el
-  éxito **y en el 502**. Hoy no se ve; va igual porque es lo único que une «qué recomendó Ivi» con
-  «qué se mandó y qué resultó», y no se puede reconstruir después. También viaja `superficie:
-  hermes` (tope de salida del lado de Ivi).
+  éxito **y en el 502**. ⚠️ **Hoy no cierra ningún lazo**: verificado contra `ivi-cerebro@1e5d2f3`,
+  `responder()` no acepta `traza_id` ni `superficie` y `rag/traza.py` no existe — el uuid nace,
+  viaja y **se descarta en los dos extremos**, sin error que lo delate. En el árbol de trabajo *sin
+  commitear* de ese repo las dos cosas ya están. Se manda igual porque no se puede reconstruir
+  después. **Al afirmar algo sobre otro repo, decí contra qué snapshot lo verificaste**: acá se
+  mezclaron dos fotos una vez y el ADR terminó prometiendo un lazo que no existía.
 - **FAIL-CLOSED y RUIDOSO**: cualquier fallo es un **502 con `codigo`**, los ocho de
   `CODIGO_ERROR_IVI` (`cliente.ts`): `falta_config` sin `IVI_URL`/`IVI_SERVICE_TOKEN`,
   `config_hermes` en 401, `ivi_no_configurado` en 503, `timeout` (30s, incluye timeout leyendo el
