@@ -98,10 +98,13 @@ test('la medianoche no duplica: lo encolado a las 21:30 para mañana sigue conta
   const anoche = proximoMomento(new Date(), '21:30', cfg.zona);
   const pasadaLaMedianoche = proximoMomento(anoche, '00:30', cfg.zona);
 
+  // 20:30 de Lima, no 19:30: desde #166 la franja también se evalúa sobre el
+  // MENSAJE, y a las 19:30 la vendedora todavía estaba (la franja cierra a las
+  // 20:00). Una hora de espera alcanza igual para el mínimo de 30 min.
   await sembrarMensaje(db, {
     personaId: '51961506674',
     texto: 'hola, quiero información',
-    occurredAt: haceHoras(anoche, 2),
+    occurredAt: haceHoras(anoche, 1),
     numeroPropio: NUMERO_PROPIO,
   });
 
