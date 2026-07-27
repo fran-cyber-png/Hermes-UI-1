@@ -23,6 +23,7 @@
     "ingest:interactions": "tsx src/scripts/ingestInteractions.ts",
     "ingest:icarus": "tsx src/scripts/ingestIcarus.ts",
     "clientes:sincronizar": "tsx src/scripts/sincronizarClientes.ts",
+    "ventas:sincronizar": "tsx src/scripts/sincronizarVentas.ts",
     "medir:correo": "tsx src/scripts/medirCorreoFichas.ts",
     "medir:cotizaciones": "tsx src/scripts/medirCotizaciones.ts",
     "piezas:resultados": "tsx src/scripts/resultadosDePiezas.ts",
