@@ -1,8 +1,14 @@
 # H11 — Qué fuentes y qué campos toca el divisor roto de `tb_moneda`
 
-> **Para el equipo de Ivi.** El entregable que pidieron en
-> [`plan-ejecucion-hermes.md` §H11](https://github.com/Goberna-Lab/ivi-cerebro/blob/main/docs/plan-ejecucion-hermes.md):
-> la lista de fuentes/campos afectados, para poner el gate acotado y no apagar de más.
+> **Para el equipo de Ivi.** El entregable que pidieron en `plan-ejecucion-hermes.md` §H11 (línea
+> 263): la lista de fuentes/campos afectados, para poner el gate acotado y no apagar de más.
+>
+> ⚠️ **Ese archivo no está publicado**, así que acá no va un link: al 27-jul `docs/plan-ejecucion-hermes.md`
+> está **sin commitear** (`??`) en el checkout local de `ivi-cerebro` —`gh api
+> repos/Goberna-Lab/ivi-cerebro/contents/docs/plan-ejecucion-hermes.md` → **404**— y la v1 de este
+> documento lo linkeaba como `blob/main`, o sea que la procedencia del entregable entero abría un
+> 404 para cualquiera que no fuera la máquina donde se escribió. El otro ref de Ivi que se cita
+> abajo, `docs/specs/governa-tesoreria.md`, **sí** está trackeado y limpio en `ivi-cerebro@1e5d2f3`.
 >
 > **Investigación read-only.** No cambia comportamiento, no toca Cerberus, no toca producción.
 > Código leído: `Goberna-Lab/ceberusapp` en `c83adbf` (2026-07-25) y `Goberna-Lab/hermes` en `main`
@@ -64,7 +70,7 @@ Convención: **🔴 no servir como `HECHO`** · **🟡 servir con salvedad** · 
 
 | Fuente | Campo | Estado | Por qué |
 |---|---|---|---|
-| `tb_moneda` | `radio_divisor` | 🔴 | El campo del descuadre. No derivar nada de él (Ivi ya lo decidió en `governa-tesoreria.md` §0.3 — se confirma) |
+| `tb_moneda` | `radio_divisor` | 🔴 | El campo del descuadre. No derivar nada de él (Ivi ya lo decidió en `governa-tesoreria.md` §0, «Por qué el multiplicador y no el divisor», línea 30 — se confirma) |
 | `tb_moneda` | `radio_multiplicador` | 🟡 | Es el campo bueno, pero **sin fecha de vigencia**: no aplica a importes históricos |
 | `tb_venta` | `monto_total` | 🔴 | Agujero **B**: la magnitud puede no corresponder a `codigo_moneda` |
 | `tb_venta` | `codigo_moneda` | 🟢 | La etiqueta es fiel a lo que eligió la vendedora; lo que miente es el número al lado |
@@ -538,7 +544,8 @@ grep -c "precio_promocion" \
 ```
 
 `precio_promocion` solo aparece en el ABM del producto, en la lista rotulada `S/`, en el export, en
-el payload a icarus y en la API pública que consume Hermes.
+el payload a icarus (`sales/icarus_payload.py:312,397` — o sea que **sí sale de Cerberus**, y por ahí
+llega a Hermes, aunque el flujo de venta no lo lea) y en la API pública que consume Hermes.
 
 **Por qué importa:** el `FormularioVenta.tsx:115-118` de Hermes suma **`precioPromocion`**. Un
 producto real del payload vivo tiene `precio_promocion = 80` (`server/src/cerberus/productos.test.ts:22`).
@@ -684,7 +691,7 @@ Hoy USD tiene los dos radios en `NULL` y cada consumidor inventa su propio caso 
 
 **4 · `fecha_vigencia` e historial** *(el arreglo de fondo)*
 Tabla `tb_moneda_tasa (moneda_id, unidades_por_usd, vigencia_desde, vigencia_hasta, fuente,
-registrado_por)`, ya especificada por Ivi en `governa-tesoreria.md` §237. Sin esto, mover PEN de
+registrado_por)`, ya especificada por Ivi en `governa-tesoreria.md` (línea 237, tabla del §6). Sin esto, mover PEN de
 3,49 a 3,60 reescribe el histórico y no hay forma de reconstruir el número anterior.
 
 **5 · Darle una vista al formulario que ya existe** *(o borrarlo)*
