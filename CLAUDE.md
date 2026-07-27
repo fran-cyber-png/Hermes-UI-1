@@ -282,7 +282,7 @@ del panel. El porqué está en el ADR: el panel derecho es de **esa persona**, I
 - **Pendiente**: `traza_id` (la llave del lazo de aprendizaje de Ivi) todavía no viaja, y el
   ensamblado (`POST /api/ensamblar`) es otra superficie y otro contrato.
 
-## El catálogo de piezas — lo que Ivi lee para poder ELEGIR sin inventar (ADR 0021)
+## El catálogo de piezas — lo que Ivi lee para poder ELEGIR sin inventar (ADR 0023)
 
 **Ivi ARMA, no inventa**: devuelve **ids, nunca texto**, y Hermes compone con su texto ACTUAL. De ahí
 sale la propiedad que hace segura la integración — *un índice viejo del lado de Ivi degrada la
@@ -295,20 +295,32 @@ catálogo: `server/src/catalogo/` + `routes/catalogo.ts`, **solo lectura**.
   `propietario`, `placeholders` y `enviable`. `?clase=` y `?vendedora=` filtran.
   **`clase` es semántica, no la tabla**: hoy son cuatro catálogos separados (`plantillas` +
   `plantilla_pasos`, `hechos`, los acuses y los ganchos, estos dos **en código**), y unificarlos —que
-  es otro frente— no puede romperle el contrato a Ivi. Un **paso** suelto NO es direccionable:
-  `plantilla_pasos.id` se reescribe en cada edición, así que los pasos viajan dentro de su plantilla
-  con su `orden`.
+  es otro frente— no puede romperle el contrato a Ivi. Un **paso** no tiene id propio:
+  `plantilla_pasos.id` se reescribe en cada edición, así que viaja dentro de su plantilla con su
+  `orden` **y con su propia `version`** — que es lo que el lazo estampa como `plantilla:12#3`.
 - **Si el catálogo no se puede servir: ERROR, jamás una lista vacía.** Es una cicatriz de Ivi (su ADR
   0002: un `{"ok": true}` con ceros les costó semanas). Base caída → **503 `catalogo_indisponible`**
   y el cuerpo **sin `piezas`**; cero piezas → **500 `catalogo_vacio`** (las de código existen
   siempre); un filtro que no deja nada → 200 con `filtrado: true`. Por eso `catalogo/repositorio.ts`
   **no degrada** como `hechos/repositorio.ts`: la degradación honesta para una persona que lee el
   aviso es una mentira para un índice que cachea. Ni siquiera se sirve medio catálogo.
-- **La versión es un hash del contenido** (`catalogo/version.ts`, `sha256:` + 16 hex), no un contador:
-  funciona igual para los catálogos que viven en código, no se puede olvidar de subir y no pide
-  `db:push`. **Entra el texto que sale; NO entra el rótulo** — renombrar no es un texto nuevo. Quien
-  estampe la pieza en `envios_wa` (lazo de resultados) tiene que usar `versionDeContenido()`, no una
-  copia, o el join no cierra.
+- **EL DIRECCIONAMIENTO Y LA RECETA DE VERSIÓN VIVEN EN `server/src/piezas/`**, el **mismo módulo
+  que importa el lazo de resultados** (ADR 0022) para estampar la pieza en `envios_wa`. No son dos
+  implementaciones que coinciden: es una. Ivi devuelve `{id, version}` en cada pieza del ensamblado
+  **para que el join cierre**, y con dos recetas ese join da **cero filas en silencio** — que se lee
+  como «esa pieza no se usó nunca». `piezas/direccion.ts` define `{clase, id, orden?}` y su forma
+  textual; `piezas/version.ts` es la única receta (`sha256:` + 16 hex).
+  **Entra el texto que sale Y EL ARCHIVO** —cambiar `flyer-julio.jpg` por
+  `flyer-agosto-PRECIO-NUEVO.jpg` es versión nueva, porque el precio vive adentro de la imagen—;
+  **NO entra el rótulo**, porque renombrar no es un texto nuevo. Hash y no contador: funciona igual
+  para los catálogos que viven en código, no se puede olvidar de subir y no pide `db:push`.
+  **Los candados**: `piezas/vectores.ts` fija versiones y refs **literales** que los dos frentes
+  afirman desde su lado (`catalogo/paridad.test.ts` acá), y `piezas/receta-unica.test.ts` falla si
+  aparece un `createHash` nuevo sin justificar.
+- **Nadie arma una `Pieza` fuera de `catalogo/armar.ts`.** El repositorio traduce filas a argumentos
+  y `codigo.ts` traduce constantes; los dos llaman a la misma función pura. Si cada origen se armara
+  la suya, cada origen calcularía su versión — y volveríamos a tener dos recetas, adentro del mismo
+  módulo.
 - **Va detrás de una credencial de servicio PROPIA** (`HERMES_CATALOGO_SERVICE_TOKEN`,
   `requiereServicioDeCatalogo` en `auth/servicio.ts`): Ivi es una máquina, no una vendedora, y darle
   el token de `/api/admin` para leer una lista le daría de yapa re-apuntar números y borrar sesiones.

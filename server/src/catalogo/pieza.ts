@@ -1,3 +1,5 @@
+import { CLASES_DE_PIEZA, type ClasePieza } from "../piezas/direccion.js";
+
 /**
  * UNA PIEZA — la forma con la que Hermes publica todo lo que se puede decir.
  *
@@ -44,9 +46,13 @@
  * id que mañana apunta a otra cosa es peor que no publicarlo.
  */
 
-/** Qué tipo de cosa es la pieza. Semántica, no la tabla donde vive hoy. */
-export const CLASES_DE_PIEZA = ["plantilla", "hecho", "acuse", "gancho"] as const;
-export type ClasePieza = (typeof CLASES_DE_PIEZA)[number];
+// Las clases y el direccionamiento viven en `piezas/direccion.ts`, que es el
+// MISMO módulo que importa el lazo de resultados (ADR 0022) para estampar la
+// pieza en `envios_wa`. Acá se re-exportan y no se redefinen: si el catálogo
+// dijera `hecho` y el lazo `dato`, el join entre lo que Ivi recomienda y lo que
+// se mandó daría cero filas **en silencio**, y eso se lee como «esa pieza no se
+// usó nunca».
+export { CLASES_DE_PIEZA, type ClasePieza };
 
 /**
  * En qué estado está.
@@ -83,7 +89,10 @@ export interface FamiliaDePieza {
   valor: string;
 }
 
-/** Un paso de una plantilla-secuencia. No es direccionable (ver arriba). */
+/**
+ * Un paso de una plantilla-secuencia. **No tiene id propio** (ver arriba): se
+ * direcciona dentro de su plantilla, con `(id, orden)`.
+ */
 export interface PasoDePieza {
   orden: number;
   texto: string | null;
@@ -91,6 +100,18 @@ export interface PasoDePieza {
   mediaClase: string | null;
   /** El paso pide una imagen que todavía nadie cargó: no se puede mandar. */
   mediaPendiente: boolean;
+  /**
+   * LA VERSIÓN DE ESTE PASO, con la misma receta que la de la pieza entera.
+   *
+   * Va acá porque el lazo de resultados estampa el paso, no la secuencia: en
+   * `envios_wa` queda `plantilla:12#3` con la versión de ESE paso. Si el
+   * catálogo publicara solo la versión de la plantilla, lo que quedó escrito no
+   * aparecería en ninguna parte del catálogo y el join daría cero.
+   *
+   * Además cambia por su cuenta: reemplazar el flyer de julio por el de agosto
+   * cambia la versión del paso 1 y la de la secuencia, y no toca la del paso 2.
+   */
+  version: string;
 }
 
 /** Las dos sintaxis de marcador que conviven en el repo, incompatibles entre sí. */
@@ -100,7 +121,7 @@ export interface Pieza {
   clase: ClasePieza;
   /** Único DENTRO de su clase. La identidad es el par `{clase, id}`. */
   id: string;
-  /** Hash del contenido que sale (`catalogo/version.ts`). Estable y comparable. */
+  /** Hash del contenido que sale (`piezas/version.ts`). Estable y comparable. */
   version: string;
   estado: EstadoPieza;
   /**

@@ -1,9 +1,9 @@
 import { asc } from "drizzle-orm";
 import type { db } from "../db/client.js";
 import { hechos, plantillaPasos, plantillas } from "../db/schema.js";
+import { piezaDeUnMensaje, piezaDeUnaSecuencia, type PasoCrudo } from "./armar.js";
 import { piezasDeCodigo } from "./codigo.js";
-import { marcadoresDe, type EstadoPieza, type PasoDePieza, type Pieza } from "./pieza.js";
-import { versionDeContenido } from "./version.js";
+import { type EstadoPieza, type Pieza } from "./pieza.js";
 
 /**
  * EL CATÁLOGO ENTERO, PARA UNA MÁQUINA — y por qué acá NO se degrada.
@@ -30,13 +30,19 @@ import { versionDeContenido } from "./version.js";
  * indistinguible de un catálogo donde esa mitad no existe — la misma mentira,
  * con menos filas.
  *
- * ══ QUÉ ENTRA EN LA VERSIÓN ═════════════════════════════════════════════════
+ * ══ ACÁ NO SE ARMA NINGUNA PIEZA ════════════════════════════════════════════
  *
- * Solo lo que SALE hacia la persona: el texto y las referencias de media. El
- * nombre de la plantilla y el rótulo del hecho quedan afuera a propósito —
- * renombrar una etiqueta interna no es un texto nuevo, y si contara, el lazo
- * partiría el historial de una pieza porque alguien le arregló una tilde al
- * nombre que ve la vendedora.
+ * Este archivo **traduce filas a argumentos**; quien construye la `Pieza` —y
+ * quien calcula la versión— es `armar.ts`, que a su vez usa la receta compartida
+ * con el lazo (`piezas/version.ts`). Si acá se hasheara algo, ya serían dos
+ * recetas: el modo de fallo que el ADR describe y que este repo ya cometió una
+ * vez con la urgencia de la cola (#37).
+ *
+ * Lo que entra en la versión es solo lo que SALE hacia la persona: el texto y
+ * **el archivo** adjunto. El nombre de la plantilla y el rótulo del hecho quedan
+ * afuera a propósito — renombrar una etiqueta interna no es un texto nuevo, y si
+ * contara, el lazo partiría el historial de una pieza porque alguien le arregló
+ * una tilde al nombre que ve la vendedora.
  */
 
 /**
@@ -64,37 +70,29 @@ export async function leerPiezas(base: typeof db): Promise<Pieza[]> {
     base.select().from(hechos).orderBy(asc(hechos.orden), asc(hechos.clave)),
   ]);
 
-  const pasosPorPlantilla = new Map<number, PasoDePieza[]>();
+  const pasosPorPlantilla = new Map<number, PasoCrudo[]>();
   for (const f of filasPasos) {
-    const paso: PasoDePieza = {
+    // `mediaArchivo` viaja hasta `armar.ts` porque **es lo que entra en la
+    // versión**: el flyer es contenido, y en Goberna el precio y las fechas
+    // viven adentro del flyer. `mediaClase` es solo la cadena "imagen" y no
+    // distingue el de julio del de agosto.
+    const paso: PasoCrudo = {
       orden: f.orden,
       texto: f.texto,
       mediaClase: f.mediaClase,
-      // El paso pide una imagen que todavía nadie cargó: es el estado natural de
-      // una propuesta minada (el histórico sabe QUE ahí iba el flyer, no cuál).
-      mediaPendiente: !f.mediaArchivo && f.mediaClase !== null,
+      mediaArchivo: f.mediaArchivo,
     };
     const lote = pasosPorPlantilla.get(f.plantillaId);
     if (lote) lote.push(paso);
     else pasosPorPlantilla.set(f.plantillaId, [paso]);
   }
 
-  const piezasPlantilla: Pieza[] = filasPlantillas.map((f) => {
-    const pasos = pasosPorPlantilla.get(f.id) ?? [];
-    const texto = pasos
-      .map((p) => p.texto ?? "")
-      .filter((t) => t.length > 0)
-      .join("\n\n");
-    const { placeholders, sintaxis } = marcadoresDe(texto);
-    const estado = estadoDePlantilla(f.estado, f.archivadoAt);
-    const mediaPendiente = pasos.some((p) => p.mediaPendiente);
-    return {
-      clase: "plantilla",
+  const piezasPlantilla: Pieza[] = filasPlantillas.map((f) =>
+    piezaDeUnaSecuencia({
       id: String(f.id),
-      version: versionDeContenido(
-        pasos.flatMap((p) => [String(p.orden), p.texto, p.mediaClase]),
-      ),
-      estado,
+      rotulo: f.nombre,
+      pasos: pasosPorPlantilla.get(f.id) ?? [],
+      estado: estadoDePlantilla(f.estado, f.archivadoAt),
       // «Las plantillas son personales» es cierto A MEDIAS, y la mitad que falta
       // cambia qué significa pedir el catálogo de una vendedora: una **propuesta
       // minada es del EQUIPO**, no de la vendedora bajo cuyo id corrió el script
@@ -104,42 +102,24 @@ export async function leerPiezas(base: typeof db): Promise<Pieza[]> {
       // exactamente el bug que ADR 0019 arregló en la app.
       alcance: esDelEquipo(f.origen, f.estado) ? "negocio" : "vendedora",
       propietario: f.vendedoraId,
-      rotulo: f.nombre,
-      texto,
-      momentos: [],
       familia: f.familiaCurso ? { vocabulario: "sku-cerberus", valor: f.familiaCurso } : null,
-      pasos,
-      placeholders,
-      sintaxisPlaceholder: sintaxis,
-      enviable: estado === "vigente" && !mediaPendiente,
-      motivoNoEnviable:
-        estado !== "vigente" ? "no_vigente" : mediaPendiente ? "media_pendiente" : null,
-    };
-  });
+    }),
+  );
 
-  const piezasHecho: Pieza[] = filasHechos.map((f) => {
-    const { placeholders, sintaxis } = marcadoresDe(f.texto);
-    return {
+  const piezasHecho: Pieza[] = filasHechos.map((f) =>
+    piezaDeUnMensaje({
       clase: "hecho",
       id: f.clave,
-      version: versionDeContenido([f.texto]),
-      estado: f.activo ? "vigente" : "retirada",
-      alcance: "negocio",
-      propietario: null,
       rotulo: f.rotulo,
-      texto: f.texto,
+      contenido: { texto: f.texto },
+      estado: f.activo ? "vigente" : "retirada",
       // Tal cual vienen de la base, sin filtrar por el enum de este build: ver
       // `pieza.ts`. Vacío significa «aplica a todos», así que descartar un
       // momento desconocido ENSANCHARÍA la pieza en vez de acotarla.
       momentos: Array.isArray(f.momentos) ? f.momentos.filter((m) => typeof m === "string") : [],
-      familia: null,
-      pasos: null,
-      placeholders,
-      sintaxisPlaceholder: sintaxis,
-      enviable: f.activo,
       motivoNoEnviable: f.activo ? null : "no_vigente",
-    };
-  });
+    }),
+  );
 
   return [...piezasPlantilla, ...piezasHecho, ...piezasDeCodigo()];
 }

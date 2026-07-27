@@ -4,8 +4,9 @@ import {
   MOMENTOS_DE_VENTA,
   ROTULO_INTENCION,
 } from "../sugerencias/estado.js";
-import { CLASES_DE_PIEZA, ESTADOS_DE_PIEZA } from "./pieza.js";
-import { versionDeContenido } from "./version.js";
+import { CLASES_DE_PIEZA } from "../piezas/direccion.js";
+import { versionDeContenido } from "../piezas/version.js";
+import { ESTADOS_DE_PIEZA } from "./pieza.js";
 
 /**
  * EL VOCABULARIO, PUBLICADO COMO DATO (H9).

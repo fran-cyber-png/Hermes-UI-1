@@ -98,6 +98,70 @@ test("cambiar el TEXTO cambia la versión; cambiar el NOMBRE no", async (t) => {
   assert.notEqual(await versionDe(), original, "editar el texto SÍ es una versión nueva");
 });
 
+test("CAMBIAR EL FLYER cambia la versión — del paso y de la secuencia", async (t) => {
+  // El bug que este test mata, contra filas de verdad: el catálogo hasheaba
+  // `media_clase` (la cadena "imagen") en vez de `media_archivo`, así que
+  // reemplazar el flyer de julio por el de agosto dejaba la versión IDÉNTICA.
+  //
+  // Importa porque el 42 % de la secuencia de venta lleva imagen y en Goberna
+  // **el precio y las fechas viven adentro del flyer**: los resultados de dos
+  // ofertas distintas se habrían sumado bajo una sola versión, que es
+  // exactamente el blanco móvil que H5 vino a evitar — movido de la prosa a la
+  // imagen.
+  const db = await baseDePrueba(t);
+  const id = await sembrarPlantilla(db, {
+    pasos: [
+      { orden: 1, texto: "Mirá el temario", mediaClase: "imagen", mediaArchivo: "flyer-julio.jpg" },
+      { orden: 2, texto: "¿Te reservo el cupo?" },
+    ],
+  });
+
+  const piezaDe = async () =>
+    (await leerPiezas(db)).find((p) => p.clase === "plantilla" && p.id === String(id))!;
+
+  const antes = await piezaDe();
+  await db
+    .update(plantillaPasos)
+    .set({ mediaArchivo: "flyer-agosto-PRECIO-NUEVO.jpg" })
+    .where(sql`orden = 1`);
+  const despues = await piezaDe();
+
+  assert.equal(
+    antes.pasos?.[0]?.texto,
+    despues.pasos?.[0]?.texto,
+    "el texto no se tocó: lo único que cambió es la imagen",
+  );
+  assert.notEqual(
+    antes.pasos?.[0]?.version,
+    despues.pasos?.[0]?.version,
+    "el paso del flyer tiene que cambiar de versión",
+  );
+  assert.notEqual(antes.version, despues.version, "y la secuencia entera también");
+  assert.equal(
+    antes.pasos?.[1]?.version,
+    despues.pasos?.[1]?.version,
+    "el paso que no se tocó conserva su versión",
+  );
+});
+
+test("cada paso publica SU versión — es lo que el lazo estampa como `plantilla:<id>#<orden>`", async (t) => {
+  // Sin la versión por paso, lo que el lazo escribe en `envios_wa` no existiría
+  // en ninguna parte del catálogo y el join daría cero, más disimulado.
+  const db = await baseDePrueba(t);
+  const id = await sembrarPlantilla(db, {
+    pasos: [
+      { orden: 1, texto: "uno" },
+      { orden: 2, texto: "dos" },
+    ],
+  });
+
+  const pieza = (await leerPiezas(db)).find((p) => p.clase === "plantilla" && p.id === String(id));
+  assert.ok(pieza?.pasos);
+  for (const paso of pieza.pasos) assert.match(paso.version, /^sha256:[0-9a-f]{16}$/);
+  assert.notEqual(pieza.pasos[0]?.version, pieza.pasos[1]?.version, "textos distintos, versiones distintas");
+  assert.notEqual(pieza.version, pieza.pasos[0]?.version, "la secuencia no es su primer paso");
+});
+
 test("una propuesta es BORRADOR y no es enviable; una archivada es RETIRADA", async (t) => {
   const db = await baseDePrueba(t);
   const propuesta = await sembrarPlantilla(db, {

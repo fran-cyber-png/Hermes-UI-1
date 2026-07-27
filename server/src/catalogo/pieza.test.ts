@@ -1,32 +1,12 @@
 import assert from "node:assert/strict";
 import { test, describe } from "node:test";
 import { marcadoresDe } from "./pieza.js";
-import { versionDeContenido } from "./version.js";
 import { piezasDeCodigo } from "./codigo.js";
 
-describe("la versión de una pieza", () => {
-  test("mismo contenido, misma versión: es lo que hace que el join del lazo cierre", () => {
-    assert.equal(versionDeContenido(["hola"]), versionDeContenido(["hola"]));
-  });
-
-  test("cambiar el texto cambia la versión — el pedido irreparable de Ivi", () => {
-    assert.notEqual(versionDeContenido(["hola"]), versionDeContenido(["hola!"]));
-  });
-
-  test("las partes no se pueden confundir entre sí", () => {
-    // Sin separador, `["ab","c"]` y `["a","bc"]` hashearían igual y dos
-    // plantillas distintas quedarían con la misma versión.
-    assert.notEqual(versionDeContenido(["ab", "c"]), versionDeContenido(["a", "bc"]));
-  });
-
-  test("un paso vacío no es lo mismo que un paso ausente", () => {
-    assert.notEqual(versionDeContenido(["a"]), versionDeContenido(["a", ""]));
-  });
-
-  test("es una cadena opaca, corta y comparable", () => {
-    assert.match(versionDeContenido(["x"]), /^sha256:[0-9a-f]{16}$/);
-  });
-});
+// La receta de versión ya no vive acá: es `piezas/version.ts`, compartida con el
+// lazo de resultados, y sus tests son `piezas/version.test.ts`. Lo que sí se
+// verifica desde este lado es que lo PUBLICADO casa con esa receta —
+// `catalogo/paridad.test.ts`, contra vectores literales.
 
 describe("los marcadores", () => {
   test("la sintaxis doble de los acuses", () => {

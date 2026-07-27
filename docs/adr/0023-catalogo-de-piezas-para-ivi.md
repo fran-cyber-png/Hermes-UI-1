@@ -1,4 +1,4 @@
-# ADR 0021 — El catálogo de piezas, publicado para que Ivi pueda elegir sin inventar
+# ADR 0023 — El catálogo de piezas, publicado para que Ivi pueda elegir sin inventar
 
 **Fecha**: 2026-07-27 · **Estado**: aceptado · **Issue**: #169 (H8 · H9) ·
 **Contraparte**: `ivi-cerebro/docs/plan-ejecucion-hermes.md`, `docs/respuesta-hermes-ensamblado.md`
@@ -44,13 +44,22 @@ publicado `origen: "tabla:hechos"`, unificar sería un cambio de contrato con un
 Un id pelado no alcanzaba: un `412` puede ser una plantilla o cualquier otra cosa, mientras que
 `{clase:"hecho", id:"cuotas"}` es inequívoco.
 
-**Un paso suelto no es direccionable**: `escribirPasos()` borra y reinserta todos los pasos en cada
-edición, así que `plantilla_pasos.id` cambia sin que cambie el paso. Los pasos viajan **dentro** de su
-plantilla con su `orden`. Publicar un id que mañana apunta a otra cosa es peor que no publicarlo.
+**Un paso no tiene id propio**: `escribirPasos()` borra y reinserta todos los pasos en cada edición,
+así que `plantilla_pasos.id` cambia sin que cambie el paso. Publicar un id que mañana apunta a otra
+cosa es peor que no publicarlo.
+
+Pero **sí es direccionable relativo a su plantilla**, y esa corrección importa: el lazo de resultados
+(ADR 0022) necesita medir por paso —el flyer y el seguimiento de la misma secuencia funcionan
+distinto— y no puede hacerlo si el catálogo solo habla de la secuencia entera. La forma que satisface
+a los dos es la que **Ivi ya tenía escrita** en su contrato de ensamblado: `{id, orden}`. La clase
+sigue siendo `plantilla`; `orden` dice cuál de sus mensajes, sobre `(plantilla_id, orden)` — que sí es
+estable y tiene su `unique` en el schema. Por eso **cada paso publica su propia `version`**: es
+exactamente lo que el lazo estampa como `plantilla:12#3`, y sin ella lo escrito en `envios_wa` no
+aparecería en ninguna parte del catálogo.
 
 ### 2. La versión es un hash del contenido, no un contador
 
-`catalogo/version.ts`: `sha256:` + 16 hex de lo que **sale hacia la persona**. Ivi pidió «un `version`
+`piezas/version.ts`: `sha256:` + 16 hex de lo que **sale hacia la persona**. Ivi pidió «un `version`
 entero o un `contenido_sha256`, lo que sea estable y comparable». Elegimos el hash por tres razones de
 este repo:
 
@@ -60,17 +69,71 @@ este repo:
    ahora silencioso.
 3. **No hace falta migración**: cero `db:push`, cero coordinación con las ramas que tocan el schema.
 
-**Qué entra en el hash**: el texto y las referencias de media. **Qué no**: el nombre de la plantilla y
-el rótulo del hecho. Renombrar una etiqueta interna no es un texto nuevo; si contara, el lazo partiría
-el historial de una pieza porque alguien le arregló una tilde al nombre.
+**Qué entra en el hash**: el texto **y el archivo adjunto** — el archivo, no la clase de media.
+**Qué no**: el nombre de la plantilla y el rótulo del hecho. Renombrar una etiqueta interna no es un
+texto nuevo; si contara, el lazo partiría el historial de una pieza porque alguien le arregló una
+tilde al nombre.
+
+> ⚠️ **La primera versión de este ADR decía «el texto y las referencias de media» y el código no lo
+> cumplía**: hasheaba `media_clase` —que es la cadena `"imagen"`— en vez de `media_archivo`. Medido:
+>
+> ```
+> versión antes  : sha256:88b237d5f7a38a5b   (mediaArchivo = flyer-julio.jpg)
+> versión después: sha256:88b237d5f7a38a5b   (mediaArchivo = flyer-agosto-PRECIO-NUEVO.jpg)
+> ```
+>
+> El 42 % de la secuencia de venta lleva imagen y **en Goberna el precio y las fechas viven adentro
+> de la imagen**: cambiar el flyer de julio por el de agosto no habría cambiado la versión, y los
+> resultados de dos ofertas distintas se habrían sumado. Es el blanco móvil de H5, movido de la prosa
+> a la imagen. Fijado por `catalogo/repositorio.test.db.ts` («CAMBIAR EL FLYER cambia la versión»)
+> contra filas reales.
 
 El precio, dicho: A → B → A colapsa a dos versiones, no tres. Para medir rendimiento *por texto* eso
 es lo correcto — es el mismo texto.
 
-**Contrato con el lazo de resultados**: quien estampe la versión en `envios_wa` debe usar
-`versionDeContenido()`, no una copia. Es una cadena opaca y lo único que importa es que los dos lados
-la calculen igual; con dos recetas distintas el join no cierra y nadie se entera hasta que el reporte
-esté mal.
+### 2.1 · La receta NO vive en este módulo: vive en `server/src/piezas/`
+
+Esta versión del ADR corrige la anterior. Decía, como advertencia: *«quien estampe la versión en
+`envios_wa` debe usar `versionDeContenido()`, no una copia […] con dos recetas distintas el join no
+cierra y nadie se entera hasta que el reporte esté mal»*. **La copia ya existía**, en la rama del lazo,
+y las dos divergían en cuatro cosas a la vez:
+
+| | catálogo | lazo |
+|---|---|---|
+| formato | `sha256:` + 16 hex | 64 hex, sin prefijo |
+| normalización | ninguna | CRLF → LF + trim |
+| la imagen | **no entraba** | entraba |
+| contenido vacío | una versión | `null` |
+
+Y el direccionamiento tampoco casaba: acá `{clase:"plantilla", id:"12"}`, allá
+`{clase:"paso", ref:"12#3"}`; el mismo dato salía `hecho:cuotas` de un lado y `dato:cuotas` del otro.
+**El join daba cero filas para todo el catálogo, en silencio** — que se lee como «esa pieza no se usó
+nunca», el modo de fallo exacto que los dos frentes decían estar evitando. Ningún test lo veía: cada
+rama quedaba verde con su propio vocabulario.
+
+Una advertencia escrita no es un mecanismo. La receta y el direccionamiento se mudaron a
+**`server/src/piezas/`**, que no pertenece a ninguno de los dos frentes: los dos PRs lo agregan con el
+mismo contenido y los dos lo importan, así el que mergee segundo no reescribe nada.
+
+- **Qué gana de cada receta.** El **formato** lo pone este catálogo (es lo que ya viaja en el contrato
+  publicado a Ivi, dice qué algoritmo es y entra en un log). Las **entradas** las pone el lazo (texto
+  normalizado + archivo), porque acá se hasheaba `media_clase` y era ciego al flyer. Y el **vacío**
+  deja de ser un caso especial: `null` pasa a significar una sola cosa —«no se pudo determinar el
+  contenido»—, que es lo único que el lazo necesita expresar y este catálogo no.
+- **Adentro del catálogo también hay un solo constructor.** `catalogo/armar.ts` es el único que arma
+  una `Pieza`; `repositorio.ts` traduce filas y `codigo.ts` traduce constantes. Si cada origen se
+  armara la suya, cada origen calcularía su versión y volveríamos a tener dos recetas dentro del
+  mismo módulo.
+- **Los candados.** `piezas/vectores.ts` fija refs y versiones **literales**, y cada frente afirma
+  desde su lado que produce exactamente esas (`catalogo/paridad.test.ts` acá,
+  `procedencia/paridad.test.ts` allá). `piezas/receta-unica.test.ts` inventaría todos los
+  `createHash` del server contra una lista con motivo escrito, así que una segunda receta no puede
+  nacer callada. Es la forma de `urgencia.paridad.test.db.ts` (#37), aplicada a la costura entre dos
+  PRs en vez de a dos funciones del mismo repo.
+
+**Orden de merge**: el lazo (#171) **primero**, este catálogo (#173) después. Los dos traen
+`server/src/piezas/` idéntico, así que el segundo no reescribe nada; el orden es solo para que el
+único cambio de schema (`envios_wa` gana seis columnas) entre antes que el frente que lo lee.
 
 ### 3. Error, nunca una lista vacía
 
