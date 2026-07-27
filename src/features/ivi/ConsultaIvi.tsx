@@ -76,14 +76,14 @@ function Leyenda() {
 }
 
 /** El esqueleto de la espera. Dice cuánto puede tardar: el techo real del server son 30 s. */
-function Buscando() {
+export function Buscando() {
   return (
     <div className="animate-entrar rounded-xl border-l-[3px] border-border bg-card px-3 py-2.5 ring-1 ring-border">
       <p className="text-[11px] font-semibold text-muted-foreground">Ivi está buscando en los datos…</p>
       <div className="mt-2 space-y-1.5">
-        <div className="h-2.5 w-full animate-pulse rounded bg-muted" />
-        <div className="h-2.5 w-11/12 animate-pulse rounded bg-muted" style={{ animationDelay: '120ms' }} />
-        <div className="h-2.5 w-2/3 animate-pulse rounded bg-muted" style={{ animationDelay: '240ms' }} />
+        <div className="h-2.5 w-full animate-pulse rounded bg-border" />
+        <div className="h-2.5 w-11/12 animate-pulse rounded bg-border" style={{ animationDelay: '120ms' }} />
+        <div className="h-2.5 w-2/3 animate-pulse rounded bg-border" style={{ animationDelay: '240ms' }} />
       </div>
       <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
         Puede tardar hasta 30 segundos. Si se pasa de ahí, te lo dice — no se queda girando.
@@ -91,6 +91,14 @@ function Buscando() {
     </div>
   );
 }
+
+/** De quién es el problema, en una palabra que sirva para saber a quién avisarle. */
+const CULPA: Record<'hermes' | 'ivi' | 'red' | 'sesion', string> = {
+  hermes: 'config de Hermes',
+  ivi: 'lado de Ivi',
+  red: 'conexión',
+  sesion: 'tu sesión',
+};
 
 /**
  * EL ESTADO DE ERROR, DE PRIMERA CLASE.
@@ -100,7 +108,7 @@ function Buscando() {
  * que la regla fail-closed del repo prohíbe. Dice qué pasó, de quién es, y si reintentar
  * puede servir de algo.
  */
-function FalloDeIvi({ error, onReintentar }: { error: unknown; onReintentar: () => void }) {
+export function FalloDeIvi({ error, onReintentar }: { error: unknown; onReintentar: () => void }) {
   const l = lecturaDeError(error);
   if (!l) return null;
   return (
@@ -117,7 +125,7 @@ function FalloDeIvi({ error, onReintentar }: { error: unknown; onReintentar: () 
 
       <footer className="mt-2.5 flex items-center justify-between gap-2 border-t border-destructive/20 pt-2">
         <code className="truncate font-mono text-[10px] text-muted-foreground">
-          {l.culpa === 'hermes' ? 'config de Hermes' : l.culpa === 'ivi' ? 'lado de Ivi' : l.culpa} · {l.codigo}
+          {CULPA[l.culpa]} · {l.codigo}
         </code>
         {l.reintentable && (
           <button

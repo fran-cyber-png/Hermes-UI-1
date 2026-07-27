@@ -130,6 +130,11 @@ export function RespuestaDeIvi({ respuesta }: { respuesta: RespuestaIvi }) {
   const fuentes = fuentesLegibles(respuesta.fuentes);
   const frescura = lecturaDeFrescura(respuesta.edadDelDato);
   const conGrounding = respuesta.groundingOk === false;
+  // La frescura se dice SIEMPRE que haya algo cuya antigüedad importe. En un
+  // `SIN_EVIDENCIA` no hay dato: «no se pudo medir la antigüedad» ahí es una nota al pie
+  // sobre nada, y una advertencia que aparece cuando no hace falta es la que después nadie
+  // lee cuando sí hace falta.
+  const importaLaFrescura = p.tipo !== TIPO_IVI.SIN_EVIDENCIA;
   // Un HECHO sin fuente declarada es lo que hay que poder ver de un vistazo: es un número
   // presentado con confianza y sin de dónde salió.
   const hechoSinFuente = esHecho && fuentes.length === 0;
@@ -206,7 +211,7 @@ export function RespuestaDeIvi({ respuesta }: { respuesta: RespuestaIvi }) {
 
       {/* El pie: de dónde salió y de cuándo es. Las dos preguntas que hacen supervisable un
           número, y las dos que estaban ausentes el día del incidente. */}
-      {(fuentes.length > 0 || hechoSinFuente || esHecho || !frescura.medido) && (
+      {(fuentes.length > 0 || hechoSinFuente || importaLaFrescura) && (
         <footer className="mt-2.5 space-y-1 border-t border-border/70 pt-2">
           {fuentes.length > 0 && (
             <ul className="flex flex-wrap gap-1">
@@ -241,17 +246,19 @@ export function RespuestaDeIvi({ respuesta }: { respuesta: RespuestaIvi }) {
           )}
 
           {/* «No medido» NO es «fresco», y el silencio acá fue el incidente. En un HECHO la
-              edad decide si el número sirve, así que se dice en ámbar; en los otros dos es
-              una nota al pie. */}
-          <p
-            className={
-              'flex items-center gap-1 text-[10px] leading-tight ' +
-              (!frescura.medido && esHecho ? 'text-warning-foreground' : 'text-muted-foreground')
-            }
-          >
-            <Clock size={10} className="shrink-0" />
-            {frescura.medido ? `Dato ${frescura.texto}.` : 'Ivi no midió la antigüedad: ' + frescura.texto + '.'}
-          </p>
+              edad decide si el número sirve, así que se dice en ámbar; en una cita es una
+              nota al pie. */}
+          {importaLaFrescura && (
+            <p
+              className={
+                'flex items-center gap-1 text-[10px] leading-tight ' +
+                (!frescura.medido && esHecho ? 'text-warning-foreground' : 'text-muted-foreground')
+              }
+            >
+              <Clock size={10} className="shrink-0" />
+              {frescura.medido ? `Dato ${frescura.texto}.` : 'Ivi no midió la antigüedad: ' + frescura.texto + '.'}
+            </p>
+          )}
         </footer>
       )}
     </article>
