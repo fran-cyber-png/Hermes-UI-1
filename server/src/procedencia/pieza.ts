@@ -1,10 +1,8 @@
 import {
   CLASES_DE_PIEZA,
-  direccionDesdeRef,
   esClaseDePieza,
   refDeDireccion,
   type ClasePieza,
-  type DireccionDePieza,
 } from "../piezas/direccion.js";
 import {
   versionDeUnMensaje,
@@ -217,11 +215,6 @@ export function aMano(momento: MomentoDeVenta | null): AMano {
 
 export function esAMano(p: Procedencia): p is AMano {
   return p.tipo === "a-mano";
-}
-
-/** La dirección de la pieza, o `null` si fue a mano. */
-export function direccionDePieza(p: Procedencia): DireccionDePieza | null {
-  return esAMano(p) ? null : direccionDesdeRef(p.clase, p.ref);
 }
 
 /**
