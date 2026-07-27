@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { defineConfig } from "drizzle-kit";
+import { ESQUEMAS_GESTIONADOS } from "./src/migraciones/estructura.js";
 
 export default defineConfig({
   // TODO `src/db` — glob, no una lista a mano.
@@ -25,7 +26,12 @@ export default defineConfig({
   dialect: "postgresql",
   // Por defecto drizzle-kit solo gestiona `public`. Sin esto, los esquemas `fuentes`,
   // `ontologia` y `rag` se declaran en el código y nunca se crean en la base — en silencio.
-  schemaFilter: ["public", "fuentes", "ontologia", "rag"],
+  //
+  // La lista NO se escribe acá: se importa. `db:adoptar` compara la base contra el
+  // baseline esquema por esquema, y si esta lista tuviera uno que aquella no, la
+  // verificación diría «✓ sin diferencias» sobre un esquema que nunca miró — y la base
+  // quedaría marcada como al día mintiendo. Con una sola definición eso no se puede.
+  schemaFilter: [...ESQUEMAS_GESTIONADOS],
   dbCredentials: {
     url: process.env.DATABASE_URL!,
   },

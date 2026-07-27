@@ -40,10 +40,18 @@ export function hashDe(tag: string, dir = DIR_MIGRACIONES): string {
   return createHash("sha256").update(readFileSync(join(dir, `${tag}.sql`), "utf8")).digest("hex");
 }
 
-/** Bases de verificación que quedaron de una corrida anterior interrumpida. */
+/**
+ * Bases de verificación que quedaron de una corrida anterior interrumpida.
+ *
+ * El `_` del prefijo va escapado: en un `LIKE` de SQL es un comodín de un carácter, así
+ * que sin escapar esto también matchearía `hermesXverificacionY…`. Lo único que se hace
+ * con el resultado es imprimir un `DROP DATABASE` para copiar y pegar — y un `DROP` que
+ * se copia a ciegas tiene que nombrar exactamente lo que dice nombrar.
+ */
 export async function sobrantesDeVerificacion(sql: Sql): Promise<string[]> {
+  const patron = PREFIJO_REFERENCIA.replace(/_/g, "\\_") + "%";
   const filas = await sql<{ datname: string }[]>`
-    select datname from pg_database where datname like ${PREFIJO_REFERENCIA + "%"}`;
+    select datname from pg_database where datname like ${patron}`;
   return filas.map((f) => f.datname).sort();
 }
 
