@@ -18,10 +18,16 @@ import { faltaEsquema } from '../autorespuesta/repositorio.js';
 /**
  * EL FILTRO POR LÍNEA PROPIA — el que separa dos hilos que son dos chats.
  *
- * `numero_propio` no es columna de `interactions`: vive en el payload del
- * evento, igual que en la cola (`cola/consultarCola.ts`). El `COALESCE` a `''`
- * es el mismo de allá — los mensajes de cuando había una sola línea no traen el
- * campo.
+ * Usa **la columna `interactions.numero_propio`** (#185), no el
+ * `payload->>'numeroPropio'` del evento. Las dos dicen lo mismo —la columna se
+ * rellenó desde ese mismo crudo— pero la columna está indexada
+ * (`interactions_numero_propio_idx`) y el JSON no: sacarlo del payload en cada
+ * consulta es justo lo que #185 dejó de hacer por caro y frágil. Filtrar por el
+ * payload acá habría reintroducido el patrón que main acaba de sacar.
+ *
+ * **`NULL` es «no se sabe» y NO matchea ninguna línea**, que es lo correcto:
+ * una fila cuyo crudo no traía el número no se le puede adjudicar a nadie. Es la
+ * misma decisión que tomó el backfill al no rellenarla con la línea más probable.
  *
  * **Sin `numeroPropio` no filtra**, a propósito: hay consumidores que todavía
  * piden el hilo sin decir por qué línea, y romperlos los dejaría sin
@@ -30,7 +36,7 @@ import { faltaEsquema } from '../autorespuesta/repositorio.js';
  */
 export function mismaLinea(numeroPropio: string | undefined) {
   const n = (numeroPropio ?? '').replace(/\D/g, '');
-  return n ? sql`AND COALESCE(e.payload->>'numeroPropio', '') = ${n}` : sql``;
+  return n ? sql`AND i.numero_propio = ${n}` : sql``;
 }
 
 /**

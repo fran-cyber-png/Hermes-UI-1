@@ -98,11 +98,10 @@ whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
 whatsappRouter.post('/leido/:telefono', requiereVendedora, async (req, res) => {
   const telefono = req.params.telefono.replace(/\D/g, '');
   const numeroPropio = typeof req.query.numeroPropio === 'string' ? req.query.numeroPropio : undefined;
-  // El JOIN a `events` existe solo para poder filtrar por línea: `numero_propio`
-  // no es columna de `interactions`.
+  // Sin JOIN: desde #185 `numero_propio` es columna de `interactions`, así que
+  // filtrar por línea no obliga a traerse el crudo del evento.
   const filas = await db.execute<{ external_id: string }>(sql`
     SELECT i.external_id FROM interactions i
-    LEFT JOIN events e ON e.id = i.event_id
     WHERE i.canal = 'whatsapp' AND i.persona_id = ${telefono} AND i.direccion = 'entrante'
       ${mismaLinea(numeroPropio)}
     ORDER BY i.occurred_at DESC LIMIT 50

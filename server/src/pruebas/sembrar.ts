@@ -79,6 +79,12 @@ export async function sembrarMensaje(db: DbDePrueba, m: MensajeSembrado = {}): P
       personaId: m.personaId ?? "51900000000",
       personaNombre: m.personaNombre ?? "Lead de prueba",
       texto: m.texto ?? null,
+      // MATERIALIZADO, como lo hace `proyectar.ts` en producción desde #185. El
+      // sembrador lo escribía solo en el payload del evento, así que cualquier
+      // test sobre líneas veía la columna en NULL y podía pasar por el motivo
+      // equivocado. Un sembrador que no refleja lo que graba producción convierte
+      // un test verde en una afirmación sobre algo que no existe.
+      numeroPropio: m.canal && m.canal !== "whatsapp" ? null : numeroPropio,
       occurredAt,
     })
     .returning({ id: interactions.id });
