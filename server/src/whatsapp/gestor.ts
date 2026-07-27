@@ -93,3 +93,37 @@ export class GestorWhatsapp {
     return this.orden.map((n) => this.porNumero.get(n)!);
   }
 }
+
+/**
+ * POR QUÉ LÍNEA SALE UN ENVÍO — la puerta de salida de ESA línea, elegida por el
+ * `numeroPropio` de la orden.
+ *
+ * `enviarYProyectar` usaba `whatsapp().envio`, o sea **la primera línea,
+ * siempre**. Con una sola andaba. Con dos, cada envío de la segunda llegaba al
+ * transporte de la primera y la guarda #0 lo rechazaba con «envío enrutado a la
+ * línea equivocada» — correcto, y por eso no salió ni un mensaje por el número
+ * de otra persona. Pero el efecto en producción fue peor de lo que suena: **la
+ * vendedora nueva veía su cola entera y no podía mandar una sola letra.**
+ *
+ * **No hay caída al primero**, por lo mismo que `de()` devuelve `null`: caer
+ * sería mandarle a un lead de Walter desde el número de Luz, que el lead vería
+ * como un desconocido escribiéndole y que dejaría la atribución mintiendo. Una
+ * línea que no corre es un fallo CON MOTIVO, y el motivo lista las vivas para
+ * que el error diga qué hacer.
+ *
+ * Vive acá y no en `enviarYProyectar.ts` por la razón de la cabecera de este
+ * archivo: aquél importa `db/client.ts`, que tira al importarse si falta
+ * `DATABASE_URL` — y esta decisión hay que poder interrogarla sin base.
+ */
+export function puertaDe(
+  numeroPropio: string,
+  gestor: Pick<GestorWhatsapp, 'de' | 'numeros'>,
+): { ok: true; envio: EnvioControlado } | { ok: false; motivo: string } {
+  const linea = gestor.de(numeroPropio);
+  if (linea) return { ok: true, envio: linea.envio };
+  const vivas = gestor.numeros().join(', ') || 'ninguna';
+  return {
+    ok: false,
+    motivo: `la línea ${numeroPropio} no está conectada en el server (vivas: ${vivas}): no se manda por otra`,
+  };
+}

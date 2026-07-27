@@ -1,4 +1,5 @@
-import { whatsapp } from "./wiring.js";
+import { gestorWhatsapp } from "./wiring.js";
+import { puertaDe } from "./gestor.js";
 import { proyectarMensaje } from "./proyectar.js";
 import { repositorioDrizzle } from "./repositorioDrizzle.js";
 import type { MediaSaliente } from "./transporte.js";
@@ -15,10 +16,29 @@ import { A_MANO, aMano, type Procedencia } from "../procedencia/pieza.js";
  * mitades (`EnvioControlado` + proyección del saliente) para que ninguna ruta
  * pueda hacer una sin la otra por olvido.
  *
- * Sigue habiendo **una sola puerta**: acá adentro se llama a `whatsapp().envio`,
+ * Sigue habiendo **una sola puerta**: acá adentro se llama a `EnvioControlado`,
  * nunca a `transporte.enviarTexto`. La firma sigue siendo de a UNO —un
  * destinatario, un mensaje— porque eso es lo que hace imposible el envío masivo
  * (ver el comentario de `envioControlado.ts`).
+ *
+ * ══ LA PUERTA ES UNA POR LÍNEA, Y SE ELIGE POR LA ORDEN ══════════════════════
+ *
+ * Esto decía `whatsapp().envio`, o sea **la PRIMERA línea, siempre**. Con una
+ * sola andaba. Con dos, cada envío de la segunda llegaba al transporte de la
+ * primera y la guarda #0 lo rechazaba con «envío enrutado a la línea
+ * equivocada» — correcto, pero el efecto es que **una vendedora nueva no puede
+ * contestarle a nadie**: ve su cola entera y no puede mandar una sola letra.
+ *
+ * El `wiring.ts` había anotado esta deuda al revés: decía que dejaba a los
+ * consumidores viejos «andando contra el primer número» y que lo que no se
+ * dejaba pasar era un envío a la línea equivocada. Las dos cosas juntas no
+ * dejan un envío mal enrutado: dejan un envío IMPOSIBLE.
+ *
+ * Se elige por `numeroPropio` de la orden y **no hay caída al primero**: si esa
+ * línea no está corriendo, el envío falla con motivo. Caer al primero sería
+ * mandarle a un lead de Walter desde el número de Luz — el defecto exacto que
+ * la guarda #0 existe para impedir, y que además el lead vería como un
+ * desconocido escribiéndole.
  *
  * ══ Y AHORA TAMBIÉN: DE QUÉ PIEZA SALIÓ (épica #169) ═════════════════════════
  *
@@ -58,8 +78,12 @@ async function conMomento(o: {
   return p.tipo === "a-mano" ? aMano(momento) : { ...p, momento };
 }
 
+
 export async function enviarTextoYProyectar(o: OrdenTexto): Promise<ResultadoControlado> {
-  const r = await whatsapp().envio.enviar({ ...o, procedencia: await conMomento(o) });
+  const puerta = puertaDe(o.numeroPropio, gestorWhatsapp());
+  if (!puerta.ok) return puerta;
+
+  const r = await puerta.envio.enviar({ ...o, procedencia: await conMomento(o) });
   if (!r.ok) return r;
 
   // D10: el saliente se persiste SOLO con el idExterno del envío real, para que
@@ -91,7 +115,10 @@ export interface OrdenMedia extends ConProcedencia {
 }
 
 export async function enviarMediaYProyectar(o: OrdenMedia): Promise<ResultadoControlado> {
-  const r = await whatsapp().envio.enviarMedia({
+  const puerta = puertaDe(o.numeroPropio, gestorWhatsapp());
+  if (!puerta.ok) return puerta;
+
+  const r = await puerta.envio.enviarMedia({
     vendedoraId: o.vendedoraId,
     numeroPropio: o.numeroPropio,
     telefono: o.telefono,
