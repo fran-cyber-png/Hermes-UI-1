@@ -39,6 +39,15 @@ import { versionDeContenido } from "./version.js";
  * nombre que ve la vendedora.
  */
 
+/**
+ * Una propuesta MINADA no es de nadie: la escribió el histórico del equipo y la
+ * app se la muestra a todas (ADR 0019). Aprobarla es hacerse cargo, y ahí sí
+ * pasa a ser personal.
+ */
+function esDelEquipo(origen: string, estado: string): boolean {
+  return origen === "minado" && estado === "propuesta";
+}
+
 /** El estado de una plantilla, traducido al vocabulario del catálogo. */
 function estadoDePlantilla(estado: string, archivadoAt: Date | null): EstadoPieza {
   if (archivadoAt) return "retirada";
@@ -86,9 +95,14 @@ export async function leerPiezas(base: typeof db): Promise<Pieza[]> {
         pasos.flatMap((p) => [String(p.orden), p.texto, p.mediaClase]),
       ),
       estado,
-      // Personales por construcción (`plantillas.vendedora_id`): «el catálogo»
-      // no es global, y esconderlo haría que Ivi recomiende la plantilla de otra.
-      alcance: "vendedora",
+      // «Las plantillas son personales» es cierto A MEDIAS, y la mitad que falta
+      // cambia qué significa pedir el catálogo de una vendedora: una **propuesta
+      // minada es del EQUIPO**, no de la vendedora bajo cuyo id corrió el script
+      // (`visiblePara` en `plantillas/repositorio.ts` — la tabla exige un
+      // `vendedora_id`, así que el minado guarda uno cualquiera). Marcarla como
+      // personal la escondería de `?vendedora=` para todas menos una, que es
+      // exactamente el bug que ADR 0019 arregló en la app.
+      alcance: esDelEquipo(f.origen, f.estado) ? "negocio" : "vendedora",
       propietario: f.vendedoraId,
       rotulo: f.nombre,
       texto,

@@ -20,6 +20,7 @@ async function sembrarPlantilla(
     vendedoraId?: string;
     nombre?: string;
     estado?: string;
+    origen?: string;
     familiaCurso?: string | null;
     archivada?: boolean;
     pasos: { orden: number; texto?: string | null; mediaClase?: string | null; mediaArchivo?: string | null }[];
@@ -31,6 +32,7 @@ async function sembrarPlantilla(
       vendedoraId: p.vendedoraId ?? "ana",
       nombre: p.nombre ?? "Bienvenida",
       estado: p.estado ?? "aprobada",
+      origen: p.origen ?? "manual",
       familiaCurso: p.familiaCurso ?? null,
       archivadoAt: p.archivada ? new Date() : null,
     })
@@ -116,6 +118,31 @@ test("una propuesta es BORRADOR y no es enviable; una archivada es RETIRADA", as
   // Retirada, pero PUBLICADA: un resultado histórico atribuido a ella tiene que
   // seguir teniendo a qué apuntar.
   assert.equal(p(archivada)?.estado, "retirada");
+});
+
+test("una propuesta MINADA es del equipo, no de la vendedora bajo cuyo id se guardó", async (t) => {
+  // «Las plantillas son personales» es cierto a medias: el minado guarda las
+  // propuestas bajo UN `vendedora_id` porque la tabla exige uno, y la app se las
+  // muestra a todas (ADR 0019). Marcarla como personal la escondería de
+  // `?vendedora=` para todas menos una — el bug que ese ADR ya había arreglado.
+  const db = await baseDePrueba(t);
+  const minada = await sembrarPlantilla(db, {
+    vendedoraId: "ana",
+    estado: "propuesta",
+    origen: "minado",
+    pasos: [{ orden: 1, texto: "418 conversaciones usaron esto" }],
+  });
+  const suya = await sembrarPlantilla(db, {
+    vendedoraId: "ana",
+    pasos: [{ orden: 1, texto: "la que ella escribió" }],
+  });
+
+  const piezas = await leerPiezas(db);
+  const p = (id: number) => piezas.find((x) => x.clase === "plantilla" && x.id === String(id));
+
+  assert.equal(p(minada)?.alcance, "negocio");
+  assert.equal(p(minada)?.propietario, "ana", "se dice quién tiene la fila, igual");
+  assert.equal(p(suya)?.alcance, "vendedora");
 });
 
 test("un paso con imagen pendiente hace que la plantilla no sea enviable", async (t) => {

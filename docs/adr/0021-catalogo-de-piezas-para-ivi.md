@@ -145,7 +145,11 @@ ofrece) y ahora tiene test.
   negocio?»): cada pieza declara `alcance` (`negocio` | `vendedora`) y `propietario`, y
   `?vendedora=<id>` acota lo personal sin esconder lo del negocio. Las plantillas son personales por
   construcción, así que **«el catálogo» no es global** y esconderlo haría que Ivi recomiende la
-  plantilla de otra.
+  plantilla de otra. **Con una corrección al inventario de Ivi**: «las plantillas son personales» es
+  cierto a medias — una **propuesta minada es del EQUIPO**, no de la vendedora bajo cuyo id corrió el
+  script (la tabla exige un `vendedora_id`, así que el minado pone uno cualquiera; `visiblePara` en
+  `plantillas/repositorio.ts` se las muestra a todas desde ADR 0019). Sale con `alcance: "negocio"`, o
+  `?vendedora=` la escondería de todas menos una — el bug que ese ADR ya había arreglado en la app.
 - **Se publica que hay DOS vocabularios de familia** que no mapean 1:1 —`sku-cerberus` (`DIPICOT`,
   el de `plantillas.familia_curso` y `alias_curso`) y `campana-goberna` (`osint`, el de los ganchos)—
   y el vocabulario viaja **con** el valor. Publicarlos como un `familia: string` pelado invitaba a
