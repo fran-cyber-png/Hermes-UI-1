@@ -96,10 +96,20 @@ export function usePrepararSecuencia() {
   });
 }
 
+/**
+ * APROBAR una propuesta. `familiaCurso` es la decisión sobre el curso, y va
+ * SIEMPRE: la familia que el minado infirió (confirmada), otra, o `null` =
+ * «sirve para cualquier curso». El server rechaza aprobar sin resolver eso —
+ * una plantilla sin curso no matchea con ninguna conversación.
+ */
 export function useAprobarPlantilla() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => api(`/api/plantillas/${id}/aprobar`, { method: 'POST' }),
+    mutationFn: (v: { id: number; familiaCurso: string | null }) =>
+      api(`/api/plantillas/${v.id}/aprobar`, {
+        method: 'POST',
+        body: JSON.stringify({ familiaCurso: v.familiaCurso }),
+      }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: CLAVE }),
   });
 }

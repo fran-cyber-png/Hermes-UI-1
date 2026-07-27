@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
   AlertTriangle,
-  Check,
   ChevronRight,
   Image as Icono,
   Loader2,
@@ -15,7 +14,6 @@ import {
 import { sectionLabel } from '../../lib/styles';
 import type { Conversacion } from '../canales/conversaciones';
 import {
-  useAprobarPlantilla,
   useArchivarPlantilla,
   usePlantillas,
   usePrepararSecuencia,
@@ -25,6 +23,7 @@ import {
 import { useEnvioSecuencia } from './useEnvioSecuencia';
 import { enviados, estaCorriendo, rotulo } from './secuencia';
 import { EditorPlantilla } from './EditorPlantilla';
+import { RevisionPropuesta } from './RevisionPropuesta';
 
 /**
  * LAS PLANTILLAS-SECUENCIA, al lado del chat.
@@ -109,7 +108,6 @@ export function PanelPlantillas({
 }) {
   const { data, isPending, isError } = usePlantillas();
   const preparar = usePrepararSecuencia();
-  const aprobar = useAprobarPlantilla();
   const archivar = useArchivarPlantilla();
   const envio = useEnvioSecuencia(conversacion);
 
@@ -117,7 +115,12 @@ export function PanelPlantillas({
   const [editando, setEditando] = useState<Plantilla | 'nueva' | null>(null);
   const [porArchivar, setPorArchivar] = useState<number | null>(null);
 
-  const plantillas = data?.plantillas ?? [];
+  const todas = data?.plantillas ?? [];
+  // Las propuestas del minado se separan de las que se pueden mandar: son dos
+  // trabajos distintos —revisar y mandar— y mezclarlas es lo que hacía que las
+  // dos propuestas de producción pasaran desapercibidas.
+  const propuestas = todas.filter((p) => p.estado === 'propuesta');
+  const plantillas = todas.filter((p) => p.estado !== 'propuesta');
   const corriendo = estaCorriendo(envio.estado);
 
   async function abrir(p: Plantilla) {
@@ -166,6 +169,37 @@ export function PanelPlantillas({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
+        {/* ── PARA REVISAR: lo que el minado aprendió y todavía nadie miró ──
+            Va ARRIBA y separado: es trabajo pendiente de una persona, no una
+            secuencia más de la lista. Mientras estuvo mezclado —y filtrado por
+            vendedora— dos propuestas con 418 y 296 conversaciones de respaldo
+            pasaron un día entero sin que nadie supiera que existían. */}
+        {!isPending && !isError && propuestas.length > 0 && (
+          <section className="mb-3 rounded-xl border border-primary/30 bg-secondary/40 p-2">
+            <div className="mb-1.5 flex items-baseline gap-1.5 px-0.5">
+              <span className={sectionLabel}>Para revisar</span>
+              <span className="font-mono text-[10px] font-bold text-primary">
+                {propuestas.length}
+              </span>
+            </div>
+            <p className="mb-2 px-0.5 text-[10px] leading-snug text-muted-foreground">
+              Salieron de lo que el equipo ya manda todos los días. Nadie las puede enviar hasta que
+              alguien las apruebe.
+            </p>
+            <ul className="flex flex-col gap-1.5">
+              {propuestas.map((p) => (
+                <RevisionPropuesta
+                  key={p.id}
+                  plantilla={p}
+                  abierta={abierta === p.id}
+                  onAbrir={() => setAbierta(abierta === p.id ? null : p.id)}
+                  onEditar={() => setEditando(p)}
+                />
+              ))}
+            </ul>
+          </section>
+        )}
+
         {isPending ? (
           <div className="space-y-2">
             {[0, 1, 2].map((i) => (
@@ -175,6 +209,11 @@ export function PanelPlantillas({
         ) : isError ? (
           <p className="rounded-xl border border-warning/40 bg-warning/10 p-3 text-[11px] leading-relaxed text-warning-foreground">
             No se pudieron cargar las secuencias. No es que no tengas: es que la lista no cargó.
+          </p>
+        ) : plantillas.length === 0 && propuestas.length > 0 ? (
+          <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
+            Todavía no hay ninguna secuencia aprobada. Aprobá una de las de arriba y aparece acá,
+            lista para mandar.
           </p>
         ) : plantillas.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-4 text-center">
@@ -197,9 +236,13 @@ export function PanelPlantillas({
           </div>
         ) : (
           <ul className="flex flex-col gap-1.5">
+            {propuestas.length > 0 && (
+              <li className="px-0.5 pb-0.5">
+                <span className={sectionLabel}>Listas para mandar</span>
+              </li>
+            )}
             {plantillas.map((p) => {
               const activa = abierta === p.id;
-              const esPropuesta = p.estado === 'propuesta';
               return (
                 <li
                   key={p.id}
@@ -225,22 +268,13 @@ export function PanelPlantillas({
                         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
                           {p.nombre}
                         </span>
-                        {esPropuesta ? (
-                          <span className="shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-bold text-secondary-foreground">
-                            Propuesta
-                          </span>
-                        ) : p.usos > 0 ? (
+                        {p.usos > 0 && (
                           <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
                             {p.usos}×
                           </span>
-                        ) : null}
+                        )}
                       </span>
                       <TirasDePasos plantilla={p} />
-                      {esPropuesta && p.respaldo > 0 && (
-                        <span className="mt-1 block text-[10px] leading-snug text-muted-foreground">
-                          Aprendida de {p.respaldo} conversaciones tuyas. Revisala antes de usarla.
-                        </span>
-                      )}
                     </span>
                   </button>
 
@@ -291,34 +325,23 @@ export function PanelPlantillas({
                             </div>
                           ) : (
                             <div className="flex flex-wrap items-center gap-1.5">
-                              {esPropuesta ? (
-                                <button
-                                  type="button"
-                                  onClick={() => aprobar.mutate(p.id)}
-                                  disabled={aprobar.isPending}
-                                  className="inline-flex items-center gap-1.5 rounded-lg bg-navy px-2.5 py-1.5 text-[11px] font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] disabled:opacity-50"
-                                >
-                                  <Check size={12} /> Revisada: aprobar
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  disabled={!puedeMandar}
-                                  onClick={() =>
-                                    void envio.mandar(
-                                      p.id,
-                                      preparada.pasos.map((x) => ({
-                                        orden: x.orden,
-                                        mediaPendiente: x.mediaPendiente,
-                                      })),
-                                    )
-                                  }
-                                  className="inline-flex items-center gap-1.5 rounded-lg bg-navy px-2.5 py-1.5 text-[11px] font-bold text-white shadow-[0_4px_14px_-6px_rgba(14,42,82,0.6)] transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
-                                >
-                                  <Send size={12} /> Mandar {preparada.total}{' '}
-                                  {preparada.total === 1 ? 'mensaje' : 'mensajes'}
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                disabled={!puedeMandar}
+                                onClick={() =>
+                                  void envio.mandar(
+                                    p.id,
+                                    preparada.pasos.map((x) => ({
+                                      orden: x.orden,
+                                      mediaPendiente: x.mediaPendiente,
+                                    })),
+                                  )
+                                }
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-navy px-2.5 py-1.5 text-[11px] font-bold text-white shadow-[0_4px_14px_-6px_rgba(14,42,82,0.6)] transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+                              >
+                                <Send size={12} /> Mandar {preparada.total}{' '}
+                                {preparada.total === 1 ? 'mensaje' : 'mensajes'}
+                              </button>
 
                               {onEditarEnComposer && preparada.pasos[0]?.texto && (
                                 <button
@@ -359,7 +382,7 @@ export function PanelPlantillas({
                             </div>
                           )}
 
-                          {!puedeMandar && envio.estado.fase === 'lista' && !esPropuesta && (
+                          {!puedeMandar && envio.estado.fase === 'lista' && (
                             <p className="mt-1.5 text-[10px] leading-snug text-muted-foreground">
                               {conversacion?.canal !== 'whatsapp'
                                 ? 'Las secuencias se mandan por WhatsApp.'
