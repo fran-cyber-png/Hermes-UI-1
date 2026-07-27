@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { gestiones, etiquetas, intereses, conversionesWa } from '../db/schema.js';
+import { gestiones, etiquetas, intereses } from '../db/schema.js';
+import { proyectarVenta } from '../atribucion/proyectarVenta.js';
+import { conversacionDeClave } from '../atribucion/resolverConversacion.js';
 import { ultimasGestionesSql } from '../cola/etapaEfectivaSql.js';
 import { requiereVendedora } from '../auth/sesion.js';
 import {
@@ -209,6 +211,7 @@ export async function asentarVentaEnEmbudo(v: {
   telefono?: string | null;
   personaNombre?: string | null;
   numeroPropio?: string | null;
+  montoTotal?: number | null;
   productos: string[];
 }): Promise<void> {
   const clave = v.clave?.trim();
@@ -222,11 +225,37 @@ export async function asentarVentaEnEmbudo(v: {
   }
 
   if (v.saveMode === 'venta' && v.telefono) {
-    await db.insert(conversionesWa).values({
+    // Por el MISMO seam que el webhook de Cerberus (#161). Antes esta ruta insertaba a mano una
+    // fila sin folio ni clave: la venta existía en el panel y no se podía atar ni a la
+    // conversación ni a la venta de Cerberus. Ahora sale con la conversación puesta —la
+    // vendedora está parada en ella, no hay nada que resolver— y el webhook la completa
+    // después con el id, el monto y la moneda, sobre la MISMA fila (dedup por folio).
+    //
+    // ⚠️ Si Cerberus no devolvió folio (respuesta no-JSON), la fila queda sin llave natural y el
+    // webhook de esa venta creará la suya: una venta contada dos veces. Es el único hueco, y se
+    // cierra el día que `crearVenta` devuelva siempre el folio.
+    await proyectarVenta(db, {
+      externalSaleId: null,
+      folio: v.folio,
       vendedoraId: v.vendedoraId,
-      telefono: v.telefono,
-      nombre: v.personaNombre ?? null,
+      montoTotal: v.montoTotal ?? null,
+      // La moneda queda para el webhook: acá solo tenemos el id de moneda de Cerberus, y un ISO
+      // adivinado sobre ventas en USD/PEN/MXN/BOB/DOP/COP es plata mal contada.
+      moneda: null,
+      medio: null,
       origen: null,
+      estado: null,
+      estadoPago: null,
+      cliente: {
+        cerberusClienteId: null,
+        nombre: v.personaNombre ?? null,
+        dni: null,
+        correo: null,
+        telefonos: [v.telefono],
+      },
+      conversacion: conversacionDeClave(clave),
+      ocurridaAt: new Date(),
+      fuente: 'hermes',
     });
   }
 

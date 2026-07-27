@@ -52,6 +52,9 @@ ventaRouter.post('/crear', requiereVendedora, async (req, res) => {
     montoTotal: Number(b.montoTotal ?? 0),
     productos: Array.isArray(b.productos) ? b.productos : [],
     saveMode: b.saveMode === 'venta' ? 'venta' : 'cotizacion',
+    // La conversación viaja a Cerberus dentro del `venta_request_key` y vuelve en el webhook
+    // (#161). El front ya mandaba `clave` para asentar el embudo; ahora también cierra el lazo.
+    clave: b.clave ? String(b.clave) : null,
   };
 
   if (!orden.clienteId || !orden.monedaId || !orden.paisId || orden.productos.length === 0) {
@@ -78,6 +81,7 @@ ventaRouter.post('/crear', requiereVendedora, async (req, res) => {
       telefono: b.telefono ? String(b.telefono).replace(/\D/g, '') : null,
       personaNombre: b.personaNombre ? String(b.personaNombre) : null,
       numeroPropio: b.numeroPropio ? String(b.numeroPropio) : null,
+      montoTotal: orden.montoTotal || null,
       productos: (Array.isArray(b.productos) ? b.productos : [])
         .map((p: { nombre?: string }) => String(p.nombre ?? ''))
         .filter(Boolean),

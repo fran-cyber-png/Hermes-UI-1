@@ -1,3 +1,4 @@
+import { TIPOS_ACEPTADOS } from "../atribucion/payload.js";
 import type { Pais } from "../lazo/normalizar.js";
 
 /**
@@ -22,7 +23,10 @@ export function tokenValido(recibido: string | undefined, secreto: string | unde
   return recibido === secreto;
 }
 
-const TIPOS = new Set(["sale.created", "sale.updated", "sale.deleted", "products.sync"]);
+// La lista canónica de tipos vive UNA vez, en `atribucion/payload.ts` — junto al Zod que valida
+// el resto del contrato. Dos listas de «qué eventos existen» es exactamente la divergencia
+// silenciosa que ya costó caro (#37).
+const TIPOS = new Set<string>(TIPOS_ACEPTADOS);
 
 export function tipoAceptado(tipo: string | undefined): boolean {
   return tipo != null && TIPOS.has(tipo);

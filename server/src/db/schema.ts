@@ -6,11 +6,13 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   primaryKey,
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -359,10 +361,121 @@ export const conversionesWa = pgTable(
     /** De dónde vino el lead (anuncio/landing), tal como se capturó. La atribución. */
     origen: jsonb("origen"),
     iniciadaAt: timestamp("iniciada_at", { withTimezone: true }).notNull().default(sql`now()`),
+
+    // ── LA VENTA, DE VERDAD (#161 fase 1) ────────────────────────────────────
+    // Hasta acá la fila decía «alguien vendió a este teléfono» y el folio quedaba
+    // como texto libre en `gestiones.notas`. Un `notas LIKE '%GOB-%'` no es una
+    // integración: no se puede sumar, ni agrupar por curso, ni cruzar con la pauta.
+    // Estas columnas son lo que convierte la conversión en PLATA consultable.
+    // Todas son opcionales a propósito: las filas que ya existían (el botón
+    // «Marcar como interesado», `routes/contactos.ts`) siguen siendo válidas.
+
+    /** `tb_venta.id` de Cerberus. LA LLAVE NATURAL: por acá se deduplica la proyección. */
+    externalSaleId: text("external_sale_id"),
+    /** `tb_venta.folio_venta` — lo que la vendedora ve y dice por teléfono. */
+    folio: text("folio"),
+    /** Monto total de la venta. `numeric` y no float: es plata (ver `db/canonico.ts`). */
+    monto: numeric("monto"),
+    /** ISO de la moneda. Un importe sin moneda no es un importe: van juntos o no van. */
+    moneda: text("moneda"),
+    /** `tb_venta.medio_venta` de Cerberus, tal cual. NO se recalcula acá (#161 §4). */
+    medio: text("medio"),
+    /** `tb_venta.origen_venta` de Cerberus. Ojo: `origen` (jsonb) es el ANUNCIO, esto es otra cosa. */
+    origenVenta: text("origen_venta"),
+    /** 1 Pagado · 2 Pendiente · 3 No Validado · 4 Anulado · 5 Cotización. */
+    estadoVenta: integer("estado_venta"),
+    /** `pagado_completo` | `pago_parcial` | `en_verificacion` — ya calculado por Cerberus. */
+    estadoPago: text("estado_pago"),
+
+    /** La conversación que la originó: `conv:<canal>:<persona>:<numeroPropio>`. */
+    clave: text("clave"),
+    canal: text("canal"),
+    /**
+     * El número de Goberna por el que entró esa conversación. Existe desde el día uno porque
+     * el equipo vende por VARIOS números (#50): sin esta columna, la misma persona escribiendo
+     * a dos números nuestros sería una sola conversión y el rendimiento por número no se puede
+     * medir.
+     */
+    numeroPropio: text("numero_propio"),
+    /**
+     * CÓMO se ató la venta al chat: `llave` (determinista, viajó en el `idempotency_key`),
+     * `telefono_e164` (el número completo coincide), `telefono_sufijo` (coinciden los últimos
+     * 9 dígitos — más débil, ver #119) o `manual` (lo que escribió el CRM antes de todo esto).
+     * Es un dato del negocio: dice cuánto confiar en la atribución.
+     */
+    atribucion: text("atribucion").notNull().default("manual"),
+    /** Quién trajo la fila: `hermes` (el CRM) · `webhook` (Cerberus) · `puente-icarus` (temporal). */
+    fuenteVenta: text("fuente_venta").notNull().default("hermes"),
+    /** Cuándo ocurrió la venta en Cerberus (no cuándo la vimos). */
+    ocurridaAt: timestamp("ocurrida_at", { withTimezone: true }),
   },
   (t) => [
     index("conversiones_wa_vendedora_idx").on(t.vendedoraId),
     index("conversiones_wa_telefono_idx").on(t.telefono),
+    // La idempotencia de la proyección: reprocesar el mismo webhook —o correr el puente dos
+    // veces— pisa la fila, no la duplica. Parcial porque las filas viejas (y las del botón
+    // «Marcar como interesado») no tienen venta de Cerberus y son todas legítimas.
+    uniqueIndex("conversiones_wa_venta_uq")
+      .on(t.externalSaleId)
+      .where(sql`external_sale_id IS NOT NULL`),
+    // La segunda llave. Cuando la vendedora registra la venta desde el chat, Cerberus le
+    // devuelve el FOLIO y no el id; el webhook de esa misma venta llega después con el id. Sin
+    // esta unicidad serían dos conversiones para una venta, y el panel contaría doble.
+    // (`folio_venta` es unique en Cerberus — `sales/models.py:130`.)
+    uniqueIndex("conversiones_wa_folio_uq").on(t.folio).where(sql`folio IS NOT NULL`),
+    index("conversiones_wa_clave_idx").on(t.clave),
+  ],
+);
+
+/**
+ * LAS VENTAS QUE NO SE PUDIERON ATAR A NINGUNA CONVERSACIÓN.
+ *
+ * ── Por qué existe una tabla aparte y no un flag ──
+ * `conversiones_wa` significa «esta conversación produjo esta venta», y hay tres consultas
+ * vivas que la cuentan entera como ventas del CRM (`dashboard/series.ts`,
+ * `dashboard/porVendedora.ts`, la compuerta de Cierre en `gestiones/registrarGestion.ts`).
+ * Meter ahí las 6.800 ventas del negocio —el 98 % de las cuales nunca pasó por un chat de
+ * Hermes— convertiría el panel de la vendedora en el reporte de Cerberus de un día para otro.
+ *
+ * Pero perderlas tampoco: **una venta que no se pudo atribuir es un dato, no un no-evento.**
+ * Es el denominador. Sin esta tabla, «atribuimos el 6 %» y «atribuimos el 100 %» se ven igual.
+ *
+ * Es append-only e idempotente por `external_sale_id`. Cuando una venta de acá se vuelve
+ * atribuible —porque la persona escribe después, o porque Cerberus la reenvía con la llave—,
+ * `proyectarVenta` la mueve a `conversiones_wa` y la borra de acá: una venta está de un lado o
+ * del otro, nunca en los dos.
+ */
+export const ventasNoAtribuidas = pgTable(
+  "ventas_no_atribuidas",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    /** `tb_venta.id`. La llave natural, igual que en `conversiones_wa`. */
+    externalSaleId: text("external_sale_id").notNull(),
+    folio: text("folio"),
+    /** El username de Cerberus. Acá NO es notNull: una venta vieja puede no traerlo. */
+    vendedoraId: text("vendedora_id"),
+    monto: numeric("monto"),
+    moneda: text("moneda"),
+    medio: text("medio"),
+    origenVenta: text("origen_venta"),
+    estadoVenta: integer("estado_venta"),
+    estadoPago: text("estado_pago"),
+    cerberusClienteId: bigint("cerberus_cliente_id", { mode: "number" }),
+    /**
+     * Cuántos teléfonos tenía el cliente. El teléfono en sí NO se guarda: es de Cerberus, y
+     * copiarlo acá sería fabricar una segunda base de clientes (lo que #161 §4 prohíbe).
+     * Para reintentar el match alcanza con volver a leer el evento, que está guardado crudo.
+     */
+    telefonos: integer("telefonos").notNull().default(0),
+    /** `sin_telefono` | `sin_conversacion`. Cada motivo pide una acción distinta. */
+    motivo: text("motivo").notNull(),
+    fuenteVenta: text("fuente_venta").notNull(),
+    ocurridaAt: timestamp("ocurrida_at", { withTimezone: true }),
+    vistaAt: timestamp("vista_at", { withTimezone: true }).notNull().default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex("ventas_no_atribuidas_uq").on(t.externalSaleId),
+    index("ventas_no_atribuidas_motivo_idx").on(t.motivo),
   ],
 );
 

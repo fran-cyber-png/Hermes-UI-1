@@ -5,7 +5,9 @@ import { registro, conversiones } from "../db/ontologia.js";
 import { webhooksRecibidos } from "../db/operacion.js";
 import { construirCompra } from "../lazo/evento.js";
 import { capiDesdeEnv } from "../lazo/capi.js";
-import { claveDeVenta, extraerVenta, tipoAceptado, tokenValido } from "./cerberus.js";
+import { leerEventoCerberus, ventaDeEvento, type EventoCerberus } from "../atribucion/payload.js";
+import { proyectarVenta } from "../atribucion/proyectarVenta.js";
+import { claveDeVenta, extraerVenta, tokenValido } from "./cerberus.js";
 import { recibirWhatsapp, verificarWhatsapp } from "./whatsapp.js";
 
 export const webhookRouter = Router();
@@ -31,6 +33,12 @@ webhookRouter.post("/whatsapp", recibirWhatsapp);
  * ── Auth ──
  * Token en el querystring (`?token=`), como lo manda Cerberus. No es HMAC. Comparación directa,
  * falla cerrado.
+ *
+ * ── Validación (#161 fase 1) ──
+ * El cuerpo se valida con Zod (`atribucion/payload.ts`) contra el contrato real. Antes se leía
+ * a mano con `Number(v.monto_total)`: un campo ausente daba `NaN` y seguía viaje. Ahora un
+ * payload que no entendemos **se guarda igual** —para poder mirarlo y re-procesarlo— y se
+ * responde 400 con el motivo. Nada se acepta a medias y nada se pierde.
  */
 webhookRouter.post("/cerberus", async (req, res) => {
   // 1. La puerta. Sin token válido, ni miramos el cuerpo.
@@ -41,49 +49,76 @@ webhookRouter.post("/cerberus", async (req, res) => {
   }
 
   const payload = req.body;
-  const tipo = payload?.event_type as string | undefined;
-  const eventoId = payload?.event_id as string | undefined;
-
-  if (!tipoAceptado(tipo) || !eventoId) {
-    res.status(400).json({ ok: false, message: "event_type o event_id inválidos" });
-    return;
-  }
+  const lectura = leerEventoCerberus(payload);
 
   // 2. Guardar el crudo. Es lo ÚNICO que tiene que pasar antes de responder — la red de
   //    seguridad contra el fire-and-forget. `event_id` deduplica reintentos del MISMO envío.
-  try {
-    await db
-      .insert(webhooksRecibidos)
-      .values({ fuente: "cerberus", tipo, eventoId, payload })
-      .onConflictDoNothing({ target: [webhooksRecibidos.fuente, webhooksRecibidos.eventoId] });
-  } catch (err) {
-    // Si ni siquiera podemos guardar el crudo, ahí SÍ pedimos reintento (500) — aunque Cerberus
-    // no reintente, es lo correcto: no confirmamos algo que no guardamos.
-    res.status(500).json({ ok: false, message: (err as Error).message });
+  //    Un payload que NO validó también se guarda, marcado como error: el día que Cerberus
+  //    cambie el contrato, el evento perdido sería una venta que nadie puede recuperar.
+  const eventoId = typeof payload?.event_id === "string" ? payload.event_id : null;
+  if (eventoId) {
+    try {
+      await db
+        .insert(webhooksRecibidos)
+        .values({
+          fuente: "cerberus",
+          tipo: typeof payload?.event_type === "string" ? payload.event_type : null,
+          eventoId,
+          payload,
+          ...(lectura.ok ? {} : { estado: "error", error: lectura.motivo }),
+        })
+        .onConflictDoNothing({ target: [webhooksRecibidos.fuente, webhooksRecibidos.eventoId] });
+    } catch (err) {
+      // Si ni siquiera podemos guardar el crudo, ahí SÍ pedimos reintento (500) — aunque
+      // Cerberus no reintente, es lo correcto: no confirmamos algo que no guardamos.
+      res.status(500).json({ ok: false, message: (err as Error).message });
+      return;
+    }
+  }
+
+  if (!lectura.ok) {
+    res.status(400).json({ ok: false, message: lectura.motivo });
     return;
   }
 
   // 3. Responder YA. La venta está a salvo; el procesamiento no puede hacer perder el evento.
-  res.status(200).json({ ok: true, evento: eventoId });
+  res.status(200).json({ ok: true, evento: lectura.evento.event_id });
 
   // 4. Procesar en segundo plano, después de contestar. Los errores quedan registrados en la
   //    fila del webhook, no se los come nadie.
-  void procesar(payload, tipo!, eventoId).catch(async (err) => {
+  void procesar(payload, lectura.evento).catch(async (err) => {
     await db
       .update(webhooksRecibidos)
       .set({ estado: "error", error: (err as Error).message })
-      .where(sql`${webhooksRecibidos.fuente} = 'cerberus' AND ${webhooksRecibidos.eventoId} = ${eventoId}`);
+      .where(
+        sql`${webhooksRecibidos.fuente} = 'cerberus' AND ${webhooksRecibidos.eventoId} = ${lectura.evento.event_id}`,
+      );
   });
 });
 
 /**
  * Proyecta la venta y, si corresponde, dispara el Purchase. Corre DESPUÉS de responder.
  *
- * Reusa exactamente la misma lógica que el lazo por lotes (`construirCompra`): así una venta que
- * llega por webhook y una que llega por el dump nocturno se evalúan idénticas. Una sola
- * definición de qué es una compra.
+ * ── Los TRES destinos, y por qué son tres ──
+ *
+ * 1. **`fuentes.registro`** — el espejo crudo de `tb_venta`. Lo lee el lazo por lotes
+ *    (`ontologia/ventas.ts` → `lazo/worker.ts`), así que una venta que llega por webhook y una
+ *    que llega por el dump se evalúan idénticas.
+ * 2. **`conversiones_wa`** — LO QUE EL CRM LEE (`dashboard/series.ts`, `dashboard/porVendedora.ts`,
+ *    la compuerta de Cierre). Es lo que faltaba: hasta este cambio el receptor escribía solo en
+ *    los dos schemas heredados y la app no se enteraba de nada (#161 §0.C).
+ * 3. **`ontologia.conversiones`** — el OUTBOX del CAPI, no un schema muerto: `lazo/worker.ts:87`
+ *    lo consulta para no mandarle a Meta dos veces el mismo `Purchase`. Sacarlo de acá rompería
+ *    esa deduplicación, así que se queda donde está y con el mismo `event_id`.
+ *
+ * Los tres son independientes: que falle la proyección al CRM no puede impedir el Purchase, ni
+ * al revés. Por eso cada uno tiene su propio manejo de error y el resumen se junta al final.
  */
-async function procesar(payload: any, tipo: string, eventoId: string): Promise<void> {
+async function procesar(payload: any, evento: EventoCerberus): Promise<void> {
+  const tipo = evento.event_type;
+  const eventoId = evento.event_id;
+  const problemas: string[] = [];
+
   // El catálogo (products.sync) y los borrados no disparan lazo — solo se espejan.
   const clave = claveDeVenta(payload);
   if (clave) {
@@ -100,6 +135,21 @@ async function procesar(payload: any, tipo: string, eventoId: string): Promise<v
   if (tipo === "sale.deleted" || tipo === "products.sync" || !clave) {
     await marcarProcesado(eventoId);
     return;
+  }
+
+  // ── LA ATRIBUCIÓN: la venta entra al CRM (#161 fase 1) ──
+  // Va ANTES del lazo a propósito. El CAPI depende de Meta y de una ventana de 7 días; esto no
+  // depende de nadie, y es lo que hace que la vendedora vea la venta en su panel. Si Meta está
+  // caído, la atribución tiene que haber pasado igual.
+  const atribuible = ventaDeEvento(evento, "webhook");
+  if (atribuible) {
+    try {
+      await proyectarVenta(db, atribuible);
+    } catch (err) {
+      // No abortamos: el Purchase de Meta tiene su propia ventana y no puede esperar a que
+      // arreglemos una proyección. El fallo queda escrito en la fila del webhook.
+      problemas.push(`atribución: ${(err as Error).message}`);
+    }
   }
 
   // ── El lazo, en vivo ──
@@ -160,12 +210,21 @@ async function procesar(payload: any, tipo: string, eventoId: string): Promise<v
     }
   }
 
-  await marcarProcesado(eventoId);
+  await marcarProcesado(eventoId, problemas);
 }
 
-async function marcarProcesado(eventoId: string): Promise<void> {
+/**
+ * Cierra la fila del webhook. Un evento que se procesó **a medias** no se marca como procesado
+ * a secas: queda `procesado` con el error escrito, porque «anduvo todo» y «anduvo el Purchase
+ * pero no la atribución» no pueden verse iguales.
+ */
+async function marcarProcesado(eventoId: string, problemas: string[] = []): Promise<void> {
   await db
     .update(webhooksRecibidos)
-    .set({ estado: "procesado", procesadoAt: new Date() })
+    .set({
+      estado: "procesado",
+      procesadoAt: new Date(),
+      ...(problemas.length ? { error: problemas.join(" · ") } : {}),
+    })
     .where(sql`${webhooksRecibidos.fuente} = 'cerberus' AND ${webhooksRecibidos.eventoId} = ${eventoId}`);
 }
