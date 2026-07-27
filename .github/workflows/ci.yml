@@ -4,9 +4,10 @@ name: CI
 # anterior pasó: lo barato falla primero, así un typo no espera cuatro minutos de tests
 # para avisar.
 #
-#   N1  rápido     lint · typecheck · guardia del journal          ~30 s   toda corrida
-#   N2  unidad     build · tests puros · chequeo de secretos       ~2 min  toda corrida
-#   N2b base       tests con Postgres efímera (el SQL de verdad)   ~2 min  toda corrida
+#   N1  rápido     secretos · expand-only · journal · server      ~45 s   toda corrida
+#   N2  front      lint · typecheck · build · tests del front      ~2 min  toda corrida
+#   N2b base       tests con Postgres efímera: el SQL y la PARIDAD ~2 min  toda corrida
+#                  del schema (migrar desde cero ≡ src/db/*.ts)
 #   N3  staging    despliega a staging + migra + smoke funcional   ~3 min  solo push a main
 #   N4  prod front despliega el front a producción, sin restart    ~1 min  solo si N3 pasó
 #
@@ -16,8 +17,10 @@ name: CI
 #
 # Todo corre en el runner self-hosted de VPS1 (label `vps1-hermes`): no gasta minutos de
 # GitHub, y desplegar es escribir en el disco local — sin SSH ni claves.
-# OJO: el runner es UNO. Los jobs se serializan aunque el grafo los dibuje en paralelo;
-# por eso están agrupados como están, y no en diez jobs chiquitos.
+# OJO: el runner es UNO. Los jobs se serializan aunque el grafo los dibuje en paralelo,
+# y cada job extra paga su propio `npm ci`. Por eso los jobs se agrupan por CONJUNTO DE
+# DEPENDENCIAS (server / front / base) y no por temática: así son tres `npm ci` y no
+# cinco, y de paso los 820 tests del server —que tardan 3 s— caen en el primer nivel.
 
 on:
   pull_request:
@@ -37,36 +40,37 @@ env:
 
 jobs:
   # ══ NIVEL 1 ══════════════════════════════════════════════════════════════════
-  # Lo que puede fallar en segundos, falla en segundos. Sin dependencias: es la raíz.
+  # Las guardias que no necesitan instalar NADA van primero de todo: son segundos y
+  # atrapan lo que más caro sale (un secreto versionado, una migración destructiva).
+  # Después, con las dependencias del server puestas, todo lo que se apoya en ellas —
+  # incluidos los tests puros, que son 820 y tardan 3 s.
+  #
+  # Por qué los tests del server están en el nivel «rápido» y no en el 2: el runner es
+  # UNO y cada job extra paga su propio `npm ci`. Agrupar por costo de dependencias
+  # —server acá, front en N2— sale más barato Y falla antes que agrupar por temática.
   n1-rapido:
-    name: 'N1 · lint, typecheck y journal'
+    name: 'N1 · guardias, server y tests puros'
     runs-on: [self-hosted, vps1-hermes]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Dependencias del front
-        run: npm ci
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Typecheck del front
-        run: npx tsc --noEmit -p tsconfig.app.json
-
-      - name: Dependencias del server
-        run: npm ci
-        working-directory: server
-
-      - name: Typecheck del server
-        run: npx tsc --noEmit
-        working-directory: server
-
-      # La guardia del journal de migraciones. Va acá y no con el resto de los tests
-      # porque es el fallo más caro del repo —drizzle saltea una migración en silencio
-      # y el deploy sale verde— y cuesta 200 ms detectarlo.
-      - name: Guardia del journal de migraciones
-        run: npx tsx --test src/pruebas/journal.test.ts
-        working-directory: server
+      # Regla dura #1. `.gitignore` es una intención, no una garantía: un `git add -f`
+      # la saltea. Esto mira lo que HAY en el árbol, que es lo que terminaría publicado.
+      # Cuesta cero: no instala nada.
+      - name: Ningún secreto entró al repo
+        run: |
+          set -uo pipefail
+          MAL=0
+          if git ls-files | grep -E '(^|/)\.env$|(^|/)\.env\.[^e]' ; then
+            echo "::error::hay un .env versionado — los secretos van por nombre, nunca en el repo"
+            MAL=1
+          fi
+          # La sesión de WhatsApp es la credencial de la cuenta, no un archivo de config.
+          if git ls-files | grep -E '\.wa-sessions/|\.db-wal$|\.db-shm$' ; then
+            echo "::error::hay una sesión de WhatsApp versionada — esa es la credencial de la cuenta"
+            MAL=1
+          fi
+          exit $MAL
 
       # EXPAND-ONLY. Esta guardia es la que hace válido el rollback automático del
       # deploy: si las migraciones solo AGREGAN, el código viejo sigue funcionando
@@ -105,47 +109,58 @@ jobs:
           done
           exit $MAL
 
+      - name: Dependencias del server
+        run: npm ci
+        working-directory: server
+
+      # La guardia del journal de migraciones. Va temprano porque es el fallo más caro
+      # del repo —drizzle saltea una migración en silencio y el deploy sale verde— y
+      # cuesta 200 ms detectarlo. También fija las dos líneas del baseline que
+      # drizzle-kit NO emite y que se pierden al regenerarlo: la extensión `vector` y el
+      # índice GIN de `notas`.
+      - name: Guardia del journal de migraciones
+        run: npx tsx --test src/pruebas/journal.test.ts
+        working-directory: server
+
+      # Lo que drizzle-kit sabe de sus propios metadatos: que cada snapshot corresponda
+      # a su .sql y que no haya colisiones. No toca ninguna base (por eso `client.ts`
+      # quedó fuera del glob de `drizzle.config.ts`: exigía un DATABASE_URL para nada).
+      - name: El journal y los snapshots de drizzle son coherentes
+        run: npm run db:check
+        working-directory: server
+
+      - name: Typecheck del server
+        run: npx tsc --noEmit
+        working-directory: server
+
+      - name: Tests del server (puros)
+        run: npm test
+        working-directory: server
+
   # ══ NIVEL 2 ══════════════════════════════════════════════════════════════════
-  n2-unidad:
-    name: 'N2 · build, tests puros y secretos'
+  # El front, con su propio `npm ci` — el paquete de dependencias más caro del repo.
+  # Ordenado de barato a caro dentro del job: lint, typecheck, build, tests.
+  n2-front:
+    name: 'N2 · lint, typecheck, build y tests del front'
     needs: n1-rapido
     runs-on: [self-hosted, vps1-hermes]
     steps:
       - uses: actions/checkout@v4
 
-      # Regla dura #1. `.gitignore` es una intención, no una garantía: un `git add -f`
-      # la saltea. Esto mira lo que HAY en el árbol, que es lo que terminaría publicado.
-      - name: Ningún secreto entró al repo
-        run: |
-          set -uo pipefail
-          MAL=0
-          if git ls-files | grep -E '(^|/)\.env$|(^|/)\.env\.[^e]' ; then
-            echo "::error::hay un .env versionado — los secretos van por nombre, nunca en el repo"
-            MAL=1
-          fi
-          # La sesión de WhatsApp es la credencial de la cuenta, no un archivo de config.
-          if git ls-files | grep -E '\.wa-sessions/|\.db-wal$|\.db-shm$' ; then
-            echo "::error::hay una sesión de WhatsApp versionada — esa es la credencial de la cuenta"
-            MAL=1
-          fi
-          exit $MAL
-
       - name: Dependencias del front
         run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck del front
+        run: npx tsc --noEmit -p tsconfig.app.json
 
       - name: Build del front
         run: npm run build
 
       - name: Tests del front
         run: npm test
-
-      - name: Dependencias del server
-        run: npm ci
-        working-directory: server
-
-      - name: Tests del server
-        run: npm test
-        working-directory: server
 
       # Informativa a propósito: `npm audit` reporta vulnerabilidades transitivas que a
       # veces no tienen arreglo disponible. Frenar el pipeline por eso enseña a
@@ -162,7 +177,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   n2b-base:
-    name: 'N2b · tests con base (el SQL)'
+    name: 'N2b · tests con base (el SQL y la paridad del schema)'
     needs: n1-rapido
     runs-on: [self-hosted, vps1-hermes]
     env:
@@ -180,6 +195,10 @@ jobs:
         run: npm ci
         working-directory: server
 
+      # Además del SQL de la cola y el radar, acá corre la PARIDAD del schema
+      # (`migraciones/adopcion.test.db.ts`): migrar desde cero tiene que dar la misma
+      # base que declara `src/db/*.ts`. Es lo que hace que un cambio de schema sin su
+      # migración NO pueda pasar desapercibido y terminar en un `db:push` a mano.
       - name: Tests con base
         run: npm run test:db
         working-directory: server
@@ -194,7 +213,7 @@ jobs:
   # CON historia, y corre el smoke funcional autenticado.
   n3-staging:
     name: 'N3 · desplegar a staging y smoke'
-    needs: [n2-unidad, n2b-base]
+    needs: [n2-front, n2b-base]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, vps1-hermes]
     # Staging tiene su propia cola: no comparte candado con producción.
@@ -214,6 +233,16 @@ jobs:
 
           npm ci --no-audit --no-fund
           (cd server && npm ci --no-audit --no-fund)
+
+          # ANTES de migrar: que lo registrado en la base de staging y lo que el repo
+          # dice ser se correspondan. El migrador de drizzle compara por `when`, no por
+          # hash, así que una base migrada contra otro baseline no se delata sola — el
+          # síntoma sería un «relation already exists» a mitad del .sql, que no explica
+          # nada. `db:estado` sí explica, y dice qué hacer.
+          #
+          # Staging es descartable: si esto falla, la salida trae el comando para
+          # recrear la base y volver a migrar (docs/migraciones.md §staging).
+          (cd server && npm run db:estado -- --exigir-coherencia)
 
           # LAS MIGRACIONES, sobre una base que ya tiene datos. Este es el ensayo que
           # antes no existía: `db:push` se corría directo contra producción.
@@ -387,14 +416,14 @@ jobs:
   # Un solo lugar donde ver en qué nivel quedó la corrida, sin abrir job por job.
   resumen:
     name: 'Resumen'
-    needs: [n1-rapido, n2-unidad, n2b-base, n3-staging, n4-prod-front]
+    needs: [n1-rapido, n2-front, n2b-base, n3-staging, n4-prod-front]
     if: always()
     runs-on: [self-hosted, vps1-hermes]
     steps:
       - name: Consolidar
         env:
           R1: ${{ needs.n1-rapido.result }}
-          R2: ${{ needs.n2-unidad.result }}
+          R2: ${{ needs.n2-front.result }}
           R2B: ${{ needs.n2b-base.result }}
           R3: ${{ needs.n3-staging.result }}
           R4: ${{ needs.n4-prod-front.result }}
@@ -414,9 +443,9 @@ jobs:
             echo
             echo "| Nivel | Qué verifica | Resultado |"
             echo "|---|---|---|"
-            echo "| N1 | lint · typecheck · journal | $(icono "$R1") |"
-            echo "| N2 | build · tests puros · secretos | $(icono "$R2") |"
-            echo "| N2b | tests con base (el SQL) | $(icono "$R2B") |"
+            echo "| N1 | secretos · expand-only · journal · server | $(icono "$R1") |"
+            echo "| N2 | lint · typecheck · build · tests del front | $(icono "$R2") |"
+            echo "| N2b | SQL con base + paridad del schema | $(icono "$R2B") |"
             echo "| N3 | staging + migraciones + smoke | $(icono "$R3") |"
             echo "| N4 | front a producción | $(icono "$R4") |"
             echo

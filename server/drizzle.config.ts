@@ -14,7 +14,13 @@ export default defineConfig({
   //   canonico.ts  → venta, cliente, pago, cuota, producto
   //   operacion.ts → lo que hace que las pantallas NO le hablen a Meta: snapshots, config, serie
   //   hechos.ts    → la capa 1: el eje del tiempo
-  schema: "./src/db/*.ts",
+  //
+  // `client.ts` queda AFUERA porque no declara tablas: arma la conexión y **tira si no
+  // hay DATABASE_URL**, al importarse. Mientras estuvo dentro del glob, `db:generate` y
+  // `db:check` —que no tocan ninguna base— exigían igual un DATABASE_URL válido, y en CI
+  // había que inventarle uno falso. Sacarlo no achica lo que drizzle ve: verificado con
+  // un `db:generate` que sigue diciendo «No schema changes».
+  schema: "./src/db/!(client).ts",
   out: "./drizzle",
   dialect: "postgresql",
   // Por defecto drizzle-kit solo gestiona `public`. Sin esto, los esquemas `fuentes`,

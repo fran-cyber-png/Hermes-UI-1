@@ -12,6 +12,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:check": "drizzle-kit check",
     "db:adoptar": "tsx src/scripts/adoptarMigraciones.ts",
+    "db:estado": "tsx src/scripts/estadoMigraciones.ts",
     "humo": "tsx src/pruebas/humoE2E.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",

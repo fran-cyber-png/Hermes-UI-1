@@ -236,6 +236,16 @@ if [ -n "$CAMBIO_DEPS_RAIZ" ] || [ "$ROLLBACK" -eq 1 ]; then
 fi
 
 if [ -n "$TRAE_MIGRACION" ] && [ "$MIGRAR" -eq 1 ]; then
+  # Segunda guardia, ahora con el código NUEVO en el disco: que lo registrado en la base
+  # y lo que el repo dice ser coincidan. Sin esto, una base migrada contra otro baseline
+  # pasa desapercibida — el migrador de drizzle compara por `when`, no por hash, así que
+  # aplicaría cosas sobre un schema que no es el que cree.
+  # (La guardia de «nunca adoptó» ya corrió antes del respaldo: esa funciona con
+  # cualquier checkout, y esta necesita que `db:estado` exista en el código nuevo.)
+  decir "estado de las migraciones en la base"
+  como_deploy bash -c "cd '$RAIZ/server' && npm run db:estado -- --exigir-coherencia" \
+    || fallar "la base y las migraciones del repo no se corresponden — NO migro. Mirá la salida de arriba."
+
   decir "aplicando migraciones"
   como_deploy bash -c "cd '$RAIZ/server' && npm run db:migrate" \
     || fallar "la migración falló. La base quedó como estaba salvo lo que alcanzó a aplicar; el respaldo está en $DIR_RESPALDOS. NO reinicié el servicio."
