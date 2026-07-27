@@ -76,7 +76,30 @@ function montar(numero: string, cual: string): WhatsappArmado {
     emitirRT({ tipo: 'estado' });
   });
 
-  void transporte.iniciar();
+  /**
+   * ⚠ EL ARRANQUE DE UNA LÍNEA NO PUEDE TUMBAR A LAS DEMÁS.
+   *
+   * Esto era `void transporte.iniciar()`. `void` no captura nada: si `init()`
+   * rechaza —sesión corrupta, binario de whatsmeow que no levanta, `.db`
+   * ilegible— queda una promesa rechazada sin manejar, y Node mata el proceso.
+   * Con UNA línea eso era casi lo correcto: sin WhatsApp no hay Hermes. Con
+   * varias es exactamente lo contrario — **la sesión vencida de la vendedora
+   * nueva se llevaría puesta la línea que factura**, y encima en un ciclo de
+   * systemd que reintenta y vuelve a morir.
+   *
+   * Se captura por línea y se sigue. La que falló queda en el estado que tenga
+   * (nunca «conectado»), así que el semáforo del panel y `GET /lineas` la
+   * muestran caída — que es la verdad, y es accionable. Lo que NO se hace es
+   * fingir que arrancó.
+   */
+  void transporte.iniciar().catch((err: unknown) => {
+    // eslint-disable-next-line no-console
+    console.error(
+      `[wa arranque] la línea ${numero} NO pudo iniciar: queda caída y las demás siguen. ` +
+        `Revisá su sesión en .wa-sessions/${numero}.db (re-vincular desde el panel de Cerberus).`,
+      err,
+    );
+  });
 
   return { numero, transporte, envio: new EnvioControlado(transporte, registroEnviosDrizzle), falso };
 }
