@@ -26,9 +26,30 @@
  * inventarla es el error que este trabajo existe para no cometer.
  */
 
+/**
+ * LAS CLASES DE PIEZA que esta pantalla puede declarar.
+ *
+ * Es una **copia a mano** del vocabulario del server (`server/src/piezas/direccion.ts`)
+ * porque el front no importa código del server — el mismo problema que ya tienen
+ * los seis momentos en `features/hechos/hechos.ts`. La copia no puede driftear en
+ * silencio: `procedencia/frontComparteVocabulario.test.ts` lee ESTE archivo y
+ * falla si alguna de estas clases no existe del otro lado.
+ *
+ * Y son estas dos y no `paso`/`dato`: el catálogo que Ivi consulta publica
+ * `plantilla` y `hecho`, así que si acá se declarara otra cosa, el join entre lo
+ * que Ivi recomienda y lo que quedó en `envios_wa` daría **cero filas, en
+ * silencio** — que se lee como «esa pieza no se usó nunca».
+ */
+export const CLASES_DECLARABLES = ['plantilla', 'hecho'] as const;
+
 /** La forma en que la pieza viaja al server (el contrato de `POST /enviar`). */
 export interface PiezaDeclarada {
-  clase: 'paso' | 'dato';
+  clase: (typeof CLASES_DECLARABLES)[number];
+  /**
+   * La identidad dentro de su clase. Para una `plantilla` lleva el paso pegado
+   * con `#` (`12#3`): el paso se direcciona DENTRO de su secuencia porque
+   * `plantilla_pasos.id` no es estable.
+   */
   ref: string;
   via: 'panel-sugerencia' | 'panel-datos';
   editada: boolean;

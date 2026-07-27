@@ -1,4 +1,4 @@
-# ADR 0021 — El lazo de resultados: la procedencia se escribe, el resultado se deriva
+# ADR 0022 — El lazo de resultados: la procedencia se escribe, el resultado se deriva
 
 - **Fecha**: 2026-07-27
 - **Estado**: aceptado
@@ -25,9 +25,9 @@ escribe a mano):
 
 | columna | qué es |
 |---|---|
-| `pieza_clase` | `paso` · `dato` · `acuse` |
+| `pieza_clase` | `plantilla` · `hecho` · `acuse` · `gancho` — el vocabulario de `piezas/direccion.ts` |
 | `pieza_ref` | la identidad dentro del catálogo de su clase (`12#3`, `cuotas`, `fuera-de-horario-…`) |
-| `pieza_version` | **sha256 del contenido autoral** |
+| `pieza_version` | **la versión del contenido autoral**, `piezas/version.ts` |
 | `pieza_via` | por qué pantalla entró (`panel-sugerencia`, `panel-secuencias`, `panel-datos`, `automatica`) |
 | `pieza_editada` | ¿salió reescrito por la vendedora? |
 | `momento_venta` | el `MomentoDeVenta` en que salió |
@@ -114,6 +114,65 @@ texto era», nunca como una versión más.
 
 El hash lo hace **el server**, no el navegador: desde el composer viaja el *texto* de la pieza. Dos
 clientes con distinta normalización partirían en dos la historia de una pieza sin que nadie lo note.
+Hay un test que lo verifica (`piezas/receta-unica.test.ts` recorre el front y falla si aparece un
+hash ahí).
+
+**Y el archivo entra en la versión.** No es un detalle de completitud: el 42 % de la secuencia de
+venta lleva imagen y **en Goberna el precio y las fechas viven adentro de la imagen**. Cambiar
+`flyer-julio.jpg` por `flyer-agosto-PRECIO-NUEVO.jpg` cambia lo que la persona recibe. Si esas dos
+compartieran versión, los resultados de dos ofertas distintas se sumarían — el mismo blanco móvil de
+arriba, movido de la prosa a la imagen. Lo que entra es el **archivo**, no la clase de media (que es
+la cadena `"imagen"` y no distingue nada).
+
+### B.1 · La receta y el direccionamiento viven **en un tercer módulo**, `server/src/piezas/`
+
+Esta es la corrección que se hizo después de la revisión adversaria, y es la decisión más importante
+del ADR porque sin ella todo lo demás no sirve para nada.
+
+El lazo estampa la pieza en `envios_wa`; el **catálogo** (ADR 0023, PR #173) publica esa misma pieza
+para que Ivi la elija. Ivi devuelve `{id, version}` en cada pieza del ensamblado **para que el join
+cierre**, y todo el valor del frente está en ese join: sin él no se puede contestar «¿esta pieza
+funcionó?».
+
+Cada frente se había escrito su propia receta, y divergían en **cuatro cosas a la vez**:
+
+| | catálogo | lazo |
+|---|---|---|
+| formato | `sha256:` + 16 hex | 64 hex, sin prefijo |
+| normalización | ninguna | CRLF → LF + trim |
+| la imagen | **no entraba** (hasheaba `media_clase`) | entraba |
+| contenido vacío | una versión | `null` |
+
+Y el direccionamiento tampoco casaba: el catálogo publicaba `{clase:"plantilla", id:"12"}`, el lazo
+estampaba `{clase:"paso", ref:"12#3"}`, y el mismo dato salía `hecho:cuotas` de un lado y
+`dato:cuotas` del otro. **El join daba cero filas para todo el catálogo, en silencio** — y eso se lee
+como «esa pieza no se usó nunca», que es exactamente la conclusión falsa que este trabajo existe para
+no sacar. Ningún test de los dos lados lo veía: cada suite quedaba verde con su propio vocabulario.
+
+La solución no es «que coincidan», es **que sean una**. `server/src/piezas/` no pertenece a ninguno de
+los dos frentes: los dos PRs lo agregan con el mismo contenido y los dos lo importan.
+
+- **El paso, dentro de su plantilla.** Acá había un choque real y las dos posiciones tenían razón: el
+  catálogo dice que un paso no es direccionable (`escribirPasos()` borra y reinserta, así que
+  `plantilla_pasos.id` cambia sin que cambie el paso) y el lazo necesita medir por paso (el flyer y
+  el seguimiento funcionan distinto). La forma que satisface a las dos es la que **Ivi ya tenía
+  escrita** en su contrato de ensamblado: `{id, orden}`. La clase es `plantilla`, y `orden` dice cuál
+  de sus mensajes — sobre `(plantilla_id, orden)`, que sí es estable y tiene su `unique`.
+- **Qué gana de cada receta.** El **formato** lo pone el catálogo (`sha256:` + 16 hex): es lo que ya
+  viaja en el contrato publicado a Ivi, dice qué algoritmo es y entra en un log. Las **entradas** las
+  pone el lazo (texto normalizado + archivo): el catálogo hasheaba `media_clase`, que era ciego al
+  flyer. Y el **vacío** deja de ser `null`: `null` pasa a significar una sola cosa —no se pudo
+  determinar el contenido—, que es lo único que el lazo necesita expresar y el catálogo no.
+- **Los candados.** `piezas/vectores.ts` fija refs y versiones **literales**, y cada frente afirma
+  desde su lado que produce exactamente esas (`procedencia/paridad.test.ts` acá,
+  `catalogo/paridad.test.ts` allá). `piezas/receta-unica.test.ts` inventaría todos los `createHash`
+  del server contra una lista con motivo escrito, así que una segunda receta no puede nacer callada.
+  Es la forma de `urgencia.paridad.test.db.ts` (#37), aplicada a la costura entre dos PRs.
+
+**Orden de merge**: este PR (#171) **primero**, el catálogo (#173) después. Los dos traen
+`server/src/piezas/` idéntico, así que el segundo no reescribe nada; el orden es solo para que el
+único cambio de schema (`envios_wa` gana seis columnas) entre antes que el frente que lo lee, y para
+que, si algo del módulo compartido hay que retocar, se retoque en el que ya está en `main`.
 
 ### C · Una métrica no se puede serializar sin su `n` ni sin su `base`
 

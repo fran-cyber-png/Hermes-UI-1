@@ -74,7 +74,7 @@ function Tarjeta({
             // pieza que saldría con «Mandar»: lo que cambia es que acá la
             // vendedora la edita antes, y eso queda marcado, no escondido.
             pieza: {
-              clase: 'paso',
+              clase: 'plantilla',
               ref: `${s.plantillaId}#${s.pasos[0]?.orden ?? 1}`,
               via: 'panel-sugerencia',
             },

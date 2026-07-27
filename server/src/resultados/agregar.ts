@@ -1,4 +1,5 @@
 import { rotuloDePieza, versionCorta, type Procedencia } from "../procedencia/pieza.js";
+import { rotuloDeDireccion } from "../piezas/direccion.js";
 import {
   loQuePaso,
   type HechosDeUnEnvio,
@@ -34,20 +35,26 @@ import { medir, type Medicion } from "./medicion.js";
 
 /** La clave con la que se agrupa: pieza + versión, o la línea de base. */
 export function claveDeAgrupacion(p: Procedencia): string {
-  return p.tipo === "a-mano" ? "a-mano" : `${p.clase}:${p.ref}@${versionCorta(p.version)}`;
+  return p.tipo === "a-mano"
+    ? "a-mano"
+    : `${piezaDeAgrupacion(p)}@${versionCorta(p.version)}`;
 }
 
 /** La pieza SIN la versión — para quien quiera sumar las versiones a propósito. */
 export function piezaDeAgrupacion(p: Procedencia): string {
-  return p.tipo === "a-mano" ? "a-mano" : `${p.clase}:${p.ref}`;
+  // El rótulo lo arma `piezas/direccion.ts`, el mismo que nombra la pieza del
+  // lado del catálogo: si el reporte dijera `dato:cuotas` y el catálogo
+  // `hecho:cuotas`, nadie podría cruzar una recomendación de Ivi con su
+  // resultado.
+  return p.tipo === "a-mano" ? "a-mano" : rotuloDeDireccion({ clase: p.clase, id: p.ref });
 }
 
 export interface FilaDeResultados {
-  /** `paso:12#3@a1b2c3d4` · `dato:cuotas@…` · `a-mano`. Incluye la versión. */
+  /** `plantilla:12#3@a1b2c3d4` · `hecho:cuotas@…` · `a-mano`. Incluye la versión. */
   clave: string;
-  /** La pieza sin versión: `paso:12#3`. Para sumar versiones a propósito. */
+  /** La pieza sin versión: `plantilla:12#3`. Para sumar versiones a propósito. */
   pieza: string;
-  /** El sha256 completo del contenido, o `null` si no se supo qué texto era. */
+  /** La versión del contenido (`piezas/version.ts`), o `null` si no se supo qué texto era. */
   version: string | null;
   /** Cómo se lee. La línea de base dice que lo es; la pieza muestra su versión. */
   rotulo: string;

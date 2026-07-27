@@ -6,7 +6,7 @@ import {
   piezaDelTexto,
 } from './procedenciaComposer';
 
-const DATO = { clase: 'dato', ref: 'cuotas', via: 'panel-datos' } as const;
+const DATO = { clase: 'hecho', ref: 'cuotas', via: 'panel-datos' } as const;
 const FRASE = 'El pago se puede hacer en 2 cuotas.';
 const TEL = '51961506674';
 
@@ -57,7 +57,7 @@ describe('qué pieza declarar para lo que hay en la caja', () => {
 
   test('la última pieza puesta gana: poner un dato y después otro no acumula', () => {
     anotarPieza(TEL, DATO, FRASE);
-    const otro = { clase: 'dato', ref: 'acceso-un-anio', via: 'panel-datos' } as const;
+    const otro = { clase: 'hecho', ref: 'acceso-un-anio', via: 'panel-datos' } as const;
     anotarPieza(TEL, otro, 'El acceso lo tenés por todo un año.');
     expect(piezaDelTexto(TEL, 'El acceso lo tenés por todo un año.')).toEqual({
       ...otro,
@@ -73,7 +73,7 @@ describe('qué pieza declarar para lo que hay en la caja', () => {
   });
 
   test('una sugerencia del panel se declara como paso, con su vía', () => {
-    const paso = { clase: 'paso', ref: '12#1', via: 'panel-sugerencia' } as const;
+    const paso = { clase: 'plantilla', ref: '12#1', via: 'panel-sugerencia' } as const;
     anotarPieza(TEL, paso, 'Te cuento del diploma…');
     expect(piezaDelTexto(TEL, 'Te cuento del diploma…')).toEqual({
       ...paso,

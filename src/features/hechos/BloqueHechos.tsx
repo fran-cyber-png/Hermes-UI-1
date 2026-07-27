@@ -50,7 +50,7 @@ function Chip({ h, telefono }: { h: HechoRecomendado; telefono: string | null })
             // De qué pieza salió (#169): la clave del catálogo, que es estable
             // aunque el rótulo se renombre. Sin esto, un dato que destrabó una
             // venta llega al server indistinguible de un texto escrito de cero.
-            pieza: { clase: 'dato', ref: h.clave, via: 'panel-datos' },
+            pieza: { clase: 'hecho', ref: h.clave, via: 'panel-datos' },
           })
         }
         title={h.texto}

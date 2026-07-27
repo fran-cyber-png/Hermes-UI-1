@@ -464,6 +464,78 @@ imagen. UI en `src/features/plantillas/`, colgada del `···` («Mensajes prede
     primero es silencio y responde **409 `falta_familia`**. La regla es pura: `plantillas/aprobacion.ts`.
     Una imagen pendiente **no** bloquea aprobar (sí mandar).
 
+## El lazo de resultados — de qué pieza salió y qué pasó después (#169, ADR 0022)
+
+`envios_wa` guardaba qué se mandó y nunca **de qué pieza**, y nada guardaba **qué pasó después**: una
+plantilla con 500 usos y 0 ventas se veía idéntica a una con 500 usos y 50. Server en
+`server/src/procedencia/` (el hecho que se escribe) + `server/src/resultados/` (el veredicto que se
+deriva). **Frente 1 de la épica #169**; los frentes 2 (un catálogo con bases y deltas) y 3 (el puente
+con Ivi) todavía no están.
+
+- **La procedencia viaja en la ORDEN de envío**, no en un `update`: misma puerta (`EnvioControlado`),
+  misma fila. Por eso un envío **bloqueado** también deja escrito de qué pieza iba a salir. Seis
+  columnas nuevas en `envios_wa`, armadas **solo** por `procedencia/pieza.ts`: `pieza_clase`
+  (`plantilla`·`hecho`·`acuse`·`gancho`) · `pieza_ref` · `pieza_version` · `pieza_via` ·
+  `pieza_editada` · `momento_venta`.
+- **EL VOCABULARIO Y LA RECETA DE VERSIÓN VIVEN EN `server/src/piezas/`**, no acá — es el **mismo
+  módulo que importa el catálogo que Ivi consulta** (PR #173). Ivi recomienda
+  `hecho:cuotas@sha256:…` y el valor de todo el frente está en encontrar esa pieza en `envios_wa`:
+  con dos vocabularios el join da **cero filas, en silencio**, y eso se lee como «esa pieza no se
+  usó nunca». `piezas/direccion.ts` define `{clase, id, orden?}` y su forma textual (`12#3` es el
+  paso 3 de la plantilla 12: el paso se direcciona **dentro** de su secuencia porque
+  `plantilla_pasos.id` no es estable); `piezas/version.ts` es la única receta.
+  **Los candados**: `piezas/vectores.ts` fija versiones y refs **literales** que los dos frentes
+  afirman desde su lado (`procedencia/paridad.test.ts`), y `piezas/receta-unica.test.ts` falla si
+  aparece un `createHash` nuevo sin justificar — la lección de #37, aplicada antes de pagarla.
+- **`null` es la LÍNEA DE BASE, no un hueco**: lo que la vendedora escribió a mano es contra lo que se
+  compara todo. El tipo tiene dos ramas nombradas (`A_MANO`), no `Pieza | null`, y esa fila sale
+  **primera** en el reporte. Además es el **semillero de piezas nuevas** —«se puede en 2 cuotas» la
+  improvisó una persona, no salió de ninguna plantilla— y por eso `HechosDeUnEnvio` lleva el `texto`:
+  el corpus del frente 3 puede salir sin tocar el schema.
+- **`(clase, ref)` es la identidad, `via` es la pantalla.** Textual y no una FK **a propósito**:
+  cuando el frente 2 unifique los catálogos, esto se remapea y lo acumulado sigue valiendo. `via`
+  (`panel-sugerencia`·`panel-secuencias`·`panel-datos`·`automatica`) no la toca el frente 2, porque
+  unificar catálogos no cambia por dónde entró la mano. Sin las dos, una de estas dos preguntas
+  queda sin respuesta: «¿la secuencia 12 funciona?» y «¿las dos respuestas del panel sirven?».
+- **La VERSIÓN es un `sha256:` + 16 hex del contenido AUTORAL**, y es ahora o nunca: sin ella,
+  mejorar una frase suma los dos textos y una pieza que pasó de 12 % a 30 % se reporta 21 % para
+  siempre. Hash y no contador porque un contador **se puede olvidar de incrementar** y el bump que
+  falta mezcla dos textos en silencio. **El texto de la pieza es la plantilla SIN resolver**
+  (`{nombre}`/`{precio}` se resuelven por contacto: hashear el mensaje final haría de cada
+  destinatario una versión). **El archivo entra** —cambiar `flyer-julio.jpg` por
+  `flyer-agosto-PRECIO-NUEVO.jpg` es versión nueva, porque en Goberna el precio vive adentro de la
+  imagen y el 42 % de la secuencia lleva una—; CRLF y bordes, no. El hash lo hace el **server** —
+  desde el composer viaja el texto, no un hash del navegador, y hay un test que lo verifica.
+  `null` significa **una sola cosa**: no se pudo determinar el contenido. Un contenido vacío tiene
+  versión.
+- **El resultado se DERIVA, nunca se guarda** (como ADR 0013/0014/0015): ¿contestó? · en cuánto ·
+  ¿avanzó de etapa? · ¿hubo venta después? El SQL **solo trae hechos crudos** (ni un `CASE`, ni una
+  ventana, ni un umbral) y el veredicto + el agregado son puros: no hay segunda implementación que
+  pueda divergir. El candado es `consultarResultados.test.db.ts` — el agregado tiene que ser
+  exactamente la suma de los veredictos puros.
+- **LOS NOMBRES NO PROMETEN CAUSA.** Que una venta siga a un mensaje no dice que la causó.
+  `huboRespuesta` · `huboAvanceDeEtapa` · `huboVentaDespues`, y la `base` de cada medición es
+  `respondio_despues_de` — **nunca «efectividad»**. `medicion.test.ts` falla si alguien mete una
+  palabra causal, como `plantillas.test.ts` prohíbe que un acuse se anuncie como máquina.
+- **Ninguna métrica se puede serializar sin su `n` ni su `base`**: son campos requeridos de
+  `Medicion` y `medir()` es el único constructor — el tipo lo impide, no una convención. Cada una
+  lleva su **intervalo de Wilson al 95 %** y `muestraSuficiente` (`MUESTRA_MINIMA` = 30), porque 2/3
+  (67 %) **no** le gana a 180/400 (45 %).
+- **LA RESPUESTA ES DEL ÚLTIMO MENSAJE**, no de todos los anteriores. Sin esa regla, en una
+  conversación de cuatro salientes la misma respuesta se cuenta cuatro veces: medido sobre un corpus
+  con la forma real, **22 % sembrado salía 54 %** — y el inflado crece con la longitud de la
+  conversación, o sea que premia a las piezas usadas donde la gente ya iba a contestar.
+- **«¿Compró?» depende del PR #165** y todavía no está: `resultados/ventas.ts` es el seam. Con
+  `conversiones_wa` vacía responde **`null` = «no lo sabemos», nunca `false`**. Cuando #165 entre,
+  cambia el `WHERE` de una consulta en ese archivo y nada más.
+- **Cómo se ve**: `GET /api/resultados/piezas?dias=30` (detrás de `requiereVendedora`) y
+  `cd server && npm run piezas:resultados [días]` (read-only), los dos sobre el mismo seam. **No hay
+  pantalla a propósito**: la procedencia se acumula recién desde este deploy y el frente 2 va a
+  reorganizar el catálogo — la vista se dibujaría dos veces. Ojo con la lectura: las primeras semanas
+  el corpus va a ser casi 100 % línea de base, y las cuatro frases de #153 no llegan solas a muestra
+  decidible (a 2 de cada 1.876 conversaciones, `n = 30` pide ~28.000). **La primera pregunta que esto
+  responde no es «¿cuál funciona?» sino «¿alguien las está usando?».**
+
 ## Interés derivado del anuncio — el lead ya llegó diciendo qué quiere
 
 `server/src/cursos/` traduce el texto con el que llegó la persona (la campaña del anuncio de

@@ -44,7 +44,7 @@ describe("el agregado cuenta por pieza, y la línea de base es una fila más", (
       envio({ procedencia: A_MANO, primerEntranteEn: mas(5) }),
     ]);
 
-    const dato = r.filas.find((f) => f.pieza === "dato:cuotas")!;
+    const dato = r.filas.find((f) => f.pieza === "hecho:cuotas")!;
     assert.equal(dato.envios, 3, "el tamaño de la muestra");
     assert.equal(dato.respondieron.exitos, 2);
     assert.equal(dato.respondieron.n, 3, "la proporción nunca viaja sin su n");
@@ -77,8 +77,8 @@ describe("el agregado cuenta por pieza, y la línea de base es una fila más", (
       ...Array.from({ length: 3 }, () => envio({ procedencia: otro, primerEntranteEn: mas(5) })),
       ...Array.from({ length: 10 }, () => envio({ procedencia: CUOTAS() })),
     ]);
-    assert.equal(r.filas[0].pieza, "dato:cuotas", "10 envíos con 0 respuestas van antes que 3 con 3");
-    assert.equal(r.filas[1].pieza, "dato:acceso-un-anio");
+    assert.equal(r.filas[0].pieza, "hecho:cuotas", "10 envíos con 0 respuestas van antes que 3 con 3");
+    assert.equal(r.filas[1].pieza, "hecho:acceso-un-anio");
   });
 
   test("la MISMA pieza por dos vías es UNA fila, con el desglose de por dónde entró", () => {
@@ -91,7 +91,7 @@ describe("el agregado cuenta por pieza, y la línea de base es una fila más", (
       envio({ procedencia: elegida }),
     ]);
 
-    const fila = r.filas.find((f) => f.pieza === "paso:12#1")!;
+    const fila = r.filas.find((f) => f.pieza === "plantilla:12#1")!;
     assert.equal(fila.envios, 3, "una sola pieza: la 12 es la 12 venga de donde venga");
     assert.deepEqual(fila.porVia, [
       { via: "panel-sugerencia", envios: 2 },
@@ -104,7 +104,7 @@ describe("el agregado cuenta por pieza, y la línea de base es una fila más", (
       envio({ procedencia: CUOTAS(true) }),
       envio({ procedencia: CUOTAS() }),
     ]);
-    const fila = r.filas.find((f) => f.pieza === "dato:cuotas")!;
+    const fila = r.filas.find((f) => f.pieza === "hecho:cuotas")!;
     assert.equal(fila.envios, 2);
     assert.equal(fila.editados, 1);
   });
@@ -134,7 +134,7 @@ describe("LA VERSIÓN separa las filas — el blanco deja de moverse", () => {
       envio({ procedencia: nueva }),
     ]);
 
-    const deCuotas = r.filas.filter((f) => f.pieza === "dato:cuotas");
+    const deCuotas = r.filas.filter((f) => f.pieza === "hecho:cuotas");
     assert.equal(deCuotas.length, 2, "una fila por versión");
     assert.deepEqual(
       deCuotas.map((f) => `${f.respondieron.exitos}/${f.respondieron.n}`).sort(),
@@ -142,7 +142,7 @@ describe("LA VERSIÓN separa las filas — el blanco deja de moverse", () => {
       "los dos textos NO se promedian en un 50 % que esconde la mejora",
     );
     // Y las dos filas dicen a qué pieza pertenecen, para poder sumarlas a propósito.
-    assert.deepEqual([...new Set(deCuotas.map((f) => f.pieza))], ["dato:cuotas"]);
+    assert.deepEqual([...new Set(deCuotas.map((f) => f.pieza))], ["hecho:cuotas"]);
     assert.notEqual(deCuotas[0].version, deCuotas[1].version);
   });
 
@@ -161,7 +161,7 @@ describe("LA VERSIÓN separa las filas — el blanco deja de moverse", () => {
     ]);
 
     const piezas = r.filas.map((f) => f.pieza);
-    assert.deepEqual(piezas, ["dato:cuotas", "dato:cuotas", "dato:acceso"], "juntas y por volumen");
+    assert.deepEqual(piezas, ["hecho:cuotas", "hecho:cuotas", "hecho:acceso"], "juntas y por volumen");
     assert.ok(r.filas[0].primerUso < r.filas[1].primerUso, "la vieja primero");
   });
 
@@ -169,7 +169,7 @@ describe("LA VERSIÓN separa las filas — el blanco deja de moverse", () => {
     const sinVersion = deUnDato({ clave: "cuotas", editada: false, contenido: null });
     const conVersion = deUnDato({ clave: "cuotas", editada: false, contenido: { texto: "algo" } });
     const r = agregar([envio({ procedencia: sinVersion }), envio({ procedencia: conVersion })]);
-    assert.equal(r.filas.filter((f) => f.pieza === "dato:cuotas").length, 2);
+    assert.equal(r.filas.filter((f) => f.pieza === "hecho:cuotas").length, 2);
     assert.ok(r.filas.some((f) => f.clave.endsWith("@sin-versión")));
   });
 });
@@ -186,7 +186,7 @@ describe("«no lo sabemos» no se dibuja como «cero»", () => {
 
   test("con atribución, una pieza sin ventas SÍ dice 0 de N — y eso es un dato", () => {
     const r = agregar([envio({ procedencia: CUOTAS() }), envio({ procedencia: CUOTAS() })]);
-    const fila = r.filas.find((f) => f.pieza === "dato:cuotas")!;
+    const fila = r.filas.find((f) => f.pieza === "hecho:cuotas")!;
     assert.equal(r.seSabeDeVentas, true);
     assert.equal(fila.ventasDespues!.exitos, 0);
     assert.equal(fila.ventasDespues!.n, 2);
@@ -198,7 +198,7 @@ describe("«no lo sabemos» no se dibuja como «cero»", () => {
       envio({ procedencia: PASO(), ventaEn: mas(2 * 24 * 60) }),
       envio({ procedencia: PASO() }),
     ]);
-    const fila = r.filas.find((f) => f.pieza === "paso:12#1")!;
+    const fila = r.filas.find((f) => f.pieza === "plantilla:12#1")!;
     assert.equal(fila.ventasDespues!.exitos, 1);
     assert.equal(fila.ventasDespues!.n, 2);
   });

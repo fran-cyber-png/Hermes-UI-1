@@ -14,6 +14,7 @@ import {
   rotuloDePieza,
   versionDePieza,
 } from "./pieza.js";
+import { versionDeUnMensaje, versionLegible } from "../piezas/version.js";
 
 const CUOTAS = "Se puede pagar en 2 cuotas.";
 const dato = (texto: string | null, editada = false) =>
@@ -38,7 +39,7 @@ describe("la pieza se identifica por (clase, ref) — estable a través del fren
   test("un paso de secuencia: la ref lleva la plantilla Y el orden", () => {
     const p = paso(12, 3);
     assert.equal(p.tipo, "pieza");
-    assert.equal(p.clase, "paso");
+    assert.equal(p.clase, "plantilla");
     assert.equal(p.ref, "12#3");
     assert.equal(p.via, "panel-secuencias");
     assert.equal(p.editada, false);
@@ -62,7 +63,7 @@ describe("la pieza se identifica por (clase, ref) — estable a través del fren
 
   test("un dato recomendado se identifica por su clave, que es estable al renombrar el rótulo", () => {
     const p = dato(CUOTAS);
-    assert.equal(p.clase, "dato");
+    assert.equal(p.clase, "hecho");
     assert.equal(p.ref, "cuotas");
     assert.equal(p.via, "panel-datos");
   });
@@ -83,7 +84,7 @@ describe("la pieza se identifica por (clase, ref) — estable a través del fren
   });
 
   test("las clases y las vías son listas cerradas: un typo no entra a la base", () => {
-    assert.deepEqual([...CLASES_DE_PIEZA], ["paso", "dato", "acuse"]);
+    assert.deepEqual([...CLASES_DE_PIEZA], ["plantilla", "hecho", "acuse", "gancho"]);
     assert.deepEqual(
       [...VIAS_DE_PIEZA],
       ["panel-sugerencia", "panel-secuencias", "panel-datos", "automatica"],
@@ -139,7 +140,14 @@ describe("LA VERSIÓN — sin ella el lazo mide un blanco móvil y no lo dice", 
   test("sin contenido conocido, la versión es null — y eso se lee «no sabemos qué texto era»", () => {
     const p = dato(null);
     assert.equal(p.version, null);
-    assert.equal(versionDePieza({ texto: "" }), null, "nada de nada tampoco es una versión");
+  });
+
+  test("pero el contenido VACÍO sí tiene versión: «vacío» y «no sabemos» son cosas distintas", () => {
+    // Antes esto devolvía `null` mientras el catálogo publicaba un hash para la
+    // misma pieza: dos respuestas distintas, y el join no cerraba. `null`
+    // significa una sola cosa — no se pudo determinar el contenido.
+    assert.notEqual(versionDePieza({ texto: "" }), null);
+    assert.equal(versionDePieza({ texto: "" }), versionDeUnMensaje({ texto: "" }));
   });
 
   test("CRITERIO DE ACEPTACIÓN: un envío ya escrito conserva la versión vieja", () => {
@@ -170,8 +178,11 @@ describe("«a mano» es un valor, no la ausencia de uno", () => {
   test("se lee en castellano, y dice lo que es", () => {
     assert.equal(rotuloDePieza(A_MANO), "escrito a mano (la línea de base)");
     // El rótulo lleva la versión: dos textos distintos NO se leen igual.
-    assert.equal(rotuloDePieza(dato(CUOTAS)), `dato · cuotas @${versionDePieza({ texto: CUOTAS })!.slice(0, 8)}`);
-    assert.ok(rotuloDePieza(paso(7, 2, "panel-sugerencia")).startsWith("paso · 7#2 @"));
+    assert.equal(
+      rotuloDePieza(dato(CUOTAS)),
+      `hecho · cuotas @${versionLegible(versionDePieza({ texto: CUOTAS }))}`,
+    );
+    assert.ok(rotuloDePieza(paso(7, 2, "panel-sugerencia")).startsWith("plantilla · 7#2 @"));
   });
 
   test("refDePieza de lo escrito a mano es null — y ese null ES el dato", () => {
@@ -190,7 +201,7 @@ describe("las columnas: ida y vuelta sin perder nada", () => {
     });
     const cols = columnasDeProcedencia(p);
     assert.deepEqual(cols, {
-      piezaClase: "paso",
+      piezaClase: "plantilla",
       piezaRef: "12#3",
       piezaVersion: versionDePieza({ texto: "hola {nombre}" }),
       piezaVia: "panel-sugerencia",
@@ -232,7 +243,7 @@ describe("las columnas: ida y vuelta sin perder nada", () => {
     // No debería pasar nunca —los constructores son la única puerta— pero si
     // pasa, contarla como pieza le atribuiría a alguien un resultado ajeno.
     const leida = procedenciaDesdeColumnas({
-      piezaClase: "paso",
+      piezaClase: "plantilla",
       piezaRef: null,
       piezaVersion: "abc",
       piezaVia: "panel-sugerencia",

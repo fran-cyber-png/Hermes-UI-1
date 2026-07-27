@@ -282,11 +282,11 @@ describe("PARIDAD: el agregado es la suma de los veredictos puros", () => {
     assert.equal(r.filas[0].clave, "a-mano");
     assert.deepEqual(
       r.filas.map((f) => f.pieza).sort(),
-      ["a-mano", "dato:cuotas", "paso:12#1"],
+      ["a-mano", "hecho:cuotas", "plantilla:12#1"],
     );
     // Los editados NO se pierden en el agrupado: son la MISMA pieza y la MISMA
     // versión (el texto del catálogo no cambió), contados aparte.
-    assert.equal(r.filas.find((f) => f.pieza === "dato:cuotas")!.envios, 4);
-    assert.equal(r.filas.find((f) => f.pieza === "dato:cuotas")!.editados, 1);
+    assert.equal(r.filas.find((f) => f.pieza === "hecho:cuotas")!.envios, 4);
+    assert.equal(r.filas.find((f) => f.pieza === "hecho:cuotas")!.editados, 1);
   });
 });

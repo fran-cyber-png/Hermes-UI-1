@@ -261,12 +261,23 @@ export const enviosWa = pgTable(
      * catálogo, a propósito textual y no una FK: el frente 2 de la épica unifica
      * los cuatro catálogos, y con una FK a `plantilla_pasos.id` esa unificación
      * obligaría a migrar (o a tirar) todo lo acumulado hasta entonces.
+     *
+     * **El vocabulario es el MISMO que publica el catálogo que Ivi consulta**
+     * (`piezas/direccion.ts`): `plantilla` · `hecho` · `acuse` · `gancho`, con el
+     * paso de una secuencia direccionado dentro de su plantilla (`12#3`). No es
+     * una elección de estilo: Ivi recomienda `hecho:cuotas@sha256:…` y si acá
+     * dijera `dato:cuotas` el join daría cero filas **en silencio**, que se lee
+     * como «esa pieza no se usó nunca».
      */
     piezaClase: text("pieza_clase"),
     piezaRef: text("pieza_ref"),
     /**
-     * QUÉ TEXTO ERA: sha256 del contenido AUTORAL de la pieza (la plantilla sin
-     * resolver + su archivo), en hex.
+     * QUÉ TEXTO ERA: la versión del contenido AUTORAL de la pieza (la plantilla
+     * sin resolver + su archivo), en el formato `sha256:` + 16 hex.
+     *
+     * La calcula `piezas/version.ts`, **la misma función con la que el catálogo
+     * publica la versión de esa pieza** — con dos recetas el valor de esta
+     * columna no se puede cruzar con nada.
      *
      * Sin esto el lazo mide un blanco móvil y no lo dice: el día que alguien
      * mejore una frase, los dos textos se suman y una pieza que pasó de 12 % a
@@ -276,7 +287,7 @@ export const enviosWa = pgTable(
      * Es un hash y no un contador porque un contador se puede olvidar de
      * incrementar, y el bump que falta no rompe nada: mezcla dos textos en
      * silencio. El detalle y el «qué es el texto de la pieza» están en
-     * `procedencia/pieza.ts`.
+     * `piezas/version.ts`.
      */
     piezaVersion: text("pieza_version"),
     /** Por qué pantalla entró (panel-sugerencia · panel-secuencias · panel-datos · automatica). */
