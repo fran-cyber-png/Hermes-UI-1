@@ -10,6 +10,11 @@ revisar», la familia inferida, la atribución por anuncio— vive en el server 
 que apuntar el front a `hermes-api.goberna.us` mostraría el bug, no el arreglo. Y desplegar
 para sacar una captura es exactamente lo que N5 existe para que nadie haga de apuro.
 
+Además, contra producción **no se puede ni entrar**: el arnés de Playwright mockea todas las
+mutaciones (devuelve `{"ok":true,"simulado":true}` sin llegar al server), y el login **es**
+una mutación — la pantalla se queda en «Entrando…» para siempre. Se intentó; queda anotado
+para que nadie lo vuelva a intentar creyendo que es un bug de la app.
+
 Así que la evidencia es de **la rama corriendo entera, contra una Postgres efímera propia**
 (contenedor aparte, puerto 5441 — ni la de dev ni la de prod ni la de tests), sembrada con
 la foto de producción: las dos propuestas del minado con su respaldo real (418 y 296) y 31
