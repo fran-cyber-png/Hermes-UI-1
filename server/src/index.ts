@@ -111,7 +111,7 @@ app.use("/api/sdk", sdkRouter);
 
 app.use("/api/ivi", iviRouter()); // el proxy al cerebro RAG en geografo (issue #61)
 
-// EL CATÁLOGO DE PIEZAS, para que Ivi pueda ELEGIR sin inventar (H8/H9, ADR 0021).
+// EL CATÁLOGO DE PIEZAS, para que Ivi pueda ELEGIR sin inventar (H8/H9, ADR 0023).
 // Solo lectura, detrás de su propia credencial de servicio: lo consume una máquina,
 // no una vendedora. Si no se puede servir devuelve 5xx — nunca una lista vacía.
 app.use("/api/catalogo", catalogoRouter());
