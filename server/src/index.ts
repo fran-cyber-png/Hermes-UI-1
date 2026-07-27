@@ -48,6 +48,7 @@ import { streamRouter } from "./routes/stream.js";
 import { vincularRouter } from "./routes/vincular.js";
 import { simularRouter } from "./routes/simular.js";
 import { iviRouter } from "./routes/ivi.js";
+import { catalogoRouter } from "./routes/catalogo.js";
 import { adminRouter } from "./routes/admin.js";
 import { requiereServicio } from "./auth/servicio.js";
 import { db } from "./db/client.js";
@@ -109,6 +110,11 @@ app.use("/api/structure", structureRouter); // las 3 etapas anidadas, con la pla
 app.use("/api/sdk", sdkRouter);
 
 app.use("/api/ivi", iviRouter()); // el proxy al cerebro RAG en geografo (issue #61)
+
+// EL CATÁLOGO DE PIEZAS, para que Ivi pueda ELEGIR sin inventar (H8/H9, ADR 0021).
+// Solo lectura, detrás de su propia credencial de servicio: lo consume una máquina,
+// no una vendedora. Si no se puede servir devuelve 5xx — nunca una lista vacía.
+app.use("/api/catalogo", catalogoRouter());
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 

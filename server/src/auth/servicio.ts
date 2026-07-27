@@ -58,3 +58,56 @@ export function requiereServicio(req: Request, res: Response, next: NextFunction
   req.servicio = "cerberus";
   next();
 }
+
+/**
+ * LA SEGUNDA IDENTIDAD DE SERVICIO — el mecanismo ya existía, la identidad no.
+ *
+ * `requiereServicio` está clavado a UN consumidor (`req.servicio = "cerberus"`)
+ * y a UN secreto (el del API de administración). Ivi es el consumidor #2, y su
+ * necesidad es de solo lectura: el catálogo de piezas. Darle el token de
+ * administración sería darle, de yapa, la potestad de re-apuntar números de
+ * WhatsApp y borrar sesiones — para leer una lista.
+ *
+ * Así que la generalización mínima: la misma puerta, otro secreto, otra
+ * identidad. Cada consumidor máquina trae su credencial y lo que se le rompa a
+ * uno no toca al otro (issue #95).
+ *
+ * ── Por qué 503 y no 401 cuando falta el secreto ──
+ * Es la lección que Ivi aprendió del otro lado con `401` vs `503`, y que ya
+ * está escrita en `ivi/cliente.ts`: **«el server no tiene token» y «el cliente
+ * mandó mal el token» no pueden verse iguales**, o una falla de configuración
+ * se disfraza de credencial equivocada y se vive semanas sin enterarse. Del
+ * lado de Cerberus esa distinción no existe porque el server **no arranca** en
+ * producción sin `HERMES_ADMIN_SERVICE_TOKEN`; acá no se puede hacer lo mismo
+ * sin voltear el server de producción en el próximo deploy, así que la falta de
+ * configuración se dice en la respuesta. Sigue siendo fail-closed: sin secreto
+ * no entra nadie.
+ */
+export function requiereServicioDeCatalogo(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  const esperado = process.env.HERMES_CATALOGO_SERVICE_TOKEN ?? "";
+  if (!esperado) {
+    res.status(503).json({
+      error: {
+        motivo: "falta_config",
+        mensaje:
+          "el server no tiene configurada la credencial de servicio del catálogo (HERMES_CATALOGO_SERVICE_TOKEN)",
+      },
+    });
+    return;
+  }
+
+  const auth = req.headers.authorization ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!credencialValida(token, esperado)) {
+    res.status(401).json({
+      error: { motivo: "credencial_invalida", mensaje: "credencial de servicio inválida o ausente" },
+    });
+    return;
+  }
+  req.servicio = "catalogo";
+  next();
+}

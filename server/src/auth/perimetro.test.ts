@@ -53,8 +53,17 @@ describe('esRutaAbierta — qué queda fuera del token', () => {
     assert.equal(esRutaAbierta('/api/stream'), false); // los eventos llevan teléfonos
   });
 
+  test('el catálogo de piezas queda fuera del token DE VENDEDORA, no sin puerta', () => {
+    // Lo consume Ivi, que es un proceso: no hay vendedora que haya hecho login.
+    // Su puerta es `requiereServicioDeCatalogo` (otro secreto, otra identidad),
+    // montada tanto en index.ts como dentro del router — lo mismo que /api/admin.
+    assert.equal(esRutaAbierta('/api/catalogo/piezas'), true);
+    assert.equal(esRutaAbierta('/api/catalogo/vocabulario'), true);
+  });
+
   test('un prefijo abierto no abre a sus vecinos con nombre parecido', () => {
     assert.equal(esRutaAbierta('/api/authx'), false);
+    assert.equal(esRutaAbierta('/api/catalogos'), false);
     assert.equal(esRutaAbierta('/api/whatsapp/_simulador'), false);
     assert.equal(esRutaAbierta('/api/auth'), true); // el prefijo exacto sí
   });

@@ -22,6 +22,7 @@ import { requiereVendedora } from './sesion.js';
 const PREFIJOS_ABIERTOS = [
   '/api/auth', // el login: sin esto nadie consigue token (y /yo valida el suyo adentro)
   '/api/admin', // su puerta es la CREDENCIAL DE SERVICIO (requiereServicio, #85): la llama Cerberus, no una vendedora
+  '/api/catalogo', // ídem, con su propia credencial (requiereServicioDeCatalogo): lo lee Ivi, que es un proceso
 ];
 
 /**
