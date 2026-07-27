@@ -1,6 +1,7 @@
 import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,6 +33,14 @@ import { PREFIJO_REFERENCIA } from "./referencia.js";
  */
 
 const SERVER = join(dirname(fileURLToPath(import.meta.url)), "../..");
+
+/** Cuántas migraciones declara el repo. La verdad vive en el journal, no en un literal. */
+function migracionesDeclaradas(): number {
+  const journal = JSON.parse(readFileSync(join(SERVER, "drizzle/meta/_journal.json"), "utf8")) as {
+    entries: unknown[];
+  };
+  return journal.entries.length;
+}
 const SCRIPT = "src/scripts/adoptarMigraciones.ts";
 
 /** Una base propia para el test, con su URL — el script se conecta por URL, no por handle. */
@@ -148,7 +157,11 @@ test("una base como producción se adopta: registra la migración SIN ejecutar s
 
   const registradas = await base.sql<{ hash: string }[]>`
     select hash from drizzle.__drizzle_migrations`;
-  assert.equal(registradas.length, 1);
+  // Contra el JOURNAL, no contra un número escrito acá: adoptar registra TODAS las
+  // migraciones que el repo declara, así que un literal envejece con la primera que
+  // alguien agregue —y el test se pondría rojo por existir, no por estar mal—. Pasó
+  // con `0001_procedencia_de_envios` a las horas de mergear el pipeline.
+  assert.equal(registradas.length, migracionesDeclaradas());
 
   const [{ n }] = await base.sql<{ n: number }[]>`select count(*)::int as n from events`;
   assert.equal(n, 1, "los datos no se tocan: adoptar registra, no ejecuta");
