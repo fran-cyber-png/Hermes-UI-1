@@ -42,6 +42,13 @@ export interface EntradaCurso {
   interes_curso?: string | null;
   /** El curso del formulario del lead emparejado por teléfono. */
   lead_curso?: string | null;
+  /**
+   * El PRIMER anuncio de la conversación — el que de verdad dice por qué curso
+   * escribió. Va antes que `ultima_origen` porque el referral de
+   * Click-to-WhatsApp viaja SOLO en el primer mensaje: con `ultima_origen`, el
+   * chip perdía el anuncio en cuanto la persona escribía una segunda vez.
+   */
+  origen_anuncio?: { fuente: string; titulo?: string | null } | null;
   ultima_origen?: { fuente: string; titulo?: string | null } | null;
 }
 
@@ -71,7 +78,8 @@ function util(v: string | null | undefined): string | null {
 }
 
 export function cursoDeFila(c: EntradaCurso): CursoDeFila | null {
-  const anuncio = c.ultima_origen?.fuente === 'anuncio' ? util(c.ultima_origen.titulo) : null;
+  const origen = c.origen_anuncio?.fuente === 'anuncio' ? c.origen_anuncio : c.ultima_origen;
+  const anuncio = origen?.fuente === 'anuncio' ? util(origen.titulo) : null;
   const candidatos: [FuenteCurso, string | null][] = [
     ['interes', util(c.interes_curso)],
     ['lead', util(c.lead_curso)],

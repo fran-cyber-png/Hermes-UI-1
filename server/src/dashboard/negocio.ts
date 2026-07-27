@@ -2,7 +2,17 @@ import { sql, type SQL } from "drizzle-orm";
 import type { db } from "../db/client.js";
 import { respondidaSql } from "../cola/urgenciaSql.js";
 import { etapaEfectivaSql, ultimasGestionesSql } from "../cola/etapaEfectivaSql.js";
-import { cursoDeLeadSql, sufijoTelefonoSql } from "../gente/leadDeTelefono.js";
+import {
+  adIdDeCursoSql,
+  cursoCrudoSql,
+  fuenteCursoSql,
+  interesUltimoCteSql,
+  leadCursoCteSql,
+  sufijosCteSql,
+} from "../cola/cursoSql.js";
+import { sufijoTelefonoSql } from "../gente/leadDeTelefono.js";
+import { familiaDeAnuncio, familiaDeTexto, type AliasCurso } from "../cursos/alias.js";
+import { aliasesActivos } from "../cursos/repositorio.js";
 import { horaDelDiaLimaSql } from "../lib/horaLimaSql.js";
 import { HORA_APERTURA, HORA_CIERRE, horasDelDia } from "./horarioAtencion.js";
 
@@ -25,9 +35,18 @@ import { HORA_APERTURA, HORA_CIERRE, horasDelDia } from "./horarioAtencion.js";
  *   · `respondida`   ← `cola/urgenciaSql.ts`
  *   · etapa efectiva ← `cola/etapaEfectivaSql.ts` (ADR 0013) + `ultimasGestionesSql`
  *   · sufijo de match ← `gente/leadDeTelefono.ts`
+ *   · candidatos y precedencia del curso ← `cola/cursoSql.ts` (los MISMOS de la cola)
+ *   · texto → familia de curso ← `cursos/alias.ts` (el mismo diccionario de #102)
  *   · corte de día / hora de Lima ← `lib/horaLimaSql.ts` (#4)
  * Lo único que este módulo define por su cuenta —y lo define UNA vez, acá— es
- * «primera respuesta», «precio mencionado» y el curso de un lead.
+ * «primera respuesta» y «precio mencionado».
+ *
+ * ⚠️ ESTA TABLA YA DIVERGIÓ UNA VEZ. Hasta el 26-jul-2026 el curso salía **solo
+ * del formulario**: el panel decía «Sin curso identificado: 68 de 70 (97 %)»
+ * mientras la cola de al lado le pintaba el chip a casi todas, porque ella sí
+ * miraba el interés y el anuncio. Era la misma pregunta contestada dos veces y
+ * distinto. Si alguna vez hace falta cambiar de dónde sale el curso, se cambia
+ * en `cursos/precedencia.ts` + `cola/cursoSql.ts` y cambia para todos.
  *
  * COSTO: el CTE `msgs` escanea `interactions` entero (join a `events` por el
  * `numeroPropio`, que es parte de la clave de conversación). Es a propósito:
@@ -66,6 +85,13 @@ export type Dimension = (typeof DIMENSIONES)[number];
 export type FilaNegocio = {
   /** Nombre del curso o título del anuncio. `null` = no se pudo atribuir. */
   clave: string | null;
+  /**
+   * La familia de curso (`DIPICOT`) cuando el diccionario de `alias_curso` supo
+   * traducir el texto. `null` = la fila es el texto crudo, tal como vino: se
+   * muestra igual, porque un anuncio que no sabemos mapear con volumen ES el
+   * dato que hay que ver.
+   */
+  familia?: string | null;
   /** El `adId` de Meta cuando la dimensión es anuncio; `null` en la de curso. */
   ad_id: string | null;
   llegaron: number;
@@ -115,6 +141,12 @@ export interface OpcionesNegocio {
   ahora: Date;
   dimension: Dimension;
   numeroPropio?: string | null;
+  /**
+   * El diccionario texto→familia. Por defecto, los alias activos de la base
+   * (`alias_curso`, editable sin deploy). El test lo inyecta para no depender de
+   * la siembra.
+   */
+  aliases?: readonly AliasCurso[];
 }
 
 // ── El SQL ───────────────────────────────────────────────────────────────────
@@ -190,6 +222,56 @@ function conversacionesDelPeriodo(o: OpcionesNegocio): SQL {
   `;
 }
 
+/**
+ * EL CURSO DE CADA CONVERSACIÓN, con la precedencia compartida.
+ *
+ * Los tres candidatos salen de los MISMOS fragmentos que la cola
+ * (`cola/cursoSql.ts`) y la precedencia entre ellos, del MISMO gemelo en SQL.
+ * Este módulo no define nada de eso: solo los engancha a su `base`.
+ */
+const COLUMNAS_CURSO = {
+  interes: "b.interes_curso",
+  lead: "b.lead_curso",
+  origen: "b.origen",
+} as const;
+
+/** El `WITH` de la dimensión CURSO: la base + los tres candidatos + quién ganó. */
+function conCurso(o: OpcionesNegocio): SQL {
+  return sql`
+    ${conversacionesDelPeriodo(o)},
+    sufijos AS (${sufijosCteSql("base")}),
+    lead_curso AS (${leadCursoCteSql}),
+    interes_ultimo AS (${interesUltimoCteSql}),
+    con_candidatos AS (
+      SELECT b.*, iu.curso AS interes_curso, lc.curso AS lead_curso
+      FROM base b
+      LEFT JOIN interes_ultimo iu ON iu.clave = b.clave
+      -- Solo WhatsApp: en Messenger/Instagram el persona_id es un id de
+      -- plataforma, y sacarle «los últimos 9 dígitos» produciría un match por
+      -- casualidad. Un cruce falso es peor que un «sin atribuir» honesto.
+      LEFT JOIN lead_curso lc
+        ON b.canal = 'whatsapp' AND lc.sufijo = (${sufijoTelefonoSql("b.persona_id")})
+    ),
+    curso AS (
+      SELECT b.*,
+             (${cursoCrudoSql(COLUMNAS_CURSO)})  AS curso_crudo,
+             (${fuenteCursoSql(COLUMNAS_CURSO)}) AS curso_fuente,
+             (${adIdDeCursoSql(COLUMNAS_CURSO)}) AS curso_ad_id
+      FROM con_candidatos b
+    )
+  `;
+}
+
+/**
+ * La llave con la que se junta el texto crudo con su familia. El `\x01` separa
+ * el texto del `adId` sin poder aparecer en ninguno de los dos.
+ */
+const SEPARADOR_LLAVE = String.fromCharCode(1);
+const llaveDeCurso = (crudo: string, adId: string | null): string =>
+  `${crudo}${SEPARADOR_LLAVE}${adId ?? ""}`;
+const llaveDeCursoSql = (alias: string): SQL =>
+  sql`(${sql.raw(alias)}.curso_crudo || chr(1) || COALESCE(${sql.raw(alias)}.curso_ad_id, ''))`;
+
 /** `interval` de 24 h expresado sobre el reloj que manda (`ahora`), no `now()`. */
 const HACE_24H = (ahora: Date): SQL => sql`(${ahora.toISOString()}::timestamptz - interval '24 hours')`;
 
@@ -210,6 +292,77 @@ const METRICAS_DE_FILA: SQL = sql`
   count(*) FILTER (WHERE b.etapa_efectiva = 'cierre')::int              AS cerrados,
   count(*) FILTER (WHERE b.precio_mencionado)::int                      AS precio_mencionado
 `;
+
+/**
+ * LA TABLA POR CURSO — dos consultas, y el porqué de las dos.
+ *
+ * La traducción «texto → familia» (`[JUL] INTELIGENCIA | WSP` → DIPICOT) NO se
+ * puede escribir en SQL sin duplicar `cursos/alias.ts`: la regla es «por palabra
+ * entera y gana el alias más específico», y una segunda escritura de eso es
+ * exactamente la divergencia que este arreglo vino a cerrar. Así que:
+ *
+ *   1. se pregunta qué TEXTOS distintos hay en el período (unos pocos),
+ *   2. se traducen en TypeScript con el ÚNICO matcheador que existe,
+ *   3. se vuelve a preguntar agrupando por familia, con el mapa como VALUES.
+ *
+ * Agrupar en Postgres y no en TypeScript no es capricho: la mediana de demora
+ * (`percentile_cont`) no se puede sumar entre grupos, así que juntar dos textos
+ * de la misma familia después de agregarlos daría una mediana inventada.
+ *
+ * Son dos escaneos de una consulta de PANEL —se pide cuando alguien mira, no en
+ * cada tecla—, el mismo costo que este módulo ya aceptaba a propósito.
+ */
+async function filasPorCurso(base: typeof db, o: OpcionesNegocio): Promise<FilaNegocio[]> {
+  const conCursoCte = conCurso(o);
+
+  const distintos = await base.execute<{ curso_crudo: string; curso_ad_id: string | null }>(sql`
+    ${conCursoCte}
+    SELECT DISTINCT c.curso_crudo, c.curso_ad_id
+    FROM curso c
+    WHERE c.curso_fuente IS NOT NULL
+  `);
+
+  const aliases = o.aliases ?? (await aliasesActivos(base));
+
+  // El mapa: para cada texto crudo, cómo se llama la fila y de qué familia es.
+  // Sin alias que matchee NO se inventa una familia — la fila queda con el texto
+  // tal como vino, que es información: un anuncio con volumen y sin mapear es
+  // justo lo que hay que ver (`npm run cursos:gaps` lo lista).
+  const mapa = distintos.map((d) => {
+    const alias = d.curso_ad_id
+      ? familiaDeAnuncio(aliases, { adId: d.curso_ad_id, titulo: d.curso_crudo })
+      : familiaDeTexto(aliases, d.curso_crudo);
+    return {
+      llave: llaveDeCurso(d.curso_crudo, d.curso_ad_id),
+      etiqueta: alias?.nombreCurso ?? (d.curso_crudo || null),
+      familia: alias?.familia ?? null,
+    };
+  });
+
+  const valores = mapa.filter((m) => m.etiqueta !== null);
+  const conMapa =
+    valores.length > 0
+      ? sql`, mapa (llave, etiqueta, familia) AS (VALUES ${sql.join(
+          valores.map((m) => sql`(${m.llave}::text, ${m.etiqueta}::text, ${m.familia}::text)`),
+          sql`, `,
+        )})`
+      : sql``;
+  const joinMapa =
+    valores.length > 0 ? sql`LEFT JOIN mapa m ON m.llave = ${llaveDeCursoSql("b")}` : sql``;
+  const columnas =
+    valores.length > 0
+      ? sql`m.etiqueta AS clave, m.familia AS familia`
+      : sql`NULL::text AS clave, NULL::text AS familia`;
+
+  return base.execute<FilaNegocio>(sql`
+    ${conCursoCte}${conMapa}
+    SELECT ${columnas}, NULL::text AS ad_id, ${METRICAS_DE_FILA}
+    FROM curso b
+    ${joinMapa}
+    ${valores.length > 0 ? sql`GROUP BY m.etiqueta, m.familia` : sql``}
+    ORDER BY llegaron DESC, clave NULLS LAST
+  `);
+}
 
 // ── El seam ──────────────────────────────────────────────────────────────────
 
@@ -274,44 +427,16 @@ export async function consultarNegocio(base: typeof db, o: OpcionesNegocio): Pro
   `);
 
   // ── 3 · La tabla del negocio: por curso o por anuncio ──────────────────────
-  const filas = await base.execute<FilaNegocio>(
+  const filas =
     o.dimension === "curso"
-      ? sql`
-        ${conBase},
-        -- El lead que nombra el curso, uno por teléfono. El desempate es
-        -- DISTINTO al de la ficha (gente/emparejar.ts, que prioriza el EMAIL) y
-        -- es a propósito: acá la pregunta es «¿qué diploma quería?», no «¿con
-        -- qué lo cotizo?». Primero el que dice un curso, después el más reciente.
-        leads_curso AS (
-          SELECT DISTINCT ON (sufijo) sufijo, curso
-          FROM (
-            SELECT ${sufijoTelefonoSql("phone")} AS sufijo,
-                   ${cursoDeLeadSql}              AS curso,
-                   created_time
-            FROM leads
-            WHERE phone IS NOT NULL
-          ) x
-          WHERE length(sufijo) = 9
-          ORDER BY sufijo, (curso IS NOT NULL) DESC, created_time DESC
-        )
-        SELECT lc.curso AS clave, NULL::text AS ad_id, ${METRICAS_DE_FILA}
-        FROM base b
-        -- Solo WhatsApp: en Messenger/Instagram el persona_id es un id de
-        -- plataforma, y sacarle «los últimos 9 dígitos» produciría un match por
-        -- casualidad. Un cruce falso es peor que un «sin atribuir» honesto.
-        LEFT JOIN leads_curso lc
-          ON b.canal = 'whatsapp' AND lc.sufijo = ${sufijoTelefonoSql("b.persona_id")}
-        GROUP BY lc.curso
-        ORDER BY llegaron DESC, clave NULLS LAST
-      `
-      : sql`
+      ? await filasPorCurso(base, o)
+      : await base.execute<FilaNegocio>(sql`
         ${conBase}
         SELECT b.origen->>'titulo' AS clave, b.origen->>'adId' AS ad_id, ${METRICAS_DE_FILA}
         FROM base b
         GROUP BY b.origen->>'titulo', b.origen->>'adId'
         ORDER BY llegaron DESC, clave NULLS LAST
-      `,
-  );
+      `);
 
   // ── 4 · Los números propios que existen en este período (#50) ─────────────
   // Sin filtrar por el número elegido a propósito: el selector tiene que poder

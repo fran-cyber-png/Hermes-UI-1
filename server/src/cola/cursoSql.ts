@@ -14,9 +14,15 @@ import { cursoDeLeadSql, sufijoTelefonoSql } from "../gente/leadDeTelefono.js";
  *                             NOMBRE con el que lo llenó—, emparejado por
  *                             teléfono contra `leads`.
  *
- * La PRECEDENCIA entre las dos (y el anuncio) NO vive acá: es una decisión de
- * presentación y vive pura en el front (`src/features/canales/curso.ts`), donde
- * se testea sin base. El server sirve los candidatos; el front elige.
+ * La PRECEDENCIA entre las dos (y el anuncio) para el CHIP la decide el front
+ * (`src/features/canales/curso.ts`): el server le sirve los candidatos y él
+ * elige, porque ahí es una decisión de presentación que se testea sin base.
+ *
+ * Para las consultas que AGRUPAN (el Dashboard por curso, #128) eso no alcanza:
+ * traer 1.900 conversaciones para decidir en TypeScript costaría el escaneo
+ * entero en cada apertura del panel. Por eso al final de este archivo vive el
+ * gemelo en SQL de `cursos/precedencia.ts` — con su test de paridad, que es lo
+ * que impide que las dos escrituras se separen (la lección de #37 y del ADR 0009).
  *
  * CONTRATO DE COLUMNAS: los fragmentos asumen que la consulta ya expone el CTE
  * `todo` (con `clave`, `canal`, `tipo`, `persona_id`).
@@ -50,11 +56,24 @@ export const interesUltimoCteSql: SQL = sql`
  * teléfono real — sería un curso INVENTADO en la fila de otra persona. Se
  * prefiere no mostrar chip antes que mostrar uno falso.
  */
-export const sufijosDeLaColaCteSql: SQL = sql`
+export const sufijosDeLaColaCteSql: SQL = sufijosCteSql("todo", sql`AND tipo = 'mensaje'`);
+
+/**
+ * El mismo CTE, parametrizado por la relación de la que salen las conversaciones.
+ *
+ * La cola lo arma sobre `todo` (comentarios + conversaciones, de ahí el filtro de
+ * `tipo`); el panel de negocio lo arma sobre su propio `base`, que ya son solo
+ * conversaciones. **Se generalizó en vez de copiarse** (#128): la llave de match
+ * contra `leads` tiene que ser una, o la misma persona sale con un curso en su
+ * fila y con otro en el Dashboard.
+ */
+export function sufijosCteSql(relacion: string, filtroExtra: SQL = sql``): SQL {
+  return sql`
   SELECT DISTINCT (${sufijoTelefonoSql("persona_id")}) AS sufijo
-  FROM todo
-  WHERE canal = 'whatsapp' AND tipo = 'mensaje' AND persona_id IS NOT NULL
+  FROM ${sql.raw(relacion)}
+  WHERE canal = 'whatsapp' ${filtroExtra} AND persona_id IS NOT NULL
 `;
+}
 
 /**
  * EL CURSO DEL LEAD —Y SU NOMBRE—, UNO POR SUFIJO. Se arranca desde `sufijos`
@@ -90,3 +109,75 @@ export const leadCursoCteSql: SQL = sql`
 export const leadCursoJoinSql: SQL = sql`LEFT JOIN lead_curso lc
   ON todo.canal = 'whatsapp' AND todo.tipo = 'mensaje'
   AND lc.sufijo = (${sufijoTelefonoSql("todo.persona_id")})`;
+
+/**
+ * ══ LA PRECEDENCIA, DICHA EN SQL — el gemelo de `cursos/precedencia.ts` ══════
+ *
+ * `interés registrado > curso del formulario > anuncio`, la regla que cerró el
+ * dueño en #72. Vive acá, al lado de los fragmentos que traen los candidatos,
+ * porque quien compone la consulta necesita las dos cosas juntas.
+ *
+ * **Por qué existe un gemelo y no una sola escritura**: la versión pura decide
+ * sobre una fila ya traída (el chip, la ficha); esta agrupa 1.900 conversaciones
+ * DENTRO de Postgres, sin traerlas. Sacar las filas para decidir en TypeScript
+ * costaría el escaneo entero en cada apertura del panel. Lo que impide que se
+ * separen es `dashboard/curso.paridad.test.db.ts`, que corre las dos sobre los
+ * mismos datos y falla si difieren — el mismo mecanismo que el ADR 0009 puso
+ * para la urgencia.
+ *
+ * Las tres columnas se pasan por nombre porque cada consulta las llama distinto.
+ */
+export interface ColumnasDeCurso {
+  /** La columna con el interés asentado (`intereses.curso`). */
+  interes: string;
+  /** La columna con el curso del formulario (`cursoDeLeadSql` ya aplicado). */
+  lead: string;
+  /** La columna jsonb con el origen del mensaje (`events.payload->'origen'`). */
+  origen: string;
+}
+
+const utilSql = (columna: string): SQL => sql`NULLIF(btrim(${sql.raw(columna)}), '')`;
+
+const tituloAnuncioSql = (origen: string): SQL =>
+  sql`CASE WHEN ${sql.raw(origen)}->>'fuente' = 'anuncio'
+        THEN NULLIF(btrim(${sql.raw(origen)}->>'titulo'), '') END`;
+
+const adIdAnuncioSql = (origen: string): SQL =>
+  sql`CASE WHEN ${sql.raw(origen)}->>'fuente' = 'anuncio'
+        THEN NULLIF(btrim(${sql.raw(origen)}->>'adId'), '') END`;
+
+/**
+ * El TEXTO CRUDO del curso de la conversación, o `NULL` si ninguna de las tres
+ * fuentes dice nada. Nunca se infiere del texto del mensaje.
+ *
+ * Un anuncio sin título pero con `adId` devuelve cadena vacía (no `NULL`): el
+ * curso existe, lo dice el mapeo por anuncio, y perderlo acá sería contar como
+ * «sin atribuir» algo que sí está atribuido.
+ */
+export function cursoCrudoSql(c: ColumnasDeCurso): SQL {
+  return sql`COALESCE(
+    ${utilSql(c.interes)},
+    ${utilSql(c.lead)},
+    ${tituloAnuncioSql(c.origen)},
+    CASE WHEN ${adIdAnuncioSql(c.origen)} IS NOT NULL THEN '' END
+  )`;
+}
+
+/** Cuál de las tres fuentes ganó. Es lo que hace que el número nunca mienta sobre su origen. */
+export function fuenteCursoSql(c: ColumnasDeCurso): SQL {
+  return sql`CASE
+    WHEN ${utilSql(c.interes)} IS NOT NULL THEN 'interes'
+    WHEN ${utilSql(c.lead)}    IS NOT NULL THEN 'lead'
+    WHEN ${tituloAnuncioSql(c.origen)} IS NOT NULL
+      OR ${adIdAnuncioSql(c.origen)}    IS NOT NULL THEN 'anuncio'
+  END`;
+}
+
+/** El `adId` del anuncio cuando el curso salió de ahí — la llave del mapeo humano. */
+export function adIdDeCursoSql(c: ColumnasDeCurso): SQL {
+  return sql`CASE
+    WHEN ${utilSql(c.interes)} IS NOT NULL THEN NULL
+    WHEN ${utilSql(c.lead)}    IS NOT NULL THEN NULL
+    ELSE ${adIdAnuncioSql(c.origen)}
+  END`;
+}

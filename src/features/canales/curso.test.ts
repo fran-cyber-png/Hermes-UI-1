@@ -8,6 +8,24 @@ import { colorDeCurso, cursoDeFila, PALETA_CURSO } from './curso';
  */
 
 describe('cursoDeFila — el interés manda, el lead respalda, el anuncio es el último recurso', () => {
+  // El referral de Click-to-WhatsApp viaja SOLO en el primer mensaje: en cuanto
+  // la persona escribe una segunda vez, `ultima_origen` queda en null y el chip
+  // perdía el anuncio. `origen_anuncio` (el primero de la conversación) es lo
+  // que mira el Dashboard, y ahora también el chip.
+  test('el anuncio sale del PRIMERO de la conversación, no del último mensaje', () => {
+    const r = cursoDeFila({
+      origen_anuncio: { fuente: 'anuncio', titulo: 'Inteligencia Estratégica' },
+      ultima_origen: null,
+    });
+    expect(r?.fuente).toBe('anuncio');
+    expect(r?.nombre).toBe('Inteligencia Estratégica');
+  });
+
+  test('sin `origen_anuncio` (server viejo) sigue usando `ultima_origen`', () => {
+    const r = cursoDeFila({ ultima_origen: { fuente: 'anuncio', titulo: 'Inteligencia Estratégica' } });
+    expect(r?.fuente).toBe('anuncio');
+  });
+
   test('con interés registrado, gana el interés aunque haya lead y anuncio', () => {
     const r = cursoDeFila({
       interes_curso: 'Diploma de Especialización en Inteligencia y Contrainteligencia 14',

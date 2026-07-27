@@ -25,6 +25,8 @@ export interface Conversacion {
   ultima_clase?: string | null;
   /** Origen del último mensaje (anuncio/landing): para «📣 Vino del anuncio» cuando no hay texto ni media. */
   ultima_origen?: { fuente: string; titulo?: string | null } | null;
+  /** El PRIMER anuncio de la conversación — de acá sale el curso (#128). */
+  origen_anuncio?: { fuente: string; titulo?: string | null; adId?: string | null } | null;
   /** Derivada: hay un saliente posterior al último entrante. Nunca estado de fila. */
   respondida: boolean;
   /** Derivada: alguna vez salió un mensaje nuestro. Distinto de `respondida`

@@ -49,7 +49,9 @@ const TITULO_DIMENSION: Record<Dimension, { titulo: string; sinAtribuir: string;
   curso: {
     titulo: 'Por curso',
     sinAtribuir: 'Sin curso identificado',
-    ayuda: 'El curso sale del formulario que la persona llenó, cruzado por teléfono.',
+    ayuda:
+      'El curso sale del interés que la vendedora registró, del formulario que la persona llenó o ' +
+      'del anuncio por el que escribió — en ese orden, el mismo del chip de la cola.',
   },
   anuncio: {
     titulo: 'Por anuncio',

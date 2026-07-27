@@ -19,6 +19,12 @@ export type Dimension = 'curso' | 'anuncio';
 export interface FilaNegocio {
   /** El curso o el título del anuncio. `null` = no se pudo atribuir. */
   clave: string | null;
+  /**
+   * La familia de curso (`DIPICOT`) cuando el diccionario supo traducir el texto.
+   * `null` = la fila es el texto crudo tal como vino — se muestra igual, porque
+   * un anuncio con volumen que no sabemos mapear es justo lo que hay que ver.
+   */
+  familia?: string | null;
   ad_id: string | null;
   llegaron: number;
   respondidos: number;

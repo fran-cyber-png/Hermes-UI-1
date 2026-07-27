@@ -113,6 +113,7 @@ const comentariosCte = (filtroCanal: SQL, incluirPins: boolean) => sql`
     texto, contexto_texto,
     NULL::text                                  AS ultima_clase,
     NULL::jsonb                                 AS ultima_origen,
+    NULL::jsonb                                 AS origen_anuncio,
     false                                       AS precio_enviado,
     occurred_at                                 AS referencia,
     occurred_at                                 AS ultimo_at,
@@ -159,6 +160,14 @@ const conversacionesCte = sql`
     -- El origen del ÚLTIMO mensaje: si vino de un anuncio y no tiene texto, el
     -- front muestra «📣 Vino del anuncio» en vez de «(sin texto)».
     (array_agg(origen ORDER BY occurred_at DESC))[1]                AS ultima_origen,
+    -- El PRIMER anuncio de la conversación, que es de donde sale el CURSO (#128).
+    -- Es distinto de ultima_origen y la diferencia importaba: el referral de
+    -- Click-to-WhatsApp viaja SOLO en el primer mensaje, así que en cuanto la
+    -- persona escribe una segunda vez ultima_origen es NULL y el chip perdía el
+    -- anuncio. El Dashboard siempre miró el primero (dashboard/negocio.ts) —
+    -- esta columna es la que hace que los dos cuenten lo mismo.
+    (array_agg(origen ORDER BY occurred_at)
+       FILTER (WHERE origen->>'fuente' = 'anuncio'))[1]             AS origen_anuncio,
     -- ¿Ya le pasamos el precio? (cola/precio.ts): el hecho comercial que el
     -- embudo no veía — 611 conversaciones con precio enviado y 1 interés
     -- registrado en toda la base. Es derivado de lo escrito, no un estado.
@@ -407,7 +416,7 @@ async function ejecutarCola(
       ${padronCteSql(conPadron)}
     )
     SELECT todo.clave AS clave, canal, tipo, persona_id, persona_nombre, numero_propio,
-           texto, contexto_texto, ultima_clase, ultima_origen, respondida, ya_le_hablamos,
+           texto, contexto_texto, ultima_clase, ultima_origen, origen_anuncio, respondida, ya_le_hablamos,
            precio_enviado, ventana_abierta, pide_info, n,
            referencia, ultimo_at, seguimiento_en,
            etapa_manual,
