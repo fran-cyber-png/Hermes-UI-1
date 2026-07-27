@@ -198,14 +198,18 @@ describe('POST /api/ivi/preguntar — SIN_EVIDENCIA sale por el camino de las re
 });
 
 /**
- * ESTE ES EL LUGAR DONDE EL DEFECTO LLEGABA A LA VENDEDORA.
+ * ESTE ES EL LUGAR DONDE EL CONTRATO AFIRMABA DE MÁS.
  *
- * La UI dibuja el botón a partir del flag que sale de acá (`{reintentable && <button>Reintentar`).
- * El `http_inesperado` es un cajón de sastre con vidas mezcladas, y la ruta lo resolvía mirando
- * solo el `codigo` — con lo que el 500 de Ivi (pgvector reiniciándose, Bedrock sin credenciales)
- * salía como `reintentable: false` y la vendedora se quedaba sin la única acción que servía.
+ * `http_inesperado` es un cajón de sastre con vidas mezcladas, y la ruta lo resolvía mirando solo
+ * el `codigo` — con lo que el 500 de Ivi (pgvector reiniciándose, Bedrock sin credenciales) salía
+ * como `reintentable: false`, o sea «no lo intentes más» sobre algo que a los 10 s ya andaba.
  *
  * El `estado` ya viajaba en el `ErrorIvi`; simplemente no se miraba.
+ *
+ * Ojo con el tiempo verbal, que es el defecto que este PR corrige en el repo de al lado: el flag
+ * existe para que una UI no reimplemente esta tabla, pero **hoy ninguna la lee**. El front de esta
+ * rama no tiene pantalla de Ivi (`grep -rn "api/ivi" src/` → nada) y la del PR #174 deriva el
+ * reintento de una tabla propia. La medición completa está en el ADR 0021 §3.
  */
 describe('POST /api/ivi/preguntar — `reintentable` no puede afirmar más de lo que sabe', () => {
   /** Un cliente que falla como falla el de verdad: con código Y estado. */

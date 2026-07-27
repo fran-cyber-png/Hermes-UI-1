@@ -59,11 +59,33 @@ caen adentro:
 | `500` — el `except Exception` de Ivi (pgvector caído, Bedrock sin credenciales) | **transitorio** | `false` ❌ |
 | `502`/`504` — nginx o la tailnet delante de geografo | **transitorio** | `false` ❌ |
 
-El campo se llama `reintentable`: con `false` la app no dibuja el botón, así que un pgvector
-reiniciándose le quitaba a la vendedora la única acción que la habría desbloqueado. El `estado` ya
-viajaba en el `ErrorIvi`; solo faltaba mirarlo. Un `5xx`, un `408` o un `429` en ese cajón son
-transitorios; el resto no. El orden importa: **el código decide primero** — un `503` es el
-`ivi_sin_token_configurado` de Ivi, config y no caída, y ser 5xx no lo vuelve transitorio.
+El campo se llama `reintentable` y con `false` un pgvector reiniciándose le **habría** quitado a la
+vendedora la única acción que la desbloqueaba. El `estado` ya viajaba en el `ErrorIvi`; solo faltaba
+mirarlo. Un `5xx`, un `408` o un `429` en ese cajón son transitorios; el resto no. El orden importa:
+**el código decide primero** — un `503` es el `ivi_sin_token_configurado` de Ivi, config y no caída,
+y ser 5xx no lo vuelve transitorio.
+
+#### Habría, no le quitaba: quién lee `reintentable` hoy
+
+Nadie. Y decirlo importa, porque este ADR trata justamente de no afirmar más de lo que se midió.
+
+| Medición | Contra qué foto | Resultado |
+|---|---|---|
+| `grep -rn "api/ivi" src/` · `grep -rn "Ivi" src/` | esta rama (`feat/costura-ivi-traza`) | **cero líneas**: no hay consumidor del proxy en el front |
+| dónde vive el consumidor | `docs/plan-panel-contexto.md:162` (hito S9) y el PR **#174** `feat/superficie-de-ivi`, sin mergear | pendiente |
+| qué hace ese consumidor con el flag | `feat/superficie-de-ivi@d2045f3` | **tampoco lo lee** |
+
+La tercera fila es la que sorprende y por eso se escribe: en #174 la pantalla sí dibuja un botón
+«Reintentar», pero no a partir de este campo. `api()` (`src/lib/datos/cliente.ts:103-109`) construye
+el `ErrorApi` con `message`, `status`, `type`, `errores` y `codigo` — `reintentable` se descarta en
+ese borde —, y `src/features/ivi/errores.ts` vuelve a derivar el reintento de una tabla propia
+indexada solo por `codigo`, donde `http_inesperado` está fijo en `false`. O sea: el 500 que este
+arreglo acaba de marcar transitorio seguiría sin ofrecer el botón allá.
+
+Lo que este arreglo cierra es el **contrato**: la ruta ya no afirma «permanente» sobre algo que no
+lo es. Cablear la UI a ese contrato —o borrar la tabla duplicada del front— es trabajo aparte, y
+mientras no se haga, la frase «la app dibuja el botón con este flag» es una promesa, no una
+descripción.
 
 ### 4 · El `traza_id` nace en Hermes y va desde el día uno
 

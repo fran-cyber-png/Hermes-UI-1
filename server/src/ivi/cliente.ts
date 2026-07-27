@@ -61,14 +61,23 @@ export const respuestaIviSchema = z.object({
    * cubre la tercera: una forma inesperada degrada a «no reportado» en vez de convertir una
    * respuesta buena en un 502.
    *
-   * Medido contra ivi-cerebro@1e5d2f3 (y su árbol de trabajo, idénticos en este archivo):
-   * `contrato_hermes()` emite `r.get("numeros_no_verificados", [])` y `_no_verificados()`
-   * devuelve siempre `list[str]`, así que HOY no llega `null`. Pero el propio `gimnasio.py:106`
-   * de Ivi escribe `r.get("numeros_no_verificados") or []`: el emisor ya se defiende de un
-   * `None` que considera posible, y quien recibe no tiene por qué ser más frágil que quien manda.
+   * Medido contra `ivi-cerebro@1e5d2f3` — y `rag/api_contrato.py` es idéntico ahí y en el árbol
+   * de trabajo de esa rama (`git diff HEAD -- rag/api_contrato.py` vacío): `contrato_hermes()`
+   * emite `r.get("numeros_no_verificados", [])` y `_no_verificados()` devuelve siempre
+   * `list[str]`, así que HOY no llega `null`. Pero el propio Ivi se defiende de un `None` que
+   * considera posible: `r.get("numeros_no_verificados") or []` en `gimnasio.py` **:106 @1e5d2f3**
+   * (ese archivo NO es idéntico en el árbol de trabajo — ahí la misma línea es la :145). Quien
+   * recibe no tiene por qué ser más frágil que quien manda.
    *
-   * La dirección de la degradación es la conservadora: sin lista, la app desconfía del párrafo
-   * entero. Fail-closed es sobre el TEXTO, no sobre su nota al pie.
+   * ⚠️ Y HAY UNA LECTURA DE IVI QUE CONTRADICE ESTA, escrita en `rag/traza.py` —un archivo que
+   * hoy está **sin commitear** (`??`) en el checkout local de `ivi-cerebro`, o sea que no vive en
+   * ningún commit—: ahí `[]` es «el grounding corrió y no encontró nada» y `NULL` es «el grounding
+   * no corrió», dos hechos distintos. Hermes los colapsa igual, y es una DECISIÓN, no un descuido:
+   * la degradación va hacia el lado conservador (sin lista, la app desconfía del párrafo entero),
+   * y hoy no hay ningún consumidor que use la distinción. Si Ivi la publica en el contrato de
+   * verdad, este es el punto exacto donde Hermes la pierde y hay que volver acá.
+   *
+   * Fail-closed es sobre el TEXTO, no sobre su nota al pie.
    */
   numerosNoVerificados: z
     .array(z.string())
@@ -199,9 +208,13 @@ function estadoTransitorio(estado: number): boolean {
  *            Bedrock sin credenciales, un bug de aquel lado ................. TRANSITORIO
  *   502/504  nginx o la tailnet delante de geografo ........................ TRANSITORIO
  *
- * — y marcarlas a las tres `false` le negaba a la vendedora el botón «Reintentar» justo en el
- * caso en que a los 10 s ya funcionaba. El `estado` ya venía en el `ErrorIvi`; solo faltaba
- * mirarlo. El campo se llama `reintentable`: no puede afirmar más de lo que sabe.
+ * — y marcarlas a las tres `false` afirmaba «permanente» justo sobre el caso que a los 10 s ya
+ * funcionaba. El `estado` ya venía en el `ErrorIvi`; solo faltaba mirarlo. El campo se llama
+ * `reintentable`: no puede afirmar más de lo que sabe.
+ *
+ * Y este comentario tampoco: **hoy ningún consumidor lee el flag** —el front no tiene pantalla de
+ * Ivi, y la del PR #174 re-deriva el reintento de una tabla propia—, así que lo que se arregló acá
+ * es el contrato, no un botón que a alguien le faltara en la pantalla. ADR 0021 §3 lo mide.
  *
  * El orden importa: **el código decide primero y el estado solo desempata el cajón de sastre**.
  * Un `503` es el `ivi_sin_token_configurado` de `autorizar()` —config de geografo, no una
@@ -259,11 +272,13 @@ export function aCamelCase(crudo: unknown): unknown {
     tipo,
     fuentes,
     groundingOk,
-    // `null` y ausente son EL MISMO HECHO cuando el campo es una lista: «no se reportó». Se
-    // normaliza acá, en el borde, porque es una diferencia de DIALECTO —Python manda `None`
-    // donde JS no manda nada— y este es el lugar donde el dialecto de Ivi se vuelve el de
-    // Hermes. Ojo: `edadDelDato` NO se normaliza, y la asimetría es a propósito — ahí `null`
-    // sí significa algo distinto de ausente («no medido», que no es «fresco»).
+    // Hermes decide TRATAR `null` y ausente como el mismo hecho —«no se reportó»— y lo hace acá,
+    // en el borde, porque es una diferencia de DIALECTO (Python manda `None` donde JS no manda
+    // nada) y este es el lugar donde el dialecto de Ivi se vuelve el de Hermes. Es una decisión
+    // de Hermes, no una lectura del emisor: `rag/traza.py` de Ivi —hoy sin commitear— dice lo
+    // contrario para su propia telemetría (`[]` ≠ `NULL`). Ver la nota del schema, arriba.
+    // Ojo: `edadDelDato` NO se normaliza, y la asimetría es a propósito — ahí `null` sí significa
+    // algo distinto de ausente («no medido», que no es «fresco»).
     numerosNoVerificados: numerosNoVerificados ?? undefined,
     edadDelDato,
   };

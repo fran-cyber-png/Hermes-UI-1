@@ -56,8 +56,13 @@ export function iviRouter(preguntar: PreguntarAIvi = preguntarleAIvi): Router {
       //
       // El `estado` va JUNTO con el código: sin él, el cajón de sastre `http_inesperado` marca
       // igual el 404 de «todavía no lo desplegaron» que el 500 de «pgvector se está
-      // reiniciando», y la app —que dibuja el botón «Reintentar» con este flag— se lo niega a
-      // la vendedora en el caso que a los 10 s ya andaba. Ver `esReintentable`.
+      // reiniciando», y le afirma «permanente» al segundo, que a los 10 s ya andaba.
+      // Ver `esReintentable`.
+      //
+      // Tiempo verbal, a propósito: este flag es para que la app NO tenga que reimplementar la
+      // tabla de códigos, pero HOY NADIE LO LEE. Medido en esta rama, `grep -rn "api/ivi" src/`
+      // no da una línea; el consumidor vive en el PR #174 y, verificado contra
+      // `feat/superficie-de-ivi@d2045f3`, tampoco lee este campo todavía. ADR 0021 §3.
       if (err instanceof ErrorIvi) {
         console.error(`ivi: ${err.codigo} — ${err.message} [traza ${err.trazaId ?? '—'}]`, err.cause ?? '');
         res.status(502).json({

@@ -204,9 +204,13 @@ referenciado por nombre, regla dura #1). El cliente vive en `server/src/ivi/clie
   mismo error un minuto después). El caso que obliga a mirar el estado es **`http_inesperado`, que
   es un cajón de sastre**: adentro caen el `404` de «todavía no lo desplegaron» (permanente) **y**
   el `500` propio de Ivi —su `except Exception`: pgvector caído, Bedrock sin credenciales— y los
-  `502/504` de nginx/tailnet, que son transitorios. Marcarlos a todos `false` le borraba el botón
-  «Reintentar» a la vendedora justo cuando servía. **El código decide primero**: un `503` es
+  `502/504` de nginx/tailnet, que son transitorios. Marcarlos a todos `false` afirmaba «permanente»
+  sobre algo que a los 10 s ya andaba. **El código decide primero**: un `503` es
   `ivi_sin_token_configurado`, config y no caída, y ser 5xx no lo vuelve transitorio.
+  ⚠️ **Hoy nadie lee ese flag**: el front de `main` no tiene pantalla de Ivi, y la del PR #174
+  (`feat/superficie-de-ivi@d2045f3`, sin mergear) re-deriva el reintento de su propia tabla por
+  `codigo` —`api()` descarta `reintentable` al armar el `ErrorApi`—. Lo arreglado es el contrato;
+  cablearlo a la UI está pendiente. ADR 0021 §3 tiene la medición.
 - **Los campos informativos degradan, no tumban**: `numerosNoVerificados` acepta ausente, `null` y
   hasta una forma inesperada (se ignora y se loguea) — un campo accesorio no puede convertir una
   respuesta buena en un 502. Los tres que cargan el peso (`texto`, `tipo`, `groundingOk`) **sí**
