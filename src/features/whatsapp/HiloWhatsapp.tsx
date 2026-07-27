@@ -6,6 +6,7 @@ import { formatoTelefono, tempClass } from '../../lib/formato';
 import { usePopover } from '../../lib/teclado/usePopover';
 import { ejecutarEnvioComposer, guardarBorrador, leerBorrador } from './borradorComposer';
 import { alPonerEnComposer } from './puenteComposer';
+import { piezaDelTexto } from './procedenciaComposer';
 import { textoDelBoton } from '../autorespuesta/revision';
 import { TextoWhatsapp } from './TextoWhatsapp';
 import { Avatar } from '../canales/Avatar';
@@ -582,7 +583,16 @@ function ComposerWa({
         texto,
         adjunto,
         enviarTexto: (t) =>
-          enviar.mutateAsync({ numeroPropio, telefono, texto: t, referencia: conversacionClave }),
+          enviar.mutateAsync({
+            numeroPropio,
+            telefono,
+            texto: t,
+            referencia: conversacionClave,
+            // De qué pieza salió (#169). Se pregunta sobre el texto QUE VA A
+            // SALIR, no sobre el que llegó: si ella lo reescribió entero, lo
+            // que sale es de ella y así queda contado.
+            pieza: piezaDelTexto(telefono, t),
+          }),
         enviarConAdjunto: (archivo, caption) =>
           enviarMedia.mutateAsync({ numeroPropio, telefono, referencia: conversacionClave, archivo, caption }),
         telefonoVisibleAhora: () => telefonoActualRef.current,

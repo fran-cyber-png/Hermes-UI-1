@@ -65,7 +65,21 @@ function Tarjeta({
       {/* El texto ES el botón de editar: tocarlo lo abre en el composer. */}
       <button
         type="button"
-        onClick={() => telefono && ponerEnComposer({ telefono, texto: s.vistaPrevia.texto })}
+        onClick={() =>
+          telefono &&
+          ponerEnComposer({
+            telefono,
+            texto: s.vistaPrevia.texto,
+            // La vista previa ES el paso 1 de la secuencia (#169). La MISMA
+            // pieza que saldría con «Mandar»: lo que cambia es que acá la
+            // vendedora la edita antes, y eso queda marcado, no escondido.
+            pieza: {
+              clase: 'paso',
+              ref: `${s.plantillaId}#${s.pasos[0]?.orden ?? 1}`,
+              via: 'panel-sugerencia',
+            },
+          })
+        }
         title="Abrirlo en la caja para editarlo antes de mandar"
         // Nombre accesible explícito: sin esto el nombre del botón es su texto
         // entero (que incluye «…antes de mandar») y se vuelve indistinguible del
@@ -239,6 +253,8 @@ export function DosRespuestas({
               void envio.mandar(
                 s.plantillaId,
                 s.pasos.map((p) => ({ orden: p.orden, mediaPendiente: false })),
+                // Salió de las dos respuestas del panel, no del buscador (#169).
+                'panel-sugerencia',
               )
             }
           />

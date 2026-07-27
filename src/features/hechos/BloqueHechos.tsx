@@ -42,7 +42,17 @@ function Chip({ h, telefono }: { h: HechoRecomendado; telefono: string | null })
     <li className="group/h flex items-start gap-1 rounded-lg border border-border bg-card px-2 py-1.5 transition-colors hover:border-primary/40">
       <button
         type="button"
-        onClick={() => telefono && ponerEnComposer({ telefono, texto: h.texto })}
+        onClick={() =>
+          telefono &&
+          ponerEnComposer({
+            telefono,
+            texto: h.texto,
+            // De qué pieza salió (#169): la clave del catálogo, que es estable
+            // aunque el rótulo se renombre. Sin esto, un dato que destrabó una
+            // venta llega al server indistinguible de un texto escrito de cero.
+            pieza: { clase: 'dato', ref: h.clave, via: 'panel-datos' },
+          })
+        }
         title={h.texto}
         aria-label={`Poner en la caja: ${h.rotulo}`}
         disabled={!telefono}

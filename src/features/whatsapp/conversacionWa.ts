@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { tokenGuardado } from '../../lib/datos/token';
 import { API_URL } from '../../config';
+import type { PiezaDeclarada } from './procedenciaComposer';
 
 /** Un adjunto del hilo: el archivo ya vive en el server, esto es la referencia. */
 export interface MediaHilo {
@@ -88,7 +89,14 @@ export function useConversacionWa(telefono: string | null) {
   });
 
   const enviar = useMutation({
-    mutationFn: (vars: { numeroPropio: string; telefono: string; texto: string; referencia: string }) =>
+    mutationFn: (vars: {
+      numeroPropio: string;
+      telefono: string;
+      texto: string;
+      referencia: string;
+      /** De qué pieza salió (#169). Ausente = escrito a mano: la línea de base. */
+      pieza?: PiezaDeclarada;
+    }) =>
       api<{ ok: true; idExterno: string }>('/api/whatsapp/enviar', {
         method: 'POST',
         body: JSON.stringify(vars),

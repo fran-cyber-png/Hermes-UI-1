@@ -66,8 +66,18 @@ export function useEnvioSecuencia(conversacion: Conversacion | null) {
   /**
    * Manda la secuencia entera, de a un mensaje, esperando entre uno y otro.
    * Devuelve el estado final para quien quiera encadenar algo.
+   *
+   * `via` (#169) dice por qué pantalla entró: el server manda EXACTAMENTE el
+   * mismo paso venga de las dos respuestas del panel o del buscador de
+   * secuencias, así que si esto no viajara, «¿las dos respuestas sirven de
+   * algo?» no tendría respuesta posible. No es la identidad de la pieza: la
+   * secuencia 12 es la 12 venga de donde venga.
    */
-  async function mandar(plantillaId: number, pasos: PasoAEnviar[]): Promise<void> {
+  async function mandar(
+    plantillaId: number,
+    pasos: PasoAEnviar[],
+    via: 'panel-sugerencia' | 'panel-secuencias' = 'panel-secuencias',
+  ): Promise<void> {
     const telefono = conversacion?.persona_id;
     const numeroPropio = conversacion?.numero_propio;
     if (!conversacion || !telefono || !numeroPropio || pasos.length === 0) return;
@@ -88,6 +98,7 @@ export function useEnvioSecuencia(conversacion: Conversacion | null) {
             numeroPropio,
             personaNombre: conversacion.persona_nombre,
             ultimo: i === pasos.length - 1,
+            via,
           }),
         });
         aplicar({ tipo: 'paso-ok' });

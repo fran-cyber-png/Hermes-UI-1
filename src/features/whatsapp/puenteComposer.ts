@@ -1,4 +1,5 @@
 import { guardarBorrador } from './borradorComposer';
+import { anotarPieza, olvidarPieza, type PiezaDeclarada } from './procedenciaComposer';
 
 /**
  * EL PUENTE AL COMPOSER — «un clic manda tal cual; un clic en el texto lo abre
@@ -22,6 +23,13 @@ import { guardarBorrador } from './borradorComposer';
 export interface TextoParaComposer {
   telefono: string;
   texto: string;
+  /**
+   * DE QUÉ PIEZA SALIÓ este texto (épica #169). Omitirla NO es un descuido
+   * neutro: el envío va a contar como escrito a mano, que es la línea de base.
+   * Quien ponga texto en la caja desde una superficie nueva y no la declare,
+   * ensucia el número contra el que se comparan todas las piezas.
+   */
+  pieza?: Omit<PiezaDeclarada, 'editada'>;
 }
 
 type Escucha = (v: TextoParaComposer) => void;
@@ -43,6 +51,11 @@ export function alPonerEnComposer(fn: Escucha): () => void {
 export function ponerEnComposer(v: TextoParaComposer): void {
   if (!v.telefono || !v.texto) return;
   guardarBorrador(v.telefono, v.texto);
+  // La procedencia se anota acá y no en cada componente: una superficie que
+  // ponga texto sin declarar su pieza cae sola en la línea de base, en vez de
+  // heredar la pieza que quedó de la vez anterior.
+  if (v.pieza) anotarPieza(v.telefono, v.pieza, v.texto);
+  else olvidarPieza(v.telefono);
   for (const fn of escuchas) fn(v);
 }
 

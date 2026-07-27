@@ -17,6 +17,8 @@
  * Puro y sin DOM a propósito: así se testea con vitest en `environment: node`
  * (ver `vitest.config.ts`), sin montar el componente.
  */
+import { olvidarPieza } from './procedenciaComposer';
+
 const borradores = new Map<string, string>();
 
 /** El borrador guardado para ese teléfono, o cadena vacía si no hay ninguno. */
@@ -85,6 +87,7 @@ export async function ejecutarEnvioComposer(deps: DependenciasEnvioComposer): Pr
     // Con adjunto, el texto de la caja viaja como caption (como en WhatsApp).
     await enviarConAdjunto(adjunto, t);
     limpiarBorrador(telefonoDelEnvio);
+    olvidarPieza(telefonoDelEnvio); // ese envío ya usó su pieza (#169)
     if (telefonoVisibleAhora() === telefonoDelEnvio) {
       limpiarAdjuntoVisible();
       limpiarTextoVisible();
