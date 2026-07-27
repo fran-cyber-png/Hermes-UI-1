@@ -101,23 +101,34 @@ jobs:
 
       # Si el deploy falló, el script YA revirtió y verificó. Lo que falta es que quede
       # rastro: un run rojo en Actions lo ve quien estaba mirando, y nadie más.
+      # DOS SALIDAS, A PROPÓSITO. Los indicadores van al issue; el LOG no.
+      #
+      # `journalctl -u hermes` de un CRM de WhatsApp lleva teléfonos, nombres y claves de
+      # conversación de gente real. Un issue es permanente, lo ve todo el que tiene acceso
+      # al repo y no caduca nunca. El resumen del run sí caduca y lo ve quien está
+      # mirando el deploy — que es exactamente quien necesita el log.
       - name: Estado real de producción tras el fallo
         if: failure()
         id: forense
         run: |
           set +e
+          # Lo que SÍ va al issue: tres indicadores, sin datos de nadie.
           {
             echo "### Estado de producción ahora"
             echo
             echo "- \`/health\`: $(curl -fsS --max-time 5 https://hermes-api.goberna.us/health 2>&1 || echo 'SIN RESPUESTA')"
             echo "- servicio: $(systemctl is-active hermes 2>&1)"
             echo "- SHA del checkout: $(git -C /srv/hermes rev-parse --short HEAD 2>&1)"
+          } | tee /tmp/forense.md >> "$GITHUB_STEP_SUMMARY"
+
+          # Lo que se queda en el run: el log, que es donde viven los datos personales.
+          {
             echo
-            echo "Últimas líneas del log:"
+            echo "Últimas líneas del log (NO se copian al issue: llevan datos de leads reales):"
             echo '```'
             sudo journalctl -u hermes -n 30 --no-pager 2>&1 | tail -30
             echo '```'
-          } | tee /tmp/forense.md >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Abrir un issue con lo que pasó
         if: failure()
@@ -139,6 +150,9 @@ jobs:
               `no darlo por hecho.`,
               '',
               forense,
+              '',
+              `El **log del servicio** queda en el resumen del run, no acá: lleva teléfonos y`,
+              `nombres de leads reales, y un issue no caduca.`,
               '',
               `**Run:** ${run}`,
               '',
