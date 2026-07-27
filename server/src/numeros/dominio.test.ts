@@ -1,9 +1,10 @@
-import { test } from "node:test";
+import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
   esquemaUpsert,
   normalizarNumero,
   estadoSesionAContrato,
+  sesionPublicada,
   estadoVinculacionAContrato,
   estadoVinculacionVigente,
   VIGENCIA_QR_MS,
@@ -153,4 +154,54 @@ test("esPareoEnVuelo: el ÉXITO no toma el candado — era el bloqueo eterno del
   // Los dos que SÍ: hay un cliente vivo esperando al teléfono. Ahí el candado protege.
   assert.equal(esPareoEnVuelo({ estado: "esperando", numero: "519" }), true);
   assert.equal(esPareoEnVuelo({ estado: "qr", numero: "519", qr: "data:img" }), true);
+});
+
+/**
+ * EL SEMÁFORO DEL PANEL, CON VARIAS LÍNEAS (#50).
+ *
+ * El defecto que esto cierra: `sesionDeNumero()` le preguntaba a
+ * `WHATSAPP_NUMERO`, así que **solo el primer número podía reportar estado
+ * real**. Una segunda línea conectada y atendiendo se veía «Desconectado» en el
+ * panel de Cerberus — y un semáforo que miente sobre lo que se acaba de agregar
+ * enseña a no mirarlo, justo cuando más se lo mira.
+ */
+describe("sesionPublicada — el estado que ve el panel", () => {
+  test("una línea VIVA reporta su estado real, sea la primera o la quinta", () => {
+    assert.deepEqual(sesionPublicada({ estado: "conectado", telefono: "51999888777" }, true), {
+      estado: "conectado",
+      ban: null,
+    });
+  });
+
+  test("el ban de una línea viva viaja con su código y su fecha", () => {
+    assert.deepEqual(sesionPublicada({ estado: "baneado", codigo: "191", expira: "en 24 horas" }, true), {
+      estado: "baneado",
+      ban: { codigo: "191", expira_at: "en 24 horas" },
+    });
+  });
+
+  test("vinculada pero NO corriendo: `desconectado`, no `conectado`", () => {
+    // Es el caso de un número que se vinculó y todavía no se agregó a
+    // WHATSAPP_NUMEROS. No está andando, y decir que sí sería la mentira inversa.
+    assert.deepEqual(sesionPublicada(null, true), { estado: "desconectado", ban: null });
+  });
+
+  test("sin sesión y sin archivo: `sin_vincular` — nunca se vinculó", () => {
+    assert.deepEqual(sesionPublicada(null, false), { estado: "sin_vincular", ban: null });
+  });
+
+  test("🔴 una línea viva NO se confunde con una vinculada-y-apagada", () => {
+    // El corazón del bug: antes las dos daban `desconectado` porque el estado real
+    // solo se consultaba para `WHATSAPP_NUMERO`.
+    const viva = sesionPublicada({ estado: "conectado", telefono: "51999888777" }, true);
+    const apagada = sesionPublicada(null, true);
+    assert.notDeepEqual(viva, apagada);
+    assert.equal(viva.estado, "conectado");
+  });
+
+  test("el archivo NO puede ascender a una línea viva que se cayó", () => {
+    // Si el transporte dice `desconectado`, tener el `.db` no lo mejora: manda el
+    // estado vivo, siempre.
+    assert.equal(sesionPublicada({ estado: "desconectado", motivo: "se cayó" }, true).estado, "desconectado");
+  });
 });

@@ -79,6 +79,37 @@ export function estadoSesionAContrato(e: EstadoSesion): SesionContrato {
   }
 }
 
+/**
+ * EL ESTADO QUE SE PUBLICA PARA UN NÚMERO, dado lo que se sabe de él (#50).
+ *
+ * Puro y aparte de la ruta porque es una DECISIÓN, no un cableado: qué se le dice
+ * al panel de Cerberus sobre una línea. Antes vivía adentro de `admin.ts`
+ * preguntándole a `WHATSAPP_NUMERO`, así que **solo el primer número podía
+ * reportar estado real** y cualquier otra línea viva se mostraba «Desconectado»
+ * aunque estuviera atendiendo. Un semáforo que miente enseña a no mirarlo.
+ *
+ * `estadoVivo` = el del transporte de ESA línea, o `null` si esa línea no corre.
+ * `hayArchivoDeSesion` = si existe su `.db` (o sea: se vinculó alguna vez).
+ *
+ * ⚠️ Cuando la línea NO corre pero el archivo existe, esto devuelve
+ * `desconectado`. En la práctica suele significar «falta agregarlo a
+ * `WHATSAPP_NUMEROS` y reiniciar», que es accionable y distinto de «se cayó» —
+ * pero el vocabulario acordado con Cerberus no tiene un estado para eso
+ * (`docs/multi-numero/hermes.md`). Agregarle uno es cambiarle el contrato al
+ * panel, así que va como decisión aparte (**#194**) y no de contrabando.
+ *
+ * Y si esa decisión sale por el lado de que las líneas vivas salgan de
+ * `numeros_wa`, este estado ambiguo **desaparece solo**: no habría forma de estar
+ * registrado, vinculado y aun así no correr.
+ */
+export function sesionPublicada(
+  estadoVivo: EstadoSesion | null,
+  hayArchivoDeSesion: boolean,
+): SesionContrato {
+  if (estadoVivo) return estadoSesionAContrato(estadoVivo);
+  return hayArchivoDeSesion ? { estado: "desconectado", ban: null } : { estado: "sin_vincular", ban: null };
+}
+
 // ── Estado de vinculación (vinculador) → contrato ─────────────────────────────
 
 export type EstadoVinculacionContrato =

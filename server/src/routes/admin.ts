@@ -3,16 +3,17 @@ import { rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { Router, type Request, type Response } from "express";
 import { db } from "../db/client.js";
-import { whatsapp } from "../whatsapp/wiring.js";
+import { gestorWhatsapp } from "../whatsapp/wiring.js";
 import { vinculador } from "../whatsapp/vinculador.js";
 import {
   esquemaUpsert,
   normalizarNumero,
-  estadoSesionAContrato,
+  sesionPublicada,
   estadoVinculacionAContrato,
   esPareoEnVuelo,
   type SesionContrato,
 } from "../numeros/dominio.js";
+import type { EstadoSesion } from "../whatsapp/transporte.js";
 import {
   listarNumeros,
   obtenerNumero,
@@ -42,22 +43,34 @@ function responderError(res: Response, status: number, motivo: string, mensaje: 
 }
 
 /**
- * El estado de sesión de UN número, honesto con lo que hoy corre. Hoy vive UN
- * transporte (el de `WHATSAPP_NUMERO`): si el número consultado es ese, se reporta
- * su estado real; si no, se deduce de si existe la sesión `.db` (vinculado pero no
- * en vivo hasta el GestorWhatsapp, #50).
+ * El estado de sesión de UN número, honesto con lo que de verdad corre.
+ *
+ * Con el `GestorWhatsapp` (#50) viven N transportes, así que el estado sale de la
+ * línea que corresponde a ESE número. Si esa línea no está levantada, se deduce
+ * de si existe la sesión `.db`.
  */
 function sesionDeNumero(numero: string): SesionContrato {
-  const numeroVivo = normalizarNumero(process.env.WHATSAPP_NUMERO ?? "");
-  if (numeroVivo && numero === numeroVivo) {
-    try {
-      return estadoSesionAContrato(whatsapp().transporte.estado());
-    } catch {
-      /* whatsapp no arrancado (no debería en runtime); cae a la deducción por archivo */
-    }
+  // LE PREGUNTA AL GESTOR, NO AL ENV (#50).
+  //
+  // Antes esto miraba `WHATSAPP_NUMERO`: el único número que podía reportar
+  // estado real era el primero, y **cualquier otra línea viva se veía
+  // "Desconectado"** aunque estuviera conectada y atendiendo. Con una sola línea
+  // eso era exacto; con dos, el semáforo del panel miente justo sobre lo que se
+  // acaba de agregar — y un semáforo que miente enseña a no mirarlo.
+  //
+  // Ahora el estado sale de la línea que DE VERDAD corre, sea cuál sea.
+  let estadoVivo: EstadoSesion | null = null;
+  try {
+    // `de()` devuelve null si esa línea no corre — y NUNCA cae al primero, que es
+    // lo que hacía que el semáforo de la segunda línea mostrara el de la primera.
+    estadoVivo = gestorWhatsapp().de(numero)?.transporte.estado() ?? null;
+  } catch {
+    /* whatsapp no arrancado (no debería en runtime); cae a la deducción por archivo */
   }
-  if (existsSync(`${DIR_SESIONES}${numero}.db`)) return { estado: "desconectado", ban: null };
-  return { estado: "sin_vincular", ban: null };
+
+  // La decisión vive en `numeros/dominio.ts`, pura y con test. Acá solo se juntan
+  // los dos datos que hay que mirar.
+  return sesionPublicada(estadoVivo, existsSync(`${DIR_SESIONES}${numero}.db`));
 }
 
 function aNumeroContrato(fila: NumeroRow) {
