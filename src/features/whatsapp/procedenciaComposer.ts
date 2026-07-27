@@ -32,8 +32,11 @@
  * Es una **copia a mano** del vocabulario del server (`server/src/piezas/direccion.ts`)
  * porque el front no importa código del server — el mismo problema que ya tienen
  * los seis momentos en `features/hechos/hechos.ts`. La copia no puede driftear en
- * silencio: `procedencia/frontComparteVocabulario.test.ts` lee ESTE archivo y
- * falla si alguna de estas clases no existe del otro lado.
+ * silencio: **`server/src/procedencia/paridad.test.ts`** lee ESTE archivo y falla
+ * si alguna de estas clases no existe del otro lado. (Antes acá decía
+ * `frontComparteVocabulario.test.ts`, que no existe en ninguna rama: el mecanismo
+ * era real y el nombre no, en un comentario cuya tesis es que una advertencia
+ * escrita no es un mecanismo.)
  *
  * Y son estas dos y no `paso`/`dato`: el catálogo que Ivi consulta publica
  * `plantilla` y `hecho`, así que si acá se declarara otra cosa, el join entre lo
@@ -55,14 +58,22 @@ export interface PiezaDeclarada {
   editada: boolean;
   /**
    * EL TEXTO DE LA PIEZA — el que la pantalla dejó en la caja, **sin** las
-   * ediciones de la vendedora. Con esto el server calcula la versión (#169):
-   * mejorar una frase tiene que poder verse, y sin versión los dos textos se
-   * suman en un promedio que esconde el cambio.
+   * ediciones de la vendedora. Con esto el server calcula la versión de un
+   * **`hecho`** (#169): su texto cae en la caja tal cual está en el catálogo, sin
+   * marcadores que resolver y sin archivo, así que ese texto ES la pieza.
    *
    * Viaja el texto y no un hash **a propósito**: hashear en el navegador
    * significaría que dos clientes con distinta normalización parten en dos la
    * historia de una pieza sin que nadie lo note. El hash se hace en un solo
    * lugar, en el server.
+   *
+   * ⚠️ **Para una `plantilla` el server lo IGNORA**, y tiene que ser así: lo que
+   * la pantalla pone en la caja es `vistaPrevia.texto` —ya expandido con el
+   * `{nombre}` y el `{precio}` de esa persona— y el nombre del archivo del paso
+   * nunca llega hasta acá (la API manda `conImagen: boolean`). Versionar con eso
+   * daba una versión por destinatario y ninguna que casara con el catálogo. El
+   * contenido autoral del paso se lee de `plantilla_pasos`; el porqué medido está
+   * en `server/src/procedencia/desdeElComposer.ts`.
    */
   textoPieza: string;
 }

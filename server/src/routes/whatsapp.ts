@@ -13,7 +13,8 @@ import { RUTA_MEDIA, nombreSeguro } from '../whatsapp/mediaDir.js';
 import { normalizarTelefono } from '../whatsapp/identidadWa.js';
 import { FotoNoDisponibleError, type FotoPerfil, type MediaSaliente } from '../whatsapp/transporte.js';
 import { cancelarPorRespuestaHumana, faltaEsquema } from '../autorespuesta/repositorio.js';
-import { procedenciaDesdeColumnas, versionDePieza } from '../procedencia/pieza.js';
+import { procedenciaDelComposer, type LeerPasoDeSecuencia } from '../procedencia/desdeElComposer.js';
+import { obtenerPlantilla } from '../plantillas/repositorio.js';
 
 /**
  * LA CONVERSACIÓN NATIVA DE WHATSAPP dentro de Hermes: ver el hilo y responder,
@@ -75,41 +76,36 @@ async function hiloDe(telefono: string, conMarca = true) {
 }
 
 /**
- * DE QUÉ PIEZA SALIÓ, cuando el texto pasó por el composer (épica #169).
+ * El contenido AUTORAL de un paso, leído de la MISMA fila que lee
+ * `POST /api/plantillas/:id/enviar-paso`: el texto guardado (con sus
+ * `{nombre}`/`{precio}` sin resolver) y el archivo adjunto.
  *
- * El bloque de datos recomendados y las dos respuestas del panel **no envían**:
- * dejan el texto en la caja y la vendedora manda (la regla de #45). El server no
- * tiene forma de saber de dónde salió ese texto, así que la pantalla lo declara
- * acá — incluido si ella lo reescribió antes de mandar.
+ * Es lo que le falta al cuerpo que manda el navegador, y por eso la versión no
+ * se puede calcular con lo que él declara. El porqué, medido, está en
+ * `procedencia/desdeElComposer.ts`.
  *
- * **Ante cualquier duda, la línea de base**: un cuerpo raro NO se convierte en
- * una pieza inventada. `procedenciaDesdeColumnas` es el mismo lector tolerante
- * que usa la derivación, y ya está probado — perder una atribución es barato,
- * inventarla es el error que este trabajo existe para no cometer.
+ * **Degrada, pero RUIDOSO.** No poder leer el paso no puede tumbar un envío —la
+ * vendedora aprieta Enviar, no «versionar»—, así que devuelve `null` y el envío
+ * sale con `pieza_version` en «no sabemos». Pero se avisa: perder la versión en
+ * silencio es cómo se acumulan meses de filas que después no cruzan con nada, y
+ * es el modo de fallo exacto que este frente existe para no repetir.
  */
-function procedenciaDelCuerpo(pieza: unknown) {
-  if (!pieza || typeof pieza !== 'object') return undefined;
-  const p = pieza as Record<string, unknown>;
-  const leida = procedenciaDesdeColumnas({
-    piezaClase: typeof p.clase === 'string' ? p.clase : null,
-    piezaRef: typeof p.ref === 'string' && p.ref.length <= 120 ? p.ref : null,
-    // LA VERSIÓN LA CALCULA EL SERVER, no el cliente: viaja el TEXTO DE LA
-    // PIEZA (el que la pantalla dejó en la caja, sin las ediciones de la
-    // vendedora) y acá se hashea. Que el hash lo hiciera el navegador
-    // significaría que dos clientes con distinta normalización parten en dos la
-    // historia de una pieza sin que nadie lo note.
-    piezaVersion: versionDePieza(
-      typeof p.textoPieza === 'string' && p.textoPieza.length <= 4000
-        ? { texto: p.textoPieza }
-        : null,
-    ),
-    piezaVia: typeof p.via === 'string' ? p.via : null,
-    piezaEditada: p.editada === true,
-    // El momento NO viaja desde el cliente: lo clasifica el server en
-    // `enviarYProyectar`, con la misma cabeza que decide qué mandar.
-    momentoVenta: null,
-  });
-  return leida.tipo === 'pieza' ? leida : undefined;
+function leerPasoDeSecuencia(vendedoraId: string): LeerPasoDeSecuencia {
+  return async (plantillaId, orden) => {
+    const plantilla = await obtenerPlantilla(db, vendedoraId, plantillaId).catch((e: unknown) => {
+      console.error(`[procedencia] no se pudo leer la plantilla ${plantillaId}: el envío sale sin versión de pieza`, e);
+      return null;
+    });
+    const paso = plantilla?.pasos.find((p) => p.orden === orden);
+    // `null` = no se pudo determinar el contenido, que es un dato y no un hueco.
+    if (!paso) {
+      if (plantilla) {
+        console.warn(`[procedencia] la plantilla ${plantillaId} no tiene el paso ${orden}: el envío sale sin versión de pieza`);
+      }
+      return null;
+    }
+    return { texto: paso.texto, archivo: paso.media?.archivo ?? null };
+  };
 }
 
 /** El estado de la sesión, para el banner (conectado / sin-vincular / baneado…). */
@@ -178,7 +174,7 @@ whatsappRouter.post('/enviar', requiereVendedora, async (req, res) => {
     telefono: String(telefono ?? ''),
     texto: String(texto ?? ''),
     referencia: String(referencia ?? ''),
-    procedencia: procedenciaDelCuerpo(req.body?.pieza),
+    procedencia: await procedenciaDelComposer(req.body?.pieza, leerPasoDeSecuencia(req.vendedoraId!)),
   });
 
   if (!r.ok) {
