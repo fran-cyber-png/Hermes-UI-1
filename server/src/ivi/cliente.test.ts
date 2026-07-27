@@ -359,6 +359,70 @@ describe('la costura con Ivi (contrato real, snake_case)', () => {
     await preguntarleAIvi('x', 'v', [], { ...CONFIG_OK, fetch: fake });
     assert.equal('historial' in JSON.parse(String(llamadas[0]!.init.body)), false);
   });
+
+  /**
+   * LA CAPA DE HONESTIDAD TIENE TRES PATAS, Y UNA SE CAÍA EN LA COSTURA.
+   *
+   * `grounding_ok: false` dice «alguna cifra del texto no se pudo casar contra los datos».
+   * CUÁLES lo dice `numeros_no_verificados` — y el schema de Hermes no lo tenía, así que
+   * `z.object()` (laxo a propósito, y bien) lo descartaba en silencio. La app recibía la
+   * bandera sin la lista: podía decir «algo acá no está verificado» y no podía señalar QUÉ,
+   * que es la única forma de no descartar la respuesta entera.
+   *
+   * Ivi lo emite desde siempre (`contrato_hermes()`, api_contrato.py:56). Es un desfase de
+   * este lado, no de aquél.
+   */
+  test('numeros_no_verificados cruza la costura: sin la lista, «marcalas» es inaplicable', async () => {
+    const { fake } = fetchQueDevuelve({
+      ...respuestaRealDeIvi(),
+      texto: 'Llevamos 642 ventas y una conversión del 12 %.',
+      grounding_ok: false,
+      numeros_no_verificados: ['642', '12 %'],
+    });
+    const r = await preguntarleAIvi('¿cuánto?', 'v', undefined, { ...CONFIG_OK, fetch: fake });
+    assert.equal(r.groundingOk, false);
+    assert.deepEqual(r.numerosNoVerificados, ['642', '12 %']);
+  });
+
+  test('una lista VACÍA no es lo mismo que un campo ausente — se conserva la diferencia', async () => {
+    const { fake } = fetchQueDevuelve(respuestaRealDeIvi()); // trae `numeros_no_verificados: []`
+    const conLista = await preguntarleAIvi('a', 'v', undefined, { ...CONFIG_OK, fetch: fake });
+    assert.deepEqual(conLista.numerosNoVerificados, [], '[] = el grounding corrió y no marcó nada');
+
+    const { numeros_no_verificados: _sin, ...viejo } = respuestaRealDeIvi();
+    const { fake: fake2 } = fetchQueDevuelve(viejo);
+    const sinLista = await preguntarleAIvi('a', 'v', undefined, { ...CONFIG_OK, fetch: fake2 });
+    assert.equal(sinLista.numerosNoVerificados, undefined, 'ausente = este Ivi no lo emite');
+  });
+
+  test('una lista con formas raras NO tumba la respuesta entera (misma laxitud que `fuentes`)', async () => {
+    // Rechazar acá convertiría una respuesta buena en un 502: el campo es para MARCAR, no
+    // para decidir. La normalización a texto vive en el front, donde se dibuja.
+    const { fake } = fetchQueDevuelve({ ...respuestaRealDeIvi(), numeros_no_verificados: [642, null] });
+    const r = await preguntarleAIvi('a', 'v', undefined, { ...CONFIG_OK, fetch: fake });
+    assert.deepEqual(r.numerosNoVerificados, [642, null]);
+  });
+
+  /**
+   * H4 — `200` + `SIN_EVIDENCIA` NO entra al camino de errores.
+   *
+   * «Ivi funcionó y no sabe» es una RESPUESTA. Si el cliente lanzara acá, la app la vería
+   * como un 502 y la honestidad de Ivi se leería como «Ivi está roto»: el incidente al revés.
+   */
+  test('200 + SIN_EVIDENCIA es una respuesta, no un error: no lanza y llega tal cual', async () => {
+    const { fake } = fetchQueDevuelve({
+      texto: 'No tengo con qué responder eso. Preguntame otra cosa o pedime que lo busque distinto.',
+      tipo: 'SIN_EVIDENCIA',
+      modo: 'sin_evidencia',
+      fuentes: [],
+      grounding_ok: true,
+      numeros_no_verificados: [],
+      edad_del_dato: null,
+    });
+    const r = await preguntarleAIvi('¿cuántos pingüinos hay?', 'v', undefined, { ...CONFIG_OK, fetch: fake });
+    assert.equal(r.tipo, 'SIN_EVIDENCIA');
+    assert.match(r.texto, /No tengo con qué responder/);
+  });
 });
 
 /**

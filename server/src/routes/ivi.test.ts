@@ -142,6 +142,43 @@ describe('POST /api/ivi/preguntar', () => {
     }
   });
 
+  /**
+   * H4 — la frontera entre «Ivi no sabe» e «Ivi falló», del lado del proxy.
+   *
+   * `SIN_EVIDENCIA` es lo más parecido a un error que Ivi devuelve BIEN: es Ivi
+   * funcionando y diciendo que no tiene con qué. Si saliera por el camino del 502, la
+   * capa de honestidad se leería como una caída — y la vendedora aprendería a ignorarla.
+   * Lo mismo con `groundingOk: false`: la respuesta sigue siendo una respuesta.
+   */
+  test('SIN_EVIDENCIA sale como 200: Ivi funcionó y no sabe, eso no es una falla', async () => {
+    const sinEvidencia: RespuestaIvi = {
+      texto: 'No tengo con qué responder eso.',
+      tipo: 'SIN_EVIDENCIA',
+      fuentes: [],
+      groundingOk: true,
+      numerosNoVerificados: [],
+      edadDelDato: null,
+    };
+    const r = await pedir(async () => sinEvidencia, { token: TOKEN, body: { pregunta: '¿?' } });
+    assert.equal(r.status, 200);
+    assert.equal(r.json?.ok, true);
+    assert.deepEqual(r.json?.respuesta, sinEvidencia);
+  });
+
+  test('groundingOk false viaja con su lista: la app marca las cifras, no descarta la respuesta', async () => {
+    const conCifrasDudosas: RespuestaIvi = {
+      texto: 'Llevamos 642 ventas.',
+      tipo: 'HECHO',
+      fuentes: ['SDK:governa.ventas.porPais'],
+      groundingOk: false,
+      numerosNoVerificados: ['642'],
+      edadDelDato: null,
+    };
+    const r = await pedir(async () => conCifrasDudosas, { token: TOKEN, body: { pregunta: '¿?' } });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.json?.respuesta, conCifrasDudosas);
+  });
+
   test('un error no tipado → 502 genérico, sin inventar respuesta', async () => {
     const preguntar: PreguntarAIvi = async () => {
       throw new Error('boom inesperado');
