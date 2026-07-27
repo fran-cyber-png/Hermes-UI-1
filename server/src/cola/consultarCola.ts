@@ -137,8 +137,25 @@ const comentariosCte = (filtroCanal: SQL, incluirPins: boolean) => sql`
     ${filtroCanal}
 `;
 
+/**
+ * El recorte por LÍNEA (#50): solo las conversaciones que entraron o salieron por
+ * ESE número propio de Goberna.
+ *
+ * Va sobre `interactions.numero_propio` —la COLUMNA materializada por #185, con
+ * índice `(numero_propio, occurred_at)`— y no sobre `e.payload->>'numeroPropio'`,
+ * que es de donde el resto de este CTE todavía lo saca. Es la misma decisión que
+ * tomó `mismaLinea()` en el hilo: derivarlo con JSON en cada consulta es caro y
+ * frágil, y acá además tiraría el índice justo en el filtro que existe para
+ * podar filas temprano.
+ *
+ * **`NULL` no matchea ninguna línea, y está bien**: una fila cuyo crudo no traía
+ * el número no se le puede adjudicar a nadie. Es lo que ya decidió el backfill al
+ * no rellenarla con la línea más probable.
+ */
+const filtroDeLinea = (linea: string) => (linea ? sql`AND i.numero_propio = ${linea}` : sql``);
+
 /** Cada mensaje con su número propio y la CLASE de su media, sacados del evento. */
-const msgCte = (filtroCanal: SQL, incluirPins: boolean) => sql`
+const msgCte = (filtroCanal: SQL, incluirPins: boolean, linea: string) => sql`
   SELECT i.canal, i.persona_id, i.persona_nombre, i.texto, i.direccion, i.occurred_at,
          COALESCE(e.payload->>'numeroPropio', '') AS numero_propio,
          e.payload->'media'->>'clase'             AS clase,
@@ -151,6 +168,7 @@ const msgCte = (filtroCanal: SQL, incluirPins: boolean) => sql`
       incluirPins,
     )})
     ${filtroCanal}
+    ${filtroDeLinea(linea)}
 `;
 
 /** Los mensajes agrupados en conversación por (canal, persona, número propio). */
@@ -206,16 +224,24 @@ const conversacionesCte = sql`
  * `pins` (opcional, #49): cuando se pasa, las conversaciones fijadas entran
  * aunque estén fuera de la ventana de 30 días. Los conteos del embudo lo pasan
  * en `null` — su universo es la ventana, sin excepciones personales.
+ *
+ * `linea` (#50): con una línea elegida, **los comentarios se caen del UNION**.
+ * No es un descarte por comodidad — un comentario de Facebook no llegó por
+ * ningún número de WhatsApp (`comentariosCte` los emite con `numero_propio`
+ * NULL), así que dejarlos adentro haría que «solo la línea de Walter» mostrara
+ * filas que no son de Walter ni de ninguna línea. Y una fijada de otra línea
+ * tampoco entra: el recorte por línea se aplica en `msg`, o sea ANTES de que el
+ * `OR` de pins pueda saltarse la ventana.
  */
-const conTodo = (filtroCanal: SQL, pins: SQL | null) => sql`
+const conTodo = (filtroCanal: SQL, pins: SQL | null, linea = "") => sql`
   WITH ${pins ? sql`pins AS (${pins}),
   ` : sql``}msg AS (
-    ${msgCte(filtroCanal, pins != null)}
+    ${msgCte(filtroCanal, pins != null, linea)}
   ),
   todo AS (
-    ${comentariosCte(filtroCanal, pins != null)}
+    ${linea ? sql`` : sql`${comentariosCte(filtroCanal, pins != null)}
     UNION ALL
-    ${conversacionesCte}
+    `}${conversacionesCte}
   )
 `;
 
@@ -232,6 +258,15 @@ export interface OpcionesCola {
   categoria?: string;
   /** La vendedora del token: sin ella el estado personal (pin/fav/leído) queda en defaults. */
   vendedoraId?: string;
+  /**
+   * Solo lo que entró/salió por ESTE número propio de Goberna (#50). Vacío = todas
+   * las líneas, que es lo que pasaba cuando había una sola.
+   *
+   * Es un recorte de VISTA, no de permiso: acota lo que se mira, no lo que se
+   * puede mirar. Quién puede ver qué línea es otra decisión y otro frente —
+   * `numero_vendedora` existe y hoy no la lee nadie.
+   */
+  linea?: string;
   limit?: number;
   offset?: number;
 }
@@ -351,6 +386,7 @@ async function ejecutarCola(
   const tab = opciones.tab ?? "";
   const categoria = (opciones.categoria ?? "").trim().toLowerCase();
   const vendedoraId = opciones.vendedoraId;
+  const linea = (opciones.linea ?? "").trim();
   const limit = Math.min(opciones.limit || 40, 100);
   const offset = opciones.offset || 0;
 
@@ -401,7 +437,7 @@ async function ejecutarCola(
   // el nivel 0–5. `etapa_manual` llega de la última gestión (etapaEfectivaSql.ts);
   // el estado personal, del LEFT JOIN a `estado_conversacion`.
   const filas = await base.execute(sql`
-    ${conTodo(filtroCanal, pins)},
+    ${conTodo(filtroCanal, pins, linea)},
     seguimientos AS (
       ${seguimientosPendientesSql}
     ),
@@ -472,7 +508,7 @@ async function ejecutarCola(
       sin_responder: number;
       ya_compraron: number;
     }>(sql`
-      ${conTodo(filtroCanal, pins)},
+      ${conTodo(filtroCanal, pins, linea)},
       ultimas_gestiones AS (${ultimasGestionesSql}),
       cats AS (${categoriasCteSql}),
       padron AS (${padronCteSql(conPadron)})
@@ -493,7 +529,7 @@ async function ejecutarCola(
       sinResponder: r?.sin_responder ?? 0,
       yaCompraron: r?.ya_compraron ?? 0,
     };
-    desglose = await desglosarEmbudo(base, filtroCanal, condicionesBase, conPadron);
+    desglose = await desglosarEmbudo(base, filtroCanal, condicionesBase, conPadron, linea);
     conteos = plegarConteos(desglose);
   }
 
@@ -519,10 +555,14 @@ async function desglosarEmbudo(
   filtroCanal: SQL,
   condiciones: SQL[],
   conPadron: boolean,
+  // La línea entra acá por lo mismo que entra el canal: define el UNIVERSO de la
+  // foto, no un recorte de columna. Sin esto, con la cola filtrada a Walter la
+  // banda de desglose seguiría contando las conversaciones de la otra línea.
+  linea: string,
 ): Promise<FilaDesglose[]> {
   const donde = condiciones.length ? sql`WHERE ${sql.join(condiciones, sql` AND `)}` : sql``;
   const filas = await base.execute<FilaDesglose>(sql`
-    ${conTodo(filtroCanal, null)},
+    ${conTodo(filtroCanal, null, linea)},
     ultimas_gestiones AS (${ultimasGestionesSql}),
     padron AS (${padronCteSql(conPadron)})
     SELECT (${etapaEfectivaSql})        AS etapa,
@@ -563,5 +603,5 @@ export async function contarPorEtapaEfectiva(base: typeof db): Promise<Record<st
   // Sin condiciones no hay nada que preguntarle al padrón: el join saldría gratis
   // pero igual costaría una pasada. `false` deja la consulta idéntica a la de
   // antes de #133 — y de paso no depende de que `clientes_padron` exista.
-  return plegarConteos(await desglosarEmbudo(base, sql``, [], false));
+  return plegarConteos(await desglosarEmbudo(base, sql``, [], false, ""));
 }

@@ -16,6 +16,7 @@ import { FotoNoDisponibleError, type FotoPerfil, type MediaSaliente } from '../w
 import { cancelarPorRespuestaHumana, faltaEsquema } from '../autorespuesta/repositorio.js';
 import { procedenciaDelComposer, type LeerPasoDeSecuencia } from '../procedencia/desdeElComposer.js';
 import { obtenerPlantilla } from '../plantillas/repositorio.js';
+import { listarNumeros } from '../numeros/repositorio.js';
 
 /**
  * LA CONVERSACIÓN NATIVA DE WHATSAPP dentro de Hermes: ver el hilo y responder,
@@ -60,6 +61,39 @@ function leerPasoDeSecuencia(vendedoraId: string): LeerPasoDeSecuencia {
 /** El estado de la sesión, para el banner (conectado / sin-vincular / baneado…). */
 whatsappRouter.get('/sesion', (_req, res) => {
   res.json(whatsapp().transporte.estado());
+});
+
+/**
+ * LAS LÍNEAS QUE ESTÁN CORRIENDO, para que la vendedora pueda recortar la cola a
+ * una (#50). Lo que devuelve es el GESTOR —las líneas vivas—, no `numeros_wa`:
+ * una fila registrada por Cerberus cuyo transporte no arrancó no es una línea
+ * que se pueda mirar, y ofrecerla como filtro daría una cola vacía sin decir por
+ * qué.
+ *
+ * `numeros_wa` aporta UNA cosa: el nombre. El chip tiene que decir «Walter», no
+ * «51941654039» — un número no se reconoce de un vistazo y elegir la línea
+ * equivocada se descubre tarde. Es un LEFT JOIN conceptual: sin fila registrada,
+ * sin tabla todavía, o con la base caída, la línea igual se lista con su número
+ * como etiqueta. **Perder el rótulo no puede esconder la línea**: quedarse sin
+ * filtro es peor que un filtro que dice el número crudo.
+ */
+whatsappRouter.get('/lineas', async (_req, res) => {
+  const vivas = gestorWhatsapp().todos();
+
+  let etiquetas = new Map<string, string>();
+  try {
+    etiquetas = new Map((await listarNumeros(db)).map((n) => [n.numero, n.etiqueta]));
+  } catch (e) {
+    console.warn('[lineas] no se pudieron leer los rótulos de `numeros_wa`: van con el número crudo', e);
+  }
+
+  res.json({
+    lineas: vivas.map((l) => ({
+      numero: l.numero,
+      etiqueta: etiquetas.get(l.numero)?.trim() || l.numero,
+      estado: l.transporte.estado().estado,
+    })),
+  });
 });
 
 /** El hilo completo de una conversación, en orden cronológico + de dónde vino el lead. */
