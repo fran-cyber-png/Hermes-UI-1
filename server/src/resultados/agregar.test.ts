@@ -2,7 +2,6 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { A_MANO, deUnDato, deUnPasoDePlantilla } from "../procedencia/pieza.js";
 import { agregar } from "./agregar.js";
-import { medir } from "./medicion.js";
 import type { HechosDeUnEnvio } from "./loQuePaso.js";
 
 const SALIO = new Date("2026-07-20T10:00:00Z");
@@ -17,6 +16,7 @@ const envio = (over: Partial<HechosDeUnEnvio> = {}): HechosDeUnEnvio => ({
   texto: "hola, ¿cómo estás?",
   salioEn: SALIO,
   primerEntranteEn: null,
+  siguienteEnvioEn: null,
   etapaAntes: null,
   etapasDespues: [],
   ventaEn: null,

@@ -25,6 +25,7 @@
     "clientes:sincronizar": "tsx src/scripts/sincronizarClientes.ts",
     "medir:correo": "tsx src/scripts/medirCorreoFichas.ts",
     "medir:cotizaciones": "tsx src/scripts/medirCotizaciones.ts",
+    "piezas:resultados": "tsx src/scripts/resultadosDePiezas.ts",
     "plantillas:proponer": "tsx src/scripts/proponerPlantillas.ts",
     "cursos:gaps": "tsx src/scripts/gapsDeCurso.ts",
     "hechos:sembrar": "tsx src/scripts/sembrarHechos.ts",

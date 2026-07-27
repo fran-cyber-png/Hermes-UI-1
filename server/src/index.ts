@@ -19,6 +19,7 @@ import { agendaRouter } from "./routes/agenda.js";
 import { gestionesRouter } from "./routes/gestiones.js";
 import { categoriasRouter } from "./routes/categorias.js";
 import { senalesRouter } from "./routes/senales.js";
+import { resultadosRouter } from "./routes/resultados.js";
 import { plantillasRouter } from "./routes/plantillas.js";
 import { sugerenciasRouter } from "./routes/sugerencias.js";
 import { hechosRouter } from "./routes/hechos.js";
@@ -86,6 +87,7 @@ app.use("/api/agenda", agendaRouter); // los seguimientos agendados de cada vend
 app.use("/api/gestiones", gestionesRouter); // bitácora comercial: etapas, próximas acciones, etiquetas
 app.use("/api/categorias", categoriasRouter); // catálogo de categorías con color, por vendedora (#48)
 app.use("/api/senales", senalesRouter); // cotizado / se enfrió: etiquetas derivadas, no guardadas (ADR 0016)
+app.use("/api/resultados", resultadosRouter); // el lazo: qué pieza cierra ventas y cuál solo gasta mensajes (#169)
 app.use("/api/plantillas", plantillasRouter); // secuencias de venta: un paso por llamada, nunca un bucle en el server
 app.use("/api/sugerencias", sugerenciasRouter); // las dos respuestas listas del panel derecho
 app.use("/api/hechos", hechosRouter); // los datos recomendados: la munición de una línea (#153)

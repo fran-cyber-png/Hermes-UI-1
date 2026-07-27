@@ -20,6 +20,7 @@ const hechos = (over: Partial<HechosDeUnEnvio> = {}): HechosDeUnEnvio => ({
   texto: "El pago se puede hacer en 2 cuotas.",
   salioEn: SALIO,
   primerEntranteEn: null,
+  siguienteEnvioEn: null,
   etapaAntes: null,
   etapasDespues: [],
   ventaEn: null,
@@ -56,6 +57,62 @@ describe("¿contestó, y en cuánto?", () => {
   test("un entrante ANTERIOR al envío no es una respuesta a este envío", () => {
     const v = loQuePaso(hechos({ primerEntranteEn: new Date(SALIO.getTime() - 60_000) }));
     assert.equal(v.huboRespuesta, false);
+  });
+});
+
+/**
+ * LA REGLA DEL ÚLTIMO MENSAJE — el bug que encontró el corpus sintético.
+ *
+ * Con la forma de los datos reales (conversaciones de hasta cuatro salientes
+ * espaciados dos horas), la tasa SEMBRADA era 22 % y el reporte imprimía 54 %:
+ * la misma respuesta se le acreditaba a los cuatro mensajes anteriores. Y el
+ * inflado no es parejo —crece con cuántos mensajes tuvo la conversación, que es
+ * justo lo que correlaciona con la gente que ya iba a contestar—, así que
+ * premia a las piezas usadas en conversaciones largas.
+ */
+describe("una respuesta es de UN mensaje, no de todos los anteriores", () => {
+  test("si le escribimos otra cosa antes de que contestara, la respuesta NO es de este envío", () => {
+    const v = loQuePaso(
+      hechos({
+        siguienteEnvioEn: mas(120), // le mandamos otra cosa a las 2 h
+        primerEntranteEn: mas(180), // ella contestó a las 3 h
+      }),
+    );
+    assert.equal(v.huboRespuesta, false, "esa respuesta es del mensaje de las 2 h, no de este");
+    assert.equal(v.minutosHastaLaRespuesta, null);
+  });
+
+  test("el ÚLTIMO mensaje antes de la respuesta SÍ se la lleva", () => {
+    const v = loQuePaso(
+      hechos({
+        siguienteEnvioEn: null, // no le escribimos nada más
+        primerEntranteEn: mas(180),
+      }),
+    );
+    assert.equal(v.huboRespuesta, true);
+    assert.equal(v.minutosHastaLaRespuesta, 180);
+  });
+
+  test("si el siguiente envío salió DESPUÉS de que contestó, la respuesta sigue siendo de este", () => {
+    // El caso normal de una conversación viva: mandamos, contesta, y recién
+    // entonces le respondemos. Ese segundo envío no le saca el mérito al primero.
+    const v = loQuePaso(
+      hechos({
+        primerEntranteEn: mas(30),
+        siguienteEnvioEn: mas(45),
+      }),
+    );
+    assert.equal(v.huboRespuesta, true);
+  });
+
+  test("en una secuencia, los pasos del medio no cobran la respuesta del final", () => {
+    // Cuatro pasos a 90 s uno del otro y una respuesta a la media hora: la gana
+    // el paso 4. No se puede saber cuál de los cuatro la ganó de verdad, y
+    // atribuírsela al último es la única regla que no cuenta de más.
+    const paso1 = loQuePaso(hechos({ siguienteEnvioEn: mas(1.5), primerEntranteEn: mas(30) }));
+    const paso4 = loQuePaso(hechos({ siguienteEnvioEn: null, primerEntranteEn: mas(30) }));
+    assert.equal(paso1.huboRespuesta, false);
+    assert.equal(paso4.huboRespuesta, true);
   });
 });
 

@@ -46,6 +46,7 @@ interface FilaCruda {
   pieza_editada: boolean;
   momento_venta: string | null;
   primer_entrante_en: Date | null;
+  siguiente_envio_en: Date | null;
   etapa_antes: string | null;
   etapas_despues: { etapa: string; cuando: string }[] | null;
 }
@@ -98,6 +99,15 @@ export async function consultarEnvios(
           AND COALESCE(ev.payload->>'numeroPropio', '') = env.numero_propio
           AND i.direccion = 'entrante'
           AND i.occurred_at > env.salio_en)                       AS primer_entrante_en,
+      -- EL SIGUIENTE SALIENTE NUESTRO en la misma conversación. Sin esto, una
+      -- sola respuesta se le acredita a todos los mensajes anteriores y toda
+      -- tasa se infla (medido sobre un corpus con la forma real: 22 % sembrado
+      -- salía 54 %). El veredicto lo aplica la función pura; acá solo se trae.
+      (SELECT min(COALESCE(e2.resuelto_at, e2.creado_at))
+         FROM envios_wa e2
+        WHERE e2.referencia = env.referencia
+          AND e2.estado = 'enviado'
+          AND COALESCE(e2.resuelto_at, e2.creado_at) > env.salio_en)  AS siguiente_envio_en,
       -- La etapa declarada ANTES (el mismo DISTINCT ON de siempre, acotado).
       (SELECT g.etapa
          FROM gestiones g
@@ -144,6 +154,7 @@ export async function consultarEnvios(
       }),
       salioEn,
       primerEntranteEn: f.primer_entrante_en ? new Date(f.primer_entrante_en) : null,
+      siguienteEnvioEn: f.siguiente_envio_en ? new Date(f.siguiente_envio_en) : null,
       etapaAntes: f.etapa_antes,
       etapasDespues: (f.etapas_despues ?? []).map((g) => ({
         etapa: g.etapa,

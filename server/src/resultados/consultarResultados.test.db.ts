@@ -107,6 +107,24 @@ describe("los hechos crudos que trae el SQL", () => {
     assert.equal(loQuePaso(h).huboAvanceDeEtapa, true);
   });
 
+  test("UNA RESPUESTA ES DE UN MENSAJE: el saliente del medio no cobra la respuesta del final", async (t) => {
+    // El bug que encontró el corpus sintético: con dos salientes y una sola
+    // respuesta, sin la regla del último mensaje los DOS contaban «respondió»
+    // y toda tasa se inflaba (22 % sembrado → 54 % reportado).
+    const db = await baseDePrueba(t);
+    const tel = "51900000009";
+    await sembrarEnvioWa(db, { telefono: tel, creadoAt: hace(6) }); // el primero
+    await sembrarEnvioWa(db, { telefono: tel, creadoAt: hace(5) }); // le escribimos otra vez
+    await sembrarMensaje(db, { personaId: tel, occurredAt: hace(4) }); // recién ahí contestó
+
+    const hechos = await envios(db);
+    assert.equal(hechos.length, 2);
+    const veredictos = hechos.map((h) => loQuePaso(h).huboRespuesta);
+    assert.deepEqual(veredictos, [false, true], "la respuesta es del ÚLTIMO, no de los dos");
+    assert.ok(hechos[0].siguienteEnvioEn, "el primero sabe que le escribimos de nuevo");
+    assert.equal(hechos[1].siguienteEnvioEn, null, "el último no tiene siguiente");
+  });
+
   test("un envío FALLIDO no entra: no tiene resultado que medir", async (t) => {
     const db = await baseDePrueba(t);
     await sembrarEnvioWa(db, { telefono: "51900000005", estado: "fallido", creadoAt: hace(5) });

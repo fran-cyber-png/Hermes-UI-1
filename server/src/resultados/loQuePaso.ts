@@ -92,6 +92,19 @@ export interface HechosDeUnEnvio {
   salioEn: Date;
   /** El primer mensaje ENTRANTE de esa persona posterior al envío, si lo hubo. */
   primerEntranteEn: Date | null;
+  /**
+   * EL SIGUIENTE ENVÍO NUESTRO a esa misma conversación, si lo hubo.
+   *
+   * Sin este campo, **una sola respuesta se le acredita a todos los mensajes
+   * anteriores**: en una conversación con cuatro salientes espaciados dos horas,
+   * el «sí, me interesa» de la persona cuenta como respuesta de los cuatro. Se
+   * midió sobre un corpus sintético con la forma de los datos reales: la tasa
+   * sembrada era 22 % y el reporte imprimía **54 %**. Y el inflado no es
+   * parejo —crece con cuántos mensajes tuvo la conversación, que es justo lo
+   * que correlaciona con la gente que ya iba a contestar—, así que no se
+   * cancela entre piezas: premia a las que se usan en conversaciones largas.
+   */
+  siguienteEnvioEn: Date | null;
   /** La última etapa que una persona asentó ANTES del envío (cruda, sin normalizar). */
   etapaAntes: string | null;
   /**
@@ -113,7 +126,11 @@ export interface HechosDeUnEnvio {
 
 /** El veredicto de UN envío. Todo lo que dice es «qué pasó después». */
 export interface LoQuePaso {
-  /** ¿Contestó dentro de la ventana? */
+  /**
+   * ¿Contestó dentro de la ventana **y sin que le hayamos escrito otra cosa en
+   * el medio**? Es la regla de «el último mensaje antes de la respuesta»: la
+   * respuesta se le acredita al último saliente, no a todos los anteriores.
+   */
   huboRespuesta: boolean;
   /** Cuánto tardó en contestar. `null` si no contestó. */
   minutosHastaLaRespuesta: number | null;
@@ -157,8 +174,22 @@ export function loQuePaso(h: HechosDeUnEnvio, v: Ventanas = VENTANAS_POR_DEFECTO
   const topeRespuestaMin = v.horas * 60;
   const topeVentaMin = v.diasVenta * 24 * 60;
 
+  // LA RESPUESTA ES DEL ÚLTIMO MENSAJE, NO DE TODOS LOS ANTERIORES.
+  //
+  // Si después de este envío le escribimos otra cosa ANTES de que ella
+  // contestara, la respuesta no es de este mensaje: es del que vino después.
+  // Sin esta línea, en una conversación de cuatro salientes la misma respuesta
+  // se cuenta cuatro veces y toda tasa se infla (medido: 22 % sembrado → 54 %
+  // reportado). No se puede saber cuál de los cuatro la ganó, y atribuírsela al
+  // último es la única regla que no cuenta de más.
+  const leEscribimosDeNuevoAntes =
+    h.siguienteEnvioEn !== null &&
+    h.primerEntranteEn !== null &&
+    h.siguienteEnvioEn > h.salioEn &&
+    h.siguienteEnvioEn <= h.primerEntranteEn;
+
   const minsRespuesta =
-    h.primerEntranteEn && h.primerEntranteEn > h.salioEn
+    h.primerEntranteEn && h.primerEntranteEn > h.salioEn && !leEscribimosDeNuevoAntes
       ? minutos(h.salioEn, h.primerEntranteEn)
       : null;
   const huboRespuesta = minsRespuesta !== null && minsRespuesta <= topeRespuestaMin;
