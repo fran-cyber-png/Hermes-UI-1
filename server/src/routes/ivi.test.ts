@@ -151,13 +151,14 @@ describe('POST /api/ivi/preguntar', () => {
    * Lo mismo con `groundingOk: false`: la respuesta sigue siendo una respuesta.
    */
   test('SIN_EVIDENCIA sale como 200: Ivi funcionó y no sabe, eso no es una falla', async () => {
-    const sinEvidencia: RespuestaIvi = {
+    const sinEvidencia: RespuestaIviConTraza = {
       texto: 'No tengo con qué responder eso.',
       tipo: 'SIN_EVIDENCIA',
       fuentes: [],
       groundingOk: true,
       numerosNoVerificados: [],
       edadDelDato: null,
+      trazaId: 'hermes-sin-evidencia',
     };
     const r = await pedir(async () => sinEvidencia, { token: TOKEN, body: { pregunta: '¿?' } });
     assert.equal(r.status, 200);
@@ -166,13 +167,14 @@ describe('POST /api/ivi/preguntar', () => {
   });
 
   test('groundingOk false viaja con su lista: la app marca las cifras, no descarta la respuesta', async () => {
-    const conCifrasDudosas: RespuestaIvi = {
+    const conCifrasDudosas: RespuestaIviConTraza = {
       texto: 'Llevamos 642 ventas.',
       tipo: 'HECHO',
       fuentes: ['SDK:governa.ventas.porPais'],
       groundingOk: false,
       numerosNoVerificados: ['642'],
       edadDelDato: null,
+      trazaId: 'hermes-cifras-dudosas',
     };
     const r = await pedir(async () => conCifrasDudosas, { token: TOKEN, body: { pregunta: '¿?' } });
     assert.equal(r.status, 200);

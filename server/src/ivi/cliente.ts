@@ -80,7 +80,12 @@ export const respuestaIviSchema = z.object({
    * Fail-closed es sobre el TEXTO, no sobre su nota al pie.
    */
   numerosNoVerificados: z
-    .array(z.string())
+    // Laxo POR DENTRO, igual que `fuentes` y por la misma razón: este campo es para MARCAR,
+    // no para decidir. Con `z.array(z.string())` una lista con un elemento raro se perdía
+    // ENTERA, y entonces la app no podía señalar ninguna cifra — cuando podía haber señalado
+    // las buenas. La normalización a texto vive en el front, donde se dibuja. El `.catch()` de
+    // abajo sigue cubriendo lo que ni siquiera es una lista.
+    .array(z.unknown())
     .optional()
     .catch(({ value }) => {
       // Ruidoso, como todo lo de esta costura: degradar en silencio es cómo se viven meses sin
