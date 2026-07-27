@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
 /**
@@ -26,28 +27,63 @@ import { z } from 'zod';
 // ── El contrato de la respuesta (RespuestaIvi) ──────────────────────────────
 //
 // Fijado por el issue #61. La fuente de verdad del detalle vive en geografo
-// (`ivi-cerebro/docs/puente-hermes-pendiente.md`), que no está en este repo, así que
-// dos campos quedan a propósito PERMISIVOS hasta la paridad con ese doc:
+// (`ivi-cerebro/rag/api_contrato.py::contrato_hermes`, con 16 tests que lo fijan), así que
+// dos campos quedan a propósito PERMISIVOS:
 //   - `fuentes`: sabemos que es una lista; la forma de cada ítem se pasa tal cual a la
 //     app (no la fijamos acá para no rechazar por error una respuesta buena de Ivi).
 //   - `edadDelDato`: la frescura del dato, para mostrar («hace 2 horas»); aceptamos
-//     texto o número, y `null` cuando no aplica.
+//     texto o número, y `null` cuando no aplica. `null` es «NO MEDIDO», no «fresco».
 // Los tres campos que cargan el peso (`texto`, `tipo`, `groundingOk`) sí son estrictos.
+//
+// ⚠️ NADA DE `.strict()` ACÁ, y es una decisión: Ivi solo AGREGA campos (`truncada`,
+// `degradado`, `modelo`, `costo_usd`, `ms_total` están anunciados). Con `.strict()`, cada
+// campo nuevo de Ivi sería un 502 en la cara de la vendedora y los dos repos tendrían que
+// coordinar releases. Lo que se ignora es barato; lo que rompe es renombrar.
 
 export const respuestaIviSchema = z.object({
   /** La respuesta de Ivi, ya redactada. */
   texto: z.string(),
-  /** Qué clase de respuesta es. String libre a propósito: un `tipo` nuevo de Ivi no debe romper Hermes. */
+  /** Qué clase de respuesta es (ver `TIPO_IVI`). String libre a propósito: un `tipo` nuevo de Ivi no debe romper Hermes. */
   tipo: z.string(),
   /** Las citas del RAG. La forma de cada ítem no se fija acá (ver arriba); se pasa a la app tal cual. */
   fuentes: z.array(z.unknown()),
   /** Si la respuesta está anclada en datos reales. El flag que la app usa para no mostrar humo. */
   groundingOk: z.boolean(),
-  /** Frescura del dato para mostrar; `null` cuando no aplica. */
+  /**
+   * Las cifras del texto que Ivi NO pudo casar contra los datos. Con `groundingOk: false`,
+   * esta lista es la que dice CUÁLES marcar — sin ella la app solo puede desconfiar de todo
+   * el párrafo o de nada. Opcional: un emisor viejo puede no mandarla, y eso no es un fallo.
+   */
+  numerosNoVerificados: z.array(z.string()).optional(),
+  /** Frescura del dato para mostrar; `null` cuando no aplica (o no se midió). */
   edadDelDato: z.union([z.string(), z.number()]).nullable(),
 });
 
 export type RespuestaIvi = z.infer<typeof respuestaIviSchema>;
+
+/** La respuesta tal como sale de Hermes: la de Ivi más la traza con la que se pidió. */
+export interface RespuestaIviConTraza extends RespuestaIvi {
+  /** El `traza_id` que Hermes generó para esta pregunta (ver §traza_id, abajo). */
+  trazaId: string;
+}
+
+/**
+ * El vocabulario de `tipo` que Ivi publica hoy. Está acá para que la UI ramifique sin
+ * copiar literales sueltos — NO para cerrar el schema: `tipo` sigue siendo string libre y
+ * un valor nuevo tiene que caer en la rama conservadora (`CONTEXTO`), nunca en un throw
+ * y nunca en `HECHO`.
+ *
+ *   HECHO         una cifra del SDK `governa.*`, determinista. Se muestra con su fuente.
+ *   CONTEXTO      texto de un documento citado. NO es una cifra.
+ *   SIN_EVIDENCIA Ivi no sabe. Se MUESTRA, no se esconde ni se reintenta (ver `esReintentable`).
+ */
+export const TIPO_IVI = {
+  HECHO: 'HECHO',
+  CONTEXTO: 'CONTEXTO',
+  SIN_EVIDENCIA: 'SIN_EVIDENCIA',
+} as const;
+
+export type TipoIvi = (typeof TIPO_IVI)[keyof typeof TIPO_IVI];
 
 // ── El historial de la conversación (opcional en la pregunta) ───────────────
 
@@ -97,6 +133,12 @@ export class ErrorIvi extends Error {
   readonly codigo: CodigoErrorIvi;
   /** El estado HTTP, cuando el fallo vino de una respuesta (401/503/…). */
   readonly estado?: number;
+  /**
+   * La traza de la pregunta que falló. La pone `preguntarleAIvi` al salir, en UN solo lugar,
+   * para que ningún `throw` nuevo se olvide: un 502 sin traza no se puede cruzar con el log
+   * de Ivi, que es justamente el momento en que uno quiere cruzarlos.
+   */
+  trazaId?: string;
 
   constructor(codigo: CodigoErrorIvi, message: string, estado?: number, causa?: unknown) {
     super(message, causa !== undefined ? { cause: causa } : undefined);
@@ -104,6 +146,22 @@ export class ErrorIvi extends Error {
     this.codigo = codigo;
     this.estado = estado;
   }
+}
+
+/**
+ * Si volver a preguntar lo mismo puede dar otro resultado.
+ *
+ * Es la mitad que faltaba de la regla que este repo ya tenía escrita («un 404 no es "no hay
+ * respuesta clara"»), aplicada del otro lado: **una respuesta 200 NUNCA pasa por acá**, ni
+ * siquiera un `SIN_EVIDENCIA` — Ivi funcionó y ya decidió que no sabe; reintentar es pedirle
+ * la misma respuesta otra vez y cobrarle el tiempo a la vendedora.
+ *
+ * Solo los dos fallos verdaderamente transitorios se reintentan. Config y contrato roto dan
+ * exactamente el mismo error un minuto después: reintentarlos es esconder el bug detrás de
+ * un spinner más largo.
+ */
+export function esReintentable(codigo: CodigoErrorIvi): boolean {
+  return codigo === CODIGO_ERROR_IVI.TIMEOUT || codigo === CODIGO_ERROR_IVI.RED;
 }
 
 // ── Las dos traducciones de la costura ──────────────────────────────────────
@@ -123,6 +181,7 @@ const respuestaCrudaSchema = z
     tipo: z.unknown(),
     fuentes: z.unknown(),
     grounding_ok: z.unknown(),
+    numeros_no_verificados: z.unknown(),
     edad_del_dato: z.unknown(),
   })
   .partial();
@@ -136,8 +195,15 @@ const respuestaCrudaSchema = z
 export function aCamelCase(crudo: unknown): unknown {
   const r = respuestaCrudaSchema.safeParse(crudo);
   if (!r.success) return crudo;
-  const { texto, tipo, fuentes, grounding_ok: groundingOk, edad_del_dato: edadDelDato } = r.data;
-  return { texto, tipo, fuentes, groundingOk, edadDelDato };
+  const {
+    texto,
+    tipo,
+    fuentes,
+    grounding_ok: groundingOk,
+    numeros_no_verificados: numerosNoVerificados,
+    edad_del_dato: edadDelDato,
+  } = r.data;
+  return { texto, tipo, fuentes, groundingOk, numerosNoVerificados, edadDelDato };
 }
 
 /**
@@ -177,22 +243,48 @@ export interface DepsIvi {
   fetch?: typeof fetch;
   iviUrl?: string;
   token?: string;
+  /** Fija la traza para que un test pueda afirmar sobre ella; en producción se genera sola. */
+  trazaId?: string;
 }
 
 /** El presupuesto de tiempo para toda la ida y vuelta (fetch + lectura del body). Fijado por test. */
 export const TIMEOUT_MS = 30_000;
+
+/**
+ * Qué superficie de Hermes pregunta. Ivi lo usa para el tope de salida (`hermes` = 600 tokens);
+ * sin mandarlo asume `chat`, que da lo mismo hoy — se manda igual para que el día que Hermes
+ * tenga una superficie de resumen el parámetro ya esté y no haya nada que negociar.
+ */
+const SUPERFICIE = 'hermes';
+
+/**
+ * EL `traza_id` — el único hilo que une «qué recomendó Ivi» (en la base de Ivi) con «qué se
+ * mandó y qué resultó» (en la de Hermes). Se genera de este lado, en cada pregunta, y viaja
+ * en el cuerpo; Ivi lo guarda en su traza y lo propaga al SDK.
+ *
+ * Va desde el día uno aunque todavía no se vea: es un dato que no se puede reconstruir después
+ * —la request ya pasó— y sin él el lazo de aprendizaje no cierra nunca. El prefijo dice de qué
+ * lado nació, que es lo primero que uno quiere saber leyendo un log ajeno.
+ */
+export function nuevaTrazaId(): string {
+  return `hermes-${randomUUID()}`;
+}
 
 /** La firma del cliente — un solo lugar la define (antes duplicada entre la ruta y su test, #98). */
 export type PreguntarAIvi = (
   pregunta: string,
   usuario: string,
   historial?: TurnoHistorial[],
-) => Promise<RespuestaIvi>;
+) => Promise<RespuestaIviConTraza>;
 
 /**
- * Le pregunta a Ivi y devuelve una `RespuestaIvi` ya validada. Ante cualquier
- * problema LANZA un `ErrorIvi` con su `codigo` — nunca devuelve una respuesta falsa
- * ni un «no encontré datos» inventado.
+ * Le pregunta a Ivi y devuelve una `RespuestaIvi` ya validada, con la traza de la pregunta.
+ * Ante cualquier problema LANZA un `ErrorIvi` con su `codigo` — nunca devuelve una respuesta
+ * falsa ni un «no encontré datos» inventado.
+ *
+ * ⚠️ Una respuesta `200` con `tipo: SIN_EVIDENCIA` NO es un fallo: sale por acá, como cualquier
+ * otra. Ivi funcionó y decidió que no sabe; eso es un producto —«todavía no sé»— y la app lo
+ * muestra. Convertirlo en error haría que la honestidad de Ivi se lea como «Ivi está roto».
  *
  * `usuario` es la vendedora autenticada (el `vendedoraId` del token de Hermes): lo
  * pone el proxy, no viene del body, así no se puede suplantar.
@@ -202,7 +294,24 @@ export async function preguntarleAIvi(
   usuario: string,
   historial?: TurnoHistorial[],
   deps: DepsIvi = {},
-): Promise<RespuestaIvi> {
+): Promise<RespuestaIviConTraza> {
+  const trazaId = deps.trazaId ?? nuevaTrazaId();
+  try {
+    return await consultar(trazaId, pregunta, usuario, historial, deps);
+  } catch (err) {
+    // La traza se pega ACÁ, en un solo lugar: así ningún `throw` futuro se olvida de ponerla.
+    if (err instanceof ErrorIvi) err.trazaId ??= trazaId;
+    throw err;
+  }
+}
+
+async function consultar(
+  trazaId: string,
+  pregunta: string,
+  usuario: string,
+  historial: TurnoHistorial[] | undefined,
+  deps: DepsIvi,
+): Promise<RespuestaIviConTraza> {
   const iviUrl = deps.iviUrl ?? process.env.IVI_URL;
   const token = deps.token ?? process.env.IVI_SERVICE_TOKEN;
   const hacerFetch = deps.fetch ?? fetch;
@@ -227,9 +336,12 @@ export async function preguntarleAIvi(
         authorization: `Bearer ${token}`,
       },
       // El historial viaja como [{q, a}]: es lo que `responder()` de Ivi lee (#142).
+      // `traza_id` y `superficie` van en snake_case porque este es el dialecto de Ivi.
       body: JSON.stringify({
         pregunta,
         usuario,
+        superficie: SUPERFICIE,
+        traza_id: trazaId,
         ...(historial?.length ? { historial: aParesQA(historial) } : {}),
       }),
     });
@@ -286,11 +398,13 @@ export async function preguntarleAIvi(
 
   const parseado = respuestaIviSchema.safeParse(aCamelCase(crudo));
   if (!parseado.success) {
-    console.error('ivi: la respuesta no cumple el contrato RespuestaIvi', parseado.error.issues);
+    console.error('ivi: la respuesta no cumple el contrato RespuestaIvi', parseado.error.issues, { trazaId });
     throw new ErrorIvi(
       CODIGO_ERROR_IVI.RESPUESTA_INVALIDA,
       'La respuesta de Ivi no cumple el contrato RespuestaIvi.',
     );
   }
-  return parseado.data;
+  // Acá NO se ramifica por `tipo`: un SIN_EVIDENCIA sale igual que un HECHO. Quién lo muestra
+  // distinto es la UI; quién lo convertiría en error no existe, y esa ausencia es el punto.
+  return { ...parseado.data, trazaId };
 }

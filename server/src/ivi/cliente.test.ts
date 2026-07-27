@@ -3,9 +3,12 @@ import { test, describe } from 'node:test';
 import {
   CODIGO_ERROR_IVI,
   ErrorIvi,
+  aCamelCase,
+  esReintentable,
   preguntarleAIvi,
   aParesQA,
   respuestaIviSchema,
+  TIPO_IVI,
   TIMEOUT_MS,
   type RespuestaIvi,
   type TurnoHistorial,
@@ -338,5 +341,190 @@ describe('la costura con Ivi (contrato real, snake_case)', () => {
     const { fake, llamadas } = fetchQueDevuelve(respuestaRealDeIvi());
     await preguntarleAIvi('x', 'v', [], { ...CONFIG_OK, fetch: fake });
     assert.equal('historial' in JSON.parse(String(llamadas[0]!.init.body)), false);
+  });
+});
+
+/**
+ * H1 — EL CUERPO LITERAL QUE IVI DIJO QUE MANDA.
+ *
+ * Copiado tal cual del criterio de aceptación de `ivi-cerebro/docs/plan-ejecucion-hermes.md`
+ * (27-jul), que a su vez sale de `contrato_hermes()`. Es el fixture de contrato: si Ivi cambia
+ * un nombre de campo, este test se pone rojo ANTES que la producción de la vendedora.
+ */
+const CUERPO_REAL_DE_IVI = {
+  texto: 'En México llevamos 642 ventas cobradas este mes.',
+  tipo: 'HECHO',
+  modo: 'estructurada',
+  fuentes: ['governa.ventas.porPais'],
+  grounding_ok: true,
+  numeros_no_verificados: [],
+  edad_del_dato: null,
+  redactor: 'bedrock (claude-haiku-4-5-20251001)',
+};
+
+describe('H1 · el contrato snake_case de Ivi entra sin pelear', () => {
+  test('el cuerpo literal de Ivi pasa el schema (success: true)', () => {
+    const r = respuestaIviSchema.safeParse(aCamelCase(CUERPO_REAL_DE_IVI));
+    assert.equal(r.success, true, JSON.stringify(r.error?.issues));
+  });
+
+  test('y también por el camino real, de punta a punta', async () => {
+    const { fake } = fetchQueDevuelve(CUERPO_REAL_DE_IVI);
+    const r = await preguntarleAIvi('¿ventas de México?', 'ana', undefined, { ...CONFIG_OK, fetch: fake });
+    assert.equal(r.tipo, 'HECHO');
+    assert.equal(r.groundingOk, true);
+    assert.equal(r.edadDelDato, null);
+    assert.deepEqual(r.numerosNoVerificados, []);
+  });
+
+  test('numeros_no_verificados llega a la app: sin él no se puede marcar la cifra dudosa', async () => {
+    const { fake } = fetchQueDevuelve({
+      ...CUERPO_REAL_DE_IVI,
+      grounding_ok: false,
+      numeros_no_verificados: ['642', '12 %'],
+    });
+    const r = await preguntarleAIvi('¿ventas?', 'ana', undefined, { ...CONFIG_OK, fetch: fake });
+    assert.equal(r.groundingOk, false);
+    assert.deepEqual(r.numerosNoVerificados, ['642', '12 %']);
+  });
+
+  test('un campo NUEVO de Ivi no es un 502 — el contrato crece sin coordinar releases', async () => {
+    const { fake } = fetchQueDevuelve({
+      ...CUERPO_REAL_DE_IVI,
+      truncada: false,
+      degradado: true,
+      modelo: 'claude-haiku-4-5',
+      costo_usd: 0.0003,
+      ms_total: 812,
+    });
+    const r = await preguntarleAIvi('x', 'ana', undefined, { ...CONFIG_OK, fetch: fake });
+    assert.equal(r.texto, CUERPO_REAL_DE_IVI.texto);
+  });
+
+  test('el vocabulario de `tipo` está publicado, pero el schema NO lo cierra', () => {
+    assert.deepEqual(Object.values(TIPO_IVI).sort(), ['CONTEXTO', 'HECHO', 'SIN_EVIDENCIA']);
+    // Un `tipo` que todavía no existe tiene que pasar: cerrarlo sería un 502 por cada
+    // palabra nueva de Ivi. Quien ramifica (la UI) usa un `default:` conservador.
+    const conTipoNuevo = respuestaIviSchema.safeParse(aCamelCase({ ...CUERPO_REAL_DE_IVI, tipo: 'CONJETURA' }));
+    assert.equal(conTipoNuevo.success, true);
+  });
+});
+
+describe('H2 · el historial cruza la costura como {q, a}', () => {
+  test('tres turnos alternados salen exactamente como [{q,a},{q,a},{q,a}]', async () => {
+    const { fake, llamadas } = fetchQueDevuelve(CUERPO_REAL_DE_IVI);
+    const historial: TurnoHistorial[] = [
+      { rol: 'vendedora', texto: '¿ventas de México?' },
+      { rol: 'ivi', texto: 'México lleva 642.' },
+      { rol: 'vendedora', texto: '¿y Perú?' },
+      { rol: 'ivi', texto: 'Perú lleva 118.' },
+      { rol: 'vendedora', texto: '¿y Ecuador?' },
+    ];
+    await preguntarleAIvi('¿y Bolivia?', 'ana', historial, { ...CONFIG_OK, fetch: fake });
+    const enviado = JSON.parse(String(llamadas[0]!.init.body));
+    assert.deepEqual(enviado.historial, [
+      { q: '¿ventas de México?', a: 'México lleva 642.' },
+      { q: '¿y Perú?', a: 'Perú lleva 118.' },
+      // la vendedora habló al final: el par queda abierto, con `a: ''`
+      { q: '¿y Ecuador?', a: '' },
+    ]);
+  });
+
+  test('un turno de Ivi sin pregunta previa NO crea una entrada huérfana', async () => {
+    const { fake, llamadas } = fetchQueDevuelve(CUERPO_REAL_DE_IVI);
+    const historial: TurnoHistorial[] = [
+      { rol: 'ivi', texto: 'quedé colgado de nada' },
+      { rol: 'vendedora', texto: '¿precio?' },
+    ];
+    await preguntarleAIvi('x', 'ana', historial, { ...CONFIG_OK, fetch: fake });
+    const enviado = JSON.parse(String(llamadas[0]!.init.body));
+    assert.deepEqual(enviado.historial, [{ q: '¿precio?', a: '' }]);
+  });
+});
+
+describe('H4 · SIN_EVIDENCIA es una respuesta, no un fallo', () => {
+  function sinEvidencia() {
+    return {
+      texto: 'No tengo datos para responder eso.',
+      tipo: TIPO_IVI.SIN_EVIDENCIA,
+      modo: 'sin_evidencia',
+      fuentes: [],
+      grounding_ok: false,
+      numeros_no_verificados: [],
+      edad_del_dato: null,
+      redactor: null,
+    };
+  }
+
+  test('un 200 con SIN_EVIDENCIA no lanza, no reintenta, y llega a la app', async () => {
+    const { fake, llamadas } = fetchQueDevuelve(sinEvidencia(), { status: 200 });
+    const r = await preguntarleAIvi('¿cuántos alumnos hay en Marte?', 'ana', undefined, {
+      ...CONFIG_OK,
+      fetch: fake,
+    });
+    assert.equal(r.tipo, TIPO_IVI.SIN_EVIDENCIA);
+    assert.equal(r.texto, 'No tengo datos para responder eso.');
+    assert.equal(r.groundingOk, false, 'la honestidad de Ivi llega tal cual, no se maquilla');
+    assert.equal(llamadas.length, 1, 'Ivi ya decidió: reintentar sería pedir otra respuesta a lo mismo');
+  });
+
+  test('SIN_EVIDENCIA con `fuentes` vacías tampoco es RESPUESTA_INVALIDA', async () => {
+    const { fake } = fetchQueDevuelve({ ...sinEvidencia(), fuentes: [] });
+    const r = await preguntarleAIvi('x', 'ana', undefined, { ...CONFIG_OK, fetch: fake });
+    assert.deepEqual(r.fuentes, []);
+  });
+
+  test('el reintento se decide por `codigo`, y ningún camino de respuesta pasa por ahí', () => {
+    // Transitorios: geografo puede estar ocupado o la tailnet parpadeando.
+    assert.equal(esReintentable(CODIGO_ERROR_IVI.TIMEOUT), true);
+    assert.equal(esReintentable(CODIGO_ERROR_IVI.RED), true);
+    // Config y contrato: reintentar da exactamente el mismo fallo, más tarde.
+    assert.equal(esReintentable(CODIGO_ERROR_IVI.FALTA_CONFIG), false);
+    assert.equal(esReintentable(CODIGO_ERROR_IVI.CONFIG_HERMES), false);
+    assert.equal(esReintentable(CODIGO_ERROR_IVI.IVI_NO_CONFIGURADO), false);
+    assert.equal(esReintentable(CODIGO_ERROR_IVI.RESPUESTA_INVALIDA), false);
+    assert.equal(esReintentable(CODIGO_ERROR_IVI.HTTP_INESPERADO), false);
+    assert.equal(esReintentable(CODIGO_ERROR_IVI.DESCONOCIDO), false);
+  });
+});
+
+describe('traza_id · el hilo que une «qué recomendó Ivi» con «qué pasó en Hermes»', () => {
+  test('cada request lleva un traza_id, y vuelve en la respuesta', async () => {
+    const { fake, llamadas } = fetchQueDevuelve(CUERPO_REAL_DE_IVI);
+    const r = await preguntarleAIvi('x', 'ana', undefined, { ...CONFIG_OK, fetch: fake });
+    const enviado = JSON.parse(String(llamadas[0]!.init.body));
+    assert.equal(typeof enviado.traza_id, 'string');
+    assert.ok(enviado.traza_id.length >= 8, 'un traza_id de una letra no sirve para buscar nada');
+    assert.equal(r.trazaId, enviado.traza_id, 'la app tiene que poder citar la misma traza que Ivi guardó');
+  });
+
+  test('dos preguntas no comparten traza', async () => {
+    const { fake, llamadas } = fetchQueDevuelve(CUERPO_REAL_DE_IVI);
+    await preguntarleAIvi('a', 'ana', undefined, { ...CONFIG_OK, fetch: fake });
+    await preguntarleAIvi('b', 'ana', undefined, { ...CONFIG_OK, fetch: fake });
+    const [una, otra] = llamadas.map((l) => JSON.parse(String(l.init.body)).traza_id);
+    assert.notEqual(una, otra);
+  });
+
+  test('la traza sobrevive al fallo: un 502 sin traza no se puede cruzar con nada', async () => {
+    const { fake } = fetchQueDevuelve('', { status: 500 });
+    await assert.rejects(
+      () => preguntarleAIvi('x', 'ana', undefined, { ...CONFIG_OK, fetch: fake, trazaId: 'traza-fija' }),
+      (e: unknown) => e instanceof ErrorIvi && e.trazaId === 'traza-fija',
+    );
+  });
+
+  test('también cuando el fallo es de config y no se tocó la red', async () => {
+    await assert.rejects(
+      () => preguntarleAIvi('x', 'ana', undefined, { iviUrl: '', token: '', trazaId: 'traza-fija' }),
+      (e: unknown) =>
+        e instanceof ErrorIvi && e.codigo === CODIGO_ERROR_IVI.FALTA_CONFIG && e.trazaId === 'traza-fija',
+    );
+  });
+
+  test('`superficie: hermes` viaja en cada pregunta (tope de salida del lado de Ivi)', async () => {
+    const { fake, llamadas } = fetchQueDevuelve(CUERPO_REAL_DE_IVI);
+    await preguntarleAIvi('x', 'ana', undefined, { ...CONFIG_OK, fetch: fake });
+    assert.equal(JSON.parse(String(llamadas[0]!.init.body)).superficie, 'hermes');
   });
 });
