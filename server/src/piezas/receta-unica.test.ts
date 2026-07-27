@@ -44,6 +44,8 @@ const HASHES_PERMITIDOS: Record<string, string> = {
   "auth/sesion.ts": "HMAC del token Bearer de la vendedora. Es una credencial, no un contenido.",
   "lazo/evento.ts":
     "Seudonimiza un correo antes de mandarlo al SDK. Hashea una IDENTIDAD para esconderla, no un texto para compararlo.",
+  "migraciones/referencia.ts":
+    "El sha256 de un archivo de migración, con la receta que fija drizzle-kit (ADR 0021). Identifica un ARCHIVO ya aplicado, no el contenido de una pieza — y su formato no lo elegimos nosotros.",
 };
 
 const LLAMA_A_HASH = /\bcreateHash\s*\(|\bcreateHmac\s*\(/;
