@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createClient, type WhatsmeowClient } from '@whatsmeow-node/whatsmeow-node';
 import QRCode from 'qrcode';
+import { estadoVinculacionVigente } from '../numeros/dominio.js';
 
 /**
  * EL VINCULADOR — el motor de la consola de operador (D13).
@@ -28,9 +29,31 @@ export type EstadoVinculacion =
 class Vinculador {
   private client: WhatsmeowClient | null = null;
   private actual: EstadoVinculacion = { estado: 'inactivo' };
+  /** Cuándo llegó el último QR. Es lo que distingue un pareo vivo de uno muerto. */
+  private qrEn: number | null = null;
 
+  constructor(private readonly ahora: () => number = () => Date.now()) {}
+
+  /**
+   * El estado que ve el mundo. NO es `this.actual` a secas: un QR que dejó de
+   * refrescarse se lee como `inactivo` (la regla vive en `numeros/dominio.ts`,
+   * pura y con test). Sin eso, un pareo que nadie escaneó deja el vinculador
+   * tomado y ningún otro número se puede vincular hasta reiniciar el server.
+   */
   estado(): EstadoVinculacion {
-    return this.actual;
+    return estadoVinculacionVigente(this.actual, this.qrEn, this.ahora());
+  }
+
+  /**
+   * Suelta el vinculador a propósito: cierra el cliente y vuelve a `inactivo`.
+   * Es la salida del operador cuando abrió una vinculación y no la escaneó — sin
+   * esto, la única forma de destrabar es reiniciar Hermes, que tira las sesiones
+   * de las vendedoras.
+   */
+  async cancelar(): Promise<void> {
+    await this.cerrar();
+    this.actual = { estado: 'inactivo' };
+    this.qrEn = null;
   }
 
   async iniciar(numeroRaw: string): Promise<void> {
@@ -48,11 +71,13 @@ class Vinculador {
     const client = createClient({ store: `${dir}${numero}.db` });
     this.client = client;
     this.actual = { estado: 'esperando', numero };
+    this.qrEn = null;
 
     client.on('qr', async ({ code }) => {
       try {
         const qr = await QRCode.toDataURL(code, { width: 360, margin: 1 });
         this.actual = { estado: 'qr', numero, qr };
+        this.qrEn = this.ahora();
       } catch {
         /* si un QR puntual no renderiza, el próximo (rota cada ~20s) lo hará */
       }

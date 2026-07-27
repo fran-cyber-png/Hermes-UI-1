@@ -5,6 +5,8 @@ import {
   normalizarNumero,
   estadoSesionAContrato,
   estadoVinculacionAContrato,
+  estadoVinculacionVigente,
+  VIGENCIA_QR_MS,
 } from "./dominio.js";
 
 test("normalizarNumero: dígitos, mínimo 8, y prefija 51 a un móvil peruano de 9", () => {
@@ -79,4 +81,45 @@ test("estadoVinculacionAContrato: el QR pasa como esperando_qr; arranque como vi
     estado: "error",
     motivo: "boom",
   });
+});
+
+test("estadoVinculacionVigente: un QR que dejó de refrescarse deja de tomar el vinculador", () => {
+  const qr = { estado: "qr", numero: "51941654039", qr: "data:img" } as const;
+  const t0 = 1_700_000_000_000;
+
+  // Vivo: whatsmeow lo rota cada ~20 s, así que uno recién llegado se muestra.
+  assert.deepEqual(estadoVinculacionVigente(qr, t0, t0 + 19_000), qr);
+  assert.deepEqual(estadoVinculacionVigente(qr, t0, t0 + VIGENCIA_QR_MS), qr);
+
+  // Muerto: nadie escaneó, el canal se cerró. Deja de bloquear a los demás números.
+  assert.deepEqual(estadoVinculacionVigente(qr, t0, t0 + VIGENCIA_QR_MS + 1), {
+    estado: "inactivo",
+  });
+
+  // El contrato lo dice como `expirado`, que es lo que hace que la consola pida otro.
+  assert.deepEqual(
+    estadoVinculacionAContrato(estadoVinculacionVigente(qr, t0, t0 + 10 * 60_000)),
+    { estado: "expirado" }
+  );
+});
+
+test("estadoVinculacionVigente: solo caduca el QR — lo demás pasa intacto", () => {
+  const t0 = 1_700_000_000_000;
+  const viejo = t0 - 60 * 60_000;
+
+  // `conectado` no caduca: la sesión quedó hecha, el reloj no la deshace.
+  const conectado = { estado: "conectado", numero: "519", jid: "519@s" } as const;
+  assert.deepEqual(estadoVinculacionVigente(conectado, viejo, t0), conectado);
+
+  // `esperando` tampoco: todavía no hubo QR que envejecer (whatsmeow está arrancando).
+  const esperando = { estado: "esperando", numero: "519" } as const;
+  assert.deepEqual(estadoVinculacionVigente(esperando, null, t0), esperando);
+
+  // Un `error` viejo se sigue reportando: es el motivo que la pantalla muestra.
+  const error = { estado: "error", numero: "519", motivo: "boom" } as const;
+  assert.deepEqual(estadoVinculacionVigente(error, viejo, t0), error);
+
+  // Un QR sin marca de tiempo no se puede juzgar: se muestra, no se inventa que murió.
+  const qr = { estado: "qr", numero: "519", qr: "data:img" } as const;
+  assert.deepEqual(estadoVinculacionVigente(qr, null, t0), qr);
 });

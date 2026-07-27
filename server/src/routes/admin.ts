@@ -173,6 +173,40 @@ adminRouter.post("/numeros/:numero/vincular", (req: Request, res: Response) => {
   res.json({ estado: "vinculando" });
 });
 
+/**
+ * SUELTA el vinculador. Es la salida del operador que abrió una vinculación y no
+ * la escaneó: el vinculador es uno-a-la-vez, así que ese pareo colgado bloquea a
+ * TODOS los demás números, y hasta acá la única forma de destrabarlo era reiniciar
+ * Hermes — que tira las sesiones de las vendedoras.
+ *
+ * Es idempotente: cancelar algo que ya no está en curso responde 200 con
+ * `cancelada: false`. Cancelar la vinculación de OTRO número es 409, no un
+ * silencio: quien la pidió tiene que saber que apagó algo ajeno.
+ */
+adminRouter.delete("/numeros/:numero/vincular", async (req: Request, res: Response) => {
+  const numero = normalizarNumero(req.params.numero);
+  if (!numero) return responderError(res, 400, "entrada_invalida", "número inválido");
+
+  const enCurso = vinculador.estado();
+  if (enCurso.estado === "inactivo") {
+    res.json({ estado: "inactivo", cancelada: false });
+    return;
+  }
+  if ("numero" in enCurso && enCurso.numero !== numero) {
+    res.status(409).json({
+      error: {
+        motivo: "vinculacion_en_curso",
+        mensaje: `la vinculación en curso es de ${enCurso.numero}, no de ${numero}`,
+        numero_en_curso: enCurso.numero,
+      },
+    });
+    return;
+  }
+
+  await vinculador.cancelar();
+  res.json({ estado: "inactivo", cancelada: true });
+});
+
 /** Polling del pareo. Al conectar, libera la sesión `.db` y marca vinculado. */
 adminRouter.get("/numeros/:numero/vincular/estado", (req: Request, res: Response) => {
   const numero = normalizarNumero(req.params.numero);

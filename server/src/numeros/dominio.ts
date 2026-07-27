@@ -98,6 +98,34 @@ export interface VinculacionContrato {
 }
 
 /**
+ * VIGENCIA DEL QR — la regla que impide ofrecer un pareo muerto.
+ *
+ * whatsmeow rota el QR cada ~20 s MIENTRAS el canal de pareo está abierto. Cuando
+ * se cierra (nadie escaneó), deja de llegar: el vinculador se queda con el último
+ * para siempre. Eso hace dos daños, y el segundo es el grave —
+ *   1. la pantalla muestra un QR que el teléfono ya no acepta, sin decirlo;
+ *   2. el vinculador es UNO A LA VEZ, así que ese pareo muerto **bloquea a todos
+ *      los demás números** hasta que alguien reinicie el server.
+ * Con la regla, un QR que dejó de refrescarse se lee como `inactivo` → el contrato
+ * dice `expirado` → la consola pide uno nuevo y el número que estaba esperando
+ * puede entrar. Tres rotaciones perdidas es muerto, no lento.
+ */
+export const VIGENCIA_QR_MS = 60_000;
+
+/**
+ * El estado del vinculador leído A TRAVÉS del reloj. Puro: el `ahora` entra por
+ * parámetro para poder interrogarlo sobre el minuto siguiente sin esperarlo.
+ */
+export function estadoVinculacionVigente(
+  actual: EstadoVinculacion,
+  qrEn: number | null,
+  ahora: number
+): EstadoVinculacion {
+  if (actual.estado !== "qr" || qrEn === null) return actual;
+  return ahora - qrEn > VIGENCIA_QR_MS ? { estado: "inactivo" } : actual;
+}
+
+/**
  * Traduce el estado del vinculador (global, uno-a-la-vez) al contrato del polling.
  * `qr` = QR listo para escanear; `esperando`/arranque = todavía generando.
  */

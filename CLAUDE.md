@@ -623,6 +623,18 @@ sesión nunca deja VPS1). Endpoint central: `PUT /api/admin/numeros/:numero` (up
 vendedora. Contrato de los dos lados en **`docs/multi-numero/`**; decisión en **ADR 0010**. El ruteo
 multi-número real (N transportes vivos) es el Frente A, **issue #50**, todavía pendiente.
 
+- **El vinculador es UNO A LA VEZ y por eso se puede soltar**: `POST .../vincular` arranca (responde
+  `vinculando`, **el QR NO viene acá**: viaja en el polling de `.../vincular/estado` como
+  `esperando_qr`) y **`DELETE .../vincular` cancela**. Sin esa puerta, una vinculación que nadie
+  escaneó bloqueaba a todos los demás números hasta reiniciar Hermes — o sea tirando las sesiones de
+  las vendedoras para destrabar un QR. Cancelar es idempotente (`cancelada: false` si no había nada)
+  y cancelar la de OTRO número es 409, nunca un silencio.
+- **Un QR que dejó de refrescarse ya no toma el vinculador** (`VIGENCIA_QR_MS`, 60 s): whatsmeow lo
+  rota cada ~20 s mientras el canal de pareo vive; cuando se cierra, deja de llegar y el último se
+  quedaba en pantalla para siempre —imposible de escanear— **y encima bloqueando**. La regla vive
+  pura en `numeros/dominio.ts` (`estadoVinculacionVigente`, reloj inyectado), no adentro del
+  vinculador: el caso que importa es el minuto que todavía no pasó.
+
 ## «Es la misma persona que…» — la unificación de contactos
 
 La misma persona escribe desde dos números, o desde WhatsApp y desde Instagram. La vendedora lo
