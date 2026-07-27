@@ -282,6 +282,47 @@ del panel. El porqué está en el ADR: el panel derecho es de **esa persona**, I
 - **Pendiente**: `traza_id` (la llave del lazo de aprendizaje de Ivi) todavía no viaja, y el
   ensamblado (`POST /api/ensamblar`) es otra superficie y otro contrato.
 
+## El catálogo de piezas — lo que Ivi lee para poder ELEGIR sin inventar (ADR 0021)
+
+**Ivi ARMA, no inventa**: devuelve **ids, nunca texto**, y Hermes compone con su texto ACTUAL. De ahí
+sale la propiedad que hace segura la integración — *un índice viejo del lado de Ivi degrada la
+**calidad** de la selección, nunca la **corrección** de lo que se manda*. Para elegir, necesita ver el
+catálogo: `server/src/catalogo/` + `routes/catalogo.ts`, **solo lectura**.
+
+- **`GET /api/catalogo/piezas`** — todo lo que se puede decir, en una lista plana. Cada pieza se
+  direcciona con **`{clase, id}`** (`plantilla` · `hecho` · `acuse` · `gancho`) y trae `version`,
+  `estado` (`vigente` | `borrador` | `retirada`), `texto`, `momentos`, `familia`, `alcance` +
+  `propietario`, `placeholders` y `enviable`. `?clase=` y `?vendedora=` filtran.
+  **`clase` es semántica, no la tabla**: hoy son cuatro catálogos separados (`plantillas` +
+  `plantilla_pasos`, `hechos`, los acuses y los ganchos, estos dos **en código**), y unificarlos —que
+  es otro frente— no puede romperle el contrato a Ivi. Un **paso** suelto NO es direccionable:
+  `plantilla_pasos.id` se reescribe en cada edición, así que los pasos viajan dentro de su plantilla
+  con su `orden`.
+- **Si el catálogo no se puede servir: ERROR, jamás una lista vacía.** Es una cicatriz de Ivi (su ADR
+  0002: un `{"ok": true}` con ceros les costó semanas). Base caída → **503 `catalogo_indisponible`**
+  y el cuerpo **sin `piezas`**; cero piezas → **500 `catalogo_vacio`** (las de código existen
+  siempre); un filtro que no deja nada → 200 con `filtrado: true`. Por eso `catalogo/repositorio.ts`
+  **no degrada** como `hechos/repositorio.ts`: la degradación honesta para una persona que lee el
+  aviso es una mentira para un índice que cachea. Ni siquiera se sirve medio catálogo.
+- **La versión es un hash del contenido** (`catalogo/version.ts`, `sha256:` + 16 hex), no un contador:
+  funciona igual para los catálogos que viven en código, no se puede olvidar de subir y no pide
+  `db:push`. **Entra el texto que sale; NO entra el rótulo** — renombrar no es un texto nuevo. Quien
+  estampe la pieza en `envios_wa` (lazo de resultados) tiene que usar `versionDeContenido()`, no una
+  copia, o el join no cierra.
+- **Va detrás de una credencial de servicio PROPIA** (`HERMES_CATALOGO_SERVICE_TOKEN`,
+  `requiereServicioDeCatalogo` en `auth/servicio.ts`): Ivi es una máquina, no una vendedora, y darle
+  el token de `/api/admin` para leer una lista le daría de yapa re-apuntar números y borrar sesiones.
+  Sin el secreto configurado responde **503 `falta_config`** (distinto del 401 de credencial
+  equivocada — si no, una falla de config se disfraza de token mal mandado).
+- **`GET /api/catalogo/vocabulario`** (y el mismo objeto dentro de `/piezas`) publica los
+  **momentos de venta como dato**: Ivi es Python y no puede importar `sugerencias/estado.ts`. Se
+  **deriva** de `MOMENTOS_DE_VENTA` en cada request — nada de un JSON que alguien tiene que acordarse
+  de actualizar. Tres guardas: la derivación, el `Record` `DESCRIPCION_MOMENTO` (agregar un momento
+  sin describirlo **no compila**) y un test que compara contra **la copia a mano del front**
+  (`src/features/hechos/hechos.ts`), que era la desincronización que ya existía.
+- **Un momento desconocido viaja tal cual, nunca se filtra**: en `hechos`, `momentos: []` significa
+  «vale para todos», así que descartar un valor nuevo **ensancharía** la pieza en vez de acotarla.
+
 ## Señales automáticas — «Cotizado» y «Se enfrió»
 
 `server/src/senales/` calcula, sobre el hilo, dos cosas que hoy nadie ve: si a esa persona ya le
@@ -576,7 +617,8 @@ gane) + `docs/adr/` con los ADR 0001–0005. Ver `docs/agents/domain.md`.
 Solo en `server/.env` (gitignored). **Se referencian por nombre, jamás se pegan** (regla dura #1):
 `DATABASE_URL`, `META_ACCESS_TOKEN`, `CERBERUS_BASE_URL`, `HERMES_SESSION_SECRET`,
 `WHATSAPP_TRANSPORTE`, `WHATSAPP_NUMERO`, `IVI_URL`, `IVI_SERVICE_TOKEN`,
-`HERMES_ADMIN_SERVICE_TOKEN`, `AUTO_RESPUESTA` (+ sus `AUTO_RESPUESTA_*`, todos con default
+`HERMES_ADMIN_SERVICE_TOKEN`, `HERMES_CATALOGO_SERVICE_TOKEN` (el de Ivi para leer el catálogo de
+piezas — **otro secreto**, a propósito), `AUTO_RESPUESTA` (+ sus `AUTO_RESPUESTA_*`, todos con default
 sensato). Ver `server/.env.example` (solo nombres).
 
 ## Reglas duras (Goberna)
