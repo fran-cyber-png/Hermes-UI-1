@@ -44,6 +44,14 @@ publicado `origen: "tabla:hechos"`, unificar sería un cambio de contrato con un
 Un id pelado no alcanzaba: un `412` puede ser una plantilla o cualquier otra cosa, mientras que
 `{clase:"hecho", id:"cuotas"}` es inequívoco.
 
+> ⚠️ **Es una decisión de Hermes, no un pedido de Ivi.** El código decía «es el pedido explícito de
+> Ivi tras inventariar el repo» y eso no se sostiene contra ninguna foto: medido contra
+> `ivi-cerebro@1e5d2f3`, los dos documentos que se citaban como el contrato están **sin commitear**
+> —o sea que no viven en ningún commit— y aun leyéndolos no contienen la palabra `clase`; el payload
+> que Ivi especifica es `{id, version, orden, gancho_id}`. El argumento de arriba es bueno y se
+> sostiene solo. Lo que queda **abierto** es el otro lado: para que el join con `envios_wa` cierre,
+> Ivi tiene que devolver también la clase (o la `ref` compuesta), y eso no está acordado.
+
 **Un paso no tiene id propio**: `escribirPasos()` borra y reinserta todos los pasos en cada edición,
 así que `plantilla_pasos.id` cambia sin que cambie el paso. Publicar un id que mañana apunta a otra
 cosa es peor que no publicarlo.
@@ -51,9 +59,12 @@ cosa es peor que no publicarlo.
 Pero **sí es direccionable relativo a su plantilla**, y esa corrección importa: el lazo de resultados
 (ADR 0022) necesita medir por paso —el flyer y el seguimiento de la misma secuencia funcionan
 distinto— y no puede hacerlo si el catálogo solo habla de la secuencia entera. La forma que satisface
-a los dos es la que **Ivi ya tenía escrita** en su contrato de ensamblado: `{id, orden}`. La clase
-sigue siendo `plantilla`; `orden` dice cuál de sus mensajes, sobre `(plantilla_id, orden)` — que sí es
-estable y tiene su `unique` en el schema. Por eso **cada paso publica su propia `version`**: es
+a los dos es `{id, orden}`. La clase sigue siendo `plantilla`; `orden` dice cuál de sus mensajes,
+sobre `(plantilla_id, orden)` — que sí es estable y tiene su `unique` en el schema. (Acá también
+decía que esa forma «Ivi ya la tenía escrita en su contrato de ensamblado»: en
+`respuesta-hermes-ensamblado.md`, el archivo sin commitear de arriba, `orden` es la **posición en la
+secuencia a mandar**, no cuál paso de una plantilla. Que se escriban igual es una coincidencia
+cómoda, no un acuerdo.) Por eso **cada paso publica su propia `version`**: es
 exactamente lo que el lazo estampa como `plantilla:12#3`, y sin ella lo escrito en `envios_wa` no
 aparecería en ninguna parte del catálogo.
 

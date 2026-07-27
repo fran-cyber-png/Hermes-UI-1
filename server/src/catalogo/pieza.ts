@@ -34,8 +34,15 @@ import { CLASES_DE_PIEZA, type ClasePieza } from "../piezas/direccion.js";
  *
  * Los ids de los cuatro catálogos no son compatibles entre sí: un `412` puede
  * ser una plantilla o cualquier otra cosa, mientras que `{clase:"hecho",
- * id:"cuotas"}` es inequívoco. Es el pedido explícito de Ivi tras inventariar
- * el repo, y evita que la unificación futura tenga que renumerar nada.
+ * id:"cuotas"}` es inequívoco, y evita que la unificación futura tenga que
+ * renumerar nada.
+ *
+ * ⚠️ **Es una decisión de Hermes, no un pedido de Ivi** — acá decía «es el
+ * pedido explícito de Ivi tras inventariar el repo» y no se sostiene contra
+ * ninguna foto: medido contra `ivi-cerebro@1e5d2f3`, los documentos que se
+ * citaban están sin commitear y su payload de ensamblado es
+ * `{id, version, orden, gancho_id}`, sin `clase`. La medición completa y el
+ * punto de contrato que queda abierto están en `piezas/direccion.ts`.
  *
  * ══ LO QUE NO ES DIRECCIONABLE ══════════════════════════════════════════════
  *

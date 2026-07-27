@@ -65,9 +65,19 @@ interface Comun {
    * independientes permiten la combinación imposible («enviable: true, motivo:
    * media_pendiente») y alguien la escribiría alguna vez.
    *
-   * En una secuencia esto **agrega** un motivo, no lo quita: las guardas que se
-   * calculan solas (no vigente, media pendiente) mandan igual. Nadie puede
-   * declarar enviable una plantilla a la que le falta el flyer.
+   * Lo que garantiza en una secuencia, exactamente: **declarar un motivo no
+   * puede volver enviable a nada**. `enviable` se deriva de `motivo === null`, y
+   * el `??` solo deja pasar el `null` — o sea que un motivo declarado bloquea, y
+   * un `null` declarado cae en las guardas que se calculan solas (no vigente,
+   * media pendiente). Nadie puede declarar enviable una plantilla a la que le
+   * falta el flyer.
+   *
+   * Lo que NO garantiza, y acá decía que sí («**agrega** un motivo, no lo
+   * quita»): un motivo declarado **reemplaza** la CADENA del motivo calculado.
+   * Si alguien pasara `"no_vigente"` sobre una plantilla que además tiene la
+   * imagen pendiente, el catálogo diría `no_vigente` y no `media_pendiente`. Las
+   * dos bloquean, así que no hay agujero — pero el que se reporta es uno solo, y
+   * hoy ningún llamador pasa este campo a `piezaDeUnaSecuencia`.
    */
   motivoNoEnviable?: Pieza["motivoNoEnviable"];
 }
