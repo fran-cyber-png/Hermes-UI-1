@@ -74,6 +74,18 @@ Cmnd_Alias HERMES_DEPLOY = \
   /usr/local/bin/hermes-deploy, \
   /usr/local/bin/hermes-deploy *
 
+# INSTALAR el script desde el repo. `desplegar-server.yml` hace esto en cada corrida, a
+# propósito: lo que corre es siempre lo que está commiteado y revisado, y un parche
+# aplicado a mano en el servidor lo pisa el próximo deploy.
+#
+# El destino está FIJO (`/usr/local/bin/hermes-deploy`); el `*` es solo el origen, que
+# cambia con el directorio de trabajo del runner. Eso no agrega privilegio: quien tiene
+# HERMES_DEPLOY ya puede ejecutar ese path como root, así que poder decidir su contenido
+# es la misma facultad por otra puerta. Sin esta línea el workflow muere en el primer
+# paso pidiendo contraseña.
+Cmnd_Alias HERMES_INSTALAR = \
+  /usr/bin/install -m 0755 -o root -g root * /usr/local/bin/hermes-deploy
+
 # La unidad de systemd: poder cambiar cómo arranca el servicio, no solo arrancarlo.
 # `sudoedit` y no `vim` a secas: edita una copia con permisos de andreecito y la mueve
 # de vuelta al final, así un editor con plugins raros no corre como root.
@@ -119,9 +131,9 @@ Cmnd_Alias HERMES_RUNNER = \
   /usr/bin/journalctl -u actions.runner.Goberna-Lab-hermes.vps1-hermes *
 
 andreecito ALL=(root) NOPASSWD: HERMES_SVC, HERMES_STAGING, HERMES_DOCKER, \
-  HERMES_DEPLOY, HERMES_UNIT, HERMES_NGINX, HERMES_CERT, HERMES_RUNNER
+  HERMES_DEPLOY, HERMES_INSTALAR, HERMES_UNIT, HERMES_NGINX, HERMES_CERT, HERMES_RUNNER
 
 # `deploy` es quien corre el runner de Actions y ya tiene NOPASSWD:ALL por
 # 99-deploy-bootstrap; se lista igual para que el día que se acote ese bootstrap, el
 # pipeline siga funcionando.
-deploy ALL=(root) NOPASSWD: HERMES_SVC, HERMES_STAGING, HERMES_DEPLOY
+deploy ALL=(root) NOPASSWD: HERMES_SVC, HERMES_STAGING, HERMES_DEPLOY, HERMES_INSTALAR
