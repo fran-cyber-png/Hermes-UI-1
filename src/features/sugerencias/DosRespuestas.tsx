@@ -41,7 +41,7 @@ function Tarjeta({
   conversacion: Conversacion;
   corriendoOtra: boolean;
   onMandar: () => void;
-  onIrAPlantillas: () => void;
+  onIrAPlantillas?: () => void;
 }) {
   const telefono = conversacion.persona_id;
   const hayHueco = s.vistaPrevia.faltantes.length > 0;
@@ -116,13 +116,15 @@ function Tarjeta({
         >
           <Send size={11} /> Mandar
         </button>
-        <button
-          type="button"
-          onClick={onIrAPlantillas}
-          className="ml-auto text-[10px] font-semibold text-muted-foreground transition-colors hover:text-primary"
-        >
-          Ver secuencia
-        </button>
+        {onIrAPlantillas && (
+          <button
+            type="button"
+            onClick={onIrAPlantillas}
+            className="ml-auto text-[10px] font-semibold text-muted-foreground transition-colors hover:text-primary"
+          >
+            Ver secuencia
+          </button>
+        )}
       </div>
     </div>
   );
@@ -133,7 +135,9 @@ export function DosRespuestas({
   onIrAPlantillas,
 }: {
   conversacion: Conversacion;
-  onIrAPlantillas: () => void;
+  /** Opcional desde el rediseño del panel: si no hay a dónde ir, el atajo
+   *  no se dibuja. Un botón que no lleva a ningún lado enseña a no confiar. */
+  onIrAPlantillas?: () => void;
 }) {
   const esWa = conversacion.canal === 'whatsapp';
   const { data, isPending, error } = useSugerencias(
@@ -168,13 +172,15 @@ export function DosRespuestas({
           {status === 404
             ? 'Este servidor todavía no sirve respuestas sugeridas: falta desplegar.'
             : 'No se pudieron traer las respuestas sugeridas.'}{' '}
-          <button
-            type="button"
-            onClick={onIrAPlantillas}
-            className="font-bold text-primary hover:underline"
-          >
-            Ver tus secuencias
-          </button>
+          {onIrAPlantillas && (
+            <button
+              type="button"
+              onClick={onIrAPlantillas}
+              className="font-bold text-primary hover:underline"
+            >
+              Ver tus secuencias
+            </button>
+          )}
         </span>
       </div>
     );
@@ -186,16 +192,19 @@ export function DosRespuestas({
     return (
       <div className="rounded-xl border border-dashed border-border p-2.5">
         <p className="text-[11px] leading-relaxed text-muted-foreground">
-          Ninguna secuencia encaja con el momento de esta conversación, así que no se propone una a
-          ciegas.
+          {onIrAPlantillas
+            ? 'Ninguna secuencia encaja con el momento de esta conversación, así que no se propone una a ciegas.'
+            : 'Ninguna secuencia encaja con el momento de esta conversación — y todavía no hay ninguna cargada para elegir a mano.'}
         </p>
-        <button
-          type="button"
-          onClick={onIrAPlantillas}
-          className="mt-1 text-[11px] font-bold text-primary hover:underline"
-        >
-          Elegir de tus secuencias
-        </button>
+        {onIrAPlantillas && (
+          <button
+            type="button"
+            onClick={onIrAPlantillas}
+            className="mt-1 text-[11px] font-bold text-primary hover:underline"
+          >
+            Elegir de tus secuencias
+          </button>
+        )}
       </div>
     );
   }
