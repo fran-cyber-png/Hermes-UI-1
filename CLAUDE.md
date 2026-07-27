@@ -279,6 +279,23 @@ imagen. UI en `src/features/plantillas/`, colgada del `···` («Mensajes prede
   rehidrata precios de ayer, ADR 0007).
 - **Sembrar desde el histórico**: `cd server && npm run plantillas:proponer [-- --dias 14]` (dry-run) ·
   `-- --aplicar <vendedoraId>` las guarda **como propuestas**. El minado propone, una persona aprueba.
+  El minado **infiere la familia de curso** del propio texto (el flyer dice de qué diploma habla) y
+  **no parte el saludo por la hora del día**: «buenos días» y «buenas tardes» son el mismo primer
+  paso, y separarlos era lo que impedía que la secuencia de dos pasos —saludo, después flyer—
+  apareciera nunca (ADR 0019).
+- **Las propuestas se revisan DESDE LA APP** (ADR 0019): bloque **«Para revisar»** arriba de la
+  pestaña Enviar del panel derecho (`plantillas/RevisionPropuesta.tsx`), con el respaldo en criollo
+  («418 conversaciones usaron esto»), los pasos tal como están guardados y tres salidas: **Aprobar ·
+  Editar antes · Descartar**. Se lee **sin conversación abierta y sin Cerberus**: la vista previa con
+  `{precio}` resuelto necesita las dos cosas, y hacer depender la revisión de eso era por qué no se
+  podía aprobar nada.
+  - Una propuesta minada **es del equipo**, no de la vendedora bajo cuyo id corrió el script (verla
+    es seguro: no se puede mandar). **Aprobarla es hacerse cargo**: pasa a ser suya. Una aprobada de
+    otra vendedora sigue siendo privada.
+  - **No se aprueba sin resolver el curso**: confirmar la familia inferida, elegir otra, o marcar
+    «sirve para cualquier curso» a propósito. Omitir la clave en el body ≠ mandarla en `null` — lo
+    primero es silencio y responde **409 `falta_familia`**. La regla es pura: `plantillas/aprobacion.ts`.
+    Una imagen pendiente **no** bloquea aprobar (sí mandar).
 
 ## Interés derivado del anuncio — el lead ya llegó diciendo qué quiere
 
@@ -291,9 +308,22 @@ ficha: «📣 Inteligencia y Contrainteligencia · del anuncio [Confirmar]» (#1
   escribe una fila en `intereses` es el clic humano** en `POST /api/gestiones/intereses/derivado`.
 - **Precedencia** (la de #72, no se reinventa): interés registrado > curso del formulario > campaña
   del anuncio. Sin alias que matchee **no se inventa**: se muestra el título crudo, sin botón.
+  Vive **una vez**, pura, en `cursos/precedencia.ts`, con su gemelo en SQL en `cola/cursoSql.ts` para
+  las consultas que agrupan — y un **test de paridad** que falla si se separan
+  (`dashboard/curso.paridad.test.db.ts`, ADR 0019). El Dashboard por curso **consume esos
+  fragmentos**; hasta el 26-jul tenía los suyos y decía «97 % sin curso identificado» mientras la
+  cola le pintaba el chip a casi todas las filas.
 - **El diccionario vive en la base** (`alias_curso`, editable sin deploy) y nace sembrado con
   `ALIAS_SEMILLA` (`cursos/alias.ts`, idempotente y sin pisar lo editado a mano). Para sacar un alias
   de circulación: `activo = false`, nunca DELETE.
+- **Hay alias por TEXTO y alias por `adId`** (ADR 0019). Los anuncios genéricos —«Adquiérelo ahora»,
+  «No lo dejes pasar», «FORMA PARTE»— no nombran ningún curso, y mapear esas frases le heredaría el
+  curso equivocado al próximo anuncio con el mismo copy: se mapean por su `adId`
+  (`origen.adId`), que es lo único que los identifica. Una fila con `ad_id` **no se busca por texto**,
+  y un mapeo por anuncio le gana al título (lo afirmado sobre lo inferido).
+- **La red anti-gap**: `CAMPANAS_CON_VOLUMEN` (medido contra prod) + un test que falla si una campaña
+  con volumen se queda sin familia. Para encontrar los que faltan: `cd server && npm run cursos:gaps`
+  (solo lectura; lista anuncios y campañas sin mapear, con su `adId` listo para cargar).
 - **Lo que se registra es el nombre CRUDO del producto de Cerberus** (la última edición activa de la
   familia, resuelta contra el catálogo vivo al confirmar), no el nombre corto del chip: `intereses.curso`
   es lo que después se cotiza. Falla ruidoso (502/409), nunca inventa un nombre parecido.
@@ -438,11 +468,12 @@ sensato). Ver `server/.env.example` (solo nombres).
   `auto_respuestas_pendientes.aprobada_por/.aprobada_at/.editada/.campana`, ADR 0016),
   `auto_respuestas_pendientes.campana_fuente` (ADR 0018), **`clientes_padron` (#133 — sin ella la
   cola sirve sin la marca de ex-cliente y lo dice en `sinPadron`; con ella hay que correr
-  `npm run clientes:sincronizar` o queda vacía y no marca a nadie)** y `alias_curso`
-  (#102) — sin el push esas funciones **degradan** (hilo sin marca, ruta del interruptor en 503,
-  bandeja vacía con el motivo escrito, ficha sin propuesta de curso), no rompen —; y `plantillas` +
-  `plantilla_pasos` (plantillas-secuencia), sin las cuales `/api/plantillas` **no funciona** en un
-  server ya desplegado.
+  `npm run clientes:sincronizar` o queda vacía y no marca a nadie)**, `alias_curso`
+  (#102) y **`alias_curso.ad_id`** (ADR 0019) — sin el push esas funciones **degradan** (hilo sin
+  marca, ruta del interruptor en 503, bandeja vacía con el motivo escrito, ficha sin propuesta de
+  curso, y sin `ad_id` se pierde el mapeo por anuncio pero NO los alias de texto: `aliasesActivos`
+  reintenta sin esa columna), no rompen —; y `plantillas` + `plantilla_pasos`
+  (plantillas-secuencia), sin las cuales `/api/plantillas` **no funciona** en un server ya desplegado.
 - **El transporte falso repite ids entre reinicios** (`falso-1`, `falso-2`…): reprocesar colisiona con la
   idempotencia (`wa:falso-N` ya existe) y el mensaje no entra. Para demos limpias, borrar los
   `external_id LIKE 'wa:falso-%'` primero. El transporte real usa ids reales de WhatsApp (únicos).
