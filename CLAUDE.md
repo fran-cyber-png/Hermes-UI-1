@@ -645,6 +645,31 @@ multi-número real (N transportes vivos) es el Frente A, **issue #50**, todavía
   La regla vive pura en `numeros/dominio.ts` (`estadoVinculacionVigente`, reloj inyectado), no
   adentro del vinculador: el caso que importa es el minuto que todavía no pasó.
 
+## La atribución de ventas — la conversación se vuelve plata
+
+`server/src/atribucion/`. **Un solo proyector** (`proyectarVenta`) y tres caminos que lo llaman: el
+webhook de Cerberus (`webhook/ruta.ts`), la venta que la vendedora registra desde el chat
+(`asentarVentaEnEmbudo`) y el **puente temporal** (`npm run ventas:sincronizar`). El detalle
+completo, lo medido y el pedido a Cerberus: **`docs/atribucion-de-ventas.md`** (issue #161).
+
+- **La llave es determinista, no un match**: la conversación viaja a Cerberus dentro del
+  `venta_request_key`, se guarda en `Venta.idempotency_key` y **vuelve** en el webhook
+  (`atribucion/llave.ts`). Techo duro de **64 caracteres**; si no entra, cae a la llave vieja —
+  nunca truncada. Adivinar por teléfono es el respaldo, y tiene techo medido: **2,1 %** histórico.
+- **Cascada etiquetada**: `llave` › `telefono_e164` › `telefono_sufijo`. El sufijo de 9 dígitos es
+  **débil** (#119): de 143 matches, 29 tienen otro E.164. Queda marcado aparte a propósito.
+- **Nada se pierde y nada se infla**: lo atribuido va a `conversiones_wa` (lo que el CRM lee), lo que
+  no, a **`ventas_no_atribuidas`** con su motivo. Tabla aparte porque `conversiones_wa` la cuentan
+  entera como ventas tres consultas vivas — meter ahí las 6.800 ventas del ERP convertiría el panel
+  de la vendedora en el reporte de Cerberus.
+- **`ontologia.conversiones` NO es un schema muerto**: es el outbox del CAPI y `lazo/worker.ts:87`
+  lo consulta para no mandar dos veces el mismo `Purchase`. Se queda donde está.
+- **El puente es temporal y se apaga solo**: lee `icarus.cerberus_events` (read-only) y pasa los
+  payloads por el MISMO camino que el webhook. **icarus no es el espejo de Cerberus** — es la
+  plataforma multi-tenant de los clientes de consultoría y sirve a un cliente real. El día que
+  Cerberus haga fan-out se deja de correr el script; no hay una línea que tocar.
+  🚨 **Nunca repuntar `ICARUS_CERBERUS_WEBHOOK_URL`**: eso rompe producción de un cliente. Fan-out.
+
 ## «Es la misma persona que…» — la unificación de contactos
 
 La misma persona escribe desde dos números, o desde WhatsApp y desde Instagram. La vendedora lo
