@@ -106,10 +106,31 @@ Matrículas y el campo «medio» **siguen sin endpoint público**.
 
 ---
 
-### 1.3 ICARUS — las landings y, sin que nadie lo usara, **el espejo de Cerberus**
+### 1.3 ICARUS — las landings, y **el destino equivocado del webhook de ventas**
 
-**Qué es**: hub de contactos y campañas (React + Postgres, schema `icarus`, en VPS1).
-Recibe los formularios de las landings web… **y mucho más**.
+> 🔄 **CORRECCIÓN (2026-07-27)** — la primera versión de este documento decía que icarus
+> «ya es el espejo vivo de Cerberus». Es una lectura equivocada de un síntoma real. Lo
+> corrige [`ivi-cerebro/docs/los-cinco-sistemas.md`](../../ivi-cerebro/docs/los-cinco-sistemas.md),
+> que verificó el origen:
+>
+> **Icarus es una plataforma multi-tenant para clientes de CONSULTORÍA** (instancias
+> `icarus_api:8092`, `icarus_tejada_api:8093`, `icarus_demo_api:8094`) — es del dominio
+> *consultoría*, no del de *escuela*. Tiene las 6.973 ventas porque **el webhook de
+> Cerberus apunta ahí**:
+> ```
+> /srv/cerberus/.env
+>   ICARUS_CERBERUS_WEBHOOK_ENABLED = true
+>   ICARUS_CERBERUS_WEBHOOK_URL     = https://icarus.goberna.us
+> ```
+> No es un espejo diseñado: es un flujo en vivo que va a otro lado. Nadie verificó qué
+> construye icarus con esas ventas.
+>
+> ⚠️ **Consecuencia operativa que hay que respetar**: **icarus sirve a un cliente real
+> (Tejada)**. Repuntar el webhook a Hermes lo rompería. El cambio correcto es
+> **fan-out** (Cerberus postea a los dos durante la ventana), nunca redirigir.
+
+**Qué es**: plataforma multi-tenant de clientes de consultoría (Postgres, schema
+`icarus`, en VPS1). También recibe los formularios de las landings web.
 
 **Qué sabe**:
 
@@ -163,12 +184,39 @@ devolverle la conversión a Meta (CAPI).
 
 ### 1.5 MOODLE — el campus
 
-**Qué es**: la plataforma donde el alumno estudia. Aparece en Hermes solo como
-`Moodle User ID` dentro de la matrícula de Cerberus.
+**Qué es**: la plataforma donde el alumno estudia. **Externo a la infraestructura de
+Goberna** (no corre en VPS1 ni VPS2): se accede por API con token, y **Cerberus lo
+maneja a él**, no al revés (`MOODLE_BASE_URL`, `MOODLE_TOKEN`; cada producto lleva
+`id_curso_moodle` e `id_cohorte_moodle`).
 
 **Qué sabe Hermes de Moodle**: nada, hoy. La matrícula de Cerberus es el puente.
 
 **Es fuente de verdad de**: el acceso real del alumno y su avance en el curso.
+
+---
+
+### 1.6 Y hay dos más que este mapa no contaba
+
+Este documento está escrito desde Hermes, así que dejó afuera dos piezas que sí existen
+y que [`ivi-cerebro/docs/los-cinco-sistemas.md`](../../ivi-cerebro/docs/los-cinco-sistemas.md)
+documenta en detalle:
+
+- **meta-escuela** (`Goberna-Lab/meta-escuela`, VPS1 `:4100`, **bindeado al tailnet**):
+  el catálogo `governa.*` con 20 tools de negocio y el CQ Engine. **No posee dato:
+  proyecta** el de Cerberus (`fuentes.*` crudo, `ontologia.*` semántico). 🔴 Su
+  proyección está **congelada desde el 2026-07-13** — la única ingesta que existió fue
+  un `mysqldump` a mano.
+  ⚠️ **Y esto explica algo de Hermes**: los 39 archivos de `sdk/`, `analisis/`,
+  `ontologia/`, `canales/` y `fuentes/` que arrastramos como «la segunda mitad dormida»
+  son **una copia byte-idéntica del SDK de meta-escuela**. Es deuda del ADR 0002 de ese
+  repo, no código huérfano.
+- **Ivi** (en `geografo`, por tailnet): la capa de lenguaje. **No posee dato: consume**
+  `governa.*` + documentos. Hermes ya tiene el puente (`POST /api/ivi/preguntar`,
+  issue #61, mergeado); falta `IVI_URL` en el `.env` de producción.
+
+**La ley que ordena todo** (ADR 0002 de meta-escuela, y coincide con la decisión del
+dueño del 27-jul): *Cerberus es la dueña de la data; todo lo demás son herramientas
+sobre ella.* Ninguna pieza se vuelve fuente de verdad por tener base propia.
 
 ---
 
