@@ -30,6 +30,30 @@ describe('familiaDeProducto — el nombre corto que entra en una fila de 360 px'
     expect(a.familia).not.toBe(b.familia);
   });
 
+  // Los tres GEN* reales del catálogo (26-jul-2026): Bicameral, Cartografía
+  // Electoral y Dirección Corporativa de Seguridad. Son cursos sin nada que ver
+  // entre sí; si el prefijo volviera a ser la familia, el chip los pintaría
+  // iguales y el Dashboard los sumaría en una fila que no existe.
+  test('Bicameral, Cartografía y Dirección Corporativa no comparten familia', () => {
+    const familias = [
+      familiaDeProducto('GEN5C4BE8', 'Diploma de especialización Bicameral 1').familia,
+      familiaDeProducto('GEN15527B', 'Diploma intensivo de Cartografía Electoral 1').familia,
+      familiaDeProducto('GENCDE6AE', 'Diploma Élite Internacional En Dirección Corporativa De Seguridad')
+        .familia,
+    ];
+    expect(new Set(familias).size).toBe(3);
+    expect(familias).not.toContain('GEN');
+  });
+
+  // `DIPICOT003-6B5D` y `DIPCOCO002-BFA8` existen en el catálogo vivo: Cerberus
+  // le pegó un sufijo al SKU para desambiguar dos filas del mismo producto.
+  test('un SKU con sufijo de desambiguación sigue siendo de su familia', () => {
+    expect(familiaDeProducto('DIPICOT003-6B5D', 'Diploma de Inteligencia y Contrainteligencia 3').familia).toBe(
+      'DIPICOT',
+    );
+    expect(familiaDeProducto('DIPCOCO002-BFA8', 'Diploma de Contraterrorismo 2').familia).toBe('DIPCOCO');
+  });
+
   test('un producto sin número de edición no se inventa una', () => {
     const r = familiaDeProducto('DIPCPOL025', 'Diploma Internacional del Consultor Político');
     expect(r.nombreCorto).toBe('Consultor Político');

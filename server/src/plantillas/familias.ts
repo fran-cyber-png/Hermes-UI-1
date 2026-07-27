@@ -66,7 +66,11 @@ export function familiaDeProducto(sku: string, nombre: string): Familia {
     return { familia: limpio, edicion: null, nombreCorto };
   }
 
-  const m = /^([A-Z]+)(\d+)$/.exec(limpio);
+  // `DIPICOT014`, y también `DIPICOT003-6B5D`: cuando Cerberus tuvo que
+  // desambiguar dos filas del mismo producto le pegó un sufijo al SKU. Sin
+  // aceptarlo, esa edición se quedaba afuera de su familia (familia = el SKU
+  // entero) y `ultimaEdicion` no la veía nunca.
+  const m = /^([A-Z]+)(\d+)(?:-[A-Z0-9]+)?$/.exec(limpio);
   if (m) return { familia: m[1], edicion: Number(m[2]), nombreCorto };
 
   // Sin sufijo numérico (30 productos del catálogo): la familia es el SKU entero.

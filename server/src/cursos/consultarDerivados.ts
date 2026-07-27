@@ -48,6 +48,7 @@ function partirClave(clave: string): { canal: string; personaId: string } | null
 interface FilaCandidatos {
   clave: string;
   titulo_anuncio: string | null;
+  ad_id_anuncio: string | null;
   curso_lead: string | null;
 }
 
@@ -89,9 +90,15 @@ export async function candidatosPorClave(
     ),
     -- El PRIMER anuncio de la conversación: el mismo que muestra el banner.
     anuncio AS (
-      SELECT DISTINCT ON (clave) clave, btrim(origen->>'titulo') AS titulo
+      SELECT DISTINCT ON (clave) clave,
+             btrim(origen->>'titulo') AS titulo,
+             NULLIF(btrim(origen->>'adId'), '') AS ad_id
       FROM mio
-      WHERE origen->>'fuente' = 'anuncio' AND NULLIF(btrim(origen->>'titulo'), '') IS NOT NULL
+      -- Un anuncio SIN título entra igual si trae adId: los genéricos
+      -- («Adquiérelo ahora») se resuelven por id, no por lo que dicen.
+      WHERE origen->>'fuente' = 'anuncio'
+        AND (NULLIF(btrim(origen->>'titulo'), '') IS NOT NULL
+             OR NULLIF(btrim(origen->>'adId'), '') IS NOT NULL)
       ORDER BY clave, occurred_at ASC
     ),
     personas AS (
@@ -110,6 +117,7 @@ export async function candidatosPorClave(
     )
     SELECT c.clave,
            a.titulo AS titulo_anuncio,
+           a.ad_id  AS ad_id_anuncio,
            lc.curso AS curso_lead
     FROM (SELECT DISTINCT clave FROM mio) c
     LEFT JOIN anuncio a ON a.clave = c.clave
@@ -120,7 +128,9 @@ export async function candidatosPorClave(
   for (const f of filas) {
     const candidatos: CandidatoCurso[] = [];
     if (f.curso_lead) candidatos.push({ fuente: "lead", texto: f.curso_lead });
-    if (f.titulo_anuncio) candidatos.push({ fuente: "anuncio", texto: f.titulo_anuncio });
+    if (f.titulo_anuncio || f.ad_id_anuncio) {
+      candidatos.push({ fuente: "anuncio", texto: f.titulo_anuncio, adId: f.ad_id_anuncio });
+    }
     if (candidatos.length) salida[f.clave] = candidatos;
   }
   return salida;

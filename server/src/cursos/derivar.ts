@@ -1,4 +1,4 @@
-import { familiaDeTexto, type AliasCurso } from "./alias.js";
+import { familiaDeAnuncio, familiaDeTexto, type AliasCurso } from "./alias.js";
 
 /**
  * EL INTERÉS DERIVADO — qué curso PROPONER cuando nadie lo asentó todavía (#102).
@@ -36,6 +36,12 @@ export interface CandidatoCurso {
   fuente: FuenteDerivada;
   /** El texto crudo: la campaña del anuncio o el curso del formulario. */
   texto: string | null;
+  /**
+   * El `adId` de Meta, solo para `fuente: 'anuncio'`. Cuando el anuncio está
+   * mapeado a mano, ese mapeo gana sobre cualquier lectura del título — hay
+   * anuncios («Adquiérelo ahora») cuyo título no nombra ningún curso.
+   */
+  adId?: string | null;
 }
 
 export interface InteresDerivado {
@@ -63,12 +69,17 @@ export function derivarInteres(v: {
   if (v.registrados.length > 0) return null;
 
   const utiles = v.candidatos
-    .map((c) => ({ fuente: c.fuente, texto: (c.texto ?? "").trim() }))
-    .filter((c) => c.texto !== "");
+    .map((c) => ({ fuente: c.fuente, texto: (c.texto ?? "").trim(), adId: (c.adId ?? "").trim() }))
+    // Un anuncio SIN título pero mapeado por `adId` sigue siendo un candidato: es
+    // el caso de los anuncios genéricos, que es justo el que había que resolver.
+    .filter((c) => c.texto !== "" || c.adId !== "");
   if (utiles.length === 0) return null;
 
   for (const c of utiles) {
-    const alias = familiaDeTexto(v.aliases, c.texto);
+    const alias =
+      c.fuente === "anuncio"
+        ? familiaDeAnuncio(v.aliases, { adId: c.adId, titulo: c.texto })
+        : familiaDeTexto(v.aliases, c.texto);
     if (alias) {
       return {
         curso: alias.nombreCurso,

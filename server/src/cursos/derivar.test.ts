@@ -90,3 +90,51 @@ test("sin alias cargados (tabla vacía o sin migrar) no propone nada mapeado", (
   assert.equal(d?.curso, null);
   assert.equal(d?.textoOrigen, "[JUL] INTELIGENCIA | WSP");
 });
+
+/**
+ * EL ANUNCIO QUE NO DICE NADA (26-jul-2026). «Adquiérelo ahora» (22 personas),
+ * «No lo dejes pasar» (17) y «FORMA PARTE» (2) son los tres anuncios con más
+ * volumen sin mapear, y ninguno nombra un curso: la única llave es su `adId`.
+ */
+test("un anuncio genérico mapeado por adId propone el curso igual", () => {
+  const aliases = [
+    ...ALIAS_SEMILLA,
+    {
+      alias: "Anuncio «Adquiérelo ahora»",
+      familia: "DIPICOT",
+      nombreCurso: "Inteligencia y Contrainteligencia",
+      adId: "120215551234567",
+    },
+  ];
+
+  const sinMapeo = derivarInteres({
+    registrados: [],
+    candidatos: [{ fuente: "anuncio", texto: "Adquiérelo ahora", adId: "otro-id" }],
+    aliases,
+  });
+  assert.equal(sinMapeo?.familia, null, "sin mapeo sigue sin inventarse un curso");
+
+  const conMapeo = derivarInteres({
+    registrados: [],
+    candidatos: [{ fuente: "anuncio", texto: "Adquiérelo ahora", adId: "120215551234567" }],
+    aliases,
+  });
+  assert.equal(conMapeo?.familia, "DIPICOT");
+  assert.equal(conMapeo?.curso, "Inteligencia y Contrainteligencia");
+});
+
+test("el formulario sigue mandando sobre el anuncio, aunque el anuncio esté mapeado por adId", () => {
+  const aliases = [
+    ...ALIAS_SEMILLA,
+    { alias: "Anuncio X", familia: "DIPICOT", nombreCurso: "Inteligencia y Contrainteligencia", adId: "77" },
+  ];
+  const d = derivarInteres({
+    registrados: [],
+    candidatos: [
+      lead("Diploma técnico en Osint & Socmint"),
+      { fuente: "anuncio", texto: null, adId: "77" },
+    ],
+    aliases,
+  });
+  assert.equal(d?.familia, "DIPOSOC", "lo que la persona eligió gana sobre de dónde vino");
+});

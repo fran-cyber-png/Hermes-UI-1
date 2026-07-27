@@ -880,6 +880,17 @@ export const aliasCurso = pgTable(
     familia: text("familia").notNull(),
     /** El nombre legible del curso — lo que ve la vendedora en el chip de la propuesta. */
     nombreCurso: text("nombre_curso").notNull(),
+    /**
+     * EL MAPEO POR ANUNCIO (26-jul-2026). Cuando está, la fila NO se busca por
+     * texto: se compara exacto contra el `adId` de Meta (`origen.adId`), y su
+     * `alias` pasa a ser una etiqueta humana.
+     *
+     * Existe porque los anuncios con más volumen sin mapear —«Adquiérelo ahora»,
+     * «No lo dejes pasar», «FORMA PARTE»— no nombran ningún curso: mapear esas
+     * frases haría que cualquier anuncio futuro con el mismo copy heredara el
+     * curso equivocado. Lo único que identifica a ese anuncio es su id.
+     */
+    adId: text("ad_id"),
     /** Fuera de circulación sin perder el rastro. La consulta solo lee los activos. */
     activo: boolean("activo").notNull().default(true),
     creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
@@ -887,6 +898,9 @@ export const aliasCurso = pgTable(
   (t) => [
     // Un mismo texto no puede mapear a dos familias: la propuesta sería un volado.
     unique("alias_curso_alias_uq").on(t.alias),
+    // Ni un mismo anuncio. Los NULL no chocan entre sí en Postgres, así que las
+    // filas de texto (la mayoría) conviven sin problema bajo esta restricción.
+    unique("alias_curso_ad_id_uq").on(t.adId),
     index("alias_curso_familia_idx").on(t.familia),
   ],
 );

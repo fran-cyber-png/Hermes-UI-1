@@ -39,6 +39,22 @@ export interface AliasCurso {
   familia: string;
   /** El nombre legible del curso — lo que ve la vendedora en el chip. */
   nombreCurso: string;
+  /**
+   * EL MAPEO POR ANUNCIO. Cuando está, esta fila **no se matchea por texto**: se
+   * compara exacto contra el `adId` de Meta que viaja en `origen.adId`.
+   *
+   * Existe porque hay anuncios que no nombran ningún curso —«Adquiérelo ahora»
+   * (22 personas), «No lo dejes pasar» (17), «FORMA PARTE» (2)— y un alias de
+   * texto no los puede resolver sin inventar: mapear la frase «adquiérelo ahora»
+   * a un diploma haría que CUALQUIER anuncio futuro con ese copy herede el curso
+   * equivocado. Lo único que identifica a ese anuncio es su id.
+   */
+  adId?: string | null;
+}
+
+/** Una fila que se busca por texto (la mayoría). Las de `adId` juegan otro partido. */
+function esDeTexto(a: AliasCurso): boolean {
+  return !a.adId;
 }
 
 /**
@@ -82,6 +98,9 @@ export function familiaDeTexto(
   let mejor: AliasCurso | null = null;
   let mejorNorm = "";
   for (const a of aliases) {
+    // Las filas de anuncio se saltean: su `alias` es una ETIQUETA humana («Anuncio
+    // “Adquiérelo ahora”»), no un texto que deba aparecer en una campaña.
+    if (!esDeTexto(a)) continue;
     const an = normalizarTexto(a.alias);
     if (an === "" || !aguja.includes(` ${an} `)) continue;
     if (
@@ -98,6 +117,54 @@ export function familiaDeTexto(
   }
   return mejor;
 }
+
+/**
+ * EL CURSO DE UN ANUNCIO — por `adId` primero, por título después.
+ *
+ * El orden no es un detalle: un mapeo por `adId` lo puso una PERSONA mirando el
+ * anuncio, y un match por título es una inferencia. Lo afirmado gana sobre lo
+ * inferido, siempre — la misma regla que hace que el interés registrado le gane
+ * al formulario en `derivar.ts`.
+ */
+export function familiaDeAnuncio(
+  aliases: readonly AliasCurso[],
+  anuncio: { adId?: string | null; titulo?: string | null },
+): AliasCurso | null {
+  const id = (anuncio.adId ?? "").trim();
+  if (id !== "") {
+    const porId = aliases.find((a) => (a.adId ?? "").trim() === id);
+    if (porId) return porId;
+  }
+  return familiaDeTexto(aliases, anuncio.titulo);
+}
+
+/**
+ * LOS TEXTOS POR LOS QUE LLEGA LA GENTE, MEDIDOS CONTRA PRODUCCIÓN (26-jul-2026),
+ * con la familia que les corresponde según el catálogo vivo de Cerberus.
+ *
+ * No es documentación: es la RED que `alias.test.ts` usa para fallar cuando una
+ * campaña con volumen se queda sin familia. El gap se descubría mirando el
+ * Dashboard tres semanas después —3.453 leads sin mapear— y esa forma de
+ * enterarse es la que este arreglo cierra.
+ *
+ * Los `leads` son de la medición; se guardan para que quien agregue una campaña
+ * sepa cuánto pesa la que está tocando. «Campaña Electoral» (29 leads) NO está
+ * acá a propósito: es genérica, no nombra ningún curso, y mapearla sería inventar.
+ */
+export const CAMPANAS_CON_VOLUMEN: readonly { texto: string; familia: string; leads: number }[] = [
+  { texto: "Inteligencia Estratégica", familia: "DIPICOT", leads: 372 },
+  { texto: "Ciberinteligencia y Ciberdefensa", familia: "DIPCINTE", leads: 1149 },
+  { texto: "Operaciones Psicológicas y Psicosociales", familia: "DIPOPPS", leads: 810 },
+  { texto: "Ciberdefensa, Hacking Ético e Ingeniería Social", familia: "DIPCIBE", leads: 333 },
+  { texto: "Gestión Parlamentaria Bicameral", familia: "GEN5C2G3", leads: 275 },
+  { texto: "Dirección Corporativa De Seguridad", familia: "GENCDE6AE", leads: 243 },
+  { texto: "OpSic Senior", familia: "DIPOPPSS", leads: 198 },
+  { texto: "Gestor Parlamentario", familia: "DIPGESPA", leads: 180 },
+  { texto: "Bicameral para Diputados y Senadores", familia: "GEN5C2G3", leads: 170 },
+  { texto: "Estrategia Territorial en campañas", familia: "EPCVETC", leads: 46 },
+  { texto: "Cartografía Electoral", familia: "GEN15527B", leads: 20 },
+  { texto: "I FORO DE ESTADO 2026", familia: "EVGLINTEST", leads: 6 },
+];
 
 /**
  * CON LO QUE NACE LA TABLA — las familias reales del catálogo de la Escuela
@@ -157,6 +224,66 @@ export const ALIAS_SEMILLA: readonly AliasCurso[] = [
   ]),
   ...aliasesDe("DIPASEPRE", "Asesor Presidencial", ["asesor presidencial", "asesoria presidencial"]),
   ...aliasesDe("DIPCOCO", "Contraterrorismo", ["contraterrorismo", "antiterrorismo"]),
+
+  // ══ LOS 3.453 LEADS QUE NO TENÍAN FAMILIA (medido 26-jul-2026) ═════════════
+  //
+  // Todos tenían producto real en el catálogo: el gap no era de datos, era de
+  // diccionario. Van con las redacciones con las que la pauta las escribe.
+  ...aliasesDe("DIPCINTE", "Ciberinteligencia y Ciberdefensa", [
+    "ciberinteligencia",
+    "ciberinteligencia y ciberdefensa",
+    "ciberdefensa",
+  ]),
+  // DIPCIBE comparte la palabra «ciberdefensa» con DIPCINTE: el alias largo es lo
+  // que los separa (la regla del más específico), y por eso va entero.
+  ...aliasesDe("DIPCIBE", "Ciberdefensa, Hacking Ético e Ingeniería Social", [
+    "ciberdefensa hacking etico e ingenieria social",
+    "hacking etico",
+    "ingenieria social",
+  ]),
+  ...aliasesDe("DIPOPPS", "Operaciones Psicológicas y Psicosociales", [
+    "opsic",
+    "operaciones psicologicas",
+    "operaciones psicologicas y psicosociales",
+    "psicosociales",
+  ]),
+  // DIPOPPSS es familia PROPIA, no una edición de DIPOPPS: «Senior» es otro
+  // producto con otro precio. El alias largo le gana al corto por especificidad.
+  ...aliasesDe("DIPOPPSS", "Operaciones Psicológicas y Psicosociales Senior", [
+    "opsic senior",
+    "operaciones psicologicas y psicosociales senior",
+  ]),
+  ...aliasesDe("DIPGESPA", "Gestor Parlamentario", ["gestor parlamentario", "gestion parlamentaria"]),
+  // Los tres «Bicameral» son GEN*, así que no comparten prefijo de SKU: la familia
+  // es la del SKU de la última edición disponible (`GEN5C2G3`, Bicameral 3). Al
+  // abrir una edición nueva hay que apuntar el alias al SKU nuevo — es el precio
+  // de que Cerberus no les haya dado un prefijo propio.
+  ...aliasesDe("GEN5C2G3", "Bicameral", [
+    "bicameral",
+    "gestion parlamentaria bicameral",
+    "bicameral para diputados y senadores",
+  ]),
+  // Producto propio, NO es el «Director de Seguridad» (DIPDIRS): otro SKU, otro
+  // precio. Ninguno de sus alias contiene al del otro, así que no compiten.
+  ...aliasesDe("GENCDE6AE", "Dirección Corporativa de Seguridad", [
+    "direccion corporativa de seguridad",
+    "director corporativo de seguridad",
+  ]),
+  ...aliasesDe("EPCVETC", "Estrategia Territorial en Campañas Electorales", [
+    "estrategia territorial",
+    "estrategia territorial en campanas electorales",
+  ]),
+  ...aliasesDe("GEN15527B", "Cartografía Electoral", [
+    "cartografia electoral",
+    "cartografia electoral y estrategia territorial",
+  ]),
+  // El Foro es un EVENTO, no un curso, y aun así la gente llega por él: sin
+  // alias, sus 6 personas caían en «sin curso identificado».
+  ...aliasesDe("EVGLINTEST", "Foro de Estado Perú 2026", [
+    "foro de estado",
+    "foro de estado peru",
+    "i foro de estado 2026",
+  ]),
 ];
 
 /** Azúcar para que la semilla se lea como lo que es: una familia y sus formas de escribirla. */

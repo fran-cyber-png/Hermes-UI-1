@@ -47,6 +47,42 @@ test("cada GEN* es su propia familia — no se agrupan entre sí", () => {
   assert.notEqual(a.familia, b.familia);
 });
 
+/**
+ * Los tres GEN* REALES del catálogo (26-jul-2026) son cursos que no tienen NADA
+ * que ver entre sí. Si algún día el prefijo volviera a ser la familia, los tres
+ * caerían en la misma bolsa «GEN» y el Dashboard mostraría 738 personas
+ * interesadas en un curso que no existe.
+ */
+test("Bicameral, Cartografía y Dirección Corporativa NO caen en una bolsa «GEN»", () => {
+  const familias = [
+    familiaDeProducto("GEN5C4BE8", "Diploma de especialización Bicameral 1").familia,
+    familiaDeProducto("GEN15527B", "Diploma intensivo en entrenamiento de Cartografía Electoral 1").familia,
+    familiaDeProducto("GENCDE6AE", "Diploma Élite Internacional En Dirección Corporativa De Seguridad").familia,
+  ];
+  assert.equal(new Set(familias).size, 3, "tres cursos distintos, tres familias distintas");
+  assert.equal(familias.includes("GEN"), false, "«GEN» no es una familia: es un prefijo sin dueño");
+});
+
+/**
+ * EL SKU CON SUFIJO DE DESAMBIGUACIÓN. En el catálogo vivo conviven
+ * `DIPICOT003-6B5D` y `DIPCOCO003-EB71` con sus hermanos sin sufijo. Con el
+ * patrón viejo (`^([A-Z]+)(\d+)$`) esos SKUs no matcheaban y la familia
+ * terminaba siendo el SKU entero: la edición 3 de Inteligencia quedaba fuera de
+ * DIPICOT, invisible para `ultimaEdicion` y como fila propia en el selector.
+ */
+test("un SKU con sufijo `-XXXX` sigue siendo de su familia, con su edición", () => {
+  const f = familiaDeProducto("DIPICOT003-6B5D", "Diploma de Especialización en Inteligencia y Contrainteligencia 3");
+  assert.equal(f.familia, "DIPICOT");
+  assert.equal(f.edicion, 3);
+  assert.equal(familiaDeProducto("DIPCOCO002-BFA8", "Diploma de Contraterrorismo 2").familia, "DIPCOCO");
+});
+
+test("el Foro de Estado es un evento del catálogo y tiene familia como cualquier otro", () => {
+  const f = familiaDeProducto("EVGLINTEST003", "Foro De Estado Perú 2026");
+  assert.equal(f.familia, "EVGLINTEST");
+  assert.equal(f.edicion, 3);
+});
+
 test("el nombre corto se queda sin el número de edición (es lo que se trunca hoy)", () => {
   assert.equal(
     familiaDeProducto("DIPICOT026", "Diploma Internacional de Inteligencia y Contrainteligencia 26").nombreCorto,

@@ -21,27 +21,52 @@ import { ALIAS_SEMILLA, type AliasCurso } from "./alias.js";
  * llenaría el log del server con la misma línea.
  */
 let yaAvisoFalta = false;
+let yaAvisoSinAdId = false;
 
 export async function aliasesActivos(base: typeof db): Promise<AliasCurso[]> {
   try {
-    const filas = await base
+    return await base
       .select({
         alias: aliasCurso.alias,
         familia: aliasCurso.familia,
         nombreCurso: aliasCurso.nombreCurso,
+        adId: aliasCurso.adId,
       })
       .from(aliasCurso)
       .where(eq(aliasCurso.activo, true));
-    return filas;
   } catch (err) {
-    if (!yaAvisoFalta) {
-      yaAvisoFalta = true;
-      console.error(
-        "[cursos] no se pudieron leer los alias de curso (¿falta `npm run db:push`?): " +
-          `${(err as Error).message}. El interés derivado queda apagado hasta que la tabla exista.`,
-      );
+    // DEGRADACIÓN EN DOS ESCALONES, y el orden importa: `ad_id` es una columna
+    // NUEVA (26-jul) y el `db:push` es manual. Sin este reintento, un server ya
+    // desplegado perdería TODO el diccionario —los 30 alias que hoy funcionan—
+    // por una columna que todavía no existe. Se pierde el mapeo por anuncio, no
+    // la atribución entera.
+    try {
+      const filas = await base
+        .select({
+          alias: aliasCurso.alias,
+          familia: aliasCurso.familia,
+          nombreCurso: aliasCurso.nombreCurso,
+        })
+        .from(aliasCurso)
+        .where(eq(aliasCurso.activo, true));
+      if (!yaAvisoSinAdId) {
+        yaAvisoSinAdId = true;
+        console.warn(
+          "[cursos] `alias_curso.ad_id` no existe todavía: sirvo los alias SIN el mapeo por " +
+            "anuncio. Corré `npm run db:push` para habilitarlo.",
+        );
+      }
+      return filas;
+    } catch {
+      if (!yaAvisoFalta) {
+        yaAvisoFalta = true;
+        console.error(
+          "[cursos] no se pudieron leer los alias de curso (¿falta `npm run db:push`?): " +
+            `${(err as Error).message}. El interés derivado queda apagado hasta que la tabla exista.`,
+        );
+      }
+      return [];
     }
-    return [];
   }
 }
 
@@ -62,7 +87,14 @@ export async function sembrarAliasCurso(
   if (semilla.length === 0) return 0;
   const insertadas = await base
     .insert(aliasCurso)
-    .values(semilla.map((a) => ({ alias: a.alias, familia: a.familia, nombreCurso: a.nombreCurso })))
+    .values(
+      semilla.map((a) => ({
+        alias: a.alias,
+        familia: a.familia,
+        nombreCurso: a.nombreCurso,
+        adId: a.adId ?? null,
+      })),
+    )
     .onConflictDoNothing()
     .returning({ id: aliasCurso.id });
   return insertadas.length;
