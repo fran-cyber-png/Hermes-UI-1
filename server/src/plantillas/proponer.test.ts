@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { ALIAS_SEMILLA } from "../cursos/alias.js";
 import { firmaDeMensaje, nombreDeSecuencia, proponerSecuencias, type SalienteMinado } from "./proponer.js";
 
 /**
@@ -128,6 +129,83 @@ test("el nombre de la secuencia sale de su primer paso, no de un contador", () =
     nombreDeSecuencia({ orden: 1, texto: null, conMedia: true, respaldo: 1, cuota: 1 }),
     /imagen/i,
   );
+});
+
+/**
+ * ══ LA SECUENCIA REAL DEL DUEÑO, LA DE DOS PASOS ════════════════════════════
+ *
+ * «(1) 👋Hola buenos días, te saluda Sofía… (2) el flyer con imagen». El minado
+ * la encontraba PARTIDA en dos propuestas de un paso (419 y 296 conversaciones)
+ * porque agrupa por el primer mensaje y la hora del día cae dentro de los 40
+ * caracteres de la firma: «buenos días» y «buenas tardes» eran dos arranques
+ * distintos, cada uno con la mitad del respaldo, y ninguno le ganaba al flyer.
+ */
+const SOFIA_MANANA =
+  "👋Hola buenos días, te saluda *Sofía, asesora comercial de Goberna*. En seguida te comparto la información del diploma.";
+const SOFIA_TARDE =
+  "👋Hola buenas tardes, te saluda *Sofía, asesora comercial de Goberna*. En seguida te comparto la información del diploma.";
+
+test("«buenos días» y «buenas tardes» son EL MISMO saludo: no parten el cohorte", () => {
+  assert.equal(firmaDeMensaje(SOFIA_MANANA, false), firmaDeMensaje(SOFIA_TARDE, false));
+  assert.equal(
+    firmaDeMensaje("Hola buenas noches, te saluda Sofía", false),
+    firmaDeMensaje("Hola buenos días, te saluda Sofía", false),
+  );
+});
+
+test("«buen día» no es lo mismo que el resto del mensaje: el colapso no borra palabras", () => {
+  assert.notEqual(firmaDeMensaje(SOFIA_MANANA, false), firmaDeMensaje("Hola buenos días", false));
+});
+
+test("la secuencia de DOS pasos (saludo → flyer) se propone entera", () => {
+  const datos = [
+    ...conversaciones("m", 11, [{ texto: SOFIA_MANANA }, { texto: FLYER, conMedia: true }]),
+    ...conversaciones("t", 10, [{ texto: SOFIA_TARDE }, { texto: FLYER, conMedia: true }]),
+    // Y el otro arranque real: el flyer directo, con menos respaldo que los dos juntos.
+    ...conversaciones("f", 15, [{ texto: FLYER, conMedia: true }, { texto: TEMARIO }]),
+  ];
+
+  const propuestas = proponerSecuencias(datos, OPCIONES);
+  const saludo = propuestas.find((p) => p.pasos[0].texto?.includes("Sofía"));
+
+  assert.ok(saludo, "el saludo tiene que llegar a ser una propuesta, no partirse en dos");
+  assert.equal(saludo.respaldo, 21, "los dos horarios suman un solo cohorte");
+  assert.equal(saludo.pasos.length, 2, "y su segundo paso —el flyer— aparece");
+  assert.equal(saludo.pasos[1].conMedia, true);
+  assert.equal(propuestas[0].respaldo, 21, "el cohorte unido ahora le gana al flyer suelto");
+});
+
+/**
+ * ══ LA FAMILIA DE CURSO, INFERIDA ═══════════════════════════════════════════
+ *
+ * Sin familia, una propuesta aprobada NO matchea con el curso de ninguna
+ * conversación: queda aprobada e inútil. Y el dato estaba en el propio texto.
+ */
+test("la familia se infiere del texto minado: el flyer dice de qué diploma habla", () => {
+  const datos = conversaciones("a", 30, [{ texto: FLYER, conMedia: true }]);
+  const [s] = proponerSecuencias(datos, { ...OPCIONES, aliases: ALIAS_SEMILLA });
+  assert.equal(s.familia, "DIPICOT");
+  assert.equal(s.curso, "Inteligencia y Contrainteligencia");
+});
+
+test("la familia sale de TODA la secuencia: el saludo no nombra el curso, el paso 2 sí", () => {
+  const datos = conversaciones("a", 30, [{ texto: SOFIA_MANANA }, { texto: FLYER, conMedia: true }]);
+  const [s] = proponerSecuencias(datos, { ...OPCIONES, aliases: ALIAS_SEMILLA });
+  assert.equal(s.familia, "DIPICOT");
+});
+
+test("si el texto no nombra ningún curso NO se inventa una familia", () => {
+  const datos = conversaciones("a", 30, [{ texto: "Hola, ya te respondo en un momento" }]);
+  const [s] = proponerSecuencias(datos, { ...OPCIONES, aliases: ALIAS_SEMILLA });
+  assert.equal(s.familia, null);
+  assert.equal(s.curso, null);
+});
+
+test("sin diccionario cargado la propuesta sale igual, solo que sin familia", () => {
+  const datos = conversaciones("a", 30, [{ texto: FLYER, conMedia: true }]);
+  const [s] = proponerSecuencias(datos, OPCIONES);
+  assert.equal(s.familia, null);
+  assert.equal(s.pasos.length, 1, "el minado no depende del diccionario para funcionar");
 });
 
 test("el literal que se guarda es el texto EXACTO más repetido, no una mezcla", () => {

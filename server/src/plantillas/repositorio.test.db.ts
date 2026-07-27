@@ -94,6 +94,8 @@ test("una propuesta minada nace PROPUESTA y con la imagen pendiente marcada", as
     {
       nombre: "Flyer y temario",
       respaldo: 415,
+      familia: "DIPICOT",
+      curso: "Inteligencia y Contrainteligencia",
       pasos: [
         { orden: 1, texto: "DIPLOMA…", conMedia: true, respaldo: 415, cuota: 0.7 },
         { orden: 2, texto: "Temario del diploma", conMedia: true, respaldo: 190, cuota: 0.4 },
@@ -114,6 +116,8 @@ test("re-correr el minado no duplica: reemplaza las propuestas sin aprobar", asy
   const propuesta = {
     nombre: "Flyer",
     respaldo: 100,
+    familia: null,
+    curso: null,
     pasos: [{ orden: 1, texto: "hola", conMedia: false, respaldo: 100, cuota: 1 }],
   };
 
@@ -126,13 +130,13 @@ test("re-correr el minado no duplica: reemplaza las propuestas sin aprobar", asy
 test("re-correr el minado NUNCA pisa una propuesta que alguien ya aprobó", async (t) => {
   const db = await baseDePrueba(t);
   await guardarPropuestas(db, V, [
-    { nombre: "Vieja", respaldo: 10, pasos: [{ orden: 1, texto: "x", conMedia: false, respaldo: 10, cuota: 1 }] },
+    { nombre: "Vieja", respaldo: 10, familia: null, curso: null, pasos: [{ orden: 1, texto: "x", conMedia: false, respaldo: 10, cuota: 1 }] },
   ]);
   const [vieja] = await listarPlantillas(db, V);
-  await aprobarPlantilla(db, V, vieja.id);
+  await aprobarPlantilla(db, V, vieja.id, null);
 
   await guardarPropuestas(db, V, [
-    { nombre: "Nueva", respaldo: 20, pasos: [{ orden: 1, texto: "y", conMedia: false, respaldo: 20, cuota: 1 }] },
+    { nombre: "Nueva", respaldo: 20, familia: null, curso: null, pasos: [{ orden: 1, texto: "y", conMedia: false, respaldo: 20, cuota: 1 }] },
   ]);
 
   const vivas = await listarPlantillas(db, V);
@@ -145,12 +149,12 @@ test("re-correr el minado NUNCA pisa una propuesta que alguien ya aprobó", asyn
 test("aprobar es lo único que vuelve enviable una propuesta", async (t) => {
   const db = await baseDePrueba(t);
   await guardarPropuestas(db, V, [
-    { nombre: "P", respaldo: 5, pasos: [{ orden: 1, texto: "x", conMedia: false, respaldo: 5, cuota: 1 }] },
+    { nombre: "P", respaldo: 5, familia: null, curso: null, pasos: [{ orden: 1, texto: "x", conMedia: false, respaldo: 5, cuota: 1 }] },
   ]);
   const [p] = await listarPlantillas(db, V);
   assert.equal(p.estado, "propuesta");
 
-  const aprobada = await aprobarPlantilla(db, V, p.id);
+  const aprobada = await aprobarPlantilla(db, V, p.id, "DIPICOT");
   assert.equal(aprobada?.estado, "aprobada");
 });
 
@@ -162,7 +166,7 @@ test("la lista ordena: aprobadas por uso, después propuestas por respaldo", asy
   await sumarUso(db, b.id);
   await sumarUso(db, a.id);
   await guardarPropuestas(db, V, [
-    { nombre: "Propuesta", respaldo: 999, pasos: [{ orden: 1, texto: "x", conMedia: false, respaldo: 9, cuota: 1 }] },
+    { nombre: "Propuesta", respaldo: 999, familia: null, curso: null, pasos: [{ orden: 1, texto: "x", conMedia: false, respaldo: 9, cuota: 1 }] },
   ]);
 
   const vivas = await listarPlantillas(db, V);
@@ -171,6 +175,96 @@ test("la lista ordena: aprobadas por uso, después propuestas por respaldo", asy
     ["Muy usada", "Poco usada", "Propuesta"],
   );
   assert.equal(vivas[0].usos, 2);
+});
+
+/**
+ * ══ LA REVISIÓN DE PROPUESTAS (26-jul-2026) ═════════════════════════════════
+ *
+ * El bug en producción: el minado guardó DOS propuestas (418 y 296
+ * conversaciones de respaldo) y la app le decía «Todavía no hay secuencias» al
+ * dueño, porque la visibilidad estaba atada al `vendedoraId` con el que corrió
+ * el script. Invisibles, y sin ninguna forma de aprobarlas desde la app.
+ */
+test("una propuesta minada la ve CUALQUIER vendedora: no es de nadie hasta que se aprueba", async (t) => {
+  const db = await baseDePrueba(t);
+  await guardarPropuestas(db, V, [
+    {
+      nombre: "Flyer del diploma",
+      respaldo: 418,
+      familia: "DIPICOT",
+      curso: "Inteligencia y Contrainteligencia",
+      pasos: [{ orden: 1, texto: "DIPLOMA…", conMedia: true, respaldo: 418, cuota: 0.8 }],
+    },
+  ]);
+
+  const desdeOtra = await listarPlantillas(db, OTRA);
+  assert.equal(desdeOtra.length, 1, "la propuesta del equipo se ve desde otra sesión");
+  assert.equal(desdeOtra[0].estado, "propuesta");
+  assert.equal(desdeOtra[0].familiaCurso, "DIPICOT", "el minado ya infirió el curso");
+});
+
+test("una plantilla APROBADA de otra vendedora sigue siendo privada", async (t) => {
+  const db = await baseDePrueba(t);
+  await crearPlantilla(db, V, { nombre: "Mía", pasos: SECUENCIA });
+  assert.deepEqual(await listarPlantillas(db, OTRA), []);
+});
+
+test("aprobar la vuelve activa, con su curso, y disponible para sugerir", async (t) => {
+  const db = await baseDePrueba(t);
+  await guardarPropuestas(db, V, [
+    {
+      nombre: "Flyer del diploma",
+      respaldo: 418,
+      familia: "DIPICOT",
+      curso: "Inteligencia y Contrainteligencia",
+      pasos: [{ orden: 1, texto: "Te comparto la info del diploma", conMedia: false, respaldo: 418, cuota: 0.8 }],
+    },
+  ]);
+  const [propuesta] = await listarPlantillas(db, OTRA);
+
+  const aprobada = await aprobarPlantilla(db, OTRA, propuesta.id, "DIPICOT");
+
+  assert.equal(aprobada?.estado, "aprobada");
+  assert.equal(aprobada?.familiaCurso, "DIPICOT");
+  // Y ahora es de quien la aprobó: aprobar es hacerse cargo.
+  const deQuienAprobo = await listarPlantillas(db, OTRA);
+  assert.equal(deQuienAprobo[0].estado, "aprobada");
+  assert.deepEqual(await listarPlantillas(db, V), [], "deja de estar en el pozo común");
+});
+
+test("aprobar puede CAMBIAR la familia que el minado infirió", async (t) => {
+  const db = await baseDePrueba(t);
+  await guardarPropuestas(db, V, [
+    {
+      nombre: "P",
+      respaldo: 30,
+      familia: "DIPICOT",
+      curso: "Inteligencia y Contrainteligencia",
+      pasos: [{ orden: 1, texto: "x", conMedia: false, respaldo: 30, cuota: 1 }],
+    },
+  ]);
+  const [p] = await listarPlantillas(db, V);
+
+  const aprobada = await aprobarPlantilla(db, V, p.id, "DIPOSOC");
+  assert.equal(aprobada?.familiaCurso, "DIPOSOC");
+});
+
+test("descartar una propuesta del equipo se puede: es parte de revisarla", async (t) => {
+  const db = await baseDePrueba(t);
+  await guardarPropuestas(db, V, [
+    {
+      nombre: "No sirve",
+      respaldo: 25,
+      familia: null,
+      curso: null,
+      pasos: [{ orden: 1, texto: "x", conMedia: false, respaldo: 25, cuota: 1 }],
+    },
+  ]);
+  const [p] = await listarPlantillas(db, OTRA);
+
+  assert.equal(await archivarPlantilla(db, OTRA, p.id), true);
+  assert.deepEqual(await listarPlantillas(db, OTRA), []);
+  assert.deepEqual(await listarPlantillas(db, V), []);
 });
 
 test("un paso con archivo guarda su media y no queda pendiente", async (t) => {

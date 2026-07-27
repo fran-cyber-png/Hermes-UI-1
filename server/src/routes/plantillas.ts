@@ -12,6 +12,7 @@ import { resolverCurso } from "../plantillas/catalogo.js";
 import { agruparEnFamilias } from "../plantillas/familias.js";
 import { catalogoActivo } from "../plantillas/catalogo.js";
 import { expandirCuerpo, exigeCurso } from "../plantillas/expandir.js";
+import { decidirAprobacion } from "../plantillas/aprobacion.js";
 import {
   aprobarPlantilla,
   archivarPlantilla,
@@ -213,14 +214,44 @@ plantillasRouter.patch("/:id", async (req, res) => {
   res.json({ ok: true, plantilla });
 });
 
-/** Aprobar una propuesta minada: el acto humano que la vuelve enviable. */
+/**
+ * APROBAR una propuesta minada: el acto humano que la vuelve enviable.
+ *
+ * El body lleva la decisión sobre el curso — `{ familiaCurso: "DIPICOT" }` o
+ * `{ familiaCurso: null }` («sirve para cualquier curso»). **Omitir la clave no
+ * es lo mismo que mandarla en `null`**: omitirla significa «no dije nada», y
+ * entonces vale la familia que la plantilla ya tenía. Si tampoco tiene, la
+ * aprobación se rechaza con `falta_familia` en vez de dejar una plantilla
+ * aprobada que no puede matchear con ninguna conversación.
+ *
+ * Quién puede: cualquier vendedora, porque una propuesta minada es del equipo
+ * (`repositorio.ts#visiblePara`). Al aprobarla pasa a ser suya.
+ */
+const aprobarSchema = z.object({
+  familiaCurso: z.string().max(40).nullable().optional(),
+});
+
 plantillasRouter.post("/:id/aprobar", async (req, res) => {
   const id = Number(req.params.id);
-  const plantilla = Number.isInteger(id) ? await aprobarPlantilla(db, req.vendedoraId!, id) : null;
-  if (!plantilla) {
+  const parsed = aprobarSchema.safeParse(req.body ?? {});
+  if (!Number.isInteger(id) || !parsed.success) {
+    res.status(400).json({ ok: false, message: "id o curso inválidos" });
+    return;
+  }
+
+  const actual = await obtenerPlantilla(db, req.vendedoraId!, id);
+  if (!actual) {
     res.status(404).json({ ok: false, message: "esa plantilla no existe o no es tuya" });
     return;
   }
+
+  const decision = decidirAprobacion(actual, parsed.data);
+  if (!decision.ok) {
+    res.status(409).json({ ok: false, codigo: decision.motivo, message: decision.mensaje });
+    return;
+  }
+
+  const plantilla = await aprobarPlantilla(db, req.vendedoraId!, id, decision.familiaCurso);
   res.json({ ok: true, plantilla });
 });
 

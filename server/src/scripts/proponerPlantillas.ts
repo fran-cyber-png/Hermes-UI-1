@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { proponerSecuencias, type SalienteMinado } from "../plantillas/proponer.js";
 import { guardarPropuestas } from "../plantillas/repositorio.js";
+import { aliasesActivos } from "../cursos/repositorio.js";
 
 /**
  * APRENDER LA SECUENCIA DEL HISTÓRICO — el script que le deja a la vendedora sus
@@ -73,10 +74,14 @@ async function main() {
     conMedia: f.con_media,
   }));
 
-  const propuestas = proponerSecuencias(salientes);
+  // El diccionario de `alias_curso`: con él, la propuesta nace sabiendo de qué
+  // diploma habla («DIPLOMA INTERNACIONAL DE INTELIGENCIA…» → DIPICOT) y quien
+  // revisa solo confirma. Sin él el minado funciona igual, pero sin familia.
+  const aliases = await aliasesActivos(db);
+  const propuestas = proponerSecuencias(salientes, { aliases });
 
   console.log(`\nVentana: conversaciones nuevas de los últimos ${dias} días`);
-  console.log(`Salientes minados: ${salientes.length}\n`);
+  console.log(`Salientes minados: ${salientes.length} · alias de curso: ${aliases.length}\n`);
 
   if (propuestas.length === 0) {
     console.log("No hay ninguna secuencia con respaldo suficiente. No se propone nada.\n");
@@ -84,7 +89,8 @@ async function main() {
   }
 
   propuestas.forEach((p, i) => {
-    console.log(`── Propuesta ${i + 1} · «${p.nombre}» · ${p.respaldo} conversaciones`);
+    const curso = p.curso ? ` · curso inferido: ${p.curso} (${p.familia})` : " · SIN curso inferido";
+    console.log(`── Propuesta ${i + 1} · «${p.nombre}» · ${p.respaldo} conversaciones${curso}`);
     for (const paso of p.pasos) {
       const marca = paso.conMedia ? "[imagen] " : "";
       const cuota = `${Math.round(paso.cuota * 100)}%`;
@@ -102,7 +108,10 @@ async function main() {
 
   const n = await guardarPropuestas(db, vendedora, propuestas);
   console.log(`Guardadas ${n} propuestas para «${vendedora}», en estado PROPUESTA.`);
-  console.log("Nadie las puede mandar hasta que alguien las revise y las apruebe.\n");
+  console.log("Nadie las puede mandar hasta que alguien las revise y las apruebe.");
+  console.log(
+    "Se revisan DESDE LA APP: chat → panel derecho → pestaña «Enviar» → «Para revisar».\n",
+  );
   process.exit(0);
 }
 

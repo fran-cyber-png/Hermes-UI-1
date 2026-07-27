@@ -30,6 +30,8 @@
  * mandarlo sin leer sería exactamente la automatización que la casa prohíbe.
  */
 
+import { familiaDeTexto, type AliasCurso } from "../cursos/alias.js";
+
 /** Un mensaje saliente del histórico, con su posición dentro de la conversación. */
 export interface SalienteMinado {
   clave: string;
@@ -54,6 +56,19 @@ export interface SecuenciaPropuesta {
   pasos: PasoPropuesto[];
   /** Cuántas conversaciones arrancaron así. Es el respaldo de toda la secuencia. */
   respaldo: number;
+  /**
+   * LA FAMILIA DE CURSO INFERIDA del propio texto minado, o `null` si el
+   * diccionario no reconoció ninguna.
+   *
+   * Sin esto, una propuesta nacía con `familia_curso` en NULL y —aunque alguien
+   * la aprobara— no matcheaba con el curso de ninguna conversación: aprobada e
+   * inútil. Y el dato estaba a la vista: el flyer dice «DIPLOMA INTERNACIONAL DE
+   * INTELIGENCIA Y CONTRAINTELIGENCIA». Se infiere para que el humano solo tenga
+   * que CONFIRMAR, que es una decisión de un segundo, en vez de investigar.
+   */
+  familia: string | null;
+  /** El nombre legible de esa familia — lo que la pantalla de revisión muestra. */
+  curso: string | null;
 }
 
 export interface OpcionesPropuesta {
@@ -65,6 +80,8 @@ export interface OpcionesPropuesta {
   maxPasos?: number;
   /** Cuántos arranques distintos proponer (el flyer y el saludo son dos formas). */
   variantes?: number;
+  /** El diccionario con el que se infiere la familia de curso. Sin él, no se infiere. */
+  aliases?: readonly AliasCurso[];
 }
 
 const DEFAULTS: Required<OpcionesPropuesta> = {
@@ -72,6 +89,7 @@ const DEFAULTS: Required<OpcionesPropuesta> = {
   minCuota: 0.25,
   maxPasos: 6,
   variantes: 2,
+  aliases: [],
 };
 
 /**
@@ -89,12 +107,26 @@ const DEFAULTS: Required<OpcionesPropuesta> = {
  */
 const LARGO_FIRMA = 40;
 
+/**
+ * LA HORA DEL DÍA NO ES UN MENSAJE DISTINTO.
+ *
+ * «Hola **buenos días**, te saluda Sofía…» y «Hola **buenas tardes**, te
+ * saluda Sofía…» son el mismo primer paso mandado a distinta hora. Como la firma
+ * corta al encabezado, esa diferencia caía DENTRO de los 40 caracteres y partía
+ * el cohorte en dos (195 y 180 conversaciones en la minería de prod) — con el
+ * resultado de que el saludo perdía contra el flyer y **la secuencia de dos
+ * pasos que el dueño mostró no se proponía nunca**. Colapsarlas es lo que la
+ * hace aparecer.
+ */
+const SALUDO_HORARIO = /\bbuen(?:os|as)\s+(?:dias|tardes|noches)\b/g;
+
 export function firmaDeMensaje(texto: string | null, conMedia: boolean): string {
   const nucleo = (texto ?? "")
     .normalize("NFD")
     .replace(/\p{M}/gu, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
+    .replace(SALUDO_HORARIO, "saludo")
     .trim()
     .slice(0, LARGO_FIRMA);
   return `${conMedia ? "M" : "T"}|${nucleo}`;
@@ -207,7 +239,16 @@ export function proponerSecuencias(
     }
 
     if (pasos.length === 0) continue;
-    secuencias.push({ nombre: nombreDeSecuencia(pasos[0]), pasos, respaldo: cohorte.length });
+    // La familia sale del texto de TODA la secuencia, no solo del primer paso: el
+    // saludo de la asesora no nombra ningún curso y el flyer que viene después sí.
+    const alias = familiaDeTexto(o.aliases, pasos.map((p) => p.texto ?? "").join(" \n "));
+    secuencias.push({
+      nombre: nombreDeSecuencia(pasos[0]),
+      pasos,
+      respaldo: cohorte.length,
+      familia: alias?.familia ?? null,
+      curso: alias?.nombreCurso ?? null,
+    });
   }
 
   return secuencias.sort((a, b) => b.respaldo - a.respaldo);

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { db } from "../db/client.js";
 import { plantillaPasos, plantillas } from "../db/schema.js";
 import type { SecuenciaPropuesta } from "./proponer.js";
@@ -101,6 +101,31 @@ async function pasosDe(base: typeof db, ids: number[]): Promise<Map<number, Paso
 }
 
 /**
+ * QUÉ VE UNA VENDEDORA: lo suyo, **más las propuestas del minado**.
+ *
+ * Las aprobadas son personales: las escribió ella y son las que puede mandar.
+ * Las **propuestas minadas no son de nadie** — salen del histórico del equipo, y
+ * el script las guarda bajo UN `vendedoraId` porque la tabla exige uno. Con la
+ * visibilidad atada a esa columna pasó lo que tenía que pasar: el minado guardó
+ * dos propuestas con 418 y 296 conversaciones de respaldo, y la app le decía
+ * «Todavía no hay secuencias» a todo el mundo menos a esa vendedora. Invisibles,
+ * y sin ninguna forma de revisarlas desde la app.
+ *
+ * Verlas es seguro por construcción: una propuesta **no se puede mandar**
+ * (`routes/plantillas.ts`, guarda 1). Al aprobarla, alguien se hace cargo y pasa
+ * a ser suya.
+ */
+function visiblePara(vendedoraId: string) {
+  return and(
+    or(
+      eq(plantillas.vendedoraId, vendedoraId),
+      and(eq(plantillas.origen, "minado"), eq(plantillas.estado, "propuesta")),
+    ),
+    isNull(plantillas.archivadoAt),
+  );
+}
+
+/**
  * Las plantillas vivas de la vendedora, con sus pasos. Orden: primero las
  * aprobadas (son las que se pueden mandar) por uso, después las propuestas por
  * respaldo — la propuesta que el histórico respalda más, arriba de las otras.
@@ -109,7 +134,7 @@ export async function listarPlantillas(base: typeof db, vendedoraId: string): Pr
   const filas = await base
     .select()
     .from(plantillas)
-    .where(and(eq(plantillas.vendedoraId, vendedoraId), isNull(plantillas.archivadoAt)))
+    .where(visiblePara(vendedoraId))
     .orderBy(asc(plantillas.nombre));
 
   const pasos = await pasosDe(
@@ -135,7 +160,7 @@ export async function listarPlantillas(base: typeof db, vendedoraId: string): Pr
     });
 }
 
-/** Una plantilla propia con sus pasos. `null` si no existe o no es suya (→ 404). */
+/** Una plantilla que esta vendedora puede ver. `null` si no existe o no la alcanza (→ 404). */
 export async function obtenerPlantilla(
   base: typeof db,
   vendedoraId: string,
@@ -144,13 +169,7 @@ export async function obtenerPlantilla(
   const [f] = await base
     .select()
     .from(plantillas)
-    .where(
-      and(
-        eq(plantillas.id, id),
-        eq(plantillas.vendedoraId, vendedoraId),
-        isNull(plantillas.archivadoAt),
-      ),
-    );
+    .where(and(eq(plantillas.id, id), visiblePara(vendedoraId)));
   if (!f) return null;
 
   const pasos = await pasosDe(base, [id]);
@@ -233,22 +252,37 @@ export async function editarPlantilla(
  * APROBAR: el acto humano que convierte una propuesta minada en algo enviable.
  * Sin este paso, lo que salió del histórico no se puede mandar — es la línea
  * entre «te sugiero» y «lo hice solo».
+ *
+ * Aprobar **se hace cargo**: la plantilla pasa a ser de quien la aprobó. Una
+ * propuesta la ve todo el equipo (`visiblePara`); una aprobada tiene dueño, que
+ * es quien responde por lo que sale.
+ *
+ * `familiaCurso` viene resuelto por quien revisó (la inferida del minado
+ * confirmada, otra, o `null` explícito = «sirve para cualquier curso»). Qué se
+ * puede aprobar y qué no lo decide `aprobacion.ts`, puro; acá solo se escribe.
  */
 export async function aprobarPlantilla(
   base: typeof db,
   vendedoraId: string,
   id: number,
+  familiaCurso: string | null,
 ): Promise<Plantilla | null> {
   const actual = await obtenerPlantilla(base, vendedoraId, id);
   if (!actual) return null;
   await base
     .update(plantillas)
-    .set({ estado: "aprobada", actualizadoAt: new Date() })
+    .set({ estado: "aprobada", vendedoraId, familiaCurso, actualizadoAt: new Date() })
     .where(eq(plantillas.id, id));
   return obtenerPlantilla(base, vendedoraId, id);
 }
 
-/** Archiva (soft-delete). Los pasos quedan: la plantilla se puede desarchivar a mano. */
+/**
+ * Archiva (soft-delete). Los pasos quedan: la plantilla se puede desarchivar a mano.
+ *
+ * Alcanza también a las propuestas del equipo: **descartar es parte de revisar**.
+ * Si solo se pudieran archivar las propias, una propuesta que no sirve quedaría
+ * para siempre arriba de la lista de todo el mundo.
+ */
 export async function archivarPlantilla(
   base: typeof db,
   vendedoraId: string,
@@ -257,13 +291,7 @@ export async function archivarPlantilla(
   const filas = await base
     .update(plantillas)
     .set({ archivadoAt: new Date() })
-    .where(
-      and(
-        eq(plantillas.id, id),
-        eq(plantillas.vendedoraId, vendedoraId),
-        isNull(plantillas.archivadoAt),
-      ),
-    )
+    .where(and(eq(plantillas.id, id), visiblePara(vendedoraId)))
     .returning({ id: plantillas.id });
   return filas.length > 0;
 }
@@ -302,6 +330,11 @@ export async function guardarPropuestas(
       .values({
         vendedoraId,
         nombre: p.nombre,
+        // La familia que el minado infirió del propio texto. Sin ella la
+        // plantilla nacía sin curso y —aunque alguien la aprobara— no matcheaba
+        // con ninguna conversación: aprobada e inútil. Es una PROPUESTA, no un
+        // hecho: quien revisa la confirma o la cambia antes de aprobar.
+        familiaCurso: p.familia ?? null,
         estado: "propuesta",
         origen: "minado",
         respaldo: p.respaldo,
