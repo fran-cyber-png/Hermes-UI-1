@@ -51,6 +51,15 @@ export interface ConfigAutoRespuesta {
   /** Cuánto tiene que llevar esperando el último entrante. */
   esperaMinutos: number;
   /**
+   * Y hasta cuándo sigue teniendo sentido acusar recibo. Es el techo que faltaba
+   * (#166): la feature se diseñó para el hueco de la madrugada —llega a las 2
+   * a. m., se le acusa a las 7:30— y sin cota superior vaciaba un atraso de
+   * días. Las 40 preparadas del 27-jul esperaban entre 57 y 72 horas: un
+   * «gracias por escribirnos» a los tres días es peor que el silencio, porque
+   * confirma que nadie miró. Más viejo que esto es trabajo de la vendedora.
+   */
+  maxEsperaHoras: number;
+  /**
    * A qué horas es aceptable que salga un mensaje. Un lead que escribe a las
    * 3 a. m. NO recibe respuesta a las 3:01: eso despierta gente. Lo de la
    * madrugada se acumula y sale a partir de las 7:30.
@@ -86,6 +95,9 @@ export const CONFIG_POR_DEFECTO: ConfigAutoRespuesta = {
   zona: 'America/Lima',
   franja: { desde: '09:00', hasta: '20:00' },
   esperaMinutos: 30,
+  // 12 horas: la que escribió a las 21:00 todavía alcanza el reparto de las
+  // 7:30 de la mañana siguiente, y la de anteayer no.
+  maxEsperaHoras: 12,
   ventanaDespacho: { desde: '07:30', hasta: '21:00' },
   espaciadoSegundos: [60, 240],
   techoPorHora: 20,
@@ -115,6 +127,9 @@ export function configDesdeEnv(env: NodeJS.ProcessEnv = process.env): ConfigAuto
     esperaMinutos: env.AUTO_RESPUESTA_ESPERA_MIN
       ? numeroPositivo('AUTO_RESPUESTA_ESPERA_MIN').parse(env.AUTO_RESPUESTA_ESPERA_MIN)
       : CONFIG_POR_DEFECTO.esperaMinutos,
+    maxEsperaHoras: env.AUTO_RESPUESTA_MAX_ESPERA_H
+      ? numeroPositivo('AUTO_RESPUESTA_MAX_ESPERA_H').parse(env.AUTO_RESPUESTA_MAX_ESPERA_H)
+      : CONFIG_POR_DEFECTO.maxEsperaHoras,
     espaciadoSegundos: env.AUTO_RESPUESTA_ESPACIADO
       ? rango(env.AUTO_RESPUESTA_ESPACIADO, 'AUTO_RESPUESTA_ESPACIADO')
       : CONFIG_POR_DEFECTO.espaciadoSegundos,

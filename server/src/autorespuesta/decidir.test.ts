@@ -4,9 +4,9 @@ import { CONFIG_POR_DEFECTO, type ConfigAutoRespuesta } from './config.js';
 import { decidir, type ConversacionCandidata } from './decidir.js';
 
 /**
- * LA ELEGIBILIDAD, con el reloj inyectado. Cada test fija UNA de las cinco
- * condiciones del contrato (issue #125) y su borde: el minuto 29 contra el 30,
- * las 8:59 contra las 9:00, la segunda del día, el que dijo que no.
+ * LA ELEGIBILIDAD, con el reloj inyectado. Cada test fija UNA condición del
+ * contrato (issues #125 y #166) y su borde: el minuto 29 contra el 30, las 8:59
+ * contra las 9:00, la segunda del día, el que dijo que no.
  *
  * Referencias horarias (Lima = UTC-5):
  *   02:00Z → 21:00 Lima (fuera de horario)
@@ -155,5 +155,134 @@ describe('la auto-respuesta NO corresponde', () => {
     ];
     const d = decidir(candidata({ curso: null }), cfg, MADRUGADA, rota);
     assert.equal(d.elegible === false && d.motivo, 'sin_plantilla');
+  });
+});
+
+/**
+ * LOS TRES DEFECTOS DE #166, sobre los datos que los descubrieron.
+ *
+ * El 27-jul a las 01:03 se prendió en supervisada y se prepararon 40 borradores.
+ * Ninguno salió, y al revisarlos con el dueño se vio que 25 eran de gente que
+ * había escrito EN horario, que las esperas iban de 57 a 72 horas, y que uno era
+ * para una conversación que la persona ya había cerrado. Cada test de acá abajo
+ * es uno de esos borradores, con su hora y su texto.
+ */
+describe('los borradores del 27-jul que no tenían que existir (#166)', () => {
+  /** 01:03 de Lima: el minuto exacto en que se prendió y se prepararon las 40. */
+  const CUANDO_SE_PRENDIO = new Date('2026-07-27T06:03:00Z');
+
+  test('escribió a las 10:47 de la mañana: no le corresponde un acuse de fuera de horario', () => {
+    const d = decidir(
+      // 26-jul 10:47 de Lima. Con la franja evaluada sobre el reloj, a la 1 AM
+      // esta conversación calificaba: 25 de las 40 eran así.
+      candidata({ ultimoEntranteEn: new Date('2026-07-26T15:47:00Z') }),
+      cfg,
+      CUANDO_SE_PRENDIO,
+    );
+    assert.equal(d.elegible === false && d.motivo, 'escribio_en_horario');
+    assert.ok(d.elegible === false && d.detalle.includes('10:47'), d.elegible === false ? d.detalle : '');
+  });
+
+  test('el borde de la franja, del lado del MENSAJE: 08:59 sí, 09:00 no', () => {
+    // Reloj a las 20:30 de Lima: ya cerró (la franja termina 20:00) y las dos
+    // esperas caben abajo del techo de 12 h, así que lo único que las separa es
+    // el minuto en que escribió cada una.
+    const alas2030 = new Date('2026-07-26T01:30:00Z');
+
+    const aLas0859 = decidir(candidata({ ultimoEntranteEn: new Date('2026-07-25T13:59:00Z') }), cfg, alas2030);
+    assert.equal(aLas0859.elegible, true, 'escribió un minuto antes de que abriéramos');
+
+    const aLas0900 = decidir(candidata({ ultimoEntranteEn: new Date('2026-07-25T14:00:00Z') }), cfg, alas2030);
+    assert.equal(aLas0900.elegible === false && aLas0900.motivo, 'escribio_en_horario');
+  });
+
+  test('esperó 70 horas: un «gracias por escribirnos» a los tres días es peor que el silencio', () => {
+    const d = decidir(
+      // 24-jul 03:00 de Lima — madrugada, o sea que la franja la deja pasar.
+      candidata({ ultimoEntranteEn: new Date('2026-07-24T08:00:00Z') }),
+      cfg,
+      CUANDO_SE_PRENDIO,
+    );
+    assert.equal(d.elegible === false && d.motivo, 'espera_excesiva');
+    assert.ok(d.elegible === false && d.detalle.includes('70 h'), d.elegible === false ? d.detalle : '');
+  });
+
+  test('el techo se mueve con la config: lo mismo entra o no según AUTO_RESPUESTA_MAX_ESPERA_H', () => {
+    const escribio = new Date('2026-07-27T06:00:00Z'); // 01:00 de Lima
+    const alas21 = new Date('2026-07-28T02:00:00Z'); // 21:00 de Lima: 20 h esperando
+
+    const conTechoAmplio = decidir(candidata({ ultimoEntranteEn: escribio }), { ...cfg, maxEsperaHoras: 24 }, alas21);
+    assert.equal(conTechoAmplio.elegible, true, 'con el techo en 24 h, 20 h de espera todavía entra');
+
+    const conTechoDefault = decidir(candidata({ ultimoEntranteEn: escribio }), cfg, alas21);
+    assert.equal(conTechoDefault.elegible === false && conTechoDefault.motivo, 'espera_excesiva');
+  });
+
+  /**
+   * El caso de la abogada (Morita, 22/36 en el issue). El hilo textual:
+   *   10:01 nosotros → seguimiento del Foro de Estado
+   *   10:45 ella     → «Hola, ya revise toda la información»
+   *   10:46 ella     → «Soy abogada, y no me es de mucha utilidad»
+   *   10:47 nosotros → «Entiendo»
+   *   10:47 ella     → «Agradezco mucho la atención prestada»
+   * El sistema le preparó «gracias por escribirnos, tu consulta quedó
+   * registrada». Los textos llegan del más reciente al más viejo (`candidatos.ts`).
+   */
+  test('la que ya se despidió no tiene una consulta esperando respuesta', () => {
+    const d = decidir(
+      candidata({
+        salientes: 2,
+        ultimoEntranteEn: new Date('2026-07-27T04:00:00Z'), // 23:00 Lima
+        textosDelCliente: [
+          'Agradezco mucho la atención prestada',
+          'Soy abogada, y no me es de mucha utilidad',
+          'Hola, ya revise toda la información',
+        ],
+      }),
+      cfg,
+      CUANDO_SE_PRENDIO,
+    );
+    assert.equal(d.elegible === false && d.motivo, 'conversacion_cerrada');
+  });
+
+  test('el no con motivo frena aunque no haya despedida', () => {
+    const d = decidir(
+      candidata({
+        salientes: 2,
+        ultimoEntranteEn: new Date('2026-07-27T04:00:00Z'),
+        textosDelCliente: ['Soy abogada, y no me es de mucha utilidad', 'Hola, ya revise toda la información'],
+      }),
+      cfg,
+      CUANDO_SE_PRENDIO,
+    );
+    assert.equal(d.elegible === false && d.motivo, 'rechazo');
+  });
+
+  test('un «gracias» suelto no cierra nada: esa persona sigue esperando', () => {
+    const d = decidir(
+      candidata({
+        salientes: 2,
+        ultimoEntranteEn: new Date('2026-07-27T04:00:00Z'),
+        textosDelCliente: ['gracias', 'me pasas el temario?'],
+      }),
+      cfg,
+      CUANDO_SE_PRENDIO,
+    );
+    assert.equal(d.elegible, true);
+  });
+
+  test('sin un solo saliente no hubo atención que cerrar', () => {
+    // Nadie le escribió nunca: no se le puede agradecer una atención que no
+    // hubo, así que la despedida no aplica y el acuse sí.
+    const d = decidir(
+      candidata({
+        salientes: 0,
+        ultimoEntranteEn: new Date('2026-07-27T04:00:00Z'),
+        textosDelCliente: ['gracias por todo'],
+      }),
+      cfg,
+      CUANDO_SE_PRENDIO,
+    );
+    assert.equal(d.elegible, true);
   });
 });

@@ -54,6 +54,20 @@ export function diaLocal(fecha: Date, zona: string): string {
   return `${p.anio}-${dos(p.mes)}-${dos(p.dia)}`;
 }
 
+/**
+ * `HH:MM` del reloj local — para DECIRLE a un humano a qué hora pasó algo.
+ *
+ * Vive acá y no en cada pantalla porque es el mismo reloj con el que se decide:
+ * si el simulacro imprimiera la hora con un formateador propio y la decisión
+ * usara este, un borrador podría quedar descartado por «escribió 10:47» al lado
+ * de una fila que dice 15:47. La hora que se muestra tiene que salir de donde
+ * sale la que se juzga.
+ */
+export function hhmmLocal(fecha: Date, zona: string): string {
+  const p = partesLocales(fecha, zona);
+  return `${dos(p.hora)}:${dos(p.minuto)}`;
+}
+
 /** ¿El reloj local está dentro de la ventana [desde, hasta)? */
 export function dentroDe(fecha: Date, ventana: Ventana, zona: string): boolean {
   const ahora = minutosLocales(fecha, zona);
