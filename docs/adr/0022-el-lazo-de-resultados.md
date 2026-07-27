@@ -112,10 +112,33 @@ un paso **sí** es versión nueva (el flyer es contenido). Cambiar solo espacios
 **no** (se normalizan antes). Sin contenido conocido, la versión es `null` y se lee «no sabemos qué
 texto era», nunca como una versión más.
 
-El hash lo hace **el server**, no el navegador: desde el composer viaja el *texto* de la pieza. Dos
-clientes con distinta normalización partirían en dos la historia de una pieza sin que nadie lo note.
-Hay un test que lo verifica (`piezas/receta-unica.test.ts` recorre el front y falla si aparece un
-hash ahí).
+El hash lo hace **el server**, no el navegador. Dos clientes con distinta normalización partirían en
+dos la historia de una pieza sin que nadie lo note. Hay un test que lo verifica
+(`piezas/receta-unica.test.ts` recorre el front y falla si aparece un hash ahí).
+
+**Y hay una segunda puerta al mismo `envios_wa`, que es donde esto se pagaba.** `enviar-paso` estampa
+con la fila delante; pero cuando la vendedora toca la sugerencia, la edita en la caja y manda por
+`POST /api/whatsapp/enviar`, el server armaba la versión con lo que declaraba el navegador — y el
+navegador no puede saberla, por dos motivos independientes: lo que cae en la caja es
+`vistaPrevia.texto`, **ya expandido** con el `{nombre}` y el `{precio}` de esa persona, y el nombre
+del archivo del paso nunca llega al front (la API le manda `conImagen: boolean`). Medido sobre
+`PASO_FLYER` de `piezas/vectores.ts` —el paso 1 con imagen, cuya versión publicada es un valor
+literal del contrato, así que cualquiera puede repetir la cuenta—:
+
+```
+catálogo publica (12#1)      sha256:97ddb49e06f65c7b
+`enviar-paso` estampa        sha256:97ddb49e06f65c7b   CASA
+el composer estampaba        sha256:c7fd30aec30cb2bc   NO CASA
+  · el mismo paso a Javier   sha256:5adf571e9b7f7aea   otra distinta, por destinatario
+  · solo por faltar el flyer sha256:083198f70dffe8f5   NO CASA tampoco
+```
+
+O sea: cero filas, en silencio, justo para el 42 % de la secuencia que lleva imagen — el modo de
+fallo que este ADR existe para no cometer, entrando por la puerta que no se había mirado. Se arregla
+en `procedencia/desdeElComposer.ts`: una **`plantilla` se versiona releyendo `plantilla_pasos`** (el
+lector va inyectado, así el criterio se prueba sin base) y un **`hecho` sigue versionándose por el
+texto de la caja**, que ahí sí es el del catálogo tal cual — releer la fila sería peor, porque si
+alguien la editó en el medio lo que salió fue el texto viejo. Sin fila que leer, `version: null`.
 
 **Y el archivo entra en la versión.** No es un detalle de completitud: el 42 % de la secuencia de
 venta lleva imagen y **en Goberna el precio y las fechas viven adentro de la imagen**. Cambiar
@@ -155,9 +178,15 @@ los dos frentes: los dos PRs lo agregan con el mismo contenido y los dos lo impo
 - **El paso, dentro de su plantilla.** Acá había un choque real y las dos posiciones tenían razón: el
   catálogo dice que un paso no es direccionable (`escribirPasos()` borra y reinserta, así que
   `plantilla_pasos.id` cambia sin que cambie el paso) y el lazo necesita medir por paso (el flyer y
-  el seguimiento funcionan distinto). La forma que satisface a las dos es la que **Ivi ya tenía
-  escrita** en su contrato de ensamblado: `{id, orden}`. La clase es `plantilla`, y `orden` dice cuál
-  de sus mensajes — sobre `(plantilla_id, orden)`, que sí es estable y tiene su `unique`.
+  el seguimiento funcionan distinto). La forma que satisface a las dos es `{id, orden}`: la clase es
+  `plantilla`, y `orden` dice cuál de sus mensajes — sobre `(plantilla_id, orden)`, que sí es estable
+  y tiene su `unique`. **Acá decía que esa forma «Ivi ya la tenía escrita en su contrato de
+  ensamblado», y no es cierto**: en `respuesta-hermes-ensamblado.md` (`ivi-cerebro@1e5d2f3`, un
+  archivo **sin commitear**) el `orden` es la posición en la secuencia a mandar, no cuál paso de una
+  plantilla. Que se escriban igual es una coincidencia cómoda; el argumento que sostiene la decisión
+  es el de arriba, que es todo de Hermes. Lo mismo vale para `{clase, id}`: el payload que Ivi
+  especifica es `{id, version, orden, gancho_id}` y **no lleva clase** — ver `piezas/direccion.ts`,
+  que anota el punto de contrato que queda abierto.
 - **Qué gana de cada receta.** El **formato** lo pone el catálogo (`sha256:` + 16 hex): es lo que ya
   viaja en el contrato publicado a Ivi, dice qué algoritmo es y entra en un log. Las **entradas** las
   pone el lazo (texto normalizado + archivo): el catálogo hasheaba `media_clase`, que era ciego al

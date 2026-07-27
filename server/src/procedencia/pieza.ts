@@ -58,8 +58,10 @@ import { MOMENTOS_DE_VENTA, type MomentoDeVenta } from "../sugerencias/estado.js
  * los reimplementa: los importa.
  *
  * No es una preferencia de estilo, es la única forma de que el trabajo sirva.
- * Ivi recomienda `hecho:cuotas@sha256:…` y para saber si esa pieza funcionó hay
- * que encontrarla en `envios_wa`. Cuando cada lado tenía su vocabulario —el
+ * Ivi recomienda una pieza del catálogo y para saber si esa pieza funcionó hay
+ * que encontrarla en `envios_wa` (`hecho:cuotas@sha256:…` es cómo la nombra
+ * Hermes en un reporte, no una cadena que Ivi emita — ver `piezas/direccion.ts`,
+ * que aclara qué es de Ivi y qué es decisión de acá). Cuando cada lado tenía su vocabulario —el
  * catálogo publicaba `{clase:"plantilla", id:"12"}` y acá se estampaba
  * `{clase:"paso", ref:"12#3"}`; el mismo dato salía `hecho:cuotas` de un lado y
  * `dato:cuotas` del otro; las versiones ni siquiera tenían el mismo formato— **el

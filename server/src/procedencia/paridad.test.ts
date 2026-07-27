@@ -10,9 +10,9 @@ import { columnasDeProcedencia, deUnAcuse, deUnDato, deUnPasoDePlantilla } from 
 /**
  * QUE LO QUE SE ESTAMPA SEA LO QUE EL CATÁLOGO PUBLICA.
  *
- * El valor de todo este frente está en un join: Ivi recomienda
- * `hecho:cuotas@sha256:…`, y para saber si esa pieza funcionó hay que
- * encontrarla en `envios_wa`. **Si las dos puntas no escriben exactamente lo
+ * El valor de todo este frente está en un join: Ivi recomienda una pieza del
+ * catálogo y para saber si esa pieza funcionó hay que encontrarla en
+ * `envios_wa` con el mismo nombre y la misma versión. **Si las dos puntas no escriben exactamente lo
  * mismo, el join da cero filas y nadie se entera** — se lee como «esa pieza no
  * se usó nunca», que es la conclusión falsa que #169 existe para no sacar.
  *

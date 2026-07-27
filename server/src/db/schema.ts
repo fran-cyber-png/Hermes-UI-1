@@ -265,9 +265,9 @@ export const enviosWa = pgTable(
      * **El vocabulario es el MISMO que publica el catálogo que Ivi consulta**
      * (`piezas/direccion.ts`): `plantilla` · `hecho` · `acuse` · `gancho`, con el
      * paso de una secuencia direccionado dentro de su plantilla (`12#3`). No es
-     * una elección de estilo: Ivi recomienda `hecho:cuotas@sha256:…` y si acá
-     * dijera `dato:cuotas` el join daría cero filas **en silencio**, que se lee
-     * como «esa pieza no se usó nunca».
+     * una elección de estilo: Ivi recomienda una pieza del catálogo y si acá
+     * dijera `dato` donde el catálogo dice `hecho`, el join daría cero filas **en
+     * silencio**, que se lee como «esa pieza no se usó nunca».
      */
     piezaClase: text("pieza_clase"),
     piezaRef: text("pieza_ref"),

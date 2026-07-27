@@ -478,10 +478,13 @@ con Ivi) todavía no están.
   (`plantilla`·`hecho`·`acuse`·`gancho`) · `pieza_ref` · `pieza_version` · `pieza_via` ·
   `pieza_editada` · `momento_venta`.
 - **EL VOCABULARIO Y LA RECETA DE VERSIÓN VIVEN EN `server/src/piezas/`**, no acá — es el **mismo
-  módulo que importa el catálogo que Ivi consulta** (PR #173). Ivi recomienda
-  `hecho:cuotas@sha256:…` y el valor de todo el frente está en encontrar esa pieza en `envios_wa`:
+  módulo que importa el catálogo que Ivi consulta** (PR #173). Ivi recomienda una pieza del
+  catálogo y el valor de todo el frente está en encontrar esa pieza en `envios_wa`:
   con dos vocabularios el join da **cero filas, en silencio**, y eso se lee como «esa pieza no se
-  usó nunca». `piezas/direccion.ts` define `{clase, id, orden?}` y su forma textual (`12#3` es el
+  usó nunca». (`hecho:cuotas@sha256:…` es cómo la nombra Hermes en un reporte; el payload de Ivi es
+  `{id, version, orden, gancho_id}` y **no lleva la clase** — que Ivi la devuelva es un punto de
+  contrato todavía abierto, anotado en `piezas/direccion.ts`.)
+  `piezas/direccion.ts` define `{clase, id, orden?}` y su forma textual (`12#3` es el
   paso 3 de la plantilla 12: el paso se direcciona **dentro** de su secuencia porque
   `plantilla_pasos.id` no es estable); `piezas/version.ts` es la única receta.
   **Los candados**: `piezas/vectores.ts` fija versiones y refs **literales** que los dos frentes
@@ -505,9 +508,18 @@ con Ivi) todavía no están.
   destinatario una versión). **El archivo entra** —cambiar `flyer-julio.jpg` por
   `flyer-agosto-PRECIO-NUEVO.jpg` es versión nueva, porque en Goberna el precio vive adentro de la
   imagen y el 42 % de la secuencia lleva una—; CRLF y bordes, no. El hash lo hace el **server** —
-  desde el composer viaja el texto, no un hash del navegador, y hay un test que lo verifica.
+  del navegador no viaja ningún hash, y hay un test que lo verifica.
   `null` significa **una sola cosa**: no se pudo determinar el contenido. Un contenido vacío tiene
   versión.
+- ⚠️ **HAY DOS PUERTAS AL MISMO `envios_wa`, y la del composer no puede calcular la versión.**
+  `POST /api/plantillas/:id/enviar-paso` estampa desde la fila; pero cuando la vendedora toca la
+  sugerencia, la edita en la caja y manda por `POST /api/whatsapp/enviar`, lo único que el navegador
+  puede declarar es el texto **ya expandido** con el `{nombre}`/`{precio}` de esa persona, y nunca
+  el nombre del archivo (la API le manda `conImagen: boolean`). Versionar con eso daba **una versión
+  por destinatario y ninguna que casara con el catálogo** — cero filas, en silencio, justo para el
+  paso del flyer. Por eso una `plantilla` se versiona releyendo `plantilla_pasos`
+  (`procedencia/desdeElComposer.ts`, lector inyectado) y un `hecho` sigue versionándose por el texto
+  de la caja, que ahí ES el del catálogo. Sin fila que leer, `version: null` — nunca una inventada.
 - **El resultado se DERIVA, nunca se guarda** (como ADR 0013/0014/0015): ¿contestó? · en cuánto ·
   ¿avanzó de etapa? · ¿hubo venta después? El SQL **solo trae hechos crudos** (ni un `CASE`, ni una
   ventana, ni un umbral) y el veredicto + el agregado son puros: no hay segunda implementación que
