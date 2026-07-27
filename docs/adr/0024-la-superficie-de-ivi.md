@@ -1,4 +1,4 @@
-# ADR 0021 — La superficie de Ivi: una capa aparte, y tres respuestas que no se parecen
+# ADR 0024 — La superficie de Ivi: una capa aparte, y tres respuestas que no se parecen
 
 - **Fecha**: 2026-07-27
 - **Estado**: aceptada
@@ -103,8 +103,40 @@ se construye. La pantalla lo dice en voz alta, para que no parezca un olvido.
 
 ## Consecuencias
 
-- La superficie es **aditiva**: `App.tsx` suma un estado, un atajo, un botón y un componente
-  al pie. Ningún archivo del panel derecho, de la cola ni del chat se toca.
+- La superficie es aditiva **en archivos**, y eso no alcanzó: `App.tsx` suma un estado, un
+  atajo, un botón y un componente al pie, y ningún archivo del panel derecho, de la cola ni
+  del chat se tocó. **Aun así le rompió una tecla al chat.** La primera versión de este ADR
+  decía «es aditiva» a secas, y era falso en efecto.
+
+  `App.tsx` monta esta hoja **siempre** (abierta o cerrada, como la libreta), pero adentro
+  llamaba a `useEscape(onCerrar)` **antes** del `if (!abierta) return null`. Ese hook
+  registra en CAPTURA sobre `window` y hace `stopPropagation()` —así es como un popover se
+  cierra sin arrastrar la conversación de atrás—, así que con Ivi **cerrado**, que es casi
+  todo el tiempo, el Escape moría ahí y no llegaba nunca al listener del shell. Dejaron de
+  andar tres atajos documentados que no tienen nada que ver con Ivi: cerrar la conversación
+  en Mensajes, cerrar la Cabina y cerrar la `LibretaPersonal`.
+
+  El molde que este ADR dice copiar **no tiene el problema, y por la parte que no se
+  copió**: `LibretaPersonal` tiene el `if (!abierta) return null` y **ningún listener
+  global**. Esta hoja sí quiere el listener; el precio es la condición explícita.
+
+  La lección no es «acordate de la guarda». `useEscape` documentaba su invariante —«solo se
+  monta abierto»— como un comentario que nadie podía verificar. Ahora es un argumento
+  (`useEscape(onCerrar, abierta)`), y el que lo prueba es un test que monta el componente
+  **cerrado** con un listener de burbuja imitando al shell. Eso obligó a abrir el primer
+  entorno con DOM del front (`src/pruebas/dom.tsx`, `// @vitest-environment jsdom` por
+  archivo): una regresión de teclado no la puede ver ningún test puro, porque el defecto no
+  está en la decisión —`escapeDePopover.ts` está testeado hasta el hueso— sino en el
+  cableado.
+- **Las dos puertas de «mandar» consultan el mismo criterio** (`motivoParaNoPreguntar`, puro
+  y con test). No empezaron así: el botón miraba el tope de 4000 caracteres y el `⌘↵` —el
+  atajo que la propia pantalla publicita abajo del composer— no. Pegando 4500 caracteres, el
+  botón quedaba apagado y el acorde mandaba igual; el server contestaba **400 sin `codigo`**,
+  `lecturaDeError` no encontraba ninguno y caía en `desconocido`, así que la app decía «se
+  rompió algo que nadie previó, avisale a sistemas» **teniendo el diagnóstico correcto a dos
+  líneas de distancia** («500 caracteres de más»). Mentir en el diagnóstico es justo lo que
+  el estado de error de acá arriba vino a evitar, y una sola cabeza es la única forma de que
+  las dos puertas no vuelvan a divergir (la lección de #37).
 - **Hoy esto se ve roto, y está bien.** `POST /api/preguntar` de Ivi devuelve 404 en
   producción, así que la primera experiencia real va a ser el 502 `http_inesperado`. Por eso
   el estado de error se diseñó como estado de primera clase y no como un `catch`: dice qué
@@ -120,3 +152,19 @@ se construye. La pantalla lo dice en voz alta, para que no parezca un olvido.
 
 `docs/evidencia/169-ivi-*.png`, reproducibles con `npx vite --port 5199` →
 `http://localhost:5199/galeria-ivi.html` (entry aparte, fuera del bundle de la app).
+
+**El banco de teclado** —`…/galeria-ivi.html?teclado=1`— es la reproducción de los dos
+defectos en un navegador de verdad: la hoja **cerrada** con un listener de burbuja sobre
+`window` imitando al shell, y un contador de Escapes que llegaron. Medido en Chromium con
+el arreglo puesto:
+
+| Qué se hizo | Antes | Ahora |
+|---|---|---|
+| `Esc` con la hoja **cerrada** | el shell no recibía nada | contador **1** — el shell se enteró |
+| `Esc` con la hoja **abierta**, foco fuera de un campo | cierra, contador queda en 1 | igual (el contrato de no arrastrar lo de atrás **no** se tocó) |
+| `⌘↵` con 4500 caracteres | salía el `POST` → 400 sin código → «se rompió algo que nadie previó» | **no sale nada**, el texto queda intacto y se lee «500 caracteres de más» |
+| `⌘↵` dentro del tope | salía | sigue saliendo (`POST /api/ivi/preguntar`) |
+
+Captura: `docs/evidencia/169-ivi-tope-4500-no-sale.png`. En tests, lo mismo lo fijan
+`src/features/ivi/ConsultaIvi.test.tsx` y `src/lib/teclado/useEscape.test.tsx`; los dos se
+ponen en rojo si se revierte el arreglo correspondiente.

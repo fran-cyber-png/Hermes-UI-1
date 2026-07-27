@@ -47,8 +47,15 @@ npm install && npm run dev:app                     # Vite :5173 + la app de escr
 - `npm run dev` (sin `:app`) abre el front en el navegador: la cola y la conversación nativa funcionan;
   solo el viejo webview no (y ese está retirado, ver §WhatsApp).
 - **Tests**: server `cd server && npm test` (node:test, puros salvo checks en vivo); front `npm test`
-  (vitest, entorno `node` — módulos puros, sin DOM). **Typecheck**: front
+  (vitest, entorno `node` por default — módulos puros). **Typecheck**: front
   `npx tsc --noEmit -p tsconfig.app.json`, server `cd server && npx tsc --noEmit`.
+- **Tests de COMPONENTE (con DOM)**: archivo `*.test.tsx` con `// @vitest-environment jsdom` en
+  la **primera línea** (por archivo, no global: meter los ~40 tests puros en jsdom los haría más
+  lentos sin ganar nada). El andamio —raíz de React, `QueryClientProvider`, un `keydown` que
+  viaja de verdad, los remiendos de jsdom— vive en `src/pruebas/dom.tsx`: `montar(<X/>)`,
+  `teclear('Escape')`, `await reposar()`. Existen porque **una regresión de teclado no la puede
+  ver ningún test puro**: la decisión (`escapeDePopover.ts`) estaba testeada hasta el hueso y la
+  app perdió igual el Escape global, porque el defecto estaba en el CABLEADO (ADR 0024).
 - **Tests con base (SQL)** (ADR 0008): para el SQL de la cola/radar/proyecciones, contra una Postgres
   efímera. `docker compose -f docker-compose.test.yml up -d --wait`, luego `cd server && npm run
   test:db`. Para escribir uno: archivo `*.test.db.ts` (el glob puro no lo toma), `const db = await
@@ -236,12 +243,21 @@ referenciado por nombre, regla dura #1). El cliente vive en `server/src/ivi/clie
   `POST /api/preguntar` puede **no estar vivo aún**: hasta entonces la ruta responde 502 honesto.
   Al 27-jul da **404**, así que lo que una vendedora ve hoy es el `http_inesperado`.
 
-### La superficie en la app (#169, **ADR 0021**)
+### La superficie en la app (#169, **ADR 0024**)
 
 `src/features/ivi/`. Se abre con la tecla **`i`** o el botón de la barra, desde cualquier vista:
 es una **hoja a la derecha, encima de la mesa** — el molde de `LibretaPersonal`, no una pestaña
 del panel. El porqué está en el ADR: el panel derecho es de **esa persona**, Ivi es del
 **negocio**, y a 360 px un hilo de preguntas compite por alto con «Registrar venta».
+
+- ⚠️ **`App.tsx` la monta SIEMPRE**, abierta o cerrada, y por eso le pasa `abierta` a
+  `useEscape`. Sin esa guarda, el listener en captura que la hoja usa para cerrarse sin
+  arrastrar la conversación de atrás se come el Escape de **toda la app** mientras Ivi está
+  cerrado: dejan de andar cerrar la conversación en Mensajes, cerrar la Cabina y cerrar la
+  libreta. Si montás un modal que vive montado, pasale la condición.
+- **El botón de mandar y `⌘↵` consultan la MISMA función** (`motivoParaNoPreguntar` en
+  `ivi.ts`, pura). Separadas divergían: el acorde se saltaba el tope de 4000 y la pantalla
+  reportaba «se rompió algo que nadie previó» en vez de «te pasaste 500 caracteres».
 
 - **Los tres tipos cambian de FORMA, no de color** (un color se aprende, una forma se reconoce
   sin leer): `HECHO` filete sólido + blanco · `CONTEXTO` filete punteado + hundido (la bandeja de
