@@ -122,7 +122,10 @@ test("la marca no se lleva puesto nada de lo que la cola ya servía", async (t) 
 
   const r = await consultarCola(db, {});
   const fila = filas(r)[0] as Fila & { etapa_efectiva: string | null; nivel: number };
-  assert.equal(fila.etapa_efectiva, "nuevo");
+  // «hola» de un entrante sin gestión asentada deriva a `interesado`
+  // (`etapaEfectivaSql`): lo que importa acá es que el join al padrón no lo
+  // cambió, no cuál es el valor.
+  assert.equal(fila.etapa_efectiva, "interesado");
   assert.equal(fila.nivel, 0, "un entrante sin responder de hoy sigue siendo el nivel más urgente");
   assert.ok(r.desglose && r.desglose.length > 0, "el desglose del embudo sigue saliendo");
   assert.equal(r.sinPadron, undefined, "con la tabla presente no se degrada");
