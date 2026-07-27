@@ -64,6 +64,23 @@ function fetchQueDevuelve(body: unknown, init: ResponseInit = { status: 200 }) {
   return { fake, llamadas };
 }
 
+/**
+ * Los `console.error` que soltó un pedazo de código. El ruido de esta costura es deliberado
+ * («degradar en silencio es cómo se viven meses sin enterarse»), así que es parte del
+ * contrato y se puede probar: importa tanto que grite cuando debe como que se calle cuando no.
+ */
+function gritos(fn: () => void): unknown[][] {
+  const original = console.error;
+  const salidas: unknown[][] = [];
+  console.error = (...args: unknown[]) => void salidas.push(args);
+  try {
+    fn();
+  } finally {
+    console.error = original;
+  }
+  return salidas;
+}
+
 /** Un `fetch` falso que estalla (para timeout / red). */
 function fetchQueEstalla(err: unknown): typeof fetch {
   return async () => {
@@ -542,9 +559,12 @@ describe('traza_id · el hilo que une «qué recomendó Ivi» con «qué pasó e
  *   502/504  nginx o la tailnet delante de geografo .................. TRANSITORIO
  *
  * El campo se llama `reintentable`: si dice `false` para un fallo que a los 10 s ya no está,
- * la app (que dibuja el botón «Reintentar» a partir de ese flag) le niega a la vendedora la
- * única acción que la habría desbloqueado. Afirmar de más es exactamente lo que este contrato
- * no puede hacer, así que el veredicto mira el ESTADO además del código.
+ * afirma de más — y afirmar de más es exactamente lo que este contrato no puede hacer. Por eso el
+ * veredicto mira el ESTADO además del código.
+ *
+ * Sobre el impacto, con el mismo cuidado: **hoy ningún consumidor lee este flag**. El front de esta
+ * rama no tiene pantalla de Ivi y la del PR #174 re-deriva el reintento de su propia tabla. Lo que
+ * se prueba acá es el contrato, no un botón. ADR 0021 §3 tiene la medición.
  */
 describe('el 500 de Ivi es transitorio — `reintentable` mira el estado, no solo el código', () => {
   test('el 500 propio de Ivi (pgvector caído) SÍ se puede reintentar', () => {
@@ -616,11 +636,12 @@ describe('el 500 de Ivi es transitorio — `reintentable` mira el estado, no sol
  * buena por un campo accesorio. Quedó MÁS estricto que el emisor, al revés de la laxitud
  * deliberada del resto del schema.
  *
- * Medido: `contrato_hermes()` (ivi-cerebro@1e5d2f3 y árbol de trabajo, idénticos) emite
- * `r.get("numeros_no_verificados", [])` y `_no_verificados()` devuelve siempre `list[str]` —
- * o sea que HOY Ivi no manda `null`. Pero su propio `gimnasio.py:106` escribe
- * `r.get("numeros_no_verificados") or []`: el emisor se defiende de un `None` que él mismo
- * considera posible. La dirección correcta de la tolerancia es esa.
+ * Medido: `contrato_hermes()` (ivi-cerebro@1e5d2f3; `rag/api_contrato.py` es idéntico ahí y en el
+ * árbol de trabajo de esa rama) emite `r.get("numeros_no_verificados", [])` y `_no_verificados()`
+ * devuelve siempre `list[str]` — o sea que HOY Ivi no manda `null`. Pero su propio `gimnasio.py`
+ * escribe `r.get("numeros_no_verificados") or []` (**:106 @1e5d2f3**; ese archivo sí cambió en el
+ * árbol de trabajo, donde es la :145): el emisor se defiende de un `None` que él mismo considera
+ * posible. La dirección correcta de la tolerancia es esa.
  */
 describe('`numerosNoVerificados` degrada, no tumba', () => {
   test('`null` es «no lo reportó», no un 502', () => {
@@ -655,6 +676,30 @@ describe('`numerosNoVerificados` degrada, no tumba', () => {
     assert.equal(r.texto, CUERPO_REAL_DE_IVI.texto);
     assert.equal(r.groundingOk, false, 'lo que carga el peso sigue siendo estricto y sigue llegando');
     assert.equal(r.numerosNoVerificados, undefined);
+  });
+
+  test('la NORMALIZACIÓN del `null` vive en `aCamelCase`, no en el `.catch()` del schema', () => {
+    // El arreglo tiene DOS mitades y las dos terminan en el mismo `undefined`, así que ningún
+    // assert sobre el resultado las distingue: con esta mitad revertida la suite entera seguía
+    // verde. Lo que las separa es DÓNDE se decide. `aCamelCase` es el borde donde el dialecto de
+    // Ivi (el `None` de Python) se vuelve el de Hermes (ausente); el `.catch()` del schema es la
+    // red para lo que nadie previó. Este test mira el borde, no el resultado.
+    const salida = aCamelCase({ ...CUERPO_REAL_DE_IVI, numeros_no_verificados: null }) as Record<string, unknown>;
+    assert.equal('numerosNoVerificados' in salida, true, 'la clave se escribe siempre: no cambia la forma');
+    assert.equal(salida.numerosNoVerificados, undefined, 'el `null` se normaliza ACÁ, antes de validar');
+  });
+
+  test('y por eso un `null` no ensucia el log; una forma inesperada sí — que es para lo que existe', () => {
+    // La consecuencia observable de la mitad de arriba, y la que hace que el comentario del
+    // `.catch()` sea cierto: «este log significa forma inesperada». Si el `null` cayera en el
+    // `.catch()`, el grito saldría en CADA respuesta legítima de un Ivi que mande `None` y
+    // dejaría de señalar nada — que es exactamente cómo se pasan meses sin enterarse de que un
+    // campo dejó de llegar.
+    const conNull = gritos(() => respuestaIviSchema.safeParse(aCamelCase({ ...CUERPO_REAL_DE_IVI, numeros_no_verificados: null })));
+    assert.deepEqual(conNull, [], `un \`null\` es una forma PREVISTA; no se avisa nada. Salió: ${JSON.stringify(conNull)}`);
+
+    const conBasura = gritos(() => respuestaIviSchema.safeParse(aCamelCase({ ...CUERPO_REAL_DE_IVI, numeros_no_verificados: '642' })));
+    assert.equal(conBasura.length, 1, 'una cadena donde va una lista sí se avisa');
   });
 
   test('pero los tres campos que cargan el peso NO degradan: ahí sí es 502', () => {
