@@ -10,21 +10,35 @@ import type { Campana } from './campana.js';
  * escrito de antemano, se lee entero en una pantalla, y lo que se guardó en la
  * cola es EXACTAMENTE lo que se mandó.
  *
- * ── Por qué todas dicen que son automáticas ──
- * Decisión de diseño, no un adorno: el mensaje avisa que es automático y que
- * una persona responde al abrir. Un cliente que cree estar hablando con una
- * persona a las 3 a. m. y descubre que no, se siente engañado; uno que sabe que
- * recibió un acuse fuera de horario, no. Además es lo que hace innecesario
- * cualquier disfraz: si el mensaje no finge ser humano, no hay nada que
- * disimular.
+ * ── Por qué NINGUNA dice que es automática (cambió el 27-jul, #166) ──
+ * Hasta ADR 0015 las cuatro empezaban con «Te escribe un mensaje automático».
+ * Era una decisión de diseño con su argumento: quien cree hablar con una
+ * persona a las 3 a. m. y descubre que no, se siente engañado. **El dueño la
+ * revirtió el 27-jul: el lead todavía no puede saber que hay un automatismo
+ * detrás.** El argumento viejo no era falso, pero perdió contra el comercial, y
+ * lo que queda escrito acá es la decisión vigente, no la que se prefiere.
+ *
+ * Lo que la reemplaza NO es un disfraz, y la diferencia es lo único que hace
+ * defendible el cambio: el mensaje deja de HABLAR de sí mismo, no empieza a
+ * mentir. Sigue sin fingir una conversación —no pregunta de vuelta, no
+ * improvisa, no dice «te escribo yo»—, sigue siendo un acuse de recibo, y por
+ * eso las frases que quedan son las tres que podemos sostener siempre:
+ * **estamos fuera del horario**, **atendemos desde tal hora**, **tu mensaje
+ * quedó registrado**. Lo que se fue con la mención al automatismo es también la
+ * promesa que no controlábamos («una asesora te responde personalmente»): a
+ * quien no le respondan igual, la plantilla le habría mentido dos veces.
+ *
+ * El guardarraíl es `plantillas.test.ts`: ninguna puede volver a nombrar la
+ * máquina (ni «automático», ni «bot», ni «sistema»), y ninguna puede prometer
+ * una respuesta personal a una hora fija.
  *
  * ── Por campaña, no una sola para todos (ADR 0016) ──
  * «Si vino de "[JUL] INTELIGENCIA", responde lo de Inteligencia» (dueño,
  * 2026-07-25). Lo que cambia por campaña NO es una plantilla entera por curso —
  * eso serían 38 textos que nadie mantiene— sino **una frase**: el `gancho` de la
  * familia (`campana.ts`), que dice qué manda la asesora al abrir. El resto del
- * mensaje es el mismo, y sigue avisando que es automático. Agregar un curso es
- * agregar una entrada en `FAMILIAS`, no escribir una plantilla.
+ * mensaje es el mismo. Agregar un curso es agregar una entrada en `FAMILIAS`,
+ * no escribir una plantilla.
  *
  * ── El punto de integración con las plantillas-secuencia (#138, YA en `main`) ──
  * `server/src/plantillas/` existe y es el hogar del contenido que manda la
@@ -122,9 +136,9 @@ export function catalogo(): Plantilla[] {
       titulo: 'Fuera de horario — por la campaña de la que vino',
       cuerpo:
         '{{saludo}}, gracias por escribirnos a la Escuela de Goberna. ' +
-        'Te escribe un mensaje automático: en este momento estamos fuera del horario de atención. ' +
-        'Vemos que te interesa {{curso}}: a partir de las {{hora_apertura}} una asesora {{gancho}}. ' +
-        'Si deseas, déjanos aquí tu consulta y ya la tenemos a mano al abrir.',
+        'En este momento estamos fuera del horario de atención; atendemos desde las {{hora_apertura}}. ' +
+        'Vemos que te interesa {{curso}}: al abrir, una asesora {{gancho}}. ' +
+        'Si deseas, déjanos aquí tu consulta y ya la tenemos a mano.',
       // Solo cuando RECONOZCO la familia: sin `gancho` esta plantilla no
       // renderiza, y una respuesta «de campaña» sobre una campaña que no
       // entiendo sería exactamente el invento que esta feature no hace.
@@ -135,10 +149,10 @@ export function catalogo(): Plantilla[] {
       titulo: 'Fuera de horario — ya sabemos qué curso le interesa',
       cuerpo:
         '{{saludo}}, gracias por escribirnos a la Escuela de Goberna. ' +
-        'Te escribe un mensaje automático: en este momento estamos fuera del horario de atención. ' +
-        'Tenemos anotado tu interés en {{curso}} y una asesora te responde personalmente ' +
-        'a partir de las {{hora_apertura}} con el temario, las fechas y el costo. ' +
-        'Si deseas, déjanos aquí tu consulta y ya la tenemos a mano al abrir.',
+        'En este momento estamos fuera del horario de atención; atendemos desde las {{hora_apertura}}. ' +
+        'Tenemos anotado tu interés en {{curso}}: al abrir, una asesora retoma tu consulta ' +
+        'con el temario, las fechas y el costo. ' +
+        'Si deseas, déjanos aquí lo que necesites saber y ya lo tenemos a mano.',
       aplica: (ctx) => Boolean(ctx.curso),
     },
     {
@@ -146,8 +160,7 @@ export function catalogo(): Plantilla[] {
       titulo: 'Fuera de horario — primer contacto',
       cuerpo:
         '{{saludo}}, gracias por escribirnos a la Escuela de Goberna. ' +
-        'Te escribe un mensaje automático: en este momento estamos fuera del horario de atención. ' +
-        'Una asesora te responde personalmente a partir de las {{hora_apertura}}. ' +
+        'En este momento estamos fuera del horario de atención; atendemos desde las {{hora_apertura}}. ' +
         'Cuéntanos qué curso o diplomado te interesa y al abrir te enviamos el temario completo.',
       aplica: (ctx) => momentoDeVenta(estadoDesdeContexto(ctx)) === 'primer-contacto',
     },
@@ -156,9 +169,8 @@ export function catalogo(): Plantilla[] {
       titulo: 'Fuera de horario — ya veníamos hablando',
       cuerpo:
         '{{saludo}}, gracias por escribirnos. ' +
-        'Te escribe un mensaje automático: en este momento estamos fuera del horario de atención. ' +
-        'Tu consulta ya quedó registrada y la asesora que te viene atendiendo te responde ' +
-        'a partir de las {{hora_apertura}}.',
+        'En este momento estamos fuera del horario de atención; atendemos desde las {{hora_apertura}}. ' +
+        'Tu mensaje ya quedó registrado y lo retomamos apenas abrimos.',
       // El catch-all queda explícito: cualquier momento que no sea primer
       // contacto es «ya veníamos hablando». Si mañana aparece un momento nuevo,
       // cae acá — que es el acuse más neutro, no el más específico.

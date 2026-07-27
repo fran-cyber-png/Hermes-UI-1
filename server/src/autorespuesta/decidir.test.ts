@@ -37,7 +37,7 @@ describe('la auto-respuesta corresponde', () => {
   test('fuera de horario, con una hora esperando y sin respuesta: elegible', () => {
     const d = decidir(candidata(), cfg, MADRUGADA);
     assert.equal(d.elegible, true);
-    assert.ok(d.elegible && d.texto.includes('mensaje automático'), 'el texto avisa que es automático');
+    assert.ok(d.elegible && !/autom[áa]tic/i.test(d.texto), 'el texto NO se delata como máquina (#166)');
     assert.ok(d.elegible && d.texto.startsWith('Hola Ana'), 'saluda por su nombre');
     assert.equal(d.elegible && d.plantillaId, 'fuera-de-horario-primer-contacto');
   });

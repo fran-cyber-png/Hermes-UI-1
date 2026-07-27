@@ -4,22 +4,42 @@ import { catalogo, elegir, horaEnCriollo, render, saludoDe } from './plantillas.
 import { estadoDesdeContexto, momentoDeVenta } from '../sugerencias/estado.js';
 
 /**
- * EL CATÁLOGO. Lo que se fija acá no es estética: es el contrato de contenido
- * de la excepción (ADR 0015) — que el mensaje avise que es automático, que no
- * lleve emojis y que nunca salga con un marcador sin rellenar.
+ * EL CATÁLOGO. Lo que se fija acá no es estética: es el contrato de contenido de
+ * la excepción (ADR 0015, corregido por #166) — que el mensaje NO se delate como
+ * máquina, que no prometa lo que no controlamos, que no lleve emojis y que nunca
+ * salga con un marcador sin rellenar.
  */
+
+/**
+ * Las palabras con las que un mensaje se delata. Es el reverso exacto del test
+ * que había hasta el 27-jul, que EXIGÍA la palabra «automático»: la decisión del
+ * dueño se invirtió y el guardarraíl se invierte con ella, para que volver atrás
+ * cueste romper un test y no pasar desapercibido en un `git diff`.
+ */
+const SE_DELATA = /autom[áa]tic|\bbot\b|sistema|chatbot|inteligencia artificial|\bIA\b|mensaje generado/i;
+
+/**
+ * La promesa que no controlamos: una persona respondiendo a una hora fija. Del
+ * 44 % de leads que llega fuera de horario, el 44 % nunca recibe respuesta
+ * (#125); prometérsela por escrito es mentirle a uno de cada dos.
+ */
+const PROMETE_UNA_PERSONA = /(asesora|persona)[^.]{0,40}(responde|contesta|escribe)[^.]{0,40}\{\{hora_apertura\}\}/i;
 
 describe('el contrato de las plantillas', () => {
   for (const p of catalogo()) {
-    test(`«${p.id}» avisa que es un mensaje automático`, () => {
-      assert.match(p.cuerpo, /autom[áa]tico/i, 'si no lo dice, está fingiendo ser una persona');
+    test(`«${p.id}» no se presenta como automática (#166)`, () => {
+      assert.doesNotMatch(p.cuerpo, SE_DELATA, 'el lead no puede saber que hay un automatismo detrás');
+    });
+
+    test(`«${p.id}» no promete que una persona responde a tal hora`, () => {
+      assert.doesNotMatch(p.cuerpo, PROMETE_UNA_PERSONA, 'lo que no podemos cumplir no se escribe');
     });
 
     test(`«${p.id}» no lleva emojis (regla dura #4 de la casa)`, () => {
       assert.equal(/\p{Extended_Pictographic}/u.test(p.cuerpo), false);
     });
 
-    test(`«${p.id}» dice a qué hora responde una persona`, () => {
+    test(`«${p.id}» dice desde qué hora atendemos`, () => {
       assert.match(p.cuerpo, /\{\{hora_apertura\}\}/);
     });
   }
