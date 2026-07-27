@@ -12,32 +12,51 @@ FB/IG, Messenger), gestiona el embudo, agenda, llama, manda correos y registra l
 Cerberus — desde UNA app (Tauri/web) cuya UI vive en el server (**OTA**: actualizar = actualizar
 el VPS, nadie reinstala).
 
-## ⚠️ Producción está 26 commits atrás de `main` (verificado 2026-07-22)
+## ✅ Producción al día (verificado 2026-07-27, madrugada)
 
-**Lo de abajo describe `main`, NO lo que las vendedoras están usando.** VPS1 quedó en `17648e4`
-(«docs: CLAUDE.md — las 6 vistas ya existen») y nunca se actualizó desde entonces. Verificado por
-dos vías: `git rev-parse HEAD` en `/srv/hermes`, y el build servido en vivo
-(`assets/index-2_UFlZcN.js`, que no es el que produce `main`).
+VPS1 corre **`db4aa00`**, con front y server construidos del mismo commit y **el schema aplicado**
+(`clientes_padron`, `alias_curso.ad_id`, plantillas, auto-respuesta — el detalle en los Gotchas del
+`CLAUDE.md`). Verificado por tres vías: `git rev-parse HEAD` en `/srv/hermes`, el chequeo HTTP
+(front 200, `/api/*` 401 sin token) y capturas con Playwright contra la app viva.
 
-**Lo que NO está en producción**: el rediseño «Cierre de edición» entero (8 pantallas, riel, teclado
-global) · la urgencia de 6 niveles · el radar ordenado en el server · el techo de scan (#19) · la
-ventana de 30 días de la cola (#30) · el caché persistente (#31) · el login que distingue «clave
-mala» de «Cerberus no contesta».
-
-No es drift: `17648e4` es ancestro de `main`, así que un `git pull` lo pone al día sin conflictos.
-**El schema no cambió** en esos 26 commits → no hace falta `db:push`. Sí cambió el `package.json` de
-la raíz → hace falta `npm ci`.
-
-Deploy (fuera del horario de las vendedoras — son 26 commits de cambio visual y conviene avisarles):
+**Esto envejece rápido: no hay CD.** Antes de leer el código de `main` como «lo que corre»:
 
 ```bash
-ssh deploy@161.132.39.165 'cd /srv/hermes && git pull && \
-  ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci && \
-  env VITE_API_URL=https://hermes-api.goberna.us npm run build && \
-  sudo systemctl restart hermes'
+ssh deploy@161.132.39.165 'cd /srv/hermes && git log --oneline -1 && systemctl is-active hermes'
 ```
 
-Rollback: `cd /srv/hermes && git checkout 17648e4 && npm ci && npm run build && sudo systemctl restart hermes`.
+### Cómo se despliega hoy
+
+**Sin cambio de schema** → el workflow: `gh workflow run "Desplegar server (con restart)" --repo
+Goberna-Lab/hermes -f confirmar=reiniciar`.
+
+**Con cambio de schema** → a mano, porque el workflow frena a propósito (y ese gate **no** se
+satisface migrando la base: compara `~/.hermes-despliegue/server` contra `main`, y ese diff no se
+va). El orden importa — `db:push` lee `schema.ts` **del disco**, así que el checkout va primero:
+
+```bash
+# 1 · código
+ssh deploy@161.132.39.165 'cd /srv/hermes && git fetch origin main && git checkout --force origin/main \
+  && ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci && cd server && npm ci'
+
+# 2 · schema — DESDE UNA TERMINAL DE VERDAD (pide TTY para sus prompts; ver Gotchas)
+ssh -t deploy@161.132.39.165 'cd /srv/hermes/server && npm run db:push'
+
+# 3 · build con swap (vaciar `dist` daría 404 durante todo el build) + restart + estado de rollback
+ssh deploy@161.132.39.165 'cd /srv/hermes && rm -rf dist.nuevo \
+  && env VITE_API_URL=https://hermes-api.goberna.us npx vite build --outDir dist.nuevo --emptyOutDir \
+  && test -f dist.nuevo/index.html && rm -rf dist.anterior && mv dist dist.anterior && mv dist.nuevo dist \
+  && sudo systemctl restart hermes \
+  && git rev-parse HEAD | tee ~/.hermes-despliegue/server ~/.hermes-despliegue/front'
+```
+
+**Reiniciar tiene costo**: `sesionStore` vive en memoria, así que el restart tira las sesiones de
+Cerberus y las vendedoras vuelven a loguearse. Va fuera del horario de atención y batcheado.
+
+Rollback: `cat ~/.hermes-despliegue/server` da el sha anterior; `git checkout <sha> && npm ci &&
+npm run build && sudo systemctl restart hermes`. Ojo: **el schema no vuelve solo** — si el deploy
+incluyó un `db:push`, el rollback de código deja la base adelantada (es aditiva, así que degrada en
+vez de romper, pero conviene saberlo).
 
 ## Qué hay en `main` (≠ lo que corre en producción)
 
@@ -62,6 +81,38 @@ arquitectura.** Lo más importante que dice: **este repo tiene dos mitades** —
 dashboard de pauta heredado de meta-escuela, que está montado pero desconectado— y hay **cosas
 rotas** (auth partida; las otras dos —la cola duplicada y el nivel VENCIDO que no se disparaba— se
 resolvieron en #37/#38, ver `arquitectura.md` §8.2–8.3).
+
+## 🔴 Lo que está apagado a propósito (27-jul-2026)
+
+**La auto-respuesta.** Interruptor de base en `apagada` desde las 01:10 del 27-jul. Se prendió esa
+madrugada en modo supervisado y se apagó siete minutos después, al revisar con el dueño los 40
+borradores que había preparado: estaban mal de **siete formas**, tres graves. **Nada salió** — las
+40 quedaron en `preparada`, estado que el despachador no incluye en `EN_COLA_DE_ENVIO`, y caducan
+solas sin cruzar el día.
+
+**No la prendas sin leer el issue #166.** El defecto de fondo cabe en una línea
+(`autorespuesta/decidir.ts:77`): la condición de la franja preguntaba *«¿estamos nosotros fuera de
+horario ahora?»* en vez de *«¿esta persona escribió fuera de horario?»*. A la 1 AM lo primero es
+cierto para todos, así que calificaba cualquier conversación sin responder:
+
+| Escribió a las… | Cuántos de los 40 |
+|---|---|
+| 01–08 h | 15 (correcto) |
+| **09–16 h** | **25 — dentro del horario de atención** |
+
+Y ninguno tenía techo de antigüedad: las esperas iban de **57 a 72 horas**. La función se diseñó
+para el hueco de la madrugada (ADR 0015), no para vaciar un atraso de días.
+
+Las **dos llaves** siguen valiendo y hay que mirar las dos: `AUTO_RESPUESTA` en el entorno **y** el
+interruptor de la base. Estuvieron desincronizadas todo el 25 y 26 de julio — la base decía
+`supervisada` y el chip de la cabecera lo mostraba así, pero la variable no existía en el `.env`, y
+por eso llegaron leads dos días sin una sola recomendación. Antes de concluir que «está prendida»,
+mirá el log del arranque, que lo dice explícito.
+
+**Antes de prenderla, siempre**: `cd server && npm run auto:simulacro`. Con la advertencia que costó
+este incidente — **el simulacro imprimió un plan de 33 mensajes que se veía impecable y estaba mal
+de siete formas**, porque muestra el resultado y no las variables de la decisión (la hora local en
+que escribió cada persona, su antigüedad). Eso se arregla en #166.
 
 ## PENDIENTES
 

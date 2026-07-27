@@ -462,18 +462,28 @@ sensato). Ver `server/.env.example` (solo nombres).
 ## Gotchas
 
 - **Drizzle sin migraciones versionadas**: el schema se aplica con `npm run db:push` (drizzle-kit). Al
-  tocar `server/src/db/schema.ts`, push contra la DB. Pendiente de push hoy: las dos tablas de la
-  auto-respuesta (`auto_respuestas_pendientes`, `auto_respuesta_estado`), `envios_wa.automatico`
-  (#125), las cinco columnas del modo supervisado (`auto_respuesta_estado.modo` +
-  `auto_respuestas_pendientes.aprobada_por/.aprobada_at/.editada/.campana`, ADR 0016),
-  `auto_respuestas_pendientes.campana_fuente` (ADR 0018), **`clientes_padron` (#133 — sin ella la
-  cola sirve sin la marca de ex-cliente y lo dice en `sinPadron`; con ella hay que correr
-  `npm run clientes:sincronizar` o queda vacía y no marca a nadie)**, `alias_curso`
-  (#102) y **`alias_curso.ad_id`** (ADR 0019) — sin el push esas funciones **degradan** (hilo sin
-  marca, ruta del interruptor en 503, bandeja vacía con el motivo escrito, ficha sin propuesta de
-  curso, y sin `ad_id` se pierde el mapeo por anuncio pero NO los alias de texto: `aliasesActivos`
-  reintenta sin esa columna), no rompen —; y `plantillas` + `plantilla_pasos`
-  (plantillas-secuencia), sin las cuales `/api/plantillas` **no funciona** en un server ya desplegado.
+  tocar `server/src/db/schema.ts`, push contra la DB. **Al 27-jul-2026 producción está al día**: las
+  dos tablas de la auto-respuesta, `envios_wa.automatico` (#125), el modo supervisado (ADR 0016),
+  `campana_fuente` (ADR 0018), `clientes_padron` (#133), `alias_curso` + `ad_id` (#102, ADR 0019),
+  `plantillas` + `plantilla_pasos` y `hechos` están todas aplicadas. Lo único pendiente es lo del
+  PR #165 (`ventas_no_atribuidas` y las 14 columnas de `conversiones_wa`), que aún no se mergeó.
+  Cuando falta un push, casi todo **degrada y lo dice** (hilo sin marca de ex-cliente y `sinPadron`
+  en la respuesta, interruptor en 503, bandeja vacía con el motivo escrito, ficha sin propuesta de
+  curso, `aliasesActivos` reintentando sin `ad_id` y perdiendo solo el mapeo por anuncio) — la
+  excepción es `plantillas`/`plantilla_pasos`, sin las cuales `/api/plantillas` **no funciona**.
+- **`db:push` PREGUNTA, y sin TTY se muere a mitad.** Cuando el cambio incluye una restricción sobre
+  una tabla con filas, drizzle-kit abre un prompt interactivo (`pgSuggestions`) y, sin terminal real,
+  aborta con `Interactive prompts require a TTY`. El `!` de Claude Code **no** aloca TTY ni con
+  `ssh -t`: hay que correrlo desde una terminal de verdad. **Leé lo que pregunta**: para
+  `alias_curso.ad_id` ofrecía *truncar la tabla* (habría borrado los 30 alias vivos, incluidos los
+  editados a mano) y la respuesta correcta era **No** — los `NULL` no chocan entre sí en Postgres,
+  así que el UNIQUE entra igual. Si el prompt propone borrar, truncar o renombrar, es drift, no el
+  cambio que venías a aplicar.
+- **El workflow de deploy no se puede satisfacer corriendo `db:push`.** `desplegar-server.yml` frena
+  si `schema.ts` cambió entre el sha guardado en `~/.hermes-despliegue/server` y `main`, y ese diff
+  no desaparece porque hayas migrado la base: el gate vuelve a saltar. Con cambio de schema el
+  deploy va a mano (checkout → `npm ci` → `db:push` → build con swap de `dist` → restart) y al final
+  se actualiza el archivo de estado, o el próximo rollback apunta al sha equivocado.
 - **El transporte falso repite ids entre reinicios** (`falso-1`, `falso-2`…): reprocesar colisiona con la
   idempotencia (`wa:falso-N` ya existe) y el mensaje no entra. Para demos limpias, borrar los
   `external_id LIKE 'wa:falso-%'` primero. El transporte real usa ids reales de WhatsApp (únicos).
@@ -481,17 +491,34 @@ sensato). Ver `server/.env.example` (solo nombres).
 - **La cola sirve conversaciones, no filas** (`/api/conversaciones`, no `/api/interactions`): los
   mensajes se agrupan por `(canal, persona, número propio)`; los comentarios siguen individuales.
 
-## Estado (2026-07-22)
+## Estado (2026-07-27)
 
 En `main`, Hermes es un CRM completo: Dashboard radar · Pipeline con compuertas (cotizado exige
 interés; cierre solo vía venta) · chat multicanal con media completa y BarraGestion · Contactos ·
 Correos (falta SMTP) · Agenda-calendario.
 
-> ⚠️ **`main` ≠ producción.** Verificado el 22-jul: VPS1 está en `17648e4`, **26 commits atrás**. Lo
-> que las vendedoras usan NO incluye el rediseño «Cierre de edición», la urgencia de 6 niveles, la
-> ventana de 30 días de la cola ni el caché persistente. El deploy es manual y no hay CD, así que
-> **leer este código como «lo que corre» es incorrecto**. El comando de deploy y el rollback están
-> en `docs/estado.md`.
+> ✅ **Producción está al día** (verificado 27-jul, madrugada): VPS1 corre `db4aa00`, front y server
+> alineados, y **el schema aplicado** (ver Gotchas). Sigue sin haber CD — el deploy es manual—, así
+> que esto envejece rápido: antes de asumir que el código de `main` es lo que corre, verificalo con
+> `ssh deploy@161.132.39.165 'cd /srv/hermes && git log --oneline -1'`.
+
+**Lo que entró esa madrugada**: los 126 ex-clientes marcados en la cola (#133, con el padrón local
+de 10.468 sincronizado desde icarus) · los 56 alias de curso, Foro de Estado incluido · la pantalla
+para aprobar plantillas propuestas · la paridad cola↔Dashboard del chip de curso · `IVI_URL` cargada
+en el entorno de prod (Ivi todavía no desplegó su endpoint, así que la ruta responde su 502 honesto).
+
+> 🔴 **La auto-respuesta está APAGADA a propósito** (interruptor de base en `apagada`, 27-jul 01:10).
+> Se prendió esa noche y se apagó a los siete minutos: los 40 borradores que preparó estaban mal de
+> **siete formas** distintas, tres graves. **No la prendas sin leer el issue #166.** Nada salió —
+> las 40 quedaron en `preparada`, que el despachador no ve. Lo esencial: la condición de la franja
+> se evaluaba sobre `ahora` en vez de sobre cuándo escribió la persona, así que a la 1 AM calificaba
+> cualquiera (25 de 40 habían escrito **dentro** del horario de atención, y todos esperaban entre 57
+> y 72 horas); y las plantillas se presentaban como «un mensaje automático», contra la regla nueva
+> del dueño.
+
+> 📌 **Regla del dueño (27-jul-2026): el lead todavía NO puede saber que hay un automatismo detrás.**
+> Invierte lo que `autorespuesta/plantillas.ts` documentaba como decisión de diseño deliberada. Si
+> tocás plantillas o sugerencias, ese es el marco.
 
 **La foto completa, los pendientes y el contexto: `docs/estado.md`**; la bitácora de cómo se llegó:
 `docs/sesion-2026-07-21-crm-definitivo.md`.
