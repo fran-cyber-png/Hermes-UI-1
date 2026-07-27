@@ -1,3 +1,4 @@
+import { armarLlaveAtribucion } from '../atribucion/llave.js';
 import { cuerpoParaCerberus } from './latin1.js';
 import { obtenerSesionCerberus } from './sesionStore.js';
 
@@ -48,6 +49,14 @@ export interface OrdenVenta {
   productos: ProductoVenta[];
   /** 'cotizacion' (presupuesto, seguro) o 'venta' (final). */
   saveMode: 'cotizacion' | 'venta';
+  /**
+   * LA CONVERSACIÓN DE LA QUE SALIÓ (`conv:<canal>:<persona>:<numeroPropio>`).
+   *
+   * No la usa Cerberus: viaja adentro del `venta_request_key` y **vuelve** en el webhook
+   * (`Venta.idempotency_key` → `icarus_payload.py:327`). Es lo que convierte la atribución en un
+   * hecho en vez de un match por teléfono. Ver `atribucion/llave.ts`.
+   */
+  clave?: string | null;
 }
 
 export type ResultadoVenta = { ok: true; folio?: string; mensaje?: string } | { ok: false; motivo: string };
@@ -147,8 +156,12 @@ export async function crearVenta(vendedoraId: string, orden: OrdenVenta): Promis
     cuotas_json: '[]',
     save_mode: orden.saveMode,
     mostrar_observacion_pdf: 'true',
-    // Idempotencia: dos clicks no crean dos ventas.
-    venta_request_key: `hermes-${vendedoraId}-${Date.now()}`,
+    // Idempotencia: dos clicks no crean dos ventas. Y —desde #161— también LA LLAVE DE
+    // ATRIBUCIÓN: acá adentro viaja la conversación, Cerberus la guarda tal cual en
+    // `Venta.idempotency_key` y la devuelve en el webhook. Es el único campo que hace el viaje
+    // completo, así que es el único lugar donde la atribución puede volverse determinista.
+    // Sin conversación usable, `armarLlaveAtribucion` devuelve exactamente la llave de antes.
+    venta_request_key: armarLlaveAtribucion({ vendedoraId, clave: orden.clave }),
   });
 
   try {
