@@ -82,13 +82,37 @@ como_deploy() { runuser -u "$USUARIO" -- "$@"; }
 # Usuario y base salen del DATABASE_URL, que es la única fuente de verdad de a qué
 # base le habla el server. La contraseña de esa URL NO se toca: `docker exec` entra al
 # contenedor, donde la autenticación local ya está resuelta (regla dura #1).
+#
+# Se parsea con expansiones de bash y no con `sed`, por una razón concreta: el `sed`
+# anterior tenía `postgresql://` horneado, y `postgres://` —igual de válido para
+# postgres.js y para drizzle— NO matcheaba, así que devolvía la URL ENTERA como si
+# fuera el nombre de usuario. Eso terminaba en `pg_dump -U <url-con-contraseña>`, cuyo
+# error va al log del run de Actions. Un typo en un esquema, y la contraseña de
+# producción publicada. Acá el esquema se descarta sin mirarlo.
+#
+# Y se VALIDA: si lo que sale no parece un identificador, se falla. Un valor raro que
+# igual «no está vacío» es exactamente cómo pasó desapercibido el bug anterior.
 leer_datos_de_la_base() {
-  local dbu
-  dbu="$(sed -n 's|^DATABASE_URL=||p' "$RAIZ/server/.env")"
-  DBUSER="$(printf '%s' "$dbu" | sed -E 's|postgresql://([^:]+):.*|\1|')"
-  DBNAME="$(printf '%s' "$dbu" | sed -E 's|.*/([^/?]+)$|\1|')"
-  [ -n "$DBUSER" ] && [ -n "$DBNAME" ] ||
-    fallar "no pude leer usuario/base del DATABASE_URL de $RAIZ/server/.env"
+  local dbu sin_esquema credencial resto ruta
+  dbu="$(sed -n 's|^DATABASE_URL=||p' "$RAIZ/server/.env" | head -1)"
+  [ -n "$dbu" ] || fallar "no encontré DATABASE_URL en $RAIZ/server/.env"
+
+  sin_esquema="${dbu#*://}"          # usuario:clave@host:puerto/base?params
+  credencial="${sin_esquema%%@*}"    # usuario:clave
+  resto="${sin_esquema#*@}"          # host:puerto/base?params
+  ruta="${resto#*/}"                 # base?params
+  DBUSER="${credencial%%:*}"
+  DBNAME="${ruta%%\?*}"
+
+  # NUNCA se imprime `$dbu` en el mensaje de error: lleva la contraseña.
+  case "$DBUSER" in
+    "" | *[!A-Za-z0-9_]*)
+      fallar "el usuario que saqué del DATABASE_URL de $RAIZ/server/.env no parece un identificador. No lo imprimo (la URL lleva la contraseña): miralo vos." ;;
+  esac
+  case "$DBNAME" in
+    "" | *[!A-Za-z0-9_-]*)
+      fallar "la base que saqué del DATABASE_URL de $RAIZ/server/.env no parece un identificador. No la imprimo: miralo vos." ;;
+  esac
 }
 
 # ¿La base ya adoptó el baseline? `f` = no, `t` = sí, vacío = no se pudo saber.
@@ -98,8 +122,21 @@ registro_de_migraciones() {
 }
 
 [ "$(id -u)" -eq 0 ] || fallar "corré con sudo (necesita systemctl y runuser)"
-touch "$BITACORA" 2>/dev/null || true
-mkdir -p "$ESTADO" && chown "$USUARIO": "$ESTADO"
+
+# UN SOLO DEPLOY A LA VEZ. El `concurrency` de Actions serializa los workflows, pero no
+# sabe nada de un `sudo hermes-deploy` disparado por SSH — y este script se ofrece para
+# eso a propósito. Dos corridas a la vez se pelean por el mismo worktree, por `dist/` y
+# por los archivos de estado, y el `revertir()` de una pisaría el checkout de la otra.
+exec 9>/var/lock/hermes-deploy
+flock -n 9 || fallar "ya hay un deploy de Hermes corriendo (candado /var/lock/hermes-deploy). Esperá a que termine."
+
+# El DRY-RUN no escribe: ni la bitácora, ni el directorio de estado. Un «decime qué
+# harías» que deja archivos atrás no es un dry-run — la misma vara que le aplicamos a
+# `db:adoptar`.
+if [ "$DRY" -eq 0 ]; then
+  touch "$BITACORA" 2>/dev/null || true
+  mkdir -p "$ESTADO" && chown "$USUARIO": "$ESTADO"
+fi
 
 decir "deploy pedido por ${SUDO_USER:-root} · ref=$REF migrar=$MIGRAR rollback=$ROLLBACK"
 
@@ -110,7 +147,12 @@ if [ -n "$(como_deploy git -C "$RAIZ" status --porcelain -uno)" ]; then
   fallar "$RAIZ tiene cambios sin commitear. Miralos antes de descartarlos: puede ser un parche de emergencia que nadie subió."
 fi
 
-como_deploy git -C "$RAIZ" fetch --quiet --all --prune --tags
+# `--prune --tags` borra refs locales, así que solo va cuando el deploy es de verdad.
+if [ "$DRY" -eq 1 ]; then
+  como_deploy git -C "$RAIZ" fetch --quiet origin
+else
+  como_deploy git -C "$RAIZ" fetch --quiet --all --prune --tags
+fi
 
 # El SHA del server CORRIENDO sale del archivo de estado, no del checkout.
 if [ -f "$ESTADO/server" ]; then
@@ -139,7 +181,17 @@ fi
 NUEVO="$(como_deploy git -C "$RAIZ" rev-parse "$REF")"
 
 # ¿El rango trae migraciones? Decide si hace falta respaldar la base.
-TOCADOS="$(como_deploy git -C "$RAIZ" diff --name-only "$VIEJO..$NUEVO" 2>/dev/null || true)"
+#
+# El fallo de este `git diff` NO se puede tragar. Antes era `2>/dev/null || true`, y con
+# eso un `$VIEJO` inválido —un SHA podado por un force-push, un archivo de estado
+# truncado— se convertía en «no cambió ningún archivo»: sin respaldo, sin migración,
+# reiniciando el código nuevo contra el schema viejo. Fail-open en el único punto donde
+# el diseño promete red.
+if ! TOCADOS="$(como_deploy git -C "$RAIZ" diff --name-only "$VIEJO..$NUEVO" 2>&1)"; then
+  fallar "no pude comparar ${VIEJO:0:8}..${NUEVO:0:8}: $TOCADOS
+       Suele ser que el SHA de $ESTADO/server ya no existe en el repo.
+       Miralo antes de seguir: si sigo, no sabría si hay migraciones que aplicar."
+fi
 TRAE_MIGRACION="$(printf '%s\n' "$TOCADOS" | grep -E '^server/drizzle/' || true)"
 CAMBIO_DEPS_RAIZ="$(printf '%s\n' "$TOCADOS" | grep -E '^(package\.json|package-lock\.json)$' || true)"
 CAMBIO_DEPS_SERVER="$(printf '%s\n' "$TOCADOS" | grep -E '^server/(package\.json|package-lock\.json)$' || true)"
@@ -209,30 +261,66 @@ if [ -n "$TRAE_MIGRACION" ] && [ "$MIGRAR" -eq 1 ]; then
          cd $RAIZ/server && npm run db:adoptar -- --si"
   fi
 
+  # EL DUMP ES EL CRM ENTERO: teléfonos, nombres y las conversaciones de WhatsApp de
+  # gente real. En VPS1 conviven otros productos y otros usuarios, así que los permisos
+  # importan tanto como el respaldo. `chown` NO cambia el modo — el `umask` del root que
+  # corre esto dejaría el archivo en 0644 y el directorio en 0755, legibles por
+  # cualquiera. Van explícitos.
   mkdir -p "$DIR_RESPALDOS"
+  chmod 0750 "$DIR_RESPALDOS"
   chown "$USUARIO":hermes "$DIR_RESPALDOS" 2>/dev/null || true
+
   ARCHIVO="$DIR_RESPALDOS/hermes_db-$(date +%Y%m%d-%H%M%S)-pre-${NUEVO:0:8}.sql.gz"
   decir "trae migraciones → respaldando la base en $ARCHIVO"
-  docker exec "$CONTENEDOR_DB" pg_dump -U "$DBUSER" -d "$DBNAME" | gzip > "$ARCHIVO" \
+  (umask 027; docker exec "$CONTENEDOR_DB" pg_dump -U "$DBUSER" -d "$DBNAME" | gzip > "$ARCHIVO") \
     || fallar "el respaldo falló — NO sigo con una migración sin red"
+  chmod 0640 "$ARCHIVO"
   chown "$USUARIO":hermes "$ARCHIVO" 2>/dev/null || true
   decir "respaldo listo ($(du -h "$ARCHIVO" | cut -f1))"
+
   # Se conservan los últimos 20: suficiente para volver atrás, no tanto como para
-  # llenar el disco sin que nadie mire.
-  ls -1t "$DIR_RESPALDOS"/hermes_db-*.sql.gz 2>/dev/null | tail -n +21 | xargs -r rm -f
+  # llenar el disco sin que nadie mire. El `|| true` es porque bajo `pipefail` un `ls`
+  # sin coincidencias (imposible acá, pero) mataría el deploy por una tarea de limpieza.
+  (ls -1t "$DIR_RESPALDOS"/hermes_db-*.sql.gz 2>/dev/null | tail -n +21 | xargs -r rm -f) || true
 fi
 
 # ── El cambio ───────────────────────────────────────────────────────────────────
+#
+# DESDE ACÁ Y HASTA EL RESTART hay una ventana peligrosa: el checkout ya se movió al
+# código nuevo pero el proceso sigue ejecutando el viejo. Si algo falla en el medio
+# —`npm ci` sin red, `vite build` sin memoria— morir en seco deja el disco adelantado y
+# el proceso atrás: el próximo restart que haga systemd (crash, reboot) levantaría el
+# código nuevo sin que nadie lo haya decidido.
+#
+# `desandar_checkout` cierra esa ventana. NO reinicia, a propósito: el proceso nunca se
+# reinició, así que para la vendedora no pasó nada — y un restart le costaría la sesión
+# de Cerberus por un fallo que no la afectó. Lo que sí puede quedar adelantado es la
+# base, y está bien: las migraciones son expand-only, el código viejo funciona igual.
+desandar_checkout() {
+  printf '\033[1;31m✗ %s\033[0m\n' "$1" >&2
+  decir "deshaciendo el checkout: vuelvo a ${VIEJO:0:8} SIN reiniciar (el proceso nunca se movió)"
+  como_deploy git -C "$RAIZ" checkout --quiet --force --detach "$VIEJO" || true
+  local aviso=""
+  if [ -n "$TRAE_MIGRACION" ] && [ "$MIGRAR" -eq 1 ]; then
+    aviso="
+       OJO: las migraciones YA se aplicaron. La base queda adelantada, que es seguro
+       (son expand-only), pero al volver a desplegar no se van a re-aplicar."
+  fi
+  fallar "el deploy de ${NUEVO:0:8} se cortó antes de reiniciar. Producción sigue sirviendo ${VIEJO:0:8} y nadie se enteró.$aviso"
+}
+
 decir "checkout de ${NUEVO:0:8}"
 como_deploy git -C "$RAIZ" checkout --quiet --force --detach "$NUEVO"
 
 if [ -n "$CAMBIO_DEPS_SERVER" ] || [ "$ROLLBACK" -eq 1 ]; then
   decir "dependencias del server"
-  como_deploy npm --prefix "$RAIZ/server" ci --no-audit --no-fund
+  como_deploy npm --prefix "$RAIZ/server" ci --no-audit --no-fund \
+    || desandar_checkout "falló el npm ci del server"
 fi
 if [ -n "$CAMBIO_DEPS_RAIZ" ] || [ "$ROLLBACK" -eq 1 ]; then
   decir "dependencias del front"
-  como_deploy env ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm --prefix "$RAIZ" ci --no-audit --no-fund
+  como_deploy env ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm --prefix "$RAIZ" ci --no-audit --no-fund \
+    || desandar_checkout "falló el npm ci del front"
 fi
 
 if [ -n "$TRAE_MIGRACION" ] && [ "$MIGRAR" -eq 1 ]; then
@@ -244,11 +332,11 @@ if [ -n "$TRAE_MIGRACION" ] && [ "$MIGRAR" -eq 1 ]; then
   # cualquier checkout, y esta necesita que `db:estado` exista en el código nuevo.)
   decir "estado de las migraciones en la base"
   como_deploy bash -c "cd '$RAIZ/server' && npm run db:estado -- --exigir-coherencia" \
-    || fallar "la base y las migraciones del repo no se corresponden — NO migro. Mirá la salida de arriba."
+    || desandar_checkout "la base y las migraciones del repo no se corresponden — NO migré. Mirá la salida de arriba."
 
   decir "aplicando migraciones"
   como_deploy bash -c "cd '$RAIZ/server' && npm run db:migrate" \
-    || fallar "la migración falló. La base quedó como estaba salvo lo que alcanzó a aplicar; el respaldo está en $DIR_RESPALDOS. NO reinicié el servicio."
+    || desandar_checkout "la migración falló. Lo que aplicó, aplicó (drizzle no envuelve el archivo en una transacción); el respaldo está en $DIR_RESPALDOS"
 fi
 
 # El front se construye APARTE y se cambia de lugar al final: `vite build` vacía el
@@ -257,8 +345,9 @@ fi
 # el rollback del front, a un `mv` de distancia.
 decir "build del front"
 como_deploy rm -rf "$RAIZ/dist.nuevo"
-como_deploy bash -c "cd '$RAIZ' && env VITE_API_URL='$API_PUBLICA' npx vite build --outDir dist.nuevo --emptyOutDir"
-[ -f "$RAIZ/dist.nuevo/index.html" ] || fallar "el build no dejó index.html"
+como_deploy bash -c "cd '$RAIZ' && env VITE_API_URL='$API_PUBLICA' npx vite build --outDir dist.nuevo --emptyOutDir" \
+  || desandar_checkout "falló el build del front"
+[ -f "$RAIZ/dist.nuevo/index.html" ] || desandar_checkout "el build no dejó index.html"
 como_deploy rm -rf "$RAIZ/dist.anterior"
 como_deploy mv "$RAIZ/dist" "$RAIZ/dist.anterior"
 como_deploy mv "$RAIZ/dist.nuevo" "$RAIZ/dist"
