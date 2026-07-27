@@ -101,6 +101,30 @@ export const MOMENTOS_DE_VENTA = [
 
 export type MomentoDeVenta = (typeof MOMENTOS_DE_VENTA)[number];
 
+/**
+ * QUÉ SIGNIFICA CADA MOMENTO, en una línea y para quien no vive en este repo.
+ *
+ * Existe porque **Ivi es Python y no puede importar este archivo** (H9): el
+ * vocabulario se publica como dato en `/api/catalogo/vocabulario`, y una lista
+ * de seis slugs sin explicación no alcanza para que el otro lado elija bien.
+ *
+ * Es un `Record` sobre `MomentoDeVenta` a propósito, igual que
+ * `intencionesSugeridas()`: agregar un momento y no decir qué significa **no
+ * compila**. Ese gate es lo que impide que el dato publicado envejezca en
+ * silencio mientras el enum crece.
+ *
+ * NO es texto que se le muestre a un cliente ni a la vendedora (para ella está
+ * `PORQUE_DEL_MOMENTO` en el front, en su voz): es documentación del contrato.
+ */
+export const DESCRIPCION_MOMENTO: Record<MomentoDeVenta, string> = {
+  enfriada: "Ya se le mandó el precio y dejó de contestar hace días.",
+  cotizada: "Ya tiene el precio y todavía está tibia: falta que decida.",
+  "material-sin-precio": "Vio material (flyer o temario) pero nunca se le pasó el precio.",
+  "primer-contacto": "Nadie le habló nunca desde Hermes.",
+  "pidiendo-info": "Su último mensaje pide información (precio, temario, info).",
+  "en-conversacion": "Conversación abierta, sin ninguna señal fuerte.",
+};
+
 export function momentoDeVenta(e: EstadoDeVenta): MomentoDeVenta {
   if (e.enfriada) return "enfriada";
   if (e.cotizada) return "cotizada";
