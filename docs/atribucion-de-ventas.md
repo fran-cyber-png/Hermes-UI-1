@@ -232,21 +232,42 @@ formato de `CERBERUS_WEBHOOK_TARGETS` ya lo soporta sin volver a tocar código.
 
 ## Lo medido (2026-07-27, lectura de producción)
 
+### Cuánto cierra el puente HOY
+
+Corriendo la cascada real sobre los **7.566** eventos que Cerberus ya emitió, contra las
+conversaciones vivas de Hermes:
+
 | | |
 |---|---|
-| Conversaciones de WhatsApp en Hermes | **1.998** (historia de **6 días**: 21 → 27 jul) |
+| Ventas distintas evaluadas | **6.945** |
+| **ATRIBUIDAS** | **142 · 2,0 %** |
+| … por la **llave** | **0** — todavía no se creó ninguna venta desde el CRM |
+| … por **E.164 completo** | **130** |
+| … por **sufijo de 9** | **12** ⚠️ los más débiles (#119) |
+| **SIN ATRIBUIR** | **6.803** — sin teléfono **22** · sin conversación **6.781** |
+| Payloads que **no** validaron contra el Zod | **0 de 7.566** |
+
+Plata atribuida vs. total, por moneda (sin convertir — convertir acá sería hornear una tasa):
+
+| | PEN | USD | MXN | COP | BOB | CLP | DOP |
+|---|---|---|---|---|---|---|---|
+| atribuida | 28.601 | 5.726 | 72.474 | 539.514 | 2.094 | 0 | 0 |
+| total | 682.079 | 296.741 | 3.571.165 | 36.603.652 | 796.961 | 285.329 | 876.834 |
+
+### El contexto que explica ese 2 %
+
+| | |
+|---|---|
+| Conversaciones de WhatsApp en Hermes | **1.998** — historia de **6 días** (21 → 27 jul) |
 | Ventas en el espejo de Cerberus | **6.973** · confirmadas **6.651** |
-| Ventas que matchean una conversación por **sufijo de 9** | **143 (2,1 %)** |
-| …por **E.164 completo** | **114 (1,6 %)** |
-| …que matchean **solo** por sufijo (E.164 distinto) | **29** — el 20 % de los matches |
-| Últimos 30 días | **25 de 454 (5,5 %)** por sufijo · 21 (4,6 %) por E.164 |
-| Últimos 7 días | **10 de 94 (10,6 %)** por sufijo · 8 (8,5 %) por E.164 |
+| Match sobre las ventas de los **últimos 30 días** | **25 de 454 · 5,5 %** |
+| Match sobre las ventas de los **últimos 7 días** | **10 de 94 · 10,6 %** |
+| Ventas que matchean **solo** por sufijo (E.164 distinto) | **29** — el 20 % de los matches por sufijo |
 | `conversiones_wa` · `webhooks_recibidos` | **0** · **0** |
-| Eventos que Cerberus ya emitió (`icarus.cerberus_events`) | **7.566**, sobre **6.945** ventas distintas |
-| …con `venta.vendedor` · con `cliente.telefonos[]` | **7.560** · **7.538** |
-| …con `idempotency_key` **de Hermes** | **0** — ninguna venta se creó todavía desde el CRM |
+| Eventos con `venta.vendedor` · con `cliente.telefonos[]` | **7.560** · **7.538** de 7.566 |
 
 **El techo real de hoy es la historia, no el algoritmo.** Hermes tiene 6 días de conversaciones
-(desde que se vinculó el número) y un solo número vinculado. Por eso el match de los últimos 7 días
-(10,6 %) es 5× el histórico (2,1 %) — y por eso el multi-número (#50) y la llave determinista suben
-ese número mucho más que cualquier heurística de matching.
+(desde que se vinculó el número) y **un solo número** vinculado. Por eso el match de los últimos 7
+días (10,6 %) es 5× el histórico (2,0 %) — y por eso el **multi-número (#50)** y la **llave
+determinista** suben ese número mucho más que cualquier heurística de matching. El 2 % no es el
+techo del sistema: es la sombra que proyectan 6 días de conversación sobre 3 años de ventas.
