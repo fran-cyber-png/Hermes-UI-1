@@ -89,3 +89,40 @@ describe('el frío es del hilo, no de la persona', () => {
     expect(estadoDelContacto(entrada({ error: true, enfriada: true })).acento).toBe('alerta');
   });
 });
+
+/**
+ * EL PADRÓN LOCAL MIENTRAS CERBERUS PIENSA (#133).
+ *
+ * La ficha tiene un techo de 12 s porque Cerberus a veces deja la conexión
+ * abierta sin responder. Durante esos segundos el panel decía «Buscando en
+ * Cerberus…» incluso cuando la cola YA sabía —por el cruce contra el padrón—
+ * que esa persona compró tres veces. El dato existía y se escondía.
+ */
+describe('mientras Cerberus responde, el padrón local ya sabe algo', () => {
+  it('cargando + padrón que dice cliente: se pinta cliente, no un spinner', () => {
+    const e = estadoDelContacto(entrada({ cargando: true, padron: 'recompro' }));
+    expect(e.tono).toBe('cliente');
+    expect(e.acento).toBe('cliente');
+    expect(e.titulo).toBe('Cliente');
+    expect(e.detalle).toMatch(/confirmando/i);
+  });
+
+  it('la llamada viva MANDA: cuando llega, la ficha reemplaza a la provisional', () => {
+    const e = estadoDelContacto(entrada({ ficha: CLIENTE, padron: 'compro' }));
+    expect(e.compras).toMatchObject({ n: 2 });
+    expect(e.detalle).toBeNull();
+  });
+
+  it('si Cerberus contesta que NO figura, el padrón no lo contradice: manda la fuente de verdad', () => {
+    const e = estadoDelContacto(entrada({ ficha: { estado: 'nuevo' }, padron: 'compro' }));
+    expect(e.tono).toBe('nuevo');
+  });
+
+  it('sin padrón, cargando sigue siendo cargando (nada cambió para el 93% de las filas)', () => {
+    expect(estadoDelContacto(entrada({ cargando: true })).tono).toBe('cargando');
+  });
+
+  it('el padrón no tapa un error de Cerberus: «no se pudo saber» no es «es cliente»', () => {
+    expect(estadoDelContacto(entrada({ error: true, padron: 'vip' })).acento).toBe('alerta');
+  });
+});

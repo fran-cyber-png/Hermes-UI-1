@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { BookOpen, NotebookPen, Send, UserRound, type LucideIcon } from 'lucide-react';
 import type { Conversacion } from '../canales/conversaciones';
+import { marcaDeCliente } from '../canales/cliente';
 import { PanelContexto } from '../canales/PanelContexto';
 import { FichaContacto, useFicha } from '../cerberus/FichaContacto';
 import type { Ficha } from '../cerberus/ficha';
@@ -114,6 +115,9 @@ export function PanelDerecho({
     error: ficha.isError,
     ficha: ficha.data,
     enfriada: senales?.senales[conversacion.clave]?.enfriamiento.enfriada ?? false,
+    // Lo que la fila de la cola ya traía (#133): evita el «Buscando en
+    // Cerberus…» cuando el padrón local ya sabe que esta persona compró.
+    padron: marcaDeCliente(conversacion)?.nivel ?? null,
   });
 
   const cliente = fichaDeCliente(ficha.data);

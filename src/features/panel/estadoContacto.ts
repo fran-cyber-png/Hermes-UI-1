@@ -1,4 +1,5 @@
 import { resumenCompras, type Ficha, type ResumenCompras } from '../cerberus/ficha';
+import type { NivelCliente } from '../canales/cliente';
 
 /**
  * QUIÉN ES ESTA PERSONA — la primera pregunta del panel, resuelta sin DOM.
@@ -39,6 +40,12 @@ export interface EntradaEstadoContacto {
   ficha: Ficha | undefined;
   /** Señal automática del hilo: cotizada y sin respuesta hace N días. */
   enfriada: boolean;
+  /**
+   * Lo que la COLA ya sabía de esta persona (#133): el nivel del cruce contra el
+   * padrón local, que viaja en la fila. Solo se usa MIENTRAS la ficha viva
+   * viaja; en cuanto Cerberus contesta —lo que sea que conteste— manda Cerberus.
+   */
+  padron?: NivelCliente | null;
 }
 
 export interface EstadoContacto {
@@ -67,6 +74,25 @@ export function estadoDelContacto(e: EntradaEstadoContacto): EstadoContacto {
   }
 
   if (e.cargando) {
+    /**
+     * EL DATO QUE YA TENÍAMOS (#133). La ficha tiene un techo de 12 s porque
+     * Cerberus a veces deja la conexión abierta sin responder; durante esos
+     * segundos el panel decía «Buscando…» aunque la fila de la cola YA supiera
+     * —del cruce contra el padrón local— que esta persona compró tres veces.
+     *
+     * Es PROVISIONAL y se dice que lo es: no trae cifras (el padrón local no
+     * guarda montos, a propósito) y la llamada viva lo reemplaza entero apenas
+     * llega, conteste lo que conteste.
+     */
+    if (e.padron) {
+      return {
+        ...base,
+        tono: 'cliente',
+        acento: 'cliente',
+        titulo: 'Cliente',
+        detalle: 'Ya te compró. Confirmando con Cerberus…',
+      };
+    }
     return { ...base, tono: 'cargando', acento: 'neutro', titulo: 'Buscando en Cerberus…', detalle: null };
   }
 
