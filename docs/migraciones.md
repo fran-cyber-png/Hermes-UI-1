@@ -158,6 +158,19 @@ npm run db:adoptar          # verifica y dice qué haría — NO escribe nada
 npm run db:adoptar -- --si  # verifica y, si coincide, registra
 ```
 
+> **La primera vez hay un huevo y una gallina**: el checkout de producción todavía no tiene
+> `db:adoptar` (viene con las migraciones, y las migraciones no se pueden desplegar hasta que la base
+> adopte). Se sale usando **otro checkout que ya tenga el código nuevo** —el de staging— apuntado al
+> `.env` de producción, sin tocar `/srv/hermes`:
+>
+> ```bash
+> cd /srv/hermes-staging/server
+> DOTENV_CONFIG_PATH=/srv/hermes/server/.env npm run db:adoptar
+> DOTENV_CONFIG_PATH=/srv/hermes/server/.env npm run db:adoptar -- --si
+> ```
+>
+> Después del primer deploy, `/srv/hermes/server` tiene los scripts y esto deja de hacer falta.
+
 Lo que hace la verificación, sola, cada vez:
 
 1. levanta una base **temporal en el mismo servidor** (`hermes_verificacion_*`; mismo Postgres,
