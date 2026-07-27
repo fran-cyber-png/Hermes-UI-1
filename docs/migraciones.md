@@ -1,7 +1,7 @@
 # Migraciones — cómo cambiar el schema sin romper producción
 
 > Desde el 2026-07-24 el schema de Hermes vive en migraciones versionadas, no en `db:push`.
-> El *por qué* está en **ADR 0020**; esto es el *cómo*.
+> El *por qué* está en **ADR 0021**; esto es el *cómo*.
 
 ---
 
@@ -294,7 +294,7 @@ corregir el `when` en `_journal.json` para que supere al máximo aplicado, y vol
 
 `db:push` **sigue existiendo** y sigue siendo lo correcto para **las bases efímeras de test**
 (`montarBase.ts`): se crean vacías, se usan y se tiran; no hay datos que preservar ni historia que
-registrar. Contra **producción o staging, nunca** — ADR 0020.
+registrar. Contra **producción o staging, nunca** — ADR 0021.
 
 Por qué no: `db:push` compara contra la base viva y aplica lo que le parece, sin archivo, sin
 revisión y sin registro. En la práctica pedía cosas peligrosas y las pedía por teclado — al agregar

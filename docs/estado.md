@@ -176,7 +176,7 @@ que escribió cada persona, su antigüedad). Eso se arregla en #166.
   pieza: `ssh deploy@161.132.39.165 'sudo hermes-deploy --dry-run'` para ver el plan,
   `sudo hermes-deploy` para promover `origin/main`, `sudo hermes-deploy --rollback` para volver.
   Respalda la base, migra, construye, reinicia, hace el smoke y revierte solo si falla.
-  El schema **ya no se empuja a mano**: viaja en `server/drizzle/` (ADR 0020, `docs/migraciones.md`).
+  El schema **ya no se empuja a mano**: viaja en `server/drizzle/` (ADR 0021, `docs/migraciones.md`).
   Solo front, sin restart: se despliega automático al mergear a `main` (N4).
 - **VPS1:** systemd `hermes` (PORT=4110) · Postgres `hermes_db` 127.0.0.1:5438 · nginx
   `hermes-api` (SSE sin buffering, 64 MB adjuntos) · deploy key `github.com-hermes` · sesión WA en

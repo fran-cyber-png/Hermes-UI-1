@@ -23,6 +23,12 @@ import { PREFIJO_REFERENCIA } from "./referencia.js";
  * El script se corre como SUBPROCESO a propósito: lo que hay que probar es lo que el
  * operador va a escribir en VPS1, códigos de salida incluidos — no una función
  * interna que se le parece.
+ *
+ * ⚠️ CORRELO CON `npm run test:db`, no con `tsx --test` a secas. La base plantilla vive
+ * en un contenedor COMPARTIDO (5439) y la monta `montarBase.ts` desde el `schema.ts` de
+ * quien la corrió último. Con dos worktrees trabajando en paralelo, la plantilla puede
+ * ser de la otra rama — y entonces la PARIDAD falla contra un schema que no es el tuyo.
+ * `npm run test:db` la remonta antes de cada corrida, así que ahí no pasa.
  */
 
 const SERVER = join(dirname(fileURLToPath(import.meta.url)), "../..");

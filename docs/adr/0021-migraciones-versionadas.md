@@ -1,4 +1,4 @@
-# ADR 0020 — El schema se versiona en migraciones, no se empuja contra la base viva
+# ADR 0021 — El schema se versiona en migraciones, no se empuja contra la base viva
 
 - **Fecha:** 2026-07-24 · **enmendado el 2026-07-27** (la verificación del baseline dejó de ser
   un paso del runbook y pasó a ser parte del script; ver las dos secciones marcadas)
@@ -34,7 +34,7 @@ estado actual de producción.**
 - `server/drizzle/NNNN_*.sql` — el SQL, en el repo, revisable en el PR que lo introduce.
 - `server/drizzle/meta/_journal.json` — el índice, con su contador `when`.
 - El CD las aplica solo, **después de respaldar la base** y **después de haberlas aplicado en
-  staging** sobre una base con historia (ADR 0021).
+  staging** sobre una base con historia (ADR 0022).
 
 Cuatro decisiones que la acompañan:
 

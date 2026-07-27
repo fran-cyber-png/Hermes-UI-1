@@ -5,8 +5,8 @@
 > **26 commits de atraso** — precisamente porque el despliegue era manual.
 >
 > **Actualizado el 2026-07-24**: el pipeline pasó a tener **cinco niveles** y apareció un
-> **staging** entre `main` y las vendedoras (ADR 0021). Las migraciones dejaron de frenarlo
-> (ADR 0020). Lo que sigue vigente de la versión original: por qué el front puede ser automático
+> **staging** entre `main` y las vendedoras (ADR 0022). Las migraciones dejaron de frenarlo
+> (ADR 0021). Lo que sigue vigente de la versión original: por qué el front puede ser automático
 > y el server no (§2 y §3), y las tres reglas que lo hacen seguro (§4).
 
 ---
@@ -96,7 +96,7 @@ mantiene solo (y así el drift no vuelve); lo que interrumpe a una persona lo de
 
 Lo que agregó staging a esa postura: **antes, «automatizar lo barato» significaba que el front
 llegaba a las vendedoras sin que nadie hubiera ejecutado ese código en ningún lado.** Ahora lo barato
-se automatiza igual, pero pasando por un lugar donde romperlo no le cuesta nada a nadie (ADR 0021).
+se automatiza igual, pero pasando por un lugar donde romperlo no le cuesta nada a nadie (ADR 0022).
 
 ### El despliegue del server es un script, no YAML
 
@@ -175,7 +175,7 @@ secretos en GitHub: el workflow escribe en el disco local.
 
 ## 6. Lo que NO automatiza, a propósito
 
-### ~~El schema de la base~~ — resuelto el 2026-07-24 (ADR 0020)
+### ~~El schema de la base~~ — resuelto el 2026-07-24 (ADR 0021)
 
 > Lo que decía acá: «si el rango toca `server/src/db/schema.ts`, **los dos workflows frenan**»,
 > porque `db:push` compara contra la base viva y aplica lo que le parece, sin plan y sin backup.
@@ -257,7 +257,7 @@ artefactos, no drift.
 Los cuatro huecos que esta sección declaraba el 2026-07-22 se cerraron el 2026-07-24:
 
 - ~~**No hay staging.**~~ Lo hay: `/srv/hermes-staging`, `:4111`, base propia. Cada push a `main`
-  pasa por ahí antes que producción (ADR 0021).
+  pasa por ahí antes que producción (ADR 0022).
 - ~~**No hay smoke test funcional.**~~ `npm run humo` verifica el perímetro de auth ruta por ruta, el
   front servido, el login contra Cerberus y —autenticado— la cola, el radar, la agenda y el SSE.
   Corre en staging con sesión y en producción en modo público.
@@ -272,7 +272,7 @@ Los cuatro huecos que esta sección declaraba el 2026-07-22 se cerraron el 2026-
   Una migración que tarde diez minutos sobre dos millones de filas va a parecer instantánea acá.
   Sembrarla con un dump anonimizado de producción es el próximo paso obvio.
 - **Staging comparte máquina con producción.** Un staging que se coma la RAM o el disco afecta a las
-  vendedoras. Deuda consciente (ADR 0021).
+  vendedoras. Deuda consciente (ADR 0022).
 - **La cáscara no entra al pipeline.** Tauri/Electron se siguen empaquetando aparte y a mano.
 - **No hay despliegue por tags ni versionado.** Se despliega el HEAD de `main` o un SHA suelto.
 - **CORS sigue en `*`** (issue #94). No es del CD, pero es la deuda de perímetro que queda viva.

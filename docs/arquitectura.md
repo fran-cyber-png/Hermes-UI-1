@@ -300,7 +300,7 @@ delete+recreate**, porque un rebuild cambiaba el id de la persona y rompía los 
 crea igual, por el glob del `drizzle.config.ts`) · `pauta_snapshots`, `configuracion`, `pauta_serie`
 (sus escritores están detrás de rutas que nadie llama).
 
-### ~~Migraciones: no hay~~ — las hay, desde el 2026-07-24 (ADR 0020)
+### ~~Migraciones: no hay~~ — las hay, desde el 2026-07-24 (ADR 0021)
 
 > Lo que decía acá: «`db:push` de drizzle-kit, cero migraciones versionadas. Deuda heredada y
 > declarada en ADR 0001. Al tocar `db/schema.ts`, push contra la base.»
