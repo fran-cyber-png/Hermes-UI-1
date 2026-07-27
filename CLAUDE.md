@@ -469,8 +469,8 @@ imagen. UI en `src/features/plantillas/`, colgada del `···` («Mensajes prede
 `envios_wa` guardaba qué se mandó y nunca **de qué pieza**, y nada guardaba **qué pasó después**: una
 plantilla con 500 usos y 0 ventas se veía idéntica a una con 500 usos y 50. Server en
 `server/src/procedencia/` (el hecho que se escribe) + `server/src/resultados/` (el veredicto que se
-deriva). **Frente 1 de la épica #169**; los frentes 2 (un catálogo con bases y deltas) y 3 (el puente
-con Ivi) todavía no están.
+deriva). **Frente 1 de la épica #169**; el frente 2 (un catálogo con bases y deltas) tiene su diseño
+en **ADR 0025** —aprobado el modelo, sin schema todavía— y el 3 (el puente con Ivi) no está.
 
 - **La procedencia viaja en la ORDEN de envío**, no en un `update`: misma puerta (`EnvioControlado`),
   misma fila. Por eso un envío **bloqueado** también deja escrito de qué pieza iba a salir. Seis
