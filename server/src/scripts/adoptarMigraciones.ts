@@ -118,6 +118,28 @@ async function main(): Promise<void> {
       return;
     }
 
+    // GUARDIA DEL `when`, la misma que journal.test.ts hace sobre el repo pero contra la
+    // BASE. El migrador de drizzle aplica lo que tiene `when` mayor al máximo
+    // `created_at` registrado: si adoptáramos algo con un `when` menor o igual, quedaría
+    // registrado como aplicado y drizzle lo saltearía para siempre — «adoptada» y nunca
+    // ejecutada, que es el mismo fallo silencioso por otra puerta.
+    if (hayTabla) {
+      const [{ tope }] = await sql<{ tope: number | null }[]>`
+        select max(created_at)::bigint as tope from drizzle.__drizzle_migrations`;
+      const chocan = tope === null ? [] : pendientes.filter((p) => p.when <= Number(tope));
+      if (chocan.length > 0) {
+        console.log(
+          `✗ ${chocan.length} migración(es) tienen un \`when\` que NO supera al máximo ya ` +
+            `registrado en la base (${tope}):\n` +
+            chocan.map((c) => `  ${c.tag}  when=${c.when}`).join("\n") +
+            "\n\nDrizzle las saltearía en silencio. Corregí el `when` en _journal.json:\n" +
+            "  JOURNAL_FILE=server/drizzle/meta/_journal.json goberna-journal-set-when",
+        );
+        process.exitCode = 1;
+        return;
+      }
+    }
+
     // ── LA VERIFICACIÓN ────────────────────────────────────────────────────────
     if (opciones.forzar) {
       console.log("╔════════════════════════════════════════════════════════════════════╗");

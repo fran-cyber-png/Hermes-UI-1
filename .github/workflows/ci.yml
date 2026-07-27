@@ -72,7 +72,10 @@ jobs:
         run: |
           set -uo pipefail
           MAL=0
-          if git ls-files | grep -E '(^|/)\.env$|(^|/)\.env\.[^e]' ; then
+          # `.env.example` es lo ÚNICO que puede estar versionado. La regex anterior
+          # (`\.env\.[^e]`) dejaba pasar cualquier `.env.<algo-que-empieza-con-e>`:
+          # .env.enc, .env.escuela, .env.electoral.
+          if git ls-files | grep -E '(^|/)\.env(\..+)?$' | grep -vE '(^|/)\.env\.example$' ; then
             echo "::error::hay un .env versionado — los secretos van por nombre, nunca en el repo"
             MAL=1
           fi
@@ -423,15 +426,23 @@ jobs:
           env VITE_API_URL="$API" npx vite build --outDir dist.nuevo --emptyOutDir
           test -f dist.nuevo/index.html
           rm -rf dist.anterior
-          mv dist dist.anterior
+          # El `if`: en un checkout recién clonado no hay `dist/` todavía, y morir acá
+          # dejaría el build hecho y sin publicar. N3 ya lo tenía; esto lo empareja.
+          if [ -d dist ]; then mv dist dist.anterior; fi
           mv dist.nuevo dist          # el cambio real: microsegundos
 
           echo "$NUEVO" > "$ESTADO/server"   # el código de server/ es idéntico: la marca es honesta
           echo "$NUEVO" > "$ESTADO/front"
 
           # 4 · Regla dura #2: no se dice "listo" sin verificar contra la URL viva.
-          SERVIDO="$(curl -fsS --max-time 20 "$API/" | grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' | head -1)"
-          LOCAL="$(ls dist/assets/index-*.js | head -1 | sed 's|dist/||')"
+          # Sin `head`: bajo `pipefail`, `head -1` cierra el pipe y el productor muere con
+          # SIGPIPE → el paso falla con 141 y sin mensaje. Y falla DESPUÉS de haber
+          # escrito el estado, así que el run rojo miente sobre lo que quedó desplegado.
+          # `sed -n '1{p;q}'`... tampoco: mismo problema. Se lee todo y se corta en bash.
+          TODOS_SERVIDOS="$(curl -fsS --max-time 20 "$API/" | grep -oE 'assets/index-[A-Za-z0-9_-]+\.js')"
+          SERVIDO="${TODOS_SERVIDOS%%$'\n'*}"
+          TODOS_LOCALES="$(cd dist && ls assets/index-*.js)"
+          LOCAL="${TODOS_LOCALES%%$'\n'*}"
           echo "servido: $SERVIDO · construido: $LOCAL"
           if [ "$SERVIDO" != "$LOCAL" ]; then
             echo "::error::El sitio vivo no sirve el build nuevo. Rollback: mv dist dist.roto && mv dist.anterior dist"

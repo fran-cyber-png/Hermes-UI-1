@@ -28,7 +28,21 @@ import type { Sql } from "postgres";
  */
 export const ESQUEMAS_GESTIONADOS = ["public", "fuentes", "ontologia", "rag"] as const;
 
-/** Las cuatro cosas que se comparan. El nombre es el que sale impreso. */
+/**
+ * Las cuatro cosas que se comparan. El nombre es el que sale impreso.
+ *
+ * LO QUE **NO** SE COMPARA, escrito para que nadie lo suponga: tipos `ENUM` y sus
+ * valores, extensiones instaladas, vistas y vistas materializadas, funciones y
+ * triggers, tablas particionadas (`relkind='p'`) o foráneas (`'f'`), si una tabla es
+ * `UNLOGGED`, columnas `GENERATED … AS IDENTITY` (no dejan fila en `pg_attrdef`, así
+ * que su firma es indistinguible de un `bigint NOT NULL` común), privilegios y RLS.
+ *
+ * Hoy el schema no usa ninguna de esas cosas —27 `bigserial`, cero `pgEnum`, cero
+ * identity— así que la comparación es completa **para este repo**. El día que alguien
+ * agregue un `pgEnum()` o un `generatedAlwaysAsIdentity()`, esta lista deja de cubrirlo
+ * y hay que ampliarla: si no, `db:adoptar` diría «✓ sin diferencias» sobre una base que
+ * difiere, que es exactamente el fallo que este módulo existe para impedir.
+ */
 export type Aspecto = "tabla" | "columna" | "índice" | "restricción";
 
 export const ASPECTOS: readonly Aspecto[] = ["tabla", "columna", "índice", "restricción"];

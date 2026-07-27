@@ -66,9 +66,19 @@ export function guardarAntiProd(url: string): void {
     }
   }
   if (!url.includes(":5439")) {
+    // Se muestra host:puerto/base y NUNCA la URL entera: esta guardia salta justo
+    // cuando alguien apuntó los tests a otra base, o sea cuando la URL que iría al log
+    // de CI lleva la contraseña de esa otra base (regla dura #1).
+    let donde = "(no se pudo leer)";
+    try {
+      const u = new URL(url);
+      donde = `${u.hostname}:${u.port}${u.pathname}`;
+    } catch {
+      /* si ni siquiera es una URL, el mensaje de arriba alcanza */
+    }
     throw new Error(
       `GUARDIA anti-prod: la URL de test tiene que apuntar al puerto 5439 (la base de test ` +
-        `corre SOLO ahí). Recibí: ${url}`,
+        `corre SOLO ahí). Recibí: ${donde}`,
     );
   }
 }

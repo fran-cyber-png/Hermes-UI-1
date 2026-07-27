@@ -50,7 +50,10 @@ BITACORA=/var/log/hermes-deploy.log
 #                 del último deploy con restart. Lo escribe SOLO este script — N4 no lo
 #                 toca porque un deploy de front no reinicia el server, así que no
 #                 cambia cuál fue el último server sano.
-ESTADO="/home/$USUARIO/.hermes-despliegue"
+# El home sale de passwd, no se supone: `ci.yml` usa `$HOME` del runner, y si los dos
+# no apuntan al MISMO directorio, N4 y N5 llevan estados distintos — cada uno creyendo
+# que producción está en un sha diferente.
+ESTADO="$(getent passwd "$USUARIO" | cut -d: -f6)/.hermes-despliegue"
 
 REF=origin/main
 ROLLBACK=0
