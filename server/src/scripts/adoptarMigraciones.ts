@@ -1,9 +1,19 @@
 import "dotenv/config";
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 import postgres from "postgres";
+import {
+  ESQUEMAS_GESTIONADOS,
+  compararEstructuras,
+  describirDiferencias,
+  leerEstructura,
+  resumirComparacion,
+} from "../migraciones/estructura.js";
+import {
+  estructuraDeReferencia,
+  hashDe,
+  leerJournal,
+  sobrantesDeVerificacion,
+  tagsDelRepo,
+} from "../migraciones/referencia.js";
 
 /**
  * ADOPTAR MIGRACIONES — para una base que YA tiene el schema pero no el registro.
@@ -16,40 +26,52 @@ import postgres from "postgres";
  * Lo que hace: registra migraciones como aplicadas SIN ejecutar su SQL, que es
  * exactamente lo que hace falta cuando la base ya está en ese estado.
  *
- * ANTES de usarlo hay que PROBAR que la base realmente está en ese estado. La prueba
- * no la hace este script (no puede: comparar schemas de verdad es trabajo de pg_dump);
- * la hace el runbook, con un diff contra una base recién migrada:
+ * LA PRUEBA DE QUE ESTÁ EN ESE ESTADO LA HACE ESTE SCRIPT. Antes la hacía el
+ * runbook, a mano, con un `pg_dump` de cada lado y un `diff` — un paso manual, y los
+ * pasos manuales no se hacen. Su fallo además es el peor de todos: si se adopta una
+ * base que NO coincide, queda **marcada como al día mintiendo**, drizzle no vuelve a
+ * mirar el baseline nunca, y la diferencia sobrevive en silencio para siempre.
  *
- *     docs/migraciones.md  §«Adoptar una base que ya existía»
+ * Ahora, antes de registrar nada, levanta una base temporal en el MISMO servidor, le
+ * aplica las migraciones desde cero, y compara tabla por tabla, columna por columna
+ * (con su tipo, su nulabilidad y su default), índice por índice y restricción por
+ * restricción. **Ante cualquier diferencia se rehúsa** y las lista.
  *
- * Este script solo se rehúsa a lo obviamente malo: base vacía (ahí lo correcto es
- * `db:migrate`), o migraciones ya registradas que no coinciden.
+ *     npm run db:adoptar            # verifica y dice qué haría; no toca nada
+ *     npm run db:adoptar -- --si    # verifica y, si coincide, registra
  *
- *     npm run db:adoptar            # dice qué haría, no toca nada
- *     npm run db:adoptar -- --si    # lo hace
+ * `--si` NO saltea la verificación: es la confirmación de escribir, no un permiso
+ * para no mirar. La salida de emergencia es otra bandera, ruidosa y con motivo
+ * obligatorio (`--forzar-sin-verificar --motivo="…"`), documentada en
+ * `docs/migraciones.md`.
  */
 
-const AQUI = dirname(fileURLToPath(import.meta.url));
-const DIR_MIGRACIONES = join(AQUI, "../../drizzle");
+export type Opciones = {
+  confirmado: boolean;
+  forzar: boolean;
+  motivo: string;
+};
 
-type EntradaJournal = { idx: number; when: number; tag: string };
-
-function leerJournal(): EntradaJournal[] {
-  const ruta = join(DIR_MIGRACIONES, "meta/_journal.json");
-  const journal = JSON.parse(readFileSync(ruta, "utf8")) as { entries: EntradaJournal[] };
-  return [...journal.entries].sort((a, b) => a.idx - b.idx);
-}
-
-/** El mismo hash que registra drizzle-kit: sha256 del contenido del .sql, crudo. */
-function hashDe(tag: string): string {
-  const sql = readFileSync(join(DIR_MIGRACIONES, `${tag}.sql`), "utf8");
-  return createHash("sha256").update(sql).digest("hex");
+export function leerOpciones(argv: readonly string[]): Opciones {
+  const motivo = argv.find((a) => a.startsWith("--motivo="))?.slice("--motivo=".length) ?? "";
+  return {
+    confirmado: argv.includes("--si"),
+    forzar: argv.includes("--forzar-sin-verificar"),
+    motivo: motivo.trim(),
+  };
 }
 
 async function main(): Promise<void> {
-  const confirmado = process.argv.includes("--si");
+  const opciones = leerOpciones(process.argv.slice(2));
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("falta DATABASE_URL (sale de server/.env)");
+
+  if (opciones.forzar && !opciones.motivo) {
+    throw new Error(
+      '--forzar-sin-verificar exige --motivo="por qué se saltea la verificación". ' +
+        "Saltearla sin dejar escrito el porqué es justo lo que esta bandera existe para evitar.",
+    );
+  }
 
   // Qué base es, para que quede en el log de quien lo corre: sin credenciales.
   const u = new URL(url);
@@ -71,9 +93,9 @@ async function main(): Promise<void> {
       );
     }
 
-    // El dry-run NO escribe: ni siquiera crea el schema. Un «decime qué harías» que
-    // deja objetos atrás no es un dry-run, y la tabla de migraciones es justo la que
-    // no querés que aparezca a medias en una base de producción.
+    // El dry-run NO escribe: ni siquiera crea el schema `drizzle`. Un «decime qué
+    // harías» que deja objetos atrás no es un dry-run, y la tabla de migraciones es
+    // justo la que no querés que aparezca a medias en una base de producción.
     const [{ hayTabla }] = await sql<{ hayTabla: boolean }[]>`
       select exists (
         select 1 from information_schema.tables
@@ -96,14 +118,60 @@ async function main(): Promise<void> {
       return;
     }
 
+    // ── LA VERIFICACIÓN ────────────────────────────────────────────────────────
+    if (opciones.forzar) {
+      console.log("╔════════════════════════════════════════════════════════════════════╗");
+      console.log("║  SIN VERIFICAR — se está adoptando A CIEGAS                        ║");
+      console.log("╚════════════════════════════════════════════════════════════════════╝");
+      console.log(`motivo: ${opciones.motivo}\n`);
+      console.log(
+        "Si la base NO está en el estado del baseline, queda marcada como al día\n" +
+          "mintiendo y drizzle no vuelve a mirar el baseline nunca. Anotá esto donde\n" +
+          "alguien lo lea, porque a partir de acá nada más lo va a detectar.\n",
+      );
+    } else {
+      const sobrantes = await sobrantesDeVerificacion(sql);
+      if (sobrantes.length > 0) {
+        console.log("⚠ quedaron bases de verificación de una corrida anterior:");
+        for (const s of sobrantes) console.log(`    DROP DATABASE "${s}" WITH (FORCE);`);
+        console.log("");
+      }
+
+      console.log("Verificando que la base esté EXACTAMENTE en el estado del baseline.");
+      console.log(`  esquemas comparados : ${ESQUEMAS_GESTIONADOS.join(", ")}`);
+      console.log(`  migraciones del repo: ${tagsDelRepo().join(", ")}`);
+
+      const { estructura: baseline } = await estructuraDeReferencia(sql, url, (l) =>
+        console.log(`  ${l}`),
+      );
+      const viva = await leerEstructura(sql);
+
+      // QUÉ se comparó, no solo el veredicto: un «✓ todo igual» sin decir sobre
+      // cuántas tablas es indistinguible de una consulta que devolvió vacío.
+      console.log("\nQué se comparó:");
+      for (const linea of resumirComparacion(viva, baseline)) console.log(linea);
+
+      const difs = compararEstructuras(viva, baseline);
+      if (difs.length > 0) {
+        console.log(`\n✗ ${difs.length} diferencia(s). NO se adopta nada.\n`);
+        for (const linea of describirDiferencias(difs)) console.log(linea);
+        console.log(
+          "\nCada diferencia es algo que el repo y la base no cuentan igual. Se arreglan\n" +
+            "hacia el repo —que la migración las describa—, no ignorándolas: el\n" +
+            "`notas_texto_gin_idx` que existía solo en producción se arregló así.\n" +
+            'Salida de emergencia: --forzar-sin-verificar --motivo="…" (ver docs/migraciones.md).',
+        );
+        process.exitCode = 1;
+        return;
+      }
+      console.log("\n✓ sin diferencias: la base viva y el baseline describen lo mismo.\n");
+    }
+
     console.log("Se marcarían como aplicadas (SIN ejecutar su SQL):");
     for (const p of pendientes) console.log(`  ${p.tag}  ${p.hash.slice(0, 16)}…  when=${p.when}`);
 
-    if (!confirmado) {
-      console.log(
-        "\nEsto NO se ejecutó. Antes de correrlo con `--si`, verificá con el diff de " +
-          "`docs/migraciones.md` que la base tiene exactamente este schema.",
-      );
+    if (!opciones.confirmado) {
+      console.log("\nEsto NO se ejecutó. Para hacerlo: el mismo comando con `--si`.");
       return;
     }
 
