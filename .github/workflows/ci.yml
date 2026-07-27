@@ -29,9 +29,15 @@ on:
   workflow_dispatch:
 
 # Un push nuevo a la misma rama cancela la corrida vieja: hay un solo runner.
+#
+# EN `main` NO SE CANCELA, y esto no es un detalle. La corrida de `main` incluye N3 y N4,
+# que despliegan — y el `concurrency` de un JOB no protege contra la cancelación del
+# WORKFLOW. Con `cancel-in-progress: true`, dos pushes seguidos (un merge y un hotfix)
+# pueden matar N4 justo entre `mv dist dist.anterior` y `mv dist.nuevo dist`, dejando
+# producción SIN front. En una rama, cancelar solo cuesta minutos de runner.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   # El binario de Electron son ~100 MB que CI nunca usa: la app de las vendedoras se
@@ -53,6 +59,11 @@ jobs:
     runs-on: [self-hosted, vps1-hermes]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Historia completa: la guardia expand-only necesita el merge base con `main`,
+          # y con el `fetch-depth: 1` por defecto no existe. En el runner self-hosted el
+          # workspace persiste, así que después de la primera vez esto es incremental.
+          fetch-depth: 0
 
       # Regla dura #1. `.gitignore` es una intención, no una garantía: un `git add -f`
       # la saltea. Esto mira lo que HAY en el árbol, que es lo que terminaría publicado.
@@ -81,26 +92,49 @@ jobs:
       # Si necesitás borrar o renombrar, van DOS deploys: primero agregás lo nuevo,
       # después de desplegado migrás los datos, y recién en un PR posterior sacás lo
       # viejo. Es más lento y es la única forma de que el rollback siga siendo seguro.
+      # NO PUEDE PASAR SIN HABER MIRADO. Antes esto era
+      #   NUEVAS="$(git diff … 2>/dev/null || true)"
+      # y cualquier fallo de git —un checkout shallow sin merge base, por ejemplo— daba
+      # la cadena vacía, que es indistinguible de «no hay migraciones nuevas». La guardia
+      # salía verde sin haber abierto un solo archivo. Ahora un fallo de git es un fallo
+      # del paso; «no hay migraciones» solo lo dice un `git diff` que corrió bien.
       - name: Las migraciones nuevas son expand-only
         run: |
           set -uo pipefail
-          git fetch --quiet --depth=1 origin main 2>/dev/null || true
+          if ! git fetch --quiet origin main; then
+            echo "::error::no pude traer origin/main — esta guardia no puede correr"
+            exit 1
+          fi
+          if ! BASE="$(git merge-base FETCH_HEAD HEAD)"; then
+            echo "::error::no hay merge base con origin/main (¿checkout shallow?) — esta guardia no puede correr"
+            exit 1
+          fi
 
           # Solo las migraciones que ESTE cambio agrega. Las que ya están en main ya se
           # aplicaron: revisarlas otra vez solo daría falsos positivos para siempre.
-          NUEVAS="$(git diff --name-only --diff-filter=A FETCH_HEAD...HEAD -- 'server/drizzle/*.sql' 2>/dev/null || true)"
+          # (En un push a `main` la base ES el HEAD, así que no hay nada nuevo que mirar:
+          #  el PR ya pasó por acá. Es una guardia de PR, y está bien que lo sea.)
+          if ! NUEVAS="$(git diff --name-only --diff-filter=A "$BASE" HEAD -- 'server/drizzle/*.sql')"; then
+            echo "::error::git diff falló — esta guardia no puede correr"
+            exit 1
+          fi
           if [ -z "$NUEVAS" ]; then
-            echo "sin migraciones nuevas en este cambio"
+            echo "sin migraciones nuevas en este cambio (comparado contra ${BASE:0:8})"
             exit 0
           fi
 
-          echo "migraciones nuevas:"; printf '  %s\n' $NUEVAS
+          echo "migraciones nuevas (contra ${BASE:0:8}):"; printf '  %s\n' $NUEVAS
           MAL=0
           for f in $NUEVAS; do
             # Se ignoran los comentarios: el .sql explica en prosa por qué existe cada
             # línea, y esa prosa nombra justamente las palabras que buscamos.
+            #
+            # La lista cubre las dos familias: lo que rompe el rollback (DROP de cualquier
+            # cosa que el código viejo use, RENAME, SET NOT NULL, ALTER TYPE) y lo que
+            # destruye datos sin vuelta (TRUNCATE, DELETE FROM). `UPDATE … SET` queda
+            # afuera a propósito: un backfill acotado es legítimo dentro de una migración.
             PELIGROSO="$(grep -vE '^\s*--' "$f" \
-              | grep -inE '\b(DROP\s+(TABLE|COLUMN|SCHEMA|CONSTRAINT)|ALTER\s+COLUMN\s+.*\s+TYPE|SET\s+NOT\s+NULL|RENAME\s+(TO|COLUMN))\b' || true)"
+              | grep -inE '\b(DROP\s+(TABLE|COLUMN|SCHEMA|CONSTRAINT|INDEX|TYPE|VIEW|DATABASE|DEFAULT)|ALTER\s+COLUMN\s+.*\s+TYPE|SET\s+NOT\s+NULL|RENAME\s+(TO|COLUMN)|TRUNCATE|DELETE\s+FROM)\b' || true)"
             if [ -n "$PELIGROSO" ]; then
               echo "::error file=$f::migración destructiva — el rollback automático deja de ser seguro"
               printf '%s\n' "$PELIGROSO"
@@ -338,7 +372,15 @@ jobs:
           # 2 · Clasificar sobre TODO el rango sin desplegar, nunca commit por commit:
           #     de a uno, un cambio de front posterior a uno de server se desplegaría
           #     solo y dejaría el front adelante del server.
-          TOCADOS="$(git -C "$SRV" diff --name-only "$VIEJO".."$NUEVO" || true)"
+          # Si este diff falla (un SHA podado, un archivo de estado corrupto), el
+          # `|| true` de antes lo convertía en «no cambió nada»: N4 clasificaba un
+          # cambio de server como «solo front», desplegaba, y marcaba como corriendo un
+          # código de server que nunca se desplegó. Fail-open en la clasificación.
+          if ! TOCADOS="$(git -C "$SRV" diff --name-only "$VIEJO".."$NUEVO" 2>&1)"; then
+            echo "::error::no pude comparar ${VIEJO:0:8}..${NUEVO:0:8}: $TOCADOS"
+            echo "::error::suele ser que el SHA de \$HOME/.hermes-despliegue/server ya no existe. No toco nada."
+            exit 1
+          fi
           CAMBIO_SERVER="$(printf '%s\n' "$TOCADOS" | grep -E '^server/' || true)"
           CAMBIO_MIGRACION="$(printf '%s\n' "$TOCADOS" | grep -E '^server/drizzle/' || true)"
           CAMBIO_DEPS="$(printf '%s\n' "$TOCADOS" | grep -E '^(package\.json|package-lock\.json)$' || true)"
