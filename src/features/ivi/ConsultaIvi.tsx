@@ -2,7 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { BrainCircuit, RefreshCw, SendHorizontal, ShieldAlert, X } from 'lucide-react';
 import { useEscape } from '../../lib/teclado/useEscape';
 import { lecturaDeError } from './errores';
-import { MAX_CARACTERES_PREGUNTA, usePreguntarleAIvi, type RespuestaIvi, type TurnoHistorial } from './ivi';
+import {
+  MAX_CARACTERES_PREGUNTA,
+  motivoParaNoPreguntar,
+  usePreguntarleAIvi,
+  type RespuestaIvi,
+  type TurnoHistorial,
+} from './ivi';
 import { RespuestaDeIvi } from './RespuestaDeIvi';
 
 /**
@@ -216,11 +222,14 @@ export function ConsultaIvi({ abierta, onCerrar }: { abierta: boolean; onCerrar:
     );
   }
 
+  /**
+   * La ÚNICA salida hacia Ivi. La condición no se evalúa acá: la da `motivoParaNoPreguntar`,
+   * la misma que apaga el botón. Cuando estaban separadas, `⌘↵` se saltaba el tope.
+   */
   function enviar() {
-    const pregunta = texto.trim();
-    if (!pregunta || preguntar.isPending) return;
+    if (motivoParaNoPreguntar(texto, preguntar.isPending)) return;
     setTexto('');
-    lanzar(pregunta, turnos.length, turnos);
+    lanzar(texto.trim(), turnos.length, turnos);
   }
 
   function reintentar(indice: number) {
@@ -230,6 +239,7 @@ export function ConsultaIvi({ abierta, onCerrar }: { abierta: boolean; onCerrar:
   }
 
   const sobrante = texto.length - MAX_CARACTERES_PREGUNTA;
+  const noSale = motivoParaNoPreguntar(texto, preguntar.isPending);
 
   return (
     <div
@@ -344,7 +354,7 @@ export function ConsultaIvi({ abierta, onCerrar }: { abierta: boolean; onCerrar:
             <button
               type="button"
               onClick={enviar}
-              disabled={!texto.trim() || preguntar.isPending || sobrante > 0}
+              disabled={noSale !== null}
               aria-label="Preguntarle a Ivi"
               className="mb-px flex size-7 shrink-0 items-center justify-center rounded-lg bg-navy text-white transition-transform duration-200 ease-house active:scale-[0.94] disabled:cursor-default disabled:bg-muted disabled:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
