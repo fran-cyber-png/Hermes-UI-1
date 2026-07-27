@@ -36,6 +36,13 @@
       "when": 1785409968155,
       "tag": "0004_atribucion_de_ventas",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785496368155,
+      "tag": "0005_libreta_doc_jsonb",
+      "breakpoints": true
     }
   ]
 }

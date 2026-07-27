@@ -1,6 +1,7 @@
 import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { db as DbSingleton } from '../db/client.js';
 import { gestiones, notas } from '../db/schema.js';
+import { aTextoPlano } from './textoPlano.js';
 
 /**
  * LA LÓGICA DE NOTAS — extraída del router para poder testearla contra una base
@@ -33,8 +34,27 @@ export function validarTexto(valor: unknown): ResultadoValidacion {
   return { ok: true, texto };
 }
 
+/**
+ * LA COSTURA ÚNICA entre el documento rico y lo que se indexa.
+ *
+ * Cuando viene `doc`, el `texto` **se deriva acá y no se le cree al llamador**,
+ * aunque mande uno: es la misma regla que `procedencia/desdeElComposer.ts` fija
+ * para el hash de una pieza —el server calcula, el navegador no manda
+ * derivados—, y por el mismo motivo. Un `texto` de confianza podría venir viejo,
+ * recortado o de otra persona, y la nota quedaría bien en pantalla (se pinta
+ * desde `doc`) e **invisible en la búsqueda** (que lee `texto`).
+ *
+ * Sin `doc` se valida el `texto` tal cual: es el camino de las notas de siempre,
+ * y el que sigue andando para toda fila con `doc IS NULL`.
+ */
+export function prepararContenido(entrada: { texto?: unknown; doc?: unknown }): ResultadoValidacion {
+  return validarTexto(entrada.doc !== undefined ? aTextoPlano(entrada.doc) : entrada.texto);
+}
+
 export interface CambiosEdicion {
   texto?: string;
+  /** Solo se incluye si el PATCH lo trajo: omitirlo NO borra el `doc` que había. */
+  doc?: unknown;
   fijada?: boolean;
   editadoAt: Date;
 }
@@ -47,18 +67,26 @@ export type ResultadoEdicion = { ok: true; cambios: CambiosEdicion } | { ok: fal
  * inyectado como en `cola/urgencia.ts` para no depender del reloj real. Separada
  * de la escritura en base para poder testearse sin IO.
  */
-export function prepararEdicion(cambios: { texto?: unknown; fijada?: unknown }, ahora: Date): ResultadoEdicion {
+export function prepararEdicion(
+  cambios: { texto?: unknown; doc?: unknown; fijada?: unknown },
+  ahora: Date,
+): ResultadoEdicion {
   const resultado: CambiosEdicion = { editadoAt: ahora };
-  if (cambios.texto !== undefined) {
-    const v = validarTexto(cambios.texto);
+
+  // `doc` GANA sobre `texto`: si vienen los dos, el texto se rederiva del doc y
+  // el que mandó el llamador se descarta. Ver `prepararContenido`.
+  if (cambios.doc !== undefined || cambios.texto !== undefined) {
+    const v = prepararContenido(cambios);
     if (!v.ok) return v;
     resultado.texto = v.texto;
+    if (cambios.doc !== undefined) resultado.doc = cambios.doc;
   }
+
   if (cambios.fijada !== undefined) {
     resultado.fijada = Boolean(cambios.fijada);
   }
   if (resultado.texto === undefined && resultado.fijada === undefined) {
-    return { ok: false, motivo: 'no hay nada que editar (mandá texto y/o fijada)' };
+    return { ok: false, motivo: 'no hay nada que editar (mandá texto, doc y/o fijada)' };
   }
   return { ok: true, cambios: resultado };
 }
@@ -75,6 +103,12 @@ export interface NotaListada {
   clave: string;
   vendedoraId: string;
   texto: string;
+  /**
+   * El documento rico, o `null`. En una histórica de `gestiones` es SIEMPRE
+   * null y no puede ser otra cosa: esas nunca pasaron por el editor. Quien las
+   * pinte tiene que caer al `texto`, que es el dato original de esa fila.
+   */
+  doc: unknown;
   fijada: boolean;
   creadoAt: Date;
   editadoAt: Date | null;
@@ -103,6 +137,7 @@ async function listarNotasHistoricas(
       clave: opciones.clave,
       vendedoraId: f.vendedoraId,
       texto: f.texto,
+      doc: null,
       fijada: false,
       creadoAt: f.creadoAt,
       editadoAt: null,
@@ -161,11 +196,22 @@ export async function buscarNotas(base: typeof DbSingleton, opciones: { vendedor
     .orderBy(desc(notas.fijada), desc(notas.creadoAt));
 }
 
+/**
+ * Con `doc`, el `texto` se REDERIVA acá — el que venga en `datos.texto` se
+ * descarta. Es la costura: no hay forma de insertar una fila cuyo `texto` no sea
+ * el aplanado de su `doc`. Ver `prepararContenido`.
+ */
 export async function crearNota(
   base: typeof DbSingleton,
-  datos: { clave: string; vendedoraId: string; texto: string },
+  datos: { clave: string; vendedoraId: string; texto: string; doc?: unknown },
 ): Promise<NotaFila> {
-  const [fila] = await base.insert(notas).values(datos).returning();
+  const { clave, vendedoraId } = datos;
+  const valores =
+    datos.doc === undefined
+      ? { clave, vendedoraId, texto: datos.texto }
+      : { clave, vendedoraId, texto: aTextoPlano(datos.doc), doc: datos.doc };
+
+  const [fila] = await base.insert(notas).values(valores).returning();
   return fila;
 }
 

@@ -747,7 +747,25 @@ export const notas = pgTable(
     id: bigserial({ mode: "number" }).primaryKey(),
     clave: text("clave").notNull(),
     vendedoraId: text("vendedora_id").notNull(),
+    /**
+     * EL TEXTO PLANO, y desde la Libreta es una columna DERIVADA: cuando hay
+     * `doc`, esto es `aTextoPlano(doc)` (`notas/textoPlano.ts`) escrito en el
+     * MISMO insert/update. Se queda como `text NOT NULL` a propósito — el GIN y
+     * el `WHERE` de `buscarNotas` no cambian ni un carácter, así que la búsqueda
+     * sigue andando el día del deploy con las notas viejas (sin `doc`) y con las
+     * nuevas, sin una rama que las distinga.
+     */
     texto: text("texto").notNull(),
+    /**
+     * EL DOCUMENTO RICO de BlockNote (`Block[]`), null en toda nota escrita
+     * antes de la Libreta. `null` significa **una sola cosa**: es texto plano de
+     * antes, no «se perdió» — por eso la columna es nullable y no tiene default.
+     *
+     * ⚠️ Nadie lo escribe sin pasar por `crearNota`/`editarNota`: si `doc` se
+     * guarda por otro camino, `texto` queda viejo y la nota se ve bien en
+     * pantalla pero **no aparece nunca en la búsqueda**. No rompe: miente.
+     */
+    doc: jsonb("doc"),
     /** Sube la nota al tope de su ancla. */
     fijada: boolean("fijada").notNull().default(false),
     creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
