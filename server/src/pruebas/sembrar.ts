@@ -12,6 +12,7 @@ import {
   notas,
   recordatorios,
 } from "../db/schema.js";
+import { sincronizarLote } from "../clientes/sincronizar.js";
 import type { DbDePrueba } from "./base.js";
 
 /**
@@ -368,6 +369,36 @@ export interface GestionSembrada {
  * (#47, ver ADR 0012). No usa el seam de gestiones (no lo necesita: es solo
  * fixture) — inserta directo, como el resto de `sembrar.ts`.
  */
+export interface ClienteSembrado {
+  /** El teléfono tal como lo guarda el padrón: internacional o local. */
+  telefono: string;
+  /** El país declarado — lo que permite completar un número local a E.164. */
+  pais?: string | null;
+  compras?: number;
+  /** El `buyer_tier` crudo del padrón (`vip` · `repeat` · `single` · `prospect`). */
+  tier?: string | null;
+  id?: string | number;
+}
+
+/**
+ * Siembra un cliente del PADRÓN (#133). A diferencia del resto de `sembrar.ts`,
+ * NO inserta a mano: pasa por `sincronizarLote`, que es el camino real por el
+ * que la fila llega a `clientes_padron`. Así el test del cruce prueba también
+ * cómo se guardó — que es donde vive la normalización a E.164 y el código de
+ * país que evita el falso positivo de #119.
+ */
+export async function sembrarCliente(db: DbDePrueba, c: ClienteSembrado): Promise<void> {
+  await sincronizarLote(db, [
+    {
+      id: c.id ?? randomUUID(),
+      phone: c.telefono,
+      country: c.pais ?? null,
+      n_purchases: c.compras ?? 1,
+      buyer_tier: c.tier ?? null,
+    },
+  ]);
+}
+
 export async function sembrarGestion(db: DbDePrueba, g: GestionSembrada): Promise<number> {
   const [fila] = await db
     .insert(gestiones)

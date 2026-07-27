@@ -26,6 +26,7 @@ import {
   leadCursoJoinSql,
   sufijosDeLaColaCteSql,
 } from "./cursoSql.js";
+import { padronCteSql, padronJoinSql, yaComproSql } from "./clienteSql.js";
 
 /**
  * LA COLA UNIFICADA — una fila por CONVERSACIÓN, no por mensaje. Extraída de la
@@ -69,6 +70,13 @@ import {
  * anuncio (`ultima_origen`) la decide el front, puro y testeado. Solo se
  * calculan en la consulta de la PÁGINA: ni el total ni los conteos del embudo
  * pagan el join a `leads`.
+ *
+ * EX-CLIENTE (#133): `cliente_nivel` y `cliente_compras` dicen si quien escribe
+ * YA LE COMPRÓ a Goberna, y cuánto. 140 de las 1.997 conversaciones vivas son de
+ * gente que ya pagó y hasta hoy se veían igual que un desconocido. Sale del
+ * cruce por teléfono contra la copia local del padrón (`cola/clienteSql.ts`), en
+ * ESTA misma pasada — nunca de una llamada a Cerberus por fila, que es
+ * exactamente lo que hacía inviable tenerlo en el listado.
  *
  * Son la ÚNICA fuente del curso de una fila (#137). El Pipeline llegó a este
  * mismo dato por otro camino —un cruce contra `leads` después del `LIMIT`, más
@@ -228,7 +236,7 @@ export interface ResultadoCola {
    * obliga a probarlo para saber si vale la pena, y con 1.867 conversaciones eso
    * es un salto al vacío. Sale de la MISMA consulta que el total, sin costo extra.
    */
-  conteosFiltro?: { pideInfo: number; sinResponder: number };
+  conteosFiltro?: { pideInfo: number; sinResponder: number; yaCompraron: number };
   /**
    * La MISMA foto, abierta por las preguntas que el tablero no sabía responder —
    * de una sola pasada. Es lo que hace navegables 1.389 tarjetas: cuántas de la
@@ -239,6 +247,8 @@ export interface ResultadoCola {
   desglose?: FilaDesglose[];
   /** true = la cola vino SIN estado personal (la tabla no existe todavía, #49). */
   sinEstado?: boolean;
+  /** true = la cola vino SIN la marca de ex-cliente (falta el `db:push` de #133). */
+  sinPadron?: boolean;
 }
 
 /** Una celda del desglose: etapa × ya-le-hablamos × precio × viva, con su conteo. */
@@ -253,30 +263,70 @@ export type FilaDesglose = {
 };
 
 /**
- * La cola, con degradación honesta (#49, ADR 0014): si `estado_conversacion`
- * todavía no existe (el `db:push` es manual), reintenta SIN el estado personal
- * en vez de tirar 500 y dejar a la vendedora sin mesa de trabajo.
+ * La cola, con degradación honesta (#49, ADR 0014): las tablas que se crean con
+ * un `db:push` manual pueden faltar en un server ya desplegado, y ninguna de
+ * ellas vale un 500 que deje a la vendedora sin mesa de trabajo. Se apaga lo que
+ * falta —el estado personal, la marca de ex-cliente— y se DICE en la respuesta.
+ *
+ * El orden importa: primero se apaga lo que el error nombra (así un
+ * `clientes_padron` ausente no se lleva puestos el pin y el no-leído, que son de
+ * otra tabla), y solo si eso no alcanza se apaga lo demás.
  */
 export async function consultarCola(
   base: typeof db,
   opciones: OpcionesCola = {},
 ): Promise<ResultadoCola> {
-  try {
-    return await ejecutarCola(base, opciones, true);
-  } catch (e) {
-    if (!esTablaAusente(e)) throw e;
-    console.warn(
-      "[cola] `estado_conversacion` no existe: sirvo la cola SIN pin/favorita/no-leído. " +
-        "Corré `npm run db:push` (ADR 0014).",
-    );
-    return { ...(await ejecutarCola(base, opciones, false)), sinEstado: true };
+  let conEstado = true;
+  let conPadron = true;
+
+  // Dos degradaciones posibles ⇒ como mucho tres intentos.
+  for (let intento = 0; ; intento++) {
+    try {
+      const r = await ejecutarCola(base, opciones, conEstado, conPadron);
+      return {
+        ...r,
+        ...(conEstado ? {} : { sinEstado: true }),
+        ...(conPadron ? {} : { sinPadron: true }),
+      };
+    } catch (e) {
+      if (!esTablaAusente(e) || intento >= 2) throw e;
+      if (conPadron && mencionaTabla(e, "clientes_padron")) {
+        console.warn(
+          "[cola] `clientes_padron` no existe: sirvo la cola SIN la marca de ex-cliente. " +
+            "Corré `npm run db:push` (#133).",
+        );
+        conPadron = false;
+        continue;
+      }
+      if (conEstado) {
+        console.warn(
+          "[cola] `estado_conversacion` no existe: sirvo la cola SIN pin/favorita/no-leído. " +
+            "Corré `npm run db:push` (ADR 0014).",
+        );
+        conEstado = false;
+        continue;
+      }
+      conPadron = false;
+    }
   }
+}
+
+/** ¿El error de tabla ausente habla de ESTA tabla? Decide QUÉ se apaga. */
+function mencionaTabla(e: unknown, tabla: string): boolean {
+  for (let actual: unknown = e, saltos = 0; actual != null && saltos < 5; saltos++) {
+    if (typeof actual !== "object") break;
+    const mensaje = (actual as { message?: unknown }).message;
+    if (typeof mensaje === "string" && mensaje.includes(tabla)) return true;
+    actual = (actual as { cause?: unknown }).cause;
+  }
+  return false;
 }
 
 async function ejecutarCola(
   base: typeof db,
   opciones: OpcionesCola,
   conEstado: boolean,
+  conPadron: boolean,
 ): Promise<ResultadoCola> {
   const canal = opciones.canal ?? "";
   const intencion = opciones.intencion ?? "";
@@ -303,6 +353,10 @@ async function ejecutarCola(
   // `por-vencer` sigue aceptándose aunque el panel ya no tenga su chip: el
   // contrato de la API no se rompe por un cambio de UI (ver `src/features/canales/cola.ts`).
   if (intencion === "por-vencer") condicionesBase.push(sql`ventana_abierta`);
+  // «Ya compraron» (#133): 140 conversaciones que valen oro, a un clic. Reusa el
+  // predicado de `cola/clienteSql.ts` — la página, el total, el número del chip
+  // y el desglose leen LA MISMA definición.
+  if (intencion === "ya-compraron") condicionesBase.push(yaComproSql);
   // Compat: la cola vieja mandaba `puedo-escribirle`; el front nuevo usa tabs.
   if (intencion === "puedo-escribirle") condicionesBase.push(sql`(ventana_abierta OR tipo = 'mensaje')`);
 
@@ -348,6 +402,9 @@ async function ejecutarCola(
     ),
     lead_curso AS (
       ${leadCursoCteSql}
+    ),
+    padron AS (
+      ${padronCteSql(conPadron)}
     )
     SELECT todo.clave AS clave, canal, tipo, persona_id, persona_nombre, numero_propio,
            texto, contexto_texto, ultima_clase, ultima_origen, respondida, ya_le_hablamos,
@@ -357,6 +414,8 @@ async function ejecutarCola(
            iu.curso AS interes_curso,
            lc.curso AS lead_curso,
            lc.nombre AS lead_nombre,
+           pc.nivel AS cliente_nivel,
+           pc.compras AS cliente_compras,
            (${etapaEfectivaSql}) AS etapa_efectiva,
            extract(day from now() - referencia)::int AS dias,
            (${nivelUrgenciaSql}) AS nivel,
@@ -373,6 +432,7 @@ async function ejecutarCola(
     LEFT JOIN cats ON cats.clave = todo.clave
     LEFT JOIN interes_ultimo iu ON iu.clave = todo.clave
     ${leadCursoJoinSql}
+    ${padronJoinSql(conPadron)}
     ${donde(condiciones)}
     ORDER BY ${bandaPinOrdenSql}, nivel ASC, orden ASC
     LIMIT ${limit} OFFSET ${offset}
@@ -383,28 +443,40 @@ async function ejecutarCola(
   // incremental por columna del tablero (#90) es honesta por construcción.
   let total: number | undefined;
   let conteos: Record<string, number> | undefined;
-  let conteosFiltro: { pideInfo: number; sinResponder: number } | undefined;
+  let conteosFiltro: ResultadoCola["conteosFiltro"];
   let desglose: FilaDesglose[] | undefined;
   if (offset === 0) {
     // Una sola pasada da las tres cifras: el total del recorte actual (con el
     // filtro secundario puesto) y cuántas daría cada chip dentro del MISMO
     // recorte. El `FILTER` es lo que evita una consulta por chip.
-    const [r] = await base.execute<{ n: number; pide_info: number; sin_responder: number }>(sql`
+    const [r] = await base.execute<{
+      n: number;
+      pide_info: number;
+      sin_responder: number;
+      ya_compraron: number;
+    }>(sql`
       ${conTodo(filtroCanal, pins)},
       ultimas_gestiones AS (${ultimasGestionesSql}),
-      cats AS (${categoriasCteSql})
+      cats AS (${categoriasCteSql}),
+      padron AS (${padronCteSql(conPadron)})
       SELECT count(*) FILTER (WHERE ${yTodas(condicionesBase)})::int AS n,
              count(*) FILTER (WHERE pide_info)::int                 AS pide_info,
-             count(*) FILTER (WHERE NOT respondida)::int            AS sin_responder
+             count(*) FILTER (WHERE NOT respondida)::int            AS sin_responder,
+             count(*) FILTER (WHERE ${yaComproSql})::int            AS ya_compraron
       FROM todo
       LEFT JOIN ultimas_gestiones USING (clave)
       ${estadoJoinSql(vendedoraId, conEstado)}
       LEFT JOIN cats ON cats.clave = todo.clave
+      ${padronJoinSql(conPadron)}
       ${donde(condicionesRecorte)}
     `);
     total = r?.n;
-    conteosFiltro = { pideInfo: r?.pide_info ?? 0, sinResponder: r?.sin_responder ?? 0 };
-    desglose = await desglosarEmbudo(base, filtroCanal, condicionesBase);
+    conteosFiltro = {
+      pideInfo: r?.pide_info ?? 0,
+      sinResponder: r?.sin_responder ?? 0,
+      yaCompraron: r?.ya_compraron ?? 0,
+    };
+    desglose = await desglosarEmbudo(base, filtroCanal, condicionesBase, conPadron);
     conteos = plegarConteos(desglose);
   }
 
@@ -429,11 +501,13 @@ async function desglosarEmbudo(
   base: typeof db,
   filtroCanal: SQL,
   condiciones: SQL[],
+  conPadron: boolean,
 ): Promise<FilaDesglose[]> {
   const donde = condiciones.length ? sql`WHERE ${sql.join(condiciones, sql` AND `)}` : sql``;
   const filas = await base.execute<FilaDesglose>(sql`
     ${conTodo(filtroCanal, null)},
-    ultimas_gestiones AS (${ultimasGestionesSql})
+    ultimas_gestiones AS (${ultimasGestionesSql}),
+    padron AS (${padronCteSql(conPadron)})
     SELECT (${etapaEfectivaSql})        AS etapa,
            ya_le_hablamos               AS "yaLeHablamos",
            precio_enviado               AS precio,
@@ -441,6 +515,7 @@ async function desglosarEmbudo(
            count(*)::int                AS n
     FROM todo
     LEFT JOIN ultimas_gestiones USING (clave)
+    ${padronJoinSql(conPadron)}
     ${donde}
     GROUP BY 1, 2, 3, 4
   `);
@@ -468,5 +543,8 @@ export function plegarConteos(desglose: readonly FilaDesglose[]): Record<string,
  * bug de verdad, no una diferencia de definición.
  */
 export async function contarPorEtapaEfectiva(base: typeof db): Promise<Record<string, number>> {
-  return plegarConteos(await desglosarEmbudo(base, sql``, []));
+  // Sin condiciones no hay nada que preguntarle al padrón: el join saldría gratis
+  // pero igual costaría una pasada. `false` deja la consulta idéntica a la de
+  // antes de #133 — y de paso no depende de que `clientes_padron` exista.
+  return plegarConteos(await desglosarEmbudo(base, sql``, [], false));
 }
