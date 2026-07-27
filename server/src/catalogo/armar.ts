@@ -62,8 +62,12 @@ interface Comun {
    * Por qué NO se puede mandar. Ausente o `null` = se puede.
    *
    * Es un solo campo y no dos porque `enviable` se deriva de él: dos campos
-   * independientes permiten la combinación imposible («enviable, motivo:
+   * independientes permiten la combinación imposible («enviable: true, motivo:
    * media_pendiente») y alguien la escribiría alguna vez.
+   *
+   * En una secuencia esto **agrega** un motivo, no lo quita: las guardas que se
+   * calculan solas (no vigente, media pendiente) mandan igual. Nadie puede
+   * declarar enviable una plantilla a la que le falta el flyer.
    */
   motivoNoEnviable?: Pieza["motivoNoEnviable"];
 }
