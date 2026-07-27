@@ -30,6 +30,12 @@ import type { ComoSeAtribuyo, MotivoSinAtribuir } from "./venta.js";
  * `ventaDeEvento` + `proyectarVenta` — el MISMO camino que `webhook/ruta.ts`. Es literalmente
  * el mismo JSON. Cuando Cerberus postee también a Hermes, se deja de correr el script y no hay
  * una línea que tocar: no hay un segundo modelo que retirar.
+ *
+ * ── El costo, dicho de frente ──
+ * Una venta = una consulta de resolución sobre `interactions`, y el prefiltro por sufijo no usa
+ * índice (es una función sobre la columna). Con 7.566 eventos y 6.767 interacciones eso son
+ * segundos; el día que `interactions` tenga cientos de miles de filas, hay que correrlo con
+ * `--desde`. No se optimiza antes de que duela: esto se apaga.
  */
 
 /** Una fila de `icarus.cerberus_events`, tal como la devuelve el driver. */
