@@ -114,7 +114,7 @@ No es una hoja encima de la app: es la vista **Mensajes** con la cola filtrada.
 
 | Columna | En revisión |
 |---|---|
-| izquierda | la fila de sugerencias, agrupada por campaña, con el lote en cada cabecera |
+| izquierda | la fila de sugerencias, agrupada por campaña, con el lote en cada cabecera ⚠️ (**el lote se retiró en ADR 0020 §6**: la cabecera ahora dice «Revisar 8 ›» y abre la primera del grupo) |
 | centro | **la conversación real, sin tocar** |
 | derecha | «Por qué esta respuesta», **arriba** de la ficha de siempre |
 | composer | el borrador, editable, con banda y fondo propios; el botón dice **Aprobar** |
@@ -195,6 +195,9 @@ registrada, en vez de inventar una.
   (no marcar algo que sí se leyó) rompe el contador de la cola.
 - **Queda una asimetría deliberada**: hay «Descartar todo» global y no «Aprobar todo» global. El lote
   de aprobación existe **dentro** de una campaña, que es donde acaba de leerse el texto.
+  > ⚠️ **Corregido por ADR 0020 §6 (#166).** El lote por campaña tampoco existe: el grupo que lo
+  > desarmó se llamaba «Sin campaña» y ofrecía «Aprobar 32». La asimetría sigue —«Descartar todo»
+  > se queda— porque descartar no le llega a nadie.
 - **Costo del teclado, dicho**: `⌘↓`/`⌘↑` le ganan a «ir al final / al principio del texto», que es lo
   que esas teclas hacen en un textarea de macOS. Se aceptó a sabiendas: adentro de la revisión navegar
   es la acción frecuente y el borrador son cuatro renglones, así que moverse dentro del texto se hace

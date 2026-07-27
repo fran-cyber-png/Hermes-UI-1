@@ -139,7 +139,14 @@ tan detectable como la ráfaga» y rotar variantes «para que no haya N copias b
   las 3 a. m. y recibe un acuse: si cree que habló con alguien y después descubre que no, la
   que pierde es la marca.
 
-Si algún día el dueño quiere volver sobre esto, es un ADR nuevo, no un parámetro.
+  > ⚠️ **REVERTIDO el 27-jul-2026 por el dueño — ver ADR 0020 §3.** Ninguna plantilla dice ya
+  > que es automática: «el lead todavía no puede saber que hay un automatismo detrás». Lo que
+  > sí se sostiene de este párrafo es lo demás: el acuse **deja de hablar de sí mismo**, no
+  > empieza a fingir una conversación. Y lo prohibido de esta sección —warmup, aleatorización
+  > de huella, cualquier mecanismo para que el tráfico no se detecte— sigue prohibido igual.
+
+Si algún día el dueño quiere volver sobre esto, es un ADR nuevo, no un parámetro. (Quiso: es
+el ADR 0020.)
 
 ## Consecuencias
 

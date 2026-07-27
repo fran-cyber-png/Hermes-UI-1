@@ -76,6 +76,11 @@ retira el sistema solo?».
 
 ### Aprobar en lote sin que salga un lote
 
+> ⚠️ **APROBAR EN LOTE SE RETIRÓ — ADR 0020 §6 (#166).** Ya no hay ningún botón que apruebe más
+> de uno: la cabecera del grupo dice «Revisar 8 ›» y abre la primera. Lo de abajo **sigue
+> vigente igual** y por eso no se borra: `POST /aprobar` recibe un array, lo reparte con el
+> MISMO `programar.ts`, y esa es la razón por la que aprobar de a uno tampoco produce ráfagas.
+
 Un click sobre cuarenta mensajes tiene que dar **cuarenta salidas espaciadas**. El reparto lo hace el
 **mismo `programar.ts`** del modo automático —uno por vez, 60–240 s de aire, techos de 20/h y 60/día
 por número—, recalculado desde el momento del OK (la hora que traían la calculó el encolado de la
@@ -122,6 +127,11 @@ El texto se muestra **una vez por grupo** —es el mismo salvo el nombre— y ca
 quién, cuánto hace que espera, cuánto le queda. Una lista plana de 40 obligaría a leer 40 veces lo
 mismo, y a los 10 se aprueba sin leer: peor que el modo automático, porque encima creés que revisaste.
 Por eso el botón de lote dice «3 mensajes de 2 campañas» y no solo el número.
+
+> ⚠️ El agrupado se queda; **el botón de lote no** (ADR 0020 §6). El argumento de arriba se dio
+> vuelta contra sí mismo: «los 12 de Inteligencia se aprueban de un vistazo» es cierto para el
+> TEXTO y falso para todo lo demás —a quién, qué preguntó, si ya se despidió—, que es lo que hay
+> que mirar. El grupo que lo demostró se llamaba «Sin campaña».
 
 **El oro aparece en un solo lugar** de toda la pantalla: el «vence en 20 min» de lo que está por
 caducar. En Hermes el dorado significa tiempo que se acaba y acá hay algo que literalmente lo es; en

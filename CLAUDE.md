@@ -73,12 +73,35 @@ npm install && npm run dev:app                     # Vite :5173 + la app de escr
 - **Nada de automatización, con UNA excepción escrita**: no envío masivo, no warmup, **no anti-ban**.
   Un envío = una acción humana, por `EnvioControlado` (la única puerta hacia `enviarTexto`). El
   `temporary_ban` **se muestra siempre**, nunca se esconde.
-  La excepción es la **auto-respuesta fuera de horario** (#125, **ADR 0015** + **0016** + **0018**), y es del
+  La excepción es la **auto-respuesta fuera de horario** (#125, **ADR 0015** + **0016** + **0018** +
+  **0020**), y es del
   tamaño exacto del agujero que tapa: 44% de los leads llega fuera de horario y el 44% de esos nunca
   recibe respuesta. Solo puede mandar **un acuse de una plantilla registrada** a quien **escribió
   primero**, **fuera de la franja de atención**, tras **30 min sin respuesta humana**, **una vez por
   día**, y **nunca a quien dijo que no**. Nada de eso se negocia en un `if`: vive en
   `server/src/autorespuesta/`.
+  - **La franja se pregunta DOS veces, y la que importa es sobre el MENSAJE** (#166, ADR 0020).
+    `dentroDe(ahora)` responde «¿hace falta?» (adentro contesta la vendedora);
+    `dentroDe(ultimoEntranteEn)` responde «¿corresponde?» — el acuse es para quien escribió con la
+    puerta cerrada. Con una sola pregunta, a la 1 AM calificaba todo el mundo: 25 de los 40
+    borradores del 27-jul eran de gente que había escrito a las 9, a las 10, a las 4 de la tarde, y a
+    esa gente «estamos fuera del horario» le es falso. Motivo `escribio_en_horario`.
+  - **Hay techo de antigüedad, no solo piso**: `AUTO_RESPUESTA_MAX_ESPERA_H` (12 h). Las 40 del
+    27-jul esperaban entre 57 y 72 horas: un «gracias por escribirnos» a los tres días confirma que
+    nadie miró. Motivo `espera_excesiva`.
+  - **Ninguna plantilla dice que es automática** — decisión del dueño del 27-jul que **revierte ADR
+    0015**: el lead todavía no puede saber que hay un automatismo detrás. No es un disfraz: el
+    mensaje deja de hablar de sí mismo, no empieza a fingir una conversación, y solo promete lo que
+    controlamos (se fue también «una asesora te responde personalmente a las 9»). `plantillas.test.ts`
+    ahora **prohíbe** «automático», «bot» y «sistema» — el test que los exigía se dio vuelta con la
+    decisión.
+  - **Una despedida no es una consulta esperando respuesta** (motivo `conversacion_cerrada`): si ya le
+    escribimos y su último mensaje es un cierre («agradezco mucho la atención prestada»), no hay acuse.
+    Las tres formas de decir que no viven en `rechazo.ts`: el **explícito** y el **no con motivo**
+    («no me es de mucha utilidad») en `huboRechazo` —el segundo cede si el mensaje pide algo—, y el
+    **cierre cortés** en `esDespedida`, que mira solo el último. **«gracias» a secas NO es una
+    despedida**, y `PIDE_ALGO` no puede llevar una palabra que aparezca dentro de una frase de
+    rechazo («necesito» rompería «no es lo que necesito»).
   - **DOS MODOS: apagada · supervisada** (ADR 0018). **Hermes no manda solo: siempre hay una persona
     aprobando.** El tercer modo, `automatica`, **se retiró de la UI y de la API**: `PUT /modo` con
     `automatica` responde **409 `modo_retirado`**, y `PUT /interruptor {encendida:true}` —la puerta
@@ -93,7 +116,9 @@ npm install && npm run dev:app                     # Vite :5173 + la app de escr
     ahí, con su test.
   - **El MODO REVISIÓN pasa DENTRO del chat** (ADR 0018) — ya no es una hoja encima de la app
     (`BandejaRevision.tsx` está archivada). Es la vista **Mensajes** filtrada: a la izquierda
-    `ColaRevision.tsx` (la fila, agrupada por campaña, con el **lote** en cada cabecera), al centro
+    `ColaRevision.tsx` (la fila, agrupada por campaña; la cabecera de cada grupo dice **«Revisar 8 ›»**
+    y abre la primera —**aprobar en lote se retiró en ADR 0020**: un envío = una acción humana, y el
+    grupo que lo demostró se llamaba «Sin campaña» con un «Aprobar 32»—), al centro
     **la conversación real sin tocar**, a la derecha `PorQueEstaSugerencia.tsx` **arriba** de la
     ficha, y el **borrador en el composer**, editable y marcado. El botón dice **Aprobar**, no
     Enviar: acá no se manda, se programa.
@@ -124,8 +149,12 @@ npm install && npm run dev:app                     # Vite :5173 + la app de escr
     `temporary_ban`, error de envío o desconexión; cancelación si la vendedora responde antes; la
     cola se cancela entera al empezar el horario.
   - **Antes de prenderla, siempre**: `cd server && npm run auto:simulacro` — imprime el plan de
-    despacho real (a quién, qué plantilla, a qué hora) **sin mandar nada**. `--hora 03:00` mueve el
-    reloj; `--demo` corre sin base.
+    despacho real **sin mandar nada**, y cada renglón empieza por **la hora local en que escribió la
+    persona** y **cuánto lleva esperando** (#166): el plan del 27-jul se veía impecable y estaba mal
+    de siete formas porque mostraba la hora de SALIDA y nunca la de llegada. Las descartadas se
+    listan de a cinco por motivo con lo mismo. `--hora 03:00` mueve el reloj; `--demo` corre sin base
+    y **siembra los tres casos del issue** (la que escribió 10:47 en horario, la de hace tres días,
+    la que ya se había despedido).
   - Los envíos automáticos quedan marcados en `envios_wa.automatico` y **se ven en la burbuja** del
     hilo — y desde ADR 0016 la burbuja distingue **«Automático»** (salió solo) de **«Aprobado · ana»**
     (lo autorizó una persona). **Lo que sigue prohibido**: generar texto libre, iniciar conversaciones
