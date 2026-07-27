@@ -1,6 +1,7 @@
 # ADR 0020 — El schema se versiona en migraciones, no se empuja contra la base viva
 
-- **Fecha:** 2026-07-24
+- **Fecha:** 2026-07-24 · **enmendado el 2026-07-27** (la verificación del baseline dejó de ser
+  un paso del runbook y pasó a ser parte del script; ver las dos secciones marcadas)
 - **Estado:** aceptado
 - **Reemplaza:** la parte de `db:push` de ADR 0001 (el resto de ADR 0001 sigue vigente)
 - **Decide:** el pedido de un CI/CD completo, y el hueco declarado en `docs/despliegue-continuo.md` §6
@@ -37,14 +38,50 @@ estado actual de producción.**
 
 Cuatro decisiones que la acompañan:
 
-### El baseline se probó, no se declaró
+### El baseline se prueba solo, en cada adopción — enmienda del 2026-07-27
 
-`0000_baseline.sql` dice describir el schema de producción. Eso se **verificó**, no se supuso: se
-aplicó sobre una base vacía en staging y se comparó el resultado contra producción con `pg_dump
---schema-only`. Primera corrida: **una** diferencia (el índice GIN de arriba). Corregida: **cero**.
+`0000_baseline.sql` dice describir el schema de producción. Eso se **verifica**, no se supone.
 
-El procedimiento queda en `docs/migraciones.md` porque hay que repetirlo cada vez que se adopte una
-base que ya existía.
+> **Como se decidió el 24-jul**, la verificación era un procedimiento escrito en
+> `docs/migraciones.md`: aplicar el baseline sobre una base vacía, sacar dos `pg_dump --schema-only`
+> y compararlos con `diff`. Encontró **una** diferencia (el índice GIN de arriba) y quedó en cero.
+>
+> El problema no era el método, era **quién lo corre**. Era un paso manual, y los pasos manuales no
+> se hacen. Peor: su fallo es el más caro que tiene este sistema. Si se adopta una base que NO está
+> en el estado del baseline, queda **marcada como al día mintiendo** — drizzle no vuelve a mirar el
+> baseline nunca más y la diferencia sobrevive en silencio, para siempre.
+
+**Ahora la verificación la hace `db:adoptar`, antes de registrar nada.** Levanta una base temporal
+en el mismo servidor, le aplica las migraciones desde cero, lee las dos estructuras del catálogo
+—tablas, columnas con tipo, nulabilidad y default, índices y restricciones— y las resta en las dos
+direcciones. Ante cualquier diferencia **se rehúsa** y las lista.
+
+Tres detalles que la hacen verificable en vez de decorativa:
+
+- **`--si` no la saltea.** `--si` es la confirmación de *escribir*, no un permiso para no mirar. La
+  salida de emergencia es otra bandera (`--forzar-sin-verificar`) que imprime un cartel y **exige un
+  motivo escrito**.
+- **La salida dice qué comparó**, no solo su veredicto: los esquemas, las migraciones aplicadas a la
+  referencia y el conteo de cada aspecto de los dos lados. Un «✓ todo igual» sin decir sobre cuántas
+  tablas es indistinguible de una consulta que devolvió vacío — la lección del simulacro de la
+  auto-respuesta, que imprimió un plan impecable estando mal de siete formas.
+- **El criterio es una función pura con tests** (`migraciones/estructura.ts`), y el camino completo
+  tiene tests con base efímera que corren el script como subproceso. La misma disciplina que la
+  urgencia (ADR 0009) y las señales (ADR 0016): el criterio vive una vez.
+
+Se lee del **catálogo** y no de `pg_dump`: no hace falta el binario en la máquina, ni normalizar su
+prosa, ni pelearse con los tokens aleatorios que pg_dump 17 mete en `\restrict`.
+
+### Que el repo y el schema no puedan divergir — enmienda del 2026-07-27
+
+El baseline original se generó el 24-jul y en tres días le faltaban **nueve tablas**: `clientes_padron`,
+`hechos`, `alias_curso`, `plantillas`, `plantilla_pasos`, `estado_conversacion` y las dos de la
+auto-respuesta entraron por `db:push` mientras la rama esperaba. Un baseline incompleto no es uno
+viejo: es uno **falso**.
+
+La guardia es un test de paridad en N2b —`PARIDAD · migrar desde cero da el mismo schema que declara
+src/db/*.ts`— que monta dos bases y las compara enteras. Cambiar el schema sin traer su migración
+deja de compilar el PR, con el nombre de la tabla que falta en el mensaje de error.
 
 ### Lo que drizzle-kit no emite se escribe a mano en el `.sql`
 
@@ -77,6 +114,9 @@ hablándole a un schema que ya no entiende — y ahí sí hace falta restaurar e
 - El SQL se revisa en el PR, antes de tocar nada.
 - Se acabó el paso manual post-push que ya había producido deriva real.
 - Hay historia: qué se aplicó, cuándo, en qué orden.
+- **La adopción no depende de que nadie se acuerde de nada**: se prueba sola y se rehúsa ante
+  cualquier diferencia, listándolas.
+- **El schema y el repo no pueden divergir sin que CI lo diga** (paridad en N2b).
 
 **En contra**
 
@@ -85,6 +125,13 @@ hablándole a un schema que ya no entiende — y ahí sí hace falta restaurar e
   `when` menor al máximo ya aplicado, drizzle la **saltea sin error** y el deploy sale verde. Por eso
   `journal.test.ts` corre en N1 y por eso existe `goberna-journal-set-when`.
 - Expand-only obliga a partir en dos los cambios destructivos. Es más lento, a propósito.
+- `db:adoptar` necesita poder hacer `CREATE DATABASE` en el servidor de la base que adopta: la
+  referencia se levanta al lado. Es aditivo, efímero y se borra en un `finally`, pero si el proceso
+  muere en el medio queda una `hermes_verificacion_*` suelta — el script las lista al arrancar, con
+  el `DROP` listo para copiar.
+- Regenerar el baseline le cambia el hash, y toda base que ya lo había aplicado queda con «una
+  migración que este repo no conoce». En staging se resuelve borrando la base; después de que
+  producción adopte, el baseline se congela y solo se agregan migraciones nuevas.
 
 **Lo que NO cambia**
 
@@ -98,3 +145,10 @@ hablándole a un schema que ya no entiende — y ahí sí hace falta restaurar e
 - **Generar el baseline y aplicarlo en producción.** Habría muerto en el primer `CREATE TABLE`.
 - **Empezar el journal vacío y versionar solo lo nuevo.** Deja el schema actual sin describir en
   ningún lado: una base nueva (staging, un dev que arranca) no se puede levantar desde el repo.
+- **Verificar con `pg_dump` desde el script** en vez de leer el catálogo. Obliga a tener el binario
+  de la versión correcta a mano, a normalizar la prosa de su salida y a lidiar con los tokens
+  aleatorios de `\restrict` — tres fuentes de falsos positivos que no aportan nada: lo que el dump
+  dice ya está en el catálogo, sin formatear.
+- **Comparar contra una base de referencia en otra máquina** (por ejemplo, la de staging). Compararía
+  también las diferencias entre servidores: versión de Postgres, locale, collation. La referencia va
+  al lado de la base que se adopta, o la comparación mide otra cosa.
