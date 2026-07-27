@@ -192,10 +192,16 @@ export function RevisionPropuesta({
               type="button"
               disabled={!puedeAprobar || aprobar.isPending}
               onClick={() =>
-                aprobar.mutate({
-                  id: plantilla.id,
-                  familiaCurso: eleccion === CUALQUIER_CURSO ? null : eleccion,
-                })
+                aprobar.mutate(
+                  {
+                    id: plantilla.id,
+                    familiaCurso: eleccion === CUALQUIER_CURSO ? null : eleccion,
+                  },
+                  // Al aprobar, la fila se muda a «Listas para mandar». Cerrarla evita
+                  // que aparezca allá desplegada y vacía: el despliegue de una aprobada
+                  // muestra la vista previa, que todavía nadie pidió.
+                  { onSuccess: onAbrir },
+                )
               }
               className="inline-flex items-center gap-1.5 rounded-lg bg-navy px-2.5 py-1.5 text-[11px] font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
             >
