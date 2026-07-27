@@ -52,26 +52,52 @@ function inventarioDelDocumento(): Map<string, Veredicto> {
 }
 
 /**
- * Las columnas de plata de la capa canónica, leídas del schema.
- * «De plata» = un `numeric()` cuyo nombre empieza en monto/precio/saldo, más las
- * columnas de moneda, que son las que le ponen etiqueta a esos números (y una
- * etiqueta equivocada miente igual que un número equivocado — agujero C).
+ * Las únicas `numeric()` de `canonico.ts` que NO son plata, con la razón de cada una.
+ *
+ * Es una lista de EXCEPCIONES, y esa es la diferencia que importa. La primera versión de este
+ * test filtraba las columnas por el PREFIJO del nombre (`monto|precio|saldo|moneda`), o sea
+ * que reproducía en chiquito el defecto que vino a matar: la v1 del documento también armó el
+ * gate por el nombre de los campos. Con el filtro por prefijo, agregar `ticket_usd` o
+ * `descuento` a `ontologia.venta` dejaba el test verde —y `ticket` es un nombre que el propio
+ * documento clasifica 🔴 en `governa.ventas.*.ticket`—.
+ *
+ * Al revés, la carga de la prueba queda del lado correcto: **toda** columna numérica de la
+ * capa canónica es plata hasta que alguien escriba acá por qué no lo es.
  */
-function camposDePlataDeCanonico(): string[] {
+const NO_SON_PLATA: Record<string, string> = {
+  "ontologia.pago.latencia_dias": "días entre la venta y el pago: un plazo, no un importe; no lleva moneda",
+};
+
+/**
+ * Las columnas de la capa canónica que este gate vigila, leídas del schema:
+ * **todas** las numéricas (los importes) más las de moneda, que son las que les ponen etiqueta
+ * (y una etiqueta equivocada miente igual que un número equivocado — agujero C).
+ */
+function columnasVigiladasDeCanonico(): { importes: string[]; monedas: string[] } {
   const src = leer("server/src/db/canonico.ts");
-  const campos: string[] = [];
+  const importes: string[] = [];
+  const monedas: string[] = [];
   let tabla: string | null = null;
   // Un solo barrido en orden: `ontologia.table("x"` abre una tabla —y puede venir
   // partida en dos líneas, así que NO se puede escanear línea por línea— y cada
   // `numeric("col")`/`text("col")` posterior le pertenece.
-  for (const m of src.matchAll(/ontologia\.table\(\s*"([a-z_]+)"|(?:numeric|text)\(\s*"([a-z_]+)"/g)) {
+  for (const m of src.matchAll(/ontologia\.table\(\s*"([a-z_]+)"|(numeric|text)\(\s*"([a-z_]+)"/g)) {
     if (m[1]) {
       tabla = m[1];
-    } else if (tabla && /^(monto|precio|saldo|moneda)/.test(m[2])) {
-      campos.push(`ontologia.${tabla}.${m[2]}`);
+      continue;
     }
+    if (!tabla) continue;
+    const campo = `ontologia.${tabla}.${m[3]}`;
+    if (m[2] === "numeric") importes.push(campo);
+    else if (/^moneda/.test(m[3])) monedas.push(campo);
   }
-  return campos;
+  return { importes, monedas };
+}
+
+/** Importes + monedas, que es lo que el documento tiene que clasificar entero. */
+function camposDePlataDeCanonico(): string[] {
+  const { importes, monedas } = columnasVigiladasDeCanonico();
+  return [...importes, ...monedas];
 }
 
 test("el inventario del documento clasifica TODA columna de plata de la capa canónica", () => {
@@ -82,13 +108,22 @@ test("el inventario del documento clasifica TODA columna de plata de la capa can
   assert.ok(enElCodigo.length >= 12, `el escaneo de canonico.ts encontró ${enElCodigo.length} campos: se rompió`);
   assert.ok(inventario.size >= 25, `el bloque §0.1 de ${DOC} tiene ${inventario.size} entradas: se rompió`);
 
-  const faltantes = enElCodigo.filter((c) => !inventario.has(c));
+  const faltantes = enElCodigo.filter((c) => !inventario.has(c) && !(c in NO_SON_PLATA));
   assert.deepEqual(
     faltantes,
     [],
     `campos de plata en db/canonico.ts sin veredicto en ${DOC} §0.1:\n  ${faltantes.join("\n  ")}\n` +
-      "Si son plata, clasificalos. Si no, cambiá el nombre — este test lee el schema, no la intención.",
+      "Si son plata, clasificalos. Si no lo son, anotalos en NO_SON_PLATA con la razón — este test\n" +
+      "lee el schema, no la intención, y ya no adivina por el nombre de la columna.",
   );
+});
+
+test("la lista de excepciones no se puede llenar de columnas que ya no existen", () => {
+  // Una excepción que sobrevive a su columna es una puerta abierta esperando que alguien
+  // reutilice el nombre. Las excepciones caducan con la columna que las justifica.
+  const importes = new Set(columnasVigiladasDeCanonico().importes);
+  const huerfanas = Object.keys(NO_SON_PLATA).filter((c) => !importes.has(c));
+  assert.deepEqual(huerfanas, [], `NO_SON_PLATA exime columnas que canonico.ts ya no tiene:\n  ${huerfanas.join("\n  ")}`);
 });
 
 test("el inventario no inventa columnas canónicas que el schema no tiene", () => {
@@ -96,6 +131,51 @@ test("el inventario no inventa columnas canónicas que el schema no tiene", () =
   const enElCodigo = new Set(camposDePlataDeCanonico());
   const fantasmas = [...inventario.keys()].filter((k) => k.startsWith("ontologia.") && !enElCodigo.has(k));
   assert.deepEqual(fantasmas, [], `el documento clasifica campos que db/canonico.ts no tiene:\n  ${fantasmas.join("\n  ")}`);
+});
+
+/**
+ * EL GATE NO SE PUEDE ABRIR JUSTO DONDE ESTÁ EL PROBLEMA.
+ *
+ * Los tests de arriba guardan PRESENCIA: exigen que cada campo tenga un renglón. No guardaban el
+ * VEREDICTO — cambiar `ontologia.venta.monto_total` de 🔴 a 🟢 dejaba la suite en verde, y ese
+ * flip es exactamente el defecto de la v1 servido otra vez (un gate abierto donde el agujero B
+ * ensucia). El veredicto no se copia acá campo por campo, que sería la segunda lista divergente
+ * de #37; se fija la invariante de la que sale:
+ *
+ * **Mientras `tb_moneda` no tenga historial de tasas, ningún IMPORTE de la capa canónica está
+ * limpio.** El monto en moneda local lo ensucia el agujero B (la conversión vive en el JS del
+ * navegador), y su conversión a USD arrastra el divisor roto. 🟢 significa «servible como HECHO»:
+ * un importe no puede llegar ahí. Las etiquetas de moneda SÍ pueden (y `venta.moneda_iso` lo
+ * está), porque un rótulo fiel no depende de ninguna tasa.
+ *
+ * El día que exista `tb_moneda_tasa` y los importes se recalculen, este test es el que hay que
+ * venir a cambiar — a propósito: subir un importe a 🟢 tiene que costar una decisión explícita.
+ */
+test("ningún IMPORTE de la capa canónica puede figurar como limpio (🟢)", () => {
+  const inventario = inventarioDelDocumento();
+  const limpios = columnasVigiladasDeCanonico()
+    .importes.filter((c) => !(c in NO_SON_PLATA))
+    .filter((c) => inventario.get(c) === "🟢");
+  assert.deepEqual(
+    limpios,
+    [],
+    `${DOC} §0.1 da por limpios importes que el divisor roto contamina:\n  ${limpios.join("\n  ")}\n` +
+      "Un importe solo puede ser 🟢 cuando exista historial de tasas. Si ese día llegó, cambiá este test.",
+  );
+});
+
+/**
+ * El mismo número no puede tener dos veredictos. `governa.tesoreria.reloj` es la tool que sirve
+ * el `monto` de `canales/tesoreria.ts`: si el campo es 🔴 y la tool 🟢, el gate se pone en el
+ * canal y se abre en la puerta por la que Ivi realmente entra.
+ */
+test("la tool y el campo que sirve dicen lo mismo", () => {
+  const inventario = inventarioDelDocumento();
+  assert.equal(
+    inventario.get("governa.tesoreria.reloj.monto"),
+    inventario.get("canales/tesoreria.ts.monto"),
+    "`governa.tesoreria.reloj` sirve el `monto` de `canales/tesoreria.ts`: mismo número, mismo veredicto",
+  );
 });
 
 /**

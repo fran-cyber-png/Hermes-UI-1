@@ -99,9 +99,22 @@ los originales. Los dos lados están sucios, por motivos distintos.
 ### 0.1 El inventario, machine-readable
 
 Esta es **la lista canónica**: el resto del documento la explica, pero si hay que codificar el gate
-en algún lado, se codifica desde acá. Está fijada por
-`server/src/db/inventarioDePlata.test.ts`, que **falla en CI** si `db/canonico.ts` gana un campo de
-plata que este bloque no lista — que es exactamente cómo se coló el defecto de la v1.
+en algún lado, se codifica desde acá. Está fijada por `server/src/db/inventarioDePlata.test.ts`, que
+**falla en CI** en las tres formas de volver a abrir el agujero de la v1:
+
+1. **por omisión** — `db/canonico.ts` gana una columna numérica que este bloque no lista. Es
+   *toda* columna numérica, no las que «suenan» a plata: la carga de la prueba está en la lista de
+   excepciones `NO_SON_PLATA` del test, donde hoy hay una sola (`pago.latencia_dias`) y con su
+   razón escrita. Filtrar por el nombre del campo era reproducir en chiquito el defecto de la v1;
+2. **por flip de veredicto** — un importe de la capa canónica pasa a 🟢. Mientras `tb_moneda` no
+   tenga historial de tasas, ningún importe está limpio: el monto local lo ensucia el agujero B y
+   su conversión arrastra el divisor. Solo las etiquetas de moneda pueden ser 🟢;
+3. **por incoherencia entre capas** — `governa.tesoreria.reloj.monto` y `canales/tesoreria.ts.monto`
+   son el mismo número y tienen que decir lo mismo, o el gate se pone en el canal y queda abierto
+   en la tool por la que Ivi realmente entra.
+
+Lo que el test **no** guarda: el veredicto exacto (🔴 vs 🟡) de cada fila. Fijarlos uno por uno sería
+la segunda lista divergente de #37; lo que se fija es la invariante de la que salen.
 
 ```
 # fuente.campo = estado   (🔴 no servir como HECHO · 🟡 con salvedad · 🟢 limpio)
