@@ -528,3 +528,80 @@ describe('traza_id · el hilo que une «qué recomendó Ivi» con «qué pasó e
     assert.equal(JSON.parse(String(llamadas[0]!.init.body)).superficie, 'hermes');
   });
 });
+
+/**
+ * `http_inesperado` ES UN CAJÓN DE SASTRE, Y NO TODO LO QUE CAE AHÍ ES PERMANENTE.
+ *
+ * Ahí caen tres cosas con vidas distintas, y hasta acá las tres se marcaban `reintentable: false`:
+ *
+ *   404  el endpoint todavía no está desplegado (I1 del plan) ......... PERMANENTE
+ *   500  el `except Exception` de Ivi (`rag/web.py`, verificado contra
+ *        ivi-cerebro@1e5d2f3 — `self._send(500, json.dumps({"error": str(e)}))`
+ *        alrededor de la llamada a `responder()`): pgvector caído,
+ *        Bedrock sin credenciales, un bug de aquel lado ............... TRANSITORIO
+ *   502/504  nginx o la tailnet delante de geografo .................. TRANSITORIO
+ *
+ * El campo se llama `reintentable`: si dice `false` para un fallo que a los 10 s ya no está,
+ * la app (que dibuja el botón «Reintentar» a partir de ese flag) le niega a la vendedora la
+ * única acción que la habría desbloqueado. Afirmar de más es exactamente lo que este contrato
+ * no puede hacer, así que el veredicto mira el ESTADO además del código.
+ */
+describe('el 500 de Ivi es transitorio — `reintentable` mira el estado, no solo el código', () => {
+  test('el 500 propio de Ivi (pgvector caído) SÍ se puede reintentar', () => {
+    assert.equal(esReintentable(CODIGO_ERROR_IVI.HTTP_INESPERADO, 500), true);
+  });
+
+  test('un 502/504 de nginx o la tailnet también', () => {
+    assert.equal(esReintentable(CODIGO_ERROR_IVI.HTTP_INESPERADO, 502), true);
+    assert.equal(esReintentable(CODIGO_ERROR_IVI.HTTP_INESPERADO, 504), true);
+  });
+
+  test('el 404 de hoy NO: el endpoint no existe hasta que Ivi lo despliegue (I1)', () => {
+    assert.equal(esReintentable(CODIGO_ERROR_IVI.HTTP_INESPERADO, 404), false);
+  });
+
+  test('los 4xx que sí son transitorios se distinguen de los que no', () => {
+    // 408 y 429 son el servidor diciendo «ahora no, probá de nuevo»: eso ES la definición.
+    assert.equal(esReintentable(CODIGO_ERROR_IVI.HTTP_INESPERADO, 408), true);
+    assert.equal(esReintentable(CODIGO_ERROR_IVI.HTTP_INESPERADO, 429), true);
+    // Un 400 o un 403 se repiten idénticos: es nuestro request el que está mal.
+    assert.equal(esReintentable(CODIGO_ERROR_IVI.HTTP_INESPERADO, 400), false);
+    assert.equal(esReintentable(CODIGO_ERROR_IVI.HTTP_INESPERADO, 403), false);
+  });
+
+  test('sin estado, la respuesta conservadora es `false` — no se afirma lo que no se sabe', () => {
+    assert.equal(esReintentable(CODIGO_ERROR_IVI.HTTP_INESPERADO), false);
+  });
+
+  test('el estado NO reabre lo que ya está cerrado por su código', () => {
+    // Un 503 es el `ivi_sin_token_configurado` de `autorizar()`: config de geografo, no una
+    // caída. Que sea 5xx no lo vuelve transitorio — por eso el código gana, no el número.
+    assert.equal(esReintentable(CODIGO_ERROR_IVI.IVI_NO_CONFIGURADO, 503), false);
+    assert.equal(esReintentable(CODIGO_ERROR_IVI.CONFIG_HERMES, 401), false);
+    assert.equal(esReintentable(CODIGO_ERROR_IVI.RESPUESTA_INVALIDA, 200), false);
+  });
+
+  test('de punta a punta: un 500 de Ivi llega con su estado, que es lo que hace juzgable el reintento', async () => {
+    const { fake } = fetchQueDevuelve({ error: 'connection to server at "127.0.0.1", port 5432 failed' }, { status: 500 });
+    await assert.rejects(
+      () => preguntarleAIvi('x', 'ana', undefined, { ...CONFIG_OK, fetch: fake }),
+      (e: unknown) =>
+        e instanceof ErrorIvi &&
+        e.codigo === CODIGO_ERROR_IVI.HTTP_INESPERADO &&
+        e.estado === 500 &&
+        esReintentable(e.codigo, e.estado) === true,
+    );
+  });
+
+  test('y un 404 llega igual de tipado, pero sin invitación a reintentar', async () => {
+    const { fake } = fetchQueDevuelve({ error: 'no encontrado' }, { status: 404 });
+    await assert.rejects(
+      () => preguntarleAIvi('x', 'ana', undefined, { ...CONFIG_OK, fetch: fake }),
+      (e: unknown) =>
+        e instanceof ErrorIvi &&
+        e.codigo === CODIGO_ERROR_IVI.HTTP_INESPERADO &&
+        e.estado === 404 &&
+        esReintentable(e.codigo, e.estado) === false,
+    );
+  });
+});

@@ -149,6 +149,16 @@ export class ErrorIvi extends Error {
 }
 
 /**
+ * Los estados HTTP que significan «probá de nuevo», cuando el código por sí solo no alcanza.
+ *
+ * `408` y `429` son el servidor pidiendo explícitamente que se reintente; `>= 500` es que algo
+ * se rompió del otro lado y puede estar arreglado en el próximo intento.
+ */
+function estadoTransitorio(estado: number): boolean {
+  return estado >= 500 || estado === 408 || estado === 429;
+}
+
+/**
  * Si volver a preguntar lo mismo puede dar otro resultado.
  *
  * Es la mitad que faltaba de la regla que este repo ya tenía escrita («un 404 no es "no hay
@@ -156,12 +166,28 @@ export class ErrorIvi extends Error {
  * siquiera un `SIN_EVIDENCIA` — Ivi funcionó y ya decidió que no sabe; reintentar es pedirle
  * la misma respuesta otra vez y cobrarle el tiempo a la vendedora.
  *
- * Solo los dos fallos verdaderamente transitorios se reintentan. Config y contrato roto dan
- * exactamente el mismo error un minuto después: reintentarlos es esconder el bug detrás de
- * un spinner más largo.
+ * ⚠️ EL CÓDIGO SOLO NO ALCANZA, y esto costó un defecto: `HTTP_INESPERADO` es un CAJÓN DE
+ * SASTRE con tres vidas distintas adentro —
+ *
+ *   404      el endpoint todavía no está desplegado (I1 del plan) ............ PERMANENTE
+ *   500      el `except Exception` de Ivi (`rag/web.py`): pgvector caído,
+ *            Bedrock sin credenciales, un bug de aquel lado ................. TRANSITORIO
+ *   502/504  nginx o la tailnet delante de geografo ........................ TRANSITORIO
+ *
+ * — y marcarlas a las tres `false` le negaba a la vendedora el botón «Reintentar» justo en el
+ * caso en que a los 10 s ya funcionaba. El `estado` ya venía en el `ErrorIvi`; solo faltaba
+ * mirarlo. El campo se llama `reintentable`: no puede afirmar más de lo que sabe.
+ *
+ * El orden importa: **el código decide primero y el estado solo desempata el cajón de sastre**.
+ * Un `503` es el `ivi_sin_token_configurado` de `autorizar()` —config de geografo, no una
+ * caída—, así que ser 5xx no lo vuelve transitorio; por eso ya salió clasificado como
+ * `IVI_NO_CONFIGURADO` y no llega hasta acá abajo.
  */
-export function esReintentable(codigo: CodigoErrorIvi): boolean {
-  return codigo === CODIGO_ERROR_IVI.TIMEOUT || codigo === CODIGO_ERROR_IVI.RED;
+export function esReintentable(codigo: CodigoErrorIvi, estado?: number): boolean {
+  if (codigo === CODIGO_ERROR_IVI.TIMEOUT || codigo === CODIGO_ERROR_IVI.RED) return true;
+  // Sin estado no se afirma nada: la respuesta conservadora es «no invitar a reintentar».
+  if (codigo === CODIGO_ERROR_IVI.HTTP_INESPERADO) return estado !== undefined && estadoTransitorio(estado);
+  return false;
 }
 
 // ── Las dos traducciones de la costura ──────────────────────────────────────

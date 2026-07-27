@@ -53,13 +53,18 @@ export function iviRouter(preguntar: PreguntarAIvi = preguntarleAIvi): Router {
       // Fail-closed: un fallo se reporta como fallo, con su clase — jamás como «no hay datos».
       // `reintentable` viaja para que la app no tenga que reimplementar la tabla de códigos
       // (y para que no reintente un fallo de config, que da lo mismo un minuto después).
+      //
+      // El `estado` va JUNTO con el código: sin él, el cajón de sastre `http_inesperado` marca
+      // igual el 404 de «todavía no lo desplegaron» que el 500 de «pgvector se está
+      // reiniciando», y la app —que dibuja el botón «Reintentar» con este flag— se lo niega a
+      // la vendedora en el caso que a los 10 s ya andaba. Ver `esReintentable`.
       if (err instanceof ErrorIvi) {
         console.error(`ivi: ${err.codigo} — ${err.message} [traza ${err.trazaId ?? '—'}]`, err.cause ?? '');
         res.status(502).json({
           ok: false,
           codigo: err.codigo,
           message: err.message,
-          reintentable: esReintentable(err.codigo),
+          reintentable: esReintentable(err.codigo, err.estado),
           ...(err.trazaId ? { trazaId: err.trazaId } : {}),
         });
         return;

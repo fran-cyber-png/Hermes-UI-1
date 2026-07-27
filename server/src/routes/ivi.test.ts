@@ -196,3 +196,67 @@ describe('POST /api/ivi/preguntar — SIN_EVIDENCIA sale por el camino de las re
     assert.equal(mal.json?.reintentable, true, 'un timeout sí se puede reintentar');
   });
 });
+
+/**
+ * ESTE ES EL LUGAR DONDE EL DEFECTO LLEGABA A LA VENDEDORA.
+ *
+ * La UI dibuja el botón a partir del flag que sale de acá (`{reintentable && <button>Reintentar`).
+ * El `http_inesperado` es un cajón de sastre con vidas mezcladas, y la ruta lo resolvía mirando
+ * solo el `codigo` — con lo que el 500 de Ivi (pgvector reiniciándose, Bedrock sin credenciales)
+ * salía como `reintentable: false` y la vendedora se quedaba sin la única acción que servía.
+ *
+ * El `estado` ya viajaba en el `ErrorIvi`; simplemente no se miraba.
+ */
+describe('POST /api/ivi/preguntar — `reintentable` no puede afirmar más de lo que sabe', () => {
+  /** Un cliente que falla como falla el de verdad: con código Y estado. */
+  function fallaCon(codigo: CodigoErrorIvi, estado?: number): PreguntarAIvi {
+    return async () => {
+      const e = new ErrorIvi(codigo, `Ivi respondió con un estado inesperado (${estado}).`, estado);
+      e.trazaId = 'traza-3';
+      throw e;
+    };
+  }
+
+  test('el 500 de Ivi sale con `reintentable: true` — a los 10 s puede andar', async () => {
+    const r = await pedir(fallaCon(CODIGO_ERROR_IVI.HTTP_INESPERADO, 500), {
+      token: TOKEN,
+      body: { pregunta: 'hola' },
+    });
+    assert.equal(r.status, 502);
+    assert.equal(r.json?.codigo, CODIGO_ERROR_IVI.HTTP_INESPERADO);
+    assert.equal(r.json?.reintentable, true, 'pgvector caído no es un contrato roto: se reintenta');
+    assert.equal(r.json?.trazaId, 'traza-3', 'y la traza sigue viajando, que es como se cruza con el log de Ivi');
+  });
+
+  test('un 502/504 de nginx delante de geografo, igual', async () => {
+    for (const estado of [502, 504]) {
+      const r = await pedir(fallaCon(CODIGO_ERROR_IVI.HTTP_INESPERADO, estado), {
+        token: TOKEN,
+        body: { pregunta: 'hola' },
+      });
+      assert.equal(r.json?.reintentable, true, `${estado} es la tailnet o el proxy, no el contrato`);
+    }
+  });
+
+  test('el 404 de hoy sigue sin botón: el endpoint no existe hasta que lo desplieguen', async () => {
+    const r = await pedir(fallaCon(CODIGO_ERROR_IVI.HTTP_INESPERADO, 404), {
+      token: TOKEN,
+      body: { pregunta: 'hola' },
+    });
+    assert.equal(r.status, 502);
+    assert.equal(r.json?.reintentable, false, 'reintentar un 404 es un spinner más largo y el mismo 404');
+  });
+
+  test('los fallos de config siguen sin invitación a reintentar, tengan el estado que tengan', async () => {
+    const casos: [CodigoErrorIvi, number | undefined][] = [
+      [CODIGO_ERROR_IVI.CONFIG_HERMES, 401],
+      [CODIGO_ERROR_IVI.IVI_NO_CONFIGURADO, 503],
+      [CODIGO_ERROR_IVI.FALTA_CONFIG, undefined],
+      [CODIGO_ERROR_IVI.RESPUESTA_INVALIDA, undefined],
+    ];
+    for (const [codigo, estado] of casos) {
+      const r = await pedir(fallaCon(codigo, estado), { token: TOKEN, body: { pregunta: 'hola' } });
+      assert.equal(r.json?.reintentable, false, `${codigo} da el mismo error un minuto después`);
+    }
+  });
+});
