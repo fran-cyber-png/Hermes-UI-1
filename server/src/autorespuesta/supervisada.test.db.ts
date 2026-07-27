@@ -204,3 +204,105 @@ test('la campaña queda guardada, y con ella la plantilla que la nombra', async 
   assert.equal(filas[1].campana, 'Inteligencia y Contrainteligencia', 'el curso sale del formulario que llenó');
   assert.ok(filas[1].texto.includes('inteligencia y contrainteligencia'), filas[1].texto);
 });
+
+/**
+ * ── EL TEXTO PROPUESTO, CONGELADO (#186) ──────────────────────────────────────
+ *
+ * `editada` dice QUE el texto cambió; `texto_preparado` dice QUÉ decía antes. La
+ * diferencia entre los dos es lo único que permite aprender cómo la vendedora
+ * corrige a la máquina — y sin la columna esa resta no existe, porque `texto`
+ * guarda siempre lo-que-se-manda y al editar se pisa a sí mismo.
+ */
+
+test('al nacer, el texto propuesto y el que se mandaría son el mismo', async (t) => {
+  const db = await baseDePrueba(t);
+  const ahora = ahoraDePrueba();
+  const repo = repositorioDrizzle(db);
+  await supervisar(db);
+
+  await sembrarMensaje(db, { personaId: '51961506674', texto: 'hola, quiero información', occurredAt: haceHoras(ahora, 3), numeroPropio: NUMERO_PROPIO });
+  await correrEncolado({ base: db, repo, cfg, ahora: () => ahora, azar: azarFijo, registrar: () => {} });
+
+  const [f] = await db.execute<{ texto: string; texto_preparado: string; editada: boolean }>(
+    sql`SELECT texto, texto_preparado, editada FROM auto_respuestas_pendientes`,
+  );
+  assert.equal(f.texto_preparado, f.texto, 'salen del mismo valor: al nacer no pueden discrepar');
+  assert.equal(f.editada, false);
+  assert.ok(f.texto_preparado.length > 0, 'y no es la cadena vacía');
+});
+
+test('si la vendedora EDITA, queda lo que propuso la máquina Y lo que ella mandó', async (t) => {
+  const db = await baseDePrueba(t);
+  const ahora = ahoraDePrueba();
+  const repo = repositorioDrizzle(db);
+  await supervisar(db);
+
+  await sembrarMensaje(db, { personaId: '51961506674', texto: 'hola, quiero información', occurredAt: haceHoras(ahora, 3), numeroPropio: NUMERO_PROPIO });
+  await correrEncolado({ base: db, repo, cfg, ahora: () => ahora, azar: azarFijo, registrar: () => {} });
+
+  const [esperando] = await repo.listarEsperandoAprobacion();
+  const propuesto = esperando.texto;
+  const corregido = `${propuesto} Te dejo el link: goberna.us/diplomados`;
+
+  assert.equal(await repo.aprobar({ id: esperando.id, programadoPara: ahora, texto: corregido, quien: 'luz', ahora }), true);
+
+  const [f] = await db.execute<{ texto: string; texto_preparado: string; editada: boolean }>(
+    sql`SELECT texto, texto_preparado, editada FROM auto_respuestas_pendientes`,
+  );
+  assert.equal(f.texto, corregido, '`texto` es SIEMPRE lo que se manda');
+  assert.equal(f.texto_preparado, propuesto, 'y lo que propuso la máquina sobrevive a la edición');
+  assert.equal(f.editada, true);
+
+  // Lo que todo esto existe para poder hacer: la resta.
+  assert.notEqual(f.texto, f.texto_preparado);
+  assert.ok(f.texto.startsWith(f.texto_preparado), 'en este caso ella AGREGÓ, no reescribió — y eso ahora se puede ver');
+});
+
+test('aprobar SIN editar no toca ninguno de los dos textos', async (t) => {
+  const db = await baseDePrueba(t);
+  const ahora = ahoraDePrueba();
+  const repo = repositorioDrizzle(db);
+  await supervisar(db);
+
+  await sembrarMensaje(db, { personaId: '51961506674', texto: 'hola, quiero información', occurredAt: haceHoras(ahora, 3), numeroPropio: NUMERO_PROPIO });
+  await correrEncolado({ base: db, repo, cfg, ahora: () => ahora, azar: azarFijo, registrar: () => {} });
+
+  const [esperando] = await repo.listarEsperandoAprobacion();
+  // Sin `texto`: es el camino de «aprobar tal cual», el más común de la bandeja.
+  assert.equal(await repo.aprobar({ id: esperando.id, programadoPara: ahora, quien: 'luz', ahora }), true);
+
+  const [f] = await db.execute<{ texto: string; texto_preparado: string; editada: boolean }>(
+    sql`SELECT texto, texto_preparado, editada FROM auto_respuestas_pendientes`,
+  );
+  assert.equal(f.editada, false);
+  assert.equal(f.texto, f.texto_preparado, 'siguen iguales');
+});
+
+test('la invariante que hace derivable a `editada`: editada ⇔ los textos difieren', async (t) => {
+  // `editada` es hoy una bandera que el código se tiene que acordar de poner (se
+  // pone en UN solo lugar: `repositorio.aprobar`). Con las dos columnas, la verdad
+  // se puede DERIVAR — y este test fija que las dos versiones coincidan, así que
+  // el día que alguien olvide la bandera, esto lo caza.
+  const db = await baseDePrueba(t);
+  const ahora = ahoraDePrueba();
+  const repo = repositorioDrizzle(db);
+  await supervisar(db);
+
+  for (const n of ['51961506674', '51961506675']) {
+    await sembrarMensaje(db, { personaId: n, texto: 'hola, quiero información', occurredAt: haceHoras(ahora, 3), numeroPropio: NUMERO_PROPIO });
+  }
+  await correrEncolado({ base: db, repo, cfg, ahora: () => ahora, azar: azarFijo, registrar: () => {} });
+
+  const esperando = await repo.listarEsperandoAprobacion();
+  assert.equal(esperando.length, 2);
+  await repo.aprobar({ id: esperando[0].id, programadoPara: ahora, texto: 'otra cosa distinta', quien: 'luz', ahora });
+  await repo.aprobar({ id: esperando[1].id, programadoPara: ahora, quien: 'luz', ahora });
+
+  const filas = await db.execute<{ editada: boolean; diferen: boolean }>(
+    sql`SELECT editada, (texto IS DISTINCT FROM texto_preparado) AS diferen FROM auto_respuestas_pendientes`,
+  );
+  assert.equal(filas.length, 2);
+  for (const f of filas) {
+    assert.equal(f.editada, f.diferen, 'la bandera y la resta tienen que decir lo mismo');
+  }
+});

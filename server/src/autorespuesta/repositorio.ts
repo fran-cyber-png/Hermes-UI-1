@@ -183,7 +183,20 @@ export function repositorioDrizzle(base: typeof db): RepositorioAutoRespuesta {
     async encolar(p) {
       const [fila] = await base
         .insert(autoRespuestasPendientes)
-        .values({ ...p, estado: p.estado ?? 'pendiente', campana: p.campana ?? null, campanaFuente: p.campanaFuente ?? null })
+        .values({
+          ...p,
+          estado: p.estado ?? 'pendiente',
+          campana: p.campana ?? null,
+          campanaFuente: p.campanaFuente ?? null,
+          // El texto propuesto, congelado (#186). Sale del MISMO valor que `texto`
+          // y en el MISMO lugar, así que al nacer no pueden discrepar. A partir de
+          // acá `texto` puede cambiar (si la vendedora edita al aprobar) y esto no:
+          // la resta entre los dos es lo que dice QUÉ le corrigió, no solo que lo
+          // hizo. No se acepta desde `p`: si el llamador pudiera mandarlo, podría
+          // mandar uno distinto del que se muestra, y la comparación mediría un
+          // texto que nadie vio.
+          textoPreparado: p.texto,
+        })
         // El conflicto NO es un error: es «esta conversación ya tuvo la suya
         // hoy». La garantía vive en el UNIQUE (clave, dia_lima).
         .onConflictDoNothing({ target: [autoRespuestasPendientes.clave, autoRespuestasPendientes.diaLima] })

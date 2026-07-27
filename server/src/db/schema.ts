@@ -804,6 +804,36 @@ export const autoRespuestasPendientes = pgTable(
      * dice «no sé de dónde» y el panel muestra la campaña sin la cadena.
      */
     campanaFuente: text("campana_fuente"),
+
+    // ── QUÉ decía antes de que la tocaran (#186) ──────────────────────────────
+    /**
+     * El texto **RENDERIZADO** tal como se le mostró a la vendedora, antes de que
+     * lo editara. `texto` sigue siendo siempre lo-que-se-manda; esto es
+     * lo-que-la-máquina-propuso, y no cambia nunca después de escribirse.
+     *
+     * POR QUÉ HACE FALTA, si ya existe `editada`: ese booleano dice **que** el
+     * texto cambió, no **qué** cambió. Con eso se puede contestar «¿qué plantilla
+     * se edita mucho?» —útil— pero no la que enseña: qué le agrega siempre (¿el
+     * precio? ¿el link?), qué le saca, y si las ediciones **convergen a un texto
+     * que debería SER la plantilla**. Ese es el objetivo entero: que la plantilla
+     * se reescriba con lo que las vendedoras ya le corrigen, en vez de que alguien
+     * adivine.
+     *
+     * POR QUÉ NO ALCANZA `envios_wa.pieza_version`, que ya guarda la versión del
+     * contenido AUTORAL: lo que la vendedora editó no es la plantilla cruda, es la
+     * plantilla **ya resuelta** —con `{nombre}`, `{curso}` y `{precio}` sustituidos
+     * contra Cerberus en ESE instante—. Re-renderizarla después no es fiel: el
+     * precio pudo cambiar, y el interés de la persona también. Es la misma razón
+     * por la que `campana` se GUARDA en vez de recalcularse.
+     *
+     * Se escribe UNA sola vez, en `encolar`, con el mismo valor que `texto`. Que
+     * salga del mismo lugar es lo que hace imposible que las dos columnas
+     * describan cosas distintas al nacer. `aprobar` nunca la toca.
+     *
+     * Nullable por las filas anteriores a esta columna: ahí `NULL` significa **«no
+     * se registró»**, que no es lo mismo que «no se editó».
+     */
+    textoPreparado: text("texto_preparado"),
   },
   (t) => [
     unique("auto_respuestas_una_por_dia_uq").on(t.clave, t.diaLima),
