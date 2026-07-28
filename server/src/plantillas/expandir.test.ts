@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { exigeCurso, expandirCuerpo, formatearPrecio } from "./expandir.js";
+import { exigeCurso, expandirCuerpo, formatearPrecio, saludoDeLaHora } from "./expandir.js";
 
 test("las tres variables se reemplazan", () => {
   const r = expandirCuerpo("Hola {nombre}, el {curso} está en {precio}", {
@@ -67,3 +67,33 @@ test("los emojis del flyer sobreviven la expansión", () => {
   });
   assert.equal(r.texto, "🕵️‍♂️ Diploma de Inteligencia 26\n\nInversión: S/250");
 });
+
+const conHora = (h: number) => new Date(2026, 6, 27, h, 0, 0);
+
+test("{saludo} cambia con la hora local", () => {
+    assert.equal(saludoDeLaHora(conHora(9)), "Buenos días");
+    assert.equal(saludoDeLaHora(conHora(15)), "Buenas tardes");
+    assert.equal(saludoDeLaHora(conHora(23)), "Buenas noches");
+  });
+
+test("{saludo}: los bordes son los de acá: 12 ya es tarde, 19 ya es noche", () => {
+    assert.equal(saludoDeLaHora(conHora(11)), "Buenos días");
+    assert.equal(saludoDeLaHora(conHora(12)), "Buenas tardes");
+    assert.equal(saludoDeLaHora(conHora(18)), "Buenas tardes");
+    assert.equal(saludoDeLaHora(conHora(19)), "Buenas noches");
+  });
+
+test("{saludo} se expande en el cuerpo y NO entra en faltantes", () => {
+    // Es la diferencia con las otras tres: el reloj siempre está, así que un
+    // `[saludo]` en un mensaje que sale sería romper algo infalible.
+    const r = expandirCuerpo("{saludo},\n\nMi nombre es Walter.", { ahora: conHora(23) });
+    assert.equal(r.texto, "Buenas noches,\n\nMi nombre es Walter.");
+    assert.deepEqual(r.faltantes, []);
+  });
+
+test("{saludo} convive con las que sí pueden faltar", () => {
+    const r = expandirCuerpo("{saludo}, el curso sale {precio}", { ahora: conHora(9) });
+    assert.match(r.texto, /^Buenos días/);
+    assert.match(r.texto, /\[precio\]/);
+    assert.deepEqual(r.faltantes, ["precio"]);
+  });

@@ -26,6 +26,10 @@ export interface VariablesPlantilla {
   precio?: number | null;
   /** El símbolo o código («S/», «USD»). Vacío ⇒ hueco, aunque haya número. */
   moneda?: string | null;
+  /**
+   * El reloj para `{saludo}`. Se inyecta para poder testearlo; por default, ahora.
+   */
+  ahora?: Date;
 }
 
 export interface TextoExpandido {
@@ -34,13 +38,38 @@ export interface TextoExpandido {
   faltantes: string[];
 }
 
-/** Las tres variables que existen. Cualquier otra cosa entre llaves se deja intacta. */
-export const VARIABLES = ["nombre", "curso", "precio"] as const;
+/**
+ * Las variables que existen. Cualquier otra cosa entre llaves se deja intacta.
+ *
+ * `saludo` es distinta de las otras tres y por eso se aclara: **nunca queda
+ * hueco**. Las demás dependen de datos que pueden faltar —Cerberus no contesta,
+ * el producto no tiene precio— y ahí un `[precio]` visible es lo honesto. El
+ * saludo depende del reloj, que siempre está: dejar `[saludo]` en un mensaje que
+ * sale sería romper algo que no tenía cómo fallar.
+ *
+ * Existe porque el guión de Consultoría abre con «Buenos días» y se manda a
+ * cualquier hora. Un «buenos días» a las 11 de la noche es la clase de detalle
+ * que le dice al lead que del otro lado hay un machote, no una persona.
+ */
+export const VARIABLES = ["nombre", "curso", "precio", "saludo"] as const;
 export type Variable = (typeof VARIABLES)[number];
 
 /** El hueco visible de una variable que no se pudo resolver. */
 export function hueco(v: Variable): string {
   return `[${v}]`;
+}
+
+/**
+ * «Buenos días» · «Buenas tardes» · «Buenas noches», por la hora LOCAL.
+ *
+ * Los cortes son los de acá, no los del libro: hasta las 12 es mañana, hasta las
+ * 19 es tarde, después es noche. A las 19:00 en Lima ya está oscuro y «buenas
+ * tardes» suena a que nadie miró la hora.
+ */
+export function saludoDeLaHora(ahora: Date = new Date()): string {
+  const h = ahora.getHours();
+  if (h < 12) return "Buenos días";
+  return h < 19 ? "Buenas tardes" : "Buenas noches";
 }
 
 /**
@@ -71,11 +100,13 @@ export function expandirCuerpo(cuerpo: string, v: VariablesPlantilla): TextoExpa
 
   const resolver = (variable: Variable): string => {
     const valor =
-      variable === "nombre"
-        ? (v.nombre ?? "").trim() || null
-        : variable === "curso"
-          ? (v.curso ?? "").trim() || null
-          : formatearPrecio(v.precio, v.moneda);
+      variable === "saludo"
+        ? saludoDeLaHora(v.ahora)
+        : variable === "nombre"
+          ? (v.nombre ?? "").trim() || null
+          : variable === "curso"
+            ? (v.curso ?? "").trim() || null
+            : formatearPrecio(v.precio, v.moneda);
 
     if (valor === null) {
       if (!faltantes.includes(variable)) faltantes.push(variable);
@@ -84,7 +115,7 @@ export function expandirCuerpo(cuerpo: string, v: VariablesPlantilla): TextoExpa
     return valor;
   };
 
-  const texto = cuerpo.replace(/\{(nombre|curso|precio)\}/g, (_m, nombre: Variable) =>
+  const texto = cuerpo.replace(/\{(nombre|curso|precio|saludo)\}/g, (_m, nombre: Variable) =>
     resolver(nombre),
   );
 

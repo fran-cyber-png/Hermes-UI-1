@@ -22,6 +22,7 @@
     "test:db": "tsx src/pruebas/montarBase.ts && tsx --test src/**/*.test.db.ts",
     "ingest:interactions": "tsx src/scripts/ingestInteractions.ts",
     "ingest:icarus": "tsx src/scripts/ingestIcarus.ts",
+    "clientes:auditar": "tsx src/scripts/auditarClientes.ts",
     "clientes:sincronizar": "tsx src/scripts/sincronizarClientes.ts",
     "ventas:sincronizar": "tsx src/scripts/sincronizarVentas.ts",
     "medir:correo": "tsx src/scripts/medirCorreoFichas.ts",
@@ -37,7 +38,8 @@
     "cerberus:hechos": "tsx src/scripts/cerberus.ts hechos",
     "lazo": "tsx src/scripts/cerberus.ts lazo",
     "backfill": "tsx src/scripts/backfill.ts",
-    "backfill:categorias": "tsx src/scripts/backfillCategorias.ts"
+    "backfill:categorias": "tsx src/scripts/backfillCategorias.ts",
+    "guion:consultoria": "tsx src/scripts/sembrarGuionConsultoria.ts"
   },
   "dependencies": {
     "@types/nodemailer": "^8.0.1",
