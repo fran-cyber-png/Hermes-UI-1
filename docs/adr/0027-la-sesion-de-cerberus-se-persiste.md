@@ -27,12 +27,16 @@ siempre, que es tratar el síntoma alquilando el bug.
 3. **La vigencia se decide al leer Y se purga al arrancar**: `VIGENCIA_SESION_MS` = 14 días, los
    mismos del token de Hermes (el `SESSION_COOKIE_AGE` de Cerberus **no se verificó contra su
    repo** — si es menor, la fila puede quedar presente y muerta antes del TTL). Una fila más vieja
-   se trata como inexistente; al nacer el store se borran las vencidas de todas las vendedoras —
-   sin esa purga el TTL sería solo «ignorar al leer» y la fila de una vendedora inactiva viviría
-   para siempre. Y cuando Cerberus la mata por su cuenta, **el primer lugar que lo descubre la
-   borra**: `crearVenta` trata el 302 a `/ingresar/` como sesión muerta (nunca como «registrada» —
-   antes escribía una venta fantasma en el embudo) y `cargarFormulario` detecta el redirect; los
-   dos llaman a `borrarSesionCerberus` para que `/yo` diga la verdad.
+   se trata como inexistente; al nacer el store (el primer request de sesión tras el arranque —
+   el singleton es perezoso) se borran las vencidas de todas las vendedoras — sin esa purga el TTL
+   sería solo «ignorar al leer» y la fila de una vendedora inactiva viviría para siempre. Y cuando
+   Cerberus la mata por su cuenta, **quien lo descubre con evidencia la borra**: `crearVenta` trata
+   el **3xx con `Location` a `/ingresar/`** como sesión muerta (nunca como «registrada» — antes
+   escribía una venta fantasma en el embudo) y borra la fila. La regla es fina a propósito, y vive
+   pura con test (`clasificarRespuestaVenta`): un 500 del latin1 o un 502 de nginx son rechazos de
+   ESA venta — tratarlos como «expiró» deslogueaba a las tres por un hipo. `cargarFormulario`
+   detecta el redirect pero **no borra**: `permission_required` manda al mismo login, y borrar ahí
+   una sesión viva armaría el bucle «expiró → volvé a entrar».
 4. **La base degrada, nunca tumba**: sin la tabla migrada o con la base caída, el store se comporta
    exactamente como el `Map` de antes (funciona hasta el próximo reinicio) y lo dice por el log. Un
    login no puede fallar porque la persistencia falló.

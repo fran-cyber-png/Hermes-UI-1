@@ -79,16 +79,27 @@ test('sin la tabla migrada DEGRADA al Map de siempre: funciona en el proceso, no
   assert.equal(await crearSesionStore(db).obtener('ana'), null);
 });
 
-test('la retención al nacer el store: las filas vencidas de CUALQUIER vendedora se purgan', async (t) => {
+test('la retención al nacer el store: purga lo vencido y SOLO lo vencido', async (t) => {
   const db = await baseDePrueba(t);
   let reloj = Date.UTC(2026, 6, 1);
   const viejo = crearSesionStore(db, () => reloj);
   await viejo.guardar('ana', SESION); // ana usó Hermes el 1-jul y nunca más
 
   reloj += VIGENCIA_SESION_MS + 1;
-  crearSesionStore(db, () => reloj); // el server arranca 14 días después
-  // La purga es fire-and-forget: se le da un turno al event loop.
-  await new Promise((r) => setTimeout(r, 200));
-  const filas = await db.execute(sql`SELECT count(*)::int AS n FROM sesiones_cerberus`);
-  assert.equal((filas as unknown as { n: number }[])[0].n, 0);
+  await crearSesionStore(db, () => reloj).guardar('walter', SESION); // walter entra hoy
+  crearSesionStore(db, () => reloj); // y un proceso nuevo nace (su primer uso dispara la purga)
+
+  // La purga es fire-and-forget: se sondea hasta que asiente (nada de sleeps
+  // fijos — el runner de CI comparte máquina y un número mágico es un flake).
+  const hasta = Date.now() + 5_000;
+  let quedan: string[] = [];
+  while (Date.now() < hasta) {
+    const filas = await db.execute(sql`SELECT vendedora_id FROM sesiones_cerberus ORDER BY 1`);
+    quedan = (filas as unknown as { vendedora_id: string }[]).map((f) => f.vendedora_id);
+    if (quedan.length <= 1) break;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  // Una purga que barriera la tabla entera también dejaría «cero»: por eso el
+  // test exige que WALTER SOBREVIVA, no solo que ana desaparezca.
+  assert.deepEqual(quedan, ['walter']);
 });

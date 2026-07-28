@@ -78,9 +78,11 @@ export function crearSesionStore(
     );
 
   /**
-   * La retención de VERDAD, al nacer el store (= al arrancar el proceso). Sin
-   * esto el TTL sería solo «ignorar al leer»: la fila de una vendedora que dejó
-   * de usar Hermes viviría para siempre, y el ADR 0027 afirma que no.
+   * La retención de VERDAD, al nacer el store — que en producción es el PRIMER
+   * request de sesión tras el arranque (`elStore` es perezoso), no el proceso
+   * levantándose. Sin esto el TTL sería solo «ignorar al leer»: la fila de una
+   * vendedora que dejó de usar Hermes viviría para siempre, y el ADR 0027
+   * afirma que no.
    */
   void (async () => {
     try {

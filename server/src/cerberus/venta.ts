@@ -97,9 +97,11 @@ export async function cargarFormulario(vendedoraId: string): Promise<FormularioV
     signal: AbortSignal.timeout(15_000),
   });
   if (r.url.includes('/ingresar')) {
-    // Cerberus redirigió al login: la cookie persistida está muerta. Se borra
-    // acá — es el primer lugar que lo descubre — para que `/yo` diga la verdad.
-    await borrarSesionCerberus(vendedoraId);
+    // Cerberus redirigió al login. Puede ser sesión muerta O una vendedora sin
+    // permiso sobre la vista (`permission_required` manda al MISMO lugar) — y
+    // borrar acá una sesión viva armaría el bucle «expiró → volvé a entrar →
+    // expiró». Por eso este camino solo dice «no hay formulario»: el borrado
+    // con evidencia queda en `crearVenta`, donde el 302 es sobre el POST.
     return null;
   }
   if (!r.ok) return null;
@@ -110,6 +112,42 @@ export async function cargarFormulario(vendedoraId: string): Promise<FormularioV
     medios: MEDIOS,
     origenes: ORIGENES,
   };
+}
+
+export type VeredictoVenta =
+  | { tipo: 'ok'; folio?: string; mensaje?: string }
+  | { tipo: 'rechazo'; motivo: string }
+  /** Django redirigió al login: la cookie está muerta. El único caso que borra la fila. */
+  | { tipo: 'sesion_muerta' };
+
+/**
+ * QUÉ SIGNIFICA LA RESPUESTA DE `crear_venta` — pura, y con test, porque esto
+ * decide si se escribe una conversión y se cierra el pipeline.
+ *
+ * La distinción que la revisión adversaria obligó a hacer fina: **solo un 3xx
+ * cuyo `Location` apunta a `/ingresar` es una sesión muerta** (el mismo idioma
+ * que `auth.ts` usa desde siempre). Un 500 (el emoji contra el latin1, regla
+ * dura #4), un 403 de CSRF o un 502 de nginx son rechazos de ESTA venta: borrar
+ * la sesión ahí mandaba a la vendedora a reloguearse en bucle por un hipo de
+ * Cerberus — la clase exacta de deslogueo que el ADR 0027 vino a eliminar.
+ */
+export function clasificarRespuestaVenta(
+  status: number,
+  location: string | null,
+  json: { success?: boolean; message?: string; folio?: string; folio_venta?: string },
+): VeredictoVenta {
+  if (json.success) return { tipo: 'ok', folio: json.folio ?? json.folio_venta, mensaje: json.message };
+  if (json.message) return { tipo: 'rechazo', motivo: json.message };
+  if (status >= 300 && status < 400 && (location ?? '').includes('/ingresar')) {
+    return { tipo: 'sesion_muerta' };
+  }
+  if (status >= 300 || status < 200) {
+    return { tipo: 'rechazo', motivo: `Cerberus rechazó la venta (HTTP ${status})` };
+  }
+  // ⚠️ Residuo conocido: un 200 con HTML (el form re-renderizado con errores)
+  // sigue contando como registrada. Trackeado aparte; cerrarlo acá exige saber
+  // si Cerberus puede responder un éxito sin JSON, y eso se mide, no se supone.
+  return { tipo: 'ok', mensaje: 'registrada' };
 }
 
 /** Crea la venta (o cotización) en Cerberus con la sesión de la vendedora. */
@@ -193,20 +231,17 @@ export async function crearVenta(vendedoraId: string, orden: OrdenVenta): Promis
       /* si no es JSON, caemos al análisis de status abajo */
     }
 
-    if (json.success) {
-      return { ok: true, folio: json.folio ?? json.folio_venta, mensaje: json.message };
-    }
-    if (json.message) return { ok: false, motivo: json.message };
-    if (r.status >= 300) {
-      // Con `redirect: 'manual'`, un Django con la sesión muerta contesta 302 a
-      // /ingresar/. Eso NUNCA es una venta registrada: reportarlo `ok` escribía
-      // una conversión y cerraba el pipeline sobre una venta que no existe.
-      // La fila persistida ya no sirve: se borra para que `/yo` diga la verdad.
+    const v = clasificarRespuestaVenta(r.status, r.headers.get('location'), json);
+    if (v.tipo === 'sesion_muerta') {
+      // Con `redirect: 'manual'`, el 302 a /ingresar/ significa cookie muerta.
+      // Eso NUNCA es una venta registrada (contarlo `ok` escribía una conversión
+      // sobre una venta que no existe), y la fila persistida ya no sirve: se
+      // borra para que `/yo` diga la verdad.
       await borrarSesionCerberus(vendedoraId);
       return { ok: false, motivo: 'la sesión de Cerberus expiró — volvé a entrar a Hermes' };
     }
-    if (r.status >= 200) return { ok: true, mensaje: 'registrada' };
-    return { ok: false, motivo: `Cerberus rechazó la venta (HTTP ${r.status})` };
+    if (v.tipo === 'rechazo') return { ok: false, motivo: v.motivo };
+    return { ok: true, folio: v.folio, mensaje: v.mensaje };
   } catch (err) {
     return { ok: false, motivo: `no se pudo crear la venta: ${(err as Error).message}` };
   }
