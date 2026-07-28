@@ -90,6 +90,15 @@ async function columnasPresentes(): Promise<Set<string>> {
   return new Set(filas.map((f) => f.column_name));
 }
 
+/** ¿Existe esa tabla del otro lado? Mismo criterio que `columnasPresentes`. */
+async function tablaPresente(nombre: string): Promise<boolean> {
+  const filas = (await icarus`
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'icarus' AND table_name = ${nombre}
+  `) as unknown as unknown[];
+  return filas.length > 0;
+}
+
 let total: ResumenPadron = { ...RESUMEN_VACIO, porNivel: { ...RESUMEN_VACIO.porNivel } };
 let ultimoId: number | string = 0;
 
@@ -127,13 +136,37 @@ try {
   const columna = (nombre: string) =>
     presentes.has(nombre) ? icarus`${icarus(nombre)}` : icarus`NULL AS ${icarus(nombre)}`;
 
+  /**
+   * ¿HAY UNA VENTA QUE RESPALDE EL CONTEO? — la pregunta que faltaba.
+   *
+   * `n_purchases` es un contador que para las 59k filas del import de `leads_crm`
+   * viene VERBATIM del dump viejo y nunca se recalculó (medido el 27-jul-2026:
+   * 5.805 de 10.504 «compradores» sin una sola fila en `icarus.sales`, 5.466 de
+   * ellos sin siquiera un `goberna_app_id`). Un `EXISTS` correlacionado cuesta un
+   * índice por fila y convierte una afirmación heredada en un hecho verificado.
+   *
+   * Si `icarus.sales` no existe del otro lado, la columna viaja como `NULL` y
+   * `evaluarFilaDePadron` se comporta como antes — degradación honesta, avisada.
+   */
+  const hayVentas = await tablaPresente("sales");
+  const conVenta = hayVentas
+    ? icarus`EXISTS (SELECT 1 FROM icarus.sales s WHERE s.contact_id = c.id) AS con_venta`
+    : icarus`NULL::boolean AS con_venta`;
+  if (!hayVentas) {
+    console.log(
+      "  ⚠ No se ve `icarus.sales`: no se puede verificar que las compras existan.\n" +
+        "    Se sincroniza confiando en `n_purchases`, que es lo que este chequeo vino a dejar de hacer.\n",
+    );
+  }
+
   while (true) {
     const filas = (await icarus`
-      SELECT id, ${columna("phone")}, ${columna("country")},
-             ${columna("n_purchases")}, ${columna("buyer_tier")}
-      FROM icarus.contacts
-      WHERE id > ${ultimoId}
-      ORDER BY id
+      SELECT c.id, ${columna("phone")}, ${columna("country")},
+             ${columna("n_purchases")}, ${columna("buyer_tier")},
+             ${conVenta}
+      FROM icarus.contacts c
+      WHERE c.id > ${ultimoId}
+      ORDER BY c.id
       LIMIT ${TANDA}
     `) as unknown as FilaCrudaPadron[];
 
@@ -160,11 +193,27 @@ console.log(`    · VIP:             ${total.porNivel.vip.toLocaleString("es")}`
 console.log(`    · recompró:        ${total.porNivel.recompro.toLocaleString("es")}`);
 console.log(`    · compró una vez:  ${total.porNivel.compro.toLocaleString("es")}`);
 console.log(`  Descartadas:         ${total.descartadas.toLocaleString("es")} (sin teléfono o sin ninguna compra)`);
+console.log(
+  `    · sin respaldo:    ${total.sinRespaldo.toLocaleString("es")} decían haber comprado y NO tienen ni una venta`,
+);
 console.log(`  Total en base:       ${n.toLocaleString("es")}`);
 
 // EL RIESGO, DICHO CON UN NÚMERO. Una fila sin código de país cruza por el sufijo
 // de 9 dígitos pelado, que con clientes de 8 países puede matchear a otra
 // persona (#119). No es una sospecha: es esta cifra.
+// LO QUE SE DESMARCA, DICHO FUERTE. La primera corrida con este chequeo saca de
+// la cola a miles de personas que decían «Cliente»: no es un detalle del resumen,
+// es el cambio que la vendedora va a ver mañana en el chip «Ya compraron».
+if (total.sinRespaldo > 0) {
+  const pct = ((100 * total.sinRespaldo) / Math.max(total.sinRespaldo + total.guardadas, 1)).toFixed(1);
+  console.log(
+    `\n  ⚠ ${total.sinRespaldo.toLocaleString("es")} contactos (${pct}% de los que dicen haber comprado)` +
+      `\n    NO tienen una sola venta en \`icarus.sales\` que lo respalde.` +
+      `\n    ${dryRun ? "Se desmarcarían" : "Se desmarcaron"}: su \`n_purchases\` viene del import de leads_crm` +
+      `\n    y nunca se recalculó. Cerberus tampoco les registra ventas.`,
+  );
+}
+
 if (total.sinPais > 0) {
   const pct = ((100 * total.sinPais) / Math.max(total.guardadas, 1)).toFixed(1);
   console.log(

@@ -1,5 +1,6 @@
 import { sufijoTelefono } from "../whatsapp/identidadWa.js";
 import { nivelDeCliente, type NivelCliente } from "./nivel.js";
+import { paisDelNumero, paisDeNombre } from "../telefono/paises.js";
 
 /**
  * EL PADRÓN DE CLIENTES, FILA POR FILA (#133) — puro, sin base y sin red.
@@ -61,6 +62,26 @@ export interface FilaCrudaPadron {
   country: string | null;
   n_purchases: number | string | null;
   buyer_tier: string | null;
+  /**
+   * ¿HAY UNA VENTA QUE RESPALDE ESE CONTEO? — `EXISTS` sobre `icarus.sales`.
+   *
+   * `n_purchases` **no alcanza**, y esto no es prudencia: medido contra el padrón
+   * vivo el 27-jul-2026, **5.805 de 10.504** contactos con `n_purchases >= 1` no
+   * tienen ni una fila en `icarus.sales`, y 5.466 de ellos son `crm_import` sin
+   * `goberna_app_id` — o sea, ni siquiera están vinculados a un cliente de
+   * Cerberus. Ese contador lo copió verbatim el import de `leads_crm`
+   * (`apps/api/scripts/import-contacts.ts`) y nadie lo volvió a calcular:
+   * `refreshContactPurchaseStats` sólo corre cuando entra una venta por webhook.
+   *
+   * Cerberus, que es la fuente de verdad de las ventas, lo confirma desde el otro
+   * lado: de 50 conversaciones marcadas así en la cola, 49 tenían ficha de cliente
+   * con `ventas_count: 0` — incluidas varias marcadas **VIP con 5 compras**.
+   *
+   * `undefined`/`null` = no se pudo preguntar (la fuente no expone `sales`), y
+   * entonces se degrada al comportamiento de siempre. `false` = se preguntó y no
+   * hay: eso NO es un ex-cliente.
+   */
+  con_venta?: boolean | null;
 }
 
 /** Lo mínimo que la cola necesita de un cliente. Ver §PII. */
@@ -74,74 +95,6 @@ export interface FilaPadron {
   nivel: NivelCliente;
 }
 
-/**
- * LOS PAÍSES DEL PADRÓN, con su código y los largos nacionales plausibles.
- *
- * Los `largos` son lo que hace confiable detectar el país MIRANDO el número: sin
- * ellos, `502…` podría leerse como Perú (`51`) y cualquier prefijo pegaría con
- * cualquier cosa. Se listan los del padrón real (Perú 2.923 · México 1.987 ·
- * Ecuador 1.981 · Bolivia 934 · R. Dominicana 473 · Colombia 452 · Guatemala 393
- * · Panamá 300) más el resto de LATAM y España, que aparecen de a poco.
- *
- * México y Argentina aceptan un dígito extra: es el `1`/`9` que WhatsApp arrastró
- * durante años (`521…`, `549…`) y que todavía se ve en números guardados viejos.
- */
-const PAISES: readonly { codigo: string; largos: readonly number[]; nombres: readonly string[] }[] = [
-  { codigo: "51", largos: [9], nombres: ["peru", "pe", "per"] },
-  { codigo: "52", largos: [10, 11], nombres: ["mexico", "mejico", "mx", "mex"] },
-  { codigo: "593", largos: [9, 8], nombres: ["ecuador", "ec", "ecu"] },
-  { codigo: "591", largos: [8], nombres: ["bolivia", "bo", "bol"] },
-  {
-    codigo: "1",
-    largos: [10],
-    nombres: [
-      "republica dominicana", "rep dominicana", "rep. dominicana", "r dominicana",
-      "r. dominicana", "dominicana", "do", "dom",
-      "estados unidos", "usa", "us", "eeuu", "canada",
-    ],
-  },
-  { codigo: "57", largos: [10], nombres: ["colombia", "co", "col"] },
-  { codigo: "502", largos: [8], nombres: ["guatemala", "gt", "gtm"] },
-  { codigo: "507", largos: [8], nombres: ["panama", "pa", "pan"] },
-  { codigo: "56", largos: [9], nombres: ["chile", "cl", "chl"] },
-  { codigo: "54", largos: [10, 11], nombres: ["argentina", "ar", "arg"] },
-  { codigo: "58", largos: [10], nombres: ["venezuela", "ve", "ven"] },
-  { codigo: "503", largos: [8], nombres: ["el salvador", "salvador", "sv", "slv"] },
-  { codigo: "504", largos: [8], nombres: ["honduras", "hn", "hnd"] },
-  { codigo: "505", largos: [8], nombres: ["nicaragua", "ni", "nic"] },
-  { codigo: "506", largos: [8], nombres: ["costa rica", "cr", "cri"] },
-  { codigo: "595", largos: [9], nombres: ["paraguay", "py", "pry"] },
-  { codigo: "598", largos: [8, 9], nombres: ["uruguay", "uy", "ury"] },
-  { codigo: "55", largos: [10, 11], nombres: ["brasil", "brazil", "br", "bra"] },
-  { codigo: "34", largos: [9], nombres: ["espana", "es", "esp"] },
-];
-
-/** Los más largos primero: `502` tiene que ganarle a `5` antes de que alguien pruebe `50`. */
-const POR_LARGO_DE_CODIGO = [...PAISES].sort((a, b) => b.codigo.length - a.codigo.length);
-
-/** «México » / «MX» / «mexico» son el mismo país escrito por tres personas distintas. */
-function clave(nombre: string): string {
-  return nombre
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z ]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-const POR_NOMBRE = new Map<string, (typeof PAISES)[number]>(
-  PAISES.flatMap((p) => p.nombres.map((n) => [clave(n), p] as const)),
-);
-
-/** ¿Estos dígitos ya son un E.164? Devuelve el país si el código Y el largo cierran. */
-function paisDelNumero(digitos: string): (typeof PAISES)[number] | null {
-  for (const pais of POR_LARGO_DE_CODIGO) {
-    if (!digitos.startsWith(pais.codigo)) continue;
-    if (pais.largos.includes(digitos.length - pais.codigo.length)) return pais;
-  }
-  return null;
-}
 
 /**
  * El teléfono del padrón, llevado a E.164 (dígitos, sin `+`) y con su país.
@@ -160,7 +113,7 @@ export function normalizarDelPadron(
   const delNumero = paisDelNumero(digitos);
   if (delNumero) return { e164: digitos, codigoPais: delNumero.codigo };
 
-  const declarado = pais ? POR_NOMBRE.get(clave(pais)) : undefined;
+  const declarado = paisDeNombre(pais);
   if (declarado) {
     // El `0` de discado nacional que muchos CRM guardan («0986…») no viaja a E.164.
     const local = digitos.replace(/^0+/, "");
@@ -176,23 +129,55 @@ export function normalizarDelPadron(
   return { e164: digitos, codigoPais: null };
 }
 
-/** La fila cruda del padrón → lo que va a `clientes_padron`, o `null` si no aporta. */
-export function filaDePadron(cruda: FilaCrudaPadron): FilaPadron | null {
+/**
+ * POR QUÉ UNA FILA NO ENTRA AL PADRÓN. Los tres motivos se cuentan aparte porque
+ * dicen cosas distintas: `sin_compras` es el caso normal (un lead), `sin_telefono`
+ * es un dato incompleto, y `sin_respaldo` es una **afirmación que no se sostiene**
+ * —el conteo dice que compró y no hay venta— que en el padrón vivo es la mitad de
+ * las filas. Meterlos en un solo número los volvería invisibles.
+ */
+export type MotivoDescarte = "sin_compras" | "sin_respaldo" | "sin_telefono";
+
+export type ResultadoFila =
+  | { fila: FilaPadron }
+  /**
+   * El descarte lleva el `clienteId` a propósito: una fila que ANTES calificaba y
+   * ahora no —el caso de `sin_respaldo` cuando la fuente empieza a decir la
+   * verdad— ya está escrita en `clientes_padron`, y el upsert no la saca. Sin el
+   * id no habría con qué borrarla y la marca vieja sobreviviría al arreglo.
+   */
+  | { descarte: MotivoDescarte; clienteId: string };
+
+/** La fila cruda del padrón → lo que va a `clientes_padron`, o por qué no entra. */
+export function evaluarFilaDePadron(cruda: FilaCrudaPadron): ResultadoFila {
+  const clienteId = `${NAMESPACE_PADRON}${cruda.id}`;
   const compras = Number(cruda.n_purchases ?? 0);
   const nivel = nivelDeCliente({ compras, tier: cruda.buyer_tier });
-  if (!nivel) return null;
+  if (!nivel) return { descarte: "sin_compras", clienteId };
+
+  // «Ya compró» es una afirmación sobre plata: se exige la venta, no el contador.
+  // Sólo cuando se PUDO preguntar — ver `con_venta` arriba.
+  if (cruda.con_venta === false) return { descarte: "sin_respaldo", clienteId };
 
   const normalizado = normalizarDelPadron(cruda.phone, cruda.country);
-  if (!normalizado) return null;
+  if (!normalizado) return { descarte: "sin_telefono", clienteId };
 
   const sufijo = sufijoTelefono(normalizado.e164);
-  if (!sufijo) return null;
+  if (!sufijo) return { descarte: "sin_telefono", clienteId };
 
   return {
-    clienteId: `${NAMESPACE_PADRON}${cruda.id}`,
-    sufijo,
-    codigoPais: normalizado.codigoPais,
-    compras: Math.trunc(compras),
-    nivel,
+    fila: {
+      clienteId,
+      sufijo,
+      codigoPais: normalizado.codigoPais,
+      compras: Math.trunc(compras),
+      nivel,
+    },
   };
+}
+
+/** La fila cruda del padrón → lo que va a `clientes_padron`, o `null` si no aporta. */
+export function filaDePadron(cruda: FilaCrudaPadron): FilaPadron | null {
+  const r = evaluarFilaDePadron(cruda);
+  return "fila" in r ? r.fila : null;
 }

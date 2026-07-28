@@ -1,7 +1,7 @@
-import { sql } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import type { db } from "../db/client.js";
 import { clientesPadron } from "../db/schema.js";
-import { filaDePadron, type FilaCrudaPadron } from "./padron.js";
+import { evaluarFilaDePadron, type FilaCrudaPadron, type FilaPadron } from "./padron.js";
 import type { NivelCliente } from "./nivel.js";
 
 /**
@@ -34,6 +34,17 @@ export interface ResumenPadron {
   /** Filas que no aportan: sin teléfono usable o sin ninguna compra. */
   descartadas: number;
   /**
+   * De las descartadas, cuántas decían haber comprado y NO tenían una sola venta
+   * que lo respaldara.
+   *
+   * Va suelto y no adentro de `descartadas` porque no es lo mismo: un lead sin
+   * compras es el caso normal, y esto es una **afirmación que la fuente no
+   * sostiene**. Medido el 27-jul-2026 eran 5.805 de 10.504 — el 55% del padrón —
+   * y mientras entraban, la vendedora veía «Cliente» en 49 de las 128
+   * conversaciones marcadas sin una sola compra que mostrarle.
+   */
+  sinRespaldo: number;
+  /**
    * De las guardadas, cuántas quedaron SIN código de país.
    *
    * Es el riesgo de #119 hecho número: esas filas matchean por sufijo pelado y
@@ -48,6 +59,7 @@ export const RESUMEN_VACIO: ResumenPadron = {
   leidas: 0,
   guardadas: 0,
   descartadas: 0,
+  sinRespaldo: 0,
   sinPais: 0,
   porNivel: { vip: 0, recompro: 0, compro: 0 },
 };
@@ -58,6 +70,7 @@ export function sumarResumen(a: ResumenPadron, b: ResumenPadron): ResumenPadron 
     leidas: a.leidas + b.leidas,
     guardadas: a.guardadas + b.guardadas,
     descartadas: a.descartadas + b.descartadas,
+    sinRespaldo: a.sinRespaldo + b.sinRespaldo,
     sinPais: a.sinPais + b.sinPais,
     porNivel: {
       vip: a.porNivel.vip + b.porNivel.vip,
@@ -73,25 +86,37 @@ export function sumarResumen(a: ResumenPadron, b: ResumenPadron): ResumenPadron 
  * país) antes de escribir una sola fila.
  */
 export function proyectarLote(crudas: readonly FilaCrudaPadron[]): {
-  filas: ReturnType<typeof filaDePadron>[];
+  filas: (FilaPadron | null)[];
+  /**
+   * Los `cliente_id` que decían haber comprado y ya no califican. Hay que
+   * BORRARLOS: el upsert pisa lo que sigue calificando, pero una fila que dejó de
+   * hacerlo se quedaría marcada para siempre — y este cambio existe justamente
+   * para desmarcar 5.805 que ya están escritas.
+   */
+  aBorrar: string[];
   resumen: ResumenPadron;
 } {
-  const filas = crudas.map(filaDePadron);
+  const evaluadas = crudas.map(evaluarFilaDePadron);
   const resumen: ResumenPadron = {
     ...RESUMEN_VACIO,
     porNivel: { ...RESUMEN_VACIO.porNivel },
     leidas: crudas.length,
   };
-  for (const fila of filas) {
-    if (!fila) {
+  const aBorrar: string[] = [];
+  for (const r of evaluadas) {
+    if ("descarte" in r) {
       resumen.descartadas += 1;
+      if (r.descarte === "sin_respaldo") {
+        resumen.sinRespaldo += 1;
+        aBorrar.push(r.clienteId);
+      }
       continue;
     }
     resumen.guardadas += 1;
-    if (fila.codigoPais === null) resumen.sinPais += 1;
-    resumen.porNivel[fila.nivel] += 1;
+    if (r.fila.codigoPais === null) resumen.sinPais += 1;
+    resumen.porNivel[r.fila.nivel] += 1;
   }
-  return { filas, resumen };
+  return { filas: evaluadas.map((r) => ("fila" in r ? r.fila : null)), aBorrar, resumen };
 }
 
 /** Guarda un lote del padrón (upsert por `cliente_id`). */
@@ -99,7 +124,15 @@ export async function sincronizarLote(
   destino: typeof db,
   crudas: readonly FilaCrudaPadron[],
 ): Promise<ResumenPadron> {
-  const { filas, resumen } = proyectarLote(crudas);
+  const { filas, aBorrar, resumen } = proyectarLote(crudas);
+
+  // Primero se desmarca. Un «Cliente» que la fuente ya no respalda es una mentira
+  // en pantalla, y el borrado es acotado —sólo estos ids, no un TRUNCATE— así que
+  // no reabre la ventana de ceguera que este archivo evita a propósito.
+  if (aBorrar.length > 0) {
+    await destino.delete(clientesPadron).where(inArray(clientesPadron.clienteId, aBorrar));
+  }
+
   const aGuardar = filas.filter((f) => f !== null);
   if (aGuardar.length === 0) return resumen;
 

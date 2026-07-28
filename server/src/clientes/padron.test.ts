@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { filaDePadron } from "./padron.js";
+import { filaDePadron, evaluarFilaDePadron } from "./padron.js";
 import { sufijoTelefono } from "../whatsapp/identidadWa.js";
 
 /**
@@ -113,5 +113,65 @@ describe("filaDePadron — lo que NO entra a la tabla", () => {
   test("la fila lleva el id con su namespace: mañana puede haber otra fuente", () => {
     const f = filaDePadron({ id: 15, phone: "51986394450", country: "PE", ...compro });
     assert.equal(f?.clienteId, "icarus:15");
+  });
+});
+
+/**
+ * «YA COMPRÓ» ES UNA AFIRMACIÓN SOBRE PLATA, y `n_purchases` no la sostiene.
+ *
+ * Medido contra el padrón vivo el 27-jul-2026: de 10.504 contactos con
+ * `n_purchases >= 1`, **5.805 no tienen ni una fila en `icarus.sales`** — y 5.466
+ * de ésos son `crm_import` sin `goberna_app_id`, o sea que ni siquiera están
+ * vinculados a un cliente de Cerberus. Su conteo lo copió verbatim el import de
+ * `leads_crm` y nadie lo volvió a calcular.
+ *
+ * Del otro lado, Cerberus —la fuente de verdad de las ventas— lo confirma: de 50
+ * conversaciones marcadas así en la cola, 49 tenían ficha con `ventas_count: 0`,
+ * incluidas varias marcadas VIP con 5 compras. Eso es lo que la vendedora veía
+ * como «Cliente» sin una sola compra que mostrarle.
+ */
+describe("filaDePadron — el conteo no alcanza: hace falta una venta que lo respalde", () => {
+  test("dice que compró y no hay venta: NO es ex-cliente", () => {
+    const r = evaluarFilaDePadron({
+      id: 20, phone: "51986394450", country: "PE", n_purchases: 5, buyer_tier: "vip", con_venta: false,
+    });
+    assert.deepEqual(r, { descarte: "sin_respaldo", clienteId: "icarus:20" });
+  });
+
+  test("ni siquiera un VIP con cinco compras: el tier es una etiqueta, no una venta", () => {
+    assert.equal(
+      filaDePadron({ id: 21, phone: "51986394450", country: "PE", n_purchases: 5, buyer_tier: "vip", con_venta: false }),
+      null,
+    );
+  });
+
+  test("con la venta que lo respalda, entra igual que siempre", () => {
+    const f = filaDePadron({ id: 22, phone: "51986394450", country: "PE", ...compro, con_venta: true });
+    assert.equal(f?.nivel, "compro");
+    assert.equal(f?.sufijo, "986394450");
+  });
+
+  test("NO SE PUDO PREGUNTAR (sin `icarus.sales`) no es lo mismo que «no hay»", () => {
+    // Degradación honesta: se comporta como antes del chequeo, nunca desmarca por
+    // no haber podido mirar. `undefined` y `null` son la misma cosa acá.
+    assert.notEqual(filaDePadron({ id: 23, phone: "51986394450", country: "PE", ...compro }), null);
+    assert.notEqual(
+      filaDePadron({ id: 24, phone: "51986394450", country: "PE", ...compro, con_venta: null }),
+      null,
+    );
+  });
+
+  test("el descarte lleva el id, que es con lo único que se puede DESMARCAR", () => {
+    // Sin esto, las 5.805 filas ya escritas sobrevivirían al arreglo: el upsert
+    // pisa lo que sigue calificando y no toca lo que dejó de calificar.
+    const r = evaluarFilaDePadron({
+      id: 25, phone: "51986394450", country: "PE", ...compro, con_venta: false,
+    });
+    assert.ok("descarte" in r && r.clienteId === "icarus:25");
+  });
+
+  test("un lead sin compras se descarta por OTRO motivo, y no se cuenta como afirmación falsa", () => {
+    const r = evaluarFilaDePadron({ id: 26, phone: "51986394450", country: "PE", n_purchases: 0, buyer_tier: null });
+    assert.ok("descarte" in r && r.descarte === "sin_compras");
   });
 });
