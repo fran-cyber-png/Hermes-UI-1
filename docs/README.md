@@ -14,6 +14,23 @@ Los distintos contextos del proyecto, para entenderlo y extenderlo. Empezá por 
 - **[adr/0001-extraccion-desde-meta-escuela.md](adr/0001-extraccion-desde-meta-escuela.md)** — por qué
   Hermes se extrajo de meta-escuela y no se reescribió.
 
+## Para entender la plataforma completa (2026-07-28)
+
+Seis documentos escritos en la sesión de arquitectura del 27–28 de julio. Van de lo más abstracto a
+lo más ejecutable; **si vas a implementar, leelos en este orden**:
+
+| # | Documento | Qué responde |
+|---|---|---|
+| 1 | **[dos-planos.md](dos-planos.md)** | *Qué es Goberna arquitectónicamente.* Dos máquinas sin tubería entre ellas: **plano A** (Goberna opera: Cerberus+Hermes) y **plano B** (el cliente opera: Centurión, un nodo por candidato). La membrana: qué cruza y qué **jamás**. El eje es **quién opera**, no qué se vende |
+| 2 | **[sistemas-goberna.md](sistemas-goberna.md)** | *Cómo están conectados hoy*, medido contra producción. Los cinco sistemas, las llaves que los unen y los eslabones rotos ordenados por plata |
+| 3 | **[plan-2026-08-escuela-y-servidores.md](plan-2026-08-escuela-y-servidores.md)** | *Qué se hace en agosto.* Foco: escuela/eventos/ventas. Análisis de los 61 issues, los PRs de `ceberusapp`, y el inventario SSH de los dos VPS. Incluye el plan de limpieza y condensación de servidores |
+| 4 | **[mapa-ivi-rag.md](mapa-ivi-rag.md)** | *Cómo funciona Ivi y dónde está la fuga.* El pipeline completo y el diagnóstico: **el corpus está invertido** (86,6 % es documentación de cómo se construyó Ivi) |
+| 5 | **[aprendizaje-continuo-ivi.md](aprendizaje-continuo-ivi.md)** | *Cómo aprender de las conversaciones sin llenarse.* Destilación en vez de ingesta; dos almacenes con dos leyes; la política de retención que ya existe |
+| 6 | **[plan-flux-studio-catalogo.md](plan-flux-studio-catalogo.md)** | *El circuito de la pieza visual.* Studio produce · el catálogo versiona · el lazo mide. Y el reparto geografo↔Bedrock |
+
+Para implementarlos: **[prompt-orquestador-2026-08.md](prompt-orquestador-2026-08.md)** — el prompt
+completo para arrancar una sesión de implementación, con las prohibiciones enumeradas.
+
 ## Para operar
 - **[deploy-vps1.md](deploy-vps1.md)** — desplegar en VPS1 y **vincular el número de WhatsApp**, paso a paso.
 
