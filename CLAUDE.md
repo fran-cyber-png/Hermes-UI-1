@@ -586,16 +586,35 @@ ficha: «📣 Inteligencia y Contrainteligencia · del anuncio [Confirmar]» (#1
 
 ## Ex-clientes en la cola — el padrón en copia local (#133)
 
-De las **1.997 conversaciones vivas, 140 (7%) son de gente que YA COMPRÓ** (11 VIP), y hasta ahora se
-veían igual que un desconocido. El dato existía —`cerberus/ficha.ts`— pero se pedía **por HTTP, de a
-una, al abrir la conversación**: 1.997 llamadas para pintar un listado, contra un Cerberus que a veces
-se cuelga (de ahí el techo de 12 s del panel). Por eso nunca estuvo en la fila.
+De las **1.997 conversaciones vivas**, las de gente que YA COMPRÓ se veían igual que un desconocido.
+El dato existía —`cerberus/ficha.ts`— pero se pedía **por HTTP, de a una, al abrir la conversación**:
+1.997 llamadas para pintar un listado, contra un Cerberus que a veces se cuelga (de ahí el techo de
+12 s del panel). Por eso nunca estuvo en la fila.
+
+> ⚠️ **Las cifras de 140 / 7% que este archivo traía eran del contador heredado, no de ventas
+> reales.** Medido el 27-jul-2026 contra Cerberus, de las 128 marcadas **78 tenían compras** y 49
+> tenían ficha con cero ventas. Ver el punto de `n_purchases` más abajo.
 
 - **El padrón se SINCRONIZA**: `cd server && npm run clientes:sincronizar` (`--dry-run` no escribe).
   Lee **`icarus.contacts`** —icarus recibe el webhook de Cerberus en cada venta— con la conexión
   read-only `ICARUS_DATABASE_URL`, y guarda en **`clientes_padron`** lo MÍNIMO: sufijo del teléfono,
   código de país, compras y nivel. **Nombre, correo, DNI y monto NO se copian** (para eso está la
   ficha viva). Es derivada y descartable: se puede truncar y volver a sincronizar.
+- 🔴 **`n_purchases` NO ALCANZA: se exige una venta que lo respalde** (`EXISTS` sobre `icarus.sales`).
+  Medido el 27-jul-2026: de **10.504** contactos con `n_purchases >= 1`, **5.805 (55%) no tienen ni
+  una fila en `icarus.sales`** — y 5.466 de ésos son `crm_import` **sin `goberna_app_id`**, o sea que
+  ni siquiera están vinculados a un cliente de Cerberus. Ese contador lo copió verbatim el import de
+  `leads_crm` (`apps/api/scripts/import-contacts.ts` del repo icarus) y nadie lo volvió a calcular:
+  `refreshContactPurchaseStats` sólo corre cuando entra una venta por webhook. Cerberus lo confirma
+  desde el otro lado — de 50 conversaciones marcadas así, **49 tenían ficha con `ventas_count: 0`**,
+  varias marcadas **VIP con 5 compras**. Por eso la vendedora veía «Cliente» sin una sola compra que
+  mostrarle (49 de 128). Con el chequeo, el chip «Ya compraron» pasa de **128 a ~78** y todos los que
+  quedan tienen compras que enseñar. **Sin `icarus.sales` visible degrada** (se comporta como antes y
+  lo dice), porque «no se pudo preguntar» no es «no hay».
+- **Desmarcar es parte del trabajo**: el upsert pisa lo que sigue calificando pero **no toca lo que
+  dejó de calificar**, así que `proyectarLote` devuelve `aBorrar` con los `cliente_id` que perdieron
+  el respaldo y `sincronizarLote` los borra. Sin eso, las 5.805 filas ya escritas sobrevivían al
+  arreglo. Es un DELETE acotado por id, no un TRUNCATE: no reabre la ventana de ceguera.
 - **La jerarquía vive una vez**, pura, en `clientes/nivel.ts` (`vip` · `recompro` · `compro`) y se
   **congela** en la tabla al sincronizar. El SQL de la cola **no recalcula**: lee la columna. No hay
   segunda escritura que pueda divergir (la lección de #37) — el precio es que cambiar la regla obliga
@@ -607,6 +626,26 @@ se cuelga (de ahí el techo de 12 s del panel). Por eso nunca estuvo en la fila.
   dígitos (**393 clientes invisibles**). Se arregla normalizando a E.164 antes de sacar el sufijo y
   exigiendo que el teléfono de la conversación empiece con el código de país del padrón. Sin país
   conocido, el match es el de siempre y el script **imprime cuántas filas quedaron así** (#119).
+- ⚠️ **LA MARCA DE LA FILA Y LAS COMPRAS DEL PANEL SALEN DE DOS FUENTES DISTINTAS**, y por eso «dice
+  Cliente pero no muestra compras» tiene **tres** causas que en pantalla se ven igual. La fila cruza
+  contra `clientes_padron` (padrón de icarus, sufijo + guarda de país); el panel le pregunta a
+  **Cerberus en vivo** (`cerberus/ficha.ts`, `buscar/?q=` → `telefonos__numero__icontains`).
+  **(A)** el número no se podía buscar así: la guarda de #119 se había aplicado al padrón y **no** a
+  la búsqueda de Cerberus, que seguía con `slice(-9)` — para un local más corto que 9 (GT 8, BO 8,
+  PA 8…) esa cadena arranca adentro del código de país y el `icontains` **no puede dar verdadero
+  nunca**. **(B)** Cerberus tiene a esa persona con otro teléfono. **(C)** el padrón afirma de más:
+  `icarus.contacts.n_purchases` se deriva de `icarus.sales` sólo cuando corre
+  `refreshContactPurchaseStats`; para las 59k filas del import de `leads_crm` viene **verbatim del
+  dump viejo**, sin venta de Cerberus que lo respalde.
+  **Cuál pesa cuánto se mide, no se supone**: `cd server && npm run clientes:auditar [-- --cerberus]`
+  (solo lectura) reparte las conversaciones marcadas entre las tres.
+- **La partición del teléfono vive UNA vez**: `server/src/telefono/paises.ts` (`partirE164`,
+  `variantesLocales`, `mismoTelefono`). La tabla de países era privada de `clientes/padron.ts` —de
+  ahí que el otro lado de la comparación no pudiera usarla—. `variantesLocales` termina **siempre**
+  con el sufijo de 9, así que nada que hoy matchea deja de matchear; y como ensanchar la búsqueda
+  sin verificar cambiaría el falso negativo por un falso positivo, `ficha()` **confirma el candidato**
+  contra los `telefonos[]` del detalle antes de darlo por bueno (`mismoTelefono`, estricto: compara
+  país **y** local, y ahí el mexicano de Veracruz deja de ser el peruano del mismo sufijo).
 - **Solo WhatsApp**: en Messenger `persona_id` es un PSID y sus últimos 9 dígitos podrían chocar con
   un teléfono real.
 - En la UI: píldora en la fila (tres pesos del **verde** que ya significa cliente en el panel, ADR
