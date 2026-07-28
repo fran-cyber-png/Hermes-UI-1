@@ -24,10 +24,15 @@ siempre, que es tratar el síntoma alquilando el bug.
 2. **El `Map` no se va: baja a caché.** El camino caliente no paga un SELECT por request; la base es
    el respaldo que cruza el reinicio. Un solo store compartido (auth y ventas): dos cachés separados
    servirían una cookie vieja después de un re-login.
-3. **La vigencia se decide al leer**: `VIGENCIA_SESION_MS` = 14 días, los mismos del token de Hermes
-   y del «mantener sesión» de Cerberus. Una fila más vieja se trata como inexistente y se limpia.
-   Cerberus puede vencerla antes por su cuenta: eso lo descubre el POST y se le dice a la vendedora,
-   como siempre.
+3. **La vigencia se decide al leer Y se purga al arrancar**: `VIGENCIA_SESION_MS` = 14 días, los
+   mismos del token de Hermes (el `SESSION_COOKIE_AGE` de Cerberus **no se verificó contra su
+   repo** — si es menor, la fila puede quedar presente y muerta antes del TTL). Una fila más vieja
+   se trata como inexistente; al nacer el store se borran las vencidas de todas las vendedoras —
+   sin esa purga el TTL sería solo «ignorar al leer» y la fila de una vendedora inactiva viviría
+   para siempre. Y cuando Cerberus la mata por su cuenta, **el primer lugar que lo descubre la
+   borra**: `crearVenta` trata el 302 a `/ingresar/` como sesión muerta (nunca como «registrada» —
+   antes escribía una venta fantasma en el embudo) y `cargarFormulario` detecta el redirect; los
+   dos llaman a `borrarSesionCerberus` para que `/yo` diga la verdad.
 4. **La base degrada, nunca tumba**: sin la tabla migrada o con la base caída, el store se comporta
    exactamente como el `Map` de antes (funciona hasta el próximo reinicio) y lo dice por el log. Un
    login no puede fallar porque la persistencia falló.
@@ -42,7 +47,15 @@ fila vive en la misma Postgres (127.0.0.1:5438, no expuesta) del mismo host que 
 `.wa-sessions/` — la credencial de WhatsApp entera, bastante más sensible. El riesgo real y medido
 era el deploy que tira una venta; el riesgo teórico que el `Map` mitigaba exige un atacante que ya
 lee la base de producción, y ese atacante tiene cosas peores que llevarse. El TTL de 14 días acota
-la vida útil de una fila robada exactamente igual que la de una cookie robada del proceso.
+la vida útil de una fila robada — y para que eso sea **cierto** y no una intención, la purga al
+arrancar borra las filas vencidas de verdad (la revisión adversaria del PR atrapó que sin ella el
+TTL era solo «ignorar al leer»).
+
+Dos costos que se aceptan con los ojos abiertos: (a) los `pg_dump` del deploy (`hermes-deploy.sh`,
+rotación a 20) ahora llevan cookies vivas adentro — permisos `0640`/dir `0750`, pero un dump puede
+sobrevivir a su propio TTL; (b) **no hay revocación server-side todavía** (el logout del front no
+llama a ningún endpoint): una vendedora que deja el equipo conserva su fila operable hasta 14 días
+o hasta que un `DELETE` manual la saque — trackeado como issue propio, no se resuelve acá.
 
 ## Consecuencias
 

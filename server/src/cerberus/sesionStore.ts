@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, lt } from 'drizzle-orm';
 import type { db } from '../db/client.js';
 import { sesionesCerberus } from '../db/schema.js';
 import type { SesionCerberus } from './auth.js';
@@ -30,7 +30,12 @@ import type { SesionCerberus } from './auth.js';
  *    (ADR 0008); el singleton de abajo es el que usa producción.
  */
 
-/** 14 días, como el token de Hermes y el «mantener sesión» de Cerberus. */
+/**
+ * 14 días, como el token de Hermes. OJO: si Cerberus vence la suya antes (su
+ * `SESSION_COOKIE_AGE` no se verificó contra ese repo), la fila queda presente
+ * y muerta — eso lo descubren `cargarFormulario`/`crearVenta`, que al ver el
+ * redirect a /ingresar/ la BORRAN para que `/yo` diga la verdad.
+ */
 export const VIGENCIA_SESION_MS = 14 * 24 * 60 * 60 * 1000;
 
 /** ¿Una sesión guardada en `guardadaEnMs` sigue viva `ahoraMs`? Pura, con test. */
@@ -44,6 +49,21 @@ export interface SesionStoreCerberus {
   borrar(vendedoraId: string): Promise<void>;
 }
 
+/**
+ * El mensaje de drizzle lleva `params:` con la fila entera — o sea la cookie
+ * VIVA de Cerberus. Eso no puede tocar un log: journalctl viaja al summary de
+ * Actions cuando un deploy falla, que es exactamente cuándo este store degrada
+ * (regla dura #1). Se loguea el código del driver si está (`42P01` = falta la
+ * migración · `ECONNREFUSED` = base caída) y si no, solo la PRIMERA línea del
+ * mensaje: el SQL con `$n`, sin valores.
+ */
+export function detalleSeguro(e: unknown): string {
+  if (!(e instanceof Error)) return String(e);
+  const causa = (e as { cause?: { code?: string } }).cause;
+  if (causa?.code) return causa.code;
+  return e.message.split('\n', 1)[0];
+}
+
 export function crearSesionStore(
   base: typeof db,
   ahora: () => number = Date.now,
@@ -54,8 +74,23 @@ export function crearSesionStore(
   const avisar = (que: string, e: unknown) =>
     console.error(
       `[sesionStore] ${que} contra la base falló — sigo en memoria (la sesión no cruza el próximo reinicio):`,
-      e instanceof Error ? e.message : e,
+      detalleSeguro(e),
     );
+
+  /**
+   * La retención de VERDAD, al nacer el store (= al arrancar el proceso). Sin
+   * esto el TTL sería solo «ignorar al leer»: la fila de una vendedora que dejó
+   * de usar Hermes viviría para siempre, y el ADR 0027 afirma que no.
+   */
+  void (async () => {
+    try {
+      await base
+        .delete(sesionesCerberus)
+        .where(lt(sesionesCerberus.guardadaEn, new Date(ahora() - VIGENCIA_SESION_MS)));
+    } catch (e) {
+      avisar('retener', e);
+    }
+  })();
 
   async function guardar(vendedoraId: string, sesion: SesionCerberus): Promise<void> {
     const guardadaEn = ahora();
@@ -82,14 +117,33 @@ export function crearSesionStore(
     }
   }
 
+  /**
+   * Borra SOLO si sigue vencida (la guarda de `guardada_en`): con dos procesos
+   * sobre la misma base, un borrado incondicional se llevaría la fila FRESCA
+   * que el otro acaba de escribir. El borrado de `borrar()` (logout, sesión
+   * muerta) sí es incondicional a propósito.
+   */
+  async function borrarVencida(vendedoraId: string): Promise<void> {
+    try {
+      await base
+        .delete(sesionesCerberus)
+        .where(
+          and(
+            eq(sesionesCerberus.vendedoraId, vendedoraId),
+            lt(sesionesCerberus.guardadaEn, new Date(ahora() - VIGENCIA_SESION_MS)),
+          ),
+        );
+    } catch (e) {
+      avisar('purgar', e);
+    }
+  }
+
   async function obtener(vendedoraId: string): Promise<SesionCerberus | null> {
     const enCache = cache.get(vendedoraId);
-    if (enCache) {
-      if (sesionVigente(enCache.guardadaEn, ahora())) return enCache.sesion;
-      // Venció: la fila de la base es la misma de vieja; se limpia todo.
-      await borrar(vendedoraId);
-      return null;
-    }
+    if (enCache && sesionVigente(enCache.guardadaEn, ahora())) return enCache.sesion;
+    // Caché vencido: NO es «no hay sesión» — otro proceso pudo escribir una
+    // fila fresca (re-login). Se suelta la entrada y se relee la base.
+    if (enCache) cache.delete(vendedoraId);
     try {
       const filas = await base
         .select()
@@ -100,11 +154,18 @@ export function crearSesionStore(
       if (!fila) return null;
       const guardadaEn = fila.guardadaEn.getTime();
       if (!sesionVigente(guardadaEn, ahora())) {
-        await base.delete(sesionesCerberus).where(eq(sesionesCerberus.vendedoraId, vendedoraId));
+        await borrarVencida(vendedoraId);
         return null;
       }
-      cache.set(vendedoraId, { sesion: fila.sesion, guardadaEn });
-      return fila.sesion;
+      // ⚠️ La lectura pudo ser LENTA: si mientras el SELECT viajaba hubo un
+      // re-login (`guardar` puso una cookie más nueva en el caché), esta fila
+      // es la VIEJA y cachearla a ciegas la dejaría pegada 14 días. Solo gana
+      // la lectura si es más nueva que lo que el caché tenga ahora.
+      const actual = cache.get(vendedoraId);
+      if (!actual || actual.guardadaEn < guardadaEn) {
+        cache.set(vendedoraId, { sesion: fila.sesion, guardadaEn });
+      }
+      return cache.get(vendedoraId)!.sesion;
     } catch (e) {
       avisar('leer', e);
       return null;
@@ -121,13 +182,11 @@ export function crearSesionStore(
  * PEREZOSO a propósito: revienta sin `DATABASE_URL`, y este módulo lo importan
  * los tests, que le inyectan su propia base por `crearSesionStore`.
  */
-let storeProd: SesionStoreCerberus | undefined;
-async function elStore(): Promise<SesionStoreCerberus> {
-  if (!storeProd) {
-    const { db } = await import('../db/client.js');
-    storeProd = crearSesionStore(db);
-  }
-  return storeProd;
+let storeProd: Promise<SesionStoreCerberus> | undefined;
+function elStore(): Promise<SesionStoreCerberus> {
+  // Se memoiza la PROMESA, no el valor: dos requests concurrentes en el primer
+  // instante del proceso no pueden fabricar dos stores con dos cachés.
+  return (storeProd ??= import('../db/client.js').then(({ db }) => crearSesionStore(db)));
 }
 
 export async function guardarSesionCerberus(vendedoraId: string, sesion: SesionCerberus): Promise<void> {

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { sql } from 'drizzle-orm';
 import { baseDePrueba } from '../pruebas/base.js';
-import { crearSesionStore, sesionVigente, VIGENCIA_SESION_MS } from './sesionStore.js';
+import { crearSesionStore, VIGENCIA_SESION_MS } from './sesionStore.js';
 
 /**
  * EL PUNTO DE TODOS ESTOS TESTS ES EL REINICIO (#106, ADR 0027).
@@ -79,8 +79,16 @@ test('sin la tabla migrada DEGRADA al Map de siempre: funciona en el proceso, no
   assert.equal(await crearSesionStore(db).obtener('ana'), null);
 });
 
-test('sesionVigente: el borde exacto de los 14 días', () => {
-  const t0 = 1_000;
-  assert.equal(sesionVigente(t0, t0 + VIGENCIA_SESION_MS - 1), true);
-  assert.equal(sesionVigente(t0, t0 + VIGENCIA_SESION_MS), false);
+test('la retención al nacer el store: las filas vencidas de CUALQUIER vendedora se purgan', async (t) => {
+  const db = await baseDePrueba(t);
+  let reloj = Date.UTC(2026, 6, 1);
+  const viejo = crearSesionStore(db, () => reloj);
+  await viejo.guardar('ana', SESION); // ana usó Hermes el 1-jul y nunca más
+
+  reloj += VIGENCIA_SESION_MS + 1;
+  crearSesionStore(db, () => reloj); // el server arranca 14 días después
+  // La purga es fire-and-forget: se le da un turno al event loop.
+  await new Promise((r) => setTimeout(r, 200));
+  const filas = await db.execute(sql`SELECT count(*)::int AS n FROM sesiones_cerberus`);
+  assert.equal((filas as unknown as { n: number }[])[0].n, 0);
 });
