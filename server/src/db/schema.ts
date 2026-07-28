@@ -1291,3 +1291,27 @@ export const clientesPadron = pgTable(
   },
   (t) => [index("clientes_padron_sufijo_idx").on(t.sufijo)],
 );
+
+/**
+ * LA SESIÓN DE CERBERUS DE CADA VENDEDORA, PERSISTIDA (#106, ADR 0027).
+ *
+ * Antes vivía solo en un Map del proceso «a propósito» — y ese propósito tenía
+ * un costo medido: cada deploy del server deslogueaba a las tres vendedoras de
+ * golpe (el token de Hermes sobrevive porque es HMAC sin estado; la cookie de
+ * Cerberus moría con el proceso y registrar una venta daba 409). Con la
+ * adopción del 3-ago encima, la auditoría del 24-jul revirtió la decisión.
+ *
+ * Es una CREDENCIAL VIVA, y por eso lo mínimo: la cookie tal cual
+ * (`sessionid` + `csrftoken`), de quién es, y cuándo se guardó — el TTL de 14
+ * días (el mismo del token de Hermes) se aplica al leer, en
+ * `cerberus/sesionStore.ts`. La base escucha solo en 127.0.0.1; el riesgo real
+ * era el deploy que tira la venta, no la fila.
+ */
+export const sesionesCerberus = pgTable("sesiones_cerberus", {
+  /** El username de Cerberus — la misma identidad que firma el token de Hermes. */
+  vendedoraId: text("vendedora_id").primaryKey(),
+  /** La cookie con la que Hermes ACTÚA como ella al postear la venta. */
+  sesion: jsonb("sesion").$type<{ sessionid: string; csrftoken: string }>().notNull(),
+  /** Desde cuándo corre la vigencia. Se pisa en cada login. */
+  guardadaEn: timestamp("guardada_en", { withTimezone: true }).notNull().defaultNow(),
+});

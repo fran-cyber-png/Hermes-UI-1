@@ -175,6 +175,13 @@ CSRF + POST a `/ingresar/`. Éxito → Hermes emite un **token HMAC Bearer** (`a
 `vendedoraId` = username de Cerberus. Middleware `requiereVendedora` delante de todo lo que envía o
 atribuye a una vendedora.
 
+**La sesión de Cerberus se PERSISTE** (#106, ADR 0027): la cookie con la que Hermes actúa como la
+vendedora vive en `sesiones_cerberus` (TTL 14 días, decidido al leer) con el `Map` como caché del
+proceso — un deploy ya no desloguea a las tres a la vez. El store (`cerberus/sesionStore.ts`) es un
+seam inyectable (`crearSesionStore(base)`) y **degrada, nunca tumba**: sin la tabla migrada se
+comporta como el `Map` de antes y lo dice por el log. Un solo store compartido a propósito: dos
+cachés servirían una cookie vieja tras un re-login.
+
 En el cliente, la sesión **se cree el token antes de preguntar** (ADR 0007): si hay uno guardado que
 no venció, la app se pinta ya y `/api/auth/yo` valida por detrás — si no, el caché persistido queda
 tapado por un skeleton durante todo el viaje a VPS1. La firma la verifica el server en cada request
@@ -750,7 +757,9 @@ solo: los jobs se serializan.
 | **N4** | front a producción, sin restart — cero downtime | solo si N3 pasó |
 | **N5** | server a producción: respalda, migra, reinicia, smoke, revierte solo si falla | **botón** en Actions |
 
-N5 es un botón porque reiniciar tira las sesiones de Cerberus de las vendedoras. El trabajo lo hace
+N5 es un botón por prudencia: desde ADR 0027 reiniciar ya **no** tira las sesiones de Cerberus
+(persisten en `sesiones_cerberus`), pero un restart en horario de venta sigue mereciendo un humano
+mirando. El trabajo lo hace
 **`deploy/vps1/hermes-deploy.sh`** —versionado, no YAML— y es la misma pieza que corre por SSH:
 `ssh … 'sudo hermes-deploy --dry-run | --rollback'`. `tauri-windows.yml` sigue aparte: necesita host
 Windows.

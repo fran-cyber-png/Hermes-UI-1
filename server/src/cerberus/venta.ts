@@ -90,7 +90,7 @@ function parseCsrf(html: string): string {
 
 /** Las opciones del formulario (para armar los dropdowns en Hermes). */
 export async function cargarFormulario(vendedoraId: string): Promise<FormularioVenta | null> {
-  const s = obtenerSesionCerberus(vendedoraId);
+  const s = await obtenerSesionCerberus(vendedoraId);
   if (!s) return null;
   const r = await fetch(URL_VENTA, {
     headers: { cookie: `sessionid=${s.sessionid}; csrftoken=${s.csrftoken}` },
@@ -108,7 +108,7 @@ export async function cargarFormulario(vendedoraId: string): Promise<FormularioV
 
 /** Crea la venta (o cotización) en Cerberus con la sesión de la vendedora. */
 export async function crearVenta(vendedoraId: string, orden: OrdenVenta): Promise<ResultadoVenta> {
-  const s = obtenerSesionCerberus(vendedoraId);
+  const s = await obtenerSesionCerberus(vendedoraId);
   if (!s) return { ok: false, motivo: 'la sesión de Cerberus expiró — volvé a entrar a Hermes' };
 
   const cookie = `sessionid=${s.sessionid}; csrftoken=${s.csrftoken}`;

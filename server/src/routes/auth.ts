@@ -30,7 +30,7 @@ authRouter.post('/login', async (req, res) => {
   }
 
   // Guardamos la sesión de Cerberus para poder crear ventas como ella (S6b).
-  guardarSesionCerberus(r.vendedora.id, r.sesion);
+  await guardarSesionCerberus(r.vendedora.id, r.sesion);
 
   const token = firmarSesion(r.vendedora.id);
   res.json({ ok: true, token, vendedora: r.vendedora });
@@ -39,21 +39,18 @@ authRouter.post('/login', async (req, res) => {
 /**
  * Quién soy: valida el token y devuelve la vendedora. Sirve de "¿sigo logueada?".
  *
- * Devuelve además **si Hermes todavía tiene su sesión de Cerberus**, y eso no es
- * un detalle: son dos vidas distintas. El token de Hermes dura 14 días y sobrevive
- * un reinicio; la cookie de Cerberus vive en memoria del proceso
- * (`cerberus/sesionStore.ts`) y muere con él, a propósito.
- *
- * Sin este campo, la vendedora seguía trabajando como si nada y se enteraba
- * recién al intentar registrar una venta, con un 409 en la cara. El módulo de
- * sesiones decía «si el server reinicia, la vendedora vuelve a entrar» — pero eso
- * no estaba implementado en ningún lado. Ahora la app puede avisarle ANTES, que
- * es la diferencia entre una molestia y una venta perdida.
+ * Devuelve además **si Hermes todavía tiene su sesión de Cerberus**. Siguen
+ * siendo dos vidas distintas — el token de Hermes es HMAC sin estado; la cookie
+ * de Cerberus vive en `cerberus/sesionStore.ts` — pero desde el #106 (ADR 0027)
+ * la cookie **sobrevive al reinicio**: está persistida con TTL de 14 días.
+ * `cerberus: false` ya no significa «hubo un deploy»; significa que la sesión
+ * venció o nunca existió, y la app puede avisarle ANTES de que el 409 le
+ * aparezca al registrar una venta.
  */
-authRouter.get('/yo', requiereVendedora, (req, res) => {
+authRouter.get('/yo', requiereVendedora, async (req, res) => {
   res.json({
     ok: true,
     vendedora: { id: req.vendedoraId, nombre: req.vendedoraId },
-    cerberus: Boolean(obtenerSesionCerberus(req.vendedoraId!)),
+    cerberus: Boolean(await obtenerSesionCerberus(req.vendedoraId!)),
   });
 });
