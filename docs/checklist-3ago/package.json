@@ -1,0 +1,13 @@
+{
+  "name": "checklist-3ago-hermes",
+  "private": true,
+  "type": "module",
+  "description": "Corrida Playwright del checklist del 3-ago de Hermes. Ver checklist-3ago.md.",
+  "scripts": {
+    "ensayo": "node checklist.mjs",
+    "real": "MODO=real node checklist.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.59.0"
+  }
+}
