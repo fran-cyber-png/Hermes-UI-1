@@ -9,8 +9,8 @@ import {
   desarchivarNota,
   editarNota,
   listarNotas,
+  prepararContenido,
   prepararEdicion,
-  validarTexto,
 } from '../notas/notas.js';
 
 /**
@@ -21,6 +21,26 @@ import {
  */
 function conOrigenNota(fila: NotaFila) {
   return { ...fila, origen: 'nota' as const };
+}
+
+/**
+ * Tope de tamaño del DOCUMENTO, aparte del de `texto`.
+ *
+ * `validarTexto` mira los 2.000 caracteres del texto **aplanado**, y eso no
+ * acota el JSON: una tabla de 500 filas vacías, o un doc con basura en los
+ * props, pesa megas y aplana a nada. Sin este tope, el body pasa la validación
+ * de texto y entra igual a una columna `jsonb`.
+ *
+ * Es generoso a propósito —la nota más larga que se puede escribir ronda las
+ * decenas de KB— y solo frena lo que no es una nota.
+ */
+const TOPE_DOC_BYTES = 512 * 1024;
+
+function docExcedeElTope(doc: unknown): string | null {
+  if (doc === undefined) return null;
+  const bytes = Buffer.byteLength(JSON.stringify(doc) ?? '', 'utf8');
+  if (bytes <= TOPE_DOC_BYTES) return null;
+  return `el documento de la nota pesa ${Math.round(bytes / 1024)} KB y el tope es ${TOPE_DOC_BYTES / 1024} KB`;
 }
 
 /**
@@ -65,12 +85,24 @@ notasRouter.post('/', async (req, res) => {
     res.status(400).json({ ok: false, message: 'falta la clave (conversación, o "general" para la libreta)' });
     return;
   }
-  const v = validarTexto(req.body?.texto);
+  const excede = docExcedeElTope(req.body?.doc);
+  if (excede) {
+    res.status(400).json({ ok: false, message: excede });
+    return;
+  }
+  // `prepararContenido` deriva el texto del `doc` cuando viene, y descarta el
+  // que haya mandado el cliente: el server calcula, el navegador no.
+  const v = prepararContenido(req.body ?? {});
   if (!v.ok) {
     res.status(400).json({ ok: false, message: v.motivo });
     return;
   }
-  const nota = await crearNota(db, { clave, vendedoraId: req.vendedoraId!, texto: v.texto });
+  const nota = await crearNota(db, {
+    clave,
+    vendedoraId: req.vendedoraId!,
+    texto: v.texto,
+    ...(req.body?.doc !== undefined ? { doc: req.body.doc } : {}),
+  });
   res.json({ ok: true, nota: conOrigenNota(nota) });
 });
 

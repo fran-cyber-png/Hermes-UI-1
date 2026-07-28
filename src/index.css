@@ -278,3 +278,30 @@
     outline-offset: 2px;
   }
 }
+
+/* ── LA LIBRETA · BlockNote dentro de la marca ────────────────────────────────
+   BlockNote (`@blocknote/mantine`) trae su propio CSS con `font-family: Inter`
+   sobre `.bn-default-styles`, y un fondo blanco sobre `.bn-editor`. Es el choque
+   conocido entre Tailwind 4 y los estilos de Mantine (issue #155 del repo,
+   abierto desde 2023) — acá se manifiesta como tipografía y superficie.
+
+   Se corrige DEVOLVIÉNDOLE LA HERENCIA, con selectores más específicos que los
+   suyos, y sin tocar su hoja (que se reemplaza en cada upgrade). Su CSS se
+   inyecta desde el chunk perezoso, o sea DESPUÉS de este archivo: por eso no
+   alcanza con igualar la especificidad, hay que superarla. */
+/* El contenedor entra en la lista porque él también trae `Inter`: heredar de
+   un padre que ya está pisado no devuelve nada. */
+.bn-container.bn-mantine,
+.bn-container .bn-editor.bn-default-styles,
+.bn-container .bn-editor.bn-default-styles * {
+  font-family: inherit;
+}
+
+/* La página se apoya en el fondo de la app: la superficie ya es la Libreta. */
+.bn-container .bn-editor.bn-default-styles {
+  background-color: transparent;
+  padding-inline: 0;
+  /* Alto disponible, para que el clic en el vacío de abajo entre al editor en
+     vez de caer en el contenedor y no hacer nada. */
+  min-height: 60vh;
+}

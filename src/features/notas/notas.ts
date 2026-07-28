@@ -17,7 +17,17 @@ export interface Nota {
   id: number;
   clave: string;
   vendedoraId: string;
+  /**
+   * El texto plano. Cuando hay `doc`, es lo que el SERVER derivó de él — nunca
+   * se manda desde acá: el navegador no calcula derivados (ver el server,
+   * `notas/textoPlano.ts`). Se usa para la lista, la búsqueda y el preview.
+   */
   texto: string;
+  /**
+   * El documento rico de BlockNote. `null` en toda nota escrita antes de la
+   * Libreta, y en TODA histórica de `gestiones` — que se pintan desde `texto`.
+   */
+  doc: unknown;
   fijada: boolean;
   creadoAt: string;
   /** null = nunca editada. */
@@ -88,17 +98,38 @@ export function useMutacionesNotas(clave: string) {
   const invalidar = () => qc.invalidateQueries({ queryKey: ['notas', clave] });
 
   const crear = useMutation({
-    mutationFn: (texto: string) => api<{ ok: true; nota: Nota }>('/api/notas', { method: 'POST', body: JSON.stringify({ clave, texto }) }),
+    mutationFn: (v: string | { texto?: string; doc?: unknown }) => {
+      const cuerpo = typeof v === 'string' ? { texto: v } : v;
+      return api<{ ok: true; nota: Nota }>('/api/notas', { method: 'POST', body: JSON.stringify({ clave, ...cuerpo }) });
+    },
     onSuccess: invalidar,
   });
 
   const editar = useMutation({
-    mutationFn: (v: { id: number; texto?: string; fijada?: boolean }) =>
+    mutationFn: (v: { id: number; texto?: string; doc?: unknown; fijada?: boolean }) =>
       api<{ ok: true; nota: Nota }>(`/api/notas/${v.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ texto: v.texto, fijada: v.fijada }),
+        body: JSON.stringify({ texto: v.texto, doc: v.doc, fijada: v.fijada }),
       }),
     onSuccess: invalidar,
+  });
+
+  /**
+   * AUTOGUARDADO del editor. Es `editar` con otra política de caché: parchea la
+   * fila en el caché en vez de invalidar. Invalidar en cada tecleo dispara un
+   * refetch por pulsación y hace parpadear la lista mientras se escribe — y el
+   * único dato que cambia es el `texto` derivado y el `editadoAt`, que vienen en
+   * la respuesta. El editor no se toca: es no-controlado, así que un refetch
+   * tampoco lo resetearía, solo cuesta.
+   */
+  const autoguardar = useMutation({
+    mutationFn: (v: { id: number; doc: unknown }) =>
+      api<{ ok: true; nota: Nota }>(`/api/notas/${v.id}`, { method: 'PATCH', body: JSON.stringify({ doc: v.doc }) }),
+    onSuccess: (r) => {
+      qc.setQueryData<{ notas: Nota[] }>(['notas', clave], (prev) =>
+        prev ? { notas: prev.notas.map((n) => (n.id === r.nota.id && n.origen === 'nota' ? { ...n, ...r.nota } : n)) } : prev,
+      );
+    },
   });
 
   const archivar = useMutation({
@@ -112,5 +143,35 @@ export function useMutacionesNotas(clave: string) {
     onSuccess: invalidar,
   });
 
-  return { crear, editar, archivar, desarchivar };
+  return { crear, editar, archivar, desarchivar, autoguardar };
+}
+
+/** La primera línea con texto — el título que la Libreta muestra en la lista. */
+export function tituloDeNota(nota: Nota): string {
+  const primera = nota.texto.split('\n').find((l) => l.trim() !== '');
+  return primera?.trim() ?? '';
+}
+
+/**
+ * El resto, para el renglón de abajo en la lista. Se corta con `slice` y no con
+ * CSS porque son varias líneas colapsadas en una: sin el corte, una nota larga
+ * manda un párrafo entero al DOM de cada fila.
+ */
+export function resumenDeNota(nota: Nota, tope = 90): string {
+  const titulo = tituloDeNota(nota);
+  const resto = nota.texto.slice(titulo.length).replace(/\s+/g, ' ').trim();
+  return resto.length > tope ? `${resto.slice(0, tope)}…` : resto;
+}
+
+/**
+ * El `doc` que le entra al editor. Una nota vieja (o una histórica de
+ * `gestiones`) no tiene documento: se convierte su texto a párrafos, uno por
+ * línea, para que se pueda abrir y seguir escribiendo sin migrar nada.
+ * `undefined` cuando no hay ni texto — BlockNote no acepta contenido vacío.
+ */
+export function docParaEditor(nota: Nota): unknown[] | undefined {
+  if (Array.isArray(nota.doc) && nota.doc.length > 0) return nota.doc;
+  const lineas = nota.texto.split('\n');
+  if (lineas.every((l) => l.trim() === '')) return undefined;
+  return lineas.map((linea) => ({ type: 'paragraph', content: linea === '' ? [] : [{ type: 'text', text: linea, styles: {} }] }));
 }

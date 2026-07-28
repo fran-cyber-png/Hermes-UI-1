@@ -3,7 +3,7 @@ import '@fontsource/montserrat/500.css';
 import '@fontsource/montserrat/600.css';
 import '@fontsource/montserrat/700.css';
 import '@fontsource/montserrat/800.css';
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   AlarmClock,
   BrainCircuit,
@@ -41,9 +41,20 @@ import { useDashboard } from './features/dashboard/dashboard';
 import { useTiempoReal } from './lib/datos/tiempoReal';
 import { SELECTOR_CAMPOS } from './lib/teclado/escapeDePopover';
 import type { Puente } from './lib/puente';
-import { LibretaPersonal } from './features/notas/PanelNotas';
 import { esAtajoLibreta } from './features/notas/notas';
 import { ConsultaIvi } from './features/ivi/ConsultaIvi';
+
+/**
+ * La Libreta se carga PEREZOSA y solo se monta cuando está abierta. BlockNote
+ * pesa **269 KB gzip medidos** (el bundle principal pasa de 222 a 491 KB si
+ * entra estático), y esto se abre con una tecla: cargarlo al arrancar se lo
+ * cobra a todas las vendedoras que hoy no lo usan.
+ *
+ * Montarlo condicionalmente es seguro acá porque la Libreta **no registra
+ * `useEscape`** — su Escape lo resuelve la cascada de este archivo. Si algún día
+ * registra uno propio, hay que pasarle `abierta` (la trampa de ADR 0024).
+ */
+const Libreta = lazy(() => import('./features/notas/Libreta').then((m) => ({ default: m.Libreta })));
 
 /**
  * HERMES — la mesa de la vendedora.
@@ -617,7 +628,11 @@ export default function App() {
       </div>
 
       {cabina && <Cabina onCerrar={() => setCabina(false)} enRevision={revision.activo} />}
-      <LibretaPersonal abierta={libreta} onCerrar={() => setLibreta(false)} />
+      {libreta && (
+        <Suspense fallback={null}>
+          <Libreta abierta onCerrar={() => setLibreta(false)} />
+        </Suspense>
+      )}
       <ConsultaIvi abierta={ivi} onCerrar={() => setIvi(false)} />
     </div>
   );
