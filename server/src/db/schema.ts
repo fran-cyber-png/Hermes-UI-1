@@ -576,6 +576,30 @@ export const etiquetas = pgTable(
  * Es la compuerta honesta del embudo: a "cotizado" no se llega sin saber QUÉ
  * se está cotizando. Se registran a mano (la vendedora lo escuchó) o solos al
  * registrar una cotización/venta (los productos de la orden SON el interés).
+ *
+ * ══ POR QUÉ ADEMÁS DEL NOMBRE SE GUARDA EL PRODUCTO ═══════════════════════════
+ *
+ * `curso` es TEXTO, y con texto no se arma una cotización: la orden que va a
+ * Cerberus pide `producto_id`. El dato ya se calculaba y **se tiraba** —
+ * `confirmarInteresDerivado` resuelve campaña/anuncio → familia → última edición
+ * activa → producto, devuelve `{curso, sku, familia}` y el `insert` guardaba
+ * sólo `{clave, curso, vendedoraId}` — y del lado manual pasaba lo mismo: el
+ * buscador del front elige un producto del catálogo (con su `id`) y mandaba
+ * únicamente el nombre.
+ *
+ * Con estas dos columnas, «sabemos qué quiere» y «el carrito viene precargado»
+ * dejan de ser cosas distintas.
+ *
+ * ⚠ **`NULL` es INFORMACIÓN, no un hueco**: significa «esto no es un producto
+ * del catálogo de Cerberus» — texto que la vendedora tipeó, un interés de antes
+ * de esta migración, o un producto que no se pudo verificar porque el catálogo
+ * no respondió. Un renglón así **no se puede cotizar**, y eso hay que decirlo,
+ * jamás resolverlo adivinando por nombre (sería una tercera derivación, y las
+ * dos que ya hay divergen en 6 SKUs).
+ *
+ * No hay FK ni constraint contra Cerberus: el catálogo vive en otra base, en
+ * otro repo. Es una referencia textual a propósito — la misma decisión que
+ * `(clase, ref)` en `envios_wa` (ADR 0022).
  */
 export const intereses = pgTable(
   "intereses",
@@ -585,6 +609,17 @@ export const intereses = pgTable(
     clave: text("clave").notNull(),
     /** El nombre del producto/curso tal como está en Cerberus. */
     curso: text("curso").notNull(),
+    /**
+     * `codigo_producto` de Cerberus, como texto. `NULL` = no es un producto del
+     * catálogo (ver la cabecera). Es lo que la orden de venta/cotización pide.
+     */
+    productoId: text("producto_id"),
+    /**
+     * El SKU de ese producto (`DIPICOT026`). Redundante con `producto_id` para
+     * Cerberus, pero es lo ÚNICO legible por una persona en un reporte — y es la
+     * llave con la que se habla de familias de curso (#129).
+     */
+    sku: text("sku"),
     vendedoraId: text("vendedora_id").notNull(),
     creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
   },

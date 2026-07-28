@@ -14,6 +14,7 @@ import {
   type EtapaGestion,
 } from '../gestiones/registrarGestion.js';
 import { consultarIntereses } from '../gestiones/intereses.js';
+import { registrarInteres } from '../gestiones/registrarInteres.js';
 import { confirmarInteresDerivado } from '../cursos/confirmar.js';
 import { buscarProductos } from '../cerberus/productos.js';
 
@@ -111,18 +112,33 @@ gestionesRouter.get('/intereses', async (req, res) => {
   res.json(await consultarIntereses(db, claves));
 });
 
+/**
+ * Registrar un interés a mano.
+ *
+ * `productoId` es OPCIONAL y retrocompatible: sin él, esto se comporta
+ * exactamente como antes (texto libre). Con él, el server resuelve el producto
+ * contra el catálogo vivo y guarda el vínculo — que es lo que después permite
+ * precargar el carrito sin volver a buscar. La regla y sus tres casos de borde
+ * viven en el seam `gestiones/registrarInteres.ts`, no acá.
+ *
+ * Responde `vinculado` SIEMPRE: si se pidió atar y no se pudo, la UI tiene que
+ * poder decir «anotado, pero sin precio» en vez de fingir que quedó cotizable.
+ */
 gestionesRouter.post('/intereses', async (req, res) => {
-  const { clave, curso } = req.body ?? {};
+  const { clave, curso, productoId } = req.body ?? {};
   const limpio = String(curso ?? '').trim().slice(0, 120);
   if (!clave || !limpio) {
     res.status(400).json({ ok: false, message: 'faltan la conversación o el curso' });
     return;
   }
-  await db
-    .insert(intereses)
-    .values({ clave: String(clave), curso: limpio, vendedoraId: req.vendedoraId! })
-    .onConflictDoNothing();
-  res.json({ ok: true });
+  const r = await registrarInteres(db, {
+    clave: String(clave),
+    curso: limpio,
+    productoId: productoId == null ? null : String(productoId),
+    vendedoraId: req.vendedoraId!,
+    catalogo: () => buscarProductos(),
+  });
+  res.json({ ok: true, ...r });
 });
 
 /**

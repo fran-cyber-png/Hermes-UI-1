@@ -95,15 +95,35 @@ export function Intereses({
     void qc.invalidateQueries({ queryKey: ['intereses', clave] });
     void qc.invalidateQueries({ queryKey: ['embudo'] });
   };
+  /**
+   * Agregar un interés.
+   *
+   * ⚠ **Manda el `productoId`, no sólo el nombre.** El buscador acaba de recibir
+   * productos del catálogo de Cerberus CON su id, y hasta acá se guardaba
+   * únicamente el texto — con lo cual armar después una cotización obligaba a
+   * volver a buscar el mismo producto. El id viaja y el server lo verifica
+   * contra el catálogo vivo (`gestiones/registrarInteres.ts`); acá no se decide
+   * nada, sólo se deja de tirar el dato.
+   *
+   * El texto libre (cuando Cerberus no devolvió nada) sigue yendo sin id: es un
+   * interés real que no es un producto, y eso se guarda como lo que es.
+   */
   const agregar = useMutation({
-    mutationFn: (curso: string) =>
-      api('/api/gestiones/intereses', { method: 'POST', body: JSON.stringify({ clave, curso }) }),
-    onSuccess: (_d, curso) => {
+    mutationFn: (elegido: { curso: string; productoId?: string }) =>
+      api<{ ok: true; curso?: string; vinculado?: boolean }>('/api/gestiones/intereses', {
+        method: 'POST',
+        body: JSON.stringify({ clave, curso: elegido.curso, productoId: elegido.productoId ?? null }),
+      }),
+    onSuccess: (r, elegido) => {
       invalidar();
       setQ('');
       setIdx(0);
       setAbierto(false);
-      onAgregado?.(curso);
+      // El nombre que vale es el que devolvió el server (lo resolvió contra el
+      // catálogo). `?? elegido.curso` porque el front se despliega SIN reiniciar
+      // el server (N4 va solo, N5 es un botón): esta pantalla puede estar
+      // hablándole a un server que todavía no devuelve el campo.
+      onAgregado?.(r?.curso ?? elegido.curso);
     },
   });
   const quitar = useMutation({
@@ -224,8 +244,10 @@ export function Intereses({
               if (e.key === 'Enter') {
                 // Con resultados a la vista, Enter agrega el resaltado; el texto
                 // libre solo cuando Cerberus no devolvió nada.
-                if (sugs.length > 0) agregar.mutate(sugs[Math.min(idx, sugs.length - 1)].nombre);
-                else if (q.trim().length >= 3) agregar.mutate(q.trim());
+                if (sugs.length > 0) {
+                  const p = sugs[Math.min(idx, sugs.length - 1)];
+                  agregar.mutate({ curso: p.nombre, productoId: p.id });
+                } else if (q.trim().length >= 3) agregar.mutate({ curso: q.trim() });
               }
               if (e.key === 'Escape') {
                 e.stopPropagation();
@@ -242,7 +264,7 @@ export function Intereses({
                 <button
                   key={p.id}
                   type="button"
-                  onClick={() => agregar.mutate(p.nombre)}
+                  onClick={() => agregar.mutate({ curso: p.nombre, productoId: p.id })}
                   onMouseEnter={() => setIdx(i)}
                   className={
                     'block w-full truncate px-2 py-1.5 text-left text-[11px] transition-colors ' +

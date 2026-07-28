@@ -23,11 +23,24 @@ export interface FilaInteres {
   curso: string;
   /** timestamptz de Drizzle (Date) o su ISO — se normaliza a ISO en la salida. */
   creadoAt: Date | string;
+  /** `codigo_producto` de Cerberus. `null` = no es un producto del catálogo. */
+  productoId?: string | null;
+  sku?: string | null;
 }
 
 export interface InteresConFecha {
   curso: string;
   creadoAt: string;
+  /**
+   * EL PRODUCTO, para que el carrito se pueda precargar sin volver a buscar.
+   *
+   * `null` significa «esto no es un producto del catálogo» —texto tipeado, una
+   * fila anterior a la migración, o un producto que no se pudo verificar porque
+   * Cerberus no contestó—. Un renglón así **no es cotizable**, y la UI tiene que
+   * decirlo en vez de resolverlo adivinando por nombre.
+   */
+  productoId: string | null;
+  sku: string | null;
 }
 
 export interface PayloadIntereses {
@@ -64,6 +77,12 @@ export function armarPayloadIntereses(
     (detalle[f.clave] ??= []).push({
       curso: f.curso,
       creadoAt: new Date(f.creadoAt).toISOString(),
+      // `?? null` y no `?? undefined`: «no tiene producto» tiene que viajar como
+      // un valor, no como una clave ausente. Un campo que a veces no está se lee
+      // como «el server es viejo»; un `null` explícito se lee como «no se pudo
+      // atar», que es lo que efectivamente pasó.
+      productoId: f.productoId ?? null,
+      sku: f.sku ?? null,
     });
   }
   return { intereses: planos, interesesDetalle: detalle, derivados };

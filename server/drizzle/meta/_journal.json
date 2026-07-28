@@ -50,6 +50,13 @@
       "when": 1785582768155,
       "tag": "0006_negocio_de_plantilla",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785669168155,
+      "tag": "0007_interes_atado_a_producto",
+      "breakpoints": true
     }
   ]
 }

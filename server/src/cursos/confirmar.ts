@@ -116,9 +116,20 @@ export async function confirmarInteresDerivado(
   // El mismo recorte que el POST manual: `intereses.curso` guarda el nombre de
   // Cerberus, y 120 caracteres es lo que la ficha puede mostrar.
   const curso = producto.nombre.trim().slice(0, 120);
+  // Y EL PRODUCTO, que hasta acá se calculaba y se tiraba: esta función ya había
+  // recorrido campaña/anuncio → familia → última edición activa → producto y
+  // devolvía `{curso, sku, familia}`, pero el insert guardaba sólo el nombre.
+  // Con un nombre no se arma una cotización —la orden pide `producto_id`—, así
+  // que ése era exactamente el eslabón que faltaba para precargar el carrito.
   await base
     .insert(intereses)
-    .values({ clave: o.clave, curso, vendedoraId: o.vendedoraId })
+    .values({
+      clave: o.clave,
+      curso,
+      productoId: producto.id,
+      sku: producto.sku,
+      vendedoraId: o.vendedoraId,
+    })
     .onConflictDoNothing();
 
   return { ok: true, curso, sku: producto.sku, familia: propuesta.familia };

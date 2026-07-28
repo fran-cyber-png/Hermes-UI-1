@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { eq } from "drizzle-orm";
 import { baseDePrueba } from "../pruebas/base.js";
 import { sembrarMensaje } from "../pruebas/sembrar.js";
+import { intereses } from "../db/schema.js";
 import { consultarIntereses } from "../gestiones/intereses.js";
 import type { ProductoCatalogo } from "../cerberus/productos.js";
 import { confirmarInteresDerivado } from "./confirmar.js";
@@ -96,6 +98,37 @@ test("confirmar registra el NOMBRE CRUDO de la última edición, no el del chip"
     "Diploma Internacional de Inteligencia y Contrainteligencia 26",
   ]);
   assert.equal(payload.derivados[CLAVE], undefined);
+});
+
+test("confirmar deja ATADO el producto, no sólo su nombre", async (t) => {
+  const db = await baseDePrueba(t);
+  await conversacionDeAnuncio(db);
+
+  await confirmarInteresDerivado(db, {
+    clave: CLAVE,
+    vendedoraId: "vendedora-prueba",
+    catalogo: async () => CATALOGO,
+  });
+
+  /**
+   * EL ESLABÓN QUE FALTABA. Esta función siempre recorrió campaña → familia →
+   * última edición → producto, y devolvía `{curso, sku, familia}`; lo que hacía
+   * era guardar únicamente el nombre. Con un nombre no se arma una cotización
+   * —la orden que va a Cerberus pide `producto_id`—, así que la vendedora tenía
+   * que volver a buscar en el catálogo el producto que el sistema ya había
+   * resuelto solo.
+   *
+   * Se afirma el `1908` literal a propósito: es la última edición (026), no la
+   * 011 que también matchea la familia.
+   */
+  const [fila] = await db.select().from(intereses).where(eq(intereses.clave, CLAVE));
+  assert.equal(fila.productoId, "1908");
+  assert.equal(fila.sku, "DIPICOT026");
+
+  // Y viaja hasta la ficha, que es donde el carrito lo va a leer para precargar.
+  const payload = await consultarIntereses(db, [CLAVE]);
+  assert.equal(payload.interesesDetalle[CLAVE][0].productoId, "1908");
+  assert.equal(payload.interesesDetalle[CLAVE][0].sku, "DIPICOT026");
 });
 
 test("confirmar dos veces no duplica el interés", async (t) => {
