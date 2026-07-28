@@ -23,6 +23,7 @@ const base: EstadoDeVenta = {
 const plantilla = (p: Partial<Plantilla> & { id: number; nombre: string }): Plantilla => ({
   familiaCurso: null,
   estado: "aprobada",
+  negocio: "escuela",
   origen: "manual",
   respaldo: 0,
   usos: 0,
@@ -223,4 +224,34 @@ test("las reglas siempre dan dos caminos distintos", () => {
     assert.notEqual(a.intencion, b.intencion, JSON.stringify(e));
     assert.ok(a.porque.length > 5 && b.porque.length > 5);
   }
+});
+
+test("🔴 NO sugiere una plantilla de OTRO negocio", () => {
+  // Walter atiende las dos cosas. Su guión abre con «del equipo de Consultoría
+  // & Estrategia», así que proponérselo a alguien que preguntó por un diplomado
+  // es presentarse mal, y con la seguridad de una sugerencia del sistema.
+  const guion = plantilla({
+    id: 1,
+    nombre: "Consultoría — primer contacto",
+    negocio: "consultoria",
+    pasos: [{ orden: 1, texto: "Mi nombre es Walter, del equipo de Consultoría", media: null, mediaPendiente: false }],
+  });
+
+  const leadDeEscuela = { ...base, esPrimerContacto: true, negocio: "escuela" as const };
+  assert.deepEqual(sugerirDos(leadDeEscuela, [guion]), []);
+
+  const leadDeConsultoria = { ...base, esPrimerContacto: true, negocio: "consultoria" as const };
+  assert.equal(sugerirDos(leadDeConsultoria, [guion]).length, 1);
+});
+
+test("cada negocio ve SOLO lo suyo, aunque convivan en el mismo catálogo", () => {
+  const deEscuela = plantilla({ id: 1, nombre: "Presentación Escuela", negocio: "escuela" });
+  const deConsultoria = plantilla({ id: 2, nombre: "Presentación Consultoría", negocio: "consultoria" });
+  const catalogo = [deEscuela, deConsultoria];
+
+  const soloEscuela = sugerirDos({ ...base, esPrimerContacto: true, negocio: "escuela" }, catalogo);
+  assert.ok(soloEscuela.every((s) => s.plantilla.id === 1), "se coló una de consultoría");
+
+  const soloConsultoria = sugerirDos({ ...base, esPrimerContacto: true, negocio: "consultoria" }, catalogo);
+  assert.ok(soloConsultoria.every((s) => s.plantilla.id === 2), "se coló una de escuela");
 });

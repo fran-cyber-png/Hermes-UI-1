@@ -88,6 +88,8 @@ async function main() {
     vendedora,
     {
       nombre: NOMBRE,
+      // Lo DECLARA, para que el motor no se lo proponga a un lead de curso.
+      negocio: "consultoria",
       // Sin familia de curso A PROPÓSITO: consultoría no es un curso, y atarla a
       // una familia haría que `{curso}`/`{precio}` resolvieran a un diplomado.
       familiaCurso: null,

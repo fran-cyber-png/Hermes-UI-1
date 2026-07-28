@@ -1043,6 +1043,17 @@ export const plantillas = pgTable(
     familiaCurso: text("familia_curso"),
     /** `propuesta` (minada, no enviable) | `aprobada` (revisada por una persona). */
     estado: text("estado").notNull().default("propuesta"),
+    /**
+     * De qué NEGOCIO es: `escuela` (cursos) | `consultoria` (diagnóstico de
+     * campaña). Lo DECLARA la plantilla, no lo adivina un clasificador leyendo
+     * su texto — inferirlo sería abrir otra superficie que se puede equivocar,
+     * y equivocarse acá significa presentarse como «del equipo de Consultoría»
+     * a alguien que preguntó por un diplomado.
+     *
+     * `escuela` por default y para todo lo que ya existe: es el negocio de
+     * siempre, así que la columna nace sin cambiarle el sentido a ninguna fila.
+     */
+    negocio: text("negocio").notNull().default("escuela"),
     /** `minado` (salió del histórico) | `manual` (la escribió la vendedora). */
     origen: text("origen").notNull().default("manual"),
     /** Cuántas conversaciones del histórico respaldan la propuesta. 0 si es manual. */

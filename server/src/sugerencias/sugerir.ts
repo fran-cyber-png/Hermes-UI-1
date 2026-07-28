@@ -45,7 +45,18 @@ function mejorPara(
  * catálogo de la vendedora no da para más.
  */
 export function sugerirDos(estado: EstadoDeVenta, plantillas: readonly Plantilla[]): Sugerencia[] {
-  const enviables = plantillas.filter(esEnviable);
+  // ── SOLO LAS DEL NEGOCIO DE ESTA CONVERSACIÓN ──────────────────────────────
+  //
+  // Walter atiende las dos cosas: le entran leads de Consultoría y también de
+  // cursos. Su guión abre con «del equipo de Consultoría & Estrategia», así que
+  // proponérselo a alguien que preguntó por un diplomado es presentarse mal —
+  // y encima con la seguridad de una sugerencia del sistema.
+  //
+  // El filtro es por lo que la plantilla DECLARA (`plantillas.negocio`), no por
+  // lo que diga su texto: un clasificador acá sería otra superficie que se
+  // puede equivocar, y este es justo el lugar donde equivocarse se manda solo.
+  const delNegocio = plantillas.filter((p) => p.negocio === estado.negocio);
+  const enviables = delNegocio.filter(esEnviable);
   if (enviables.length === 0) return [];
 
   const quiere = intencionesSugeridas(estado);

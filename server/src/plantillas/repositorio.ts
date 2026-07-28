@@ -1,3 +1,4 @@
+import type { LineaDeNegocio } from "../negocio/lineaDeNegocio.js";
 import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { db } from "../db/client.js";
 import { plantillaPasos, plantillas } from "../db/schema.js";
@@ -42,6 +43,8 @@ export interface Plantilla {
   nombre: string;
   familiaCurso: string | null;
   estado: EstadoPlantilla;
+  /** `escuela` | `consultoria`. Lo declara la plantilla; nadie lo infiere. */
+  negocio: LineaDeNegocio;
   origen: string;
   respaldo: number;
   usos: number;
@@ -51,6 +54,8 @@ export interface Plantilla {
 export interface EntradaPlantilla {
   nombre: string;
   familiaCurso?: string | null;
+  /** Default `escuela`: el negocio de siempre, para no cambiarle el sentido a nada. */
+  negocio?: LineaDeNegocio;
   pasos: PasoPlantilla[];
 }
 
@@ -148,6 +153,7 @@ export async function listarPlantillas(base: typeof db, vendedoraId: string): Pr
       nombre: f.nombre,
       familiaCurso: f.familiaCurso,
       estado: f.estado as EstadoPlantilla,
+      negocio: f.negocio as LineaDeNegocio,
       origen: f.origen,
       respaldo: f.respaldo,
       usos: f.usos,
@@ -178,6 +184,7 @@ export async function obtenerPlantilla(
     nombre: f.nombre,
     familiaCurso: f.familiaCurso,
     estado: f.estado as EstadoPlantilla,
+    negocio: f.negocio as LineaDeNegocio,
     origen: f.origen,
     respaldo: f.respaldo,
     usos: f.usos,
@@ -219,6 +226,7 @@ export async function crearPlantilla(
       vendedoraId,
       nombre: entrada.nombre,
       familiaCurso: entrada.familiaCurso ?? null,
+      negocio: entrada.negocio ?? "escuela",
       estado,
       origen: "manual",
     })

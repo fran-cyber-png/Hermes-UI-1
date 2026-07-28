@@ -1,0 +1,1 @@
+ALTER TABLE "plantillas" ADD COLUMN "negocio" text DEFAULT 'escuela' NOT NULL;
