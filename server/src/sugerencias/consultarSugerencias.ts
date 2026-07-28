@@ -1,3 +1,4 @@
+import { lineaDeNegocio } from "../negocio/lineaDeNegocio.js";
 import { sql } from "drizzle-orm";
 import type { db } from "../db/client.js";
 import { consultarSenales } from "../senales/consultarSenales.js";
@@ -27,6 +28,8 @@ interface HechosFila {
   con_media: boolean;
   temario: boolean;
   ultimo_entrante: string | null;
+  /** El primero: trae el prellenado del anuncio (línea de negocio). */
+  primer_entrante: string | null;
   curso: string | null;
 }
 
@@ -70,6 +73,10 @@ export async function estadoDeLaVenta(
       (SELECT bool_or(con_media) FROM msg WHERE direccion = 'saliente')                        AS con_media,
       (SELECT bool_or(texto ~* 'temario') FROM msg WHERE direccion = 'saliente')               AS temario,
       (SELECT texto FROM msg WHERE direccion = 'entrante' ORDER BY occurred_at DESC LIMIT 1)   AS ultimo_entrante,
+      -- El PRIMER entrante trae el prellenado del anuncio, que es de donde sale
+      -- la línea de negocio. El último no sirve: para el tercer mensaje ya es
+      -- conversación normal y el prellenado quedó atrás.
+      (SELECT texto FROM msg WHERE direccion = 'entrante' ORDER BY occurred_at LIMIT 1)         AS primer_entrante,
       (SELECT curso FROM intereses WHERE clave = ${o.clave} ORDER BY creado_at DESC LIMIT 1)   AS curso
   `)) as unknown as HechosFila[];
 
@@ -83,6 +90,7 @@ export async function estadoDeLaVenta(
     cotizada: Boolean(senal?.cotizacion?.esCotizacion),
     enfriada: Boolean(senal?.enfriamiento.enfriada),
     vioMaterial: Boolean(hechos?.con_media || hechos?.temario),
+    negocio: lineaDeNegocio({ textoPrimerEntrante: hechos?.primer_entrante ?? null }),
   };
 
   return estado;

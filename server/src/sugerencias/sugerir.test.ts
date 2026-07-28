@@ -17,6 +17,7 @@ const base: EstadoDeVenta = {
   cotizada: false,
   enfriada: false,
   vioMaterial: false,
+  negocio: "escuela" as const,
 };
 
 const plantilla = (p: Partial<Plantilla> & { id: number; nombre: string }): Plantilla => ({

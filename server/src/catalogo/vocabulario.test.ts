@@ -90,6 +90,7 @@ describe("un momento que este build no conoce", () => {
       cotizada: false,
       enfriada: false,
       vioMaterial: false,
+  negocio: "escuela" as const,
     });
     assert.ok((MOMENTOS_DE_VENTA as readonly string[]).includes(momento));
   });

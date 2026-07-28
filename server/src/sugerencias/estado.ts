@@ -28,6 +28,8 @@
  * cada lado tuviera su copia, un campo agregado de un lado no llegaría al otro y
  * las dos cabezas empezarían a divergir sin que nadie lo note.
  */
+import type { LineaDeNegocio } from "../negocio/lineaDeNegocio.js";
+
 export interface ContextoPlantilla {
   /** Nadie le habló nunca desde Hermes. */
   esPrimerContacto: boolean;
@@ -45,6 +47,13 @@ export interface EstadoDeVenta extends ContextoPlantilla {
   enfriada: boolean;
   /** Ya se le mandó material: una imagen o el temario. */
   vioMaterial: boolean;
+  /**
+   * De qué NEGOCIO es (`negocio/lineaDeNegocio.ts`). La Escuela vende cursos;
+   * Consultoría vende un diagnóstico de campaña. Sin esto, a un lead de
+   * consultoría se le proponía la secuencia de un curso — que es contestarle
+   * otra cosa de la que preguntó.
+   */
+  negocio: LineaDeNegocio;
 }
 
 /**
@@ -151,6 +160,11 @@ export function estadoDesdeContexto(ctx: ContextoPlantilla): EstadoDeVenta {
     cotizada: false,
     enfriada: false,
     vioMaterial: false,
+    // La auto-respuesta nocturna todavía no mira el primer entrante, así que
+    // asume el negocio de siempre. Es el default honesto: `escuela` es el 99 %
+    // del volumen, y decir «consultoría» sin evidencia mandaría el guión
+    // equivocado. Cuando el acuse nocturno sepa distinguirlos, se pasa acá.
+    negocio: "escuela",
   };
 }
 
