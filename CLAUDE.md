@@ -675,8 +675,17 @@ fuente de verdad del mapa número↔vendedora y lo **empuja** acá; Hermes guard
 `numero_vendedora`) que necesita para etiquetar/rutear, y ejecuta la vinculación (el QR sale por acá; la
 sesión nunca deja VPS1). Endpoint central: `PUT /api/admin/numeros/:numero` (upsert declarativo,
 `vendedoras[]` reemplaza el set). El mapa es **solo etiqueta/atribución**: la cola NO se filtra por
-vendedora. Contrato de los dos lados en **`docs/multi-numero/`**; decisión en **ADR 0010**. El ruteo
-multi-número real (N transportes vivos) es el Frente A, **issue #50**, todavía pendiente.
+vendedora. Contrato de los dos lados en **`docs/multi-numero/`**; decisión en **ADR 0010**.
+
+> ✅ **El ruteo multi-número YA ESTÁ VIVO** — acá decía «issue #50, todavía pendiente» y es falso.
+> Medido en VPS1 el 29-jul-2026: **tres líneas vinculadas y corriendo** (`.wa-sessions/` tiene un
+> `.db` por número y `numeros_wa` tiene sus tres filas), y prod corre justamente un fix de #50
+> («una línea que no arranca ya no se lleva puesto el proceso entero»). `WHATSAPP_NUMEROS` es el CSV
+> que las levanta; `WHATSAPP_NUMERO` quedó como el singular viejo.
+> Consecuencia práctica, y por eso se escribe acá: **agregar una CUARTA línea de prueba no es
+> infraestructura nueva** — es el mismo camino que ya levantó las tres (`wa:vincular`, una sesión
+> propia en disco, una fila en `numeros_wa`). Lo que un banco de pruebas sí tiene que resolver es lo
+> OTRO: que esa línea no comparta ni la base ni el Cerberus de producción.
 
 - **El vinculador es UNO A LA VEZ y por eso se puede soltar**: `POST .../vincular` arranca (responde
   `vinculando`, **el QR NO viene acá**: viaja en el polling de `.../vincular/estado` como
