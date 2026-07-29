@@ -24,6 +24,7 @@ import { plantillasRouter } from "./routes/plantillas.js";
 import { sugerenciasRouter } from "./routes/sugerencias.js";
 import { hechosRouter } from "./routes/hechos.js";
 import { dashboardRouter } from "./routes/dashboard.js";
+import { capturarCuerpoCrudo } from "./webhook/firma.js";
 import { landingRouter } from "./webhook/landing.js";
 import { correosRouter } from "./routes/correos.js";
 import { notasRouter } from "./routes/notas.js";
@@ -67,7 +68,9 @@ app.use(cors());
 // gastarle un parseo de JSON (el perímetro decide por path + header, jamás lee
 // el body — hay un test que lo fija).
 app.use(perimetroApi);
-app.use(express.json());
+// El `verify` guarda el body CRUDO de /webhook/*: la firma HMAC del webhook de
+// la Cloud API se calcula sobre los bytes exactos, no sobre el JSON re-serializado.
+app.use(express.json({ verify: capturarCuerpoCrudo }));
 
 // EL BFF: una sola llamada con todo lo que la home necesita. Solo Postgres, cero Meta.
 // Reemplaza las 4 llamadas que la pantalla hacía al montar — una de ellas de 4 minutos.

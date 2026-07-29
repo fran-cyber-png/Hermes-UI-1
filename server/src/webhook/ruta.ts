@@ -8,6 +8,7 @@ import { capiDesdeEnv } from "../lazo/capi.js";
 import { leerEventoCerberus, ventaDeEvento, type EventoCerberus } from "../atribucion/payload.js";
 import { proyectarVenta } from "../atribucion/proyectarVenta.js";
 import { claveDeVenta, extraerVenta, tokenValido } from "./cerberus.js";
+import { exigirFirmaWhatsapp } from "./firma.js";
 import { recibirWhatsapp, verificarWhatsapp } from "./whatsapp.js";
 
 export const webhookRouter = Router();
@@ -15,7 +16,9 @@ export const webhookRouter = Router();
 // WhatsApp Cloud API — captura del referral/ctwa_clid de click-to-WhatsApp (docs/36 §2). GET verifica
 // la suscripción; POST recibe los mensajes. Ruta pública: /webhook/whatsapp.
 webhookRouter.get("/whatsapp", verificarWhatsapp);
-webhookRouter.post("/whatsapp", recibirWhatsapp);
+// La firma HMAC va DELANTE del handler (#107): sin `X-Hub-Signature-256` válida
+// no se guarda nada. Falla cerrado — sin WHATSAPP_APP_SECRET todo POST es 403.
+webhookRouter.post("/whatsapp", exigirFirmaWhatsapp, recibirWhatsapp);
 
 /**
  * El receptor del webhook de Cerberus. Cada venta que se confirma en Cerberus llega acá, y de

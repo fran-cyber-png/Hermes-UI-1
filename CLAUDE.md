@@ -807,7 +807,8 @@ gane) + `docs/adr/` con los ADR 0001–0005. Ver `docs/agents/domain.md`.
 
 Solo en `server/.env` (gitignored). **Se referencian por nombre, jamás se pegan** (regla dura #1):
 `DATABASE_URL`, `META_ACCESS_TOKEN`, `CERBERUS_BASE_URL`, `HERMES_SESSION_SECRET`,
-`WHATSAPP_TRANSPORTE`, `WHATSAPP_NUMERO`, `IVI_URL`, `IVI_SERVICE_TOKEN`,
+`WHATSAPP_TRANSPORTE`, `WHATSAPP_NUMERO`, `WHATSAPP_APP_SECRET` (firma del webhook Cloud API,
+#107 — sin él todo POST a `/webhook/whatsapp` es 403), `IVI_URL`, `IVI_SERVICE_TOKEN`,
 `HERMES_ADMIN_SERVICE_TOKEN`, `HERMES_CATALOGO_SERVICE_TOKEN` (el de Ivi para leer el catálogo de
 piezas — **otro secreto**, a propósito), `AUTO_RESPUESTA` (+ sus `AUTO_RESPUESTA_*`, todos con default
 sensato). Ver `server/.env.example` (solo nombres).
