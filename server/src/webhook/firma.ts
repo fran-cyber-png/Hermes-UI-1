@@ -16,7 +16,7 @@ import type { NextFunction, Request, Response } from "express";
  *     abre la puerta por un descuido de configuración.
  */
 export function firmaValida(
-  cuerpoCrudo: string,
+  cuerpoCrudo: string | Buffer,
   firmaRecibida: string | null | undefined,
   secreto: string | undefined,
 ): boolean {
@@ -27,56 +27,85 @@ export function firmaValida(
   // El emisor puede o no anteponer "sha256=". Aceptamos ambas formas.
   const recibida = firmaRecibida.startsWith("sha256=") ? firmaRecibida.slice(7) : firmaRecibida;
 
-  const esperada = createHmac("sha256", secreto).update(cuerpoCrudo, "utf8").digest("hex");
+  // Hex ESTRICTO de 64, antes de decodificar: `Buffer.from(x, "hex")` trunca en
+  // SILENCIO en el primer carácter no-hex, así que 64 zetas pasaban el chequeo
+  // de largo y hacían tirar a `timingSafeEqual` — un 500 con stack en el log,
+  // disparable desde internet sin credencial. Un hex inválido ya es firma
+  // inválida, no una excepción.
+  if (!/^[0-9a-f]{64}$/i.test(recibida)) return false;
 
-  // Si los largos no coinciden, `timingSafeEqual` tira — así que lo chequeamos antes y devolvemos
-  // false en vez de explotar. Un largo equivocado ya es firma inválida.
-  if (recibida.length !== esperada.length) return false;
+  // Buffer directo cuando lo hay: la firma es de los BYTES del cable, y pasar
+  // por utf8 solo es lossless si el cuerpo era utf8 válido.
+  const esperada = createHmac("sha256", secreto).update(cuerpoCrudo).digest("hex");
 
   return timingSafeEqual(Buffer.from(recibida, "hex"), Buffer.from(esperada, "hex"));
 }
 
-/** El body CRUDO que el parser de JSON capturó para /webhook/* (ver `capturarCuerpoCrudo`). */
+/** El body CRUDO que el parser de JSON capturó para el webhook (ver `capturarCuerpoCrudo`). */
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
-      cuerpoCrudo?: string;
+      cuerpoCrudo?: Buffer;
     }
   }
 }
 
 /**
  * Hook `verify` de `express.json()`: guarda los BYTES EXACTOS que llegaron,
- * solo para `/webhook/*`. La firma HMAC se calcula sobre el crudo — re-serializar
- * `req.body` con `JSON.stringify` da otros bytes (espacios, orden, unicode) y
- * una firma que no casa nunca. Se acota a /webhook para no retener el cuerpo
- * de cada request de la API sin necesidad.
+ * solo para el webhook de WhatsApp. La firma HMAC se calcula sobre el crudo —
+ * re-serializar `req.body` con `JSON.stringify` da otros bytes y una firma que
+ * no casa nunca.
+ *
+ * `req.path` y en MINÚSCULAS a propósito: Express rutea case-insensitive, y
+ * comparar el caso exacto dejaba `/WEBHOOK/whatsapp` ruteando al handler SIN
+ * captura — con lo que la firma se validaba contra el vacío, una constante
+ * replayable independiente del cuerpo. Es el mismo bug que `perimetro.ts` ya
+ * documenta («las mayúsculas esquivaban la guardia»). La igualdad exacta (no
+ * `startsWith`) evita además retener el cuerpo de rutas que no lo usan.
  */
 export function capturarCuerpoCrudo(req: Request, _res: Response, buf: Buffer): void {
-  if (req.url.startsWith("/webhook")) req.cuerpoCrudo = buf.toString("utf8");
+  if (req.path.toLowerCase() === "/webhook/whatsapp") req.cuerpoCrudo = Buffer.from(buf);
 }
 
 /**
  * La puerta del webhook de la Cloud API (#107): Meta firma cada POST con
  * HMAC-SHA256 del body crudo usando el App Secret (`X-Hub-Signature-256`).
- * Sin firma válida, 403 y el handler NO corre — nada se guarda.
+ * Sin firma válida, 403 y el handler NO corre — a la base no llega nada (el
+ * parseo de JSON sí corre antes, porque la captura del crudo vive en él).
  *
- * FALLA CERRADO como `firmaValida`: sin `WHATSAPP_APP_SECRET` configurado, todo
- * POST se rebota. Hoy eso no rompe nada — medido el 29-jul: 0 POSTs en los logs
- * de nginx de prod y el secreto ausente, o sea que la ruta no tiene tráfico
- * real — y es la condición para activar la vía realtime (#52) sin abrir una
- * puerta que acepta payloads de cualquiera.
+ * FALLA CERRADO como `firmaValida` — sin `WHATSAPP_APP_SECRET`, todo POST se
+ * rebota (medido el 29-jul: 0 POSTs en los logs de nginx de prod y el secreto
+ * ausente; la ruta no tiene tráfico real todavía) — y RUIDOSO: el día que #52
+ * suscriba el webhook con el secreto ausente, Meta comería 403 en silencio
+ * hasta desactivar la suscripción, sin una línea que lo explique. El log dice
+ * el MOTIVO; jamás la firma ni el secreto.
  */
 export function exigirFirmaWhatsapp(req: Request, res: Response, next: NextFunction): void {
   const firma = req.headers["x-hub-signature-256"];
+  const rechazar = (motivo: string): void => {
+    console.warn(`[webhook-whatsapp] POST rechazado (403): ${motivo}`, {
+      tieneSecreto: Boolean(process.env.WHATSAPP_APP_SECRET),
+      tieneFirma: typeof firma === "string",
+      tieneCrudo: req.cuerpoCrudo !== undefined,
+      path: req.path,
+    });
+    res.sendStatus(403);
+  };
+
+  if (req.cuerpoCrudo === undefined) {
+    // «No pude leer el crudo» y «el crudo era vacío» NO son el mismo caso:
+    // validar contra "" volvería la firma una constante replayable.
+    rechazar("cuerpo_crudo_no_capturado");
+    return;
+  }
   const ok = firmaValida(
-    req.cuerpoCrudo ?? "",
+    req.cuerpoCrudo,
     typeof firma === "string" ? firma : undefined,
     process.env.WHATSAPP_APP_SECRET,
   );
   if (!ok) {
-    res.sendStatus(403);
+    rechazar(process.env.WHATSAPP_APP_SECRET ? "firma_invalida_o_ausente" : "falta_secreto");
     return;
   }
   next();
