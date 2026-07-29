@@ -25,22 +25,18 @@
 siquiera es el mismo software (schema distinto, 1 migración vs 33). VPS1 es el canónico: recibe el
 DNS, escribe hasta el 24-jul. La ventana de divergencia que el plan temía no existe.
 
-### 🔴 Lo que el dueño tiene que ver (tres cosas)
+### 🔴 Lo que el dueño vio — y lo que firmó (29-jul, ejecutado en [ADR 0028](adr/0028-retiros-del-censo-lote-1.md))
 
-1. **El Grafana de VPS2 muestra cifras de ABRIL como si fueran de hoy**: su datasource «Escuela»
-   (`/srv/monitoring/grafana/provisioning/datasources/business.yml`) apunta a la base CONGELADA de
-   VPS2. Los paneles «Alumnos registrados» e «Inscripciones» mienten desde hace tres meses. Antes
-   de apagar VPS2-escuela: dump + repuntar (o retirar) ese datasource. Es el mismo patrón del
-   `/health` de Ivi: verde sin decir de cuándo es el dato.
-2. **Incidente de secreto del propio censo**: un `grep -r` sobre `/srv/monitoring` devolvió el VALOR
-   de `GOBERNA_ESCUELA_DB_PASSWORD` (estaba en un `.env` que el patrón no excluyó) en la salida de
-   la sesión del agente censista. No se usó ni se copió a ningún archivo, pero quedó impreso una
-   vez: **conviene rotarla**. Lección para los próximos lotes: los `grep` de censo llevan
-   `--exclude='*.env*'` SIEMPRE.
-3. **Otro bot Baileys**: `leads_crm_bot` («kathy») en VPS2 — la política del 2026-07-03 prohíbe
-   Baileys para clientes y la lección del ADR 0026 era que una prohibición sin barrido es
-   documentación. Este es el segundo hallazgo del barrido que nunca se hizo. Está deslogueado desde
-   el 16-jun (sin tormenta activa), pero es capacidad instalada de la clase prohibida.
+1. ~~**El Grafana de VPS2 muestra cifras de ABRIL**~~ → **«quita grafana»: RETIRADO** ✅ —
+   contenedor removido, compose comentado, config archivada, puerto 3003 cerrado; prometheus y
+   compañía siguen. El volumen `grafana_data` queda para la kill-list final.
+2. **Rotar `GOBERNA_ESCUELA_DB_PASSWORD`** → **«dejalo así nomás por ahora pero PENDIENTE»** 🔶 —
+   queda anotado acá como deuda declarada, sin ejecutar. Lección vigente para los lotes: los `grep`
+   de censo llevan `--exclude='*.env*'` SIEMPRE.
+3. ~~**Otro bot Baileys** («kathy»)~~ → **«aprende y quitalo»: RETIRADO** ✅ — contenedor removido,
+   volumen de sesiones **destruido** (credenciales no se archivan, ADR 0026 §3), evidencia
+   archivada, vecinos verificados intactos. Lo aprendido quedó en el ADR: el barrido de la política
+   del 3-jul sigue incompleto (`grep baileys` pasa a ser paso fijo del censo).
 
 ### El cableado que impide apagar a ciegas
 
