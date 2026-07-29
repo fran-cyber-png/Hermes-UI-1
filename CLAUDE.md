@@ -78,9 +78,19 @@ npm install && npm run dev:app                     # Vite :5173 + la app de escr
   `.wa-sessions/<numero>.db`—, y eso no se puede mudar a un edge sin cambiar antes de canal.
   Si un JID aparece arriba de esa línea, la costura falló (la conversión vive en `identidadWa.ts`).
 - **Vincular un número** = server-side, aparte de la app (decisión **D13**): `cd server && npm run
-  wa:vincular -- <numero>`. Da un código de 8 dígitos para poner en el teléfono (WhatsApp → Dispositivos
-  vinculados → Vincular con número). La sesión queda en `server/.wa-sessions/` (**gitignored: es la
-  credencial de la cuenta, NUNCA se commitea**). La app de la vendedora **no vincula, solo ve**.
+  wa:vincular -- <numero>`. **Se vincula por QR** — acá decía «un código de 8 dígitos» y es falso:
+  `vincular.ts:47-56` renderiza el QR a un PNG en `$TMPDIR/hermes-wa-qr.png` y lo rota cada ~20 s
+  hasta que se escanea, con el porqué escrito al lado («el pairCode por número devolvía 400 en este
+  número»). Se escanea desde WhatsApp → Dispositivos vinculados. La sesión queda en
+  `server/.wa-sessions/` (**gitignored: es la credencial de la cuenta, NUNCA se commitea**).
+  La app de la vendedora **no vincula, solo ve**.
+  > ⚠️ **Y esa credencial no va en una laptop.** El 29-jul se encontró `.wa-sessions/51986394450.db`
+  > —la línea de VENTAS— en el checkout de desarrollo, con un `whatsmeow` local reintentando contra
+  > la cuenta de producción y el `.env` apuntando al Cerberus vivo. Se archivó fuera del repo. Ojo
+  > con el detalle que lo hace peor de lo que parece: el `.gitignore` cubre **el nombre exacto**
+  > `.wa-sessions/`, así que renombrar ese directorio dentro del repo deja 43 MB de credencial a la
+  > vista de git. Para desarrollo va `WHATSAPP_TRANSPORTE=falso`; para probar con una línea real
+  > está el banco de pruebas (`docs/plan-banco-de-pruebas.md`) con un **número de prueba**.
 - **El webview viejo** (`src/features/whatsapp/PanelWhatsapp.tsx`) está **retirado** por D13. No se usa;
   archivar con ADR cuando se limpie.
 - **Nada de automatización, con UNA excepción escrita**: no envío masivo, no warmup, **no anti-ban**.
