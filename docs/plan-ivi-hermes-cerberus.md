@@ -116,6 +116,83 @@ y no declarado):
 | 11–24 ago | C4 cierra · C5 (fan-out) · C6 (matrículas) | M3 (FX-0 UI) · M4 (E2: #180 → lazo) | I3 (partir + ingestar con el golden como juez) · I5 arranca |
 | 25 ago→ | E6: el dashboard entra al contrato | M5 (destilación A_MANO) | I5 cierra · I6 · primer audit del dueño-exigente |
 
+## 4b. EL PLAN EN TRES SESIONES (orden del dueño, 29-jul: «Ivi primero — corpus primero; Cerberus y Hermes al final»)
+
+> Una «sesión» = una jornada larga de orquestador como la del 28/29-jul. Lo de ESTA semana (N5 con
+> #106/#107/#223 adentro + el checklist del lunes) va **aparte** de las tres: es la adopción, no se
+> mezcla. Cada sesión termina con su gate verde, su evidencia y su ADR/issue — o dice qué quedó
+> afuera y por qué.
+
+### SESIÓN 1 — IVI: el corpus se da vuelta (repo `ivi-cerebro` + geografo)
+
+El orden interno importa: **el juez antes que la comida**.
+
+1. **El golden de VENDEDORA, primero que todo** (P5): ~40 preguntas reales armadas de lo YA medido
+   — las del checklist del 3-ago, los 4 hechos de #153 («¿cuotas?» «¿acceso por un año?» «¿público
+   general?» «¿canal oficial?»), la objeción #1 (aplazamiento, 13 %), «¿el diploma da
+   certificado?», «¿qué hago si pagó y no entró?», precios por familia, transferencia / reembolso /
+   factura / descuentos. Se escribe como corrida del gimnasio (`--vendedora`) y **se corre la LÍNEA
+   DE BASE**: hoy casi todo va a dar `SIN_EVIDENCIA`, y ese número es el punto de partida honesto.
+2. **Partir el corpus en dos colecciones** (P1): `negocio` / `ingenieria` — etiquetar los 2.423
+   chunks (los 2.098 `dev` → ingeniería en bloque; los 306 «negocio» revisados uno a uno: casi
+   todos son ingeniería *sobre* el negocio; los 19 procedimientos → negocio). El router elige
+   colección; la penalización compensatoria se retira recién DESPUÉS de medir con el golden.
+3. **Ingestar el negocio de verdad** (P2+P3), cada documento **con dueño y vigencia o no entra**:
+   el catálogo de cursos **DERIVADO de la API pública de Cerberus** (viva hoy: 115 activos, Evento
+   incluido — generado con edad estampada, jamás escrito a mano) · objeciones · los 4 hechos · las
+   políticas (los 4 procedimientos existentes reciben dueño al fin) · FAQ desde lo medido.
+4. **A0 — desplegar `POST /api/preguntar`** desde `ivi-cerebro` (paridad de deploy: geografo deja
+   de correr el checkout viejo). **Gate de cierre de la sesión**: `--negocio` no cae, `--vendedora`
+   mejora contra la línea de base del paso 1, y la tecla `i` de Hermes responde en vivo (curl +
+   captura). Tajada mínima de P4: toda respuesta de Capa 2 declara `edad_del_dato` mientras
+   `governa.*` siga congelada.
+
+**Entrega a las sesiones 2/3**: demanda real acumulándose en `chat_interacciones` (los
+`SIN_EVIDENCIA` = la lista de la segunda ingesta) y la lista de números que Ivi no puede dar
+frescos (el insumo de la decisión #95).
+
+### SESIÓN 2 — CERBERUS: la verdad exportable (repo `ceberusapp` + VPS2)
+
+1. **#12** — el deploy dice la verdad (restart incondicional + fallar si `StartedAt` no cambió).
+   Va primero porque sin esto los fixes de abajo pueden quedar muertos en disco con el run verde.
+2. **#9 y #10** — cerrar el `curl` anónimo (clientes y despachos). Verificación: los mismos
+   requests que los issues documentan, ahora → 302 al login / 403.
+3. **#13** — CI mínimo en PRs (los 52 tests + `makemigrations --check` + `requirements.txt`). Si la
+   suite está roja hoy, se parte: arreglarla es issue aparte.
+4. **#43 — la MONEDA en la API pública**: alimenta el catálogo derivado de Ivi (sesión 1 lo dejó
+   generándose sin moneda) y despierta la rama de moneda de FX-0.
+5. **El contrato v0 se CONGELA**: el shape real de precio/ficha/venta/matrícula/medio, con un
+   ejemplo literal por endpoint (curl al origen). El fixture y su test de paridad viven en Hermes
+   (sesión 3 los fija); acá se documenta y se promete no renombrar sin versionar.
+6. **C5 — el fan-out del webhook de ventas**: AGREGAR el destino Hermes (el receptor
+   `/webhook/cerberus?token=` ya existe y está vivo), con dry-run primero. 🚨 El destino de icarus
+   (Tejada) no se toca ni para mirarlo.
+
+**Entrega a la sesión 3**: eventos de venta llegando al receptor de Hermes; moneda viva; puertas
+cerradas.
+
+### SESIÓN 3 — HERMES: el lazo cierra (este repo)
+
+1. **`resultados/ventas.ts`** — el `WHERE` sobre `conversiones_wa` ahora que el fan-out fluye:
+   «¿compró después?» deja de responder `null`.
+2. **#180** — el `orden` del paso estable (el `12#3` que repunta corrompe la atribución) — y detrás
+   #187/#186.
+3. **FX-0** (#226): el PR de server completo (migración + guarda pura + cableado + ADR); la UI si
+   la sesión da.
+4. **La primera destilación A_MANO** (A1): a mano y chica, sobre los envíos improvisados que
+   obtuvieron respuesta → piezas candidatas al catálogo (molde de aprobación de ADR 0019) → Ivi
+   las ve por `/api/catalogo` sin tocar nada.
+5. **La segunda ingesta de Ivi, por demanda**: los `SIN_EVIDENCIA` de la semana, agrupados, con el
+   molde de la sesión 1.
+6. **El tablero de utilidad** (script/reporte, sin pantalla nueva): tasa de SIN_EVIDENCIA ·
+   grounding · edad servida · costo · usos de la tecla `i` por día.
+
+**Gate final del ciclo**: el circuito entero demostrado con UN caso real — pregunta de vendedora →
+respuesta con edad → pieza del catálogo → envío por `EnvioControlado` → resultado en
+`piezas:resultados`. Ese es el «muy útil» convertido en una fila que se puede mirar.
+
+---
+
 ## 5. Lo que necesita al dueño (sin esto, fases enteras esperan)
 
 1. **¿Bedrock para los documentos de Ivi?** (§6.5) — bloquea el embedder de I5. El 99,4 % del
