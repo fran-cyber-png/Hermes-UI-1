@@ -599,6 +599,21 @@ ninguna respuesta.
    creado_en), sum(...)` es el tablero. Si el dueño quiere bajar costo, `BOT_MODELO=claude-haiku-4-5`
    es ~5× más barato — **decisión del dueño, con el tablero de evals corrido en ese modelo antes**.
 
+## T13 — El banco de pruebas → **`docs/plan-banco-de-pruebas.md`** (issue #246)
+
+Entró después, pedido del dueño el 29-jul: poder probar el flujo entero —mensajes automáticos,
+registro de venta— con un número de prueba enlazado por QR y **sin tocar Cerberus**. El modo sombra
+no alcanza: piensa, pero no ejercita ni el envío, ni la burbuja marcada, ni la venta.
+
+**Bloquea T11.3**: ninguna línea sube a `automatico` sin que la etapa B haya corrido de punta a punta.
+
+Y no era un riesgo futuro. Al diseñarlo se encontró que el entorno de desarrollo **ya apuntaba a
+producción por los dos lados**: la sesión de WhatsApp de la línea de ventas vivía en la laptop con un
+`whatsmeow` corriendo, y `CERBERUS_BASE_URL` apuntaba al ERP vivo. El detalle completo, las dos
+etapas y el guion del dueño están en el documento.
+
+---
+
 ## T12 — Documentación (mismo PR que el código que la vuelve cierta)
 
 - CLAUDE.md: sección «El bot de primera línea» (módulo, modos, kill-switch, runbook, reglas) +
