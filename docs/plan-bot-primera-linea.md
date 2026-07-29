@@ -12,6 +12,75 @@ acá y parece necesario, lo anota y lo consulta, no lo improvisa.
 
 ---
 
+## ⚠️ Correcciones del reconocimiento (29-jul, ocho exploradores sobre el código real)
+
+Antes de escribir una línea se mandó a leer las costuras que este plan manda reusar. **Ocho premisas
+de este documento eran falsas.** Se corrigen acá, arriba de todo, en vez de en el ticket de cada uno:
+un implementador lee su ticket, no el diff del plan.
+
+1. **El detector de montos NO es privado, y `esCotizacion()` NO sirve de guardrail.** T1 decía
+   «exportar/adaptar el detector si hoy es privado»: `montosDelTexto()` está exportado desde
+   `senales/cotizacion.ts:175`. El cambio en ese archivo es de **cero líneas**.
+   Y la función que hay que llamar es esa, **no `esCotizacion()`**: el veto bancario devuelve
+   `esCotizacion: false` sobre un texto que SÍ trae la cifra — verificado corriendo, «Puedes
+   depositar S/ 250 en nuestra cuenta» pasa el veredicto con el monto adentro. El bypass lo abre el
+   lead con la pregunta más común que hay («¿cómo pago?»).
+2. **El detector es un PISO, no una garantía, y el ticket no puede escribirse como si cerrara el
+   agujero.** Está calibrado para no dar falsos positivos sobre mensajes de una vendedora; censurar
+   la salida de un LLM quiere lo contrario. Huecos medidos, no supuestos: «El precio es de 250»
+   (cifra sin moneda), «cuesta 1200 pesos» / «350 quetzales» (**la Escuela vende a MX, EC y GT**),
+   «S/350.-», «350 S/», «cuesta 9 soles» (bajo `MONTO_MINIMO`), «20% de descuento».
+   ⚠️ **No se toca `RE_MONTO`**: `senales/consultarSenales.ts:33` tiene un prefiltro SQL que debe ser
+   superconjunto suyo, y ampliarlo de un lado rompe las señales de producción en silencio.
+   El guardrail se construye **por capas**, cada una con su violación nombrada, y su test se mide
+   contra **dos corpus**: los textos reales del catálogo y de los hechos **no pueden bloquearse**
+   («se puede pagar en 2 cuotas» es un hecho aprobado) y los vectores de evasión de arriba **sí**.
+3. **El glob de tests NO es recursivo.** `npm test` corre `tsx --test src/**/*.test.ts` bajo `sh`,
+   que sin globstar trata `**` como un `*`: entra **exactamente `src/<dir>/<archivo>.test.ts`**. Un
+   test en `src/bot/evals/escenarios.test.ts` (tres niveles) **no lo corre nadie y CI sale verde**.
+   Todo test del bot vive en `server/src/bot/*.test.ts` y en ningún otro lado.
+4. **`drizzle.config.ts` usa un glob (`./src/db/!(client).ts`), no una lista.** `db/bot.ts` entra
+   solo: no hay índice que tocar. (La enumeración existió y se cambió a glob justo porque
+   `db/hechos.ts` no se creaba, en silencio.) PK autoincremental: **`bigserial({ mode: "number" })`**,
+   que es lo que usa el repo — `serial()` no se usa ni una vez.
+5. **`tokens_cacheados` es una columna ambigua y hay que partirla en dos.** El SDK devuelve
+   `cache_creation_input_tokens` y `cache_read_input_tokens` por separado, los dos `number | null`.
+   Sumados, «la caché nunca pega» (creation alto, read en cero) se ve idéntico a que ande bien —
+   que es justo el síntoma que hay que poder ver. Van `tokens_cache_escritura` y
+   `tokens_cache_lectura`.
+6. **`SENALES_DIAS_ENFRIAMIENTO` no avisa nada.** T0 decía «default + warn (patrón de…)»: ese patrón
+   degrada en silencio absoluto. El bot **inaugura la variante ruidosa** (`console.warn('[bot] …')`),
+   a propósito, porque ocho variables mal escritas en silencio dejan un bot con topes equivocados.
+   Y la config va **lazy con `env` inyectable** (`configDesdeEnv(env = process.env)`), nunca
+   congelada en un `const` de módulo: `npm test` **no carga `server/.env`**, así que un módulo que
+   lea `process.env` al importarse y tire revienta la suite entera de 1.218 tests.
+7. **`ResumenPieza` no existe** (T2 lo nombra como si fuera del repo: aparece solo en este plan), y
+   **`leerPiezas()` no filtra nada** — devuelve borradores, retiradas y piezas de otras vendedoras.
+   Peor: **con el catálogo como está hoy en producción, el bot vería 9 piezas y 4 enviables, y las
+   4 son acuses de fuera-de-horario con `{{placeholders}}` sin resolver.** No hay flyer, ni precio,
+   ni temario hasta que alguien cargue plantillas. El T2 tiene que detectar el catálogo
+   funcionalmente vacío y decirlo, no armar un `<piezas_enviables>` que ofrezca cuatro mensajes de
+   «estamos fuera del horario» a las 3 de la tarde.
+   Además: un `gancho` **nunca** es enviable (es media frase), y `acuse` —la única clase de código
+   que sí lo es— no estaba en la unión de `mandar_pieza`. La unión de T3 está mal en los dos extremos.
+8. **`via` no vive en `server/src/piezas/`** (T5 manda leer `piezas/direccion.ts`, que no la nombra):
+   está en `procedencia/pieza.ts:138`. Y estampar `'bot'` sin agregarlo ahí **falla al leer, en
+   silencio**: `procedenciaDesdeColumnas` no lo reconoce y devuelve `aMano()`, así que todo reporte
+   lee los envíos del bot como línea de base. Es exactamente el modo de falla que la épica #169
+   existe para no cometer.
+
+**Trampas del SDK de Anthropic** (verificadas contra `@anthropic-ai/sdk@0.115.0` instalado, no de
+memoria), todas para T4: `toolRunner()` **no se hace `await` al construirlo** (es thenable: con
+`await` te devuelve el mensaje final en vez del runner); al excederse, `max_iterations` hace **break
+sin lanzar**, así que hay que ramificar sobre `stop_reason` (`end_turn` es el único caso bueno);
+el `usage` del mensaje final es **solo de la última llamada HTTP** — el total se acumula iterando;
+`APIConnectionError` **extiende** `APIError`, así que el orden de los `catch` decide si un timeout de
+red se reporta como error 500 de Anthropic; `temperature` **typechequea y la API la rechaza con 400**
+en Opus 5; el timeout por default es **600.000 ms (10 minutos)** y solo se fija en el constructor; y
+el mínimo cacheable son **512 tokens** — un system corto no se cachea y no da error.
+
+---
+
 ## Reglas globales para TODO subagente (van en cada prompt)
 
 1. **`EnvioControlado` es la ÚNICA puerta hacia `enviarTexto`.** Prohibido llamar al transporte
