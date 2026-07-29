@@ -68,9 +68,15 @@ npm install && npm run dev:app                     # Vite :5173 + la app de escr
 ## WhatsApp — la costura y la vinculación
 
 - **Todo pasa por la interfaz `TransporteWhatsapp`** (`server/src/whatsapp/transporte.ts`). Habla
-  **teléfonos, nunca JIDs**. Tres implementaciones: `falso` (dev/tests), `whatsmeow` (real), `cloud-api`
-  (futuro respaldo de Meta). Se elige por env `WHATSAPP_TRANSPORTE`. Si un JID aparece arriba de esa
-  línea, la costura falló (la conversión vive en `identidadWa.ts`).
+  **teléfonos, nunca JIDs**. **DOS implementaciones, no tres**: `falso` (dev/tests) y `whatsmeow`
+  (real). Se elige por env `WHATSAPP_TRANSPORTE` y `wiring.ts` no conoce ninguna otra. Acá decía que
+  había un tercero, `cloud-api` («futuro respaldo de Meta»), y **no existe** — verificado el
+  29-jul-2026: no hay archivo de transporte ni rama en el wiring. Lo que sí existe de la Cloud API es
+  **la mitad que RECIBE**: `server/src/webhook/whatsapp.ts` + `firma.ts` (#107, con validación HMAC).
+  Falta la que manda. Importa para cualquier discusión de mover el bot a otro runtime: mientras el
+  canal sea whatsmeow, el envío vive **atado a VPS1** —un proceso Go largo con la sesión en
+  `.wa-sessions/<numero>.db`—, y eso no se puede mudar a un edge sin cambiar antes de canal.
+  Si un JID aparece arriba de esa línea, la costura falló (la conversión vive en `identidadWa.ts`).
 - **Vincular un número** = server-side, aparte de la app (decisión **D13**): `cd server && npm run
   wa:vincular -- <numero>`. Da un código de 8 dígitos para poner en el teléfono (WhatsApp → Dispositivos
   vinculados → Vincular con número). La sesión queda en `server/.wa-sessions/` (**gitignored: es la
