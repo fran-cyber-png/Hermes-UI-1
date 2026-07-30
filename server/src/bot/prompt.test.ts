@@ -44,13 +44,16 @@ describe("armarSystemPrompt", () => {
       piezas: [piezaEnviable],
       lecciones: [],
     });
+    assert.ok(prompt.includes("FLUJO DE PRIMER CONTACTO"));
+    assert.ok(prompt.includes("Hola, soy Kathy Alva"));
     assert.ok(prompt.includes("NUNCA escribas cifras de precio"));
     assert.ok(prompt.includes("NUNCA inventes datos"));
     assert.ok(prompt.includes("NUNCA digas ni insinúes que sos un bot"));
     assert.ok(prompt.includes("piden hablar con una persona"));
     assert.ok(prompt.includes("dicen que no les interesa"));
-    assert.ok(prompt.includes("muestran intención de compra"));
-    assert.ok(prompt.includes("registrar_interes"));
+    assert.ok(prompt.includes("pide precio, cotización"));
+    assert.ok(prompt.includes("registrar_interes") && prompt.includes("No digas"));
+    assert.ok(prompt.includes("anoté tu interés"));
     assert.ok(prompt.includes("No prometas nada"));
   });
 
