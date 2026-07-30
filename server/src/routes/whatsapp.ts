@@ -58,9 +58,28 @@ function leerPasoDeSecuencia(vendedoraId: string): LeerPasoDeSecuencia {
   };
 }
 
-/** El estado de la sesión, para el banner (conectado / sin-vincular / baneado…). */
-whatsappRouter.get('/sesion', (_req, res) => {
-  res.json(whatsapp().transporte.estado());
+/**
+ * El estado de la sesión. Sin parámetro devuelve la primera CONECTADA (la que el
+ * semáforo del header debe mostrar: verde si ALGUNA línea puede mandar y recibir,
+ * caída solo si todas están caídas). Con `?numeroPropio=` devuelve el estado de
+ * ESA línea — para que el composer sepa si puede enviar POR la línea de esta
+ * conversación, no por la primera que encontró el gestor.
+ */
+whatsappRouter.get('/sesion', (req, res) => {
+  const numeroPropio = typeof req.query.numeroPropio === 'string' ? req.query.numeroPropio : undefined;
+  if (numeroPropio) {
+    const linea = gestorWhatsapp().de(numeroPropio);
+    if (!linea) {
+      res.status(404).json({ ok: false, message: 'esa línea no está corriendo' });
+      return;
+    }
+    res.json(linea.transporte.estado());
+    return;
+  }
+  // Semáforo global: la primera conectada, si hay; si no, la primera cualquiera.
+  const todas = gestorWhatsapp().todos();
+  const conectada = todas.find((l) => l.transporte.estado().estado === 'conectado');
+  res.json((conectada ?? todas[0])?.transporte.estado() ?? { estado: 'desconectado' as const, motivo: 'sin líneas' });
 });
 
 /**

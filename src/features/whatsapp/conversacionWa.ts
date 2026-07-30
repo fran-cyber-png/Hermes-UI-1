@@ -58,11 +58,12 @@ export type EstadoSesionWa =
   | { estado: 'cerrada'; motivo: string }
   | { estado: 'baneado'; codigo: string; expira: string };
 
-export function useSesionWa() {
+export function useSesionWa(numeroPropio?: string | null) {
+  const params = numeroPropio ? `?numeroPropio=${encodeURIComponent(numeroPropio)}` : '';
   return useQuery({
-    queryKey: ['wa', 'sesion'],
-    queryFn: () => api<EstadoSesionWa>('/api/whatsapp/sesion'),
-    refetchInterval: 10_000, // el estado cambia solo (caídas, ban): se revisa seguido
+    queryKey: ['wa', 'sesion', numeroPropio ?? ''],
+    queryFn: () => api<EstadoSesionWa>(`/api/whatsapp/sesion${params}`),
+    refetchInterval: 10_000,
   });
 }
 

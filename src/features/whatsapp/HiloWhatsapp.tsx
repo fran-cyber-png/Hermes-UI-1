@@ -308,7 +308,7 @@ export function HiloWhatsapp({
 }) {
   const telefono = conversacion.persona_id ?? '';
   const numeroPropio = conversacion.numero_propio ?? '';
-  const { data: sesion } = useSesionWa();
+  const { data: sesion } = useSesionWa(numeroPropio || undefined);
   const { hilo, enviar, enviarMedia, marcarLeido } = useConversacionWa(telefono);
   const finRef = useRef<HTMLDivElement>(null);
   // Solo lo NUEVO se anima: ids ya vistos por hilo (se resetea al cambiar de teléfono).
