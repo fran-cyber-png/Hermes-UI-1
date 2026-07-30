@@ -1,0 +1,235 @@
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import {
+  type EstadoSesion,
+  type MediaSaliente,
+  type MediaWhatsapp,
+  type MensajeWhatsapp,
+  type ResultadoEnvio,
+  type TransporteWhatsapp,
+} from './transporte.js';
+import { normalizarTelefono } from './identidadWa.js';
+import { RUTA_MEDIA, nombreSeguro } from './mediaDir.js';
+
+const GRAPH_BASE = 'https://graph.facebook.com/v25.0';
+
+/** El `type` de Meta → la clase canónica de Hermes. Sin entrada = no es media (texto, reacción...). */
+const CLASE_POR_TIPO: Record<string, MediaWhatsapp['clase']> = {
+  image: 'imagen',
+  video: 'video',
+  audio: 'audio',
+  document: 'documento',
+  sticker: 'sticker',
+};
+
+/** Extensión razonable a partir del mime — copia chica de la de `transporteWhatsmeow.ts`. No se
+ *  comparte: mover un helper de 6 líneas a un archivo estable por un spike no vale la pena. */
+function extensionDeMime(mime: string | null | undefined): string {
+  const mapa: Record<string, string> = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp',
+    'video/mp4': '.mp4',
+    'audio/ogg; codecs=opus': '.ogg',
+    'audio/ogg': '.ogg',
+    'audio/mpeg': '.mp3',
+    'application/pdf': '.pdf',
+  };
+  return mapa[mime ?? ''] ?? '.bin';
+}
+
+export interface OpcionesCloudApi {
+  /** El número "From" del test (Step 1 de API Setup), sin `+`. */
+  numeroPropio: string;
+  /** El "Phone number ID" que muestra Meta — NO es el número. */
+  phoneNumberId: string;
+  /** El access token (temporal o permanente) de "API Setup". */
+  token: string;
+}
+
+/**
+ * SPIKE — `TransporteWhatsapp` sobre la WhatsApp Cloud API oficial de Meta.
+ *
+ * Existe para probar, con un número de PRUEBA aparte (nunca una de las tres
+ * líneas whatsmeow de producción), si Hermes puede hablar Cloud API antes de
+ * construir nada serio. Documentado en el CLAUDE.md como "falta la mitad que
+ * manda" — esto es esa mitad, a propósito acotada:
+ *
+ *   · Sin sesión que vincular: la Cloud API es HTTP sin estado, así que
+ *     `iniciar()` solo confirma que el token abre (no hay QR ni pairing acá:
+ *     eso ya lo hiciste en el dashboard de Meta).
+ *   · `enviarMedia` NO está implementado — el objetivo de este spike es
+ *     validar texto de ida y vuelta, no paridad completa con whatsmeow.
+ *   · Fuera de la ventana de 24h, Meta rechaza `enviarTexto` con su propio
+ *     error (código 131047): se propaga tal cual, no se disfraza.
+ *
+ * Los ENTRANTES no llegan por acá directamente: Meta los entrega por el
+ * webhook (`webhook/whatsapp.ts`), que llama a `recibirEntrante()` cuando el
+ * `phone_number_id` del payload coincide con el de este transporte — así
+ * `IngestaWhatsapp` los ve exactamente igual que los de whatsmeow.
+ */
+export class TransporteCloudApi implements TransporteWhatsapp {
+  readonly nombre = 'cloud-api' as const;
+  readonly numeroPropio: string;
+  /** Público: el webhook lo necesita para saber si un payload entrante es DE este número. */
+  readonly phoneNumberId: string;
+
+  private readonly token: string;
+  private sesion: EstadoSesion = { estado: 'conectando' };
+  private susMensaje: ((m: MensajeWhatsapp) => void)[] = [];
+  private susEstado: ((e: EstadoSesion) => void)[] = [];
+
+  constructor(opts: OpcionesCloudApi) {
+    const numero = normalizarTelefono(opts.numeroPropio);
+    if (!numero) throw new Error(`Número propio inválido: "${opts.numeroPropio}"`);
+    this.numeroPropio = numero;
+    this.phoneNumberId = opts.phoneNumberId;
+    this.token = opts.token;
+  }
+
+  private cambiarEstado(e: EstadoSesion): void {
+    this.sesion = e;
+    for (const cb of this.susEstado) cb(e);
+  }
+
+  /** No hay sesión que levantar: solo confirmamos que el token es válido para este número. */
+  async iniciar(): Promise<void> {
+    try {
+      const r = await fetch(`${GRAPH_BASE}/${this.phoneNumberId}?fields=verified_name`, {
+        headers: { Authorization: `Bearer ${this.token}` },
+      });
+      if (!r.ok) {
+        const cuerpo = await r.text();
+        this.cambiarEstado({
+          estado: 'desconectado',
+          motivo: `Meta rechazó el token (${r.status}): ${cuerpo.slice(0, 300)}`,
+        });
+        return;
+      }
+      this.cambiarEstado({ estado: 'conectado', telefono: this.numeroPropio });
+    } catch (err) {
+      this.cambiarEstado({ estado: 'desconectado', motivo: (err as Error).message });
+    }
+  }
+
+  estado(): EstadoSesion {
+    return this.sesion;
+  }
+  onMensaje(cb: (m: MensajeWhatsapp) => void): void {
+    this.susMensaje.push(cb);
+  }
+  onEstado(cb: (e: EstadoSesion) => void): void {
+    this.susEstado.push(cb);
+  }
+
+  private async post(body: Record<string, unknown>): Promise<any> {
+    const r = await fetch(`${GRAPH_BASE}/${this.phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', ...body }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(`Cloud API (${r.status}): ${JSON.stringify(data)}`);
+    return data;
+  }
+
+  async enviarTexto(telefono: string, texto: string): Promise<ResultadoEnvio> {
+    if (this.sesion.estado !== 'conectado') {
+      throw new Error(`No se puede enviar: la sesión está "${this.sesion.estado}".`);
+    }
+    const numero = normalizarTelefono(telefono);
+    if (!numero) throw new Error(`Teléfono inválido: "${telefono}"`);
+    const data = await this.post({ to: numero, type: 'text', text: { body: texto } });
+    return { idExterno: data.messages[0].id, ocurridoEn: new Date() };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async enviarMedia(_telefono: string, _media: MediaSaliente): Promise<ResultadoEnvio> {
+    throw new Error(
+      'TransporteCloudApi todavía no manda media: este spike solo valida texto de ida y vuelta.',
+    );
+  }
+
+  async marcarLeido(_telefono: string, idsExternos: string[]): Promise<void> {
+    for (const id of idsExternos) {
+      // Best-effort, como whatsmeow: un tick azul que falla no puede tumbar la conversación.
+      await this.post({ status: 'read', message_id: id }).catch(() => {});
+    }
+  }
+
+  async detener(): Promise<void> {
+    // Sin sesión que cerrar: es HTTP sin estado.
+  }
+
+  /**
+   * Llamado por el webhook con el `value` CRUDO del campo `messages` de Meta
+   * (`{ metadata, contacts, messages }`). Traduce cada entrante a
+   * `MensajeWhatsapp` y lo emite — el mismo contrato que usa whatsmeow, para
+   * que `IngestaWhatsapp` no sepa ni tenga que saber de dónde vino.
+   */
+  async recibirEntrante(value: any): Promise<void> {
+    const nombrePorWaId: Record<string, string | null> = {};
+    for (const c of value?.contacts ?? []) {
+      if (c?.wa_id) nombrePorWaId[c.wa_id] = c?.profile?.name ?? null;
+    }
+    for (const m of value?.messages ?? []) {
+      const mensaje = await this.aMensaje(m, nombrePorWaId);
+      if (mensaje) for (const cb of this.susMensaje) cb(mensaje);
+    }
+  }
+
+  private async aMensaje(m: any, nombrePorWaId: Record<string, string | null>): Promise<MensajeWhatsapp | null> {
+    if (!m?.id || !m?.from) return null;
+    const telefono = normalizarTelefono(m.from);
+    if (!telefono) return null;
+
+    const media = await this.bajarMediaSiHay(m);
+    const texto: string | null = m.text?.body ?? (m.type ? (m[m.type]?.caption ?? null) : null);
+
+    return {
+      idExterno: m.id,
+      numeroPropio: this.numeroPropio,
+      telefono,
+      esMio: false, // el webhook solo entrega ENTRANTES; lo que mandamos ya lo sabemos por el POST.
+      esGrupo: false,
+      ocurridoEn: m.timestamp ? new Date(Number(m.timestamp) * 1000) : new Date(),
+      nombreVisible: nombrePorWaId[m.from] ?? null,
+      texto,
+      clase: m.type === 'text' ? 'texto' : media ? 'multimedia' : 'otro',
+      media,
+    };
+  }
+
+  /** Media entrante: dos GETs (metadata → bytes), los dos con Bearer. Nunca inventa un adjunto. */
+  private async bajarMediaSiHay(m: any): Promise<MediaWhatsapp | null> {
+    const clase = CLASE_POR_TIPO[m?.type as string];
+    const idMedia = clase ? m[m.type]?.id : null;
+    if (!clase || !idMedia) return null;
+
+    try {
+      const metaResp = await fetch(`${GRAPH_BASE}/${idMedia}`, {
+        headers: { Authorization: `Bearer ${this.token}` },
+      });
+      const meta: any = await metaResp.json();
+      if (!metaResp.ok || !meta?.url) return null;
+
+      const bin = await fetch(meta.url, { headers: { Authorization: `Bearer ${this.token}` } });
+      if (!bin.ok) return null;
+
+      const bytes = Buffer.from(await bin.arrayBuffer());
+      const archivo = nombreSeguro(`wa-cloud-${idMedia}${extensionDeMime(meta.mime_type)}`);
+      await writeFile(join(RUTA_MEDIA, archivo), bytes);
+
+      return {
+        clase,
+        archivo,
+        mime: meta.mime_type ?? null,
+        nombre: m[m.type]?.filename ?? null,
+      };
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.log(`[cloud-api media] no se pudo bajar ${idMedia}: ${(err as Error).message}`);
+      return null;
+    }
+  }
+}

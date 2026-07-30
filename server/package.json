@@ -32,6 +32,7 @@
     "cursos:gaps": "tsx src/scripts/gapsDeCurso.ts",
     "hechos:sembrar": "tsx src/scripts/sembrarHechos.ts",
     "wa:vincular": "tsx src/whatsapp/vincular.ts",
+    "wa:cloud-api:probar": "tsx src/scripts/probarCloudApi.ts",
     "auto:simulacro": "tsx src/scripts/autoSimulacro.ts",
     "cerberus:ingestar": "tsx src/scripts/cerberus.ts ingestar",
     "cerberus:proyectar": "tsx src/scripts/cerberus.ts proyectar",

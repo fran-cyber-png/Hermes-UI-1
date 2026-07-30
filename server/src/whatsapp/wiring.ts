@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { TransporteFalso } from './transporteFalso.js';
 import { TransporteWhatsmeow } from './transporteWhatsmeow.js';
+import { TransporteCloudApi } from './transporteCloudApi.js';
 import { IngestaWhatsapp } from './ingesta.js';
 import { EnvioControlado } from './envioControlado.js';
 import { repositorioDrizzle } from './repositorioDrizzle.js';
@@ -20,6 +21,13 @@ import type { TransporteWhatsapp } from './transporte.js';
  *   · falso     → para desarrollo y demo, sin vincular nada.
  *   · whatsmeow → el real. La sesión se vincula aparte (`npm run wa:vincular`,
  *                 decisión D13); acá solo se conecta a la sesión ya guardada.
+ *   · cloud-api → SPIKE (30-jul-2026), un número de PRUEBA de la Cloud API
+ *                 oficial de Meta. Se monta SIEMPRE ADEMÁS de lo elegido por
+ *                 `WHATSAPP_TRANSPORTE`, nunca en su lugar: se prende solo si
+ *                 `WHATSAPP_CLOUD_API_NUMERO_PROPIO` está puesto (ausente =
+ *                 apagado). Si fuera excluyente, prenderlo en VPS1 apagaría
+ *                 las tres líneas whatsmeow reales — exactamente lo que este
+ *                 diseño existe para no poder hacer.
  *
  * **Qué números corren y cómo se los encuentra vive en `gestor.ts`**, que es puro
  * y se testea sin base. Acá queda el cableado: instanciar, enganchar la ingesta y
@@ -59,6 +67,17 @@ function montar(numero: string, cual: string): WhatsappArmado {
   if (cual === 'whatsmeow') {
     const dir = fileURLToPath(new URL('../../.wa-sessions/', import.meta.url));
     transporte = new TransporteWhatsmeow(numero, dir);
+  } else if (cual === 'cloud-api') {
+    // SPIKE (30-jul-2026): número de PRUEBA de la Cloud API oficial de Meta —
+    // nunca una de las tres líneas whatsmeow de producción. Ver transporteCloudApi.ts.
+    const phoneNumberId = process.env.WHATSAPP_CLOUD_API_PHONE_NUMBER_ID;
+    const token = process.env.WHATSAPP_CLOUD_API_TOKEN;
+    if (!phoneNumberId || !token) {
+      throw new Error(
+        'WHATSAPP_TRANSPORTE=cloud-api necesita WHATSAPP_CLOUD_API_PHONE_NUMBER_ID y WHATSAPP_CLOUD_API_TOKEN.',
+      );
+    }
+    transporte = new TransporteCloudApi({ numeroPropio: numero, phoneNumberId, token });
   } else {
     falso = new TransporteFalso({ telefono: numero });
     transporte = falso;
@@ -125,6 +144,16 @@ export function arrancarWhatsapp(): GestorWhatsapp {
     for (const n of numeros) g.agregar(montar(n, cual));
   }
 
+  // SPIKE cloud-api (30-jul-2026): número de PRUEBA de la Cloud API oficial de
+  // Meta, SIEMPRE ADEMÁS de lo de arriba — nunca en su lugar. `WHATSAPP_TRANSPORTE`
+  // decide whatsmeow/falso para las líneas de siempre; esto se prende con SU
+  // PROPIA variable, ausente = apagado (igual que `BOT_LINEAS`), justamente para
+  // que activarlo en VPS1 no pueda apagar las tres líneas reales de las vendedoras.
+  const numeroCloudApi = process.env.WHATSAPP_CLOUD_API_NUMERO_PROPIO;
+  if (numeroCloudApi) {
+    g.agregar(montar(numeroCloudApi, 'cloud-api'));
+  }
+
   gestor = g;
   return g;
 }
@@ -132,6 +161,16 @@ export function arrancarWhatsapp(): GestorWhatsapp {
 /** El gestor vivo. Lanza si se pide antes de arrancar. */
 export function gestorWhatsapp(): GestorWhatsapp {
   if (!gestor) throw new Error('WhatsApp no está arrancado todavía.');
+  return gestor;
+}
+
+/**
+ * Como `gestorWhatsapp()`, pero `null` en vez de lanzar. Para consumidores que
+ * no pueden tumbar el proceso si WhatsApp corre con otro transporte o todavía
+ * no arrancó — el webhook de la Cloud API (`webhook/whatsapp.ts`) es el caso:
+ * un POST de Meta no puede 500 solo porque el server local corre `falso`.
+ */
+export function gestorWhatsappSiActivo(): GestorWhatsapp | null {
   return gestor;
 }
 

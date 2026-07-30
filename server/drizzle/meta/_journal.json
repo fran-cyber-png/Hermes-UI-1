@@ -64,6 +64,13 @@
       "when": 1785755568155,
       "tag": "0008_sesion_cerberus_persistida",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785841968155,
+      "tag": "0009_cimientos_del_bot",
+      "breakpoints": true
     }
   ]
 }

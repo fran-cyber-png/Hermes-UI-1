@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
 import { db } from "../db/client.js";
 import { events } from "../db/schema.js";
+import { gestorWhatsappSiActivo } from "../whatsapp/wiring.js";
+import { TransporteCloudApi } from "../whatsapp/transporteCloudApi.js";
 
 /**
  * Receptor de la WhatsApp Cloud API — la ACTIVACIÓN de la atribución de click-to-WhatsApp (docs/36 §2).
@@ -20,6 +22,12 @@ import { events } from "../db/schema.js";
  *  - suscribir el webhook al campo `messages`, apuntando a `https://<backend-público>/webhook/whatsapp`;
  *  - `WHATSAPP_VERIFY_TOKEN` en el `.env` del backend (el mismo que se pone en Meta);
  *  - el backend accesible por HTTPS público (hoy es tailnet — falta exponer esta ruta).
+ *
+ * SPIKE (30-jul-2026): además de guardar el crudo para atribución, si hay un
+ * `TransporteCloudApi` activo (número de PRUEBA, `WHATSAPP_TRANSPORTE=cloud-api`)
+ * y el `phone_number_id` del payload es el suyo, este archivo también le entrega
+ * el mensaje — así aparece como conversación real en Hermes, no solo en `events`.
+ * Ver `whatsapp/transporteCloudApi.ts`.
  */
 
 /** GET: verificación del webhook. Meta manda hub.challenge al suscribir; hay que devolverlo. */
@@ -75,6 +83,23 @@ export async function recibirWhatsapp(req: Request, res: Response): Promise<void
               },
             })
             .onConflictDoNothing({ target: [events.source, events.externalId] });
+        }
+
+        // SPIKE cloud-api (30-jul-2026): si hay un transporte Cloud API activo Y
+        // este `value` es DE ese número (mismo phone_number_id), también se lo
+        // entregamos — así aparece como conversación real en Hermes y no solo
+        // en `events` (que es atribución cruda, no la cola). Ver transporteCloudApi.ts.
+        const linea = gestorWhatsappSiActivo()
+          ?.todos()
+          .find((l) => l.transporte instanceof TransporteCloudApi);
+        if (
+          linea &&
+          linea.transporte instanceof TransporteCloudApi &&
+          value.metadata?.phone_number_id === linea.transporte.phoneNumberId
+        ) {
+          await linea.transporte.recibirEntrante(value).catch((err: unknown) => {
+            console.error("[webhook whatsapp] cloud-api recibirEntrante falló:", (err as Error).message);
+          });
         }
       }
     }
