@@ -4,9 +4,11 @@ import { botPendientes, botRespuestas, botPausas, botCalificaciones } from "../d
 import type { ConfigBot } from "./config.js";
 import { decidir, type HechosParaDecidir } from "./decision.js";
 import { crearAgente, type ClienteAnthropic } from "./agente.js";
+import { trocear } from "./chunker.js";
 import { armarContextoContacto } from "./prompt.js";
 import { hiloDe } from "../whatsapp/hilo.js";
 import { gestorWhatsappSiActivo } from "../whatsapp/wiring.js";
+import { puertaDe } from "../whatsapp/gestor.js";
 import type { Accion, Turno, ResumenPieza } from "./acciones.js";
 import type { Hecho } from "../hechos/catalogo.js";
 import { CATALOGO_POR_DEFECTO } from "../hechos/catalogo.js";
@@ -134,9 +136,41 @@ async function procesarClaim(
       return;
     }
 
-    const estadoRespuesta: "sombra" | "bloqueada" =
-      resultado.texto === null ? "bloqueada" : "sombra";
+    const modo = cfg.modo === "automatico" ? "automatico" : "sombra";
+
+    const estadoRespuesta: "sombra" | "enviada" | "bloqueada" =
+      resultado.texto === null ? "bloqueada" : modo === "automatico" ? "enviada" : "sombra";
     const motivoRespuesta = resultado.texto === null ? "guardrail" : null;
+
+    // Enviar si es automático y hay texto
+    if (modo === "automatico" && resultado.texto) {
+      const telefono = extraerTelefono(clave);
+      if (telefono) {
+        const burbujas = trocear(resultado.texto);
+        const gestor = gestorWhatsappSiActivo();
+        const puerta = gestor ? puertaDe(numeroPropio, gestor) : null;
+        if (puerta?.ok && puerta.envio) {
+          for (let i = 0; i < burbujas.length; i++) {
+            const burbuja = burbujas[i]!;
+            try {
+              await puerta.envio.enviar({
+                vendedoraId: "bot",
+                numeroPropio,
+                telefono,
+                texto: burbuja,
+                referencia: `bot-auto-${clave}`,
+                automatico: true,
+              });
+              if (i < burbujas.length - 1) {
+                await new Promise((r) => setTimeout(r, 2000 + Math.random() * 4000));
+              }
+            } catch (err) {
+              console.error(`[bot despachador] error enviando burbuja ${i}:`, (err as Error).message);
+            }
+          }
+        }
+      }
+    }
 
     await db.insert(botRespuestas).values({
       clave,
@@ -230,7 +264,7 @@ async function armarHechos(
     : false;
 
   return {
-    modo: "sombra" as const,
+    modo: cfg.modo as "sombra" | "apagado" | "automatico",
     lineaHabilitada: cfg.lineas.includes(numeroPropio),
     pausa,
     huboSalienteHumanoDespuesDe: null,
