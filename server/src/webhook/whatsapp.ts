@@ -126,8 +126,19 @@ export async function recibirWhatsapp(req: Request, res: Response): Promise<void
                   texto: msg.texto,
                 }));
 
-                const respuesta = await responderConBot(textoEntrante, historial);
+                // SPIKE: si es el primer mensaje (lead nuevo), anteponer el
+                // contexto de lead al texto para que el bot sepa de qué curso viene.
+                let textoParaBot = textoEntrante;
+                if (historial.length === 0) {
+                  textoParaBot =
+                    `[CONTEXTO: Este lead llego por un anuncio del curso "Inteligencia y Contrainteligencia". ` +
+                    `Es un lead nuevo, primer contacto.]\n\n${textoEntrante}`;
+                  console.log("[bot spike] lead nuevo, contexto agregado:", textoParaBot.slice(0, 120));
+                }
+
+                const respuesta = await responderConBot(textoParaBot, historial);
                 if (respuesta && linea.transporte instanceof TransporteCloudApi) {
+                  console.log("[bot spike] respondiendo:", respuesta.slice(0, 100));
                   await linea.transporte.enviarTexto(m.from, respuesta);
                 }
               } catch (err) {
