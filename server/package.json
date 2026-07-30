@@ -44,6 +44,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1099.0",
     "@types/nodemailer": "^8.0.1",
     "@whatsmeow-node/whatsmeow-node": "0.7.0",
     "cors": "^2.8.5",

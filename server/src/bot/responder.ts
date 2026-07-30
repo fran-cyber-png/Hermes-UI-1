@@ -2,13 +2,18 @@
  * SPIKE — respuesta del bot, para probar calidad de respuestas automáticas.
  *
  * No es el bot final (T2-T13): no hay cola, no hay debounce, no hay
- * calificaciones ni follow-ups. Es una llamada directa a Anthropic para
+ * calificaciones ni follow-ups. Es una llamada directa a AWS Bedrock para
  * evaluar si las respuestas se sienten "como respondería una asesora de
  * Goberna".
  *
  * El prompt se construye sobre la entrevista con Kathy Alva (doc:
  * Clasificacion-Respuestas-Automaticas-Entrenamiento.docx).
+ *
+ * Credenciales: AWS (access key + secret + session token) por env
+ * AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_REGION.
  */
+
+import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 
 const SYSTEM_PROMPT = `Eres Kathy Alva, asesora académica de Goberna, la escuela de formación política. Respondes mensajes de WhatsApp de personas interesadas en cursos, diplomados y programas de formación política.
 
@@ -48,65 +53,75 @@ CURSOS DESTACADOS (si preguntan):
 - Análisis electoral
 (no inventes detalles que no estén en este contexto)`;
 
-/**
- * Convierte el historial de mensajes del hilo al formato que espera Anthropic.
- * Cada mensaje es { role: 'user' | 'assistant', content: string }.
- */
+/** El historial de mensajes del hilo. */
 interface TurnoConversacion {
   direccion: 'entrante' | 'saliente';
   texto: string | null;
+}
+
+/** Un cliente Bedrock por proceso (lo crea una sola vez). */
+let cliente: BedrockRuntimeClient | null = null;
+
+function clienteBedrock(): BedrockRuntimeClient {
+  if (cliente) return cliente;
+  const region = process.env.AWS_REGION || 'us-east-1';
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  const sessionToken = process.env.AWS_SESSION_TOKEN;
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error('AWS_ACCESS_KEY_ID y AWS_SECRET_ACCESS_KEY no están configuradas');
+  }
+  cliente = new BedrockRuntimeClient({
+    region,
+    credentials: {
+      accessKeyId,
+      secretAccessKey,
+      ...(sessionToken ? { sessionToken } : {}),
+    },
+  });
+  return cliente;
 }
 
 export async function responderConBot(
   mensaje: string,
   historial: TurnoConversacion[] = [],
 ): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY no está configurada');
-  }
+  const client = clienteBedrock();
 
-  // Construir el historial para Anthropic
+  // Construir el historial para Bedrock (Anthropic models on Bedrock).
   const messages: { role: 'user' | 'assistant'; content: string }[] = [];
 
-  for (const turno of historial.slice(-10)) { // últimos 10 turnos
+  for (const turno of historial.slice(-10)) {
     if (!turno.texto) continue;
     messages.push({
       role: turno.direccion === 'saliente' ? 'assistant' : 'user',
       content: turno.texto,
     });
   }
-
-  // Agregar el mensaje actual
   messages.push({ role: 'user', content: mensaje });
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: process.env.BOT_MODELO || 'claude-sonnet-4-5-20250929',
-      max_tokens: 300,
-      system: SYSTEM_PROMPT,
-      messages,
-    }),
+  const body = {
+    anthropic_version: 'bedrock-2023-05-31',
+    max_tokens: 300,
+    system: SYSTEM_PROMPT,
+    messages,
+  };
+
+  const command = new InvokeModelCommand({
+    modelId: process.env.BOT_MODELO || 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+    contentType: 'application/json',
+    accept: 'application/json',
+    body: JSON.stringify(body),
   });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Anthropic (${response.status}): ${error.slice(0, 200)}`);
-  }
-
-  const data = await response.json() as {
+  const response = await client.send(command);
+  const responseBody = JSON.parse(new TextDecoder().decode(response.body)) as {
     content: { type: string; text?: string }[];
   };
 
-  const texto = data.content?.[0]?.text?.trim();
+  const texto = responseBody.content?.[0]?.text?.trim();
   if (!texto) {
-    throw new Error('Anthropic devolvió una respuesta vacía');
+    throw new Error('Bedrock devolvió una respuesta vacía');
   }
 
   return texto;
