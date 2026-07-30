@@ -66,6 +66,8 @@ export interface ConfigBot {
   maxRespuestasHoraLinea: number;
   /** Cuántos follow-ups como mucho en un día. El follow-up es lo único que el bot INICIA. */
   followupsDia: number;
+  /** Modo: sombra (piensa y guarda) o automatico (piensa y envía). Default sombra. */
+  modo: "sombra" | "automatico";
   /**
    * La ventana en la que es aceptable que salga un follow-up, en horas locales
    * de Lima. Ver `HORARIO_DE_ATENCION` abajo: no es un número suelto.
@@ -110,7 +112,7 @@ export interface ConfigBot {
 const HORARIO_DE_ATENCION = { desde: 9, hasta: 20 } as const;
 
 export const CONFIG_BOT_POR_DEFECTO: ConfigBot = {
-  modelo: "claude-opus-5",
+  modelo: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
   // Vacío: el bot arranca apagado y hay que nombrar cada línea a mano.
   lineas: [],
   bufferSegundos: 25,
@@ -119,6 +121,7 @@ export const CONFIG_BOT_POR_DEFECTO: ConfigBot = {
   followupsDia: 20,
   followupHoraDesde: HORARIO_DE_ATENCION.desde,
   followupHoraHasta: HORARIO_DE_ATENCION.hasta,
+  modo: "sombra",
 };
 
 /** Cómo se avisa que algo del entorno no se pudo usar. Inyectable para poder testear el aviso. */
@@ -225,6 +228,7 @@ export function configDesdeEnv(
     followupsDia: entero(env, "BOT_FOLLOWUPS_DIA", d.followupsDia, 0, 500, avisar),
     followupHoraDesde,
     followupHoraHasta,
+    modo: (env.BOT_MODO?.trim() || d.modo) as "sombra" | "automatico",
   };
 
   // Una ventana al revés (o de largo cero) NO es un tope raro: es una ventana
