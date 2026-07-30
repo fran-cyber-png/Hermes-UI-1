@@ -230,7 +230,7 @@ async function armarHechos(
     : false;
 
   return {
-    modo: "sombra",
+    modo: "sombra" as const,
     lineaHabilitada: cfg.lineas.includes(numeroPropio),
     pausa,
     huboSalienteHumanoDespuesDe: null,
@@ -239,7 +239,8 @@ async function armarHechos(
     maxTurnosDia: cfg.maxTurnosDia,
     respuestasUltimaHoraLinea: respuestasUltimaHora,
     maxRespuestasHoraLinea: cfg.maxRespuestasHoraLinea,
-    transporteConectado,
+    // En sombra no hace falta el transporte: solo pensamos y guardamos.
+    transporteConectado: true,
     frenado: false,
   };
 }
