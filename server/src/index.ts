@@ -55,6 +55,9 @@ import { adminRouter } from "./routes/admin.js";
 import { requiereServicio } from "./auth/servicio.js";
 import { db } from "./db/client.js";
 import { sembrarAliasCurso } from "./cursos/repositorio.js";
+import { arrancarDespachador } from "./bot/despachador.js";
+import { configDesdeEnv, anunciarConfig } from "./bot/config.js";
+import { AnthropicBedrock } from "@anthropic-ai/bedrock-sdk";
 
 const app = express();
 const port = process.env.PORT ? Number(process.env.PORT) : 4100;
@@ -185,4 +188,30 @@ app.listen(port, () => {
         `[cursos] no se pudo sembrar la tabla de alias (¿falta \`npm run db:push\`?): ${(err as Error).message}`,
       ),
     );
+
+  // EL BOT ASESOR COMERCIAL — loop de despacho con debounce, modo sombra.
+  // Sin credenciales de AWS, el despachador arranca pero sin LLM:
+  // los claims se procesan igual y guardan bot_respuestas(estado: 'error').
+  const cfgBot = configDesdeEnv();
+  anunciarConfig(cfgBot);
+  let clienteLLM: any = null;
+  if (cfgBot.lineas.length > 0) {
+    try {
+      const awsAccessKey = process.env.AWS_ACCESS_KEY_ID;
+      const awsSecretKey = process.env.AWS_SECRET_ACCESS_KEY;
+      const region = process.env.AWS_REGION || "us-east-1";
+      if (awsAccessKey && awsSecretKey && process.env.AWS_SESSION_TOKEN === undefined) {
+        clienteLLM = new AnthropicBedrock({
+          awsAccessKey,
+          awsSecretKey,
+          awsRegion: region,
+        }) as any;
+        arrancarDespachador(cfgBot, clienteLLM);
+      } else {
+        console.warn("[bot] AWS credenciales no configuradas o detectado AWS_SESSION_TOKEN: despachador no arranca");
+      }
+    } catch (err) {
+      console.error("[bot] no se pudo crear cliente Bedrock:", (err as Error).message);
+    }
+  }
 });
