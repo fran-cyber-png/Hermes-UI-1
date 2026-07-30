@@ -3,6 +3,9 @@ import { db } from "../db/client.js";
 import { events } from "../db/schema.js";
 import { gestorWhatsappSiActivo } from "../whatsapp/wiring.js";
 import { TransporteCloudApi } from "../whatsapp/transporteCloudApi.js";
+import { responderConBot } from "../bot/responder.js";
+import { configDesdeEnv } from "../bot/config.js";
+import { hiloDe } from "../whatsapp/hilo.js";
 
 /**
  * Receptor de la WhatsApp Cloud API — la ACTIVACIÓN de la atribución de click-to-WhatsApp (docs/36 §2).
@@ -100,6 +103,38 @@ export async function recibirWhatsapp(req: Request, res: Response): Promise<void
           await linea.transporte.recibirEntrante(value).catch((err: unknown) => {
             console.error("[webhook whatsapp] cloud-api recibirEntrante falló:", (err as Error).message);
           });
+
+          // SPIKE bot: si el mensaje es del número de prueba y el bot está
+          // habilitado para esta línea, responder automáticamente.
+          const cfgBot = configDesdeEnv();
+          const numeroLinea = linea.numero;
+          if (cfgBot.lineas.includes(numeroLinea)) {
+            for (const m of value.messages ?? []) {
+              if (!m?.id || !m?.from) continue;
+              // Solo responder al número de prueba (o a cualquiera si se configura).
+              // Por ahora: solo 955135507 (el test_to de la cloud-api).
+              const esTest = m.from.replace(/\D/g, '').endsWith('955135507');
+              if (!esTest) continue;
+              const textoEntrante = m.text?.body?.trim();
+              if (!textoEntrante) continue;
+
+              try {
+                // Historial para contexto (últimos 10 turnos).
+                const hilo = await hiloDe(db, m.from, numeroLinea).catch(() => []);
+                const historial = hilo.slice(-10).map((msg: any) => ({
+                  direccion: msg.direccion,
+                  texto: msg.texto,
+                }));
+
+                const respuesta = await responderConBot(textoEntrante, historial);
+                if (respuesta && linea.transporte instanceof TransporteCloudApi) {
+                  await linea.transporte.enviarTexto(m.from, respuesta);
+                }
+              } catch (err) {
+                console.error("[bot spike] error respondiendo:", (err as Error).message);
+              }
+            }
+          }
         }
       }
     }
