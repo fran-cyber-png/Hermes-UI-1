@@ -9,6 +9,8 @@ import { armarContextoContacto } from "./prompt.js";
 import { hiloDe } from "../whatsapp/hilo.js";
 import { gestorWhatsappSiActivo } from "../whatsapp/wiring.js";
 import { puertaDe } from "../whatsapp/gestor.js";
+import { proyectarMensaje } from "../whatsapp/proyectar.js";
+import { repositorioDrizzle } from "../whatsapp/repositorioDrizzle.js";
 import type { Accion, Turno, ResumenPieza } from "./acciones.js";
 import type { Hecho } from "../hechos/catalogo.js";
 import { CATALOGO_POR_DEFECTO } from "../hechos/catalogo.js";
@@ -153,7 +155,7 @@ async function procesarClaim(
           for (let i = 0; i < burbujas.length; i++) {
             const burbuja = burbujas[i]!;
             try {
-              await puerta.envio.enviar({
+              const r = await puerta.envio.enviar({
                 vendedoraId: "bot",
                 numeroPropio,
                 telefono,
@@ -161,6 +163,23 @@ async function procesarClaim(
                 referencia: `bot-auto-${clave}`,
                 automatico: true,
               });
+              if (r.ok) {
+                // Persistir el saliente para que aparezca en la conversación
+                const proy = proyectarMensaje({
+                  idExterno: r.idExterno,
+                  numeroPropio,
+                  telefono,
+                  esMio: true,
+                  esGrupo: false,
+                  ocurridoEn: r.ocurridoEn,
+                  nombreVisible: null,
+                  texto: burbuja,
+                  clase: "texto",
+                });
+                if ("evento" in proy) {
+                  await repositorioDrizzle.persistir(proy.evento, proy.interaccion);
+                }
+              }
               if (i < burbujas.length - 1) {
                 await new Promise((r) => setTimeout(r, 2000 + Math.random() * 4000));
               }
