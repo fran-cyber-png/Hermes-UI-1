@@ -95,7 +95,7 @@ export async function responderConBot(
   messages.push({ role: 'user', content: mensaje });
 
   const response = await anthropic.messages.create({
-    model: process.env.BOT_MODELO || 'us.anthropic.claude-3-5-sonnet-20240620-v1:0',
+    model: process.env.BOT_MODELO || 'anthropic.claude-haiku-4-5-20251001-v1:0',
     max_tokens: 300,
     system: SYSTEM_PROMPT,
     messages,
