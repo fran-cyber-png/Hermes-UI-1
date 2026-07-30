@@ -1315,3 +1315,11 @@ export const sesionesCerberus = pgTable("sesiones_cerberus", {
   /** Desde cuándo corre la vigencia. Se pisa en cada login. */
   guardadaEn: timestamp("guardada_en", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export {
+  botEstado,
+  botPendientes,
+  botRespuestas,
+  botPausas,
+  botCalificaciones,
+} from "./bot.js";
