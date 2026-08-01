@@ -127,7 +127,7 @@ export function crearTools(
   definiciones.push({
     name: "escalar_a_vendedora",
     description:
-      "Escala la conversación a una vendedora humana. Usar cuando el lead pide hablar con alguien, pregunta si sos un bot, quiere comprar ya, o la pregunta no tiene respuesta en el catálogo.",
+      "Escala la conversación a una vendedora humana. Usar cuando el lead pide hablar con alguien, pregunta si eres un bot, quiere comprar ya, o la pregunta no tiene respuesta en el catálogo.",
     input_schema: {
       type: "object",
       properties: {

@@ -200,7 +200,7 @@ export { normalizarTexto as normalizarParaSpam };
  * Va acá y no disfrazada de `precio` porque este valor termina en
  * `bot_respuestas.motivo`, que es lo que alguien va a leer para entender qué pasó.
  */
-export type Violacion = "precio" | "automatismo" | "humanidad" | "largo";
+export type Violacion = "precio" | "automatismo" | "humanidad" | "largo" | "voseo";
 
 export type Veredicto = { ok: true } | { ok: false; violacion: Violacion; detalle: string };
 
@@ -1102,6 +1102,44 @@ function hayPrecio(crudo: string): Veredicto {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// VOSEO — el registro no se negocia
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * LAS FORMAS DEL VOSEO RIONPLATENSE, NORMALIZADAS Y CON BORDES DE ESPACIO.
+ *
+ * La regla del dueño (1-ago-2026): el bot se escribe en español neutro del
+ * PERÚ, y el voseo se le escapaba porque los hechos de `hechos/catalogo.ts`
+ * estaban escritos en ese registro («tenés», «entrás», «Podés») y el modelo
+ * copiaba la conjugación del texto que afirma.
+ *
+ * El criterio para entrar acá es el MISMO de `PALABRAS_DE_AUTOMATISMO`, pero
+ * al revés y más estricto: un falso positivo de esta lista no es un mensaje
+ * raro, es un lead que se va escalado a humano por nada. Por eso SOLO entran
+ * formas que **no existen** como conjugación de "tú" en español estándar:
+ *
+ *   · presente voseo: tenés/podés/querés/sos/entendés/decís/venís — la forma
+ *     de "tú" es OTRA palabra (tienes/puedes/quieres/eres/entiendes/dices/
+ *     vienes), así que no hay colisión posible;
+ *   · imperativo voseo que no tiene forma "tú" homógrafa: decime (dime),
+ *     contame (cuéntame), hacelo (hazlo), decile (dile), andate (vete);
+ *   · el pronombre `vos` y la interjección `che`.
+ *
+ * LO QUE QUEDA AFUERA A PROPÓSITO, porque "tú" también lo conjuga igual:
+ * `sabes`, `pensas`, `crees`, `hablas` (la tilde del voseo «sabés» se pierde
+ * en `normalizarTexto` y no se puede distinguir sin costo de falso positivo),
+ * y los imperativos homógrafos de la tercera persona: `mira`, `hace`, `mandame`
+ * (que también es «mándame»), `avisame` («avísame»), `fijate` («fíjate»).
+ * Esas se corrigen por el prompt y por el registro de los hechos, no por acá.
+ */
+export const FORMAS_DE_VOSEO: readonly string[] = [
+  "vos",
+  "tenes", "podes", "queres", "sos", "entendes", "decis", "venis",
+  "decime", "contame", "hacelo", "decile", "andate",
+  "che",
+];
+
+// ════════════════════════════════════════════════════════════════════════════
 // LA PUERTA
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -1148,6 +1186,13 @@ export function validarSalida(texto: string): Veredicto {
   }
 
   const plano = ` ${normalizarTexto(desarmarSiglas(crudo))} `;
+
+  // El registro va primero: es el check más barato y el motivo más útil.
+  // Y es antes que humanidad a propósito: si el texto es voseo Y se delata
+  // como máquina, lo que importa reportar es que se delató — pero un voseo
+  // suelto ya manda el mensaje al mismo lugar.
+  const voseo = primeraQueAparece(plano, FORMAS_DE_VOSEO);
+  if (voseo) return viola("voseo", `voseo rioplatense: «${voseo}»`);
 
   // Humanidad antes que automatismo: «no soy un bot» tiene las dos, y el motivo
   // que sirve para leer después es el que dice que además mintió.
