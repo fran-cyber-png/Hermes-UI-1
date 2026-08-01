@@ -33,6 +33,8 @@ type DigitoHeredado = "1" | "9";
 
 export interface Pais {
   codigo: string;
+  /** Cómo se muestra el país en la UI y en el prompt del bot («México»). */
+  nombre: string;
   /** Los largos NACIONALES plausibles (sin código de país). */
   largos: readonly number[];
   nombres: readonly string[];
@@ -54,12 +56,13 @@ export interface Pais {
  * · Panamá 300) más el resto de LATAM y España, que aparecen de a poco.
  */
 export const PAISES: readonly Pais[] = [
-  { codigo: "51", largos: [9], nombres: ["peru", "pe", "per"] },
-  { codigo: "52", largos: [10, 11], nombres: ["mexico", "mejico", "mx", "mex"], heredado: "1" },
-  { codigo: "593", largos: [9, 8], nombres: ["ecuador", "ec", "ecu"] },
-  { codigo: "591", largos: [8], nombres: ["bolivia", "bo", "bol"] },
+  { codigo: "51", nombre: "Perú", largos: [9], nombres: ["peru", "pe", "per"] },
+  { codigo: "52", nombre: "México", largos: [10, 11], nombres: ["mexico", "mejico", "mx", "mex"], heredado: "1" },
+  { codigo: "593", nombre: "Ecuador", largos: [9, 8], nombres: ["ecuador", "ec", "ecu"] },
+  { codigo: "591", nombre: "Bolivia", largos: [8], nombres: ["bolivia", "bo", "bol"] },
   {
     codigo: "1",
+    nombre: "EE. UU./Canadá",
     largos: [10],
     nombres: [
       "republica dominicana", "rep dominicana", "rep. dominicana", "r dominicana",
@@ -67,20 +70,20 @@ export const PAISES: readonly Pais[] = [
       "estados unidos", "usa", "us", "eeuu", "canada",
     ],
   },
-  { codigo: "57", largos: [10], nombres: ["colombia", "co", "col"] },
-  { codigo: "502", largos: [8], nombres: ["guatemala", "gt", "gtm"] },
-  { codigo: "507", largos: [8], nombres: ["panama", "pa", "pan"] },
-  { codigo: "56", largos: [9], nombres: ["chile", "cl", "chl"] },
-  { codigo: "54", largos: [10, 11], nombres: ["argentina", "ar", "arg"], heredado: "9" },
-  { codigo: "58", largos: [10], nombres: ["venezuela", "ve", "ven"] },
-  { codigo: "503", largos: [8], nombres: ["el salvador", "salvador", "sv", "slv"] },
-  { codigo: "504", largos: [8], nombres: ["honduras", "hn", "hnd"] },
-  { codigo: "505", largos: [8], nombres: ["nicaragua", "ni", "nic"] },
-  { codigo: "506", largos: [8], nombres: ["costa rica", "cr", "cri"] },
-  { codigo: "595", largos: [9], nombres: ["paraguay", "py", "pry"] },
-  { codigo: "598", largos: [8, 9], nombres: ["uruguay", "uy", "ury"] },
-  { codigo: "55", largos: [10, 11], nombres: ["brasil", "brazil", "br", "bra"] },
-  { codigo: "34", largos: [9], nombres: ["espana", "es", "esp"] },
+  { codigo: "57", nombre: "Colombia", largos: [10], nombres: ["colombia", "co", "col"] },
+  { codigo: "502", nombre: "Guatemala", largos: [8], nombres: ["guatemala", "gt", "gtm"] },
+  { codigo: "507", nombre: "Panamá", largos: [8], nombres: ["panama", "pa", "pan"] },
+  { codigo: "56", nombre: "Chile", largos: [9], nombres: ["chile", "cl", "chl"] },
+  { codigo: "54", nombre: "Argentina", largos: [10, 11], nombres: ["argentina", "ar", "arg"], heredado: "9" },
+  { codigo: "58", nombre: "Venezuela", largos: [10], nombres: ["venezuela", "ve", "ven"] },
+  { codigo: "503", nombre: "El Salvador", largos: [8], nombres: ["el salvador", "salvador", "sv", "slv"] },
+  { codigo: "504", nombre: "Honduras", largos: [8], nombres: ["honduras", "hn", "hnd"] },
+  { codigo: "505", nombre: "Nicaragua", largos: [8], nombres: ["nicaragua", "ni", "nic"] },
+  { codigo: "506", nombre: "Costa Rica", largos: [8], nombres: ["costa rica", "cr", "cri"] },
+  { codigo: "595", nombre: "Paraguay", largos: [9], nombres: ["paraguay", "py", "pry"] },
+  { codigo: "598", nombre: "Uruguay", largos: [8, 9], nombres: ["uruguay", "uy", "ury"] },
+  { codigo: "55", nombre: "Brasil", largos: [10, 11], nombres: ["brasil", "brazil", "br", "bra"] },
+  { codigo: "34", nombre: "España", largos: [9], nombres: ["espana", "es", "esp"] },
 ];
 
 /** Los más largos primero: `502` tiene que ganarle a `5` antes de que alguien pruebe `50`. */

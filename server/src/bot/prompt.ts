@@ -1,5 +1,6 @@
 import type { Hecho } from "../hechos/catalogo.js";
 import type { ResumenPieza } from "./acciones.js";
+import { PAIS_DEL_PREFIJO } from "./identidad.js";
 
 /**
  * Contexto inmutable del negocio. Se lee UNA VEZ al armar el prompt.
@@ -126,6 +127,8 @@ ${entrada.lecciones.map((l) => `- ${l}`).join("\n")}
 export function armarContextoContacto(entrada: {
   nombre?: string;
   procedenciaNombre?: string;
+  pais?: string;
+  procedenciaPais?: string;
   interes?: string;
   senales?: string[];
 }): string {
@@ -134,6 +137,14 @@ export function armarContextoContacto(entrada: {
     partes.push(`Estás hablando con ${entrada.nombre}`);
     if (entrada.procedenciaNombre) {
       partes.push(`(nombre de ${entrada.procedenciaNombre})`);
+    }
+  }
+  if (entrada.pais) {
+    // El país por prefijo es una apuesta, no un dato: se dice «probable».
+    const probable = entrada.procedenciaPais === PAIS_DEL_PREFIJO;
+    partes.push(`País${probable ? " probable" : ""}: ${entrada.pais}`);
+    if (entrada.procedenciaPais) {
+      partes.push(`(${entrada.procedenciaPais})`);
     }
   }
   if (entrada.interes) partes.push(`Interés registrado: ${entrada.interes}`);

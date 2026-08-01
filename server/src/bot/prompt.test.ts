@@ -132,4 +132,25 @@ describe("armarContextoContacto", () => {
     assert.ok(ctx.includes("cotizado"));
     assert.ok(ctx.includes("cliente"));
   });
+
+  it("con país confirmado lo dice sin calificativo", () => {
+    const ctx = armarContextoContacto({
+      nombre: "María",
+      pais: "Perú",
+      procedenciaPais: "de Cerberus",
+    });
+    assert.ok(ctx.includes("País: Perú"));
+    assert.ok(ctx.includes("(de Cerberus)"));
+    assert.ok(!ctx.includes("País probable"));
+  });
+
+  it("el país por prefijo se marca como probable", () => {
+    const ctx = armarContextoContacto({
+      nombre: "Javier",
+      pais: "México",
+      procedenciaPais: "del prefijo del teléfono",
+    });
+    assert.ok(ctx.includes("País probable: México"));
+    assert.ok(ctx.includes("(del prefijo del teléfono)"));
+  });
 });
