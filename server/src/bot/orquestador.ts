@@ -31,6 +31,14 @@ import {
   type Traza,
 } from "./traza.js";
 import { validarEntrada, esSpam } from "./guardrailsEntrada.js";
+import { leerEstadoLinea, ESTADO_LINEA_SIN_OPINION, type EstadoLinea } from "./estadoLinea.js";
+import { modoValido, type ModoBot } from "./modo.js";
+import {
+  esEntranteRepetido,
+  ultimoSalienteHumanoEn,
+  vendedoraActivaDesde,
+  yaLeRespondimos,
+} from "./frenos.js";
 import { armarSystemPrompt } from "./prompt.js";
 import { leerPiezas } from "../catalogo/repositorio.js";
 import { piezasParaElBot, ENFOQUE_PRODUCTO } from "./recuperador.js";
@@ -58,6 +66,13 @@ import { ejecutarAcciones } from "./ejecutar.js";
 
 // ── Tipos internos del pipeline ──────────────────────────────────────────
 
+/** Lo que `hiloDe` devuelve, acotado a lo que este pipeline usa. */
+export interface FilaHilo {
+  direccion: string;
+  texto: string | null;
+  occurred_at?: string | Date | null;
+}
+
 export interface CtxPipeline {
   traza: Traza;
   clave: string;
@@ -66,6 +81,15 @@ export interface CtxPipeline {
   clienteLLM: ClienteAnthropic;
   ahora: Date;
 
+  /** El hilo se lee UNA vez en el paso 2 y lo reusan los pasos 5 y 10. */
+  hilo: FilaHilo[];
+  ultimoEntranteEn: Date | null;
+  /** Lo que dice `bot_estado` de esta línea. Se lee una vez, en el paso 5. */
+  estadoLinea: EstadoLinea;
+  /** El modo que MANDA: la base si opinó, el entorno si no. */
+  modoEfectivo: ModoBot;
+  /** Por qué no hay texto que contestar, si es que no lo hay. */
+  motivoSinTexto: string | null;
   textoEntrante: string | null;
   contactoCtx: string;
   estado: EstadoConversacion;
@@ -101,6 +125,11 @@ function ctxInicial(
     cfg,
     clienteLLM,
     ahora,
+    hilo: [],
+    ultimoEntranteEn: null,
+    estadoLinea: ESTADO_LINEA_SIN_OPINION,
+    modoEfectivo: modoValido(cfg.modo),
+    motivoSinTexto: null,
     textoEntrante: null,
     contactoCtx: "",
     estado: "desconocido",
@@ -126,20 +155,50 @@ async function paso2Normalizar(ctx: CtxPipeline): Promise<void> {
     return;
   }
 
-  const hilo = await hiloDe(db, telefono, ctx.numeroPropio).catch(() => []);
-  const ultimo = [...(hilo as { direccion: string; texto: string | null }[])]
-    .reverse()
-    .find((m) => m.direccion === "entrante" && m.texto);
+  const hilo = (await hiloDe(db, telefono, ctx.numeroPropio).catch(() => [])) as FilaHilo[];
+  ctx.hilo = hilo;
 
-  if (!ultimo?.texto) {
-    t.cerrar("sin_texto_entrante");
+  const entrantes = hilo.filter((m) => m.direccion === "entrante");
+  const ultimoEntrante = entrantes[entrantes.length - 1];
+  ctx.ultimoEntranteEn = fechaDe(ultimoEntrante?.occurred_at);
+
+  // ⚠️ SE MIRA **EL ÚLTIMO** ENTRANTE, NO EL ÚLTIMO CON TEXTO.
+  //
+  // Acá había un `.reverse().find(m => entrante && m.texto)`, que retrocede
+  // hasta encontrar texto. El efecto: si el lead manda una NOTA DE VOZ, una
+  // foto o un sticker —lo más común en WhatsApp de LATAM—, el bot no se
+  // quedaba callado: encontraba el mensaje de texto ANTERIOR y **le volvía a
+  // contestar a ese**. Para la persona, es que le respondan algo que ya había
+  // preguntado y que ignoren lo que acaba de mandar.
+  //
+  // Un entrante sin texto es «no puedo leer esto», y esa es una respuesta que
+  // el pipeline tiene que poder dar. Hoy simplemente no se contesta (el turno
+  // queda registrado con su motivo); la derivación a una persona es de F4,
+  // donde vive la máquina de estados nueva.
+  if (!ultimoEntrante) {
+    t.cerrar("sin_entrantes");
     return;
   }
 
-  const resultado = validarEntrada(ultimo.texto);
+  if (!ultimoEntrante.texto) {
+    ctx.motivoSinTexto = "entrante_sin_texto";
+    await db.insert(botRespuestas).values({
+      clave: ctx.clave,
+      numeroPropio: ctx.numeroPropio,
+      texto: null,
+      estado: "cancelada",
+      motivo: "entrante_sin_texto",
+      creadoEn: ctx.ahora,
+    });
+    t.cerrar("entrante_sin_texto");
+    return;
+  }
+
+  const resultado = validarEntrada(ultimoEntrante.texto);
   ctx.textoEntrante = resultado.ok ? resultado.texto : null;
 
   if (!resultado.ok && resultado.motivo) {
+    ctx.motivoSinTexto = `entrada_${resultado.motivo}`;
     await db.insert(botRespuestas).values({
       clave: ctx.clave,
       numeroPropio: ctx.numeroPropio,
@@ -211,6 +270,15 @@ async function paso4Estado(ctx: CtxPipeline): Promise<void> {
 async function paso5Decidir(ctx: CtxPipeline): Promise<void> {
   const t = tramoDePipeline("decidir", ctx.traza);
 
+  // El interruptor de la base se lee ANTES que nada y se guarda en el contexto:
+  // el modo efectivo no lo usa solo `decidir()`, también lo usa el paso 14 para
+  // saber si manda. Cuando el paso 14 miraba `cfg.modo` (el entorno), poner una
+  // línea en `sombra` desde la app no la frenaba: `decidir()` dejaba pasar
+  // (sombra no es un motivo de salto) y el envío salía igual. El kill-switch
+  // solo funcionaba para `apagado`.
+  ctx.estadoLinea = await leerEstadoLinea(db, ctx.numeroPropio);
+  ctx.modoEfectivo = ctx.estadoLinea.modo ?? modoValido(ctx.cfg.modo);
+
   if (!debeResponder(ctx.estado) && ctx.estado !== "desconocido") {
     ctx.decision = { accion: "saltar", motivo: "pausado" };
     t.cerrar(`saltar:estado_terminal_${ctx.estado}`);
@@ -219,7 +287,11 @@ async function paso5Decidir(ctx: CtxPipeline): Promise<void> {
 
   const hechos = await armarHechos(ctx);
   ctx.decision = decidir(hechos);
-  t.cerrar(ctx.decision.accion === "saltar" ? `saltar:${ctx.decision.motivo}` : "responder");
+  t.cerrar(
+    ctx.decision.accion === "saltar"
+      ? `saltar:${ctx.decision.motivo}`
+      : `responder(modo=${ctx.modoEfectivo})`,
+  );
 }
 
 // ── PASO 6: VALIDAR entrada ──────────────────────────────────────────────
@@ -282,12 +354,11 @@ async function paso9Tools(ctx: CtxPipeline): Promise<void> {
 async function paso10Agente(ctx: CtxPipeline): Promise<void> {
   const t = tramoDePipeline("agente", ctx.traza);
 
-  const telefono = extraerTelefono(ctx.clave);
-  const hilo = telefono
-    ? await hiloDe(db, telefono, ctx.numeroPropio).catch(() => [])
-    : [];
-
-  const historial: Turno[] = (hilo as { direccion: string; texto: string | null }[])
+  // El hilo ya se leyó en el paso 2. Volver a pedirlo era una segunda consulta
+  // a la misma tabla en el mismo tick, y —peor— podía traer algo distinto: si
+  // una vendedora escribía en el medio, el freno se evaluaba sobre una foto y
+  // el prompt se armaba sobre otra.
+  const historial: Turno[] = ctx.hilo
     .slice(-20)
     .filter((msg) => msg.texto)
     .map((msg) => ({
@@ -392,9 +463,8 @@ async function paso13Scoring(ctx: CtxPipeline): Promise<void> {
 async function paso14Enviar(ctx: CtxPipeline): Promise<void> {
   const t = tramoDePipeline("enviar", ctx.traza);
 
-  const modo = ctx.cfg.modo === "automatico" ? "automatico" : "sombra";
-  if (modo !== "automatico" || !ctx.textoRespuesta) {
-    t.cerrar(modo === "sombra" ? "sombra" : "sin_texto");
+  if (ctx.modoEfectivo !== "automatico" || !ctx.textoRespuesta) {
+    t.cerrar(!ctx.textoRespuesta ? "sin_texto" : ctx.modoEfectivo);
     return;
   }
 
@@ -455,7 +525,7 @@ async function paso14Enviar(ctx: CtxPipeline): Promise<void> {
 
 async function paso15Ejecutar(ctx: CtxPipeline): Promise<void> {
   const t = tramoDePipeline("ejecutar", ctx.traza);
-  await ejecutarAcciones(ctx.acciones, ctx.clave);
+  await ejecutarAcciones(ctx.acciones, ctx.clave, ctx.ahora);
   t.cerrar(`${ctx.acciones.length}_acciones`);
 }
 
@@ -473,11 +543,10 @@ async function guardarRespuesta(
   estado: string,
   motivo: string | null,
 ): Promise<void> {
-  const modo = ctx.cfg.modo === "automatico" ? "automatico" : "sombra";
   const estadoRespuesta: string =
     estado === "error" ? "error" :
     ctx.textoRespuesta === null ? "bloqueada" :
-    modo === "automatico" ? "enviada" : "sombra";
+    ctx.modoEfectivo === "automatico" ? "enviada" : "sombra";
 
   await db.insert(botRespuestas).values({
     clave: ctx.clave,
@@ -509,8 +578,17 @@ export async function procesarConversacion(
 
   try {
     await paso2Normalizar(ctx);
-    if (!ctx.textoEntrante && ctx.estado === "desconocido") {
-      await guardarRespuesta(ctx, "cancelada", "sin_texto_entrante");
+    if (!ctx.textoEntrante) {
+      // La condición decía `&& ctx.estado === "desconocido"`, y `ctx.estado`
+      // acá SIEMPRE es "desconocido" (el paso 4 todavía no corrió): era una
+      // guarda que no guardaba nada. Sin texto no hay nada que contestar,
+      // punto — el estado de la conversación no cambia eso.
+      //
+      // Si el paso 2 ya dejó el motivo escrito (entrada bloqueada, entrante sin
+      // texto), no se escribe una segunda fila diciendo lo mismo.
+      if (!ctx.motivoSinTexto) {
+        await guardarRespuesta(ctx, "cancelada", "sin_texto_entrante");
+      }
       await db.delete(botPendientes).where(eq(botPendientes.clave, clave));
       return;
     }
@@ -580,7 +658,25 @@ function extraerTelefono(clave: string): string | null {
   return partes.length >= 3 ? partes[2] ?? null : null;
 }
 
+/**
+ * LOS HECHOS QUE ALIMENTAN A `decidir()` — y por qué esta función importa tanto
+ * como el motor.
+ *
+ * `decision.ts` está testeado hasta el hueso y evalúa nueve motivos en orden
+ * fijo. Pero acá se le pasaban **cuatro valores fijos**: `frenado: false`,
+ * `transporteConectado: true`, `huboSalienteHumanoDespuesDe: null` y
+ * `entranteEsRepetido: false`. Cuatro de los nueve frenos no se podían disparar
+ * nunca, con el test del motor en verde — el modo de falla más caro que hay.
+ *
+ * El peor de los cuatro era `vendedora_activa`: **si una vendedora contestaba
+ * en la línea del bot, el bot le escribía encima.**
+ *
+ * Los cuatro se recolectan de verdad. Cada uno degrada por separado: una tabla
+ * que falta apaga SU freno, no el pipeline.
+ */
 async function armarHechos(ctx: CtxPipeline): Promise<HechosParaDecidir> {
+  const telefono = extraerTelefono(ctx.clave);
+
   let pausa: { motivo: string; hasta: Date | null } | null = null;
   try {
     const fila = await db.query.botPausas.findFirst({
@@ -623,22 +719,55 @@ async function armarHechos(ctx: CtxPipeline): Promise<HechosParaDecidir> {
     // tabla sin migrar
   }
 
+  // ── El transporte: se calculaba y se DESCARTABA (se pasaba `true` fijo) ──
+  //
+  // Solo se exige en modo automático: en sombra no se manda nada, así que un
+  // transporte caído no cambia lo que el pipeline puede hacer, y frenar ahí
+  // apagaría justo el modo con el que se calibra el bot.
   const gestor = gestorWhatsappSiActivo();
-  const transporteConectado = gestor
-    ? gestor.todos().some((l) => l.numero === ctx.numeroPropio && String(l.transporte.estado()) === "conectado")
-    : false;
+  const transporteConectado =
+    ctx.modoEfectivo !== "automatico" ||
+    (gestor
+      ? gestor
+          .todos()
+          .some(
+            (l) =>
+              l.numero === ctx.numeroPropio &&
+              String(l.transporte.estado()) === "conectado",
+          )
+      : false);
+
+  // ── vendedora_activa: el freno que estaba muerto ────────────────────────
+  const humanoEn = telefono
+    ? await ultimoSalienteHumanoEn(db, ctx.numeroPropio, telefono)
+    : null;
+
+  // ── spam: repetición, pero solo si ya le contestamos (ver `frenos.ts`) ──
+  const textosEntrantes = ctx.hilo
+    .filter((m) => m.direccion === "entrante" && m.texto)
+    .map((m) => m.texto as string);
 
   return {
-    modo: ctx.cfg.modo as "sombra" | "apagado" | "automatico",
+    // El modo efectivo se resolvió en el paso 5, ANTES de esta función: lo usa
+    // también el paso 14 para saber si manda, y leerlo dos veces abriría la
+    // puerta a que `decidir()` y el envío opinen distinto en el mismo tick.
+    modo: ctx.modoEfectivo,
     lineaHabilitada: ctx.cfg.lineas.includes(ctx.numeroPropio),
     pausa,
-    huboSalienteHumanoDespuesDe: null,
-    entranteEsRepetido: false,
+    huboSalienteHumanoDespuesDe: vendedoraActivaDesde(humanoEn, ctx.ultimoEntranteEn),
+    entranteEsRepetido: esEntranteRepetido(textosEntrantes, yaLeRespondimos(ctx.hilo)),
     turnosHoy,
     maxTurnosDia: ctx.cfg.maxTurnosDia,
     respuestasUltimaHoraLinea: respuestasUltimaHora,
     maxRespuestasHoraLinea: ctx.cfg.maxRespuestasHoraLinea,
-    transporteConectado: true,
-    frenado: false,
+    transporteConectado,
+    frenado: ctx.estadoLinea.frenadoMotivo !== null,
   };
+}
+
+/** `occurred_at` viaja como texto o como Date según el driver. */
+function fechaDe(valor: string | Date | null | undefined): Date | null {
+  if (!valor) return null;
+  const d = valor instanceof Date ? valor : new Date(valor);
+  return Number.isNaN(d.getTime()) ? null : d;
 }

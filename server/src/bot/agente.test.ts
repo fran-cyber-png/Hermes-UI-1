@@ -153,6 +153,95 @@ describe("crearAgente", () => {
     }
   });
 
+  it("🔴 el bloque <contacto> viaja en TODAS las iteraciones, no solo en la primera", async () => {
+    // La regresión: el `<contacto>` (nombre, país, interés) se mandaba solo
+    // cuando `iter === 0`. De la segunda vuelta en adelante el system era el
+    // string grande a secas, así que el bot olvidaba con quién hablaba **justo
+    // después de usar una tool** — que es cuando más lo necesita.
+    const systems: unknown[] = [];
+    const piezas: ResumenPieza[] = [
+      { clase: "plantilla", id: "5", descripcion: "Flyer Inteligencia", enviable: true },
+    ];
+    const respuestas = [
+      {
+        content: [
+          { type: "text", text: "Te paso la información." },
+          { type: "tool_use", id: "toolu_1", name: "mandar_pieza", input: { id: "plantilla:5" } },
+        ],
+        stop_reason: "tool_use",
+        usage: { input_tokens: 100, output_tokens: 50 },
+      },
+      {
+        content: [{ type: "text", text: "Listo, Javier." }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 80, output_tokens: 30 },
+      },
+    ];
+    let idx = 0;
+    const espia: ClienteAnthropic = {
+      messages: {
+        create: ((args: { system: unknown }) => {
+          systems.push(args.system);
+          const r = respuestas[idx] ?? respuestas[respuestas.length - 1]!;
+          idx++;
+          return Promise.resolve({
+            id: "msg_1",
+            model: "claude-haiku-4-5",
+            role: "assistant" as const,
+            type: "message" as const,
+            content: r.content as any,
+            stop_reason: r.stop_reason as any,
+            stop_sequence: null,
+            usage: r.usage as any,
+          }) as any;
+        }) as any,
+      },
+    };
+
+    await crearAgente(espia).responder({ ...base, piezas });
+
+    assert.strictEqual(systems.length, 2, "hubo dos vueltas del tool loop");
+    for (const [i, system] of systems.entries()) {
+      const serializado = JSON.stringify(system);
+      assert.ok(
+        serializado.includes("Javier"),
+        `la iteración ${i} perdió el bloque <contacto>`,
+      );
+    }
+  });
+
+  it("el system cacheado es el PREFIJO: el bloque volátil del contacto va después", async () => {
+    // Si el contacto quedara primero, el prefijo dejaría de ser estable turno a
+    // turno y el `cache_control` no pegaría nunca.
+    let capturado: unknown = null;
+    const espia: ClienteAnthropic = {
+      messages: {
+        create: ((args: { system: unknown }) => {
+          capturado ??= args.system;
+          return Promise.resolve({
+            id: "msg_1",
+            model: "claude-haiku-4-5",
+            role: "assistant" as const,
+            type: "message" as const,
+            content: [{ type: "text", text: "Hola" }] as any,
+            stop_reason: "end_turn" as any,
+            stop_sequence: null,
+            usage: { input_tokens: 10, output_tokens: 5 } as any,
+          }) as any;
+        }) as any,
+      },
+    };
+
+    await crearAgente(espia).responder(base);
+
+    const bloques = capturado as { text: string; cache_control?: unknown }[];
+    assert.ok(Array.isArray(bloques));
+    assert.ok(bloques[0]!.cache_control, "el primer bloque es el cacheado");
+    assert.ok(bloques[0]!.text.includes("<rol>"), "el primer bloque es el system grande");
+    assert.ok(bloques[1]!.text.includes("<contacto>"), "el contacto va segundo");
+    assert.strictEqual(bloques[1]!.cache_control, undefined, "el contacto NO se cachea");
+  });
+
   it("uso incluye tokens del modelo", async () => {
     const agente = crearAgente(
       clienteFake([{
