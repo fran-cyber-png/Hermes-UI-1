@@ -5,7 +5,8 @@ import { hiloDe } from "./src/whatsapp/hilo.js";
 import { crearAgente } from "./src/bot/agente.js";
 import { armarSystemPrompt } from "./src/bot/prompt.js";
 import { CATALOGO_POR_DEFECTO } from "./src/hechos/catalogo.js";
-import { piezasParaElBot } from "./src/bot/recuperador.js";
+import { leerPiezas } from "./src/catalogo/repositorio.js";
+import { piezasParaElBot, ENFOQUE_PRODUCTO } from "./src/bot/recuperador.js";
 import { recolectarContextoContacto, aBloqueDePrompt } from "./src/bot/contexto.js";
 
 const CLAVE = "conv:whatsapp:5215543219876:51984429504";
@@ -35,7 +36,7 @@ async function main() {
   console.log("== historial ==");
   console.log(JSON.stringify(historial, null, 2));
 
-  const piezas = await piezasParaElBot(CLAVE);
+  const piezas = piezasParaElBot(await leerPiezas(db), ENFOQUE_PRODUCTO);
   const system = armarSystemPrompt({ hechos: [...CATALOGO_POR_DEFECTO], piezas, lecciones: [] });
 
   const agente = crearAgente(cliente as never);
