@@ -144,11 +144,86 @@ export class TransporteCloudApi implements TransporteWhatsapp {
     return { idExterno: data.messages[0].id, ocurridoEn: new Date() };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async enviarMedia(_telefono: string, _media: MediaSaliente): Promise<ResultadoEnvio> {
-    throw new Error(
-      'TransporteCloudApi todavía no manda media: este spike solo valida texto de ida y vuelta.',
+  /**
+   * SUBIR EL ARCHIVO A META Y DEVOLVER SU `media_id`.
+   *
+   * La Cloud API no acepta bytes en el mensaje: primero se sube a `/media` y
+   * después se manda el id. El id es de un solo uso por número y caduca a los
+   * 30 días, así que **no se cachea**: subir de nuevo cuesta una request y
+   * cachear un id vencido cuesta un mensaje que no llega.
+   *
+   * `messaging_product` va en el form, no en la query: sin él Meta responde un
+   * 400 que no nombra el campo que falta.
+   */
+  private async subirMedia(media: MediaSaliente): Promise<string> {
+    const { readFile } = await import('node:fs/promises');
+    const { basename } = await import('node:path');
+
+    const bytes = await readFile(media.ruta);
+    const form = new FormData();
+    form.append('messaging_product', 'whatsapp');
+    form.append('type', media.mime);
+    form.append(
+      'file',
+      new Blob([new Uint8Array(bytes)], { type: media.mime }),
+      media.nombre ?? basename(media.ruta),
     );
+
+    const r = await fetch(`${GRAPH_BASE}/${this.phoneNumberId}/media`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.token}` },
+      body: form,
+    });
+    const data = (await r.json()) as { id?: string };
+    if (!r.ok || !data.id) {
+      throw new Error(`Cloud API subiendo media (${r.status}): ${JSON.stringify(data)}`);
+    }
+    return data.id;
+  }
+
+  /**
+   * UN adjunto a UN teléfono — la misma forma anti-masivo que `enviarTexto`.
+   *
+   * ── Por qué esto existía como un `throw` ─────────────────────────────────
+   *
+   * El spike de la Cloud API (30-jul) solo validó texto de ida y vuelta, y este
+   * método quedó lanzando. El costo real apareció recién cuando el bot pasó a
+   * la línea de Meta: **la línea del bot no podía mandar el flyer**, y el 42 %
+   * de las secuencias que cierran ventas llevan imagen. Era el bloqueador B4 de
+   * `docs/plan-bot-dipicot.md`.
+   *
+   * ── El caption va con la imagen, no aparte ───────────────────────────────
+   *
+   * Una imagen con pie es UN mensaje de WhatsApp, no dos (la misma regla que
+   * `plantilla_pasos` ya modela). Mandarlos separados le llega a la persona
+   * como dos notificaciones y rompe el orden si una falla.
+   *
+   * `audio` es la excepción: la Cloud API **no acepta caption** en audio. Se
+   * ignora en silencio ahí y en ningún otro lado, porque perder el texto de una
+   * imagen sí sería perder contenido.
+   */
+  async enviarMedia(telefono: string, media: MediaSaliente): Promise<ResultadoEnvio> {
+    if (this.sesion.estado !== 'conectado') {
+      throw new Error(`No se puede enviar: la sesión está "${this.sesion.estado}".`);
+    }
+    const numero = normalizarTelefono(telefono);
+    if (!numero) throw new Error(`Teléfono inválido: "${telefono}"`);
+
+    const id = await this.subirMedia(media);
+
+    const tipo = ({ imagen: 'image', video: 'video', audio: 'audio', documento: 'document' } as const)[
+      media.clase
+    ];
+    const caption = media.texto ? { caption: media.texto } : {};
+    const cuerpo: Record<string, unknown> =
+      media.clase === 'audio'
+        ? { audio: { id } }
+        : media.clase === 'documento'
+          ? { document: { id, filename: media.nombre ?? 'documento', ...caption } }
+          : { [tipo]: { id, ...caption } };
+
+    const data = await this.post({ to: numero, type: tipo, ...cuerpo });
+    return { idExterno: data.messages[0].id, ocurridoEn: new Date() };
   }
 
   async marcarLeido(_telefono: string, idsExternos: string[]): Promise<void> {
