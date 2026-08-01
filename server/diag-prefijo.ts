@@ -1,5 +1,4 @@
-import { config } from "dotenv";
-config();
+import "dotenv/config";
 import { AnthropicBedrock } from "@anthropic-ai/bedrock-sdk";
 import { db } from "./src/db/client.js";
 import { hiloDe } from "./src/whatsapp/hilo.js";
