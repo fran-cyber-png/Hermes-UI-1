@@ -1,14 +1,13 @@
 import { config } from "dotenv";
 config();
 import { AnthropicBedrock } from "@anthropic-ai/bedrock-sdk";
-import { db } from "../db/client.js";
-import { hiloDe } from "../whatsapp/hilo.js";
-import { crearAgente } from "./agente.js";
-import { armarSystemPrompt } from "./prompt.js";
-import { crearTools } from "./tools.js";
-import { CATALOGO_POR_DEFECTO } from "../hechos/catalogo.js";
-import { piezasParaElBot } from "./recuperador.js";
-import { recolectarContextoContacto, aBloqueDePrompt } from "./contexto.js";
+import { db } from "./src/db/client.js";
+import { hiloDe } from "./src/whatsapp/hilo.js";
+import { crearAgente } from "./src/bot/agente.js";
+import { armarSystemPrompt } from "./src/bot/prompt.js";
+import { CATALOGO_POR_DEFECTO } from "./src/hechos/catalogo.js";
+import { piezasParaElBot } from "./src/bot/recuperador.js";
+import { recolectarContextoContacto, aBloqueDePrompt } from "./src/bot/contexto.js";
 
 const CLAVE = "conv:whatsapp:5215543219876:51984429504";
 const NUMERO_PROPIO = "51984429504";
