@@ -36,6 +36,7 @@ import { leerPiezas } from "../catalogo/repositorio.js";
 import { piezasParaElBot, ENFOQUE_PRODUCTO } from "./recuperador.js";
 import { recolectarContextoContacto, aBloqueDePrompt } from "./contexto.js";
 import { extraerHechos, persistirHechos, leerHechos } from "./memoria.js";
+import { PAIS_DEL_PREFIJO } from "./identidad.js";
 import { aliasesActivos } from "../cursos/repositorio.js";
 import { trocear } from "./chunker.js";
 import { hiloDe } from "../whatsapp/hilo.js";
@@ -160,9 +161,10 @@ async function paso3Contexto(ctx: CtxPipeline): Promise<void> {
 
   ctx.contactoCtx = aBloqueDePrompt(c);
 
-  // Volcar al estado los datos que la memoria va a usar
+  // Volcar al estado los datos que la memoria va a usar. El país por prefijo
+  // NO entra: es una apuesta y persistirla le permitiría pisar a Cerberus.
   if (c.nombre) ctx.datosEstado.nombre = c.nombre;
-  if (c.pais) ctx.datosEstado.pais = c.pais;
+  if (c.pais && c.procedenciaPais !== PAIS_DEL_PREFIJO) ctx.datosEstado.pais = c.pais;
   if (c.interes ?? c.interesPropuesto) {
     ctx.datosEstado.familia = c.interes ?? c.interesPropuesto ?? undefined;
   }

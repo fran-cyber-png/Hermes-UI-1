@@ -9,6 +9,7 @@
  * Memoria      → nombre, pais (lo que el lead dijo en turnos anteriores)
  * Cerberus     → nombre, esCliente, ventasCount, pais (teléfono verificado)
  * Perfil WA    → nombre del perfil de WhatsApp (último recurso)
+ * Prefijo tel. → pais probable (último recurso; se etiqueta, no se persiste)
  * Intereses    → interes (curso registrado manualmente)
  * Señales      → cotizada, enfriada
  * Origen       → campaña/anuncio/formulario → interesPropuesto
@@ -29,6 +30,7 @@ export interface ContextoContacto {
   nombre: string | null;
   procedenciaNombre: string | null;
   pais: string | null;
+  procedenciaPais: string | null;
   interes: string | null;
   interesPropuesto: string | null;
   senales: string[];
@@ -146,8 +148,9 @@ export async function recolectarContextoContacto(
     }
   }
 
-  // ── Resolver identidad: memoria > Cerberus > perfil de WhatsApp ──
-  const identidad = resolverIdentidad(memoria, { nombre, pais }, perfilNombre);
+  // ── Resolver identidad: memoria > Cerberus > perfil de WhatsApp,
+  //    y para el país, el prefijo del teléfono como último recurso ──
+  const identidad = resolverIdentidad(memoria, { nombre, pais }, perfilNombre, telefono);
   nombre = identidad.nombre;
   procedenciaNombre = identidad.procedenciaNombre;
   pais = identidad.pais;
@@ -156,6 +159,7 @@ export async function recolectarContextoContacto(
     nombre,
     procedenciaNombre,
     pais,
+    procedenciaPais: identidad.procedenciaPais,
     interes,
     interesPropuesto,
     senales,
@@ -208,6 +212,8 @@ export function aBloqueDePrompt(ctx: ContextoContacto): string {
   return armarContextoContacto({
     nombre: ctx.nombre ?? undefined,
     procedenciaNombre: ctx.procedenciaNombre ?? undefined,
+    pais: ctx.pais ?? undefined,
+    procedenciaPais: ctx.procedenciaPais ?? undefined,
     interes: ctx.interes ?? ctx.interesPropuesto ?? undefined,
     senales: ctx.senales.length > 0 ? ctx.senales : undefined,
   });
