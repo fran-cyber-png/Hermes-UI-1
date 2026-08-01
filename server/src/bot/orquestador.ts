@@ -21,6 +21,7 @@ import type { ConfigBot } from "./config.js";
 import {
   decidir,
   type HechosParaDecidir,
+  esTransitorio,
   type MotivoSalto,
 } from "./decision.js";
 import { crearAgente, type ClienteAnthropic } from "./agente.js";
@@ -647,8 +648,45 @@ function debeSaltar(ctx: CtxPipeline): boolean {
   return ctx.decision?.accion === "saltar";
 }
 
+/**
+ * Cuánto se espera antes de reintentar un salto transitorio, y hasta cuándo.
+ *
+ * El techo NO es decorativo: es la lección de #166. Un entrante que estuvo
+ * esperando medio día no se contesta cuando el transporte vuelve — contestar
+ * «¿en qué te puedo ayudar?» seis horas después confirma que nadie miraba, y es
+ * peor que el silencio. Pasado el techo se descarta, con motivo propio.
+ */
+const REINTENTO_MS = 90_000;
+const ESPERA_MAXIMA_MS = 6 * 60 * 60 * 1000;
+
 async function saltarYLimpiar(ctx: CtxPipeline, clave: string): Promise<void> {
   const motivo = (ctx.decision as { accion: "saltar"; motivo: MotivoSalto }).motivo;
+
+  if (esTransitorio(motivo)) {
+    const espera = ctx.ultimoEntranteEn
+      ? ctx.ahora.getTime() - ctx.ultimoEntranteEn.getTime()
+      : 0;
+
+    if (espera <= ESPERA_MAXIMA_MS) {
+      // Se SUELTA el claim y se corre el turno: el despachador lo vuelve a
+      // tomar cuando la condición pase. Nada de borrar: el lead escribió y su
+      // mensaje sigue sin contestar.
+      await guardarRespuesta(ctx, "cancelada", `${motivo}_reintenta`);
+      await db
+        .update(botPendientes)
+        .set({
+          enProcesoDesde: null,
+          procesarDesde: new Date(ctx.ahora.getTime() + REINTENTO_MS),
+        })
+        .where(eq(botPendientes.clave, clave));
+      return;
+    }
+
+    await guardarRespuesta(ctx, "cancelada", `${motivo}_espera_excesiva`);
+    await db.delete(botPendientes).where(eq(botPendientes.clave, clave));
+    return;
+  }
+
   await guardarRespuesta(ctx, "cancelada", motivo);
   await db.delete(botPendientes).where(eq(botPendientes.clave, clave));
 }
@@ -724,6 +762,13 @@ async function armarHechos(ctx: CtxPipeline): Promise<HechosParaDecidir> {
   // Solo se exige en modo automático: en sombra no se manda nada, así que un
   // transporte caído no cambia lo que el pipeline puede hacer, y frenar ahí
   // apagaría justo el modo con el que se calibra el bot.
+  // ⚠️ `estado()` devuelve un OBJETO (`{estado: 'conectado', telefono}`), no una
+  // cadena. Acá había un `String(l.transporte.estado()) === "conectado"`, que
+  // compara `"[object Object]"` y por lo tanto es **siempre falso**. Mientras el
+  // valor se pasaba fijo en `true` no molestaba a nadie; al recolectarlo de
+  // verdad, ese `false` permanente dejó al bot descartando TODOS los entrantes
+  // con motivo `desconectado`. La ruta `/lineas` ya leía bien `.estado`: eran
+  // dos lecturas del mismo objeto y solo una estaba bien.
   const gestor = gestorWhatsappSiActivo();
   const transporteConectado =
     ctx.modoEfectivo !== "automatico" ||
@@ -733,7 +778,7 @@ async function armarHechos(ctx: CtxPipeline): Promise<HechosParaDecidir> {
           .some(
             (l) =>
               l.numero === ctx.numeroPropio &&
-              String(l.transporte.estado()) === "conectado",
+              l.transporte.estado().estado === "conectado",
           )
       : false);
 
