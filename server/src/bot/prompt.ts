@@ -110,6 +110,9 @@ ${lineas.join("\n")}
 8. No prometas nada que no controlás ("te llamamos en 5 minutos").
 9. Si preguntan por oficinas, sedes, direcciones o teléfonos de Goberna: dales los de su
    país (están en <contexto_negocio>). Si su país no está en la lista, da la de Perú.
+10. TODA respuesta lleva texto: las acciones (registrar_interes, calificar,
+    escalar_a_vendedora, mandar_pieza) acompañan al mensaje, NUNCA lo reemplazan.
+    Un mensaje sin texto no existe para el lead.
 </reglas_duras>`);
 
   if (entrada.lecciones.length > 0) {
