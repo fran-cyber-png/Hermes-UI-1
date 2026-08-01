@@ -9,11 +9,26 @@ const catalogo: ResumenPieza[] = [
 ];
 
 describe("crearTools", () => {
-  it("mandar_pieza con id existente → acumula, devuelve confirmación", () => {
+  /**
+   * ESTE TEST SE DIO VUELTA: pedía la confirmación («agendada»), y la
+   * confirmación era la mentira. `ejecutar.ts` descarta la acción, así que el
+   * modelo redactaba creyendo que el documento salió — «Ya tienes en tu chat el
+   * temario completo» (Carlos, 1-ago-2026 12:09:38), y quince segundos después
+   * el lead: «No tengo nada todavía apenas estoy pidiendo la información».
+   *
+   * Lo que se fija ahora es lo contrario: que la respuesta NO afirme el envío y
+   * que le PROHÍBA al modelo decir que ya la tiene. La acumulación en el
+   * recolector no cambia — el rastro de `acciones` es el que sirve para saber
+   * qué pediría el modelo cuando F3 conecte.
+   */
+  it("mandar_pieza con id existente → acumula la intención SIN afirmar que se envió", () => {
     const recolector: Accion[] = [];
     const { handlers } = crearTools(recolector, catalogo);
     const result = handlers["mandar_pieza"]!({ id: "plantilla:5" });
-    assert.ok(result.includes("agendada"));
+    assert.ok(result.startsWith("NO se envió"), `no arranca diciendo que no salió: «${result}»`);
+    // Solo las formas AFIRMATIVAS. Nada de buscar «ya la tiene»: el propio
+    // mensaje la contiene, en la prohibición «NO le digas que ya la tiene».
+    assert.ok(!/\bagendad|\benviad[ao]\b/i.test(result), `sigue afirmando el envío: «${result}»`);
     assert.strictEqual(recolector.length, 1);
     assert.deepStrictEqual(recolector[0], {
       tipo: "mandar_pieza",
@@ -38,11 +53,14 @@ describe("crearTools", () => {
     assert.strictEqual(recolector.length, 0);
   });
 
-  it("registrar_interes con familia válida → acumula", () => {
+  // Misma vuelta que `mandar_pieza`: decía «registrado» y ninguna fila se
+  // escribe. Miente menos porque la regla 7 le prohíbe contárselo al lead, pero
+  // le deja al modelo una premisa falsa para el resto del turno.
+  it("registrar_interes con familia válida → acumula SIN afirmar que quedó registrado", () => {
     const recolector: Accion[] = [];
     const { handlers } = crearTools(recolector, catalogo);
     const result = handlers["registrar_interes"]!({ familia: "DIPCINTE" });
-    assert.ok(result.includes("registrado"));
+    assert.ok(result.includes("sin confirmar"), `afirma de más: «${result}»`);
     assert.strictEqual(recolector.length, 1);
     assert.deepStrictEqual(recolector[0], {
       tipo: "registrar_interes",
