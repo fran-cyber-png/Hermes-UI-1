@@ -581,11 +581,7 @@ export default function App() {
                   siempre: el bloque del porqué es `shrink-0` y él `flex-1`. Sin
                   esto, apilarlos dejaba al de abajo aplastado a media frase. */}
               <div className="min-h-0 flex-1">
-                <PanelDerecho
-                  conversacion={abierta}
-                  onCorreo={mandarCorreoA}
-                  onAgendarBienvenida={agendarBienvenida}
-                />
+                <PanelDerecho conversacion={abierta} />
               </div>
             </aside>
           )}
