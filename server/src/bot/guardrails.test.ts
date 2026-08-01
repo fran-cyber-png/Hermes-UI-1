@@ -61,10 +61,10 @@ const HECHOS_APROBADOS = CATALOGO_POR_DEFECTO.map((h) => h.texto);
 const LEGITIMOS: readonly string[] = [
   // — las paráfrasis de los hechos, que es como los va a decir el modelo —
   "se puede pagar en 2 cuotas, sin recargo",
-  "podés pagarlo en dos cuotas",
+  "puedes pagarlo en dos cuotas",
   "El pago se hace en 2 cuotas, ¿te sirve así?",
   "Sí, se puede en cuotas.",
-  "el acceso lo tenés por todo un año",
+  "el acceso lo tienes por todo un año",
   "es para público general",
   "este es nuestro canal oficial",
   // — datos del curso —
@@ -92,7 +92,7 @@ const LEGITIMOS: readonly string[] = [
   "una asesora te escribe en un rato",
   "¿te sirve el horario de la noche?",
   "Te comparto el link de inscripción en un momento.",
-  "Contame en qué te puedo ayudar.",
+  "Cuéntame en qué te puedo ayudar.",
   "Mi turno termina a las 8, pero te dejo todo listo.",
   "Te espero a las 8.",
   "Vale, te espero a las 8.",
@@ -142,10 +142,10 @@ const LEGITIMOS: readonly string[] = [
   "el curso es cien por ciento online",
   "El 100 por ciento de las clases quedan grabadas.",
   // — mensajes largos, que es como escribe un modelo —
-  "¡Hola! Gracias por escribirnos a la Escuela de Goberna. Contame qué diplomado te interesa y te paso el temario completo. Estamos con la edición que arranca el 15 de agosto: son 11 módulos en 3 meses, todo online y con las clases grabadas por un año.",
-  "Buen día. El diplomado tiene 120 horas académicas repartidas en 11 módulos. Las clases en vivo son martes y jueves de 8 a 10 pm y quedan grabadas. Si querés, te paso el temario.",
+  "¡Hola! Gracias por escribirnos a la Escuela de Goberna. Cuéntame qué diplomado te interesa y te paso el temario completo. Estamos con la edición que arranca el 15 de agosto: son 11 módulos en 3 meses, todo online y con las clases grabadas por un año.",
+  "Buen día. El diplomado tiene 120 horas académicas repartidas en 11 módulos. Las clases en vivo son martes y jueves de 8 a 10 pm y quedan grabadas. Si quieres, te paso el temario.",
   "Sí, se puede pagar en 2 cuotas: la primera reserva tu lugar y la segunda antes de empezar. La asesora te pasa los detalles y las formas de pago.",
-  "Claro, el certificado lo emite la Escuela con código de verificación y sirve para concursos públicos. Lo recibís al terminar los 11 módulos.",
+  "Claro, el certificado lo emite la Escuela con código de verificación y sirve para concursos públicos. Lo recibes al terminar los 11 módulos.",
   // — los que rozan las reglas nuevas (ventana izquierda de 4, encuadre por izquierda) —
   "Ya somos más de 5000 egresados y este año vamos por 1200 inscriptos.",
   "El aforo es de 500 personas por aula virtual.",
@@ -231,7 +231,7 @@ const LEGITIMOS: readonly string[] = [
   // «¿puedo pagar la mitad ahora?».
   "Puedes pagar el 50 % ahora y el resto después.",
   "El pago se hace 100 % online.",
-  "Podés abonar el 50% al inscribirte.",
+  "Puedes abonar el 50% al inscribirte.",
 
   // ── RED TEAM «IDENTIDAD» · el temario de los dos productos más vendidos ────
   // `sistema` estaba prohibida como palabra, verificada contra los 7 hechos
@@ -270,6 +270,70 @@ describe("(A) lo que el bot dice todos los días — nada de esto puede bloquear
   test("el corpus de texto legítimo pasa entero", () => {
     const bloqueados = LEGITIMOS.filter(bloquea).map((t) => `${t} → ${JSON.stringify(validarSalida(t))}`);
     assert.deepEqual(bloqueados, [], "falsos positivos del guardrail");
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// (B) VOSEO — el registro no se negocia
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Regla del dueño (1-ago-2026): el bot se escribe en español neutro del PERÚ.
+ * Lo que entró a `FORMAS_DE_VOSEO` es lo que no existe como conjugación de
+ * "tú" — por eso estos textos se bloquean sin margen. Lo que quedó afuera
+ * (sabes, piensas, hablas, mira, mandame, fijate…) está documentado en
+ * `guardrails.ts`, y su lado es el corpus de abajo: NO bloquearlos.
+ */
+describe("(B) voseo — el bot no escribe en rioplatense", () => {
+  const VOSEOS: readonly string[] = [
+    "¿Tenés el temario?", // tenés → tú: tienes
+    "Podés pagar en cuotas.", // podés → puedes
+    "Si querés, te paso el link.", // querés → quieres
+    "Sos el primero en preguntar.", // sos → eres
+    "¿De dónde sos?", // sos → eres
+    "¿Vos estás en Perú?", // vos → tú
+    "Te decís Alan, ¿no?", // decís → dices
+    "¿Cuándo venís a clases?", // venís → vienes
+    "Entendés lo que te digo.", // entendés → entiendes
+    "Che, ¿te llega el mensaje?", // che, la interjección rioplatense
+    "Decime tu nombre.", // decime → dime
+    "Contame qué te interesa.", // contame → cuéntame
+    "Hacelo cuando puedas.", // hacelo → hazlo
+    "Decile que te escriba.", // decile → dile
+    "Andate tranquilo, ya está.", // andate → vete
+  ];
+
+  test("cada forma de voseo bloquea y se reporta como «voseo»", () => {
+    for (const t of VOSEOS) {
+      assert.equal(bloquea(t), true, `${t}: el voseo no sale`);
+      assert.equal(violacionDe(t), "voseo", t);
+    }
+  });
+
+  test("el tú peruano pasa: las formas vecinas NO son voseo", () => {
+    const TUTEO: readonly string[] = [
+      "¿Tienes el temario?",
+      "Puedes pagar en cuotas.",
+      "Si quieres, te paso el link.",
+      "Eres la primera en preguntar.",
+      "Tú estás en Perú.",
+      "Dime tu nombre.",
+      "Cuéntame qué te interesa.",
+      "Hazlo cuando puedas.",
+      "Dile que te escriba.",
+      "Vete tranquilo, ya está.",
+      "No te preocupes, lo vemos.", // preocupés → preocupes: tú y voseo son la misma palabra
+      "Sabes que te ayudamos.", // sabés → sabes: idéntico sin tilde
+      "Piensas que sirve, ¿no?", // pensás → piensas: idéntico sin tilde
+      "Hablas con la asesora mañana.", // hablás → hablas
+      "Mira, te mando el link.", // mirá → mira, homógrafo de la tercera persona
+      "Mándame el temario.", // mandame es también «mándame»
+      "Fíjate el horario.", // fijate es también «fíjate»
+      "No entiendes lo que digo.", // entendés es la forma marcada, entiendes la de tú
+      "Cuando entres, dime.", // entrés (voseo) → entres: tú y voseo idénticos
+    ];
+    const bloqueados = TUTEO.filter(bloquea).map((t) => `${t} → ${JSON.stringify(validarSalida(t))}`);
+    assert.deepEqual(bloqueados, [], "falsos positivos: el tú peruano que se confunde con voseo");
   });
 });
 
@@ -384,7 +448,7 @@ const PRECIO_QUE_EL_PISO_NO_VE: readonly string[] = [
   "es 250 la cosa",
   "el valor es doscientos",
   "la primera cuota es de 125",
-  "con 250 ya entrás",
+  "con 250 ya entras",
   "el diplomado está en 250 soles",
   "queda 250",
   "salen 250 los dos",
@@ -393,7 +457,7 @@ const PRECIO_QUE_EL_PISO_NO_VE: readonly string[] = [
   "20% de dcto por pronto pago",
   "cuesta 350 pesos mexicanos",
   "son 60 dólares",
-  "el precio para vos es 199",
+  "el precio para ti es 199",
   "matrícula 100 y cuotas de 75",
 
   // ── RED TEAM «PRECIO» · la banda [1900, 2099], el hallazgo grave ───────────

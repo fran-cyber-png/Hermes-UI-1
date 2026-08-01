@@ -48,7 +48,7 @@ describe("armarSystemPrompt", () => {
     assert.ok(prompt.includes("Hola, soy Kathy Alva"));
     assert.ok(prompt.includes("NUNCA escribas cifras de precio"));
     assert.ok(prompt.includes("NUNCA inventes datos"));
-    assert.ok(prompt.includes("NUNCA digas ni insinúes que sos un bot"));
+    assert.ok(prompt.includes("NUNCA digas ni insinúes que eres un bot"));
     assert.ok(prompt.includes("piden hablar con una persona"));
     assert.ok(prompt.includes("dicen que no les interesa"));
     assert.ok(prompt.includes("pide precio, cotización"));
@@ -85,7 +85,7 @@ describe("armarSystemPrompt", () => {
     });
     const idxRol = prompt.indexOf("<rol>");
     const idxCtx = prompt.indexOf("<contexto_negocio>");
-    const idxHechos = prompt.indexOf("<datos_que_podes_afirmar>");
+    const idxHechos = prompt.indexOf("<datos_que_puedes_afirmar>");
     const idxPiezas = prompt.indexOf("<piezas_enviables>");
     const idxReglas = prompt.indexOf("<reglas_duras>");
     const idxLecciones = prompt.indexOf("<lecciones>");

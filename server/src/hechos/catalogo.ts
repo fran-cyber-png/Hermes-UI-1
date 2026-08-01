@@ -73,7 +73,7 @@ export const CATALOGO_POR_DEFECTO: readonly Hecho[] = [
     clave: "acceso-un-anio",
     rotulo: "Acceso por todo un año",
     texto:
-      "Las clases quedan grabadas y el acceso al campus lo tenés por todo un año: entrás cuando puedas, las veces que quieras. Si un día no llegás en vivo, no perdés la clase.",
+      "Las clases quedan grabadas y el acceso al campus lo tienes por todo un año: entras cuando puedas, las veces que quieras. Si un día no llegas en vivo, no pierdes la clase.",
     // Contesta la objeción de agenda (6%) y es la frase que hizo decir «Ah super».
     momentos: ["cotizada", "enfriada", "material-sin-precio", "pidiendo-info", "en-conversacion"],
     orden: 2,
@@ -92,7 +92,7 @@ export const CATALOGO_POR_DEFECTO: readonly Hecho[] = [
     clave: "canal-oficial",
     rotulo: "Somos el canal oficial",
     texto:
-      "Este es nuestro canal oficial. Podés verificarnos en nuestras redes y en el canal de WhatsApp de la Escuela antes de pagar nada.",
+      "Este es nuestro canal oficial. Puedes verificarnos en nuestras redes y en el canal de WhatsApp de la Escuela antes de pagar nada.",
     // La desconfianza es el 8% de las preguntas y no se contesta con adjetivos:
     // quien recibió la prueba de existencia pagó minutos después.
     momentos: ["primer-contacto", "pidiendo-info", "cotizada", "en-conversacion"],
@@ -112,7 +112,7 @@ export const CATALOGO_POR_DEFECTO: readonly Hecho[] = [
     clave: "certificado",
     rotulo: "El certificado y su validez",
     texto:
-      "Al terminar recibís el certificado con código de verificación, que sirve para tu currículum y para concursos públicos.",
+      "Al terminar recibes el certificado con código de verificación, que sirve para tu currículum y para concursos públicos.",
     momentos: ["cotizada", "pidiendo-info", "material-sin-precio", "en-conversacion"],
     orden: 6,
   },
