@@ -89,7 +89,8 @@ const LEGITIMOS: readonly string[] = [
   "Ley 27444.",
   // — cortesía y logística —
   "te paso el temario",
-  "una asesora te escribe en un rato",
+  // «una asesora te escribe en un rato» también se mudó al corpus que bloquea,
+  // por la misma decisión: es la promesa de un humano que nadie despacha.
   "¿te sirve el horario de la noche?",
   "Te comparto el link de inscripción en un momento.",
   "Cuéntame en qué te puedo ayudar.",
@@ -97,7 +98,8 @@ const LEGITIMOS: readonly string[] = [
   "Te espero a las 8.",
   "Vale, te espero a las 8.",
   "El 15 de agosto.",
-  "una persona del equipo te contacta",
+  // «una persona del equipo te contacta» vivía acá y se mudó al corpus que
+  // BLOQUEA: desde el 1-ago-2026 prometer otra persona es `derivacion`.
   // — los que ROZAN la regla a propósito —
   "La matrícula abre el 15 de agosto.",
   "La matrícula incluye 11 módulos y el certificado.",
@@ -254,7 +256,9 @@ const LEGITIMOS: readonly string[] = [
   "El algoritmo de las redes premia el video corto: eso se ve en el módulo 5.",
   "La clase está programada para el 15 de agosto.",
   "Las clases no son en persona, son 100% online.",
-  "Quien te va a atender es una persona del equipo.",
+  // «Quien te va a atender es una persona del equipo.» era el tercer renglón de
+  // este corpus que codificaba la regla vieja. Los tres bloquean desde el
+  // 1-ago-2026 y viven ahora en el corpus de `derivacion`.
 ];
 
 describe("(A) lo que el bot dice todos los días — nada de esto puede bloquearse", () => {
@@ -817,16 +821,33 @@ describe("(C) los bordes que hay que resolver a conciencia", () => {
   });
 
   /**
-   * La regla es sobre QUIÉN ESCRIBE, no sobre que existan personas: el bot tiene
-   * que poder hablar de sus compañeras («una asesora te escribe en un rato» es
-   * corpus A). Prohibir la palabra «persona» lo dejaría sin cómo decirlo, y por
-   * eso la regex de humanidad es de PRIMERA persona: «quien te va a atender es
-   * una persona del equipo» es verdad y es legítimo.
+   * ESTE TEST SE DIO VUELTA CON LA DECISIÓN DEL 1-AGO-2026, y se deja escrito
+   * porque la vuelta es el dato.
+   *
+   * Afirmaba que «una persona del equipo te contacta» era legítimo, con este
+   * razonamiento —que sigue siendo correcto para la capa de HUMANIDAD—: la regla
+   * es sobre quién escribe, no sobre que existan otras personas. Cierto, y por
+   * eso `RE_AFIRMA_HUMANIDAD` sigue siendo de primera persona.
+   *
+   * Lo que cambió es que apareció una SEGUNDA capa con otra pregunta. El dueño
+   * miró producción y prohibió prometerle al lead que otra persona lo va a
+   * contactar (`derivaAOtraPersona`): esas promesas no se cumplían solas y
+   * mientras el lead espera, deja de escribir. Así que estas frases ya no violan
+   * «humanidad» —nunca la violaron— sino «derivacion».
+   *
+   * El único que no se movió es el último: «te habla una persona» sigue siendo
+   * humanidad, porque ahí sí afirma que quien escribe es humana.
    */
-  test("«una persona del equipo te contacta» NO viola: no afirma que quien escribe sea esa persona", () => {
-    assert.equal(validarSalida("una persona del equipo te contacta").ok, true);
-    assert.equal(validarSalida("te va a escribir una asesora del equipo").ok, true);
-    assert.equal(validarSalida("quien te va a atender es una persona del equipo").ok, true);
+  test("prometer que otra persona lo contacta viola «derivacion», no «humanidad»", () => {
+    for (const texto of [
+      "una persona del equipo te contacta",
+      "te va a escribir una asesora del equipo",
+      "quien te va a atender es una persona del equipo",
+    ]) {
+      const v = validarSalida(texto);
+      assert.equal(v.ok, false, `«${texto}» tenía que bloquear`);
+      if (!v.ok) assert.equal(v.violacion, "derivacion", `«${texto}» bloqueó por otra cosa`);
+    }
     assert.equal(bloquea("te habla una persona"), true);
   });
 
@@ -1177,5 +1198,70 @@ describe("el techo de largo — no se valida lo que no puede ser una respuesta",
   test("una respuesta larga PERO plausible sigue pasando: el techo no acota al bot", () => {
     // ~2.000 caracteres es una respuesta larguísima para WhatsApp y entra sobrada.
     assert.equal(validarSalida("Con gusto te cuento del programa. ".repeat(60)).ok, true);
+  });
+});
+
+/**
+ * DERIVACIÓN — «un asesor te contactará».
+ *
+ * Los vectores que bloquean son TEXTUALES de producción: los cuatro salieron por
+ * la línea 51984429504 el 1-ago-2026 y los cuatro prometieron una persona que
+ * nunca llegó (los rescató el dueño a mano). Se copian tal cual a propósito: un
+ * corpus inventado no habría tenido el presente de indicativo («se comunica»),
+ * que es la mitad de los casos reales.
+ */
+describe("guardrail de derivación", () => {
+  const BLOQUEAN = [
+    // Rolando, 11:54 — pidió «Precio».
+    "Un asesor te contactará en breve con la cotización en tu moneda y las opciones de pago.",
+    // René, 11:31.
+    "Un asesor te contactará en breve para cerrar los detalles y tu cotización en pesos mexicanos.",
+    // Alan, 31-jul — presente de indicativo, no futuro.
+    "en un momento una asesora se comunica contigo con la información completa del programa",
+    // El orden inverso, que el español usa igual.
+    "En breve te contactará un asesor del equipo comercial.",
+    // Otras formas de lo mismo.
+    "Te derivo con un especialista que te atiende hoy mismo.",
+    "Nuestro equipo comercial te escribe en el transcurso del día.",
+    "Una compañera te llamará para coordinar el pago.",
+  ];
+
+  for (const texto of BLOQUEAN) {
+    test(`bloquea: «${texto.slice(0, 45)}…»`, () => {
+      const v = validarSalida(texto);
+      assert.equal(v.ok, false, "tenía que bloquear y pasó");
+      if (!v.ok) assert.equal(v.violacion, "derivacion");
+    });
+  }
+
+  /**
+   * La contracara, y es la que de verdad prueba la capa: la regla nueva quiere
+   * que Kathy se plante como LA asesora. Si esta lista se rompe, el guardrail
+   * está bloqueando justo la frase que vino a fomentar.
+   */
+  const PASAN = [
+    "Hola, soy Kathy Alva, asesora académica de Goberna.",
+    "Soy la asesora que te atiende por acá.",
+    "Soy tu asesora y te acompaño en todo el proceso.",
+    "Somos el equipo de Goberna y te atendemos de lunes a viernes.",
+    "Dame un momento y te confirmo el dato exacto.",
+    "Déjame revisarlo y te digo en un ratito.",
+    "El diplomado es para público general: no hace falta ser policía ni militar.",
+    "Las clases son lunes, miércoles y viernes de 19:00 a 21:00.",
+  ];
+
+  for (const texto of PASAN) {
+    test(`NO bloquea: «${texto.slice(0, 45)}…»`, () => {
+      const v = validarSalida(texto);
+      assert.equal(v.ok, true, !v.ok ? `bloqueó por ${v.violacion}: ${v.detalle}` : "");
+    });
+  }
+
+  test("la primera persona exculpa solo su propia frase, no el resto del mensaje", () => {
+    // La primera mitad es legítima; la segunda promete a alguien más. Si el
+    // recorrido se detuviera en la primera coincidencia, esto pasaría.
+    const v = validarSalida("Soy tu asesora, y un compañero te llamará para el pago.");
+    assert.equal(v.ok, false);
+    if (!v.ok) assert.equal(v.violacion, "derivacion");
   });
 });

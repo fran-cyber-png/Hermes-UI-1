@@ -200,7 +200,14 @@ export { normalizarTexto as normalizarParaSpam };
  * Va acá y no disfrazada de `precio` porque este valor termina en
  * `bot_respuestas.motivo`, que es lo que alguien va a leer para entender qué pasó.
  */
-export type Violacion = "precio" | "automatismo" | "humanidad" | "largo" | "voseo";
+export type Violacion =
+  | "precio"
+  | "automatismo"
+  | "humanidad"
+  | "largo"
+  | "voseo"
+  /** Le anunció al lead que otra persona lo va a contactar. Ver `derivaAOtraPersona`. */
+  | "derivacion";
 
 export type Veredicto = { ok: true } | { ok: false; violacion: Violacion; detalle: string };
 
@@ -510,8 +517,12 @@ const SER_HUMANO = "(?:humana|humano|humanas|humanos|persona|personas|de carne y
 
 /**
  * «Soy 100 % humana», «Soy Ana, una persona real», «Somos personas de verdad».
- * **Primera persona nada más**: «quien te va a atender es una persona del
- * equipo» es verdad y es legítimo — lo prohibido es que lo diga de sí mismo.
+ * **Primera persona nada más**: esta capa mira lo que el bot dice DE SÍ MISMO.
+ *
+ * Acá decía que «quien te va a atender es una persona del equipo» era legítimo,
+ * y desde el 1-ago-2026 no lo es: prometer otra persona lo bloquea
+ * `derivaAOtraPersona`. Son dos capas distintas a propósito — una cuida quién
+ * dice ser, la otra a quién promete.
  */
 const RE_AFIRMA_HUMANIDAD = new RegExp(` (?:soy|somos) (?:\\S+ ){0,3}${SER_HUMANO} `);
 
@@ -520,6 +531,134 @@ const RE_NIEGA_SER_MAQUINA = new RegExp(
   " no (?:soy|somos|es) (?:\\S+ ){0,2}" +
     "(?:bot|bots|chatbot|robot|maquina|maquinas|ia|programa|sistema|algoritmo|software|asistente|automatica|automatico)[\\s]",
 );
+
+// ════════════════════════════════════════════════════════════════════════════
+// DERIVACIÓN — «un asesor te contactará»
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * QUIEN ATIENDE ES KATHY, Y NO HAY NADIE DETRÁS A QUIEN PASARLE EL LEAD.
+ *
+ * Regla del dueño (1-ago-2026), y llega de mirar producción: en una mañana el
+ * bot prometió cuatro veces una persona que no existe —«Un asesor te contactará
+ * en breve con la cotización» (Rolando, 11:54), «para cerrar los detalles y tu
+ * cotización en pesos mexicanos» (René, 11:31), «en un momento una asesora se
+ * comunica contigo» (Alan, 31-jul)— y ninguna de las cuatro se cumplió sola: las
+ * rescató el dueño a mano. Prometer un humano que nadie despacha es peor que no
+ * contestar, porque el lead **deja de escribir mientras espera**.
+ *
+ * Lo que sí puede hacer cuando no sabe algo: pedir un momento y traerlo. El
+ * escalamiento interno NO se toca —`escalar_a_vendedora` sigue marcando la
+ * conversación— lo que se prohíbe es ANUNCIÁRSELO al lead. Es la misma forma que
+ * la regla del automatismo: la máquina de adentro sigue existiendo, no se cuenta.
+ *
+ * ── POR QUÉ NO ALCANZA EL PROMPT ────────────────────────────────────────────
+ * Porque ya está pasando con reglas que sí están escritas: el saludo de la regla
+ * 0 se lo saltea, y el prompt le pedía literalmente esta frase (regla 6). Una
+ * regla del prompt es una sugerencia; el guardrail es la compuerta.
+ *
+ * ── LA PRIMERA PERSONA ES LO QUE SEPARA ─────────────────────────────────────
+ * «una asesora se comunica contigo» (prohibido) y «soy la asesora que te
+ * atiende» (que es EXACTAMENTE lo que se quiere) comparten la forma
+ * sustantivo→verbo. Lo único que las distingue es el sujeto, así que un `soy` o
+ * un `somos` en la ventana previa exculpa. Sin esa salvedad, esta capa
+ * bloquearía la frase que la regla nueva quiere fomentar.
+ */
+export const QUIEN_ATIENDE: readonly string[] = [
+  "asesor",
+  "asesora",
+  "asesores",
+  "asesoras",
+  "consultor",
+  "consultora",
+  "ejecutivo",
+  "ejecutiva",
+  "agente",
+  "agentes",
+  "especialista",
+  "especialistas",
+  "companero",
+  "companera",
+  "companeros",
+  "colega",
+  "colegas",
+  "representante",
+  "coordinador",
+  "coordinadora",
+  "encargado",
+  "encargada",
+  "vendedor",
+  "vendedora",
+  "equipo",
+  "area",
+  "departamento",
+  // «persona» entra aunque sea la palabra más genérica de la lista: es la que
+  // usa el español para esto («quien te va a atender es una persona del
+  // equipo»). No se pisa con la capa de humanidad porque esa corre ANTES y es
+  // de primera persona: «soy una persona real» sale por humanidad, como siempre.
+  "persona",
+  "personas",
+];
+
+/**
+ * Verbos de CONTACTO FUTURO, en futuro y en presente.
+ *
+ * El presente entra porque es como el español promete («una asesora **se
+ * comunica** contigo»), y es literalmente la forma que salió a Alan. Dejarlo
+ * afuera cerraba la puerta de adelante con la de atrás abierta.
+ */
+const VA_A_CONTACTAR =
+  "(?:contactara|contactaran|contactarte|contacta|contactan|comunicara|comunicaran|" +
+  "comunica|comunican|comunicarse|escribira|escribiran|escribirte|escribe|escriben|" +
+  "llamara|llamaran|llamarte|llama|llaman|atendera|atenderan|atenderte|atiende|atienden|" +
+  "respondera|responderan|pondra en contacto|pondran en contacto|pone en contacto|" +
+  "enviara|enviaran|pasara|pasaran|dara|daran|brindara|brindaran|" +
+  // Los infinitivos, que son como se arma el futuro perifrástico: «te va a
+  // escribir una asesora». Sin ellos, «va a» era un bypass de una palabra.
+  "contactar|comunicar|escribir|llamar|atender|responder)";
+
+const QUIEN = `(?:${QUIEN_ATIENDE.join("|")})`;
+
+/** «un asesor te contactará», «una asesora en breve se comunica contigo». */
+const RE_DERIVA_ADELANTE = new RegExp(` ${QUIEN} (?:\\S+ ){0,3}${VA_A_CONTACTAR}[\\s]`);
+/** El orden inverso, que el español también usa: «te contactará un asesor». */
+const RE_DERIVA_ATRAS = new RegExp(` ${VA_A_CONTACTAR} (?:\\S+ ){0,3}${QUIEN}[\\s]`);
+
+/**
+ * Cuántas PALABRAS antes del sustantivo se miran buscando la primera persona.
+ *
+ * Tres, y se cuentan en palabras y no en caracteres porque una ventana de
+ * caracteres deja pasar «soy tu asesora **y un compañero te llamará**»: el `soy`
+ * gobierna a «asesora», no a «compañero», pero cae adentro igual. Tres alcanza
+ * para el caso más largo que existe («soy Kathy Alva, asesora académica») y no
+ * llega a cruzar una conjunción.
+ */
+const PALABRAS_PRIMERA_PERSONA = 3;
+
+/** ¿El «soy»/«somos» gobierna ESTE sustantivo? Entonces habla de sí misma, y vale. */
+function esPrimeraPersona(plano: string, indice: number): boolean {
+  const previas = plano.slice(0, indice).trim().split(/\s+/).slice(-PALABRAS_PRIMERA_PERSONA);
+  return previas.includes("soy") || previas.includes("somos");
+}
+
+/**
+ * ¿El texto le anuncia al lead que OTRA PERSONA lo va a contactar?
+ *
+ * Devuelve lo que casó, o `null`. Se recorren TODAS las coincidencias y no solo
+ * la primera: «soy tu asesora y un compañero te llamará» tiene que bloquear por
+ * la segunda mitad aunque la primera sea legítima.
+ */
+export function derivaAOtraPersona(plano: string): string | null {
+  for (const re of [RE_DERIVA_ADELANTE, RE_DERIVA_ATRAS]) {
+    const global = new RegExp(re.source, "g");
+    let m: RegExpExecArray | null;
+    while ((m = global.exec(plano)) !== null) {
+      if (!esPrimeraPersona(plano, m.index)) return m[0].trim();
+      global.lastIndex = m.index + 1;
+    }
+  }
+  return null;
+}
 
 /** ¿Alguna frase de la lista aparece como frase entera en el texto normalizado? */
 function primeraQueAparece(plano: string, frases: readonly string[]): string | null {
@@ -1211,6 +1350,12 @@ export function validarSalida(texto: string): Veredicto {
 
   const seAtribuye = loQueCaso(plano, RE_SE_ATRIBUYE_MAQUINA);
   if (seAtribuye) return viola("automatismo", `se atribuye ser una máquina: «${recortar(seAtribuye)}»`);
+
+  // Después de identidad y antes de precio: «un asesor te pasa la cotización»
+  // tiene las dos, y el motivo que hay que leer es que prometió a alguien que no
+  // va a llegar — el precio ahí ni siquiera se dijo.
+  const deriva = derivaAOtraPersona(plano);
+  if (deriva) return viola("derivacion", `promete que otra persona lo contacta: «${recortar(deriva)}»`);
 
   return hayPrecio(crudo);
 }
