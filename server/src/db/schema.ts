@@ -1322,4 +1322,6 @@ export {
   botRespuestas,
   botPausas,
   botCalificaciones,
+  botEstadoConversacion,
+  botMemoriaLead,
 } from "./bot.js";

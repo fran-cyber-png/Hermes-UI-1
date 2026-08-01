@@ -144,7 +144,7 @@ test("una ventana de follow-up más angosta que la de por defecto se respeta tal
   assert.deepEqual(avisos, []);
 });
 
-test("las ocho variables se leen del env que se le pasa, no de process.env", () => {
+test("las nueve variables se leen del env que se le pasa, no de process.env", () => {
   const { avisar, avisos } = conAvisos();
   const cfg = configDesdeEnv(
     {
@@ -156,6 +156,7 @@ test("las ocho variables se leen del env que se le pasa, no de process.env", () 
       BOT_FOLLOWUPS_DIA: "5",
       BOT_FOLLOWUP_HORA_DESDE: "8",
       BOT_FOLLOWUP_HORA_HASTA: "19",
+      BOT_MODO: "automatico",
     },
     avisar,
   );
@@ -169,6 +170,7 @@ test("las ocho variables se leen del env que se le pasa, no de process.env", () 
     followupsDia: 5,
     followupHoraDesde: 8,
     followupHoraHasta: 19,
+    modo: "automatico",
   });
   assert.deepEqual(avisos, []);
 });
@@ -202,7 +204,10 @@ test("la ventana de follow-up del bot coincide con el horario de atención de la
 });
 
 test("el resumen de arranque dice CUÁNTAS líneas quedaron y CUÁLES, no «bot listo»", () => {
-  const cfg = configDesdeEnv({ BOT_LINEAS: "51986394450,51999888777" }, () => {});
+  const cfg = configDesdeEnv(
+    { BOT_LINEAS: "51986394450,51999888777", BOT_MODELO: "claude-opus-5" },
+    () => {},
+  );
   const linea = resumenDeConfig(cfg);
 
   assert.match(linea, /2 línea/);

@@ -71,3 +71,25 @@ export const botCalificaciones = pgTable("bot_calificaciones", {
   escalada: boolean("escalada").notNull().default(false),
   actualizadoEn: timestamp("actualizado_en", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const botEstadoConversacion = pgTable(
+  "bot_estado_conversacion",
+  {
+    clave: text("clave").primaryKey(),
+    estado: text("estado").notNull().default("desconocido"),
+    datos: jsonb("datos").notNull().default({}),
+    actualizadoEn: timestamp("actualizado_en", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("bot_estado_conv_estado_idx").on(t.estado, t.actualizadoEn),
+  ],
+);
+
+export const botMemoriaLead = pgTable(
+  "bot_memoria_lead",
+  {
+    clave: text("clave").primaryKey(),
+    hechos: jsonb("hechos").notNull().default({}),
+    actualizadoEn: timestamp("actualizado_en", { withTimezone: true }).notNull().defaultNow(),
+  },
+);

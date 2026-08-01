@@ -1,22 +1,5 @@
 import type { Accion, EscaladaMotivo, ResumenPieza } from "./acciones.js";
 
-const FAMILIAS_CONOCIDAS = new Set([
-  "DIPCINTE",
-  "DIPICOT",
-  "DIPOPPS",
-  "DIPCIBE",
-  "GEN5C2G3",
-  "GENCDE6AE",
-  "DIPOPPSS",
-  "DIPGESPA",
-  "EPCVETC",
-  "GEN15527B",
-  "EVGLINTEST",
-  "DIPTEEI",
-  "DIPDIRS",
-  "DIPIAMP",
-]);
-
 export interface ToolDefinition {
   name: string;
   description: string;
@@ -32,10 +15,14 @@ export type HandlerTool = (input: unknown) => string;
 /**
  * Crea las 5 tools declarativas. Todas validan y acumulan Acciones en recolector.
  * Ninguna ejecuta efectos: el despachador decide qué hacer después.
+ *
+ * `familiasValidas` reemplaza la constante hardcodeada de 14 strings:
+ * ahora se consulta `alias_curso` al iniciar el pipeline (Fase 2).
  */
 export function crearTools(
   recolector: Accion[],
   catalogo: ResumenPieza[],
+  familiasValidas: ReadonlySet<string> = FAMILIAS_POR_DEFECTO,
 ): {
   definiciones: ToolDefinition[];
   handlers: Record<string, HandlerTool>;
@@ -82,8 +69,9 @@ export function crearTools(
   handlers["registrar_interes"] = (input: unknown) => {
     const familia = (input as { familia?: string } | undefined)?.familia;
     if (!familia) return "falta la familia del curso";
-    if (!FAMILIAS_CONOCIDAS.has(familia)) {
-      return `"${familia}" no es una familia de curso conocida. Las conocidas son: ${[...FAMILIAS_CONOCIDAS].join(", ")}`;
+    if (!familiasValidas.has(familia)) {
+      const lista = [...familiasValidas].slice(0, 10).join(", ");
+      return `"${familia}" no es una familia de curso conocida. Algunas conocidas: ${lista}`;
     }
     recolector.push({ tipo: "registrar_interes", familia });
     return `interés en ${familia} registrado`;
@@ -189,3 +177,21 @@ export function crearTools(
 
   return { definiciones, handlers };
 }
+
+/** Familias por defecto — cuando alias_curso no está disponible. */
+const FAMILIAS_POR_DEFECTO: ReadonlySet<string> = new Set([
+  "DIPCINTE",
+  "DIPICOT",
+  "DIPOPPS",
+  "DIPCIBE",
+  "GEN5C2G3",
+  "GENCDE6AE",
+  "DIPOPPSS",
+  "DIPGESPA",
+  "EPCVETC",
+  "GEN15527B",
+  "EVGLINTEST",
+  "DIPTEEI",
+  "DIPDIRS",
+  "DIPIAMP",
+]);

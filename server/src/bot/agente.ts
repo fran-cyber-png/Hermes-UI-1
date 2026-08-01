@@ -17,6 +17,7 @@ interface EntradaAgente {
   piezas: ResumenPieza[];
   lecciones: string[];
   modelo: string;
+  familiasValidas?: ReadonlySet<string>;
 }
 
 type ContentBlock = 
@@ -56,7 +57,11 @@ export function crearAgente(cliente: ClienteAnthropic) {
       });
 
       const acciones: Accion[] = [];
-      const { definiciones, handlers } = crearTools(acciones, entrada.piezas);
+      const { definiciones, handlers } = crearTools(
+        acciones,
+        entrada.piezas,
+        entrada.familiasValidas,
+      );
 
       const messages: MessageParam[] = [];
       for (const t of entrada.historial) {
