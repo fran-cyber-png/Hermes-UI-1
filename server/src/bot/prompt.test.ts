@@ -153,4 +153,19 @@ describe("armarContextoContacto", () => {
     assert.ok(ctx.includes("País probable: México"));
     assert.ok(ctx.includes("(del prefijo del teléfono)"));
   });
+
+  /**
+   * El país NO se pregunta (decisión del dueño, 1-ago-2026): ya viene en el
+   * código del teléfono y `armarContextoContacto` se lo pasa al modelo en cada
+   * turno. Preguntarlo gastaba un turno entero por lead — a René (5215646898604)
+   * le costó el de las 11:29 — para conseguir un dato que ya estaba en el `521`.
+   *
+   * Se fija acá, sobre el string del prompt, porque es lo único que el modelo
+   * lee: la regla no vive en ningún `if` que se pueda testear de otra forma.
+   */
+  it("el prompt prohíbe preguntar el país y no lo pide en el primer contacto", () => {
+    const prompt = armarSystemPrompt({ hechos: [], piezas: [], lecciones: [] });
+    assert.ok(prompt.includes("NUNCA preguntes de qué país escribe"));
+    assert.ok(!prompt.includes("NOMBRE y PAÍS"));
+  });
 });
