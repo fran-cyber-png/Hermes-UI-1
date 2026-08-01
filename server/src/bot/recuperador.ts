@@ -18,12 +18,41 @@ import type { ResumenPieza } from "./acciones.js";
 /**
  * EL ENFOQUE DEL BOT, HOY: UN SOLO PRODUCTO.
  *
- * `DIPCINTE` = Diploma de Inteligencia y Contrainteligencia. Las piezas con
- * `familia === null` («sirve para cualquier curso», como los hechos) entran
- * igual; las de cualquier otra familia quedan afuera hasta que el dueño
- * amplíe el foco.
+ * ⚠️ **ACÁ DECÍA `DIPCINTE` Y ERA OTRO PRODUCTO.** Verificado contra el catálogo
+ * vivo de Cerberus el 1-ago-2026:
+ *
+ *   · **`DIPICOT`** = Diploma de Especialización en **Inteligencia y
+ *     Contrainteligencia** — 14 ediciones activas, USD 250 / promo USD 150.
+ *     Es el producto del bot.
+ *   · `DIPCINTE` = Diploma Internacional en **Ciberinteligencia y Ciberdefensa**
+ *     — USD 100. Otro producto, otro precio.
+ *
+ * El alias de producción ya mapeaba bien («inteligencia y contrainteligencia» →
+ * `DIPICOT`), así que el interés que llegaba del anuncio y el catálogo que el
+ * bot filtraba **eran de dos productos distintos**. La única pieza aprobada
+ * entraba de casualidad, por tener mal la familia en la base.
+ *
+ * ⚠️ **ESTE CAMBIO NO VA SOLO**: la fila de `plantillas` de la pieza de
+ * Inteligencia tiene `familia_curso = 'DIPCINTE'` y hay que corregirla en la
+ * misma ventana. Si el código pasa a DIPICOT y la base sigue en DIPCINTE, el
+ * bot se queda **sin una sola pieza que mandar**. Ver `docs/plan-bot-dipicot.md`
+ * §5 F0.5.
+ *
+ * Las piezas con `familia === null` («sirve para cualquier curso», como los
+ * hechos) entran igual; las de cualquier otra familia quedan afuera hasta que el
+ * dueño amplíe el foco.
+ *
+ * ── Configurable, no clavado ─────────────────────────────────────────────
+ *
+ * `BOT_FAMILIA_ENFOQUE` permite cambiarlo sin tocar código. Es un paso
+ * intermedio honesto: la casa definitiva de este valor es una columna de
+ * `bot_estado` (enfoque POR LÍNEA, editable desde la app), y eso es F3 del plan
+ * porque pide migración. Mientras tanto el default es el producto correcto.
  */
-export const ENFOQUE_PRODUCTO = "DIPCINTE";
+export const ENFOQUE_POR_DEFECTO = "DIPICOT";
+
+export const ENFOQUE_PRODUCTO: string =
+  process.env.BOT_FAMILIA_ENFOQUE?.trim().toUpperCase() || ENFOQUE_POR_DEFECTO;
 
 /**
  * Las clases que el bot conversacional puede mandar. Los acuses (auto-respuesta

@@ -17,7 +17,7 @@ Modalidad: 100% virtual, clases en vivo por Zoom (quedan grabadas), campus virtu
 Se estudia desde cualquier país. Los precios se manejan en moneda local del participante.
 
 Programas destacados:
-- Inteligencia y Contrainteligencia (DIPCINTE)
+- Inteligencia y Contrainteligencia (código interno DIPICOT — nunca menciones el código al lead)
 - Foro de Estado
 - Diplomados en formación política
 - Comunicación política

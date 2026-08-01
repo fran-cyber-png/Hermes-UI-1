@@ -79,20 +79,34 @@ export function crearAgente(cliente: ClienteAnthropic) {
           modelo: entrada.modelo,
         };
 
+        /**
+         * EL SYSTEM ES EL MISMO EN TODAS LAS ITERACIONES — y antes no lo era.
+         *
+         * El bloque `<contacto>` (nombre, país, interés registrado, señales)
+         * viajaba **solo cuando `iter === 0`**; de la segunda vuelta en adelante
+         * el system era el string grande a secas. O sea que el bot olvidaba con
+         * quién estaba hablando **justo después de usar una tool** — que es
+         * exactamente cuando más lo necesita: registró el interés y en la vuelta
+         * siguiente ya no sabe el nombre de la persona a la que le va a escribir.
+         *
+         * Se arma una vez, fuera del loop, con el mismo orden de bloques siempre:
+         * el `cache_control` va sobre el bloque grande —que es idéntico turno a
+         * turno— y el bloque volátil del contacto queda **después**, sin cachear.
+         * Ese orden es lo que hace que el caché siga pegando: un prefijo estable
+         * seguido de lo que cambia.
+         */
+        const system: Anthropic.Messages.MessageCreateParamsNonStreaming["system"] = [
+          {
+            type: "text" as const,
+            text: sistemaGrande,
+            cache_control: { type: "ephemeral" as const },
+          },
+          ...(entrada.contactoCtx
+            ? [{ type: "text" as const, text: entrada.contactoCtx }]
+            : []),
+        ];
+
         for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
-          const system: string | Anthropic.Messages.MessageCreateParamsNonStreaming["system"] =
-            iter === 0
-              ? [
-                  {
-                    type: "text" as const,
-                    text: sistemaGrande,
-                    cache_control: { type: "ephemeral" as const },
-                  },
-                  ...(entrada.contactoCtx
-                    ? [{ type: "text" as const, text: entrada.contactoCtx }]
-                    : []),
-                ]
-              : sistemaGrande;
 
           const response = await cliente.messages.create({
             model: entrada.modelo,

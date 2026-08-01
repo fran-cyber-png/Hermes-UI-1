@@ -42,6 +42,7 @@ import { arrancarReloj } from "./pauta/reloj.js";
 import { arrancarRelojDelLazo } from "./lazo/reloj.js";
 import { arrancarAutoRespuesta } from "./autorespuesta/reloj.js";
 import { autorespuestaRouter } from "./routes/autorespuesta.js";
+import { botRouter } from "./routes/bot.js";
 import { webhookRouter } from "./webhook/ruta.js";
 import { arrancarWhatsapp } from "./whatsapp/wiring.js";
 import { rutaDevWhatsapp } from "./whatsapp/rutaDev.js";
@@ -138,6 +139,7 @@ const hayFalso = gestor.todos().some((l) => l.falso);
 app.use("/api/stream", streamRouter);     // tiempo real: push de cambios (SSE)
 app.use("/api/whatsapp", whatsappRouter); // conversación nativa: hilo + enviar
 app.use("/api/autorespuesta", autorespuestaRouter); // el interruptor sin deploy de la auto-respuesta (#125)
+app.use("/api/bot", botRouter); // el kill-switch del bot de primera línea: apagar cuesta un click, no un deploy
 // ⚠ /vincular queda FUERA del perímetro /api y sigue abierto: la consola del
 // operador no tiene auth propia todavía (su HTML no manda Bearer). Contenerlo
 // es decisión aparte (auth de operador, o bloquear /vincular en nginx) — ver #36.
