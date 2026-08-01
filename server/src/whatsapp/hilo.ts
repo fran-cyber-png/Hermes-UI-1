@@ -72,6 +72,7 @@ export async function hiloDe(base: typeof db, telefono: string, numeroPropio?: s
   try {
     return await base.execute(sql`
       SELECT i.id, i.direccion, i.autor, i.texto, i.occurred_at, i.external_id,
+             i.persona_nombre AS persona_nombre,
              e.payload->'media' AS media,
              e.payload->'origen' AS origen,
              ${marca}

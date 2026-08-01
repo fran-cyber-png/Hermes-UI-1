@@ -6,11 +6,12 @@
  * si Cerberus no responde, el bot conversa sin nombre, pero no se cuelga.
  *
  * ── Fuentes ──────────────────────────────────────────────────────────
- * Cerberus     → nombre, esCliente, ventasCount, pais
+ * Memoria      → nombre, pais (lo que el lead dijo en turnos anteriores)
+ * Cerberus     → nombre, esCliente, ventasCount, pais (teléfono verificado)
+ * Perfil WA    → nombre del perfil de WhatsApp (último recurso)
  * Intereses    → interes (curso registrado manualmente)
  * Señales      → cotizada, enfriada
  * Origen       → campaña/anuncio/formulario → interesPropuesto
- * Memoria      → hechos extraídos y persistidos de turnos anteriores
  */
 
 import { db } from "../db/client.js";
@@ -20,6 +21,8 @@ import { consultarSenales } from "../senales/consultarSenales.js";
 import { consultarIntereses } from "../gestiones/intereses.js";
 import { familiaDeTexto, familiaDeAnuncio, type AliasCurso } from "../cursos/alias.js";
 import { hiloDe } from "../whatsapp/hilo.js";
+import { leerHechos } from "./memoria.js";
+import { resolverIdentidad } from "./identidad.js";
 import { armarContextoContacto } from "./prompt.js";
 
 export interface ContextoContacto {
@@ -62,6 +65,9 @@ export async function recolectarContextoContacto(
 ): Promise<ContextoContacto> {
   const errores: string[] = [];
   const telefono = extraerTelefono(clave);
+
+  // ── Memoria (lo que el lead dijo en turnos anteriores) ─────────────
+  const memoria = (await conTimeout("memoria", leerHechos(clave), errores)) ?? {};
 
   // ── Cerberus ──────────────────────────────────────────────────────
   let nombre: string | null = null;
@@ -117,6 +123,7 @@ export async function recolectarContextoContacto(
 
   // ── Origen (campaña/anuncio/formulario) ───────────────────────────
   let interesPropuesto: string | null = null;
+  let perfilNombre: string | null = null;
 
   if (telefono) {
     const hilo = await conTimeout(
@@ -131,8 +138,19 @@ export async function recolectarContextoContacto(
         errores,
       );
       interesPropuesto = resolverInteresPropuesto(hilo, aliases ?? []);
+
+      // El nombre del perfil de WhatsApp (lo persiste la ingesta en cada mensaje)
+      perfilNombre = hilo
+        .map((m) => (m.persona_nombre as string | null | undefined) ?? null)
+        .find((n): n is string => n !== null) ?? null;
     }
   }
+
+  // ── Resolver identidad: memoria > Cerberus > perfil de WhatsApp ──
+  const identidad = resolverIdentidad(memoria, { nombre, pais }, perfilNombre);
+  nombre = identidad.nombre;
+  procedenciaNombre = identidad.procedenciaNombre;
+  pais = identidad.pais;
 
   return {
     nombre,
