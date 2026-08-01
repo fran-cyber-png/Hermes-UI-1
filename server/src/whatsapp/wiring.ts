@@ -8,6 +8,8 @@ import { repositorioDrizzle } from './repositorioDrizzle.js';
 import { registroEnviosDrizzle } from './registroEnviosDrizzle.js';
 import { GestorWhatsapp, numerosConfigurados, type WhatsappArmado } from './gestor.js';
 import { emitirRT } from '../realtime/bus.js';
+import { notificarEntrante } from '../bot/ingesta.js';
+import { configDesdeEnv } from '../bot/config.js';
 import type { TransporteWhatsapp } from './transporte.js';
 
 /**
@@ -83,7 +85,21 @@ function montar(numero: string, cual: string): WhatsappArmado {
     transporte = falso;
   }
 
-  const ingesta = new IngestaWhatsapp(transporte, repositorioDrizzle);
+  const ingesta = new IngestaWhatsapp(transporte, repositorioDrizzle, (m) => {
+    // El bot llega por EL MISMO camino que ve la conversación: un entrante nuevo
+    // en una línea de BOT_LINEAS crea el claim (notificarEntrante filtra la línea
+    // y aplica el debounce). El webhook Cloud API es un camino aparte para cuando
+    // el transporte sea cloud-api; acá va el de whatsmeow (y el falso, en dev).
+    void notificarEntrante(
+      `conv:whatsapp:${m.telefono}:${m.numeroPropio}`,
+      m.numeroPropio,
+      m.ocurridoEn,
+      configDesdeEnv(),
+    ).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error('[bot] notificarEntrante falló:', (err as Error).message);
+    });
+  });
   ingesta.iniciar();
 
   // Cada cambio de estado (conectado/desconectado/baneado) se empuja en vivo: el

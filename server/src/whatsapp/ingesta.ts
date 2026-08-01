@@ -36,6 +36,7 @@ export class IngestaWhatsapp {
   constructor(
     private transporte: TransporteWhatsapp,
     private repo: RepositorioInteracciones,
+    private onEntranteNuevo?: (m: MensajeWhatsapp) => void,
   ) {}
 
   /** Engancha la ingesta al stream. A partir de acá, cada mensaje se persiste. */
@@ -71,5 +72,18 @@ export class IngestaWhatsapp {
     // así cubre también los salientes y los simulados, no solo la ingesta.
     if (nuevo) this.contadores.nuevos += 1;
     else this.contadores.duplicados += 1;
+
+    // El aviso al despachador del bot: SOLO la primera vez que se ve el mensaje
+    // (un duplicado de reconexión no debe reabrir la ventana de debounce). Lo
+    // engancha el wiring (whatsapp/wiring.ts); el filtro por línea vive dentro
+    // de notificarEntrante. Un fallo del aviso no puede tumbar la persistencia.
+    if (nuevo && !m.esMio && this.onEntranteNuevo) {
+      try {
+        this.onEntranteNuevo(m);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[ingesta whatsapp] aviso al bot falló:', (err as Error).message);
+      }
+    }
   }
 }
