@@ -87,4 +87,55 @@ describe('IngestaWhatsapp', () => {
     assert.equal(repo.guardadas[0].personaId, '51961506674');
     assert.equal(repo.guardadas[0].direccion, 'entrante');
   });
+
+  test('un entrante nuevo avisa al bot UNA vez; el duplicado no reabre la ventana', async () => {
+    const repo = new RepoEnMemoria();
+    const avisos: string[] = [];
+    const ingesta = new IngestaWhatsapp(
+      new TransporteFalso({ telefono: '51987654321' }),
+      repo,
+      (m) => avisos.push(m.telefono),
+    );
+
+    const mensaje = {
+      idExterno: 'AVISO-1',
+      numeroPropio: '51987654321',
+      telefono: '51961506674',
+      esMio: false as const,
+      esGrupo: false,
+      ocurridoEn: new Date('2026-07-21T15:00:00Z'),
+      nombreVisible: 'Rosa',
+      texto: 'hola',
+      clase: 'texto' as const,
+    };
+    await ingesta.procesar(mensaje);
+    await ingesta.procesar(mensaje);
+
+    assert.deepStrictEqual(avisos, ['51961506674'], 'solo la primera entrega avisa');
+  });
+
+  test('un saliente propio nunca avisa al bot', async () => {
+    const repo = new RepoEnMemoria();
+    const avisos: string[] = [];
+    const ingesta = new IngestaWhatsapp(
+      new TransporteFalso({ telefono: '51987654321' }),
+      repo,
+      (m) => avisos.push(m.telefono),
+    );
+
+    await ingesta.procesar({
+      idExterno: 'SAL-1',
+      numeroPropio: '51987654321',
+      telefono: '51961506674',
+      esMio: true,
+      esGrupo: false,
+      ocurridoEn: new Date('2026-07-21T15:00:00Z'),
+      nombreVisible: null,
+      texto: 'hola, soy yo',
+      clase: 'texto',
+    });
+
+    assert.equal(repo.guardadas.length, 1, 'el saliente se persiste igual');
+    assert.deepStrictEqual(avisos, [], 'pero no hay aviso al bot');
+  });
 });
