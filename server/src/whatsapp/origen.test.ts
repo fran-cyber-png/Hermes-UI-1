@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, describe } from 'node:test';
-import { detectarOrigen } from './origen.js';
+import { detectarOrigen, detectarOrigenReferral } from './origen.js';
 
 /**
  * Detectar de dónde vino el lead es la captura del embudo. Estos tests fijan que
@@ -74,5 +74,36 @@ describe('detectarOrigen', () => {
     const o = detectarOrigen(message, null);
     assert.ok(o && o.fuente === 'anuncio');
     assert.equal(o.adId, '777');
+  });
+});
+
+describe('detectarOrigenReferral — la Cloud API de Meta', () => {
+  test('un referral de click-to-WhatsApp entrega el ad_id (source_id), headline y ctwa_clid', () => {
+    const o = detectarOrigenReferral({
+      source_id: '123456789',
+      source_type: 'REEL',
+      source_url: 'https://fb.me/xyz',
+      headline: 'Reel spot antiguo',
+      ctwa_clid: 'clid-abc',
+    });
+    assert.ok(o && o.fuente === 'anuncio');
+    assert.equal(o.adId, '123456789');
+    assert.equal(o.titulo, 'Reel spot antiguo');
+    assert.equal(o.ctwaClid, 'clid-abc');
+    assert.equal(o.url, 'https://fb.me/xyz');
+  });
+
+  test('sin source_id no hay anuncio atribuible', () => {
+    assert.equal(detectarOrigenReferral({ headline: 'Reel spot antiguo' }), null);
+    assert.equal(detectarOrigenReferral(null), null);
+    assert.equal(detectarOrigenReferral('no soy un objeto'), null);
+  });
+
+  test('un referral sin headline ni clid degrada, no se cae', () => {
+    const o = detectarOrigenReferral({ source_id: '42' });
+    assert.ok(o && o.fuente === 'anuncio');
+    assert.equal(o.adId, '42');
+    assert.equal(o.titulo, null);
+    assert.equal(o.ctwaClid, null);
   });
 });

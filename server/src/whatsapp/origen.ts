@@ -71,3 +71,24 @@ export function detectarOrigen(message: Record<string, unknown>, textoMensaje: s
 
   return null;
 }
+
+/**
+ * El referral del Click-to-WhatsApp tal como lo manda la Cloud API de Meta en
+ * el PRIMER mensaje del hilo: `{ source_id (el ad_id), headline, source_url,
+ * ctwa_clid }`. Es el MISMO dato que el `externalAdReply` de whatsmeow — otro
+ * nombre para el mismo objeto, porque llega por otro protocolo. Sin él, un lead
+ * que entró por un anuncio a la línea bot llega sin decir de qué anuncio vino.
+ */
+export function detectarOrigenReferral(referral: unknown): Origen | null {
+  if (referral == null || typeof referral !== 'object') return null;
+  const r = referral as Record<string, unknown>;
+  const adId = texto(r.source_id);
+  if (!adId) return null;
+  return {
+    fuente: 'anuncio',
+    adId,
+    ctwaClid: texto(r.ctwa_clid),
+    titulo: texto(r.headline),
+    url: texto(r.source_url),
+  };
+}

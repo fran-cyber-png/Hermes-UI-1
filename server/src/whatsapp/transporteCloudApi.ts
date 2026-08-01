@@ -10,6 +10,7 @@ import {
 } from './transporte.js';
 import { normalizarTelefono } from './identidadWa.js';
 import { RUTA_MEDIA, nombreSeguro } from './mediaDir.js';
+import { detectarOrigen, detectarOrigenReferral, type Origen } from './origen.js';
 
 const GRAPH_BASE = 'https://graph.facebook.com/v25.0';
 
@@ -186,6 +187,15 @@ export class TransporteCloudApi implements TransporteWhatsapp {
     const media = await this.bajarMediaSiHay(m);
     const texto: string | null = m.text?.body ?? (m.type ? (m[m.type]?.caption ?? null) : null);
 
+    // El anuncio del que vino la persona (Click-to-WhatsApp): el referral solo
+    // llega en el PRIMER mensaje del hilo. La landing, por el [código] del texto.
+    let origen: Origen | null = null;
+    if (m.referral) {
+      origen = detectarOrigenReferral(m.referral);
+    } else if (texto) {
+      origen = detectarOrigen({}, texto);
+    }
+
     return {
       idExterno: m.id,
       numeroPropio: this.numeroPropio,
@@ -197,6 +207,7 @@ export class TransporteCloudApi implements TransporteWhatsapp {
       texto,
       clase: m.type === 'text' ? 'texto' : media ? 'multimedia' : 'otro',
       media,
+      origen,
     };
   }
 
