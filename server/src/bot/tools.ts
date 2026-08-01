@@ -49,8 +49,28 @@ export function crearTools(
     const pieza = catalogo.find((p) => `${p.clase}:${p.id}` === id);
     if (!pieza) return "esa pieza no existe; elegí de la lista de <piezas_enviables>";
     if (!pieza.enviable) return "esa pieza no se puede enviar en este momento";
+    // La intención SE SIGUE GUARDANDO aunque no se ejecute: `bot_respuestas.
+    // acciones` es el rastro con el que se diagnosticó este bug, y apagarlo nos
+    // dejaría ciegos sobre qué piezas pediría el modelo cuando F3 conecte.
     recolector.push({ tipo: "mandar_pieza", clase: pieza.clase, id: pieza.id });
-    return `pieza ${pieza.descripcion} agendada para enviar`;
+    // PERO SE LE DICE LA VERDAD. Acá decía «pieza … agendada para enviar», y era
+    // falso: `ejecutar.ts` la descarta con un console.warn. El modelo le creía y
+    // redactaba el acompañamiento como si el documento hubiera salido — «Ya
+    // tienes en tu chat el temario completo» (Carlos, 1-ago 12:09:38), a lo que
+    // el lead contestó quince segundos después «No tengo nada todavía apenas
+    // estoy pidiendo la información». Seis leads esa mañana, misma firma.
+    //
+    // Una tool que acepta y no ejecuta no produce «no pasa nada»: produce que el
+    // modelo MIENTA con confianza. El no-op explícito de `ejecutar.ts` se sentía
+    // seguro porque loguea, y el que tenía que enterarse era el modelo.
+    //
+    // Cuando F3 conecte el envío, esto vuelve a ser una confirmación — y ahí sí
+    // será cierta.
+    return (
+      "NO se envió: el envío de piezas todavía no está conectado. " +
+      "NO le digas que ya la tiene, que le llegó ni que la revise. " +
+      "Pedile un momento y decile que vos se lo pasás en seguida."
+    );
   };
 
   // 2. registrar_interes
@@ -74,7 +94,12 @@ export function crearTools(
       return `"${familia}" no es una familia de curso conocida. Algunas conocidas: ${lista}`;
     }
     recolector.push({ tipo: "registrar_interes", familia });
-    return `interés en ${familia} registrado`;
+    // Mismo caso que `mandar_pieza`: acá decía «interés en X registrado» y
+    // ninguna fila se escribe (`ejecutar.ts` lo descarta). Miente menos —la
+    // regla 7 le prohíbe contarle al lead que lo registró— pero le da al modelo
+    // una premisa falsa para el resto del turno, y de eso salen los «ya te
+    // tengo anotado». La intención se guarda igual, en `acciones`.
+    return `anotado ${familia} en el pedido, todavía sin confirmar. No se lo menciones al lead.`;
   };
 
   // 3. calificar
