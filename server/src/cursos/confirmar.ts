@@ -1,9 +1,7 @@
-import { eq } from "drizzle-orm";
 import type { db } from "../db/client.js";
-import { intereses } from "../db/schema.js";
 import type { ProductoCatalogo } from "../cerberus/productos.js";
-import { elegirUltimaEdicion } from "./catalogo.js";
 import { consultarInteresesDerivados } from "./consultarDerivados.js";
+import { registrarInteresDeFamilia, tieneInteresRegistrado } from "./registrarFamilia.js";
 import type { AliasCurso } from "./alias.js";
 
 /**
@@ -26,6 +24,13 @@ import type { AliasCurso } from "./alias.js";
  * FALLA RUIDOSO, como el proxy de Ivi: si Cerberus no contesta o la familia no
  * tiene ningún producto activo, devuelve un código de error explicado — jamás
  * inventa un nombre parecido ni registra el chip.
+ *
+ * ⚠️ **La ESCRITURA no vive acá**: la regla 2 (qué nombre, qué recorte, con qué
+ * producto atado y con qué política de conflicto) es `registrarFamilia.ts`,
+ * porque el bot conversacional también registra intereses (F3) y las dos filas
+ * tienen que ser indistinguibles. Lo que decide este archivo es lo suyo: **de
+ * dónde sale la familia** — del anuncio o del formulario, recalculado en el
+ * server.
  */
 
 export type CodigoConfirmacion =
@@ -60,11 +65,7 @@ export async function confirmarInteresDerivado(
   base: typeof db,
   o: OpcionesConfirmar,
 ): Promise<ResultadoConfirmacion> {
-  const registrados = await base
-    .select({ curso: intereses.curso })
-    .from(intereses)
-    .where(eq(intereses.clave, o.clave));
-  if (registrados.length > 0) {
+  if (await tieneInteresRegistrado(base, o.clave)) {
     return {
       ok: false,
       codigo: "ya_registrado",
@@ -93,44 +94,18 @@ export async function confirmarInteresDerivado(
     };
   }
 
-  let catalogo: ProductoCatalogo[];
-  try {
-    catalogo = await o.catalogo();
-  } catch (err) {
-    return {
-      ok: false,
-      codigo: "catalogo_caido",
-      message: `Cerberus no respondió el catálogo (${(err as Error).message}) — probá de nuevo en un rato.`,
-    };
-  }
+  // De acá en adelante la familia ya está decidida y lo que queda es escribirla:
+  // eso vive una sola vez, compartido con el bot. Los dos códigos de error que
+  // puede devolver (`sin_producto`, `catalogo_caido`) son dos de los cinco de
+  // esta función, así que el resultado se propaga tal cual.
+  const r = await registrarInteresDeFamilia(base, {
+    clave: o.clave,
+    familia: propuesta.familia,
+    vendedoraId: o.vendedoraId,
+    catalogo: o.catalogo,
+    etiqueta: propuesta.curso ?? propuesta.familia,
+  });
+  if (!r.ok) return r;
 
-  const producto = elegirUltimaEdicion(catalogo, propuesta.familia);
-  if (!producto) {
-    return {
-      ok: false,
-      codigo: "sin_producto",
-      message: `Cerberus no tiene ninguna edición activa de ${propuesta.curso ?? propuesta.familia}: registrá el interés a mano.`,
-    };
-  }
-
-  // El mismo recorte que el POST manual: `intereses.curso` guarda el nombre de
-  // Cerberus, y 120 caracteres es lo que la ficha puede mostrar.
-  const curso = producto.nombre.trim().slice(0, 120);
-  // Y EL PRODUCTO, que hasta acá se calculaba y se tiraba: esta función ya había
-  // recorrido campaña/anuncio → familia → última edición activa → producto y
-  // devolvía `{curso, sku, familia}`, pero el insert guardaba sólo el nombre.
-  // Con un nombre no se arma una cotización —la orden pide `producto_id`—, así
-  // que ése era exactamente el eslabón que faltaba para precargar el carrito.
-  await base
-    .insert(intereses)
-    .values({
-      clave: o.clave,
-      curso,
-      productoId: producto.id,
-      sku: producto.sku,
-      vendedoraId: o.vendedoraId,
-    })
-    .onConflictDoNothing();
-
-  return { ok: true, curso, sku: producto.sku, familia: propuesta.familia };
+  return { ok: true, curso: r.curso, sku: r.sku, familia: r.familia };
 }

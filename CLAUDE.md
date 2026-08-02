@@ -523,7 +523,9 @@ en **ADR 0025** —aprobado el modelo, sin schema todavía— y el 3 (el puente 
   el corpus del frente 3 puede salir sin tocar el schema.
 - **`(clase, ref)` es la identidad, `via` es la pantalla.** Textual y no una FK **a propósito**:
   cuando el frente 2 unifique los catálogos, esto se remapea y lo acumulado sigue valiendo. `via`
-  (`panel-sugerencia`·`panel-secuencias`·`panel-datos`·`automatica`) no la toca el frente 2, porque
+  (`panel-sugerencia`·`panel-secuencias`·`panel-datos`·`automatica`·**`bot`**, esta última desde F3:
+  el bot conversacional eligiendo la pieza solo — separada de `automatica`, que es del acuse
+  nocturno, para poder preguntar «¿el bot elige mejor o peor que una persona?») no la toca el frente 2, porque
   unificar catálogos no cambia por dónde entró la mano. Sin las dos, una de estas dos preguntas
   queda sin respuesta: «¿la secuencia 12 funciona?» y «¿las dos respuestas del panel sirven?».
 - **La VERSIÓN es un `sha256:` + 16 hex del contenido AUTORAL**, y es ahora o nunca: sin ella,

@@ -94,8 +94,8 @@ apagado → línea no habilitada → frenado → **pausado** (pausa activa: rech
 
 | Tool | Qué hace hoy |
 |---|---|
-| `mandar_pieza` (id) | ⚠️ **NO EJECUTA NADA** — el caso en `bot/ejecutar.ts` es un no-op. El modelo puede agendarla y no pasa nada. |
-| `registrar_interes` (familia) | Guarda el interés en la tabla (válida contra `alias_curso`) |
+| `mandar_pieza` (id) | **Manda la pieza de verdad** (F3): el paso 14b del orquestador la lee sin filtro de vendedora (`bot/piezaAMandar.ts`), expande `{nombre}`/`{curso}`/`{precio}`, y la despacha por `EnvioControlado` con `vendedoraId: 'bot'` y procedencia `via: 'bot'`. **No sale** si el modo no es `automatico`, si el texto que la acompaña no salió, si la línea se frenó mientras el modelo pensaba, si a la expansión le quedó un hueco (`[precio]`), o si esa conversación ya la recibió. Acá decía «NO EJECUTA NADA», que era cierto hasta F3. |
+| `registrar_interes` (familia) | Guarda el interés en la tabla —el nombre CRUDO de la última edición activa de Cerberus, con `producto_id` y `sku`, firmado `bot`— por el MISMO seam que el clic de una vendedora (`cursos/registrarFamilia.ts`). Válida contra `alias_curso`. |
 | `calificar` (temp/motivo) | Guarda la calificación del lead |
 | `escalar_a_vendedora` (motivo) | Pausa la conversación + marca escalada (6 motivos: pidió humano, preguntó si es bot, por cerrar, sin respuesta en catálogo, frustrado, error del bot) |
 | `pausar_conversacion` (motivo) | Pausa para siempre (rechazo/despedida) |

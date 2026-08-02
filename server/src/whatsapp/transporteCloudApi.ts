@@ -59,8 +59,10 @@ export interface OpcionesCloudApi {
  *   · Sin sesión que vincular: la Cloud API es HTTP sin estado, así que
  *     `iniciar()` solo confirma que el token abre (no hay QR ni pairing acá:
  *     eso ya lo hiciste en el dashboard de Meta).
- *   · `enviarMedia` NO está implementado — el objetivo de este spike es
- *     validar texto de ida y vuelta, no paridad completa con whatsmeow.
+ *   · `enviarMedia` SÍ está implementado (sube el archivo a `/media` y manda el
+ *     id). Acá decía «NO está implementado» y quedó desactualizado en el mismo
+ *     commit que lo agregó: es la línea del bot, y sin adjuntos el flyer —el 42 %
+ *     de la secuencia de venta— no podía salir.
  *   · Fuera de la ventana de 24h, Meta rechaza `enviarTexto` con su propio
  *     error (código 131047): se propaga tal cual, no se disfraza.
  *

@@ -2,11 +2,15 @@ import { gestorWhatsapp } from "./wiring.js";
 import { puertaDe } from "./gestor.js";
 import { proyectarMensaje } from "./proyectar.js";
 import { repositorioDrizzle } from "./repositorioDrizzle.js";
-import type { MediaSaliente } from "./transporte.js";
 import type { ResultadoControlado } from "./envioControlado.js";
+import { ordenDeMedia, type OrdenMedia, type OrdenTexto } from "./ordenes.js";
 import { db } from "../db/client.js";
 import { momentoDelEnvio } from "../procedencia/momento.js";
 import { A_MANO, aMano, type Procedencia } from "../procedencia/pieza.js";
+
+// La FORMA de una orden vive en `ordenes.ts` (sin `db` adentro, para poder
+// testearla). Se re-exporta para que quien la importaba de acá siga andando.
+export { ordenDeMedia, type OrdenMedia, type OrdenTexto };
 
 /**
  * MANDAR Y DEJAR RASTRO — el par indivisible que toda salida de Hermes hace.
@@ -50,20 +54,6 @@ import { A_MANO, aMano, type Procedencia } from "../procedencia/pieza.js";
  * es exactamente el argumento por el que mandar y proyectar ya viven juntos.
  */
 
-/** Lo que toda orden lleva además del mensaje: de dónde salió. */
-interface ConProcedencia {
-  /** La pieza. Omitir = escrito a mano (**la línea de base**, no un hueco). */
-  procedencia?: Procedencia;
-}
-
-export interface OrdenTexto extends ConProcedencia {
-  vendedoraId: string;
-  numeroPropio: string;
-  telefono: string;
-  texto: string;
-  referencia: string;
-}
-
 /**
  * Completa la procedencia con el momento de la venta, clasificado con la MISMA
  * cabeza que decide qué mandar (`sugerencias/estado.ts`). Best-effort: nunca
@@ -104,28 +94,11 @@ export async function enviarTextoYProyectar(o: OrdenTexto): Promise<ResultadoCon
   return r;
 }
 
-export interface OrdenMedia extends ConProcedencia {
-  vendedoraId: string;
-  numeroPropio: string;
-  telefono: string;
-  referencia: string;
-  media: MediaSaliente;
-  /** El nombre del archivo YA guardado en `RUTA_MEDIA` (lo que el hilo va a servir). */
-  archivo: string;
-}
-
 export async function enviarMediaYProyectar(o: OrdenMedia): Promise<ResultadoControlado> {
   const puerta = puertaDe(o.numeroPropio, gestorWhatsapp());
   if (!puerta.ok) return puerta;
 
-  const r = await puerta.envio.enviarMedia({
-    vendedoraId: o.vendedoraId,
-    numeroPropio: o.numeroPropio,
-    telefono: o.telefono,
-    referencia: o.referencia,
-    media: o.media,
-    procedencia: await conMomento(o),
-  });
+  const r = await puerta.envio.enviarMedia(ordenDeMedia(o, await conMomento(o)));
   if (!r.ok) return r;
 
   const proy = proyectarMensaje({

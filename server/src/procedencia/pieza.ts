@@ -144,6 +144,18 @@ export const VIAS_DE_PIEZA = [
   "panel-datos",
   /** El acuse fuera de horario (ADR 0015/0018). No hubo pantalla. */
   "automatica",
+  /**
+   * EL BOT CONVERSACIONAL la eligió solo, en medio de una conversación (F3).
+   *
+   * ⚠️ **No es `automatica`, y separarlas no es prolijidad.** `automatica` tiene
+   * un único productor —`deUnAcuse`, el acuse fuera de horario— y responde otra
+   * pregunta: «¿sirve mandar un acuse a quien escribió de madrugada?». El bot
+   * elige la pieza *dentro* de un diálogo, con el catálogo a la vista. Metidas
+   * en el mismo balde, la pregunta que el frente 1 existe para responder —«¿el
+   * bot elige mejor o peor que una persona?»— se vuelve incontestable, y encima
+   * el acuse nocturno quedaría midiendo el rendimiento de un flyer.
+   */
+  "bot",
 ] as const;
 export type ViaDePieza = (typeof VIAS_DE_PIEZA)[number];
 
@@ -238,7 +250,13 @@ export function esAMano(p: Procedencia): p is AMano {
 export function deUnPasoDePlantilla(o: {
   plantillaId: number;
   orden: number;
-  via: Extract<ViaDePieza, "panel-sugerencia" | "panel-secuencias">;
+  /**
+   * Las dos pantallas del panel **o el bot**. Sigue siendo una lista cerrada y
+   * no `ViaDePieza` entera: `panel-datos` es de `deUnDato` y `automatica` es del
+   * acuse, y dejarlas entrar acá permitiría estampar un paso de secuencia como
+   * si lo hubiera mandado la auto-respuesta nocturna.
+   */
+  via: Extract<ViaDePieza, "panel-sugerencia" | "panel-secuencias" | "bot">;
   /**
    * El contenido AUTORAL del paso: el texto guardado (con sus marcadores sin
    * resolver) y el archivo. Explícito y obligatorio —aunque sea `null`— para
@@ -270,6 +288,14 @@ export function deUnDato(o: {
   editada: boolean;
   /** El texto del catálogo — el que ella vio, no el que terminó mandando. */
   contenido: ContenidoDePieza | null;
+  /**
+   * Por dónde entró. Default `panel-datos` —el bloque de #153, que es de donde
+   * venían todos— y `bot` cuando el que lo eligió fue el bot conversacional. Un
+   * dato del panel **cae en el composer y no envía**; el del bot sale como
+   * mensaje. Es la misma pieza y son dos caminos, que es exactamente lo que
+   * `via` distingue.
+   */
+  via?: Extract<ViaDePieza, "panel-datos" | "bot">;
   momento?: MomentoDeVenta | null;
 }): DeUnaPieza {
   return {
@@ -277,7 +303,7 @@ export function deUnDato(o: {
     clase: "hecho",
     ref: refDeDireccion({ clase: "hecho", id: o.clave }),
     version: versionDePieza(o.contenido),
-    via: "panel-datos",
+    via: o.via ?? "panel-datos",
     editada: o.editada,
     momento: o.momento ?? null,
   };

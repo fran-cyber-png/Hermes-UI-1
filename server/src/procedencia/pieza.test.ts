@@ -85,9 +85,17 @@ describe("la pieza se identifica por (clase, ref) — estable a través del fren
 
   test("las clases y las vías son listas cerradas: un typo no entra a la base", () => {
     assert.deepEqual([...CLASES_DE_PIEZA], ["plantilla", "hecho", "acuse", "gancho"]);
+    // ⚠️ `bot` se AGREGÓ (F3): el bot conversacional manda piezas que él mismo
+    // eligió. La lista sigue cerrada —de eso se trata este test— y por eso hay
+    // que venir a tocarla: `procedenciaDesdeColumnas` degrada a la línea de base
+    // ante una vía que no reconoce, así que una vía nueva que no esté acá BORRA
+    // la atribución de esos envíos en silencio.
+    //
+    // No es `automatica`: esa tiene un solo productor (el acuse fuera de
+    // horario) y responde otra pregunta. Ver el comentario en `pieza.ts`.
     assert.deepEqual(
       [...VIAS_DE_PIEZA],
-      ["panel-sugerencia", "panel-secuencias", "panel-datos", "automatica"],
+      ["panel-sugerencia", "panel-secuencias", "panel-datos", "automatica", "bot"],
     );
   });
 });

@@ -30,7 +30,10 @@
 
 import { db } from "../db/client.js";
 import { botPausas, botCalificaciones } from "../db/bot.js";
+import { buscarProductos } from "../cerberus/productos.js";
+import { registrarInteresDeFamilia } from "../cursos/registrarFamilia.js";
 import type { Accion } from "./acciones.js";
+import { VENDEDORA_ID_DEL_BOT } from "./frenos.js";
 
 /**
  * Cuánto se le da a una persona para tomar una conversación escalada.
@@ -54,6 +57,21 @@ export async function ejecutarAcciones(
 }
 
 async function ejecutarUna(accion: Accion, clave: string, ahora: Date): Promise<void> {
+  /**
+   * ⚠️ `registrar_interes` NO ENTRA EN EL `catch` MUDO DE ABAJO.
+   *
+   * Ese catch existe para una razón chica y concreta: que una tabla del bot sin
+   * migrar no tumbe el loop. Registrar un interés es otra cosa — sale a Cerberus
+   * por HTTP, y sus dos modos de falla («el catálogo no tiene esa familia»,
+   * «Cerberus no contestó») son información que alguien tiene que poder leer.
+   * Tragados en silencio, el síntoma sería una conversación donde el bot dice
+   * que anotó el interés y la ficha está vacía, sin una línea en los logs.
+   */
+  if (accion.tipo === "registrar_interes") {
+    await registrarInteresDelBot(accion.familia, clave);
+    return;
+  }
+
   try {
     switch (accion.tipo) {
       case "calificar":
@@ -137,26 +155,57 @@ async function ejecutarUna(accion: Accion, clave: string, ahora: Date): Promise<
         break;
 
       case "mandar_pieza":
-      case "registrar_interes":
-        // 🔴 TODAVÍA NO HACEN NADA — y el comentario que había acá decía que
-        // «las ejecuta el handler en tools.ts», que es FALSO: el handler solo
-        // acumula la acción en el recolector. O sea que el bot puede agendar el
-        // flyer y registrar un interés, y ninguna de las dos cosas ocurre.
-        //
-        // Es el bloqueador principal del producto (`docs/plan-bot-dipicot.md`
-        // §2, B1 y B2) y se conecta en F3, junto con `enviarMedia` de la Cloud
-        // API — hoy `TransporteCloudApi.enviarMedia()` lanza, así que aunque se
-        // conectara acá el flyer con imagen tampoco saldría por la línea del bot.
-        //
-        // Queda como no-op EXPLÍCITO en vez de arreglarse a medias: mandar la
-        // pieza sin resolver `{precio}` contra Cerberus y sin estampar la
-        // procedencia sería mandar un texto con huecos y perder la medición.
-        console.warn(
-          `[bot ejecutar] acción «${accion.tipo}» pendiente de implementar (F3): se descarta para ${clave}`,
-        );
+        // NO se manda desde acá, y no es un olvido. Este módulo escribe tablas:
+        // no tiene el número propio, ni el teléfono, ni la puerta de envío — y
+        // encima corre bajo el `catch` mudo de abajo, donde un envío a medias
+        // desaparecería sin una línea de log. La pieza sale en el paso 14b del
+        // orquestador, que sí tiene las tres cosas y vuelve a mirar el freno de
+        // la línea justo antes de mandar.
         break;
+
+      // `registrar_interes` no aparece: se atendió arriba, fuera de este `try`,
+      // y el `if` de arriba ya lo sacó del tipo — un `case` acá no compilaría.
     }
   } catch {
     // Degradación: si la tabla no existe, la acción se pierde sin tumbar el loop
+  }
+}
+
+/**
+ * El interés que el lead dijo, asentado en `intereses` con el MISMO formato que
+ * el clic de una vendedora (`cursos/registrarFamilia.ts`): el nombre crudo de la
+ * última edición activa de Cerberus, con su `producto_id` y su `sku`.
+ *
+ * Firmado como `bot` (`intereses.vendedora_id` es `text` sin FK, así que entra
+ * sin migración): quién lo afirmó es parte del dato, y una ficha que dice «lo
+ * registró Luz» cuando lo registró la máquina es una atribución falsa.
+ *
+ * ⚠️ NO se usa `confirmarInteresDerivado`: esa función **recalcula la familia
+ * desde el origen de la conversación** (el anuncio, el formulario) e ignora la
+ * que se le pase, que es exactamente lo contrario de lo que hace falta acá — el
+ * bot registra lo que la persona ACABA de decir, que puede no tener nada que ver
+ * con el anuncio por el que entró. Además responde `ya_registrado` ante
+ * cualquier interés previo, y eso es correcto para un botón «Confirmar» y no
+ * para el bot: si el lead ya tiene un interés y ahora nombra otro, el segundo es
+ * un dato nuevo. `intereses` tiene su `unique (clave, curso)` para que nombrar
+ * dos veces el mismo no duplique nada.
+ */
+async function registrarInteresDelBot(familia: string, clave: string): Promise<void> {
+  try {
+    const r = await registrarInteresDeFamilia(db, {
+      clave,
+      familia,
+      vendedoraId: VENDEDORA_ID_DEL_BOT,
+      catalogo: () => buscarProductos(),
+    });
+    if (!r.ok) {
+      console.warn(`[bot ejecutar] no se registró el interés ${familia} de ${clave}: ${r.message}`);
+      return;
+    }
+    console.info(`[bot ejecutar] interés registrado para ${clave}: ${r.sku} · ${r.curso}`);
+  } catch (err) {
+    console.error(
+      `[bot ejecutar] falló registrar el interés ${familia} de ${clave}: ${(err as Error).message}`,
+    );
   }
 }

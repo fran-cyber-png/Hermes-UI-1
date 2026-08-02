@@ -89,6 +89,98 @@ describe("crearAgente", () => {
     }
   });
 
+  it("🔴 el TEXTO de la vuelta con tool_use sobrevive: nunca un flyer sin palabras", async () => {
+    // La regresión que esto fija: el bucle metía el `content` entero en
+    // `messages` y hacía `continue`, y `texto` se calculaba recién sobre la
+    // respuesta FINAL. Todo lo dicho en la vuelta donde el modelo pide la pieza
+    // se perdía. Con `mandar_pieza` conectada (F3) eso es un archivo suelto
+    // llegándole al lead desde un número que no conoce, sin una sola palabra.
+    const piezas: ResumenPieza[] = [
+      { clase: "plantilla", id: "5", descripcion: "Flyer Inteligencia", enviable: true },
+    ];
+    const agente = crearAgente(
+      clienteFake([
+        {
+          content: [
+            { type: "text", text: "Claro Javier, te paso el flyer ahora mismo." },
+            { type: "tool_use", id: "toolu_1", name: "mandar_pieza", input: { id: "plantilla:5" } },
+          ],
+          stop_reason: "tool_use",
+          usage: { input_tokens: 100, output_tokens: 50 },
+        },
+        // El caso peor: la vuelta final no agrega NADA. Antes esto dejaba
+        // `texto: null` con la acción cargada.
+        { content: [], stop_reason: "end_turn", usage: { input_tokens: 80, output_tokens: 5 } },
+      ]),
+    );
+    const r = await agente.responder({ ...base, piezas });
+    assert.ok("texto" in r);
+    if (!("texto" in r)) return;
+    assert.ok(r.texto, "el texto de la primera vuelta no se puede tirar");
+    assert.ok(r.texto!.includes("te paso el flyer"));
+    assert.ok(r.acciones.some((a) => a.tipo === "mandar_pieza"));
+  });
+
+  it("el texto de las dos vueltas se une, en orden", async () => {
+    const piezas: ResumenPieza[] = [
+      { clase: "plantilla", id: "5", descripcion: "Flyer", enviable: true },
+    ];
+    const agente = crearAgente(
+      clienteFake([
+        {
+          content: [
+            { type: "text", text: "Te paso el flyer." },
+            { type: "tool_use", id: "toolu_1", name: "mandar_pieza", input: { id: "plantilla:5" } },
+          ],
+          stop_reason: "tool_use",
+          usage: { input_tokens: 100, output_tokens: 50 },
+        },
+        {
+          content: [{ type: "text", text: "¿Te queda alguna duda?" }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 80, output_tokens: 30 },
+        },
+      ]),
+    );
+    const r = await agente.responder({ ...base, piezas });
+    assert.ok("texto" in r);
+    if (!("texto" in r)) return;
+    assert.equal(r.texto, "Te paso el flyer.\n\n¿Te queda alguna duda?");
+  });
+
+  it("🔴 un precio dicho ANTES de la tool bloquea igual: el guardrail ve el turno entero", async () => {
+    // Sin acumular, el guardrail solo miraba el último pedazo y una cifra dicha
+    // en la primera vuelta salía intacta hacia el lead.
+    const piezas: ResumenPieza[] = [
+      { clase: "plantilla", id: "5", descripcion: "Flyer", enviable: true },
+    ];
+    const agente = crearAgente(
+      clienteFake([
+        {
+          content: [
+            { type: "text", text: "El diplomado cuesta $350 dólares, te paso el flyer." },
+            { type: "tool_use", id: "toolu_1", name: "mandar_pieza", input: { id: "plantilla:5" } },
+          ],
+          stop_reason: "tool_use",
+          usage: { input_tokens: 100, output_tokens: 50 },
+        },
+        {
+          content: [{ type: "text", text: "Listo." }],
+          stop_reason: "end_turn",
+          usage: { input_tokens: 80, output_tokens: 30 },
+        },
+      ]),
+    );
+    const r = await agente.responder({ ...base, piezas });
+    assert.ok("texto" in r);
+    if (!("texto" in r)) return;
+    assert.equal(r.texto, null);
+    // Y la pieza NO viaja: bloquear el texto tiene que bloquear el turno entero,
+    // o el lead recibe el flyer del mensaje que se censuró.
+    assert.ok(!r.acciones.some((a) => a.tipo === "mandar_pieza"));
+    assert.ok(r.acciones.some((a) => a.tipo === "escalar"));
+  });
+
   it("texto con precio → guardrail bloquea, texto null + escalar error_bot", async () => {
     const agente = crearAgente(
       clienteFake([{
