@@ -64,7 +64,15 @@ export interface ConfigBot {
   maxTurnosDia: number;
   /** Techo de respuestas por hora y POR LÍNEA. Es la cota contra el ban. */
   maxRespuestasHoraLinea: number;
-  /** Cuántos follow-ups como mucho en un día. El follow-up es lo único que el bot INICIA. */
+  /**
+   * Cuántos reenganches como mucho en un día. El reenganche es lo único que el
+   * bot INICIA — ver `bot/reenganche.ts`.
+   *
+   * **`0` = apagado, y es el default**: es la llave de deploy del mecanismo, la
+   * misma forma que `AUTO_RESPUESTA=on` (ADR 0015). Un server que se despliega
+   * sin tocar el entorno no le escribe a nadie que no haya escrito primero. La
+   * segunda llave —la que no cuesta deploy— es el modo de la línea.
+   */
   followupsDia: number;
   /** Modo: sombra (piensa y guarda) o automatico (piensa y envía). Default sombra. */
   modo: "sombra" | "automatico";
@@ -118,7 +126,12 @@ export const CONFIG_BOT_POR_DEFECTO: ConfigBot = {
   bufferSegundos: 25,
   maxTurnosDia: 40,
   maxRespuestasHoraLinea: 60,
-  followupsDia: 20,
+  // Cero: el reenganche nace apagado. Era 20 mientras el mecanismo no existía
+  // —un número que no leía nadie—; ahora que existe, un default distinto de
+  // cero significaría que el próximo deploy empieza a iniciar conversaciones
+  // sin que nadie lo haya decidido. Se prende poniendo el número, después de
+  // mirar `npm run reenganche:simulacro`.
+  followupsDia: 0,
   followupHoraDesde: HORARIO_DE_ATENCION.desde,
   followupHoraHasta: HORARIO_DE_ATENCION.hasta,
   modo: "sombra",
@@ -269,7 +282,12 @@ export function resumenDeConfig(cfg: ConfigBot): string {
     `[bot] ${cfg.lineas.length} línea(s) habilitada(s): ${cfg.lineas.join(", ")} · ` +
     `modelo ${cfg.modelo} · buffer ${cfg.bufferSegundos}s · ` +
     `topes ${cfg.maxTurnosDia}/día por conversación, ${cfg.maxRespuestasHoraLinea}/hora por línea · ` +
-    `follow-up ${cfg.followupsDia}/día entre las ${cfg.followupHoraDesde} y las ${cfg.followupHoraHasta}`
+    // El reenganche es lo único que el bot INICIA: si está prendido tiene que
+    // decirlo con todas las letras, y si está apagado también — «follow-up
+    // 0/día» se lee como un tope raro, no como «apagado».
+    (cfg.followupsDia > 0
+      ? `reenganche ${cfg.followupsDia}/día entre las ${cfg.followupHoraDesde} y las ${cfg.followupHoraHasta}`
+      : "reenganche APAGADO (BOT_FOLLOWUPS_DIA=0)")
   );
 }
 

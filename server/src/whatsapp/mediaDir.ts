@@ -24,3 +24,21 @@ mkdirSync(RUTA_MEDIA, { recursive: true });
 export function nombreSeguro(nombre: string): string {
   return nombre.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120);
 }
+
+/**
+ * ¿Este nombre se puede pegar a `RUTA_MEDIA` sin salirse del directorio?
+ *
+ * `nombreSeguro` SANEA (devuelve otro nombre); esto VERIFICA uno que ya está
+ * guardado — son dos operaciones distintas y la segunda es la que corre antes de
+ * cada `join(RUTA_MEDIA, …)`. Vive acá y no en la ruta porque ahora hay **dos**
+ * caminos que arman esa ruta con un nombre venido de la base: la vendedora
+ * mandando un paso (`routes/plantillas.ts`) y el bot mandando una pieza
+ * (`bot/piezaAMandar.ts`). Con una copia en cada uno, endurecer la lista blanca
+ * en un lado dejaría el otro como estaba.
+ *
+ * Lista blanca, no lista negra: el `..` explícito es redundante contra el regex
+ * y se deja igual, porque es lo que hace obvio de qué se defiende.
+ */
+export function archivoSeguro(nombre: string): boolean {
+  return /^[A-Za-z0-9._-]+$/.test(nombre) && !nombre.includes('..');
+}

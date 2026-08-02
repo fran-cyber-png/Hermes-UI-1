@@ -32,6 +32,9 @@ import {
   type Traza,
 } from "./traza.js";
 import { validarEntrada, esSpam } from "./guardrailsEntrada.js";
+import { esperaExcesiva } from "./claim.js";
+import { claseIlegible, decidirAcuseIlegible, type ClaseIlegible } from "./ilegible.js";
+import { lineaConectada } from "./lineaViva.js";
 import { leerEstadoLinea, ESTADO_LINEA_SIN_OPINION, type EstadoLinea } from "./estadoLinea.js";
 import { modoValido, type ModoBot } from "./modo.js";
 import {
@@ -39,6 +42,7 @@ import {
   ultimoSalienteHumanoEn,
   vendedoraActivaDesde,
   yaLeRespondimos,
+  VENDEDORA_ID_DEL_BOT,
 } from "./frenos.js";
 import { armarSystemPrompt } from "./prompt.js";
 import { leerPiezas } from "../catalogo/repositorio.js";
@@ -53,6 +57,18 @@ import { gestorWhatsappSiActivo } from "../whatsapp/wiring.js";
 import { puertaDe } from "../whatsapp/gestor.js";
 import { proyectarMensaje } from "../whatsapp/proyectar.js";
 import { repositorioDrizzle } from "../whatsapp/repositorioDrizzle.js";
+import { enviarMediaYProyectar, enviarTextoYProyectar } from "../whatsapp/enviarYProyectar.js";
+import { deUnDato, deUnPasoDePlantilla, type Procedencia } from "../procedencia/pieza.js";
+import type { ClasePieza } from "../piezas/direccion.js";
+import {
+  cursoConTecho,
+  despacharPasos,
+  esperaEntreMensajes,
+  leerPiezaDelBot,
+  piezasYaEnviadas,
+  prepararEnvio,
+  type PasoListo,
+} from "./piezaAMandar.js";
 import type { Accion, Turno, ResumenPieza } from "./acciones.js";
 import type { Hecho } from "../hechos/catalogo.js";
 import { CATALOGO_POR_DEFECTO } from "../hechos/catalogo.js";
@@ -72,6 +88,13 @@ export interface FilaHilo {
   direccion: string;
   texto: string | null;
   occurred_at?: string | Date | null;
+  /**
+   * El adjunto, tal como vive en el crudo del evento (`payload->media`). Solo se
+   * mira su `clase` (audio · imagen · video · documento · sticker), para saber
+   * qué contestarle a un entrante sin texto: no es lo mismo «no puedo escuchar
+   * el audio» que responderle a un sticker.
+   */
+  media?: { clase?: unknown } | null;
 }
 
 export interface CtxPipeline {
@@ -91,6 +114,8 @@ export interface CtxPipeline {
   modoEfectivo: ModoBot;
   /** Por qué no hay texto que contestar, si es que no lo hay. */
   motivoSinTexto: string | null;
+  /** Qué llegó, cuando lo que llegó no tiene texto. Decide QUÉ se le contesta. */
+  claseSinTexto: ClaseIlegible;
   textoEntrante: string | null;
   contactoCtx: string;
   estado: EstadoConversacion;
@@ -99,7 +124,22 @@ export interface CtxPipeline {
   systemPrompt: string | null;
   /** Lo que el bot puede mandar este turno (catálogo filtrado por enfoque). */
   piezas: ResumenPieza[];
+  /**
+   * Lo que esta conversación YA recibió (`plantilla:12`), del bot o de una
+   * vendedora a mano. Se lee antes de armar las tools para que el modelo se
+   * entere **mientras redacta** y no prometa un flyer que después se bloquea.
+   */
+  piezasYaEnviadas: ReadonlySet<string>;
   textoRespuesta: string | null;
+  /**
+   * Cuántas burbujas del texto salieron DE VERDAD (paso 14).
+   *
+   * Lo mira el paso 14b: **una pieza no sale sin palabras**. Si el texto no se
+   * mandó —porque el guardrail lo bloqueó, porque el transporte está caído, o
+   * porque el modelo no dijo nada—, el flyer suelto que llegaría es un archivo
+   * de un número desconocido, sin contexto y sin nadie que lo explique.
+   */
+  burbujasEnviadas: number;
   acciones: Accion[];
   uso: {
     entrada: number;
@@ -131,6 +171,7 @@ function ctxInicial(
     estadoLinea: ESTADO_LINEA_SIN_OPINION,
     modoEfectivo: modoValido(cfg.modo),
     motivoSinTexto: null,
+    claseSinTexto: "otro",
     textoEntrante: null,
     contactoCtx: "",
     estado: "desconocido",
@@ -138,7 +179,9 @@ function ctxInicial(
     decision: null,
     systemPrompt: null,
     piezas: [],
+    piezasYaEnviadas: new Set(),
     textoRespuesta: null,
+    burbujasEnviadas: 0,
     acciones: [],
     uso: null,
     errorAgente: null,
@@ -171,27 +214,20 @@ async function paso2Normalizar(ctx: CtxPipeline): Promise<void> {
   // quedaba callado: encontraba el mensaje de texto ANTERIOR y **le volvía a
   // contestar a ese**. Para la persona, es que le respondan algo que ya había
   // preguntado y que ignoren lo que acaba de mandar.
-  //
-  // Un entrante sin texto es «no puedo leer esto», y esa es una respuesta que
-  // el pipeline tiene que poder dar. Hoy simplemente no se contesta (el turno
-  // queda registrado con su motivo); la derivación a una persona es de F4,
-  // donde vive la máquina de estados nueva.
   if (!ultimoEntrante) {
     t.cerrar("sin_entrantes");
     return;
   }
 
+  // Un entrante sin texto NO termina el turno: termina este paso. El motivo y
+  // la clase de lo que llegó viajan al pipeline, que ahora **contesta algo
+  // honesto** en vez de callarse (`atenderEntranteSinTexto`). La fila de
+  // `bot_respuestas` la escribe ese camino: acá se escribía una `cancelada`
+  // fija, y con el acuse conectado serían dos filas para un turno.
   if (!ultimoEntrante.texto) {
     ctx.motivoSinTexto = "entrante_sin_texto";
-    await db.insert(botRespuestas).values({
-      clave: ctx.clave,
-      numeroPropio: ctx.numeroPropio,
-      texto: null,
-      estado: "cancelada",
-      motivo: "entrante_sin_texto",
-      creadoEn: ctx.ahora,
-    });
-    t.cerrar("entrante_sin_texto");
+    ctx.claseSinTexto = claseIlegible(ultimoEntrante.media?.clase);
+    t.cerrar(`entrante_sin_texto:${ctx.claseSinTexto}`);
     return;
   }
 
@@ -326,7 +362,13 @@ async function paso7Recuperar(ctx: CtxPipeline): Promise<void> {
     );
     ctx.piezas = [];
   }
-  t.cerrar(`${ctx.piezas.length}_piezas`);
+
+  // Lo que esta conversación ya recibió. Se lee ACÁ —antes de armar las tools— y
+  // no solo antes de mandar: si el modelo se entera recién al despachar, el
+  // turno ya salió diciendo «te paso el flyer» y el flyer nunca llega.
+  ctx.piezasYaEnviadas = await piezasYaEnviadas(db, ctx.clave);
+
+  t.cerrar(`${ctx.piezas.length}_piezas·${ctx.piezasYaEnviadas.size}_ya_enviadas`);
 }
 
 // ── PASO 8: CONSTRUIR prompt ─────────────────────────────────────────────
@@ -385,6 +427,7 @@ async function paso10Agente(ctx: CtxPipeline): Promise<void> {
     lecciones: [],
     modelo: ctx.cfg.modelo,
     familiasValidas,
+    piezasYaEnviadas: ctx.piezasYaEnviadas,
   });
 
   if ("error" in resultado) {
@@ -513,13 +556,262 @@ async function paso14Enviar(ctx: CtxPipeline): Promise<void> {
         enviadas++;
       }
       if (i < burbujas.length - 1) {
-        await new Promise((r) => setTimeout(r, 2000 + Math.random() * 4000));
+        // La MISMA cadencia que los pasos de una pieza (`piezaAMandar.ts`): dos
+        // ritmos distintos para el mismo bot se separarían en la primera vez
+        // que alguien toque uno.
+        await new Promise((r) => setTimeout(r, esperaEntreMensajes()));
       }
     } catch (err) {
       console.error(`[bot orquestador] error enviando burbuja ${i}:`, (err as Error).message);
     }
   }
+  ctx.burbujasEnviadas = enviadas;
   t.cerrar(`enviadas_${enviadas}_de_${burbujas.length}`);
+}
+
+// ── PASO 14b: MANDAR LAS PIEZAS ──────────────────────────────────────────
+
+/**
+ * LO QUE EL MODELO PIDIÓ CON `mandar_pieza`, MANDADO DE VERDAD (F3).
+ *
+ * ══ POR QUÉ ACÁ Y NO EN `ejecutar.ts` ════════════════════════════════════════
+ *
+ * `ejecutarAcciones` recibe `(acciones, clave, ahora)` y nada más: no tiene el
+ * número propio, ni el teléfono, ni la puerta de envío. Y corre entero bajo un
+ * `catch` vacío pensado para «la tabla no está migrada» — un envío que sale a
+ * medias ahí desaparecería sin una línea. Escribir tablas y hablarle a un lead
+ * son dos trabajos distintos, con dos formas de fallar distintas.
+ *
+ * ══ LAS CUATRO GUARDAS, EN ORDEN ═════════════════════════════════════════════
+ *
+ *  (a) **El modo**, igual que el paso 14. Es la que faltaba: en `sombra` —el
+ *      modo con el que uno probaría— el flyer habría salido igual mientras el
+ *      texto se quedaba adentro.
+ *  (b) **El freno se RE-LEE**. Entre el paso 5 (donde se leyó `bot_estado`) y
+ *      este punto hay hasta cuatro llamadas al modelo: decenas de segundos en
+ *      los que alguien pudo apretar el kill-switch mirando esta conversación.
+ *      Un interruptor que se lee una vez al principio no frena nada de lo que
+ *      ya está en vuelo.
+ *  (c) **Una pieza, una vez** — el dedupe contra `envios_wa`, que además ve lo
+ *      que la vendedora ya mandó a mano.
+ *  (d) **`vendedoraId: 'bot'`**, sin excepción. Con cualquier otro id,
+ *      `ultimoSalienteHumanoEn` (`frenos.ts`) lee el propio envío del bot como
+ *      «hay una vendedora atendiendo» y el bot **se calla solo** en esa
+ *      conversación, justo después de mandar el flyer.
+ */
+async function paso14bPiezas(ctx: CtxPipeline): Promise<void> {
+  const t = tramoDePipeline("piezas", ctx.traza);
+
+  const pedidas = ctx.acciones.filter(
+    (a): a is Extract<Accion, { tipo: "mandar_pieza" }> => a.tipo === "mandar_pieza",
+  );
+  if (pedidas.length === 0) {
+    t.cerrar("ninguna");
+    return;
+  }
+
+  // (a) el modo
+  if (ctx.modoEfectivo !== "automatico") {
+    t.cerrar(`no_manda:${ctx.modoEfectivo}`);
+    return;
+  }
+
+  // Sin palabras no hay pieza (ver `burbujasEnviadas`).
+  if (ctx.burbujasEnviadas === 0) {
+    t.cerrar("sin_texto_que_la_acompane");
+    return;
+  }
+
+  const telefono = extraerTelefono(ctx.clave);
+  if (!telefono || !gestorWhatsappSiActivo()) {
+    t.cerrar(!telefono ? "sin_telefono" : "sin_transporte");
+    return;
+  }
+
+  // (b) el freno, RE-LEÍDO — y no una sola vez.
+  //
+  // `frenoLevantado()` es la MISMA pregunta que se hace antes de arrancar y
+  // entre cada paso de cada pieza. Leerla una vez arriba del bucle no alcanzaba:
+  // el bucle puede correr más de un minuto (hasta 6 s de Cerberus por pieza más
+  // el espaciado), así que la vendedora que aprieta «apagar» a los veinte
+  // segundos veía salir igual las piezas que faltaban, con sus adjuntos.
+  //
+  // No hay red de respaldo abajo: `EnvioControlado` se arma con el
+  // `cortaCorriente` por defecto (`() => false`, `whatsapp/wiring.ts`), o sea
+  // que esta lectura ES la única compuerta del bot.
+  const frenoLevantado = async (): Promise<string | null> => {
+    const e = await leerEstadoLinea(db, ctx.numeroPropio);
+    const modo = e.modo ?? modoValido(ctx.cfg.modo);
+    if (e.frenadoMotivo !== null) return "frenada_en_vuelo";
+    if (modo !== "automatico") return `apagada_en_vuelo:${modo}`;
+    return null;
+  };
+
+  const frenoInicial = await frenoLevantado();
+  if (frenoInicial !== null) {
+    t.cerrar(frenoInicial);
+    return;
+  }
+
+  // (c) el dedupe, RE-LEÍDO igual que el freno: el que viajó a las tools se leyó
+  // antes de hasta cuatro llamadas al modelo, y en ese rato otro pipeline sobre
+  // la misma clave pudo mandarla. El primero es de conversación (que el modelo
+  // no la prometa), este es de seguridad (que no salga dos veces).
+  const yaEnviadas = await piezasYaEnviadas(db, ctx.clave);
+
+  // (d) el TOPE POR TURNO.
+  //
+  // Los topes de la línea (`maxRespuestasHoraLinea`, `maxTurnosDia`) cuentan
+  // filas de `bot_respuestas`, o sea TURNOS. Eso alcanzaba cuando un turno eran
+  // como mucho tres burbujas (`chunker.ts`); con las piezas conectadas un turno
+  // pasa a ser tres burbujas MÁS todos los pasos de todas las piezas pedidas, y
+  // el número que `config.ts` documenta como «la cota contra el ban» deja de
+  // acotar. El modelo puede pedir los ocho hechos del catálogo más una secuencia
+  // de cuatro pasos en sus cuatro iteraciones.
+  //
+  // Dos piezas por turno es lo que se ve en una venta real: el material y un
+  // dato que lo acompaña. Lo que sobra no se pierde en silencio — se dice en la
+  // traza, que es donde se mira cuando algo no llegó.
+  const MAX_PIEZAS_POR_TURNO = 2;
+  const aMandar = pedidas.slice(0, MAX_PIEZAS_POR_TURNO);
+  const descartadas = pedidas.length - aMandar.length;
+
+  const resumen: string[] = [];
+  for (const [i, pedida] of aMandar.entries()) {
+    if (i > 0) {
+      const freno = await frenoLevantado();
+      if (freno !== null) {
+        resumen.push(freno);
+        break;
+      }
+      // La misma espera que entre los pasos de una pieza: dos piezas seguidas en
+      // el mismo segundo se leen como una descarga, no como alguien escribiendo.
+      await new Promise((r) => setTimeout(r, esperaEntreMensajes()));
+    }
+    resumen.push(await mandarUnaPieza(ctx, telefono, pedida, yaEnviadas, frenoLevantado));
+  }
+  if (descartadas > 0) resumen.push(`+${descartadas}_sobre_el_tope`);
+  t.cerrar(resumen.join(" "));
+}
+
+/** Manda UNA pieza y devuelve el renglón que va a la traza. */
+async function mandarUnaPieza(
+  ctx: CtxPipeline,
+  telefono: string,
+  pedida: Extract<Accion, { tipo: "mandar_pieza" }>,
+  yaEnviadas: ReadonlySet<string>,
+  /** El kill-switch, para preguntarlo entre paso y paso. Ver `paso14bPiezas`. */
+  frenoLevantado: () => Promise<string | null>,
+): Promise<string> {
+  const direccion = { clase: pedida.clase, id: pedida.id };
+  const rotulo = `${pedida.clase}:${pedida.id}`;
+
+  try {
+    if (yaEnviadas.has(rotulo)) {
+      console.info(`[bot orquestador] ${rotulo} ya salió en ${ctx.clave}: no se repite`);
+      return `${rotulo}:ya_enviada`;
+    }
+
+    const pieza = await leerPiezaDelBot(db, direccion);
+    if (!pieza) {
+      console.warn(`[bot orquestador] ${rotulo} no existe: no sale para ${ctx.clave}`);
+      return `${rotulo}:no_existe`;
+    }
+
+    // ⚠️ La familia sale de la FILA de la plantilla, NUNCA de
+    // `ctx.datosEstado.familia`: ese campo mezcla el nombre crudo de Cerberus,
+    // el nombre corto del alias y texto suelto del lead bajo un nombre que
+    // promete un SKU. Ninguno de los tres resuelve `{precio}`.
+    const curso = await cursoConTecho(pieza.familiaCurso);
+    const preparada = prepararEnvio(pieza, {
+      variables: {
+        // El nombre ya lo trajo el paso 3 (Cerberus / memoria / perfil de
+        // WhatsApp). Volver a llamar a `ficha()` acá serían hasta 12 s POR
+        // VARIANTE de teléfono, en serie, con el claim tomado.
+        nombre: ctx.datosEstado.nombre ?? null,
+        curso: curso?.nombre ?? null,
+        precio: curso?.precio ?? null,
+        moneda: curso?.moneda ?? null,
+      },
+    });
+
+    if (!preparada.ok) {
+      console.warn(
+        `[bot orquestador] ${rotulo} no sale para ${ctx.clave} (${preparada.motivo}): ${preparada.detalle}`,
+      );
+      return `${rotulo}:${preparada.motivo}`;
+    }
+
+    const { enviados, corte } = await despacharPasos(
+      preparada.pasos,
+      (paso) => enviarUnPaso(ctx, telefono, pieza.clase, pieza.id, paso),
+      // El kill-switch, preguntado ENTRE paso y paso. Una secuencia de cuatro
+      // pasos tarda entre 6 y 18 segundos: sin esto, apagar la línea a mitad de
+      // camino no frenaba el flyer que faltaba.
+      { abortar: frenoLevantado },
+    );
+
+    if (corte) {
+      console.error(
+        `[bot orquestador] ${rotulo} se cortó en el paso ${corte.orden} para ${ctx.clave}: ${corte.motivo}`,
+      );
+    }
+    return `${rotulo}:${enviados}/${preparada.pasos.length}`;
+  } catch (err) {
+    console.error(`[bot orquestador] error mandando ${rotulo} a ${ctx.clave}:`, (err as Error).message);
+    return `${rotulo}:error`;
+  }
+}
+
+/** Un paso = un mensaje = una fila de auditoría, con su procedencia estampada. */
+async function enviarUnPaso(
+  ctx: CtxPipeline,
+  telefono: string,
+  clase: ClasePieza,
+  id: string,
+  paso: PasoListo,
+): Promise<{ ok: boolean; motivo?: string }> {
+  // La procedencia sale de `procedencia/pieza.ts` — nadie arma esas columnas a
+  // mano. `via: 'bot'` es lo que después permite preguntar «¿el bot elige mejor
+  // o peor que una persona?»; con `automatica` la respuesta se mezclaría con la
+  // del acuse nocturno.
+  const procedencia: Procedencia =
+    clase === "plantilla"
+      ? deUnPasoDePlantilla({
+          plantillaId: Number(id),
+          orden: paso.orden,
+          via: "bot",
+          contenido: paso.contenido,
+        })
+      : deUnDato({ clave: id, editada: false, contenido: paso.contenido, via: "bot" });
+
+  const comun = {
+    vendedoraId: VENDEDORA_ID_DEL_BOT,
+    numeroPropio: ctx.numeroPropio,
+    telefono,
+    // La conversación, no un rótulo propio: es lo que el dedupe consulta y lo
+    // que `momentoDelEnvio` necesita para clasificar en qué punto de la venta
+    // salió (solo entiende referencias `conv:`).
+    referencia: ctx.clave,
+    automatico: true,
+    procedencia,
+  };
+
+  const r = paso.media
+    ? await enviarMediaYProyectar({
+        ...comun,
+        archivo: paso.media.archivo,
+        media: {
+          ruta: paso.media.ruta,
+          clase: paso.media.clase,
+          mime: paso.media.mime,
+          nombre: paso.media.nombre,
+          texto: paso.texto,
+        },
+      })
+    : await enviarTextoYProyectar({ ...comun, texto: paso.texto ?? "" });
+
+  return r.ok ? { ok: true } : { ok: false, motivo: r.motivo };
 }
 
 // ── PASO 15: EJECUTAR acciones ───────────────────────────────────────────
@@ -580,17 +872,7 @@ export async function procesarConversacion(
   try {
     await paso2Normalizar(ctx);
     if (!ctx.textoEntrante) {
-      // La condición decía `&& ctx.estado === "desconocido"`, y `ctx.estado`
-      // acá SIEMPRE es "desconocido" (el paso 4 todavía no corrió): era una
-      // guarda que no guardaba nada. Sin texto no hay nada que contestar,
-      // punto — el estado de la conversación no cambia eso.
-      //
-      // Si el paso 2 ya dejó el motivo escrito (entrada bloqueada, entrante sin
-      // texto), no se escribe una segunda fila diciendo lo mismo.
-      if (!ctx.motivoSinTexto) {
-        await guardarRespuesta(ctx, "cancelada", "sin_texto_entrante");
-      }
-      await db.delete(botPendientes).where(eq(botPendientes.clave, clave));
+      await atenderEntranteSinTexto(ctx, clave);
       return;
     }
 
@@ -624,6 +906,7 @@ export async function procesarConversacion(
     await paso12Transicionar(ctx);
     await paso13Scoring(ctx);
     await paso14Enviar(ctx);
+    await paso14bPiezas(ctx);
     await paso15Ejecutar(ctx);
     await guardarRespuesta(ctx, "ok", null);
     await paso16Auditar(ctx);
@@ -642,6 +925,72 @@ export async function procesarConversacion(
   }
 }
 
+// ── Cuando lo que llegó no se puede leer ─────────────────────────────────
+
+/**
+ * UN AUDIO, UNA FOTO O UN STICKER YA NO DEJAN AL LEAD EN SILENCIO.
+ *
+ * Cinco casos el 1-ago-2026; dos quedaron colgados sin que nadie los rescatara.
+ * Y uno de esos «ilegibles» era una OBJECIÓN: un sticker de un cachorrito triste
+ * **justo después de «¿estás interesada en adquirirlo?»** es una objeción de
+ * precio dicha sin palabras (`docs/como-se-vende-en-goberna.md` §5).
+ *
+ * Los tres caminos, y por qué son tres:
+ *
+ *   (a) **la entrada la bloqueó un guardrail** (jailbreak, texto vacío): eso NO
+ *       se le contesta. La fila ya la escribió el paso 2 con su motivo.
+ *   (b) **no había ningún entrante** (una carrera rara del debounce): nada que
+ *       contestar y nada que explicar.
+ *   (c) **llegó algo que no se puede leer**: acá sí se contesta, y pasando por
+ *       las MISMAS compuertas que todo lo demás — modo, freno, pausa,
+ *       `vendedora_activa`, topes— porque un acuse también es un mensaje que
+ *       sale de la línea. Por eso se llama a `paso5Decidir` y no se improvisa un
+ *       `if`.
+ *
+ * **Cuenta como turno**, y es a propósito: `maxRespuestasHoraLinea` es «la cota
+ * contra el ban» y cuenta mensajes que salen, no razonamientos. Uno corto ocupa
+ * la línea igual que uno largo.
+ */
+async function atenderEntranteSinTexto(ctx: CtxPipeline, clave: string): Promise<void> {
+  const borrar = () => db.delete(botPendientes).where(eq(botPendientes.clave, clave));
+
+  // (a) y (b)
+  if (ctx.motivoSinTexto !== "entrante_sin_texto") {
+    if (!ctx.motivoSinTexto) await guardarRespuesta(ctx, "cancelada", "sin_texto_entrante");
+    await borrar();
+    return;
+  }
+
+  // (c) — las compuertas de siempre, en el mismo orden de siempre.
+  await paso4Estado(ctx);
+  await paso5Decidir(ctx);
+  if (debeSaltar(ctx)) {
+    await saltarYLimpiar(ctx, clave);
+    return;
+  }
+
+  const decision = decidirAcuseIlegible(ctx.hilo, ctx.claseSinTexto);
+  if (!decision.acusa) {
+    // Tres stickers seguidos reciben UN acuse. Queda la fila con el motivo: que
+    // no se conteste tiene que ser tan visible como que se conteste.
+    await guardarRespuesta(ctx, "cancelada", `entrante_sin_texto_${decision.motivo}`);
+    await borrar();
+    return;
+  }
+
+  ctx.textoRespuesta = decision.texto;
+  await paso14Enviar(ctx);
+
+  const noSalio = ctx.modoEfectivo === "automatico" && ctx.burbujasEnviadas === 0;
+  await guardarRespuesta(
+    ctx,
+    noSalio ? "error" : "ok",
+    `acuse_ilegible_${decision.clase}${noSalio ? "_no_salio" : ""}`,
+  );
+  console.info("[bot orquestador]", resumirTraza(ctx.traza));
+  await borrar();
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 function debeSaltar(ctx: CtxPipeline): boolean {
@@ -649,25 +998,22 @@ function debeSaltar(ctx: CtxPipeline): boolean {
 }
 
 /**
- * Cuánto se espera antes de reintentar un salto transitorio, y hasta cuándo.
+ * Cuánto se espera antes de reintentar un salto transitorio.
  *
- * El techo NO es decorativo: es la lección de #166. Un entrante que estuvo
- * esperando medio día no se contesta cuando el transporte vuelve — contestar
- * «¿en qué te puedo ayudar?» seis horas después confirma que nadie miraba, y es
- * peor que el silencio. Pasado el techo se descarta, con motivo propio.
+ * El techo —hasta cuándo sigue valiendo la pena contestar— NO vive acá: es
+ * `ESPERA_MAXIMA_MS` de `claim.ts`, el mismo que usa el despachador cuando
+ * recupera un claim colgado. Es una sola regla («un entrante que esperó medio
+ * día ya no se contesta», la lección de #166) y por eso es una sola constante:
+ * con dos, el reintento y la recuperación empezarían a discrepar sobre cuándo un
+ * mensaje quedó viejo.
  */
 const REINTENTO_MS = 90_000;
-const ESPERA_MAXIMA_MS = 6 * 60 * 60 * 1000;
 
 async function saltarYLimpiar(ctx: CtxPipeline, clave: string): Promise<void> {
   const motivo = (ctx.decision as { accion: "saltar"; motivo: MotivoSalto }).motivo;
 
   if (esTransitorio(motivo)) {
-    const espera = ctx.ultimoEntranteEn
-      ? ctx.ahora.getTime() - ctx.ultimoEntranteEn.getTime()
-      : 0;
-
-    if (espera <= ESPERA_MAXIMA_MS) {
+    if (!esperaExcesiva(ctx.ultimoEntranteEn, ctx.ahora)) {
       // Se SUELTA el claim y se corre el turno: el despachador lo vuelve a
       // tomar cuando la condición pase. Nada de borrar: el lead escribió y su
       // mensaje sigue sin contestar.
@@ -762,25 +1108,14 @@ async function armarHechos(ctx: CtxPipeline): Promise<HechosParaDecidir> {
   // Solo se exige en modo automático: en sombra no se manda nada, así que un
   // transporte caído no cambia lo que el pipeline puede hacer, y frenar ahí
   // apagaría justo el modo con el que se calibra el bot.
-  // ⚠️ `estado()` devuelve un OBJETO (`{estado: 'conectado', telefono}`), no una
-  // cadena. Acá había un `String(l.transporte.estado()) === "conectado"`, que
-  // compara `"[object Object]"` y por lo tanto es **siempre falso**. Mientras el
-  // valor se pasaba fijo en `true` no molestaba a nadie; al recolectarlo de
-  // verdad, ese `false` permanente dejó al bot descartando TODOS los entrantes
-  // con motivo `desconectado`. La ruta `/lineas` ya leía bien `.estado`: eran
-  // dos lecturas del mismo objeto y solo una estaba bien.
-  const gestor = gestorWhatsappSiActivo();
+  // ⚠️ La lectura vive en `lineaViva.ts`, una sola vez y con la cicatriz
+  // escrita: acá había un `String(l.transporte.estado()) === "conectado"` que
+  // comparaba `"[object Object]"` y era **siempre falso**, y el bot terminó
+  // descartando TODOS los entrantes con motivo `desconectado`. El reenganche
+  // necesita la misma pregunta, y dos copias de ésta ya se demostraron capaces
+  // de divergir.
   const transporteConectado =
-    ctx.modoEfectivo !== "automatico" ||
-    (gestor
-      ? gestor
-          .todos()
-          .some(
-            (l) =>
-              l.numero === ctx.numeroPropio &&
-              l.transporte.estado().estado === "conectado",
-          )
-      : false);
+    ctx.modoEfectivo !== "automatico" || lineaConectada(ctx.numeroPropio);
 
   // ── vendedora_activa: el freno que estaba muerto ────────────────────────
   const humanoEn = telefono

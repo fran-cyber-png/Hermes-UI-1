@@ -207,6 +207,19 @@ app.listen(port, () => {
           awsAccessKey,
           awsSecretKey,
           awsRegion: region,
+          // ⚠️ EL TIMEOUT TIENE QUE SER MENOR QUE `VIGENCIA_CLAIM_MS` (5 min).
+          //
+          // El default del SDK son 10 minutos y 2 reintentos: el DOBLE del
+          // claim. Una sola llamada colgada sobrevive al vencimiento, otro tick
+          // toma el mismo pendiente, y el lead recibe **dos respuestas al mismo
+          // mensaje** — el tell más obvio de que hay una máquina detrás.
+          //
+          // 90 s es holgado para un turno normal (el agente tarda 3–5 s) y deja
+          // margen de sobra por debajo del claim aunque se use el reintento.
+          // `maxRetries: 1` por lo mismo: dos reintentos con este timeout ya
+          // rozan los 5 min.
+          timeout: 90_000,
+          maxRetries: 1,
         }) as any;
         arrancarDespachador(cfgBot, clienteLLM);
       } else {

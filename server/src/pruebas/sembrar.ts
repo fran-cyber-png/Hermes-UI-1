@@ -10,8 +10,11 @@ import {
   intereses,
   leads,
   notas,
+  numerosWa,
+  numeroVendedora,
   recordatorios,
 } from "../db/schema.js";
+import { botCalificaciones } from "../db/bot.js";
 import { sincronizarLote } from "../clientes/sincronizar.js";
 import { A_MANO, columnasDeProcedencia, type Procedencia } from "../procedencia/pieza.js";
 import type { DbDePrueba } from "./base.js";
@@ -438,4 +441,51 @@ export async function sembrarGestion(db: DbDePrueba, g: GestionSembrada): Promis
     .returning({ id: gestiones.id });
 
   return fila.id;
+}
+
+export interface CalificacionBotSembrada {
+  /** La clave de la conversación: la MISMA que arma la cola (`conv:...`). */
+  clave: string;
+  temperatura?: "caliente" | "tibio" | "frio" | null;
+  /** Uno de los seis `EscaladaMotivo`, o el motivo libre de `calificar`. */
+  motivo?: string | null;
+  escalada?: boolean;
+}
+
+/**
+ * Siembra lo que el BOT dijo de una conversación (`bot_calificaciones`). Inserta
+ * directo y no por `ejecutarAcciones` a propósito: ese camino usa el singleton
+ * `db` (no el de prueba) y encima llama a Cerberus para `registrar_interes`. Lo
+ * que estos tests miden es el LECTOR, no cómo se escribió la fila.
+ */
+export async function sembrarCalificacionBot(
+  db: DbDePrueba,
+  c: CalificacionBotSembrada,
+): Promise<void> {
+  await db.insert(botCalificaciones).values({
+    clave: c.clave,
+    temperatura: c.temperatura ?? null,
+    motivo: c.motivo ?? null,
+    escalada: c.escalada ?? false,
+  });
+}
+
+/**
+ * Siembra una LÍNEA con sus vendedoras asignadas (`numeros_wa` +
+ * `numero_vendedora`). Las dos tablas juntas porque hay una FK: una asignación
+ * sin su número no se puede insertar, y un test que lo intentara fallaría por el
+ * andamio y no por lo que mide.
+ */
+export async function sembrarLineaDeVendedora(
+  db: DbDePrueba,
+  numero: string,
+  vendedoras: readonly string[],
+): Promise<void> {
+  await db.insert(numerosWa).values({ numero, etiqueta: numero }).onConflictDoNothing();
+  if (vendedoras.length) {
+    await db
+      .insert(numeroVendedora)
+      .values(vendedoras.map((vendedoraId) => ({ numero, vendedoraId })))
+      .onConflictDoNothing();
+  }
 }

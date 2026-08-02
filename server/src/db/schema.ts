@@ -698,13 +698,23 @@ export const numerosWa = pgTable("numeros_wa", {
 });
 
 /**
- * MAPA NÚMERO ↔ VENDEDORA — muchos-a-muchos, SOLO etiqueta y atribución.
- *
- * Decisión de Estephano (2026-07-24): la cola NO se filtra por vendedora, sigue
- * siendo una sola pantalla compartida. Asignar una vendedora a un número lo
- * organiza/etiqueta; no crea una bandeja privada. Un número puede tener varias
+ * MAPA NÚMERO ↔ VENDEDORA — muchos-a-muchos. Un número puede tener varias
  * vendedoras y una vendedora varios números. La atribución de la venta la sigue
  * dando el token (`vendedoraId`), no este mapa.
+ *
+ * ⚠️ Acá decía «SOLO etiqueta y atribución: la cola NO se filtra por vendedora».
+ * Desde el 1-ago-2026 la cola **sí** se puede acotar a las líneas propias
+ * (`GET /api/conversaciones?mias=1`, regla en `cola/lineas.ts`). Lo que no
+ * cambió es la naturaleza de la decisión de Estephano del 24-jul:
+ *
+ * **Es un FILTRO, no un PERMISO.** La cola sigue siendo una sola pantalla
+ * compartida; «Las mías» acota lo que se MIRA, no lo que se puede mirar, y por
+ * eso es fail-open (sin filas asignadas se ve todo). No podría ser otra cosa:
+ * Hermes no tiene modelo de permisos —`requiereVendedora` dice «es una
+ * vendedora», no «cuál»— y el hilo, la ficha y el envío siguen sirviendo
+ * cualquier conversación a cualquier token. Un recorte de cola que se
+ * presentara como frontera sería una frontera imaginaria, y eso es peor que
+ * ninguna: se le cree.
  */
 export const numeroVendedora = pgTable(
   "numero_vendedora",

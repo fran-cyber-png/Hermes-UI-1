@@ -29,6 +29,9 @@ import {
   sufijosDeLaColaCteSql,
 } from "./cursoSql.js";
 import { padronCteSql, padronJoinSql, yaComproSql } from "./clienteSql.js";
+import { botCalienteSql, botEscaladaSql, botJoinSql } from "./botSql.js";
+import { recorteDeLineas } from "./lineas.js";
+import { lineasDeVendedora } from "../numeros/repositorio.js";
 
 /**
  * LA COLA UNIFICADA — una fila por CONVERSACIÓN, no por mensaje. Extraída de la
@@ -72,6 +75,13 @@ import { padronCteSql, padronJoinSql, yaComproSql } from "./clienteSql.js";
  * anuncio (`ultima_origen`) la decide el front, puro y testeado. Solo se
  * calculan en la consulta de la PÁGINA: ni el total ni los conteos del embudo
  * pagan el join a `leads`.
+ *
+ * EL VEREDICTO DEL BOT (`cola/botSql.ts`): `bot_escalada`, `bot_temperatura` y
+ * `bot_motivo` — lo que el bot comercial dijo de esa conversación. Es el LECTOR
+ * que `bot_calificaciones` no tenía: el bot marcaba «listo para cerrar», se
+ * frenaba a propósito y del otro lado no había nadie. Va en el listado y no en
+ * la ficha porque la pregunta que responde es «¿a quién atiendo AHORA?», y esa
+ * se hace antes de abrir la conversación.
  *
  * EX-CLIENTE (#133): `cliente_nivel` y `cliente_compras` dicen si quien escribe
  * YA LE COMPRÓ a Goberna, y cuánto. 140 de las 1.997 conversaciones vivas son de
@@ -139,7 +149,7 @@ const comentariosCte = (filtroCanal: SQL, incluirPins: boolean) => sql`
 
 /**
  * El recorte por LÍNEA (#50): solo las conversaciones que entraron o salieron por
- * ESE número propio de Goberna.
+ * ESOS números propios de Goberna.
  *
  * Va sobre `interactions.numero_propio` —la COLUMNA materializada por #185, con
  * índice `(numero_propio, occurred_at)`— y no sobre `e.payload->>'numeroPropio'`,
@@ -151,11 +161,19 @@ const comentariosCte = (filtroCanal: SQL, incluirPins: boolean) => sql`
  * **`NULL` no matchea ninguna línea, y está bien**: una fila cuyo crudo no traía
  * el número no se le puede adjudicar a nadie. Es lo que ya decidió el backfill al
  * no rellenarla con la línea más probable.
+ *
+ * Recibe una LISTA y no un número porque «las mías» (`numero_vendedora`) puede
+ * ser más de una: es el MISMO recorte con otro nombre, y quién arma la lista lo
+ * decide `cola/lineas.ts`, puro y con tests. Lista vacía = sin recorte, que es
+ * el comportamiento de cuando había una sola línea.
  */
-const filtroDeLinea = (linea: string) => (linea ? sql`AND i.numero_propio = ${linea}` : sql``);
+const filtroDeLineas = (lineas: readonly string[]) =>
+  lineas.length
+    ? sql`AND i.numero_propio IN (${sql.join(lineas.map((l) => sql`${l}`), sql`, `)})`
+    : sql``;
 
 /** Cada mensaje con su número propio y la CLASE de su media, sacados del evento. */
-const msgCte = (filtroCanal: SQL, incluirPins: boolean, linea: string) => sql`
+const msgCte = (filtroCanal: SQL, incluirPins: boolean, lineas: readonly string[]) => sql`
   SELECT i.canal, i.persona_id, i.persona_nombre, i.texto, i.direccion, i.occurred_at,
          COALESCE(e.payload->>'numeroPropio', '') AS numero_propio,
          e.payload->'media'->>'clase'             AS clase,
@@ -168,7 +186,7 @@ const msgCte = (filtroCanal: SQL, incluirPins: boolean, linea: string) => sql`
       incluirPins,
     )})
     ${filtroCanal}
-    ${filtroDeLinea(linea)}
+    ${filtroDeLineas(lineas)}
 `;
 
 /** Los mensajes agrupados en conversación por (canal, persona, número propio). */
@@ -225,21 +243,21 @@ const conversacionesCte = sql`
  * aunque estén fuera de la ventana de 30 días. Los conteos del embudo lo pasan
  * en `null` — su universo es la ventana, sin excepciones personales.
  *
- * `linea` (#50): con una línea elegida, **los comentarios se caen del UNION**.
- * No es un descarte por comodidad — un comentario de Facebook no llegó por
- * ningún número de WhatsApp (`comentariosCte` los emite con `numero_propio`
+ * `lineas` (#50): con un recorte de línea puesto, **los comentarios se caen del
+ * UNION**. No es un descarte por comodidad — un comentario de Facebook no llegó
+ * por ningún número de WhatsApp (`comentariosCte` los emite con `numero_propio`
  * NULL), así que dejarlos adentro haría que «solo la línea de Walter» mostrara
  * filas que no son de Walter ni de ninguna línea. Y una fijada de otra línea
  * tampoco entra: el recorte por línea se aplica en `msg`, o sea ANTES de que el
  * `OR` de pins pueda saltarse la ventana.
  */
-const conTodo = (filtroCanal: SQL, pins: SQL | null, linea = "") => sql`
+const conTodo = (filtroCanal: SQL, pins: SQL | null, lineas: readonly string[] = []) => sql`
   WITH ${pins ? sql`pins AS (${pins}),
   ` : sql``}msg AS (
-    ${msgCte(filtroCanal, pins != null, linea)}
+    ${msgCte(filtroCanal, pins != null, lineas)}
   ),
   todo AS (
-    ${linea ? sql`` : sql`${comentariosCte(filtroCanal, pins != null)}
+    ${lineas.length ? sql`` : sql`${comentariosCte(filtroCanal, pins != null)}
     UNION ALL
     `}${conversacionesCte}
   )
@@ -263,10 +281,16 @@ export interface OpcionesCola {
    * las líneas, que es lo que pasaba cuando había una sola.
    *
    * Es un recorte de VISTA, no de permiso: acota lo que se mira, no lo que se
-   * puede mirar. Quién puede ver qué línea es otra decisión y otro frente —
-   * `numero_vendedora` existe y hoy no la lee nadie.
+   * puede mirar. Vale lo mismo para `misLineas` — el porqué está en
+   * `cola/lineas.ts` y en el comentario de `numeroVendedora` (`db/schema.ts`).
    */
   linea?: string;
+  /**
+   * «Las mías»: acota a las líneas que `numero_vendedora` le asigna a
+   * `vendedoraId`. **Fail-open**: sin filas asignadas se sirve TODO y se avisa
+   * con `sinLineasPropias`. Una línea explícita en `linea` le gana.
+   */
+  misLineas?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -288,7 +312,15 @@ export interface ResultadoCola {
    * obliga a probarlo para saber si vale la pena, y con 1.867 conversaciones eso
    * es un salto al vacío. Sale de la MISMA consulta que el total, sin costo extra.
    */
-  conteosFiltro?: { pideInfo: number; sinResponder: number; yaCompraron: number };
+  conteosFiltro?: {
+    pideInfo: number;
+    sinResponder: number;
+    yaCompraron: number;
+    /** El bot se frenó y espera a una persona (`cola/botSql.ts`). */
+    botEscalada: number;
+    /** El bot la ve caliente: preguntó precio, cuotas o forma de pago. */
+    botCaliente: number;
+  };
   /**
    * La MISMA foto, abierta por las preguntas que el tablero no sabía responder —
    * de una sola pasada. Es lo que hace navegables 1.389 tarjetas: cuántas de la
@@ -301,6 +333,14 @@ export interface ResultadoCola {
   sinEstado?: boolean;
   /** true = la cola vino SIN la marca de ex-cliente (falta el `db:push` de #133). */
   sinPadron?: boolean;
+  /** true = la cola vino SIN el veredicto del bot (`bot_calificaciones` no existe acá). */
+  sinBot?: boolean;
+  /**
+   * true = se pidió «las mías» y `numero_vendedora` no le asigna ninguna, así que
+   * se sirvió TODO. Se dice en voz alta: un filtro que no filtra y no avisa se ve
+   * igual que uno que sí, y la vendedora creería que esas conversaciones son suyas.
+   */
+  sinLineasPropias?: boolean;
 }
 
 /** Una celda del desglose: etapa × ya-le-hablamos × precio × viva, con su conteo. */
@@ -330,18 +370,45 @@ export async function consultarCola(
 ): Promise<ResultadoCola> {
   let conEstado = true;
   let conPadron = true;
+  let conBot = true;
 
-  // Dos degradaciones posibles ⇒ como mucho tres intentos.
+  // A QUÉ LÍNEAS SE ACOTA — se resuelve UNA vez, ANTES del loop: el recorte no
+  // depende de qué tabla degradó, así que releer `numero_vendedora` en cada
+  // reintento sería una consulta por nada.
+  const { lineas, sinLineasPropias } = recorteDeLineas({
+    linea: opciones.linea,
+    misLineas: opciones.misLineas,
+    // Solo se le pregunta al mapa si hace falta: sin `mias` puesto, esta consulta
+    // no existe y la cola de siempre no paga nada.
+    asignadas:
+      opciones.misLineas && opciones.vendedoraId
+        ? await lineasDeVendedora(base, opciones.vendedoraId)
+        : [],
+  });
+
+  // Tres degradaciones posibles ⇒ como mucho cuatro intentos.
   for (let intento = 0; ; intento++) {
     try {
-      const r = await ejecutarCola(base, opciones, conEstado, conPadron);
+      const r = await ejecutarCola(base, opciones, lineas, conEstado, conPadron, conBot);
       return {
         ...r,
         ...(conEstado ? {} : { sinEstado: true }),
         ...(conPadron ? {} : { sinPadron: true }),
+        ...(conBot ? {} : { sinBot: true }),
+        ...(sinLineasPropias ? { sinLineasPropias: true } : {}),
       };
     } catch (e) {
-      if (!esTablaAusente(e) || intento >= 2) throw e;
+      if (!esTablaAusente(e) || intento >= 3) throw e;
+      // El bot va primero por la misma razón que el padrón: apagar lo que el
+      // error NOMBRA evita que una tabla ausente se lleve puestas las otras dos.
+      if (conBot && mencionaTabla(e, "bot_calificaciones")) {
+        console.warn(
+          "[cola] `bot_calificaciones` no existe: sirvo la cola SIN el veredicto del bot. " +
+            "Falta la migración `0009_cimientos_del_bot`.",
+        );
+        conBot = false;
+        continue;
+      }
       if (conPadron && mencionaTabla(e, "clientes_padron")) {
         console.warn(
           "[cola] `clientes_padron` no existe: sirvo la cola SIN la marca de ex-cliente. " +
@@ -358,7 +425,11 @@ export async function consultarCola(
         conEstado = false;
         continue;
       }
-      conPadron = false;
+      if (conPadron) {
+        conPadron = false;
+        continue;
+      }
+      conBot = false;
     }
   }
 }
@@ -377,8 +448,10 @@ function mencionaTabla(e: unknown, tabla: string): boolean {
 async function ejecutarCola(
   base: typeof db,
   opciones: OpcionesCola,
+  lineas: readonly string[],
   conEstado: boolean,
   conPadron: boolean,
+  conBot: boolean,
 ): Promise<ResultadoCola> {
   const canal = opciones.canal ?? "";
   const intencion = opciones.intencion ?? "";
@@ -386,7 +459,6 @@ async function ejecutarCola(
   const tab = opciones.tab ?? "";
   const categoria = (opciones.categoria ?? "").trim().toLowerCase();
   const vendedoraId = opciones.vendedoraId;
-  const linea = (opciones.linea ?? "").trim();
   const limit = Math.min(opciones.limit || 40, 100);
   const offset = opciones.offset || 0;
 
@@ -410,6 +482,13 @@ async function ejecutarCola(
   // predicado de `cola/clienteSql.ts` — la página, el total, el número del chip
   // y el desglose leen LA MISMA definición.
   if (intencion === "ya-compraron") condicionesBase.push(yaComproSql);
+  // EL BOT PIDIÓ AYUDA / EL BOT LA VE CALIENTE (`cola/botSql.ts`). Son filtros
+  // secundarios como los otros tres —no un modo aparte— justamente para que se
+  // combinen: «piden info» + «el bot pidió ayuda» es una pregunta legítima.
+  // El predicado se dice UNA vez y lo leen la página, el conteo del chip y el
+  // desglose (lección de #37).
+  if (intencion === "bot-escalada") condicionesBase.push(botEscaladaSql);
+  if (intencion === "bot-caliente") condicionesBase.push(botCalienteSql);
   // Compat: la cola vieja mandaba `puedo-escribirle`; el front nuevo usa tabs.
   if (intencion === "puedo-escribirle") condicionesBase.push(sql`(ventana_abierta OR tipo = 'mensaje')`);
 
@@ -437,7 +516,7 @@ async function ejecutarCola(
   // el nivel 0–5. `etapa_manual` llega de la última gestión (etapaEfectivaSql.ts);
   // el estado personal, del LEFT JOIN a `estado_conversacion`.
   const filas = await base.execute(sql`
-    ${conTodo(filtroCanal, pins, linea)},
+    ${conTodo(filtroCanal, pins, lineas)},
     seguimientos AS (
       ${seguimientosPendientesSql}
     ),
@@ -469,6 +548,12 @@ async function ejecutarCola(
            lc.nombre AS lead_nombre,
            pc.nivel AS cliente_nivel,
            pc.compras AS cliente_compras,
+           -- EL VEREDICTO DEL BOT (cola/botSql.ts). bot_motivo viaja CRUDO:
+           -- traducir «por_cerrar» a criollo es presentación, y eso vive del
+           -- lado del front (canales/bot.ts), igual que la marca de ex-cliente.
+           (${botEscaladaSql}) AS bot_escalada,
+           bq.temperatura       AS bot_temperatura,
+           bq.motivo            AS bot_motivo,
            (${etapaEfectivaSql}) AS etapa_efectiva,
            extract(day from now() - referencia)::int AS dias,
            (${nivelUrgenciaSql}) AS nivel,
@@ -486,6 +571,7 @@ async function ejecutarCola(
     LEFT JOIN interes_ultimo iu ON iu.clave = todo.clave
     ${leadCursoJoinSql}
     ${padronJoinSql(conPadron)}
+    ${botJoinSql(conBot)}
     ${donde(condiciones)}
     ORDER BY ${bandaPinOrdenSql}, nivel ASC, orden ASC
     LIMIT ${limit} OFFSET ${offset}
@@ -507,20 +593,25 @@ async function ejecutarCola(
       pide_info: number;
       sin_responder: number;
       ya_compraron: number;
+      bot_escalada: number;
+      bot_caliente: number;
     }>(sql`
-      ${conTodo(filtroCanal, pins, linea)},
+      ${conTodo(filtroCanal, pins, lineas)},
       ultimas_gestiones AS (${ultimasGestionesSql}),
       cats AS (${categoriasCteSql}),
       padron AS (${padronCteSql(conPadron)})
       SELECT count(*) FILTER (WHERE ${yTodas(condicionesBase)})::int AS n,
              count(*) FILTER (WHERE pide_info)::int                 AS pide_info,
              count(*) FILTER (WHERE NOT respondida)::int            AS sin_responder,
-             count(*) FILTER (WHERE ${yaComproSql})::int            AS ya_compraron
+             count(*) FILTER (WHERE ${yaComproSql})::int            AS ya_compraron,
+             count(*) FILTER (WHERE ${botEscaladaSql})::int         AS bot_escalada,
+             count(*) FILTER (WHERE ${botCalienteSql})::int         AS bot_caliente
       FROM todo
       LEFT JOIN ultimas_gestiones USING (clave)
       ${estadoJoinSql(vendedoraId, conEstado)}
       LEFT JOIN cats ON cats.clave = todo.clave
       ${padronJoinSql(conPadron)}
+      ${botJoinSql(conBot)}
       ${donde(condicionesRecorte)}
     `);
     total = r?.n;
@@ -528,8 +619,10 @@ async function ejecutarCola(
       pideInfo: r?.pide_info ?? 0,
       sinResponder: r?.sin_responder ?? 0,
       yaCompraron: r?.ya_compraron ?? 0,
+      botEscalada: r?.bot_escalada ?? 0,
+      botCaliente: r?.bot_caliente ?? 0,
     };
-    desglose = await desglosarEmbudo(base, filtroCanal, condicionesBase, conPadron, linea);
+    desglose = await desglosarEmbudo(base, filtroCanal, condicionesBase, conPadron, conBot, lineas);
     conteos = plegarConteos(desglose);
   }
 
@@ -555,14 +648,19 @@ async function desglosarEmbudo(
   filtroCanal: SQL,
   condiciones: SQL[],
   conPadron: boolean,
-  // La línea entra acá por lo mismo que entra el canal: define el UNIVERSO de la
-  // foto, no un recorte de columna. Sin esto, con la cola filtrada a Walter la
+  // El join al veredicto del bot va acá aunque el desglose no lo muestre: si la
+  // vendedora está filtrando por «el bot pidió ayuda», `condiciones` nombra `bq`
+  // y sin el join la consulta ni compila. Es la misma razón por la que ya estaba
+  // el del padrón.
+  conBot: boolean,
+  // Las líneas entran acá por lo mismo que entra el canal: definen el UNIVERSO de
+  // la foto, no un recorte de columna. Sin esto, con la cola filtrada a Walter la
   // banda de desglose seguiría contando las conversaciones de la otra línea.
-  linea: string,
+  lineas: readonly string[],
 ): Promise<FilaDesglose[]> {
   const donde = condiciones.length ? sql`WHERE ${sql.join(condiciones, sql` AND `)}` : sql``;
   const filas = await base.execute<FilaDesglose>(sql`
-    ${conTodo(filtroCanal, null, linea)},
+    ${conTodo(filtroCanal, null, lineas)},
     ultimas_gestiones AS (${ultimasGestionesSql}),
     padron AS (${padronCteSql(conPadron)})
     SELECT (${etapaEfectivaSql})        AS etapa,
@@ -573,6 +671,7 @@ async function desglosarEmbudo(
     FROM todo
     LEFT JOIN ultimas_gestiones USING (clave)
     ${padronJoinSql(conPadron)}
+    ${botJoinSql(conBot)}
     ${donde}
     GROUP BY 1, 2, 3, 4
   `);
@@ -600,8 +699,9 @@ export function plegarConteos(desglose: readonly FilaDesglose[]): Record<string,
  * bug de verdad, no una diferencia de definición.
  */
 export async function contarPorEtapaEfectiva(base: typeof db): Promise<Record<string, number>> {
-  // Sin condiciones no hay nada que preguntarle al padrón: el join saldría gratis
-  // pero igual costaría una pasada. `false` deja la consulta idéntica a la de
-  // antes de #133 — y de paso no depende de que `clientes_padron` exista.
-  return plegarConteos(await desglosarEmbudo(base, sql``, [], false, ""));
+  // Sin condiciones no hay nada que preguntarle al padrón ni al bot: el join
+  // saldría gratis pero igual costaría una pasada. Los `false` dejan la consulta
+  // idéntica a la de antes de #133 — y de paso no dependen de que
+  // `clientes_padron` ni `bot_calificaciones` existan en esa base.
+  return plegarConteos(await desglosarEmbudo(base, sql``, [], false, false, []));
 }

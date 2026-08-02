@@ -74,6 +74,15 @@ export interface Conversacion {
   cliente_nivel?: 'vip' | 'recompro' | 'compro' | null;
   /** Cuántas compras registra el padrón — el «×3» de la marca. */
   cliente_compras?: number | null;
+  /** EL VEREDICTO DEL BOT (`cola/botSql.ts`): el bot se frenó y espera a una
+   *  persona. Ausente = no se sabe (el radar y la agenda no lo traen, y un
+   *  server sin la migración del bot tampoco). Se lee en `canales/bot.ts`. */
+  bot_escalada?: boolean | null;
+  /** `caliente` · `tibio` · `frio` — lo que el bot calificó. `null` = no dijo nada. */
+  bot_temperatura?: string | null;
+  /** El motivo CRUDO: uno de los seis `EscaladaMotivo` si escaló, o el texto
+   *  libre del modelo si solo calificó. La traducción a criollo vive en `bot.ts`. */
+  bot_motivo?: string | null;
 }
 
 type Pagina = {
@@ -85,9 +94,18 @@ type Pagina = {
   /** Conteos reales por etapa efectiva sobre la misma ventana (#89). Solo primera página. */
   conteos?: Record<string, number>;
   /** Cuántas filas daría cada filtro secundario dentro del recorte actual. Primera página. */
-  conteosFiltro?: { pideInfo: number; sinResponder: number; yaCompraron?: number };
+  conteosFiltro?: {
+    pideInfo: number;
+    sinResponder: number;
+    yaCompraron?: number;
+    /** El bot se frenó y espera a una persona. Opcional: un server viejo no lo manda. */
+    botEscalada?: number;
+    botCaliente?: number;
+  };
   /** El server sirvió la cola SIN la marca de ex-cliente (falta el `db:push` de #133). */
   sinPadron?: boolean;
+  /** Se pidió «las mías» y `numero_vendedora` no le asigna ninguna: vino TODO. */
+  sinLineasPropias?: boolean;
   /** La misma foto abierta por «ya le hablamos» × precio × viva. Solo primera página. */
   desglose?: FilaDesglose[];
 };
@@ -166,6 +184,13 @@ export function useConversaciones(
      * vez de fingir que nadie fijó ni marcó nada.
      */
     sinEstado: q.data?.pages[0]?.sinEstado === true,
+    /**
+     * Se pidió «las mías» y el mapa `numero_vendedora` no le asigna ninguna, así
+     * que el server sirvió TODO (fail-open). La UI lo dice: un filtro que no
+     * filtra y no avisa se ve igual que uno que sí, y la vendedora creería que
+     * esas conversaciones son suyas.
+     */
+    sinLineasPropias: q.data?.pages[0]?.sinLineasPropias === true,
   };
 }
 

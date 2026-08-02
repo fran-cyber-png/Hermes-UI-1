@@ -23,7 +23,7 @@
 export type Tab = 'todo' | 'no-leidos' | 'favoritos';
 
 /** Los filtros secundarios: angostan dentro del tab (#49). */
-export type FiltroSec = '' | 'pide-info' | 'sin-responder' | 'ya-compraron';
+export type FiltroSec = '' | 'pide-info' | 'sin-responder' | 'ya-compraron' | 'bot-escalada' | 'bot-caliente';
 
 export const TABS: { valor: Tab; label: string; vacio: string }[] = [
   { valor: 'todo', label: 'Todo', vacio: 'No entró nada por ningún canal.' },
@@ -42,6 +42,31 @@ export const FILTROS_SEC: { valor: Exclude<FiltroSec, ''>; label: string; ayuda:
    * es lo que hace que se lo mire.
    */
   { valor: 'ya-compraron', label: 'Ya compraron', ayuda: 'Ya te compró alguna vez: el lead más barato de convertir' },
+  /**
+   * ══ LOS DOS DEL BOT — y por qué SOLO aparecen cuando tienen algo que decir ══
+   *
+   * El bot corre en UNA línea de cuatro. En las otras tres estos dos chips
+   * dirían «0» para siempre, y la barra ya está llena: es la misma regla por la
+   * que el selector de línea entero no se dibuja con una sola línea («un
+   * selector de un solo elemento no es una elección, es ruido»). `BarraFiltros`
+   * los esconde con conteo cero, así que **el chip apareciendo ES el aviso**:
+   * cuando el bot escala algo, sale un chip que antes no estaba, con su número.
+   *
+   * Son dos y no uno porque se atienden distinto: una escalada dejó al bot
+   * mudo y al lead esperando (hay que ENTRAR), una caliente sin escalar es una
+   * oportunidad que el bot sigue trabajando (hay que MIRAR). Juntarlas
+   * enterraría las tres urgentes del día entre las catorce calientes.
+   */
+  {
+    valor: 'bot-escalada',
+    label: 'Pidió ayuda',
+    ayuda: 'El bot se frenó y espera a una persona: mientras nadie entre, el lead no recibe nada',
+  },
+  {
+    valor: 'bot-caliente',
+    label: 'El bot los ve calientes',
+    ayuda: 'El bot los calificó calientes: preguntaron precio, cuotas o forma de pago',
+  },
 ];
 
 const TABS_VALIDOS: readonly string[] = TABS.map((t) => t.valor);
@@ -71,6 +96,25 @@ export const KEY_TAB = 'hermes.colaTab';
  * persona. Es la misma razón por la que el tab se guarda.
  */
 export const KEY_LINEA = 'hermes.colaLinea';
+
+/**
+ * «LAS MÍAS» — el valor reservado del MISMO eje de línea, no un estado aparte.
+ *
+ * `numero_vendedora` (poblada desde #50 y sin lectores hasta hoy) dice qué
+ * líneas atiende cada vendedora. Elegir «las mías» y elegir «Walter» son la
+ * misma pregunta —¿qué cola miro?—, así que comparten el estado: dos banderas
+ * independientes habilitarían el estado imposible «las mías Y solo Walter» y
+ * alguien tendría que inventar quién gana.
+ *
+ * No es un número, así que **no viaja como `?linea=`** (la ruta lo rechazaría
+ * con 400, y con razón): `parametrosDeCola` lo traduce a `?mias=1` y el server
+ * resuelve el mapa. Que lo resuelva el server no es un detalle: si el front
+ * mandara la lista de números, habría dos lugares decidiendo cuáles son «las
+ * mías» (la lección de #37).
+ *
+ * No puede colisionar con una línea real: las líneas son solo dígitos.
+ */
+export const LINEA_MIAS = 'mias';
 
 /**
  * Qué debería ver, la primera vez, alguien que YA venía usando la cola vieja.
@@ -196,7 +240,8 @@ export interface EstadoCola {
   /**
    * Recorta a UNA línea de WhatsApp: el número propio de Goberna por el que
    * entró la conversación (#50). Vacío/ausente = todas, que es lo que había
-   * cuando había una sola línea.
+   * cuando había una sola línea. `LINEA_MIAS` = las que `numero_vendedora` le
+   * asigna a quien está logueada (lo resuelve el server).
    */
   linea?: string;
 }
@@ -214,6 +259,9 @@ export function parametrosDeCola(e: EstadoCola): Record<string, string> {
   if (e.canal) p.canal = e.canal;
   if (e.etapa) p.etapa = e.etapa;
   if (e.precio) p.precio = '1';
-  if (e.linea) p.linea = e.linea;
+  // «Las mías» es el mismo eje con otro nombre, y sale por otro parámetro: no es
+  // un teléfono, así que mandarlo como `?linea=` sería un 400 del server.
+  if (e.linea === LINEA_MIAS) p.mias = '1';
+  else if (e.linea) p.linea = e.linea;
   return p;
 }

@@ -33,6 +33,12 @@ import { normalizarTelefono } from "../whatsapp/identidadWa.js";
  * es una cola vacía — la respuesta honesta a «mostrame lo de esta línea» cuando
  * esa línea todavía no habló con nadie, que es justo el día uno de un número
  * recién vinculado.
+ *
+ * `?mias=1`: el MISMO recorte, resuelto contra `numero_vendedora` para el token
+ * que pregunta. Va como bandera y no como lista de números a propósito — el mapa
+ * lo dueña Cerberus y lo lee el server; si el front mandara los números, habría
+ * dos lugares que deciden cuáles son «las mías». Sin líneas asignadas se sirve
+ * TODO y la respuesta lo dice (`sinLineasPropias`): fail-open, ver `cola/lineas.ts`.
  */
 export const conversacionesRouter = Router();
 
@@ -65,6 +71,7 @@ conversacionesRouter.get("/", async (req, res) => {
       categoria: typeof req.query.categoria === "string" ? req.query.categoria : "",
       precio: req.query.precio === "1",
       linea,
+      misLineas: req.query.mias === "1",
       vendedoraId: req.vendedoraId,
       limit: Number(req.query.limit) || 40,
       offset: Number(req.query.offset) || 0,

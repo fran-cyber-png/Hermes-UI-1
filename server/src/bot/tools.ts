@@ -23,6 +23,16 @@ export function crearTools(
   recolector: Accion[],
   catalogo: ResumenPieza[],
   familiasValidas: ReadonlySet<string> = FAMILIAS_POR_DEFECTO,
+  /**
+   * Las piezas que esta conversación YA recibió (`plantilla:12`, `hecho:cuotas`),
+   * leídas de `envios_wa` antes de armar las tools (F3).
+   *
+   * Viaja hasta acá —en vez de chequearse solo antes de mandar— para que el
+   * modelo se entere **mientras redacta**: si se lo decimos recién al despachar,
+   * el turno ya salió prometiendo un flyer que no va a llegar. Incluye lo que la
+   * vendedora mandó a mano, que es la mitad que el bot no puede ver de otro modo.
+   */
+  yaEnviadas: ReadonlySet<string> = new Set(),
 ): {
   definiciones: ToolDefinition[];
   handlers: Record<string, HandlerTool>;
@@ -49,27 +59,64 @@ export function crearTools(
     const pieza = catalogo.find((p) => `${p.clase}:${p.id}` === id);
     if (!pieza) return "esa pieza no existe; elegí de la lista de <piezas_enviables>";
     if (!pieza.enviable) return "esa pieza no se puede enviar en este momento";
-    // La intención SE SIGUE GUARDANDO aunque no se ejecute: `bot_respuestas.
-    // acciones` es el rastro con el que se diagnosticó este bug, y apagarlo nos
-    // dejaría ciegos sobre qué piezas pediría el modelo cuando F3 conecte.
+
+    // El dedupe POR CONVERSACIÓN, dicho a tiempo: si esta persona ya la recibió
+    // —del bot en otro turno o de una vendedora a mano—, mandarla de nuevo es
+    // repetirle el mismo archivo. Y saberlo ACÁ es lo que evita que el turno
+    // salga prometiendo algo que después el despachador va a bloquear.
+    if (yaEnviadas.has(`${pieza.clase}:${pieza.id}`)) {
+      return (
+        `a esta persona YA le llegó ${id} en esta conversación: no se manda de nuevo. ` +
+        "Si hace falta, referite a lo que ya tiene con tus palabras."
+      );
+    }
+
+    /**
+     * ⚠️ UNA PIEZA, UNA VEZ POR TURNO — la mitad barata del dedupe.
+     *
+     * El modelo puede pedir la misma pieza dos veces en el mismo turno: ahora
+     * que su propio texto sobrevive al `tool_use` (ver `agente.ts`), lo normal
+     * es que la vuelta siguiente vuelva a narrar «te paso el flyer», y de ahí a
+     * volver a llamar la tool hay un paso. Sin esta guarda eso son DOS flyers
+     * idénticos al mismo lead, con su espera de 2-6 s en el medio.
+     *
+     * Acá se corta lo de ESTE turno; lo que ya salió en turnos anteriores lo
+     * corta el dedupe por conversación (`bot/piezaAMandar.ts`), que mira
+     * `envios_wa`. Son dos guardas distintas porque son dos preguntas distintas
+     * («¿ya la pedí?» / «¿ya la recibió?»), y el recolector no sobrevive al turno.
+     */
+    const yaPedida = recolector.some(
+      (a) => a.tipo === "mandar_pieza" && a.clase === pieza.clase && a.id === pieza.id,
+    );
+    if (yaPedida) {
+      return `${id} YA está anotada en este turno: sale UNA sola vez. No la pidas de nuevo.`;
+    }
+
+    // La intención se guarda en `bot_respuestas.acciones`: es el rastro con el
+    // que se diagnosticó el no-op, y sirve igual ahora que el envío está vivo
+    // («qué pidió» y «qué salió» son dos preguntas distintas).
     recolector.push({ tipo: "mandar_pieza", clase: pieza.clase, id: pieza.id });
-    // PERO SE LE DICE LA VERDAD. Acá decía «pieza … agendada para enviar», y era
-    // falso: `ejecutar.ts` la descarta con un console.warn. El modelo le creía y
-    // redactaba el acompañamiento como si el documento hubiera salido — «Ya
-    // tienes en tu chat el temario completo» (Carlos, 1-ago 12:09:38), a lo que
-    // el lead contestó quince segundos después «No tengo nada todavía apenas
-    // estoy pidiendo la información». Seis leads esa mañana, misma firma.
-    //
-    // Una tool que acepta y no ejecuta no produce «no pasa nada»: produce que el
-    // modelo MIENTA con confianza. El no-op explícito de `ejecutar.ts` se sentía
-    // seguro porque loguea, y el que tenía que enterarse era el modelo.
-    //
-    // Cuando F3 conecte el envío, esto vuelve a ser una confirmación — y ahí sí
-    // será cierta.
+
+    /**
+     * LA RESPUESTA VOLVIÓ A CONFIRMAR — pero solo lo que de verdad pasa.
+     *
+     * Acá decía «agendada para enviar» cuando `ejecutar.ts` la descartaba, y el
+     * modelo redactaba como si el documento hubiera salido: «Ya tienes en tu
+     * chat el temario completo» (Carlos, 1-ago-2026 12:09:38), y quince segundos
+     * después el lead: «No tengo nada todavía apenas estoy pidiendo la
+     * información». Seis leads esa mañana, misma firma. Después se dio vuelta a
+     * «NO se envió», que era la verdad mientras F3 no existía.
+     *
+     * Con F3 conectado la verdad es una tercera: **todavía no salió, pero va a
+     * salir**, justo detrás de este mensaje. Por eso la respuesta promete en
+     * FUTURO y sigue prohibiendo el pasado — «ya lo tienes» seguiría siendo
+     * falso en el instante en que el modelo lo escribe, y ese instante es el
+     * único que el lead lee.
+     */
     return (
-      "NO se envió: el envío de piezas todavía no está conectado. " +
-      "NO le digas que ya la tiene, que le llegó ni que la revise. " +
-      "Pedile un momento y decile que vos se lo pasás en seguida."
+      `${id} anotada: sale JUSTO DESPUÉS de este mensaje. ` +
+      "Anunciala en futuro («te lo paso ahora mismo»). " +
+      "NO digas que ya la tiene, que le llegó ni que la revise: todavía no salió."
     );
   };
 
@@ -93,13 +140,21 @@ export function crearTools(
       const lista = [...familiasValidas].slice(0, 10).join(", ");
       return `"${familia}" no es una familia de curso conocida. Algunas conocidas: ${lista}`;
     }
+    // Mismo dedupe que `mandar_pieza`, por el mismo motivo: pedir dos veces la
+    // misma familia en el turno no puede convertirse en dos idas a Cerberus.
+    // Dos familias DISTINTAS sí pasan: son dos intereses reales, y `intereses`
+    // tiene su `unique (clave, curso)` para que no se dupliquen en la tabla.
+    const yaPedida = recolector.some(
+      (a) => a.tipo === "registrar_interes" && a.familia === familia,
+    );
+    if (yaPedida) return `${familia} ya está anotada en este turno.`;
+
     recolector.push({ tipo: "registrar_interes", familia });
-    // Mismo caso que `mandar_pieza`: acá decía «interés en X registrado» y
-    // ninguna fila se escribe (`ejecutar.ts` lo descarta). Miente menos —la
-    // regla 7 le prohíbe contarle al lead que lo registró— pero le da al modelo
-    // una premisa falsa para el resto del turno, y de eso salen los «ya te
-    // tengo anotado». La intención se guarda igual, en `acciones`.
-    return `anotado ${familia} en el pedido, todavía sin confirmar. No se lo menciones al lead.`;
+    // La fila se escribe al CERRAR el turno (`ejecutar.ts`), contra el catálogo
+    // vivo de Cerberus — así que en este instante todavía no está y puede fallar
+    // (el catálogo puede no tener ninguna edición activa de esa familia). Se
+    // dice en futuro por eso, y sigue prohibido contárselo al lead: la regla 7.
+    return `${familia} anotada: se registra al cerrar el turno. No se lo menciones al lead.`;
   };
 
   // 3. calificar

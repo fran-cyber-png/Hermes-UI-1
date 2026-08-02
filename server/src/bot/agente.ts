@@ -18,6 +18,8 @@ interface EntradaAgente {
   lecciones: string[];
   modelo: string;
   familiasValidas?: ReadonlySet<string>;
+  /** Lo que esta conversación ya recibió (`plantilla:12`). Ver `crearTools`. */
+  piezasYaEnviadas?: ReadonlySet<string>;
 }
 
 type ContentBlock = 
@@ -45,6 +47,15 @@ function acumularUso(
   };
 }
 
+/** Los bloques de texto de UNA respuesta, unidos y recortados. */
+function textoDe(content: ContentBlock[]): string {
+  return content
+    .filter((c): c is Extract<ContentBlock, { type: "text" }> => c.type === "text")
+    .map((c) => c.text)
+    .join("\n")
+    .trim();
+}
+
 export function crearAgente(cliente: ClienteAnthropic) {
   return {
     async responder(
@@ -61,6 +72,7 @@ export function crearAgente(cliente: ClienteAnthropic) {
         acciones,
         entrada.piezas,
         entrada.familiasValidas,
+        entrada.piezasYaEnviadas,
       );
 
       const messages: MessageParam[] = [];
@@ -106,6 +118,26 @@ export function crearAgente(cliente: ClienteAnthropic) {
             : []),
         ];
 
+        /**
+         * ⚠️ EL TEXTO DE CADA VUELTA SE GUARDA — antes se TIRABA.
+         *
+         * Cuando `stop_reason` es `tool_use`, la respuesta del modelo trae dos
+         * cosas: los bloques `tool_use` **y el texto con el que las acompaña**
+         * («¡Claro! Te paso el flyer 👇»). El bucle metía el `content` entero en
+         * `messages` y hacía `continue`, y `texto` se calculaba recién sobre la
+         * respuesta FINAL: todo lo dicho en las vueltas intermedias se perdía.
+         *
+         * Mientras `mandar_pieza` era un no-op no se notaba. Conectada, el modo
+         * de falla es concreto: el modelo narra en la misma vuelta en que pide la
+         * pieza, termina el turno sin agregar nada, y **al lead le llega el flyer
+         * sin una sola palabra** — un archivo suelto de un número que no conoce.
+         *
+         * Se acumula en orden y se une al final. El guardrail corre sobre el
+         * TEXTO COMPLETO, no sobre el último pedazo: una cifra de precio dicha en
+         * la primera vuelta tiene que bloquear igual.
+         */
+        const textos: string[] = [];
+
         for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
 
           const response = await cliente.messages.create({
@@ -119,6 +151,9 @@ export function crearAgente(cliente: ClienteAnthropic) {
           uso = acumularUso(response, entrada.modelo);
 
           const content = response.content as ContentBlock[];
+
+          const textoDeLaVuelta = textoDe(content);
+          if (textoDeLaVuelta) textos.push(textoDeLaVuelta);
 
           if (response.stop_reason === "tool_use") {
             const toolUses = content.filter(
@@ -148,11 +183,10 @@ export function crearAgente(cliente: ClienteAnthropic) {
             continue;
           }
 
-          const texto = content
-            .filter((c): c is Extract<ContentBlock, { type: "text" }> => c.type === "text")
-            .map((c) => c.text)
-            .join("\n")
-            .trim();
+          // Todo lo que dijo en el turno, en orden: lo de las vueltas con tool
+          // incluido. Renglón en blanco entre vueltas porque son mensajes
+          // distintos del mismo turno, no una frase partida.
+          const texto = textos.join("\n\n").trim();
 
           if (texto) {
             const veredicto = validarSalida(texto);
@@ -175,7 +209,10 @@ export function crearAgente(cliente: ClienteAnthropic) {
           };
         }
 
-        // Agotamos iteraciones
+        // Agotamos iteraciones: cuatro vueltas pidiendo tools sin cerrar el turno
+        // es una máquina trabada, no una conversación. Se descarta el texto
+        // acumulado Y **las acciones**: si `mandar_pieza` sobreviviera acá, el
+        // lead recibiría el flyer de un turno que nunca llegó a redactarse.
         return {
           texto: null,
           acciones: [{ tipo: "escalar", motivo: "error_bot" }],

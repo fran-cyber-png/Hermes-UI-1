@@ -1,13 +1,20 @@
 import { useEffect, useRef, useState, type Ref } from 'react';
-import { Check, Clock, Pin, Star } from 'lucide-react';
+import { Bot, Check, Clock, Pin, Star } from 'lucide-react';
 import { temperatureOf, TEMPERATURE_META } from '../leads/temperature';
 import { hace } from '../../lib/datos/frescura';
 import { formatoTelefono } from '../../lib/formato';
 import { textoDePreview } from '../../lib/preview';
 import { ETAPA_CHIP } from '../../lib/etapas';
-import { CLASE_BORDE, CLASE_FONDO_SUAVE, CLASE_TEXTO, resolverColor } from '../gestion/paletaCategorias';
+import {
+  CLASE_BORDE,
+  CLASE_FONDO_SUAVE,
+  CLASE_FONDO_TENUE,
+  CLASE_TEXTO,
+  resolverColor,
+} from '../gestion/paletaCategorias';
 import { cursoDeFila, detalleDeCurso } from './curso';
 import { marcaDeCliente, type NivelCliente } from './cliente';
+import { marcaDelBot, type TonoBot } from './bot';
 import { BadgeCanal } from './BadgeCanal';
 import { Avatar } from './Avatar';
 import { VENTANA_DIAS } from './types';
@@ -63,6 +70,26 @@ const CLASE_MARCA: Record<NivelCliente, string> = {
   compro: 'border-success/40 text-success',
   recompro: 'border-success/50 bg-success/10 text-success',
   vip: 'border-success bg-success text-success-foreground',
+};
+
+/**
+ * LO QUE EL BOT DIJO — píldora de FONDO tenue, como toda señal automática de la
+ * casa («Cotizado», «Se enfrió»; ADR 0016). Fondo y no borde es lo que la separa
+ * de una categoría manual sin leer un tooltip: esta no la puso nadie y no se
+ * puede borrar. **Sin oro** — el oro es tiempo que se acaba y esto no es un reloj.
+ *
+ * `rojo` para la escalada (el bot se frenó: mientras nadie entre, el lead no
+ * recibe nada) y `naranja` para la caliente (una oportunidad que el bot sigue
+ * trabajando). Los dos de la paleta cerrada `--cat-*`, la misma de las otras
+ * señales — una señal, un vocabulario.
+ *
+ * El ícono no es decoración: «Caliente» a secas chocaría con la temperatura que
+ * la fila ya codifica en la banda de 3 px (`temperatureOf`, que mide días de
+ * espera). El ícono dice de quién es la opinión antes de leerla.
+ */
+const CLASE_BOT: Record<TonoBot, string> = {
+  escalada: CLASE_FONDO_TENUE.rojo + ' ' + CLASE_TEXTO.rojo,
+  caliente: CLASE_FONDO_TENUE.naranja + ' ' + CLASE_TEXTO.naranja,
 };
 
 /**
@@ -153,6 +180,21 @@ export function FilaConversacion({
    * filas.
    */
   const marca = marcaDeCliente(c);
+  /**
+   * EL VEREDICTO DEL BOT (`bot.ts`), y ocupa el MISMO lugar que el curso.
+   *
+   * No es que sobre espacio: en 360 px el renglón 2 ya lleva curso + categoría +
+   * preview. La razón es que los dos responden la misma pregunta —«¿qué pasa con
+   * esta?»— y el bot da la respuesta más fuerte: «el bot se frenó y te espera»
+   * manda sobre «quiere el diploma de Inteligencia».
+   *
+   * ⚠️ Y hay un precio, escrito para que sea una decisión y no un accidente: en
+   * las filas donde el bot habló, el chip de curso no se ve. Hoy no cuesta nada
+   * —el bot corre en UNA línea que vende UN diploma, así que ahí el curso dice lo
+   * mismo en todas las filas—, pero el día que el bot atienda una línea con
+   * varios cursos hay que volver acá.
+   */
+  const bot = marcaDelBot(c);
 
   return (
     <button
@@ -246,7 +288,18 @@ export function FilaConversacion({
 
         {/* Renglón 2: qué dijo, con la marca de lead y las categorías. */}
         <div className="mt-0.5 flex items-center gap-1.5">
-          {curso ? (
+          {bot ? (
+            <span
+              title={bot.titulo}
+              className={
+                'flex max-w-[55%] shrink-0 items-center gap-1 truncate rounded px-1.5 py-px text-[11px] font-semibold ' +
+                CLASE_BOT[bot.tono]
+              }
+            >
+              <Bot size={11} className="shrink-0" aria-hidden="true" />
+              {bot.texto}
+            </span>
+          ) : curso ? (
             /* El QUÉ: fondo suave del color de su familia (nunca borde + sombra,
                nunca oro — el oro es tiempo que se acaba, y un curso no es un
                reloj). El `title` dice de dónde salió el dato: el chip no miente. */

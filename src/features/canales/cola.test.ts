@@ -3,6 +3,7 @@ import {
   categoriasDeLaBarra,
   filtrosActivos,
   KEY_FILTRO_VIEJO,
+  LINEA_MIAS,
   migracionDesdeKeyVieja,
   migrarFiltroViejo,
   parametrosDeCola,
@@ -110,6 +111,33 @@ describe('parametrosDeCola', () => {
     expect(
       parametrosDeCola({ tab: 'no-leidos', filtroSec: 'pide-info', categoria: null, linea: '51941654039' }),
     ).toEqual({ tab: 'no-leidos', intencion: 'pide-info', linea: '51941654039' });
+  });
+
+  it('«las mías» NO viaja como `linea`: no es un teléfono y el server lo rechazaría', () => {
+    // Comparte el estado con la línea (es el mismo eje: ¿qué cola miro?) pero
+    // sale por otro parámetro. Si viajara como `linea=mias`, la guarda de la
+    // ruta —la que exige un teléfono— respondería 400 y la vendedora vería un
+    // error en vez de su cola.
+    expect(parametrosDeCola({ tab: 'todo', filtroSec: '', categoria: null, linea: LINEA_MIAS })).toEqual({
+      mias: '1',
+    });
+  });
+
+  it('«las mías» y una línea explícita no pueden viajar juntas: es un solo eje', () => {
+    // No hay estado que las tenga a las dos, así que no hay nada que arbitrar en
+    // el server. El test lo fija porque el bug sería silencioso: dos banderas
+    // independientes habilitarían «las mías Y solo Walter».
+    const p = parametrosDeCola({ tab: 'todo', filtroSec: '', categoria: null, linea: LINEA_MIAS });
+    expect(p.linea).toBeUndefined();
+  });
+
+  it('los filtros del bot viajan como `intencion`, igual que los otros tres', () => {
+    expect(parametrosDeCola({ tab: 'todo', filtroSec: 'bot-escalada', categoria: null })).toEqual({
+      intencion: 'bot-escalada',
+    });
+    expect(parametrosDeCola({ tab: 'todo', filtroSec: 'bot-caliente', categoria: null })).toEqual({
+      intencion: 'bot-caliente',
+    });
   });
 });
 

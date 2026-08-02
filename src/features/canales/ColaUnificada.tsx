@@ -14,6 +14,7 @@ import type { DatosDashboard } from '../dashboard/dashboard';
 import {
   KEY_TAB,
   KEY_LINEA,
+  LINEA_MIAS,
   TABS,
   filtrosActivos,
   migracionDesdeKeyVieja,
@@ -79,8 +80,20 @@ export function ColaUnificada({
   // dejar la cola vacía sin explicación — un número que ya no está no puede
   // seguir escondiendo el trabajo.
   const [lineaGuardada, setLinea] = useLocalStorage<string>(KEY_LINEA, '');
-  const { lineas } = useLineas();
-  const linea = lineas.some((l) => l.numero === lineaGuardada) ? lineaGuardada : '';
+  const { lineas, hayMias } = useLineas();
+  // `LINEA_MIAS` sobrevive a la validación aunque no sea el número de ninguna
+  // línea (es el mismo eje con otro nombre, ver `cola.ts`) — pero solo mientras
+  // el mapa siga asignándole alguna: si le sacan las líneas, el recorte se cae a
+  // «todas» igual que una línea que dejó de correr. Nunca una cola vacía sin
+  // explicación.
+  const linea =
+    lineaGuardada === LINEA_MIAS
+      ? hayMias
+        ? LINEA_MIAS
+        : ''
+      : lineas.some((l) => l.numero === lineaGuardada)
+        ? lineaGuardada
+        : '';
   // Filtros secundarios y modo Listas: efímeros (la sesión arranca en limpio).
   const [filtroSec, setFiltroSec] = useState<FiltroSec>('');
   const [modoListas, setModoListas] = useState(false);
@@ -128,6 +141,7 @@ export function ColaUnificada({
     traidoEn,
     actualizando,
     sinEstado,
+    sinLineasPropias,
   } = useConversaciones({ tab, filtroSec, categoria: categoriaActiva?.nombre ?? null, linea });
   // Al abrir la app la cola viene del caché persistido: hasta que llegue lo
   // fresco hay que decir de cuándo es lo que se está mirando.
@@ -453,6 +467,7 @@ export function ColaUnificada({
             lineas={lineas}
             lineaActiva={linea}
             onLinea={setLinea}
+            hayMias={hayMias}
             catalogo={catalogo}
             categoriaActiva={categoriaActiva?.nombre ?? null}
             /* Desde la BARRA la categoría afina lo que ya se está mirando (el tab
@@ -510,6 +525,17 @@ export function ColaUnificada({
         <p className="border-b border-border bg-warning/10 px-3 py-2 text-[12px] font-medium text-warning-foreground">
           Fijar, favoritos y «sin leer» no están disponibles todavía — falta aplicar el cambio de base en
           el servidor. El resto de la cola funciona normal.
+        </p>
+      )}
+
+      {/* Se pidió «Las mías» y el mapa no le asigna ninguna línea: el server
+          sirvió TODO (fail-open). Se dice, porque una cola completa con el
+          filtro encendido se ve idéntica a una cola filtrada — y la vendedora
+          creería que esas conversaciones son suyas. */}
+      {sinLineasPropias && (
+        <p className="border-b border-border bg-warning/10 px-3 py-2 text-[12px] font-medium text-warning-foreground">
+          Todavía no tenés líneas asignadas, así que estás viendo todas. Pedí que te asignen la tuya
+          desde el panel de Cerberus.
         </p>
       )}
 

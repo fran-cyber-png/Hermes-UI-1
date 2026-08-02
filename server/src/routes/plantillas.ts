@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db } from "../db/client.js";
 import { requiereVendedora } from "../auth/sesion.js";
 import { ficha } from "../cerberus/ficha.js";
-import { RUTA_MEDIA, nombreSeguro } from "../whatsapp/mediaDir.js";
+import { RUTA_MEDIA, archivoSeguro, nombreSeguro } from "../whatsapp/mediaDir.js";
 import { enviarMediaYProyectar, enviarTextoYProyectar } from "../whatsapp/enviarYProyectar.js";
 import { deUnPasoDePlantilla } from "../procedencia/pieza.js";
 import { resolverCurso } from "../plantillas/catalogo.js";
@@ -71,10 +71,9 @@ const plantillaSchema = z.object({
   pasos: z.array(pasoSchema).min(1).max(10),
 });
 
-/** El nombre de archivo se revalida SIEMPRE: nada de `..`, nada de rutas. */
-function archivoSeguro(nombre: string): boolean {
-  return /^[A-Za-z0-9._-]+$/.test(nombre) && !nombre.includes("..");
-}
+// El nombre de archivo se revalida SIEMPRE: nada de `..`, nada de rutas. La
+// comprobación vive en `whatsapp/mediaDir.ts`, al lado del directorio que
+// protege — el bot manda por otro camino y necesita la MISMA lista blanca.
 
 function aPasos(pasos: z.infer<typeof pasoSchema>[]): PasoPlantilla[] {
   return pasos.map((p, i) => ({

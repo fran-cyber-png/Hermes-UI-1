@@ -38,11 +38,24 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
  * · `localStorage`: vitest no lo copia de la ventana de jsdom a los globales, y `token.ts`
  *   lo usa sin guarda — sin esto, TODA request muere con «reading 'getItem'» y un test que
  *   mira si salió la request lee un falso negativo.
+ * · `ResizeObserver`: jsdom tampoco lo trae, y lo usa toda barra que mide su propio ancho
+ *   (`BarraFiltros` decide con eso si dibuja el degradado de «hay más chips a la derecha»).
+ *   El stub NO simula nada: jsdom no hace layout, así que cualquier medida sería mentira.
+ *   Solo evita que un componente que mide se caiga al montar — lo que se testea acá es qué
+ *   chips existen, no cuántos entran.
  */
 function remendarJsdom() {
   if (typeof document === 'undefined') return;
   if (!Element.prototype.scrollIntoView) {
     Element.prototype.scrollIntoView = function () {};
+  }
+  const conObserver = globalThis as { ResizeObserver?: unknown };
+  if (!conObserver.ResizeObserver) {
+    conObserver.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
   }
   const g = globalThis as { localStorage?: Storage };
   if (!g.localStorage) {
