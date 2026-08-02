@@ -16,12 +16,21 @@ export const ventaRouter = Router();
 
 /** Las opciones del formulario (monedas, países) + los choices de medio/origen. */
 ventaRouter.get('/formulario', requiereVendedora, async (req, res) => {
-  const f = await cargarFormulario(req.vendedoraId!);
-  if (!f) {
-    res.status(409).json({ ok: false, message: 'La sesión de Cerberus expiró — volvé a entrar a Hermes.' });
-    return;
+  // El try tiene DUEÑO a propósito (#223): Express 4 NO captura el rechazo de un
+  // handler async, y acá adentro hay un fetch a Cerberus con timeout de 15 s.
+  // Sin esto, un Cerberus lento era un unhandled rejection que tumbaba el
+  // PROCESO entero — las tres vendedoras afuera porque una carga de formulario
+  // tardó. Con esto, es un 502 que se muestra y se reintenta.
+  try {
+    const f = await cargarFormulario(req.vendedoraId!);
+    if (!f) {
+      res.status(409).json({ ok: false, message: 'La sesión de Cerberus expiró — volvé a entrar a Hermes.' });
+      return;
+    }
+    res.json(f);
+  } catch (err) {
+    res.status(502).json({ ok: false, message: `Cerberus no respondió el formulario: ${(err as Error).message}` });
   }
-  res.json(f);
 });
 
 /** Buscador de cursos (API pública de Cerberus, solo lectura). */

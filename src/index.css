@@ -130,7 +130,7 @@
   --radius-xl: calc(var(--radius) + 4px);
 
   --font-heading: 'Montserrat', system-ui, sans-serif;
-  --font-sans: system-ui, 'Inter', sans-serif;
+  --font-sans: 'Open Sans', system-ui, sans-serif;
   /* La voz "instrumento": metadatos, unidades, índices, marcas de tiempo. Le da a la matriz su
      identidad de puente de mando sin depender de ninguna fuente externa (usa la mono del sistema). */
   --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
