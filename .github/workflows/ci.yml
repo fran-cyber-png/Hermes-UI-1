@@ -128,7 +128,24 @@ jobs:
 
           echo "migraciones nuevas (contra ${BASE:0:8}):"; printf '  %s\n' $NUEVAS
           MAL=0
+
+          # EXCEPCIÓN PUNTUAL (2026-08-02, decidida por el dueño — Estephano). Estas tres
+          # migraciones nacieron en una rama (feat/bot-f3) que se desplegó a producción sin
+          # pasar por `main`, así que desde el punto de vista de `main` son "nuevas" aunque
+          # ya llevan días corriendo. Verificado contra el schema VIVO de VPS1 el 2026-08-02:
+          # `bot_followups` no existe (la tabla que 0010 borra), y `bot_respuestas.texto_completo`
+          # + `bot_estado_conversacion` + `bot_memoria_lead` sí existen (lo que 0010/0011/0012
+          # agregan). El DROP ya pasó, en una base que ya lo tiene asumido — bloquearlo acá no
+          # protege ningún rollback real, porque no hay nada que revertir: es `main` poniéndose
+          # al día con lo que ya corre. No agregues un archivo a esta lista sin la misma
+          # verificación contra la base viva (ver docs/deploy-vps1.md para cómo conectarte).
+          EXCEPTUADAS="server/drizzle/0010_clean_ultron.sql server/drizzle/0011_living_hercules.sql server/drizzle/0012_salty_iron_patriot.sql"
+
           for f in $NUEVAS; do
+            if printf '%s\n' $EXCEPTUADAS | grep -qxF "$f"; then
+              echo "  $f — exceptuada (ya aplicada en prod, ver comentario arriba)"
+              continue
+            fi
             # Se ignoran los comentarios: el .sql explica en prosa por qué existe cada
             # línea, y esa prosa nombra justamente las palabras que buscamos.
             #
