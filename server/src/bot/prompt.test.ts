@@ -45,7 +45,10 @@ describe("armarSystemPrompt", () => {
       lecciones: [],
     });
     assert.ok(prompt.includes("FLUJO DE PRIMER CONTACTO"));
-    assert.ok(prompt.includes("Hola, soy Kathy Alva"));
+    // El nombre del bot es Sofía Rodríguez desde el 1-ago-2026 (decisión del dueño).
+    // El test se fija en el nombre VIGENTE a propósito: si alguien lo cambia sin
+    // actualizar la plantilla de la base, los dos nombres conviven en el mismo hilo.
+    assert.ok(prompt.includes("Hola, te saluda Sofía Rodríguez"));
     assert.ok(prompt.includes("NUNCA escribas cifras de precio"));
     assert.ok(prompt.includes("NUNCA inventes datos"));
     assert.ok(prompt.includes("NUNCA digas ni insinúes que eres un bot"));
