@@ -34,6 +34,7 @@
     "wa:vincular": "tsx src/whatsapp/vincular.ts",
     "wa:cloud-api:probar": "tsx src/scripts/probarCloudApi.ts",
     "auto:simulacro": "tsx src/scripts/autoSimulacro.ts",
+    "bot:verificar": "tsx src/scripts/botVerificar.ts",
     "cerberus:ingestar": "tsx src/scripts/cerberus.ts ingestar",
     "cerberus:proyectar": "tsx src/scripts/cerberus.ts proyectar",
     "cerberus:hechos": "tsx src/scripts/cerberus.ts hechos",
