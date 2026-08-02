@@ -378,6 +378,32 @@ mandaron el **precio** y si **se enfrió** después. `GET /api/senales?claves=a,
 - **Medir la precisión sobre datos reales**: `cd server && npm run medir:cotizaciones [días]`
   (read-only) — imprime ingenuo vs. detector vs. corroboradas y la muestra de falsos positivos evitados.
 
+## Lo que el bot dijo, EN LA COLA — el lector que `bot_calificaciones` no tenía
+
+El bot comercial escribía su veredicto en `bot_calificaciones` y **esa tabla no tenía un solo
+lector**. El 1-ago-2026 escaló tres conversaciones de leads que estaban por comprar: escalar lo
+silencia a propósito (`bot_pausas`, 2 h de gracia) y del otro lado no había nadie. Se salvaron porque
+el dueño estaba mirando la sala a mano — o sea que **el bot solo servía mientras alguien lo vigilaba**.
+
+- **Se deriva en la consulta de la cola**, no en un job ni en una columna nueva: `cola/botSql.ts`
+  (LEFT JOIN por `clave`, que ya es la misma) y tres columnas en cada fila — `bot_escalada`,
+  `bot_temperatura`, `bot_motivo`. Va en el LISTADO y no en la ficha porque la pregunta que responde
+  es «¿a quién atiendo AHORA?», y esa se hace **antes** de abrir la conversación.
+- **NO toca el orden de la cola.** La urgencia vive una vez (`cola/urgencia.ts` + `urgenciaSql.ts`)
+  con su test de paridad contra el radar: una escalada se encuentra por el **chip de filtro** —que
+  trae su número—, no empujando filas.
+- **Dos filtros, no uno**: `?intencion=bot-escalada` (el bot se frenó y espera a una persona) y
+  `?intencion=bot-caliente` (pidió precio/cuotas/forma de pago). Se atienden distinto —una hay que
+  ENTRARLA, la otra MIRARLA— y juntarlas enterraría las 3 urgentes entre las 14 calientes.
+- **Los dos chips solo se dibujan con conteo > 0** (el activo siempre, para poder apagarlo). El bot
+  corre en UNA línea de cuatro: en las otras tres serían chips muertos comiéndose el ancho. El efecto
+  buscado es que **el chip apareciendo ES el aviso**.
+- En la fila: píldora de **fondo tenue** con ícono de bot (señal automática, como «Cotizado» —
+  **sin oro**), rojo la escalada y naranja la caliente. Ocupa el mismo lugar que el chip de curso y
+  le gana; el precio de eso está escrito en `FilaConversacion.tsx`. `tibio`/`frio` no se dibujan
+  (serían 50 de 66 filas). La lectura de los seis motivos vive pura en `src/features/canales/bot.ts`,
+  y un motivo que el front no conoce cae en «Pidió ayuda», nunca en un throw ni en un motivo parecido.
+
 ## El panel derecho — ordenado por lo que decide una venta (ADR 0017)
 
 `src/features/panel/PanelDerecho.tsx` (360 px, `w-[22.5rem]` en `App.tsx`). El orden **no es
@@ -686,8 +712,25 @@ familia aparte del HMAC de vendedora (issues #50/#95). Lo consume **Cerberus** (
 fuente de verdad del mapa número↔vendedora y lo **empuja** acá; Hermes guarda la copia (`numeros_wa` +
 `numero_vendedora`) que necesita para etiquetar/rutear, y ejecuta la vinculación (el QR sale por acá; la
 sesión nunca deja VPS1). Endpoint central: `PUT /api/admin/numeros/:numero` (upsert declarativo,
-`vendedoras[]` reemplaza el set). El mapa es **solo etiqueta/atribución**: la cola NO se filtra por
-vendedora. Contrato de los dos lados en **`docs/multi-numero/`**; decisión en **ADR 0010**.
+`vendedoras[]` reemplaza el set). Contrato de los dos lados en **`docs/multi-numero/`**; decisión en
+**ADR 0010**.
+
+> ⚠️ **Acá decía «el mapa es solo etiqueta/atribución: la cola NO se filtra por vendedora», y desde
+> el 1-ago-2026 la cola SÍ se puede acotar a las líneas propias.** Lo que NO cambió es la naturaleza
+> de la decisión de Estephano del 24-jul: sigue siendo **un FILTRO, no un permiso**. La cola es una
+> sola pantalla compartida y cualquier vendedora puede ver cualquier conversación; «Las mías» acota
+> lo que se MIRA, no lo que se puede mirar.
+> **Y no puede ser un permiso**, porque Hermes no tiene modelo de permisos: `requiereVendedora` dice
+> «es una vendedora», no «cuál», y el hilo, la ficha y el envío siguen sirviendo cualquier
+> conversación a cualquier token. Un recorte de cola presentado como frontera sería una frontera
+> imaginaria — peor que ninguna, porque se le cree.
+> Cómo se pide: **`GET /api/conversaciones?mias=1`** (el server resuelve `numero_vendedora` para el
+> token; si el front mandara los números habría dos lugares decidiendo cuáles son «las mías»). La
+> regla vive pura en `server/src/cola/lineas.ts` y es **FAIL-OPEN**: sin filas asignadas se sirve
+> TODO y la respuesta lo dice (`sinLineasPropias`), porque una vendedora que abre una cola vacía no
+> lee «no tenés líneas», lee «se perdieron las conversaciones». En la UI es una opción más del
+> segmentado de línea (`BarraFiltros`), y **solo aparece si el mapa le asigna alguna** —
+> `GET /api/whatsapp/lineas` trae `mias` por línea.
 
 > ✅ **El ruteo multi-número YA ESTÁ VIVO** — acá decía «issue #50, todavía pendiente» y es falso.
 > Medido en VPS1 el 29-jul-2026: **tres líneas vinculadas y corriendo** (`.wa-sessions/` tiene un

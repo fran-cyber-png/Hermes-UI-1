@@ -19,6 +19,14 @@ export interface LineaWhatsapp {
   /** El nombre visible («Walter»). Cae al número si nadie lo registró. */
   etiqueta: string;
   estado: string;
+  /**
+   * ¿`numero_vendedora` le asigna ESTA línea a quien está logueada? Es lo único
+   * que el front necesita saber del mapa: los números de «las mías» los resuelve
+   * el server (`?mias=1`), acá solo se decide si la opción se ofrece.
+   * Opcional: un server viejo no manda el campo → la opción no aparece → se ve
+   * todo, que es el comportamiento de siempre.
+   */
+  mias?: boolean;
 }
 
 export function useLineas() {
@@ -41,6 +49,14 @@ export function useLineas() {
      * antes de que hubiera dos.
      */
     hayVarias: lineas.length > 1,
+    /**
+     * ¿Tiene sentido ofrecerle «Las mías»? Solo si el mapa le asigna alguna
+     * línea VIVA. Sin eso el botón existiría y no cambiaría nada — la misma
+     * regla del selector: una opción que no es una elección es ruido. Y como el
+     * server ya devuelve `mias: false` cuando no pudo leer el mapa, esto también
+     * es el fail-open: sin dato, no hay opción y se ve todo.
+     */
+    hayMias: lineas.some((l) => l.mias === true),
     cargando: q.isPending,
   };
 }

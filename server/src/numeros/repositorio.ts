@@ -52,6 +52,27 @@ export async function listarNumeros(db: Base): Promise<NumeroRow[]> {
   return nums.map((n) => aFila(n, (porNumero.get(n.numero) ?? []).sort()));
 }
 
+/**
+ * LAS LÍNEAS DE UNA VENDEDORA — el mapa leído desde el otro lado.
+ *
+ * Existe para el recorte «Las mías» de la cola (`cola/lineas.ts`). Vive acá,
+ * junto a `listarNumeros`/`upsertNumero`, porque el mapa número↔vendedora tiene
+ * un solo dueño: si la cola armara su propio `SELECT ... FROM numero_vendedora`,
+ * el día que Cerberus agregue una columna de vigencia habría dos lugares que
+ * decidir qué cuenta como «suya» (la lección de #37).
+ *
+ * Devolver `[]` no es un error: significa «el mapa no le asigna ninguna», y
+ * quién decide qué hacer con eso —fail-open, ver `cola/lineas.ts`— es la regla
+ * pura, no esta consulta.
+ */
+export async function lineasDeVendedora(db: Base, vendedoraId: string): Promise<string[]> {
+  const filas = await db
+    .select({ numero: schema.numeroVendedora.numero })
+    .from(schema.numeroVendedora)
+    .where(eq(schema.numeroVendedora.vendedoraId, vendedoraId));
+  return filas.map((f) => f.numero);
+}
+
 export async function obtenerNumero(db: Base, numero: string): Promise<NumeroRow | null> {
   const [n] = await db
     .select()

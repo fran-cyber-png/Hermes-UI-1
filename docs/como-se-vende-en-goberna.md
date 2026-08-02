@@ -198,8 +198,10 @@ sin una plantilla aprobada por Meta. Nunca prometas «te escribo el lunes»: **p
 de momento dicha sin palabras. Se contesta ofreciendo las dos salidas: cuotas, o anotarla para la
 próxima edición.
 
-> Y ojo: el bot trata todo entrante sin texto como ilegible (`entrante_sin_texto`) y se calla.
-> **Cuatro leads quedaron colgados así en ocho horas.** Un sticker no es un audio inaudible.
+> Y ojo: el bot trataba todo entrante sin texto como ilegible (`entrante_sin_texto`) y se callaba.
+> **Cuatro leads quedaron colgados así en ocho horas.** Un sticker no es un audio inaudible — y por
+> eso desde el 1-ago el acuse es distinto para cada uno (`bot/ilegible.ts`): al del sticker no se le
+> dice «no me llegó» (llegó, y fue a propósito), se le pregunta qué le pareció.
 
 ### 🏫 «¿Dónde es el curso?»
 `5213318820245` 14:21 — **nunca se le respondió**
@@ -234,7 +236,15 @@ La línea recibe **Escuela y Consultoría**. No son el mismo embudo ni el mismo 
 
 ---
 
-## 5 bis. El reenganche — la palanca de mayor volumen que hoy no existe
+## 5 bis. El reenganche — la palanca de mayor volumen
+
+> ✅ **Implementado el 1-ago-2026 y APAGADO**: `server/src/bot/reenganche.ts` (las reglas, puras) +
+> `correrReenganche.ts` (la consulta y el envío), enganchado al despachador cada 10 min. Nace
+> apagado con **`BOT_FOLLOWUPS_DIA=0`**, que es la llave de deploy; la segunda llave es el modo de
+> la línea (sale solo en `automatico`). Antes de prenderlo:
+> **`cd server && npm run reenganche:simulacro`** —imprime el plan sin mandar nada, y cada renglón
+> empieza por la hora local en que escribió la persona (#166)—. El claim de «una sola vez» es una
+> fila de `bot_respuestas` con `motivo = 'reenganche'`, no una tabla nueva.
 
 **38 de los 66 leads del día recibieron el paquete completo y no volvieron a escribir nunca.** No
 dijeron que no: se distrajeron. Es la mayoría de la cartera y hoy nadie los vuelve a tocar.
@@ -277,6 +287,14 @@ escribirle: es **pedirle que él escriba**.
 No es la auto-respuesta nocturna (ADR 0015/0018), que acusa recibo a quien escribió fuera de horario.
 Esto es lo contrario: **le habla a quien ya fue atendido y se quedó callado**. Comparten la
 infraestructura —ritmo, topes, freno ante `vendedora_activa`, kill-switch— y no el disparador.
+
+> ⚠️ **El freno `vendedora_activa` no vino gratis, y esta línea lo dio por hecho antes de que
+> existiera.** La primera implementación no lo tenía: `laPelotaEsNuestra` devuelve `true` igual si el
+> último mensaje lo escribió una persona, así que el reenganche le escribía encima a la vendedora que
+> estaba trabajando la conversación — y no hay red abajo, porque `bot_pausas` solo lo escriben
+> `escalar` y `pausar` del propio bot: **no existe ninguna ruta con la que alguien diga «esta la tomo
+> yo»**. Lo encontró un revisor adversario antes de desplegar. Queda anotado porque el modo de error
+> es el que importa: *un documento que describe lo que debería pasar se lee como si ya pasara*.
 
 Y como todo lo que sale solo: **un envío sigue siendo una acción con una persona detrás** hasta que
 haya evidencia de que esto convierte. Arranca en modo supervisado.
@@ -325,10 +343,20 @@ justo cuando el lead muestra interés real, así que **el 27 % cae sobre los lea
    > **Una tool que acepta y no ejecuta no produce «no pasa nada»: produce que el modelo mienta con
    > confianza.**
 3. **`registrar_interes` no registra.** Ninguna conversación del bot deja interés en el CRM.
-4. **La escalada no le avisa a nadie.** `bot_calificaciones` no tiene un solo lector: tres leads
-   quedaron marcados «listo para cerrar» en una tabla que nadie mira.
-5. **Cada deploy con restart cuelga al lead en vuelo.** El claim de `bot_pendientes` no vence.
-6. **El bot no lee audio ni stickers** y se calla.
+4. ~~**La escalada no le avisa a nadie.**~~ **Resuelto (1-ago)**: el veredicto del bot viaja en la
+   fila de la cola (`cola/botSql.ts` → `bot_escalada` · `bot_temperatura` · `bot_motivo`) y hay dos
+   chips con su número para filtrar: **«Pidió ayuda»** y **«El bot los ve calientes»**. Los chips
+   **solo aparecen cuando tienen algo que decir**, así que el chip apareciendo ES el aviso. El orden
+   de la cola no se tocó: una escalada se encuentra por el filtro, no empujando filas.
+5. ~~**Cada deploy con restart cuelga al lead en vuelo.**~~ **Resuelto (1-ago)**: el claim de
+   `bot_pendientes` vence a los 5 minutos y el despachador lo recupera (`bot/claim.ts`, regla pura
+   con reloj inyectado). Lo que esperó más de 6 h no se contesta: se descarta **con motivo**, que es
+   la lección de #166 aplicada acá — un «¿en qué te puedo ayudar?» tres días después confirma que
+   nadie miró.
+6. ~~**El bot no lee audio ni stickers** y se calla.~~ **Resuelto (1-ago)**: contesta un acuse corto
+   y honesto, distinto por clase de adjunto (`bot/ilegible.ts`), y **no lo repite** si el lead manda
+   tres seguidos. Sigue sin leerlos: lo que cambió es que ya no se calla. La objeción del sticker
+   (§5) todavía necesita que la persona escriba.
 
 ---
 
@@ -363,5 +391,8 @@ justo cuando el lead muestra interés real, así que **el 27 % cae sobre los lea
 - **DIPCINTE** (Ciberinteligencia y Ciberdefensa): la línea recibe leads que lo piden y no hay
   precio, fechas ni material cargados.
 - **La ceremonia de graduación**: preguntada, sin respuesta en ninguna fuente.
-- **Restringir una vendedora a una línea**: `numero_vendedora` existe y poblada, pero la cola no la
-  lee (`cola/consultarCola.ts`). Hoy todas ven todo.
+- ~~**Restringir una vendedora a una línea**~~ **Resuelto a medias (1-ago)**: la cola ya se puede
+  acotar a las líneas propias (`?mias=1`, opción «Las mías» en el selector de línea). Lo que sigue
+  abierto —y a propósito— es **restringir**: es un FILTRO, no un permiso, y es **fail-open** (sin
+  líneas asignadas se ve todo y se avisa). Un permiso de verdad no se puede hacer acá sin un modelo
+  de permisos: hoy el hilo, la ficha y el envío sirven cualquier conversación a cualquier token.

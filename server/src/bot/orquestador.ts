@@ -32,6 +32,9 @@ import {
   type Traza,
 } from "./traza.js";
 import { validarEntrada, esSpam } from "./guardrailsEntrada.js";
+import { esperaExcesiva } from "./claim.js";
+import { claseIlegible, decidirAcuseIlegible, type ClaseIlegible } from "./ilegible.js";
+import { lineaConectada } from "./lineaViva.js";
 import { leerEstadoLinea, ESTADO_LINEA_SIN_OPINION, type EstadoLinea } from "./estadoLinea.js";
 import { modoValido, type ModoBot } from "./modo.js";
 import {
@@ -85,6 +88,13 @@ export interface FilaHilo {
   direccion: string;
   texto: string | null;
   occurred_at?: string | Date | null;
+  /**
+   * El adjunto, tal como vive en el crudo del evento (`payload->media`). Solo se
+   * mira su `clase` (audio · imagen · video · documento · sticker), para saber
+   * qué contestarle a un entrante sin texto: no es lo mismo «no puedo escuchar
+   * el audio» que responderle a un sticker.
+   */
+  media?: { clase?: unknown } | null;
 }
 
 export interface CtxPipeline {
@@ -104,6 +114,8 @@ export interface CtxPipeline {
   modoEfectivo: ModoBot;
   /** Por qué no hay texto que contestar, si es que no lo hay. */
   motivoSinTexto: string | null;
+  /** Qué llegó, cuando lo que llegó no tiene texto. Decide QUÉ se le contesta. */
+  claseSinTexto: ClaseIlegible;
   textoEntrante: string | null;
   contactoCtx: string;
   estado: EstadoConversacion;
@@ -159,6 +171,7 @@ function ctxInicial(
     estadoLinea: ESTADO_LINEA_SIN_OPINION,
     modoEfectivo: modoValido(cfg.modo),
     motivoSinTexto: null,
+    claseSinTexto: "otro",
     textoEntrante: null,
     contactoCtx: "",
     estado: "desconocido",
@@ -201,27 +214,20 @@ async function paso2Normalizar(ctx: CtxPipeline): Promise<void> {
   // quedaba callado: encontraba el mensaje de texto ANTERIOR y **le volvía a
   // contestar a ese**. Para la persona, es que le respondan algo que ya había
   // preguntado y que ignoren lo que acaba de mandar.
-  //
-  // Un entrante sin texto es «no puedo leer esto», y esa es una respuesta que
-  // el pipeline tiene que poder dar. Hoy simplemente no se contesta (el turno
-  // queda registrado con su motivo); la derivación a una persona es de F4,
-  // donde vive la máquina de estados nueva.
   if (!ultimoEntrante) {
     t.cerrar("sin_entrantes");
     return;
   }
 
+  // Un entrante sin texto NO termina el turno: termina este paso. El motivo y
+  // la clase de lo que llegó viajan al pipeline, que ahora **contesta algo
+  // honesto** en vez de callarse (`atenderEntranteSinTexto`). La fila de
+  // `bot_respuestas` la escribe ese camino: acá se escribía una `cancelada`
+  // fija, y con el acuse conectado serían dos filas para un turno.
   if (!ultimoEntrante.texto) {
     ctx.motivoSinTexto = "entrante_sin_texto";
-    await db.insert(botRespuestas).values({
-      clave: ctx.clave,
-      numeroPropio: ctx.numeroPropio,
-      texto: null,
-      estado: "cancelada",
-      motivo: "entrante_sin_texto",
-      creadoEn: ctx.ahora,
-    });
-    t.cerrar("entrante_sin_texto");
+    ctx.claseSinTexto = claseIlegible(ultimoEntrante.media?.clase);
+    t.cerrar(`entrante_sin_texto:${ctx.claseSinTexto}`);
     return;
   }
 
@@ -866,17 +872,7 @@ export async function procesarConversacion(
   try {
     await paso2Normalizar(ctx);
     if (!ctx.textoEntrante) {
-      // La condición decía `&& ctx.estado === "desconocido"`, y `ctx.estado`
-      // acá SIEMPRE es "desconocido" (el paso 4 todavía no corrió): era una
-      // guarda que no guardaba nada. Sin texto no hay nada que contestar,
-      // punto — el estado de la conversación no cambia eso.
-      //
-      // Si el paso 2 ya dejó el motivo escrito (entrada bloqueada, entrante sin
-      // texto), no se escribe una segunda fila diciendo lo mismo.
-      if (!ctx.motivoSinTexto) {
-        await guardarRespuesta(ctx, "cancelada", "sin_texto_entrante");
-      }
-      await db.delete(botPendientes).where(eq(botPendientes.clave, clave));
+      await atenderEntranteSinTexto(ctx, clave);
       return;
     }
 
@@ -929,6 +925,72 @@ export async function procesarConversacion(
   }
 }
 
+// ── Cuando lo que llegó no se puede leer ─────────────────────────────────
+
+/**
+ * UN AUDIO, UNA FOTO O UN STICKER YA NO DEJAN AL LEAD EN SILENCIO.
+ *
+ * Cinco casos el 1-ago-2026; dos quedaron colgados sin que nadie los rescatara.
+ * Y uno de esos «ilegibles» era una OBJECIÓN: un sticker de un cachorrito triste
+ * **justo después de «¿estás interesada en adquirirlo?»** es una objeción de
+ * precio dicha sin palabras (`docs/como-se-vende-en-goberna.md` §5).
+ *
+ * Los tres caminos, y por qué son tres:
+ *
+ *   (a) **la entrada la bloqueó un guardrail** (jailbreak, texto vacío): eso NO
+ *       se le contesta. La fila ya la escribió el paso 2 con su motivo.
+ *   (b) **no había ningún entrante** (una carrera rara del debounce): nada que
+ *       contestar y nada que explicar.
+ *   (c) **llegó algo que no se puede leer**: acá sí se contesta, y pasando por
+ *       las MISMAS compuertas que todo lo demás — modo, freno, pausa,
+ *       `vendedora_activa`, topes— porque un acuse también es un mensaje que
+ *       sale de la línea. Por eso se llama a `paso5Decidir` y no se improvisa un
+ *       `if`.
+ *
+ * **Cuenta como turno**, y es a propósito: `maxRespuestasHoraLinea` es «la cota
+ * contra el ban» y cuenta mensajes que salen, no razonamientos. Uno corto ocupa
+ * la línea igual que uno largo.
+ */
+async function atenderEntranteSinTexto(ctx: CtxPipeline, clave: string): Promise<void> {
+  const borrar = () => db.delete(botPendientes).where(eq(botPendientes.clave, clave));
+
+  // (a) y (b)
+  if (ctx.motivoSinTexto !== "entrante_sin_texto") {
+    if (!ctx.motivoSinTexto) await guardarRespuesta(ctx, "cancelada", "sin_texto_entrante");
+    await borrar();
+    return;
+  }
+
+  // (c) — las compuertas de siempre, en el mismo orden de siempre.
+  await paso4Estado(ctx);
+  await paso5Decidir(ctx);
+  if (debeSaltar(ctx)) {
+    await saltarYLimpiar(ctx, clave);
+    return;
+  }
+
+  const decision = decidirAcuseIlegible(ctx.hilo, ctx.claseSinTexto);
+  if (!decision.acusa) {
+    // Tres stickers seguidos reciben UN acuse. Queda la fila con el motivo: que
+    // no se conteste tiene que ser tan visible como que se conteste.
+    await guardarRespuesta(ctx, "cancelada", `entrante_sin_texto_${decision.motivo}`);
+    await borrar();
+    return;
+  }
+
+  ctx.textoRespuesta = decision.texto;
+  await paso14Enviar(ctx);
+
+  const noSalio = ctx.modoEfectivo === "automatico" && ctx.burbujasEnviadas === 0;
+  await guardarRespuesta(
+    ctx,
+    noSalio ? "error" : "ok",
+    `acuse_ilegible_${decision.clase}${noSalio ? "_no_salio" : ""}`,
+  );
+  console.info("[bot orquestador]", resumirTraza(ctx.traza));
+  await borrar();
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 function debeSaltar(ctx: CtxPipeline): boolean {
@@ -936,25 +998,22 @@ function debeSaltar(ctx: CtxPipeline): boolean {
 }
 
 /**
- * Cuánto se espera antes de reintentar un salto transitorio, y hasta cuándo.
+ * Cuánto se espera antes de reintentar un salto transitorio.
  *
- * El techo NO es decorativo: es la lección de #166. Un entrante que estuvo
- * esperando medio día no se contesta cuando el transporte vuelve — contestar
- * «¿en qué te puedo ayudar?» seis horas después confirma que nadie miraba, y es
- * peor que el silencio. Pasado el techo se descarta, con motivo propio.
+ * El techo —hasta cuándo sigue valiendo la pena contestar— NO vive acá: es
+ * `ESPERA_MAXIMA_MS` de `claim.ts`, el mismo que usa el despachador cuando
+ * recupera un claim colgado. Es una sola regla («un entrante que esperó medio
+ * día ya no se contesta», la lección de #166) y por eso es una sola constante:
+ * con dos, el reintento y la recuperación empezarían a discrepar sobre cuándo un
+ * mensaje quedó viejo.
  */
 const REINTENTO_MS = 90_000;
-const ESPERA_MAXIMA_MS = 6 * 60 * 60 * 1000;
 
 async function saltarYLimpiar(ctx: CtxPipeline, clave: string): Promise<void> {
   const motivo = (ctx.decision as { accion: "saltar"; motivo: MotivoSalto }).motivo;
 
   if (esTransitorio(motivo)) {
-    const espera = ctx.ultimoEntranteEn
-      ? ctx.ahora.getTime() - ctx.ultimoEntranteEn.getTime()
-      : 0;
-
-    if (espera <= ESPERA_MAXIMA_MS) {
+    if (!esperaExcesiva(ctx.ultimoEntranteEn, ctx.ahora)) {
       // Se SUELTA el claim y se corre el turno: el despachador lo vuelve a
       // tomar cuando la condición pase. Nada de borrar: el lead escribió y su
       // mensaje sigue sin contestar.
@@ -1049,25 +1108,14 @@ async function armarHechos(ctx: CtxPipeline): Promise<HechosParaDecidir> {
   // Solo se exige en modo automático: en sombra no se manda nada, así que un
   // transporte caído no cambia lo que el pipeline puede hacer, y frenar ahí
   // apagaría justo el modo con el que se calibra el bot.
-  // ⚠️ `estado()` devuelve un OBJETO (`{estado: 'conectado', telefono}`), no una
-  // cadena. Acá había un `String(l.transporte.estado()) === "conectado"`, que
-  // compara `"[object Object]"` y por lo tanto es **siempre falso**. Mientras el
-  // valor se pasaba fijo en `true` no molestaba a nadie; al recolectarlo de
-  // verdad, ese `false` permanente dejó al bot descartando TODOS los entrantes
-  // con motivo `desconectado`. La ruta `/lineas` ya leía bien `.estado`: eran
-  // dos lecturas del mismo objeto y solo una estaba bien.
-  const gestor = gestorWhatsappSiActivo();
+  // ⚠️ La lectura vive en `lineaViva.ts`, una sola vez y con la cicatriz
+  // escrita: acá había un `String(l.transporte.estado()) === "conectado"` que
+  // comparaba `"[object Object]"` y era **siempre falso**, y el bot terminó
+  // descartando TODOS los entrantes con motivo `desconectado`. El reenganche
+  // necesita la misma pregunta, y dos copias de ésta ya se demostraron capaces
+  // de divergir.
   const transporteConectado =
-    ctx.modoEfectivo !== "automatico" ||
-    (gestor
-      ? gestor
-          .todos()
-          .some(
-            (l) =>
-              l.numero === ctx.numeroPropio &&
-              l.transporte.estado().estado === "conectado",
-          )
-      : false);
+    ctx.modoEfectivo !== "automatico" || lineaConectada(ctx.numeroPropio);
 
   // ── vendedora_activa: el freno que estaba muerto ────────────────────────
   const humanoEn = telefono

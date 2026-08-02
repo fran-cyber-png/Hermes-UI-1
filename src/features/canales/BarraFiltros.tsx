@@ -8,7 +8,7 @@ import {
   CLASE_TEXTO,
   esColorCategoria,
 } from '../gestion/paletaCategorias';
-import { categoriasDeLaBarra, FILTROS_SEC, type CategoriaEnBarra, type FiltroSec } from './cola';
+import { categoriasDeLaBarra, FILTROS_SEC, LINEA_MIAS, type CategoriaEnBarra, type FiltroSec } from './cola';
 
 /**
  * LA BARRA DE FILTROS DE LA COLA — una sola fila que se corre de izquierda a
@@ -28,6 +28,12 @@ import { categoriasDeLaBarra, FILTROS_SEC, type CategoriaEnBarra, type FiltroSec
  *  3. **El scroll se nota.** Si hay más chips a la derecha, un degradado lo dice.
  *     Sin barra de scroll a la vista (fea en un panel de 360 px), pero navegable
  *     con la rueda del mouse, con Tab y con las flechas ← →.
+ *  4. **Un chip que siempre diría cero no se dibuja.** Los dos del bot solo
+ *     aparecen cuando tienen algo que decir: el bot corre en una línea de
+ *     cuatro, y en las otras tres serían dos chips muertos ocupando el ancho de
+ *     los que sí se usan todos los días. Es la misma regla del selector de línea
+ *     («un selector de un solo elemento no es una elección, es ruido»), y tiene
+ *     un efecto que buscamos: **el chip apareciendo ES el aviso**.
  */
 /** ¿Hay más chips a la izquierda / a la derecha de lo que se ve? (los 4 px son ruido de subpíxel). */
 function sombrasDe(el: HTMLElement): { izq: boolean; der: boolean } {
@@ -45,11 +51,18 @@ export function BarraFiltros({
   lineas = [],
   lineaActiva = '',
   onLinea,
+  hayMias = false,
 }: {
   filtroSec: FiltroSec;
   onFiltro: (f: FiltroSec) => void;
   /** Cuántas filas daría cada filtro dentro del recorte actual (el server los cuenta). */
-  conteos?: { pideInfo: number; sinResponder: number; yaCompraron?: number };
+  conteos?: {
+    pideInfo: number;
+    sinResponder: number;
+    yaCompraron?: number;
+    botEscalada?: number;
+    botCaliente?: number;
+  };
   catalogo?: readonly CategoriaEnBarra[];
   categoriaActiva: string | null;
   onCategoria: (c: { nombre: string; color: string } | null) => void;
@@ -57,9 +70,11 @@ export function BarraFiltros({
   onListas: () => void;
   /** Las líneas de WhatsApp vivas (#50). Con menos de dos, el selector no se dibuja. */
   lineas?: readonly LineaWhatsapp[];
-  /** El número propio elegido; `''` = todas. */
+  /** El número propio elegido; `''` = todas, `LINEA_MIAS` = las asignadas a quien mira. */
   lineaActiva?: string;
   onLinea?: (numero: string) => void;
+  /** `numero_vendedora` le asigna alguna línea viva: recién ahí se ofrece «Las mías». */
+  hayMias?: boolean;
 }) {
   const pista = useRef<HTMLDivElement>(null);
   const [sombra, setSombra] = useState({ izq: false, der: false });
@@ -129,7 +144,37 @@ export function BarraFiltros({
         ? conteos?.sinResponder
         : valor === 'ya-compraron'
           ? conteos?.yaCompraron
-          : undefined;
+          : valor === 'bot-escalada'
+            ? conteos?.botEscalada
+            : valor === 'bot-caliente'
+              ? conteos?.botCaliente
+              : undefined;
+
+  /**
+   * Los dos del bot se esconden en cero (regla 4 del docblock). El ACTIVO se
+   * dibuja siempre, aunque el recorte lo haya dejado en cero: si desapareciera
+   * al filtrar, la vendedora se quedaría mirando una cola vacía sin el chip que
+   * la apaga — el mismo motivo por el que la categoría activa entra a la barra
+   * aunque el tope la dejara afuera.
+   */
+  const visibles = FILTROS_SEC.filter((f) => {
+    if (f.valor !== 'bot-escalada' && f.valor !== 'bot-caliente') return true;
+    return filtroSec === f.valor || (conteoDe(f.valor) ?? 0) > 0;
+  });
+
+  /** Las opciones del segmentado de línea, en el orden en que se leen. */
+  const opcionesDeLinea = [
+    // «Las mías» va PRIMERA porque es la más específica y la que se busca al
+    // abrir la app. El default NO cambia: sigue siendo «Todas» — esto ordena la
+    // lectura, no elige por ella.
+    ...(hayMias ? [{ numero: LINEA_MIAS, etiqueta: 'Las mías', titulo: 'Ver solo las líneas que tenés asignadas' }] : []),
+    { numero: '', etiqueta: 'Todas', titulo: 'Ver todas las líneas juntas' },
+    ...lineas.map((l) => ({
+      numero: l.numero,
+      etiqueta: l.etiqueta,
+      titulo: `Ver solo lo que entró por ${l.etiqueta} (${l.numero})`,
+    })),
+  ];
 
   return (
     /* `-mx-3` + `px-3` en la pista: la barra SANGRA hasta el borde del panel. Si
@@ -152,9 +197,13 @@ export function BarraFiltros({
             antes, y por eso va antes.
             Segmentado y no chips sueltos porque las opciones son excluyentes: en
             un toggle, «Escuela» y «Walter» apagados a la vez tendrían que
-            significar «ninguna», y significan «todas». Se ven las tres a la vez
+            significar «ninguna», y significan «todas». Se ven todas a la vez
             —volver a «Todas» cuesta un click desde donde estés—, que es lo mismo
             que hace el chip de la auto-respuesta con sus dos modos.
+            «Las mías» (`numero_vendedora`) es una opción MÁS de este mismo
+            segmentado, no un toggle aparte: elegir «las mías» y elegir «Walter»
+            son la misma pregunta —¿qué cola miro?—, y con dos controles
+            existiría el estado imposible «las mías Y solo Walter».
             Sin oro: acá no se está acabando ningún tiempo. */}
         {lineas.length > 1 && onLinea && (
           <>
@@ -164,7 +213,7 @@ export function BarraFiltros({
               aria-label="Línea de WhatsApp"
             >
               <Smartphone size={11} className="ml-1.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-              {[{ numero: '', etiqueta: 'Todas' }, ...lineas].map((l) => {
+              {opcionesDeLinea.map((l) => {
                 const activa = lineaActiva === l.numero;
                 return (
                   <button
@@ -172,7 +221,7 @@ export function BarraFiltros({
                     data-chip
                     type="button"
                     aria-pressed={activa}
-                    title={l.numero ? `Ver solo lo que entró por ${l.etiqueta} (${l.numero})` : 'Ver las dos líneas juntas'}
+                    title={l.titulo}
                     onClick={() => onLinea(l.numero)}
                     className={
                       /* `max-w` + `truncate`: el rótulo lo escribe Cerberus y puede
@@ -197,7 +246,7 @@ export function BarraFiltros({
           </>
         )}
 
-        {FILTROS_SEC.map((f) => {
+        {visibles.map((f) => {
           const activo = filtroSec === f.valor;
           const n = conteoDe(f.valor);
           return (

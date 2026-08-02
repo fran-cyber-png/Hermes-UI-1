@@ -95,13 +95,24 @@ whatsappRouter.get('/sesion', (req, res) => {
  * sin tabla todavía, o con la base caída, la línea igual se lista con su número
  * como etiqueta. **Perder el rótulo no puede esconder la línea**: quedarse sin
  * filtro es peor que un filtro que dice el número crudo.
+ *
+ * `mias` (de `numero_vendedora`) es lo que le permite a la barra ofrecer «Las
+ * mías» SOLO a quien tiene líneas asignadas. Sin eso sería un botón que no hace
+ * nada — la misma regla por la que el selector entero no se dibuja con una sola
+ * línea. Y viaja por el mismo camino que el rótulo: si el mapa no se pudo leer,
+ * `mias` queda en `false` en todas y la opción desaparece, o sea que la
+ * vendedora ve TODO. Fail-open también acá.
  */
-whatsappRouter.get('/lineas', async (_req, res) => {
+whatsappRouter.get('/lineas', async (req, res) => {
   const vivas = gestorWhatsapp().todos();
 
   let etiquetas = new Map<string, string>();
+  let mias = new Set<string>();
   try {
-    etiquetas = new Map((await listarNumeros(db)).map((n) => [n.numero, n.etiqueta]));
+    const registradas = await listarNumeros(db);
+    etiquetas = new Map(registradas.map((n) => [n.numero, n.etiqueta]));
+    const yo = req.vendedoraId;
+    if (yo) mias = new Set(registradas.filter((n) => n.vendedoras.includes(yo)).map((n) => n.numero));
   } catch (e) {
     console.warn('[lineas] no se pudieron leer los rótulos de `numeros_wa`: van con el número crudo', e);
   }
@@ -111,6 +122,7 @@ whatsappRouter.get('/lineas', async (_req, res) => {
       numero: l.numero,
       etiqueta: etiquetas.get(l.numero)?.trim() || l.numero,
       estado: l.transporte.estado().estado,
+      mias: mias.has(l.numero),
     })),
   });
 });
