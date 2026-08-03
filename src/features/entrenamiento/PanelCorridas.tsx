@@ -4,7 +4,10 @@ import { Play } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import {
   compararRespuesta,
+  compararReglas,
   costoAproximado,
+  ROTULO_REGLA,
+  type ConteoReglas,
   LECTURA_CAMBIO,
   resumirCorrida,
   type Cambio,
@@ -52,7 +55,7 @@ export function PanelCorridas({ linea }: { linea: string | null }) {
   const detalle = useQuery({
     queryKey: ['corrida', abierta],
     queryFn: () =>
-      api<{ corrida: Corrida; respuestas: RespuestaDeCorrida[] }>(
+      api<{ corrida: Corrida; respuestas: RespuestaDeCorrida[]; reglas: ConteoReglas }>(
         `/api/entrenamiento/corridas/${abierta}`,
       ),
     enabled: abierta !== null,
@@ -142,7 +145,9 @@ export function PanelCorridas({ linea }: { linea: string | null }) {
               qué diría ahora.
             </p>
           )}
-          {detalle.data && <Detalle respuestas={detalle.data.respuestas} />}
+          {detalle.data && (
+            <Detalle respuestas={detalle.data.respuestas} reglas={detalle.data.reglas} />
+          )}
         </div>
       </div>
     </div>
@@ -157,11 +162,59 @@ const COLOR: Record<Cambio, string> = {
   'sin-datos': 'text-muted-foreground',
 };
 
-function Detalle({ respuestas }: { respuestas: RespuestaDeCorrida[] }) {
+/**
+ * El veredicto de las reglas duras: lo que convierte 255 diffs para leer a mano
+ * en un número. Va ARRIBA de todo porque es la lectura de la Corrida — «la
+ * identidad pasó de 39 a 0» es la conclusión; la lista de diffs es la evidencia.
+ */
+function Reglas({ conteo }: { conteo: ConteoReglas }) {
+  const cambios = compararReglas(conteo);
+  if (cambios.length === 0) {
+    return (
+      <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+        Ninguna respuesta rompe una regla dura, ni antes ni ahora.
+      </p>
+    );
+  }
+  return (
+    <div className="rounded-md border border-border">
+      <div className="border-b border-border px-3 py-1.5 text-xs text-muted-foreground">
+        Reglas duras — antes → ahora
+      </div>
+      <ul className="divide-y divide-border">
+        {cambios.map((c) => (
+          <li key={c.regla} className="flex items-center gap-3 px-3 py-2 text-sm">
+            <span>{ROTULO_REGLA[c.regla]}</span>
+            <span className="ml-auto tabular-nums text-muted-foreground">
+              {c.antes} → {c.ahora}
+            </span>
+            <span
+              className={`w-16 text-right tabular-nums font-medium ${
+                c.delta > 0 ? 'text-destructive' : c.delta < 0 ? 'text-emerald-600' : 'text-muted-foreground'
+              }`}
+            >
+              {c.delta > 0 ? `+${c.delta}` : c.delta === 0 ? '=' : c.delta}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function Detalle({
+  respuestas,
+  reglas,
+}: {
+  respuestas: RespuestaDeCorrida[];
+  reglas?: ConteoReglas;
+}) {
   const resumen = resumirCorrida(respuestas);
 
   return (
     <div className="flex flex-col gap-5">
+      {reglas && <Reglas conteo={reglas} />}
+
       {/* El resumen primero: «diría otra cosa en 40 de 255» es la lectura, no la lista. */}
       <div className="flex flex-wrap gap-2 text-xs">
         {(Object.keys(resumen) as Cambio[])

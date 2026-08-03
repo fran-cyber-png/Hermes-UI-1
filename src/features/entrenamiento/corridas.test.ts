@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { compararRespuesta, resumirCorrida, costoAproximado } from './corridas';
+import {
+  compararRespuesta,
+  compararReglas,
+  resumirCorrida,
+  costoAproximado,
+} from './corridas';
 
 const r = (textoOriginal: string | null, texto: string | null) => ({
   id: 1,
@@ -85,5 +90,47 @@ describe('costoAproximado', () => {
 
   it('una corrida vacía no cuesta nada', () => {
     expect(costoAproximado(0, 0)).toBe(0);
+  });
+});
+
+describe('compararReglas', () => {
+  const vacio = {
+    identidad: 0, pregunta_pais: 0, anuncia_otra_persona: 0,
+    cifra_de_precio: 0, dice_ser_bot: 0, sede_inexistente: 0,
+  };
+
+  it('las reglas que nadie rompió no aparecen: el tablero no se llena de ceros', () => {
+    const r = compararReglas({ antes: vacio, ahora: vacio });
+    expect(r).toHaveLength(0);
+  });
+
+  /**
+   * El orden es la decisión que importa. Lo que EMPEORÓ va primero aunque sea
+   * por poco: enterrarlo debajo de una mejora grande es cómo se aprueba una
+   * regresión sin verla.
+   */
+  it('lo que empeoró va primero, aunque haya mejorado mucho otra cosa', () => {
+    const r = compararReglas({
+      antes: { ...vacio, identidad: 39, cifra_de_precio: 0 },
+      ahora: { ...vacio, identidad: 0, cifra_de_precio: 2 },
+    });
+    expect(r[0]!.regla).toBe('cifra_de_precio'); // empeoró: 0 → 2
+    expect(r[1]!.regla).toBe('identidad'); // mejoró: 39 → 0
+  });
+
+  it('entre mejoras, primero la más grande', () => {
+    const r = compararReglas({
+      antes: { ...vacio, identidad: 39, pregunta_pais: 9 },
+      ahora: vacio,
+    });
+    expect(r.map((c) => c.regla)).toEqual(['identidad', 'pregunta_pais']);
+  });
+
+  it('el delta dice la dirección', () => {
+    const r = compararReglas({
+      antes: { ...vacio, pregunta_pais: 9 },
+      ahora: { ...vacio, pregunta_pais: 1 },
+    });
+    expect(r[0]!.delta).toBe(-8);
   });
 });

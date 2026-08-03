@@ -11,6 +11,8 @@ import {
   resumirCorrida,
   type Cambio,
   type RespuestaDeCorrida,
+  compararReglas,
+  ROTULO_REGLA,
 } from './corridas';
 
 /**
@@ -185,8 +187,14 @@ const COLOR_CAMBIO: Record<Cambio, string> = {
   'sin-datos': 'text-muted-foreground',
 };
 
+const CONTEO_REGLAS = {
+  antes: { identidad: 39, pregunta_pais: 9, anuncia_otra_persona: 3, cifra_de_precio: 0, dice_ser_bot: 0, sede_inexistente: 1 },
+  ahora: { identidad: 0, pregunta_pais: 1, anuncia_otra_persona: 0, cifra_de_precio: 2, dice_ser_bot: 0, sede_inexistente: 0 },
+};
+
 function GaleriaCorridas() {
   const resumen = resumirCorrida(DIFF);
+  const cambios = compararReglas(CONTEO_REGLAS);
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       <header className="border-b border-border px-6 py-4">
@@ -194,6 +202,34 @@ function GaleriaCorridas() {
         <p className="text-sm text-muted-foreground">Corridas sobre conversaciones reales</p>
       </header>
       <div className="flex-1 overflow-y-auto px-6 py-5">
+        {/* El veredicto de las reglas ARRIBA: es la lectura de la Corrida. */}
+        <div className="mb-5 rounded-md border border-border">
+          <div className="border-b border-border px-3 py-1.5 text-xs text-muted-foreground">
+            Reglas duras — antes → ahora
+          </div>
+          <ul className="divide-y divide-border">
+            {cambios.map((c) => (
+              <li key={c.regla} className="flex items-center gap-3 px-3 py-2 text-sm">
+                <span>{ROTULO_REGLA[c.regla]}</span>
+                <span className="ml-auto tabular-nums text-muted-foreground">
+                  {c.antes} → {c.ahora}
+                </span>
+                <span
+                  className={`w-16 text-right font-medium tabular-nums ${
+                    c.delta > 0
+                      ? 'text-destructive'
+                      : c.delta < 0
+                        ? 'text-emerald-600'
+                        : 'text-muted-foreground'
+                  }`}
+                >
+                  {c.delta > 0 ? `+${c.delta}` : c.delta === 0 ? '=' : c.delta}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
         <div className="mb-5 flex flex-wrap gap-2 text-xs">
           {(Object.keys(resumen) as Cambio[])
             .filter((k) => resumen[k] > 0)

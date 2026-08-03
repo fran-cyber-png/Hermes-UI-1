@@ -7,6 +7,7 @@ import { correrCorrida } from "../corridas/correrCorrida.js";
 import { requiereVendedora } from "../auth/sesion.js";
 import { configDesdeEnv } from "../bot/config.js";
 import { crearClienteBedrock } from "../bot/clienteBedrock.js";
+import { contarViolaciones, evaluarReglas } from "../bot/reglas.js";
 import {
   procesarConversacion,
   type FilaHilo,
@@ -269,11 +270,38 @@ entrenamientoRouter.get("/corridas/:id", async (req, res) => {
     return;
   }
 
-  const respuestas = await db
+  const filas = await db
     .select()
     .from(corridaRespuestas)
     .where(eq(corridaRespuestas.corridaId, id))
     .orderBy(corridaRespuestas.id);
 
-  res.json({ ok: true, corrida, respuestas });
+  /**
+   * Las violaciones se DERIVAN acá, no se guardan (#258).
+   *
+   * Es la convención de la casa para todo lo que es función de otra cosa —la
+   * etapa efectiva (ADR 0013), `no_leido` (0014), las señales (0016)— y acá
+   * paga un dividendo propio: **cuando una regla mejora, las Corridas viejas se
+   * re-evalúan solas**. Con la cuenta congelada en una columna, arreglar un
+   * falso positivo dejaría todo el historial mintiendo, y habría que rehacer las
+   * corridas para creerle al tablero.
+   *
+   * Se derivan las DOS mitades: sin las de «entonces» no se puede decir si el
+   * bot mejoró — solo cuántas rompe hoy, que es un número sin con qué compararse.
+   */
+  const respuestas = filas.map((f) => ({
+    ...f,
+    violaciones: evaluarReglas(f.texto),
+    violacionesOriginal: evaluarReglas(f.textoOriginal),
+  }));
+
+  res.json({
+    ok: true,
+    corrida,
+    respuestas,
+    reglas: {
+      antes: contarViolaciones(filas.map((f) => f.textoOriginal)),
+      ahora: contarViolaciones(filas.map((f) => f.texto)),
+    },
+  });
 });
