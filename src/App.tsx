@@ -13,6 +13,7 @@ import {
   Mail,
   MessagesSquare,
   Users,
+  Bot,
 } from 'lucide-react';
 import { Escudo } from './components/Marca';
 import { ColaUnificada } from './features/canales/ColaUnificada';
@@ -32,6 +33,7 @@ import { VistaEmbudo } from './features/vistas/VistaEmbudo';
 import { VistaPersonas } from './features/vistas/VistaPersonas';
 import { VistaAgenda } from './features/agenda/VistaAgenda';
 import { VistaCorreos } from './features/correos/VistaCorreos';
+import { VistaEntrenamiento } from './features/entrenamiento/VistaEntrenamiento';
 import { pendientesQueApuran, useAgenda } from './features/agenda/agenda';
 import { Login } from './features/auth/Login';
 import { useSesion } from './features/auth/sesion';
@@ -83,6 +85,10 @@ const VISTAS = [
   { id: 'bandeja', label: 'Mensajes', icono: MessagesSquare },
   { id: 'correos', label: 'Correos', icono: Mail },
   { id: 'agenda', label: 'Agenda', icono: AlarmClock },
+  // La séptima: donde se mira trabajar al bot sin gastar un lead de la pauta.
+  // No es trabajo diario de la vendedora, pero vive en el riel igual — fuera de
+  // la app quedaría huérfana, y lo que no está a la vista no se usa.
+  { id: 'entrenamiento', label: 'Entrenar bot', icono: Bot },
 ] as const;
 
 type Vista = (typeof VISTAS)[number]['id'];
@@ -265,10 +271,16 @@ export default function App() {
         return;
       }
       // Los acordes con ⌘/Ctrl no escriben texto: pasan aun con el foco en un input.
-      if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '6') {
-        e.preventDefault();
-        cambiarVista(VISTAS[Number(e.key) - 1].id);
-        return;
+      // El rango sale de VISTAS, no de un '6' escrito a mano: al agregar la
+      // séptima el atajo se quedó corto sin que nada lo dijera, y el próximo
+      // que agregue una vista no tiene por qué acordarse de este `if`.
+      if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= String(VISTAS.length)) {
+        const destino = VISTAS[Number(e.key) - 1];
+        if (destino) {
+          e.preventDefault();
+          cambiarVista(destino.id);
+          return;
+        }
       }
       // ── LAS TECLAS DE LA REVISIÓN ──
       // Van acá arriba, ANTES de la guarda de «estás tecleando», porque en
@@ -616,6 +628,8 @@ export default function App() {
               />
             )}
             {vista === 'personas' && <VistaPersonas telefonoInicial={telefonoPersonas} onEscribir={escribirA} />}
+            {vista === 'entrenamiento' && <VistaEntrenamiento />}
+
             {vista === 'correos' && (
               <VistaCorreos correoInicial={puente?.tipo === 'correo' ? puente.para : null} onConsumido={() => setPuente(null)} />
             )}

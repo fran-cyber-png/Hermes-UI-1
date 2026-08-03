@@ -43,6 +43,7 @@ import { arrancarRelojDelLazo } from "./lazo/reloj.js";
 import { arrancarAutoRespuesta } from "./autorespuesta/reloj.js";
 import { autorespuestaRouter } from "./routes/autorespuesta.js";
 import { botRouter } from "./routes/bot.js";
+import { entrenamientoRouter } from "./routes/entrenamiento.js";
 import { webhookRouter } from "./webhook/ruta.js";
 import { arrancarWhatsapp } from "./whatsapp/wiring.js";
 import { rutaDevWhatsapp } from "./whatsapp/rutaDev.js";
@@ -58,7 +59,7 @@ import { db } from "./db/client.js";
 import { sembrarAliasCurso } from "./cursos/repositorio.js";
 import { arrancarDespachador } from "./bot/despachador.js";
 import { configDesdeEnv, anunciarConfig } from "./bot/config.js";
-import { AnthropicBedrock } from "@anthropic-ai/bedrock-sdk";
+import { crearClienteBedrock } from "./bot/clienteBedrock.js";
 
 const app = express();
 const port = process.env.PORT ? Number(process.env.PORT) : 4100;
@@ -140,6 +141,9 @@ app.use("/api/stream", streamRouter);     // tiempo real: push de cambios (SSE)
 app.use("/api/whatsapp", whatsappRouter); // conversación nativa: hilo + enviar
 app.use("/api/autorespuesta", autorespuestaRouter); // el interruptor sin deploy de la auto-respuesta (#125)
 app.use("/api/bot", botRouter); // el kill-switch del bot de primera línea: apagar cuesta un click, no un deploy
+// El chat de prueba (#256): corre el MOTOR REAL sin transporte, así que se puede
+// mirar trabajar al bot sin gastar un solo lead de la pauta.
+app.use("/api/entrenamiento", entrenamientoRouter);
 // ⚠ /vincular queda FUERA del perímetro /api y sigue abierto: la consola del
 // operador no tiene auth propia todavía (su HTML no manda Bearer). Contenerlo
 // es decisión aparte (auth de operador, o bloquear /vincular en nginx) — ver #36.
@@ -199,28 +203,11 @@ app.listen(port, () => {
   let clienteLLM: any = null;
   if (cfgBot.lineas.length > 0) {
     try {
-      const awsAccessKey = process.env.AWS_ACCESS_KEY_ID;
-      const awsSecretKey = process.env.AWS_SECRET_ACCESS_KEY;
-      const region = process.env.AWS_REGION || "us-east-1";
-      if (awsAccessKey && awsSecretKey && process.env.AWS_SESSION_TOKEN === undefined) {
-        clienteLLM = new AnthropicBedrock({
-          awsAccessKey,
-          awsSecretKey,
-          awsRegion: region,
-          // ⚠️ EL TIMEOUT TIENE QUE SER MENOR QUE `VIGENCIA_CLAIM_MS` (5 min).
-          //
-          // El default del SDK son 10 minutos y 2 reintentos: el DOBLE del
-          // claim. Una sola llamada colgada sobrevive al vencimiento, otro tick
-          // toma el mismo pendiente, y el lead recibe **dos respuestas al mismo
-          // mensaje** — el tell más obvio de que hay una máquina detrás.
-          //
-          // 90 s es holgado para un turno normal (el agente tarda 3–5 s) y deja
-          // margen de sobra por debajo del claim aunque se use el reintento.
-          // `maxRetries: 1` por lo mismo: dos reintentos con este timeout ya
-          // rozan los 5 min.
-          timeout: 90_000,
-          maxRetries: 1,
-        }) as any;
+      // La construcción vive en `bot/clienteBedrock.ts`: el chat de prueba
+      // necesita el MISMO cliente, y el timeout de ahí está atado a un
+      // invariante del despachador que no puede tener dos copias.
+      clienteLLM = crearClienteBedrock();
+      if (clienteLLM) {
         arrancarDespachador(cfgBot, clienteLLM);
       } else {
         console.warn("[bot] AWS credenciales no configuradas o detectado AWS_SESSION_TOKEN: despachador no arranca");

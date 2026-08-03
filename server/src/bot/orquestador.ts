@@ -130,6 +130,15 @@ export interface DepsBot {
   gestor?: GestorWhatsapp | null;
   /** Dónde se asienta la respuesta. Por defecto, `bot_respuestas`. */
   guardarRespuesta?: (fila: FilaRespuestaBot) => Promise<void>;
+  /**
+   * De dónde sale el hilo. Por defecto, de la base.
+   *
+   * Lo necesita el chat de prueba (#256): ahí la conversación **no existe en
+   * ninguna tabla** —se está escribiendo en el momento— y sin esto habría que
+   * sembrarla primero, que es exactamente ensuciar producción para poder mirar.
+   * Mismo patrón de lector inyectado que `piezaAMandar.ts`.
+   */
+  leerHilo?: () => Promise<FilaHilo[]>;
 }
 
 /** Lo que el pipeline asienta de cada respuesta, sea a dónde sea. */
@@ -163,6 +172,8 @@ export interface CtxPipeline {
   gestor: GestorWhatsapp | null;
   /** Dónde asentar la respuesta de este turno. */
   asentarRespuesta: (fila: FilaRespuestaBot) => Promise<void>;
+  /** De dónde sale el hilo de este turno. */
+  leerHilo: () => Promise<FilaHilo[]>;
 
   /** El hilo se lee UNA vez en el paso 2 y lo reusan los pasos 5 y 10. */
   hilo: FilaHilo[];
@@ -237,6 +248,13 @@ function ctxInicial(
       (async (fila) => {
         await base.insert(botRespuestas).values(fila);
       }),
+    leerHilo:
+      deps?.leerHilo ??
+      (async () => {
+        const telefono = extraerTelefono(clave);
+        if (!telefono) return [];
+        return (await hiloDe(base, telefono, numeroPropio).catch(() => [])) as FilaHilo[];
+      }),
     hilo: [],
     ultimoEntranteEn: null,
     estadoLinea: ESTADO_LINEA_SIN_OPINION,
@@ -270,7 +288,7 @@ async function paso2Normalizar(ctx: CtxPipeline): Promise<void> {
     return;
   }
 
-  const hilo = (await hiloDe(ctx.base, telefono, ctx.numeroPropio).catch(() => [])) as FilaHilo[];
+  const hilo = await ctx.leerHilo().catch(() => [] as FilaHilo[]);
   ctx.hilo = hilo;
 
   const entrantes = hilo.filter((m) => m.direccion === "entrante");
