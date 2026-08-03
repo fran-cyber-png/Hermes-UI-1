@@ -33,6 +33,7 @@
     "hechos:sembrar": "tsx src/scripts/sembrarHechos.ts",
     "wa:vincular": "tsx src/whatsapp/vincular.ts",
     "wa:cloud-api:probar": "tsx src/scripts/probarCloudApi.ts",
+    "wa:permiso-llamada": "tsx src/scripts/pedirPermisoLlamada.ts",
     "auto:simulacro": "tsx src/scripts/autoSimulacro.ts",
     "bot:verificar": "tsx src/scripts/botVerificar.ts",
     "reenganche:simulacro": "tsx src/scripts/reengancheSimulacro.ts",

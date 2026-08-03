@@ -93,6 +93,28 @@ npm install && npm run dev:app                     # Vite :5173 + la app de escr
   > está el banco de pruebas (`docs/plan-banco-de-pruebas.md`) con un **número de prueba**.
 - **El webview viejo** (`src/features/whatsapp/PanelWhatsapp.tsx`) está **retirado** por D13. No se usa;
   archivar con ADR cuando se limpie.
+- **LLAMADAS DE VOZ — habilitadas en la línea del bot, y todavía NO se puede llamar.** Estado
+  medido el 3-ago-2026 en `51984429504` (phone number id `1293736303812393`, WABA
+  `1545885483579508`): `calling.status = ENABLED` con **`call_icon_visibility = DISABLE_ALL`**.
+  El ícono va oculto **a propósito**: sin WebRTC ni SIP no hay con qué atender, y un botón de
+  llamar que nadie contesta se paga caro — 2 llamadas seguidas sin responder restringen y 4
+  revocan el permiso. Tres cosas que conviene saber antes de tocar esto:
+  · **Primero el webhook, después el switch.** Meta rechaza habilitar el calling mientras la app
+    no esté suscrita al campo `calls` (error **138018**, «technical pre-requisites are not met»).
+    Es al revés del orden intuitivo y costó un intento fallido descubrirlo.
+  · **No se puede llamar en frío**: hace falta permiso explícito de la persona, pedido con el
+    interactivo `call_permission_request` (`npm run wa:permiso-llamada -- <numero>`, **dry-run por
+    default**). Techo de 1 pedido por día y 2 por semana por persona, y exige la ventana de 24 h
+    abierta. **Ese permiso es la variable que decide si el frente entero vale la pena**, y se mide
+    sin escribir una línea de audio.
+  · Las **líneas de las vendedoras no entran acá**: son whatsmeow, y whatsmeow no puede iniciar ni
+    aceptar llamadas (solo rechazarlas). Ahí la respuesta es WhatsApp Desktop vinculado al celular
+    de la línea, no la Calling API.
+  Los eventos de `calls` se guardan crudos en `events` (`source='meta_wa_call'`); la clave de
+  idempotencia vive pura en `webhook/llamadas.ts` y **lleva el evento**, porque una llamada manda
+  varios webhooks con el mismo `id` y con la clave a secas se perdía el `terminate` — el único que
+  trae `duration`. Falta el audio, y eso es una decisión de infraestructura (SIP a un softphone es
+  bastante más barato que WebRTC adentro de Hermes), no una tarea pendiente.
 - **Nada de automatización, con UNA excepción escrita**: no envío masivo, no warmup, **no anti-ban**.
   Un envío = una acción humana, por `EnvioControlado` (la única puerta hacia `enviarTexto`). El
   `temporary_ban` **se muestra siempre**, nunca se esconde.
