@@ -50,13 +50,19 @@ export async function ejecutarAcciones(
   acciones: Accion[],
   clave: string,
   ahora: Date = new Date(),
+  /**
+   * La base. Por defecto el singleton; una corrida de prueba pasa la suya, o
+   * mirar trabajar al bot dejaría intereses, calificaciones y pausas escritos
+   * en producción (#255).
+   */
+  base: typeof db = db,
 ): Promise<void> {
   for (const accion of acciones) {
-    await ejecutarUna(accion, clave, ahora);
+    await ejecutarUna(accion, clave, ahora, base);
   }
 }
 
-async function ejecutarUna(accion: Accion, clave: string, ahora: Date): Promise<void> {
+async function ejecutarUna(accion: Accion, clave: string, ahora: Date, base: typeof db = db): Promise<void> {
   /**
    * ⚠️ `registrar_interes` NO ENTRA EN EL `catch` MUDO DE ABAJO.
    *
@@ -68,14 +74,14 @@ async function ejecutarUna(accion: Accion, clave: string, ahora: Date): Promise<
    * que anotó el interés y la ficha está vacía, sin una línea en los logs.
    */
   if (accion.tipo === "registrar_interes") {
-    await registrarInteresDelBot(accion.familia, clave);
+    await registrarInteresDelBot(accion.familia, clave, base);
     return;
   }
 
   try {
     switch (accion.tipo) {
       case "calificar":
-        await db
+        await base
           .insert(botCalificaciones)
           .values({
             clave,
@@ -99,7 +105,7 @@ async function ejecutarUna(accion: Accion, clave: string, ahora: Date): Promise<
         // respuesta, no dice nada de las ganas de comprar. Marcar todo eso como
         // caliente ensucia justo la lista por la que una vendedora prioriza.
         const temperatura = accion.motivo === "por_cerrar" ? "caliente" : "tibio";
-        await db
+        await base
           .insert(botCalificaciones)
           .values({
             clave,
@@ -120,7 +126,7 @@ async function ejecutarUna(accion: Accion, clave: string, ahora: Date): Promise<
               ...(accion.motivo === "por_cerrar" ? { temperatura: "caliente" as const } : {}),
             },
           });
-        await db
+        await base
           .insert(botPausas)
           .values({
             clave,
@@ -138,7 +144,7 @@ async function ejecutarUna(accion: Accion, clave: string, ahora: Date): Promise<
       }
 
       case "pausar":
-        await db
+        await base
           .insert(botPausas)
           .values({
             clave,
@@ -190,9 +196,9 @@ async function ejecutarUna(accion: Accion, clave: string, ahora: Date): Promise<
  * un dato nuevo. `intereses` tiene su `unique (clave, curso)` para que nombrar
  * dos veces el mismo no duplique nada.
  */
-async function registrarInteresDelBot(familia: string, clave: string): Promise<void> {
+async function registrarInteresDelBot(familia: string, clave: string, base: typeof db = db): Promise<void> {
   try {
-    const r = await registrarInteresDeFamilia(db, {
+    const r = await registrarInteresDeFamilia(base, {
       clave,
       familia,
       vendedoraId: VENDEDORA_ID_DEL_BOT,

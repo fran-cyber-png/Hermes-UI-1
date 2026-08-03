@@ -136,12 +136,18 @@ export async function persistirHechos(
   clave: string,
   nuevos: HechosLead,
   traza?: Traza,
+  /**
+   * La base. Por defecto el singleton, para no tocar a ningún llamador — pero
+   * una corrida de prueba pasa la suya, o la memoria del bot se escribiría en
+   * producción cada vez que se lo mira trabajar (#255).
+   */
+  base: typeof db = db,
 ): Promise<void> {
   const t = traza ? tramoDePipeline("memoria", traza) : null;
 
   try {
     // Leer lo que ya había para no pisar con nulls
-    const existente = await db.query.botMemoriaLead
+    const existente = await base.query.botMemoriaLead
       .findFirst({
         where: (cols, { eq }) => eq(cols.clave, clave),
       })
@@ -156,7 +162,7 @@ export async function persistirHechos(
       extraidoEn: new Date().toISOString(),
     };
 
-    await db
+    await base
       .insert(botMemoriaLead)
       .values({
         clave,
@@ -179,9 +185,9 @@ export async function persistirHechos(
  * Lee los hechos persistidos para una conversación.
  * Si la tabla no existe, devuelve vacío — el bot sigue sin memoria.
  */
-export async function leerHechos(clave: string): Promise<HechosLead> {
+export async function leerHechos(clave: string, base: typeof db = db): Promise<HechosLead> {
   try {
-    const fila = await db.query.botMemoriaLead.findFirst({
+    const fila = await base.query.botMemoriaLead.findFirst({
       where: (cols, { eq }) => eq(cols.clave, clave),
     });
     return (fila?.hechos as HechosLead) ?? {};

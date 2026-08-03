@@ -64,12 +64,17 @@ async function conTimeout<T>(
 export async function recolectarContextoContacto(
   clave: string,
   numeroPropio: string,
+  /**
+   * La base. Por defecto el singleton; una corrida de prueba pasa la suya para
+   * no leer —ni dejar rastro— en producción mientras se mira trabajar al bot (#255).
+   */
+  base: typeof db = db,
 ): Promise<ContextoContacto> {
   const errores: string[] = [];
   const telefono = extraerTelefono(clave);
 
   // ── Memoria (lo que el lead dijo en turnos anteriores) ─────────────
-  const memoria = (await conTimeout("memoria", leerHechos(clave), errores)) ?? {};
+  const memoria = (await conTimeout("memoria", leerHechos(clave, base), errores)) ?? {};
 
   // ── Cerberus ──────────────────────────────────────────────────────
   let nombre: string | null = null;
@@ -98,7 +103,7 @@ export async function recolectarContextoContacto(
   const senales: string[] = [];
   const senalesResult = await conTimeout(
     "senales",
-    consultarSenales(db, { claves: [clave] }),
+    consultarSenales(base, { claves: [clave] }),
     errores,
   );
   if (senalesResult) {
@@ -113,7 +118,7 @@ export async function recolectarContextoContacto(
   let interes: string | null = null;
   const interesesResult = await conTimeout(
     "intereses",
-    consultarIntereses(db, [clave]),
+    consultarIntereses(base, [clave]),
     errores,
   );
   if (interesesResult) {
@@ -130,13 +135,13 @@ export async function recolectarContextoContacto(
   if (telefono) {
     const hilo = await conTimeout(
       "origen",
-      hiloDe(db, telefono, numeroPropio).then((r) => r as Record<string, unknown>[]).catch(() => [] as Record<string, unknown>[]),
+      hiloDe(base, telefono, numeroPropio).then((r) => r as Record<string, unknown>[]).catch(() => [] as Record<string, unknown>[]),
       errores,
     );
     if (hilo && hilo.length > 0) {
       const aliases = await conTimeout(
         "aliases",
-        aliasesActivos(db),
+        aliasesActivos(base),
         errores,
       );
       interesPropuesto = resolverInteresPropuesto(hilo, aliases ?? []);

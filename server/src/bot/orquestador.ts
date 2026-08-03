@@ -11,6 +11,8 @@
 
 import { eq, and, lt, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
+import type { db as Base } from "../db/client.js";
+import type { GestorWhatsapp } from "../whatsapp/wiring.js";
 import {
   botPendientes,
   botRespuestas,
@@ -97,6 +99,56 @@ export interface FilaHilo {
   media?: { clase?: unknown } | null;
 }
 
+/**
+ * LO QUE EL PIPELINE TOCA AFUERA, EXPLÍCITO.
+ *
+ * El orquestador ya recibía cliente LLM, reloj y config; la base y el transporte
+ * los tomaba de sus singletons. Con eso, correrlo era mandar: no había forma de
+ * verlo trabajar sin que un mensaje saliera hacia una persona.
+ *
+ * Estos tres son lo que faltaba, y son OPCIONALES: sin `deps`, `procesarConversacion`
+ * resuelve exactamente lo de siempre (`db` y el gestor global) y producción no cambia.
+ *
+ * ⚠️ **`gestor: null` no es un caso degradado: es la garantía.** Sin transporte no
+ * hay a dónde mandar —el paso 14 ya sale por `sin_transporte`, camino que existe
+ * desde siempre—, así que una corrida de prueba no puede alcanzar a una persona
+ * por CONSTRUCCIÓN, no por un `if` que alguien pueda invertir después.
+ *
+ * Y `guardarRespuesta` se puede desviar porque `bot_respuestas` es el corpus con
+ * el que se mide al bot: si una corrida de prueba escribiera ahí, cada
+ * experimento contaminaría la medición y se borraría la diferencia entre lo que
+ * pasó y lo que habría pasado (ver `Corrida` en CONTEXT.md).
+ */
+export interface DepsBot {
+  /** La base. Por defecto, el singleton de siempre. */
+  base?: typeof Base;
+  /**
+   * El transporte. Por defecto, el gestor global. **`null` explícito = sin
+   * transporte**, que es distinto de «no lo pasé»: lo primero es la garantía de
+   * no envío, lo segundo es producción.
+   */
+  gestor?: GestorWhatsapp | null;
+  /** Dónde se asienta la respuesta. Por defecto, `bot_respuestas`. */
+  guardarRespuesta?: (fila: FilaRespuestaBot) => Promise<void>;
+}
+
+/** Lo que el pipeline asienta de cada respuesta, sea a dónde sea. */
+export interface FilaRespuestaBot {
+  clave: string;
+  numeroPropio: string;
+  texto: string | null;
+  textoCompleto: string | null;
+  acciones: Accion[];
+  estado: string;
+  motivo: string | null;
+  modelo: string | null;
+  tokensEntrada: number | null;
+  tokensSalida: number | null;
+  tokensCacheEscritura: number | null;
+  tokensCacheLectura: number | null;
+  creadoEn: Date;
+}
+
 export interface CtxPipeline {
   traza: Traza;
   clave: string;
@@ -104,6 +156,13 @@ export interface CtxPipeline {
   cfg: ConfigBot;
   clienteLLM: ClienteAnthropic;
   ahora: Date;
+
+  /** La base con la que trabaja este turno (el singleton, salvo que se inyecte otra). */
+  base: typeof Base;
+  /** El transporte de este turno. `null` = no hay a dónde mandar, y no se manda. */
+  gestor: GestorWhatsapp | null;
+  /** Dónde asentar la respuesta de este turno. */
+  asentarRespuesta: (fila: FilaRespuestaBot) => Promise<void>;
 
   /** El hilo se lee UNA vez en el paso 2 y lo reusan los pasos 5 y 10. */
   hilo: FilaHilo[];
@@ -158,7 +217,12 @@ function ctxInicial(
   cfg: ConfigBot,
   clienteLLM: ClienteAnthropic,
   ahora: Date,
+  deps?: DepsBot,
 ): CtxPipeline {
+  const base = deps?.base ?? db;
+  // `undefined` = «no me pronuncié» → el gestor global, que es producción.
+  // `null` = «sin transporte», y eso SÍ se respeta: es la garantía de no envío.
+  const gestor = deps && "gestor" in deps ? (deps.gestor ?? null) : gestorWhatsappSiActivo();
   return {
     traza: iniciarTraza(clave),
     clave,
@@ -166,6 +230,13 @@ function ctxInicial(
     cfg,
     clienteLLM,
     ahora,
+    base,
+    gestor,
+    asentarRespuesta:
+      deps?.guardarRespuesta ??
+      (async (fila) => {
+        await base.insert(botRespuestas).values(fila);
+      }),
     hilo: [],
     ultimoEntranteEn: null,
     estadoLinea: ESTADO_LINEA_SIN_OPINION,
@@ -199,7 +270,7 @@ async function paso2Normalizar(ctx: CtxPipeline): Promise<void> {
     return;
   }
 
-  const hilo = (await hiloDe(db, telefono, ctx.numeroPropio).catch(() => [])) as FilaHilo[];
+  const hilo = (await hiloDe(ctx.base, telefono, ctx.numeroPropio).catch(() => [])) as FilaHilo[];
   ctx.hilo = hilo;
 
   const entrantes = hilo.filter((m) => m.direccion === "entrante");
@@ -236,7 +307,7 @@ async function paso2Normalizar(ctx: CtxPipeline): Promise<void> {
 
   if (!resultado.ok && resultado.motivo) {
     ctx.motivoSinTexto = `entrada_${resultado.motivo}`;
-    await db.insert(botRespuestas).values({
+    await ctx.base.insert(botRespuestas).values({
       clave: ctx.clave,
       numeroPropio: ctx.numeroPropio,
       texto: null,
@@ -253,7 +324,7 @@ async function paso2Normalizar(ctx: CtxPipeline): Promise<void> {
 
 async function paso3Contexto(ctx: CtxPipeline): Promise<void> {
   const t = tramoDePipeline("contexto", ctx.traza);
-  const c = await recolectarContextoContacto(ctx.clave, ctx.numeroPropio);
+  const c = await recolectarContextoContacto(ctx.clave, ctx.numeroPropio, ctx.base);
 
   ctx.contactoCtx = aBloqueDePrompt(c);
 
@@ -282,7 +353,7 @@ async function paso3Contexto(ctx: CtxPipeline): Promise<void> {
 async function paso4Estado(ctx: CtxPipeline): Promise<void> {
   const t = tramoDePipeline("estado", ctx.traza);
   try {
-    const fila = await db.query.botEstadoConversacion.findFirst({
+    const fila = await ctx.base.query.botEstadoConversacion.findFirst({
       where: eq(botEstadoConversacion.clave, ctx.clave),
     });
     if (fila) {
@@ -294,7 +365,7 @@ async function paso4Estado(ctx: CtxPipeline): Promise<void> {
   }
 
   // Leer memoria de turnos anteriores (Fase 2)
-  const memoria = await leerHechos(ctx.clave);
+  const memoria = await leerHechos(ctx.clave, ctx.base);
   if (memoria.nombre && !ctx.datosEstado.nombre) ctx.datosEstado.nombre = memoria.nombre;
   if (memoria.pais && !ctx.datosEstado.pais) ctx.datosEstado.pais = memoria.pais;
   if (memoria.familia && !ctx.datosEstado.familia) ctx.datosEstado.familia = memoria.familia;
@@ -313,7 +384,7 @@ async function paso5Decidir(ctx: CtxPipeline): Promise<void> {
   // línea en `sombra` desde la app no la frenaba: `decidir()` dejaba pasar
   // (sombra no es un motivo de salto) y el envío salía igual. El kill-switch
   // solo funcionaba para `apagado`.
-  ctx.estadoLinea = await leerEstadoLinea(db, ctx.numeroPropio);
+  ctx.estadoLinea = await leerEstadoLinea(ctx.base, ctx.numeroPropio);
   ctx.modoEfectivo = ctx.estadoLinea.modo ?? modoValido(ctx.cfg.modo);
 
   if (!debeResponder(ctx.estado) && ctx.estado !== "desconocido") {
@@ -352,7 +423,7 @@ async function paso6ValidarEntrada(ctx: CtxPipeline): Promise<void> {
 async function paso7Recuperar(ctx: CtxPipeline): Promise<void> {
   const t = tramoDePipeline("recuperar", ctx.traza);
   try {
-    const piezas = await leerPiezas(db);
+    const piezas = await leerPiezas(ctx.base);
     ctx.piezas = piezasParaElBot(piezas, ENFOQUE_PRODUCTO);
   } catch (err) {
     // Degrada RUIDOSO: sin catálogo el bot sigue con los hechos de código,
@@ -366,7 +437,7 @@ async function paso7Recuperar(ctx: CtxPipeline): Promise<void> {
   // Lo que esta conversación ya recibió. Se lee ACÁ —antes de armar las tools— y
   // no solo antes de mandar: si el modelo se entera recién al despachar, el
   // turno ya salió diciendo «te paso el flyer» y el flyer nunca llega.
-  ctx.piezasYaEnviadas = await piezasYaEnviadas(db, ctx.clave);
+  ctx.piezasYaEnviadas = await piezasYaEnviadas(ctx.base, ctx.clave);
 
   t.cerrar(`${ctx.piezas.length}_piezas·${ctx.piezasYaEnviadas.size}_ya_enviadas`);
 }
@@ -412,7 +483,7 @@ async function paso10Agente(ctx: CtxPipeline): Promise<void> {
   // Cargar familias válidas de alias_curso (Fase 2)
   let familiasValidas: ReadonlySet<string> | undefined;
   try {
-    const aliases = await aliasesActivos(db);
+    const aliases = await aliasesActivos(ctx.base);
     familiasValidas = new Set(aliases.map((a) => a.familia));
   } catch {
     // degrada: usar el default hardcodeado en tools.ts
@@ -443,7 +514,7 @@ async function paso10Agente(ctx: CtxPipeline): Promise<void> {
   // Extraer y persistir hechos del historial (Fase 2)
   const hechos = extraerHechos(historial);
   if (hechos.nombre || hechos.pais || hechos.familia) {
-    await persistirHechos(ctx.clave, hechos, ctx.traza);
+    await persistirHechos(ctx.clave, hechos, ctx.traza, ctx.base);
   }
 
   t.cerrar(resultado.texto ? "ok" : "bloqueado");
@@ -469,7 +540,7 @@ async function paso12Transicionar(ctx: CtxPipeline): Promise<void> {
     ctx.estado = resultado.estado;
 
     try {
-      await db
+      await ctx.base
         .insert(botEstadoConversacion)
         .values({
           clave: ctx.clave,
@@ -519,7 +590,7 @@ async function paso14Enviar(ctx: CtxPipeline): Promise<void> {
   }
 
   const burbujas = trocear(ctx.textoRespuesta);
-  const gestor = gestorWhatsappSiActivo();
+  const gestor = ctx.gestor;
   const puerta = gestor ? puertaDe(ctx.numeroPropio, gestor) : null;
   if (!puerta?.ok || !puerta.envio) {
     t.cerrar("sin_transporte");
@@ -623,7 +694,7 @@ async function paso14bPiezas(ctx: CtxPipeline): Promise<void> {
   }
 
   const telefono = extraerTelefono(ctx.clave);
-  if (!telefono || !gestorWhatsappSiActivo()) {
+  if (!telefono || !ctx.gestor) {
     t.cerrar(!telefono ? "sin_telefono" : "sin_transporte");
     return;
   }
@@ -640,7 +711,7 @@ async function paso14bPiezas(ctx: CtxPipeline): Promise<void> {
   // `cortaCorriente` por defecto (`() => false`, `whatsapp/wiring.ts`), o sea
   // que esta lectura ES la única compuerta del bot.
   const frenoLevantado = async (): Promise<string | null> => {
-    const e = await leerEstadoLinea(db, ctx.numeroPropio);
+    const e = await leerEstadoLinea(ctx.base, ctx.numeroPropio);
     const modo = e.modo ?? modoValido(ctx.cfg.modo);
     if (e.frenadoMotivo !== null) return "frenada_en_vuelo";
     if (modo !== "automatico") return `apagada_en_vuelo:${modo}`;
@@ -657,7 +728,7 @@ async function paso14bPiezas(ctx: CtxPipeline): Promise<void> {
   // antes de hasta cuatro llamadas al modelo, y en ese rato otro pipeline sobre
   // la misma clave pudo mandarla. El primero es de conversación (que el modelo
   // no la prometa), este es de seguridad (que no salga dos veces).
-  const yaEnviadas = await piezasYaEnviadas(db, ctx.clave);
+  const yaEnviadas = await piezasYaEnviadas(ctx.base, ctx.clave);
 
   // (d) el TOPE POR TURNO.
   //
@@ -712,7 +783,7 @@ async function mandarUnaPieza(
       return `${rotulo}:ya_enviada`;
     }
 
-    const pieza = await leerPiezaDelBot(db, direccion);
+    const pieza = await leerPiezaDelBot(ctx.base, direccion);
     if (!pieza) {
       console.warn(`[bot orquestador] ${rotulo} no existe: no sale para ${ctx.clave}`);
       return `${rotulo}:no_existe`;
@@ -818,7 +889,7 @@ async function enviarUnPaso(
 
 async function paso15Ejecutar(ctx: CtxPipeline): Promise<void> {
   const t = tramoDePipeline("ejecutar", ctx.traza);
-  await ejecutarAcciones(ctx.acciones, ctx.clave, ctx.ahora);
+  await ejecutarAcciones(ctx.acciones, ctx.clave, ctx.ahora, ctx.base);
   t.cerrar(`${ctx.acciones.length}_acciones`);
 }
 
@@ -841,7 +912,7 @@ async function guardarRespuesta(
     ctx.textoRespuesta === null ? "bloqueada" :
     ctx.modoEfectivo === "automatico" ? "enviada" : "sombra";
 
-  await db.insert(botRespuestas).values({
+  await ctx.asentarRespuesta({
     clave: ctx.clave,
     numeroPropio: ctx.numeroPropio,
     texto: ctx.textoRespuesta,
@@ -866,8 +937,9 @@ export async function procesarConversacion(
   cfg: ConfigBot,
   clienteLLM: ClienteAnthropic,
   ahora: Date,
+  deps?: DepsBot,
 ): Promise<void> {
-  const ctx = ctxInicial(clave, numeroPropio, cfg, clienteLLM, ahora);
+  const ctx = ctxInicial(clave, numeroPropio, cfg, clienteLLM, ahora, deps);
 
   try {
     await paso2Normalizar(ctx);
@@ -898,7 +970,7 @@ export async function procesarConversacion(
     await paso10Agente(ctx);
     if (ctx.errorAgente) {
       await guardarRespuesta(ctx, "error", ctx.errorAgente);
-      await db.delete(botPendientes).where(eq(botPendientes.clave, clave));
+      await ctx.base.delete(botPendientes).where(eq(botPendientes.clave, clave));
       return;
     }
 
@@ -913,12 +985,12 @@ export async function procesarConversacion(
 
     console.info("[bot orquestador]", resumirTraza(ctx.traza));
 
-    await db.delete(botPendientes).where(eq(botPendientes.clave, clave));
+    await ctx.base.delete(botPendientes).where(eq(botPendientes.clave, clave));
   } catch (err) {
     console.error(`[bot orquestador] error en pipeline ${clave}:`, (err as Error).message);
     try {
       await guardarRespuesta(ctx, "error", `Pipeline: ${(err as Error).message}`);
-      await db.delete(botPendientes).where(eq(botPendientes.clave, clave));
+      await ctx.base.delete(botPendientes).where(eq(botPendientes.clave, clave));
     } catch {
       // ni siquiera pudimos guardar el error
     }
@@ -952,7 +1024,7 @@ export async function procesarConversacion(
  * la línea igual que uno largo.
  */
 async function atenderEntranteSinTexto(ctx: CtxPipeline, clave: string): Promise<void> {
-  const borrar = () => db.delete(botPendientes).where(eq(botPendientes.clave, clave));
+  const borrar = () => ctx.base.delete(botPendientes).where(eq(botPendientes.clave, clave));
 
   // (a) y (b)
   if (ctx.motivoSinTexto !== "entrante_sin_texto") {
@@ -1018,7 +1090,7 @@ async function saltarYLimpiar(ctx: CtxPipeline, clave: string): Promise<void> {
       // tomar cuando la condición pase. Nada de borrar: el lead escribió y su
       // mensaje sigue sin contestar.
       await guardarRespuesta(ctx, "cancelada", `${motivo}_reintenta`);
-      await db
+      await ctx.base
         .update(botPendientes)
         .set({
           enProcesoDesde: null,
@@ -1029,12 +1101,12 @@ async function saltarYLimpiar(ctx: CtxPipeline, clave: string): Promise<void> {
     }
 
     await guardarRespuesta(ctx, "cancelada", `${motivo}_espera_excesiva`);
-    await db.delete(botPendientes).where(eq(botPendientes.clave, clave));
+    await ctx.base.delete(botPendientes).where(eq(botPendientes.clave, clave));
     return;
   }
 
   await guardarRespuesta(ctx, "cancelada", motivo);
-  await db.delete(botPendientes).where(eq(botPendientes.clave, clave));
+  await ctx.base.delete(botPendientes).where(eq(botPendientes.clave, clave));
 }
 
 function extraerTelefono(clave: string): string | null {
@@ -1063,7 +1135,7 @@ async function armarHechos(ctx: CtxPipeline): Promise<HechosParaDecidir> {
 
   let pausa: { motivo: string; hasta: Date | null } | null = null;
   try {
-    const fila = await db.query.botPausas.findFirst({
+    const fila = await ctx.base.query.botPausas.findFirst({
       where: eq(botPausas.clave, ctx.clave),
     });
     if (fila) {
@@ -1077,7 +1149,7 @@ async function armarHechos(ctx: CtxPipeline): Promise<HechosParaDecidir> {
   let respuestasUltimaHora = 0;
   try {
     const inicioHoy = new Date(ctx.ahora.getFullYear(), ctx.ahora.getMonth(), ctx.ahora.getDate());
-    const turnos = await db
+    const turnos = await ctx.base
       .select({ n: sql<number>`count(*)` })
       .from(botRespuestas)
       .where(
@@ -1089,7 +1161,7 @@ async function armarHechos(ctx: CtxPipeline): Promise<HechosParaDecidir> {
     turnosHoy = Number(turnos[0]?.n ?? 0);
 
     const haceUnaHora = new Date(ctx.ahora.getTime() - 3600_000);
-    const linea = await db
+    const linea = await ctx.base
       .select({ n: sql<number>`count(*)` })
       .from(botRespuestas)
       .where(
@@ -1119,7 +1191,7 @@ async function armarHechos(ctx: CtxPipeline): Promise<HechosParaDecidir> {
 
   // ── vendedora_activa: el freno que estaba muerto ────────────────────────
   const humanoEn = telefono
-    ? await ultimoSalienteHumanoEn(db, ctx.numeroPropio, telefono)
+    ? await ultimoSalienteHumanoEn(ctx.base, ctx.numeroPropio, telefono)
     : null;
 
   // ── spam: repetición, pero solo si ya le contestamos (ver `frenos.ts`) ──
