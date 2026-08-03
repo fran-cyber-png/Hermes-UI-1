@@ -5,6 +5,7 @@ import { db } from "../db/client.js";
 import { corridas, corridaRespuestas } from "../db/corridas.js";
 import { lecciones } from "../db/lecciones.js";
 import { correrCorrida } from "../corridas/correrCorrida.js";
+import { consultarAgujeros } from "../corridas/consultarAgujeros.js";
 import { requiereVendedora } from "../auth/sesion.js";
 import { configDesdeEnv } from "../bot/config.js";
 import { crearClienteBedrock } from "../bot/clienteBedrock.js";
@@ -388,4 +389,23 @@ entrenamientoRouter.put("/lecciones/:id/retirar", async (req, res) => {
     return;
   }
   res.json({ ok: true, leccion: fila });
+});
+
+// ── LOS AGUJEROS DEL CATÁLOGO (#261) ─────────────────────────────────────────
+
+/**
+ * Lo que el bot no supo contestar.
+ *
+ * El dato viene existiendo solo: cada `sin_respuesta_en_catalogo` es un agujero
+ * que el bot detectó y que nadie miraba. Se sirve con la pregunta al lado
+ * porque «faltó un dato» no dice cuál.
+ */
+entrenamientoRouter.get("/agujeros", async (req, res) => {
+  const numeroPropio = typeof req.query.numero === "string" ? req.query.numero : "";
+  if (!numeroPropio) {
+    res.status(400).json({ ok: false, message: "hace falta ?numero=<línea>" });
+    return;
+  }
+  const agujeros = await consultarAgujeros(db, numeroPropio);
+  res.json({ ok: true, agujeros });
 });

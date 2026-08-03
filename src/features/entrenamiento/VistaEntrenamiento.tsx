@@ -5,6 +5,7 @@ import { api, ErrorApi } from '../../lib/datos/cliente';
 import { useLineas } from '../canales/lineas';
 import { PanelCorridas } from './PanelCorridas';
 import { PanelLecciones } from './PanelLecciones';
+import { PanelAgujeros } from './PanelAgujeros';
 import {
   lecturaDeSilencio,
   motivoParaNoProbar,
@@ -42,7 +43,7 @@ export function VistaEntrenamiento() {
   // Dos formas de la misma pregunta: el chat explora lo que TODAVÍA no pasó, el
   // Replay mide sobre lo que ya pasó. Conmutadas por estado, sin router, como
   // todo en esta app (ADR 0002).
-  const [pestana, setPestana] = useState<'chat' | 'corridas' | 'lecciones'>('chat');
+  const [pestana, setPestana] = useState<'chat' | 'corridas' | 'lecciones' | 'agujeros'>('chat');
   const [turnos, setTurnos] = useState<TurnoDePrueba[]>([]);
   const [borrador, setBorrador] = useState('');
   const finRef = useRef<HTMLDivElement>(null);
@@ -149,6 +150,7 @@ export function VistaEntrenamiento() {
           [
             ['chat', 'Chat de prueba'],
             ['corridas', 'Corridas sobre conversaciones reales'],
+            ['agujeros', 'Qué no supo'],
             ['lecciones', 'Lecciones'],
           ] as const
         ).map(([id, rotulo]) => (
@@ -169,6 +171,7 @@ export function VistaEntrenamiento() {
 
       {pestana === 'corridas' && <PanelCorridas linea={linea} />}
       {pestana === 'lecciones' && <PanelLecciones />}
+      {pestana === 'agujeros' && <PanelAgujeros linea={linea} />}
 
       {pestana === 'chat' && (
         <>

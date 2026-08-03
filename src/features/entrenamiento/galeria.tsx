@@ -326,8 +326,73 @@ function GaleriaLecciones() {
   );
 }
 
+function GaleriaAgujeros() {
+  return (
+    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+      <header className="border-b border-border px-6 py-4">
+        <h1 className="text-lg font-semibold">Entrenamiento del bot</h1>
+        <p className="text-sm text-muted-foreground">Qué no supo</p>
+      </header>
+      <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="mx-auto flex max-w-3xl flex-col gap-4">
+          <div>
+            <h2 className="text-sm font-medium">Lo que no supo contestar</h2>
+            <p className="text-xs text-muted-foreground">Cada vez que el bot escala porque le falta un dato, queda anotado acá. Son 2 huecos del catálogo y 1 donde el que sobra es el escalado.</p>
+          </div>
+          <div className="rounded-md border border-border">
+            <div className="flex items-center gap-2 border-b border-border px-3 py-1.5 text-xs">
+              <span className="text-amber-700">No tenía el dato: falta en el catálogo</span>
+              <span className="ml-auto font-mono text-muted-foreground">51946497307</span>
+            </div>
+            <div className="px-3 py-2">
+              <p className="text-sm font-medium">La primera conferencia internacional</p>
+              <p className="pl-0 text-xs text-muted-foreground">Contestó: «Entiendo que te interesa saber sobre la primera conferencia internacional…»</p>
+            </div>
+            <div className="border-t border-border px-3 py-2">
+              <button className="rounded-md border border-border px-2.5 py-1 text-sm">Enseñarle esto</button>
+            </div>
+          </div>
+          <div className="rounded-md border border-border">
+            <div className="flex items-center gap-2 border-b border-border px-3 py-1.5 text-xs">
+              <span className="text-amber-700">No tenía el dato: falta en el catálogo</span>
+              <span className="ml-auto font-mono text-muted-foreground">5213921662088</span>
+            </div>
+            <div className="px-3 py-2">
+              <p className="text-sm font-medium">Ya me habían mandado información</p>
+            </div>
+            <div className="border-t border-border px-3 py-2">
+              <div className="flex flex-col gap-2">
+                <textarea rows={2} defaultValue="" placeholder="El dato que le faltaba, tal como querés que lo diga." className="w-full resize-none rounded-md border border-border bg-background px-2 py-1.5 text-sm" />
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Queda en borrador: probalo con una corrida antes de publicarlo.</span>
+                  <button className="ml-auto rounded-md bg-primary px-2.5 py-1 text-sm text-primary-foreground">Guardar borrador</button>
+                  <button className="rounded-md border border-border px-2.5 py-1 text-sm">Cancelar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-md border border-border">
+            <div className="flex items-center gap-2 border-b border-border px-3 py-1.5 text-xs">
+              <span className="text-muted-foreground">Contestó y escaló igual: el que sobra es el escalado, no el dato</span>
+              <span className="ml-auto font-mono text-muted-foreground">51966172067</span>
+            </div>
+            <div className="px-3 py-2">
+              <p className="text-sm font-medium">Horarios del curso.  PRESENCIAL</p>
+              <p className="text-xs text-muted-foreground">Contestó: «Te aclaro que el diplomado es 100% virtual: clases en vivo por Zoom.»</p>
+            </div>
+            <div className="border-t border-border px-3 py-2">
+              <button className="rounded-md border border-border px-2.5 py-1 text-sm">Enseñarle esto</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Galeria() {
   const q = new URLSearchParams(location.search);
+  if (q.get('agujeros') === '1') return <GaleriaAgujeros />;
   if (q.get('lecciones') === '1') return <GaleriaLecciones />;
   if (q.get('corridas') === '1') {
     return <GaleriaCorridas />;
