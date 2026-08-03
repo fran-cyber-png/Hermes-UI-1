@@ -171,4 +171,42 @@ describe("armarContextoContacto", () => {
     assert.ok(prompt.includes("NUNCA preguntes de qué país escribe"));
     assert.ok(!prompt.includes("NOMBRE y PAÍS"));
   });
+
+  /**
+   * LA IDENTIDAD NO PUEDE SALIR DEL HILO.
+   *
+   * Medido en producción el 3-ago-2026, sobre las 171 respuestas que el bot
+   * llegó a mandar: **39 se presentaron como «Kathy Alva, asesora académica» y
+   * 6 como «Sofía Rodríguez, asesora comercial»** — dos personas distintas, con
+   * dos cargos distintos, saliendo del mismo número. Kathy Alva es una asesora
+   * REAL: su nombre entró al hilo por un envío a mano (30-jul, línea 51941654039)
+   * y por el prompt viejo (`edbca9d`), y de ahí el modelo lo siguió tomando.
+   *
+   * El nombre ya se corrigió en el prompt, pero eso **no alcanza**: quedan 64
+   * leads con «Kathy Alva» escrito en su hilo —54 de ellos en conversaciones
+   * todavía vivas— y el modelo lee ese historial en cada turno. Sin una regla
+   * explícita, el turno siguiente vuelve a presentarse con el nombre que
+   * encuentra escrito, y la identidad del bot pasa a depender de quién atendió
+   * antes. Eso es lo que se ve desde afuera como «el bot responde inestable».
+   *
+   * El segundo `assert` es el candado que importa: no fija que la regla exista
+   * —eso es la letra—, fija que **ningún otro nombre de asesora vuelva a entrar
+   * al prompt**. Es la forma de test que ya usa `plantillas.test.ts` para
+   * prohibir «automático»/«bot»/«sistema»: se prohíbe la clase, no el caso.
+   */
+  it("fija la identidad contra el historial y no admite otro nombre de asesora", () => {
+    const prompt = armarSystemPrompt({ hechos: [], piezas: [], lecciones: [] });
+
+    assert.ok(prompt.includes("TU IDENTIDAD NO LA DEFINE EL HISTORIAL"));
+    assert.ok(prompt.includes("NO lo adoptes ni te presentes con él"));
+
+    // Ninguna asesora que no sea Sofía Rodríguez puede nombrarse acá.
+    const NOMBRES_PROHIBIDOS = [/\bKathy\b/i, /\bAlva\b/i, /asesora académica/i];
+    for (const prohibido of NOMBRES_PROHIBIDOS) {
+      assert.ok(
+        !prohibido.test(prompt),
+        `el prompt nombra a otra asesora (${prohibido}): dos identidades en el mismo número`,
+      );
+    }
+  });
 });
