@@ -5,6 +5,13 @@ import { Bot, ShieldCheck, User } from 'lucide-react';
 import '../../index.css';
 import { queryClient } from '../../lib/datos/cliente';
 import { lecturaDeSilencio, type TurnoDePrueba } from './entrenamiento';
+import {
+  compararRespuesta,
+  LECTURA_CAMBIO,
+  resumirCorrida,
+  type Cambio,
+  type RespuestaDeCorrida,
+} from './corridas';
 
 /**
  * LA GALERÍA DE LA VISTA DE ENTRENAMIENTO — la evidencia, sin nada vivo detrás.
@@ -120,7 +127,121 @@ function Burbuja({ turno }: { turno: TurnoDePrueba }) {
   );
 }
 
+/**
+ * El diff de una Corrida (#257). Los cuatro casos que importan, y sobre todo el
+ * que un `===` a secas escondería: que el bot **deje de hablar** donde antes
+ * hablaba. Mezclarlo en «cambió» haría que una regla que enmudece al bot se vea
+ * igual que una que lo mejora.
+ */
+const DIFF: RespuestaDeCorrida[] = [
+  {
+    id: 1,
+    clave: 'conv:whatsapp:51986993401:51984429504',
+    textoOriginal: 'Hola, soy Kathy Alva, asesora académica de Goberna. ¿Cuál es tu nombre?',
+    estadoOriginal: 'enviada',
+    texto: 'Hola, te saluda Sofía Rodríguez, asesora comercial de Goberna. Antes de todo, ¿cuál es tu nombre?',
+    estado: 'enviada',
+    motivo: null,
+    acciones: [],
+  },
+  {
+    id: 2,
+    clave: 'conv:whatsapp:51966628980:51984429504',
+    textoOriginal:
+      'El precio regular es de $199 USD y hoy está en promoción a $150 USD. Decile SOLO el precio de SU país, que viene en <contacto>: Perú S/ 500 · México $2,800…',
+    estadoOriginal: 'enviada',
+    texto: 'Dame un momento y te paso el precio en tu moneda local para que no tengas sorpresas con el cambio.',
+    estado: 'enviada',
+    motivo: null,
+    acciones: [],
+  },
+  {
+    id: 3,
+    clave: 'conv:whatsapp:51946497307:51984429504',
+    textoOriginal: 'Entiendo que te interesa saber sobre la primera conferencia internacional…',
+    estadoOriginal: 'enviada',
+    texto: null,
+    estado: 'bloqueada',
+    motivo: 'sin_respuesta_en_catalogo',
+    acciones: [],
+  },
+  {
+    id: 4,
+    clave: 'conv:whatsapp:51902801736:51984429504',
+    textoOriginal: 'Perfecto. ¿Hay algo específico del diploma que quieras saber?',
+    estadoOriginal: 'enviada',
+    texto: 'Perfecto. ¿Hay algo específico del diploma que quieras saber?',
+    estado: 'enviada',
+    motivo: null,
+    acciones: [],
+  },
+];
+
+const COLOR_CAMBIO: Record<Cambio, string> = {
+  igual: 'text-muted-foreground',
+  cambio: 'text-foreground',
+  'ahora-calla': 'text-destructive',
+  'antes-callaba': 'text-foreground',
+  'sin-datos': 'text-muted-foreground',
+};
+
+function GaleriaCorridas() {
+  const resumen = resumirCorrida(DIFF);
+  return (
+    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+      <header className="border-b border-border px-6 py-4">
+        <h1 className="text-lg font-semibold">Entrenamiento del bot</h1>
+        <p className="text-sm text-muted-foreground">Corridas sobre conversaciones reales</p>
+      </header>
+      <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="mb-5 flex flex-wrap gap-2 text-xs">
+          {(Object.keys(resumen) as Cambio[])
+            .filter((k) => resumen[k] > 0)
+            .map((k) => (
+              <span key={k} className={`rounded border border-border px-2 py-1 ${COLOR_CAMBIO[k]}`}>
+                {LECTURA_CAMBIO[k]}: <strong className="tabular-nums">{resumen[k]}</strong>
+              </span>
+            ))}
+          <span className="ml-auto text-muted-foreground">4 conversaciones · ~US$0.01</span>
+        </div>
+        <div className="flex flex-col gap-5">
+          {DIFF.map((r) => {
+            const cambio = compararRespuesta(r);
+            return (
+              <div key={r.id} className="rounded-lg border border-border">
+                <div className="flex items-center gap-2 border-b border-border px-3 py-1.5 text-xs">
+                  <span className={COLOR_CAMBIO[cambio]}>{LECTURA_CAMBIO[cambio]}</span>
+                  <span className="ml-auto font-mono text-muted-foreground">
+                    {r.clave.split(':')[2]}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 gap-px bg-border md:grid-cols-2">
+                  <div className="bg-card px-3 py-2">
+                    <div className="mb-1 text-xs text-muted-foreground">Dijo entonces</div>
+                    <p className="whitespace-pre-wrap text-sm">{r.textoOriginal}</p>
+                  </div>
+                  <div className="bg-card px-3 py-2">
+                    <div className="mb-1 text-xs text-muted-foreground">Diría ahora</div>
+                    <p className="whitespace-pre-wrap text-sm">
+                      {r.texto ?? (
+                        <span className="text-muted-foreground">— no habla — ({r.motivo})</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Galeria() {
+  if (new URLSearchParams(location.search).get('corridas') === '1') {
+    return <GaleriaCorridas />;
+  }
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       <header className="flex flex-wrap items-center gap-3 border-b border-border px-6 py-4">

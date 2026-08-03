@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Bot, CornerDownLeft, RotateCcw, ShieldCheck, User } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { useLineas } from '../canales/lineas';
+import { PanelCorridas } from './PanelCorridas';
 import {
   lecturaDeSilencio,
   motivoParaNoProbar,
@@ -37,6 +38,10 @@ import {
 export function VistaEntrenamiento() {
   const { lineas } = useLineas();
   const [linea, setLinea] = useState<string | null>(null);
+  // Dos formas de la misma pregunta: el chat explora lo que TODAVÍA no pasó, el
+  // Replay mide sobre lo que ya pasó. Conmutadas por estado, sin router, como
+  // todo en esta app (ADR 0002).
+  const [pestana, setPestana] = useState<'chat' | 'corridas'>('chat');
   const [turnos, setTurnos] = useState<TurnoDePrueba[]>([]);
   const [borrador, setBorrador] = useState('');
   const finRef = useRef<HTMLDivElement>(null);
@@ -121,21 +126,49 @@ export function VistaEntrenamiento() {
           </select>
         </label>
 
-        <button
-          type="button"
-          onClick={() => {
-            setTurnos([]);
-            probar.reset();
-            cajaRef.current?.focus();
-          }}
-          disabled={turnos.length === 0}
-          className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-muted disabled:opacity-40"
-        >
-          <RotateCcw className="size-3.5" aria-hidden />
-          Empezar de nuevo
-        </button>
+        {pestana === 'chat' && (
+          <button
+            type="button"
+            onClick={() => {
+              setTurnos([]);
+              probar.reset();
+              cajaRef.current?.focus();
+            }}
+            disabled={turnos.length === 0}
+            className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-muted disabled:opacity-40"
+          >
+            <RotateCcw className="size-3.5" aria-hidden />
+            Empezar de nuevo
+          </button>
+        )}
       </header>
 
+      <nav className="flex gap-1 border-b border-border px-6">
+        {(
+          [
+            ['chat', 'Chat de prueba'],
+            ['corridas', 'Corridas sobre conversaciones reales'],
+          ] as const
+        ).map(([id, rotulo]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setPestana(id)}
+            className={`-mb-px border-b-2 px-3 py-2 text-sm ${
+              pestana === id
+                ? 'border-primary font-medium'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {rotulo}
+          </button>
+        ))}
+      </nav>
+
+      {pestana === 'corridas' && <PanelCorridas linea={linea} />}
+
+      {pestana === 'chat' && (
+        <>
       {/*
         La garantía se dice en pantalla, no solo en el código. Quien prueba tiene
         que poder confiar en que esto no le llega a nadie — si tiene que
@@ -207,6 +240,8 @@ export function VistaEntrenamiento() {
           </div>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

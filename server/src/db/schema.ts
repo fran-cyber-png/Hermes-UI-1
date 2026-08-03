@@ -1335,3 +1335,8 @@ export {
   botEstadoConversacion,
   botMemoriaLead,
 } from "./bot.js";
+
+// La Corrida (#257): tabla propia a propósito — `bot_respuestas` es el corpus
+// con el que se mide al bot, y mezclarle lo que el bot HABRÍA dicho borra la
+// única diferencia que importa. Ver `db/corridas.ts`.
+export { corridas, corridaRespuestas } from "./corridas.js";

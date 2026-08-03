@@ -1204,8 +1204,18 @@ async function armarHechos(ctx: CtxPipeline): Promise<HechosParaDecidir> {
   // descartando TODOS los entrantes con motivo `desconectado`. El reenganche
   // necesita la misma pregunta, y dos copias de ésta ya se demostraron capaces
   // de divergir.
+  //
+  // Y por el MISMO motivo se exime a quien corre **sin transporte a propósito**
+  // (`ctx.gestor === null`): una Corrida o el chat de prueba no van a mandar
+  // nada, así que exigirles una línea conectada frena justo lo que se quería
+  // mirar. Sin esta rama, un Replay sobre 255 conversaciones devuelve 255
+  // «bloqueada · desconectado» y se lee como que el bot dejó de contestar.
+  // Ojo: `lineaConectada` pregunta por el gestor GLOBAL, así que en una Corrida
+  // ni siquiera estaría preguntando por el transporte que se le inyectó.
   const transporteConectado =
-    ctx.modoEfectivo !== "automatico" || lineaConectada(ctx.numeroPropio);
+    ctx.modoEfectivo !== "automatico" ||
+    ctx.gestor === null ||
+    lineaConectada(ctx.numeroPropio);
 
   // ── vendedora_activa: el freno que estaba muerto ────────────────────────
   const humanoEn = telefono

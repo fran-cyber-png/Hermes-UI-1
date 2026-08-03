@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
+import { desc, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
+import { corridas, corridaRespuestas } from "../db/corridas.js";
+import { correrCorrida } from "../corridas/correrCorrida.js";
 import { requiereVendedora } from "../auth/sesion.js";
 import { configDesdeEnv } from "../bot/config.js";
 import { crearClienteBedrock } from "../bot/clienteBedrock.js";
@@ -187,4 +190,90 @@ entrenamientoRouter.post("/probar", async (req, res) => {
       tokensSalida: ultima.tokensSalida,
     } satisfies RespuestaDePrueba,
   });
+});
+
+// ── LAS CORRIDAS (#257) ──────────────────────────────────────────────────────
+
+const CuerpoCorrida = z.object({
+  rotulo: z.string().trim().min(1).max(80),
+  numeroPropio: z.string().trim().min(6).max(20),
+  /**
+   * Cuántas conversaciones tomar. Con tope: cada una es una llamada al modelo y
+   * corren EN SERIE, así que un número grande es minutos de espera y plata. El
+   * default es chico a propósito — se sube a sabiendas, no por descuido.
+   */
+  limite: z.number().int().min(1).max(300).default(25),
+});
+
+/**
+ * Dispara una Corrida y **devuelve enseguida**.
+ *
+ * No espera a que termine porque no puede: 255 conversaciones en serie son
+ * minutos, y un request colgado ese tiempo lo corta cualquier proxy y deja a
+ * quien la lanzó sin saber si corrió. La Corrida nace `corriendo` y se consulta;
+ * ese estado existe en la tabla justamente para esto.
+ */
+entrenamientoRouter.post("/corridas", async (req, res) => {
+  const parsed = CuerpoCorrida.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, message: parsed.error.issues[0]?.message ?? "cuerpo inválido" });
+    return;
+  }
+
+  const cliente = crearClienteBedrock();
+  if (!cliente) {
+    res.status(503).json({
+      ok: false,
+      codigo: "falta_config",
+      message: "el modelo no está configurado en este entorno (faltan credenciales de AWS)",
+    });
+    return;
+  }
+
+  const { rotulo, numeroPropio, limite } = parsed.data;
+  const cfg = configDesdeEnv();
+  const quien = req.vendedoraId ?? "desconocida";
+
+  // Se lanza y no se espera. El `catch` es obligatorio: una promesa colgada sin
+  // manejar tumba el proceso en Node, y acá el proceso es el que atiende a las
+  // vendedoras.
+  correrCorrida(db, cfg, cliente, new Date(), {
+    rotulo,
+    lanzadaPor: quien,
+    numeroPropio,
+    limite,
+  }).catch((err) => {
+    console.error("[corrida] falló:", (err as Error).message);
+  });
+
+  res.status(202).json({ ok: true, lanzada: true, rotulo, limite });
+});
+
+/** Las Corridas, de la más nueva a la más vieja. */
+entrenamientoRouter.get("/corridas", async (_req, res) => {
+  const filas = await db.select().from(corridas).orderBy(desc(corridas.creadaEn)).limit(30);
+  res.json({ ok: true, corridas: filas });
+});
+
+/** El detalle de una Corrida: cada conversación con sus dos mitades del diff. */
+entrenamientoRouter.get("/corridas/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ ok: false, message: "id inválido" });
+    return;
+  }
+
+  const [corrida] = await db.select().from(corridas).where(eq(corridas.id, id));
+  if (!corrida) {
+    res.status(404).json({ ok: false, message: "esa corrida no existe" });
+    return;
+  }
+
+  const respuestas = await db
+    .select()
+    .from(corridaRespuestas)
+    .where(eq(corridaRespuestas.corridaId, id))
+    .orderBy(corridaRespuestas.id);
+
+  res.json({ ok: true, corrida, respuestas });
 });
