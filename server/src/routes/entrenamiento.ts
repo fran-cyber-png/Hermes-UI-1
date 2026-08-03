@@ -3,6 +3,7 @@ import { z } from "zod";
 import { desc, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { corridas, corridaRespuestas } from "../db/corridas.js";
+import { lecciones } from "../db/lecciones.js";
 import { correrCorrida } from "../corridas/correrCorrida.js";
 import { requiereVendedora } from "../auth/sesion.js";
 import { configDesdeEnv } from "../bot/config.js";
@@ -304,4 +305,87 @@ entrenamientoRouter.get("/corridas/:id", async (req, res) => {
       ahora: contarViolaciones(filas.map((f) => f.texto)),
     },
   });
+});
+
+// ── LAS LECCIONES (#259) ─────────────────────────────────────────────────────
+
+const CuerpoLeccion = z.object({
+  texto: z.string().trim().min(5).max(400),
+  motivo: z.string().trim().max(400).optional(),
+  /** `null`/ausente = vale para todas las líneas. */
+  numeroPropio: z.string().trim().min(6).max(20).nullish(),
+});
+
+/** Escribe una Lección. Nace en BORRADOR: el bot vivo no la ve. */
+entrenamientoRouter.post("/lecciones", async (req, res) => {
+  const parsed = CuerpoLeccion.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, message: parsed.error.issues[0]?.message ?? "cuerpo inválido" });
+    return;
+  }
+  const [fila] = await db
+    .insert(lecciones)
+    .values({
+      texto: parsed.data.texto,
+      motivo: parsed.data.motivo ?? null,
+      numeroPropio: parsed.data.numeroPropio ?? null,
+      estado: "borrador",
+      creadaPor: req.vendedoraId ?? "desconocida",
+    })
+    .returning();
+  res.status(201).json({ ok: true, leccion: fila });
+});
+
+entrenamientoRouter.get("/lecciones", async (_req, res) => {
+  const filas = await db.select().from(lecciones).orderBy(desc(lecciones.id));
+  res.json({ ok: true, lecciones: filas });
+});
+
+/**
+ * Publicar: el acto de hacerse cargo.
+ *
+ * Va por su propia ruta y no por un `PUT /lecciones/:id` con `{estado}` porque
+ * no es editar un campo — es la única acción de esta pantalla con consecuencia
+ * sobre personas reales. Queda firmada con quién y cuándo (ADR 0019).
+ */
+entrenamientoRouter.put("/lecciones/:id/publicar", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ ok: false, message: "id inválido" });
+    return;
+  }
+  const [fila] = await db
+    .update(lecciones)
+    .set({
+      estado: "publicada",
+      publicadaPor: req.vendedoraId ?? "desconocida",
+      publicadaEn: new Date(),
+    })
+    .where(eq(lecciones.id, id))
+    .returning();
+  if (!fila) {
+    res.status(404).json({ ok: false, message: "esa lección no existe" });
+    return;
+  }
+  console.warn(`[lecciones] publicada #${id} por ${req.vendedoraId ?? "desconocida"}`);
+  res.json({ ok: true, leccion: fila });
+});
+
+/** Retirar: deja de aplicarse, pero NO se borra — el historial explica el bot de ayer. */
+entrenamientoRouter.put("/lecciones/:id/retirar", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ ok: false, message: "id inválido" });
+    return;
+  }
+  const [fila] = await db
+    .update(lecciones)
+    .set({ estado: "retirada" })
+    .where(eq(lecciones.id, id))
+    .returning();
+  if (!fila) {
+    res.status(404).json({ ok: false, message: "esa lección no existe" });
+    return;
+  }
+  res.json({ ok: true, leccion: fila });
 });

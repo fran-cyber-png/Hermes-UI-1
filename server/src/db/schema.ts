@@ -1340,3 +1340,7 @@ export {
 // con el que se mide al bot, y mezclarle lo que el bot HABRÍA dicho borra la
 // única diferencia que importa. Ver `db/corridas.ts`.
 export { corridas, corridaRespuestas } from "./corridas.js";
+
+// Las Lecciones (#259): lo único que se le puede ENSEÑAR al bot en caliente.
+// El bot vivo lee solo las `publicada` — ver `db/lecciones.ts`.
+export { lecciones } from "./lecciones.js";

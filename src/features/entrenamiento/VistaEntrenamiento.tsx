@@ -4,6 +4,7 @@ import { Bot, CornerDownLeft, RotateCcw, ShieldCheck, User } from 'lucide-react'
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { useLineas } from '../canales/lineas';
 import { PanelCorridas } from './PanelCorridas';
+import { PanelLecciones } from './PanelLecciones';
 import {
   lecturaDeSilencio,
   motivoParaNoProbar,
@@ -41,7 +42,7 @@ export function VistaEntrenamiento() {
   // Dos formas de la misma pregunta: el chat explora lo que TODAVÍA no pasó, el
   // Replay mide sobre lo que ya pasó. Conmutadas por estado, sin router, como
   // todo en esta app (ADR 0002).
-  const [pestana, setPestana] = useState<'chat' | 'corridas'>('chat');
+  const [pestana, setPestana] = useState<'chat' | 'corridas' | 'lecciones'>('chat');
   const [turnos, setTurnos] = useState<TurnoDePrueba[]>([]);
   const [borrador, setBorrador] = useState('');
   const finRef = useRef<HTMLDivElement>(null);
@@ -148,6 +149,7 @@ export function VistaEntrenamiento() {
           [
             ['chat', 'Chat de prueba'],
             ['corridas', 'Corridas sobre conversaciones reales'],
+            ['lecciones', 'Lecciones'],
           ] as const
         ).map(([id, rotulo]) => (
           <button
@@ -166,6 +168,7 @@ export function VistaEntrenamiento() {
       </nav>
 
       {pestana === 'corridas' && <PanelCorridas linea={linea} />}
+      {pestana === 'lecciones' && <PanelLecciones />}
 
       {pestana === 'chat' && (
         <>

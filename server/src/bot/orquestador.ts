@@ -82,6 +82,7 @@ import {
   type DatosEstado,
 } from "./estados.js";
 import { ejecutarAcciones } from "./ejecutar.js";
+import { leccionesVigentes } from "./lecciones.js";
 
 // ── Tipos internos del pipeline ──────────────────────────────────────────
 
@@ -139,6 +140,13 @@ export interface DepsBot {
    * Mismo patrón de lector inyectado que `piezaAMandar.ts`.
    */
   leerHilo?: () => Promise<FilaHilo[]>;
+  /**
+   * De dónde salen las Lecciones. Por defecto, solo las PUBLICADAS.
+   *
+   * Una Corrida pasa las suyas para poder probar un borrador sin que el bot vivo
+   * lo lleve puesto — que es la garantía entera de #259.
+   */
+  leerLecciones?: () => Promise<string[]>;
 }
 
 /** Lo que el pipeline asienta de cada respuesta, sea a dónde sea. */
@@ -174,6 +182,10 @@ export interface CtxPipeline {
   asentarRespuesta: (fila: FilaRespuestaBot) => Promise<void>;
   /** De dónde sale el hilo de este turno. */
   leerHilo: () => Promise<FilaHilo[]>;
+  /** De dónde salen las Lecciones de este turno. */
+  leerLecciones: () => Promise<string[]>;
+  /** Lo que se cargó, para que el prompt y el agente usen LO MISMO. */
+  lecciones: string[];
 
   /** El hilo se lee UNA vez en el paso 2 y lo reusan los pasos 5 y 10. */
   hilo: FilaHilo[];
@@ -248,6 +260,9 @@ function ctxInicial(
       (async (fila) => {
         await base.insert(botRespuestas).values(fila);
       }),
+    lecciones: [],
+    leerLecciones:
+      deps?.leerLecciones ?? (async () => leccionesVigentes(base, numeroPropio)),
     leerHilo:
       deps?.leerHilo ??
       (async () => {
@@ -466,10 +481,15 @@ async function paso8Prompt(ctx: CtxPipeline): Promise<void> {
   const t = tramoDePipeline("prompt", ctx.traza);
   const hechosDisponibles: Hecho[] = [...CATALOGO_POR_DEFECTO];
 
+  // Las Lecciones se cargan UNA vez y las usan el prompt Y el agente: con dos
+  // lecturas, el modelo podría recibir un conjunto en el system y otro en el
+  // turno, y nadie lo notaría hasta que una lección no surtiera efecto.
+  ctx.lecciones = await ctx.leerLecciones().catch(() => []);
+
   ctx.systemPrompt = armarSystemPrompt({
     hechos: hechosDisponibles,
     piezas: ctx.piezas,
-    lecciones: [],
+    lecciones: ctx.lecciones,
   });
   t.cerrar("ok");
 }
@@ -513,7 +533,7 @@ async function paso10Agente(ctx: CtxPipeline): Promise<void> {
     contactoCtx: ctx.contactoCtx,
     hechos: [...CATALOGO_POR_DEFECTO],
     piezas: ctx.piezas,
-    lecciones: [],
+    lecciones: ctx.lecciones,
     modelo: ctx.cfg.modelo,
     familiasValidas,
     piezasYaEnviadas: ctx.piezasYaEnviadas,

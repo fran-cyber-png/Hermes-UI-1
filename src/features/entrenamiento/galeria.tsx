@@ -274,8 +274,62 @@ function GaleriaCorridas() {
   );
 }
 
+function GaleriaLecciones() {
+  return (
+    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+      <header className="border-b border-border px-6 py-4">
+        <h1 className="text-lg font-semibold">Entrenamiento del bot</h1>
+        <p className="text-sm text-muted-foreground">Lecciones</p>
+      </header>
+      <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="mx-auto flex max-w-3xl flex-col gap-5">
+          <div className="rounded-md border border-border p-4">
+            <h2 className="mb-1 text-sm font-medium">Enseñarle algo</h2>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Queda en borrador: el bot no la lleva puesta hasta que la publiques. Probala antes con una corrida.
+            </p>
+            <textarea rows={2} defaultValue="" placeholder="Cuando pregunten por la fecha de inicio, decí el día exacto y no «en agosto»." className="mb-2 w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm" />
+            <input defaultValue="" placeholder="Por qué: qué le viste hacer" className="mb-3 w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm" />
+            <button className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground opacity-40">Guardar como borrador</button>
+          </div>
+          <div className="rounded-md border border-border">
+            <div className="flex items-center gap-2 border-b border-border px-3 py-1.5 text-xs">
+              <span className="rounded border border-dashed border-border px-1.5 py-0.5">Borrador — el bot no la ve</span>
+              <span className="ml-auto text-muted-foreground">escrita por estephano</span>
+            </div>
+            <div className="px-3 py-2">
+              <p className="text-sm">Cuando pregunten si es presencial, aclara que es 100% virtual ANTES de ofrecer el temario.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Se le vio mandar el temario a alguien que preguntaba por la modalidad.</p>
+            </div>
+            <div className="flex items-center gap-2 border-t border-border px-3 py-2">
+              <span className="text-amber-600">⚠</span>
+              <span className="text-sm">El bot va a llevar esto puesto en todas sus conversaciones. ¿Seguro?</span>
+              <button className="ml-auto rounded-md bg-primary px-2.5 py-1 text-sm text-primary-foreground">Sí, publicar</button>
+              <button className="rounded-md border border-border px-2.5 py-1 text-sm">No</button>
+            </div>
+          </div>
+          <div className="rounded-md border border-border">
+            <div className="flex items-center gap-2 border-b border-border px-3 py-1.5 text-xs">
+              <span className="rounded bg-emerald-600/10 px-1.5 py-0.5 text-emerald-700">El bot la lleva puesta</span>
+              <span className="ml-auto text-muted-foreground">publicada por estephano</span>
+            </div>
+            <div className="px-3 py-2">
+              <p className="text-sm">No repitas el saludo si ya te presentaste en la conversación.</p>
+            </div>
+            <div className="flex items-center gap-2 border-t border-border px-3 py-2">
+              <button className="rounded-md border border-border px-2.5 py-1 text-sm">Retirar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Galeria() {
-  if (new URLSearchParams(location.search).get('corridas') === '1') {
+  const q = new URLSearchParams(location.search);
+  if (q.get('lecciones') === '1') return <GaleriaLecciones />;
+  if (q.get('corridas') === '1') {
     return <GaleriaCorridas />;
   }
   return (
