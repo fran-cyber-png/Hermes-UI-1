@@ -194,6 +194,47 @@ describe("armarContextoContacto", () => {
    * al prompt**. Es la forma de test que ya usa `plantillas.test.ts` para
    * prohibir «automático»/«bot»/«sistema»: se prohíbe la clase, no el caso.
    */
+  /**
+   * EL PROMPT PROHIBÍA EL VOSEO Y LO USABA EN SUS PROPIAS INSTRUCCIONES.
+   *
+   * El bloque `<rol>` exige "tú" y lista "tenés/podés/sos/decime" como formas
+   * PROHIBIDAS; tres reglas más abajo, el mismo texto decía «VOS SOS LA
+   * ASESORA», «si no tenés el dato: pedí un momento y decí que se lo traés
+   * vos», «Escalá igual», «que no controlás», «citá su contenido». El modelo
+   * recibía la regla y su contraejemplo en el mismo string.
+   *
+   * En las 171 respuestas medidas el voseo salió 0 veces, así que esto no
+   * estaba haciendo daño todavía — se arregla igual, porque una instrucción que
+   * se desmiente a sí misma es deuda que se cobra sola cuando cambia el modelo
+   * o sube la temperatura, y el costo de arreglarla ahora es un texto.
+   *
+   * El test descarta lo que está entre comillas: ahí es donde la regla CITA las
+   * formas prohibidas, y prohibirlas ahí sería prohibir el enunciado mismo.
+   *
+   * Compara PALABRAS COMPLETAS, no `\b...\b`: en JS los acentos no son `\w`, así
+   * que `/\bdecí\b/` matchea adentro de «decírselo» —que es correcto y está en la
+   * regla 7— y el test se acusaba solo.
+   */
+  it("el prompt no usa voseo fuera de la lista que lo prohíbe", () => {
+    const prompt = armarSystemPrompt({ hechos: [], piezas: [], lecciones: [] });
+    // Fuera lo entrecomillado: la lista de formas prohibidas y los ejemplos.
+    const sinCitas = prompt.replace(/"[^"]*"/g, "");
+    const palabras = new Set(
+      (sinCitas.toLowerCase().match(/[a-záéíóúüñ]+/g) ?? []),
+    );
+
+    const VOSEO = [
+      "tenés", "podés", "querés", "sabés", "traés", "controlás", "necesitás",
+      "sos", "vos", "citá", "pedí", "decí", "escalá", "mandá", "fijate",
+    ];
+    for (const forma of VOSEO) {
+      assert.ok(
+        !palabras.has(forma),
+        `el prompt usa voseo («${forma}») en una regla, y el bloque <rol> lo prohíbe`,
+      );
+    }
+  });
+
   it("fija la identidad contra el historial y no admite otro nombre de asesora", () => {
     const prompt = armarSystemPrompt({ hechos: [], piezas: [], lecciones: [] });
 
