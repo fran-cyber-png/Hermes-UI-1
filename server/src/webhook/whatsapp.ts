@@ -5,6 +5,7 @@ import { gestorWhatsappSiActivo } from "../whatsapp/wiring.js";
 import { TransporteCloudApi } from "../whatsapp/transporteCloudApi.js";
 import { notificarEntrante } from "../bot/ingesta.js";
 import { configDesdeEnv } from "../bot/config.js";
+import { claveDeLlamada } from "./llamadas.js";
 
 /**
  * Receptor de la WhatsApp Cloud API — la ACTIVACIÓN de la atribución de click-to-WhatsApp (docs/36 §2).
@@ -22,6 +23,9 @@ import { configDesdeEnv } from "../bot/config.js";
  * PREREQUISITOS que NO son código (los hace un operador en Meta Business — ver docs/36 / runbook):
  *  - una WhatsApp Business Account (WABA) + número en la Cloud API;
  *  - suscribir el webhook al campo `messages`, apuntando a `https://<backend-público>/webhook/whatsapp`;
+ *  - para LLAMADAS, suscribir además el campo `calls` — y ese orden no es opcional: Meta
+ *    RECHAZA habilitar el calling en el número mientras la app no esté suscrita (error 138018,
+ *    «technical pre-requisites are not met»). Primero el webhook, después el switch;
  *  - `WHATSAPP_VERIFY_TOKEN` en el `.env` del backend (el mismo que se pone en Meta);
  *  - el backend accesible por HTTPS público (hoy es tailnet — falta exponer esta ruta).
  *
@@ -31,6 +35,30 @@ import { configDesdeEnv } from "../bot/config.js";
  * el mensaje — así aparece como conversación real en Hermes, no solo en `events`.
  * Ver `whatsapp/transporteCloudApi.ts`.
  */
+
+/**
+ * Guarda el CRUDO de cada evento de llamada. No interpreta nada todavía: hoy no hay con qué
+ * atender una llamada (falta WebRTC o SIP), así que lo único honesto es dejar el rastro para
+ * poder mirarlo después. Cuando exista el audio, la lógica se cuelga de acá.
+ */
+async function guardarLlamadas(value: Record<string, any>): Promise<void> {
+  for (const c of value.calls ?? []) {
+    if (!c?.id) continue; // sin id no hay idempotencia posible; mejor perderlo que duplicarlo
+    console.log(
+      `[webhook whatsapp] llamada evento=${c.event ?? "?"} direccion=${c.direction ?? "?"} ` +
+        `de=${c.from ?? "?"} estado=${c.status ?? "-"} id=${c.id}`,
+    );
+    await db
+      .insert(events)
+      .values({
+        source: "meta_wa_call",
+        externalId: claveDeLlamada(c),
+        occurredAt: c.timestamp ? new Date(Number(c.timestamp) * 1000) : new Date(),
+        payload: { ...c, phoneNumberId: value.metadata?.phone_number_id ?? null },
+      })
+      .onConflictDoNothing({ target: [events.source, events.externalId] });
+  }
+}
 
 /** GET: verificación del webhook. Meta manda hub.challenge al suscribir; hay que devolverlo. */
 export function verificarWhatsapp(req: Request, res: Response): void {
@@ -57,6 +85,15 @@ export async function recibirWhatsapp(req: Request, res: Response): Promise<void
   try {
     for (const entry of body?.entry ?? []) {
       for (const change of entry?.changes ?? []) {
+        // LAS LLAMADAS VIENEN EN SU PROPIO CAMPO (`calls`), y hasta el 3-ago-2026 este bucle
+        // las tiraba junto con todo lo que no fuera `messages`: una llamada entrante no dejaba
+        // rastro en NINGÚN lado —ni en `events`, ni en la cola, ni en un log—, así que era
+        // indistinguible de que Meta no la hubiera mandado. Guardar el crudo es lo primero.
+        if (change?.field === "calls") {
+          await guardarLlamadas(change.value ?? {});
+          continue;
+        }
+
         if (change?.field !== "messages") continue;
         const value = change.value ?? {};
 
@@ -82,6 +119,10 @@ export async function recibirWhatsapp(req: Request, res: Response): Promise<void
                 phoneNumberId: value.metadata?.phone_number_id ?? null,
                 // El oro de la atribución: source_id = ad_id del anuncio, + ctwa_clid del click.
                 referral: m.referral ?? null,
+                // La RESPUESTA al pedido de permiso de llamada llega acá dentro, no en `calls`:
+                // es un mensaje interactivo del usuario. Sin esto, un «sí, llamame» se guardaba
+                // como una fila con `texto: null` — indistinguible de un mensaje vacío.
+                interactive: m.interactive ?? null,
               },
             })
             .onConflictDoNothing({ target: [events.source, events.externalId] });
