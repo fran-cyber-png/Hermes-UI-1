@@ -5,6 +5,7 @@ import { api, ErrorApi } from '../../lib/datos/cliente';
 import { usePopover } from '../../lib/teclado/usePopover';
 import type { Conversacion } from '../canales/conversaciones';
 import { opcionesRapidas, useAgenda } from '../agenda/agenda';
+import { PasarConversacion } from '../reparto/PasarConversacion';
 import { BotonLlamar } from './BotonLlamar';
 import { Intereses } from './Intereses';
 import { MenuHerramientas } from './MenuHerramientas';
@@ -326,7 +327,14 @@ function AgendarRapido({ conversacion }: { conversacion: Conversacion }) {
   );
 }
 
-export function BarraGestion({ conversacion }: { conversacion: Conversacion }) {
+export function BarraGestion({
+  conversacion,
+  miVendedora,
+}: {
+  conversacion: Conversacion;
+  /** Quién está mirando — lo necesita el reparto para decir «Vos» (`PasarConversacion`). */
+  miVendedora?: string | null;
+}) {
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [confirmaPerdido, setConfirmaPerdido] = useState(false);
@@ -441,6 +449,11 @@ export function BarraGestion({ conversacion }: { conversacion: Conversacion }) {
         <Intereses clave={conversacion.clave} compacto resaltado={guiaIntereses} senalAbrir={senalIntereses} />
 
         <span className="ml-auto flex items-center gap-1.5">
+          {/* DE QUIÉN ES ESTA CONVERSACIÓN, y cómo pasarla. Va acá y no en el
+              menú ▼ de la fila porque no es una marca personal: es una decisión
+              del equipo, con rastro de quién la tomó. Se dibuja solo si la línea
+              tiene reparto configurado (`PasarConversacion`). */}
+          <PasarConversacion conversacion={conversacion} miVendedora={miVendedora} />
           {conversacion.canal === 'whatsapp' && conversacion.persona_id && (
             <BotonLlamar telefono={conversacion.persona_id} />
           )}

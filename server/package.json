@@ -31,6 +31,7 @@
     "plantillas:proponer": "tsx src/scripts/proponerPlantillas.ts",
     "cursos:gaps": "tsx src/scripts/gapsDeCurso.ts",
     "hechos:sembrar": "tsx src/scripts/sembrarHechos.ts",
+    "reparto:rueda": "tsx src/scripts/repartoRueda.ts",
     "wa:vincular": "tsx src/whatsapp/vincular.ts",
     "wa:cloud-api:probar": "tsx src/scripts/probarCloudApi.ts",
     "wa:permiso-llamada": "tsx src/scripts/pedirPermisoLlamada.ts",

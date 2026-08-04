@@ -557,6 +557,7 @@ export default function App() {
             <ConversacionActiva
               conversacion={abierta}
               onCerrar={() => setAbierta(null)}
+              miVendedora={vendedora.id}
               sugerencia={
                 revision.activo && revision.actual && revision.actual.clave === abierta?.clave
                   ? {

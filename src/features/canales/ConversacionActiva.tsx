@@ -23,9 +23,18 @@ export function ConversacionActiva({
   conversacion,
   onCerrar,
   sugerencia,
+  miVendedora,
 }: {
   conversacion: Conversacion | null;
   onCerrar: () => void;
+  /**
+   * Quién está mirando. Baja hasta la `BarraGestion` para el reparto: sin esto,
+   * «pasar la conversación» no puede decir «Vos» ni marcar cuál de los destinos
+   * es quien está operando. Viaja como prop y no llamando a `useSesion()` acá
+   * abajo a propósito — ese hook pide `/api/auth/yo` al montar, así que una
+   * segunda llamada sería un request más por cada conversación que se abre.
+   */
+  miVendedora?: string | null;
   /**
    * MODO REVISIÓN (ADR 0018): la auto-respuesta que Hermes preparó para ESTA
    * conversación, para que el composer la muestre como borrador aprobable.
@@ -65,7 +74,7 @@ export function ConversacionActiva({
   // agendar — arriba de CUALQUIER conversación, sin soltar el hilo.
   const conBarra = (contenido: React.ReactNode) => (
     <div className="flex h-full min-h-0 flex-col gap-2">
-      <BarraGestion conversacion={conversacion} />
+      <BarraGestion conversacion={conversacion} miVendedora={miVendedora} />
       <div className="min-h-0 flex-1">{contenido}</div>
     </div>
   );
