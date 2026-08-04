@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Conversacion } from '../canales/conversaciones';
 import { marcaDeCliente } from '../canales/cliente';
 import { useFicha } from '../cerberus/FichaContacto';
@@ -12,6 +13,7 @@ import { EncabezadoTimeline } from './EncabezadoTimeline';
 import { EventoLinea } from './EventoLinea';
 import { PieAccionTimeline } from './PieAccionTimeline';
 import { ZonaPendientes } from './ZonaPendientes';
+import { VentaDesdeElPanel } from '../venta/VentaDesdeElPanel';
 
 function fichaDeCliente(f: Ficha | undefined): Extract<Ficha, { estado: 'cliente' }> | null {
   return f?.estado === 'cliente' ? f : null;
@@ -27,6 +29,11 @@ function formatearTelefono(raw: string): string {
 }
 
 export function PanelDerecho({ conversacion }: { conversacion: Conversacion }) {
+  /**
+   * El registro de la venta. Vive acá y no adentro del pie porque el pie es
+   * presentación: decide cómo se ve el botón, no qué pasa al tocarlo.
+   */
+  const [vendiendo, setVendiendo] = useState(false);
   const esWa = conversacion.canal === 'whatsapp';
   const telefono = conversacion.persona_id;
 
@@ -117,7 +124,13 @@ export function PanelDerecho({ conversacion }: { conversacion: Conversacion }) {
           </ol>
         </div>
       </div>
-      <PieAccionTimeline estado={estado} />
+      {/* ⚠️ EL `onVender` ES LO QUE FALTABA. Sin él, `PieAccionTimeline` no
+          dibuja nada —por diseño: nunca un no-op— y el botón de registrar la
+          venta era invisible en TODOS los estados, no solo en algunos. */}
+      <PieAccionTimeline estado={estado} onVender={() => setVendiendo(true)} />
+      {vendiendo && (
+        <VentaDesdeElPanel conversacion={conversacion} onCerrar={() => setVendiendo(false)} />
+      )}
     </div>
   );
 }

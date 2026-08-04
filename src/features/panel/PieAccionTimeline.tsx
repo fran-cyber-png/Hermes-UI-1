@@ -1,74 +1,58 @@
-import { Loader2, ShoppingCart, Sparkles, type LucideIcon } from 'lucide-react';
-import type { EstadoContacto, TonoContacto } from './estadoContacto';
+import { ShoppingCart } from 'lucide-react';
+import type { EstadoContacto } from './estadoContacto';
 
 interface PropsPieAccion {
   estado: EstadoContacto;
-  onAccion?: () => void;
-}
-
-const TONO_BOTON: Partial<Record<TonoContacto, { label: string; icono: LucideIcon }>> = {
-  cliente: { label: 'Registrar venta', icono: ShoppingCart },
-  nuevo: { label: 'Marcar como interesado', icono: Sparkles },
-};
-
-const MENSAJE_TONO: Record<string, string> = {
-  cargando: 'Esperando la ficha de Cerberus…',
-  'sin-saber': 'Sin la ficha no se puede registrar una venta',
-};
-
-function BotonPrimario({
-  label,
-  icono,
-  cargando,
-  onClick,
-}: {
-  label: string;
-  icono: LucideIcon;
-  cargando?: boolean;
-  onClick: () => void;
-}) {
-  const Icono = icono;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={cargando}
-      className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-primary-foreground transition-[background-color,transform] hover:bg-primary-hover active:scale-[0.99] disabled:opacity-50"
-    >
-      {cargando ? (
-        <Loader2 size={15} aria-hidden className="animate-spin" />
-      ) : (
-        <Icono size={15} aria-hidden />
-      )}
-      {label}
-    </button>
-  );
+  /** Abre el registro de la venta. Sin esto no hay botón — nunca un no-op (MVP-7). */
+  onVender?: () => void;
 }
 
 /**
- * Un solo botón con estados, no markup duplicado (V2-6). Sin handler no hay
- * botón — nunca un no-op (MVP-7): el mensaje ocupa la misma h-10 centrada
- * que el botón, así el pie no cambia de altura.
+ * EL PIE DEL PANEL — «Registrar venta», y **siempre está**.
+ *
+ * ══ QUÉ ESTABA MAL ═══════════════════════════════════════════════════════
+ *
+ * Este pie exigía un handler para dibujar el botón (bien: nunca un no-op) y
+ * `PanelDerecho` lo montaba **sin pasarle ninguno**. La guarda hacía justo lo
+ * que promete, así que el botón **no podía aparecer en ningún estado** — ni
+ * siquiera para un cliente. Nadie llegó a cablearlo cuando el rediseño del
+ * timeline reemplazó a `AccionesContacto`, y el `CLAUDE.md` siguió diciendo que
+ * estaba «al pie y siempre visible».
+ *
+ * ══ Y POR QUÉ AHORA NO DEPENDE DEL ESTADO ════════════════════════════════
+ *
+ * Antes el botón salía solo con la ficha en `cliente`, y para un lead nuevo
+ * decía «Marcar como interesado». Eso invierte el orden real de los hechos: una
+ * venta puede caer en CUALQUIER conversación, y el estado de la ficha es
+ * justamente lo que la vendedora no puede adivinar antes de necesitarlo. Si el
+ * botón aparece y desaparece según un dato que llega de Cerberus con hasta 12
+ * segundos de retraso, deja de ser un lugar donde la mano va sola.
+ *
+ * Decisión del dueño (4-ago-2026): *«que siempre esté ahí el botón para
+ * comprar»*. Lo que cambia según el estado es **a dónde lleva**
+ * (`VentaDesdeElPanel`), no si existe.
+ *
+ * Clavado y no al final del scroll por la lección de ADR 0017: a 1280×720 con
+ * dos respuestas cargadas, el reparto flex lo empujaba fuera del panel.
  */
-export function PieAccionTimeline({ estado, onAccion }: PropsPieAccion) {
-  const boton = TONO_BOTON[estado.tono];
-
-  if (boton && onAccion) {
-    return (
-      <div className="shrink-0 border-t border-border px-4 py-3">
-        <BotonPrimario label={boton.label} icono={boton.icono} onClick={onAccion} />
-      </div>
-    );
-  }
-
-  const mensaje = MENSAJE_TONO[estado.tono] ?? null;
-  if (!mensaje) return null;
+export function PieAccionTimeline({ estado, onVender }: PropsPieAccion) {
+  if (!onVender) return null;
 
   return (
     <div className="shrink-0 border-t border-border px-4 py-3">
-      <p className="flex h-10 items-center justify-center text-center text-[11px] text-muted-foreground">
-        {mensaje}
-      </p>
+      <button
+        type="button"
+        onClick={onVender}
+        title={
+          estado.tono === 'cliente'
+            ? 'Ya es cliente en Cerberus: abre el formulario con el precio cargado'
+            : 'Registrar una venta de esta persona'
+        }
+        className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-primary-foreground transition-[background-color,transform] hover:bg-primary-hover active:scale-[0.99]"
+      >
+        <ShoppingCart size={15} aria-hidden />
+        Registrar venta
+      </button>
     </div>
   );
 }

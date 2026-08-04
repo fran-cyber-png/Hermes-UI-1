@@ -5,6 +5,7 @@ import '../../index.css';
 import { queryClient } from '../../lib/datos/cliente';
 import { BarraFiltros } from '../canales/BarraFiltros';
 import { FilaConversacion } from '../canales/FilaConversacion';
+import { PanelDerecho } from '../panel/PanelDerecho';
 import type { Conversacion } from '../canales/conversaciones';
 
 /**
@@ -141,6 +142,22 @@ function Galeria() {
             />
           </div>
 
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="text-sm font-bold text-foreground">
+            El pie del panel: «Registrar venta», y siempre está
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            El pie exigía un handler para dibujar el botón —bien: nunca un no-op— y{' '}
+            <code>PanelDerecho</code> lo montaba sin pasarle ninguno, así que el botón{' '}
+            <b>no podía aparecer en ningún estado</b>. Acá va el panel REAL, a 360×720 (el tamaño
+            donde el reparto flex ya lo había empujado fuera una vez, ADR 0017). Sin server detrás:
+            la ficha falla, y el botón está igual.
+          </p>
+          <div className="h-[45rem] w-[22.5rem]">
+            <PanelDerecho conversacion={FILAS[0]!.c} />
+          </div>
         </section>
 
         <section className="space-y-4">
