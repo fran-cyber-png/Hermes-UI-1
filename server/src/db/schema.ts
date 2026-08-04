@@ -1375,3 +1375,8 @@ export { lecciones } from "./lecciones.js";
 // El reparto de leads: quién está en la rueda y de quién es cada conversación.
 // Es un FILTRO, no un permiso — ver `db/reparto.ts`.
 export { repartoRueda, conversacionAsignada } from "./reparto.js";
+
+// El reparto del PADRÓN (los 72.923 contactos de icarus, que no escribieron
+// nunca). A diferencia del de arriba, acá el recorte SÍ es una frontera: la
+// vendedora ve lo habilitado y nada más — ver `db/padron.ts` y `padron/supervisor.ts`.
+export { contactoHabilitado } from "./padron.js";

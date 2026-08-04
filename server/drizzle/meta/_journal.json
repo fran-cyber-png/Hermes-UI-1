@@ -120,6 +120,13 @@
       "when": 1786446768155,
       "tag": "0016_lush_toad",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1786533168155,
+      "tag": "0017_abandoned_tyrannus",
+      "breakpoints": true
     }
   ]
 }

@@ -14,6 +14,7 @@ import { decisionsRouter } from "./routes/decisions.js";
 import { interactionsRouter } from "./routes/interactions.js";
 import { conversacionesRouter } from "./routes/conversaciones.js";
 import { repartoRouter } from "./routes/reparto.js";
+import { padronRouter } from "./routes/padron.js";
 import { authRouter } from "./routes/auth.js";
 import { contactosRouter } from "./routes/contactos.js";
 import { agendaRouter } from "./routes/agenda.js";
@@ -108,6 +109,7 @@ app.use("/api/venta", ventaRouter); // el formulario de venta dentro de Hermes
 app.use("/api/interactions", interactionsRouter);
 app.use("/api/conversaciones", conversacionesRouter); // la cola unificada: una fila por conversación
 app.use("/api/reparto", repartoRouter); // de quién es cada conversación cuando 7 comparten una línea
+app.use("/api/padron", padronRouter); // los 72.923 contactos de icarus: el supervisor reparte, la vendedora ve lo suyo
 app.use("/api/responder", responderRouter);
 app.use("/api/persona", personaRouter);
 app.use("/api/gente", genteRouter); // la persona canónica del grafo: su 360 y la búsqueda

@@ -1,0 +1,252 @@
+import { Router } from "express";
+import { z } from "zod";
+import { db } from "../db/client.js";
+import { esTablaAusente } from "../cola/estadoSql.js";
+import { esDestinoValido } from "../reparto/destino.js";
+import { icarus, IcarusNoConfigurado } from "../padron/conexion.js";
+import { consultarPadron } from "../padron/consultarPadron.js";
+import { destinosDelPadron } from "../padron/destinos.js";
+import { filtrosSchema, POR_PAGINA_MAX } from "../padron/filtros.js";
+import {
+  cargaPorVendedora,
+  habilitar,
+  leerHabilitados,
+  leerHabilitadosDe,
+  LOTE_MAX,
+  quitar,
+} from "../padron/habilitados.js";
+import { esSupervisor, supervisoresConfigurados } from "../padron/supervisor.js";
+
+/**
+ * EL PADRÓN DE CONTACTOS — los 72.923 de icarus que NUNCA escribieron, y quién
+ * puede verlos.
+ *
+ * ══ ACÁ EL RECORTE SÍ ES UNA FRONTERA ════════════════════════════════════
+ *
+ * Todo el resto de los recortes de Hermes son filtros y están documentados como
+ * tales: «Las mías» (`cola/lineas.ts`), «Míos» (`cola/asignadaSql.ts`). La cola
+ * es una pantalla compartida y presentar un filtro como frontera sería una
+ * frontera imaginaria — peor que ninguna, porque se le cree.
+ *
+ * Esto es lo contrario, por decisión del dueño (4-ago-2026): **la vendedora
+ * normal no ve el padrón**, ve lo que el supervisor le habilitó. Por eso la
+ * decisión vive en el SERVER, en esta ruta, y no en un `if` de la pantalla: un
+ * recorte hecho en el navegador ya habría mandado las 72.923 filas —con nombre,
+ * teléfono, correo y DNI— al cliente. La ruta no las sirve.
+ *
+ * Lo que esto NO cambia: el resto de Hermes sigue sin tener modelo de permisos.
+ * Una vendedora sigue pudiendo abrir cualquier conversación. La frontera es de
+ * ESTA pantalla, sobre datos que no llegaron por una conversación.
+ *
+ * ══ DOS BASES, SIN JOIN ══════════════════════════════════════════════════
+ *
+ * Los datos son de icarus (read-only, no es nuestra) y el reparto es de Hermes.
+ * No hay JOIN posible: se leen los ids de una y se piden esas filas a la otra.
+ * El precio está escrito en `db/padron.ts` y en `consultarPadron.ts`.
+ */
+export const padronRouter = Router();
+
+/**
+ * Un lote de una vez.
+ *
+ * 500 y no «los que haya» porque un reparto es una acción humana que alguien
+ * tiene que poder revisar: la regla dura #7 pide la lista de destinatarios a la
+ * vista antes de cualquier envío masivo, y un botón que asigna 72.923 contactos
+ * de un clic hace imposible esa revisión aguas abajo. Repartir de a tandas es
+ * más trabajo a propósito.
+ */
+const cuerpoHabilitar = z.object({
+  contactoIds: z.array(z.number().int().positive()).min(1).max(LOTE_MAX),
+  vendedoraId: z.string().trim().min(1).max(200),
+});
+
+const cuerpoQuitar = z.object({
+  contactoIds: z.array(z.number().int().positive()).min(1).max(LOTE_MAX),
+});
+
+/**
+ * Sin la migración aplicada, «no hay nada repartido» y «falta desplegar» se ven
+ * igual en pantalla y no son lo mismo. Se dicen distinto — mismo criterio que el
+ * chip de la auto-respuesta y que `routes/reparto.ts`.
+ */
+function sinMigracion(res: Parameters<Parameters<Router["get"]>[1]>[1]): void {
+  res.status(503).json({
+    ok: false,
+    motivo: "padron_no_migrado",
+    message: "falta la migración del padrón (`contacto_habilitado`)",
+  });
+}
+
+/** Un fallo de icarus nunca se disfraza de «no hay contactos» (la cicatriz de ADR 0023). */
+function fallaDeIcarus(res: Parameters<Parameters<Router["get"]>[1]>[1], e: unknown): void {
+  if (e instanceof IcarusNoConfigurado) {
+    res.status(503).json({ ok: false, motivo: "falta_config", message: e.message });
+    return;
+  }
+  console.error("[padron] icarus no respondió:", e);
+  res.status(503).json({
+    ok: false,
+    motivo: "padron_indisponible",
+    message: "no se pudo leer el padrón de contactos. NO es que no haya: no se pudo preguntar.",
+  });
+}
+
+/**
+ * LA LISTA. Dos pantallas distintas detrás de la misma ruta:
+ *
+ *   · supervisor  → el padrón entero, con filtros, para armar lotes.
+ *   · vendedora   → SOLO lo que le habilitaron. Sin filtros de universo: no hay
+ *                   universo que recortar, hay una lista que es suya.
+ *
+ * Quién es quién lo decide el TOKEN (`req.vendedoraId`), nunca un parámetro:
+ * un `?supervisor=1` sería la frontera entera a un clic de curl.
+ */
+padronRouter.get("/contactos", async (req, res) => {
+  const yo = req.vendedoraId ?? "";
+  const mando = esSupervisor(yo, process.env);
+
+  const parseo = filtrosSchema.safeParse(req.query);
+  if (!parseo.success) {
+    res.status(400).json({
+      ok: false,
+      message: "filtros inválidos",
+      detalle: parseo.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
+    });
+    return;
+  }
+  const filtros = parseo.data;
+
+  try {
+    // Los habilitados salen de la base de Hermes. Si la tabla no está migrada,
+    // el supervisor puede seguir MIRANDO el padrón (no hay reparto que cruzar) y
+    // la vendedora no puede ver nada — que es la respuesta correcta, dicha.
+    let habilitados: number[] = [];
+    let mios: number[] = [];
+    try {
+      habilitados = mando && filtros.sinHabilitar ? await leerHabilitados(db) : [];
+      mios = mando ? [] : await leerHabilitadosDe(db, yo);
+    } catch (e) {
+      if (!esTablaAusente(e)) throw e;
+      if (!mando) {
+        sinMigracion(res);
+        return;
+      }
+    }
+
+    // `soloEstos: null` es «sin recorte» y es la rama del supervisor. Para la
+    // vendedora SIEMPRE es una lista —vacía incluida—, así un bug que la dejara
+    // en `null` no abre el padrón: sería `undefined`, y el tipo no lo permite.
+    const soloEstos = mando ? null : mios;
+
+    const pagina = await consultarPadron(icarus(), { filtros, habilitados, soloEstos });
+
+    res.json({
+      ...pagina,
+      supervisor: mando,
+      porPagina: filtros.porPagina,
+      paginaActual: filtros.pagina,
+      /**
+       * Sin supervisores configurados NADIE ve el padrón, y eso hay que decirlo:
+       * una lista vacía se lee «se perdieron los contactos» o «no me habilitaron
+       * nada», y las dos son afirmaciones falsas. Mismo criterio que
+       * `sinLineasPropias` y `sinPadron`.
+       */
+      sinSupervisores: supervisoresConfigurados(process.env).length === 0,
+    });
+  } catch (e) {
+    fallaDeIcarus(res, e);
+  }
+});
+
+/**
+ * CÓMO VA EL REPARTO — a quién se le puede habilitar y cuánto tiene cada una.
+ *
+ * Solo el supervisor: la carga de las demás no es asunto de la mesa de trabajo, y
+ * la lista de destinos es justamente lo que hace falta para repartir.
+ */
+padronRouter.get("/reparto", async (req, res) => {
+  if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
+    res.status(403).json({ ok: false, motivo: "no_es_supervisor", message: "no tenés el padrón" });
+    return;
+  }
+  try {
+    const [destinos, carga] = await Promise.all([destinosDelPadron(db), cargaPorVendedora(db)]);
+    res.json({ destinos, carga });
+  } catch (e) {
+    if (esTablaAusente(e)) {
+      sinMigracion(res);
+      return;
+    }
+    throw e;
+  }
+});
+
+/** REPARTIR un lote. Solo el supervisor, y el destino se VERIFICA. */
+padronRouter.post("/habilitar", async (req, res) => {
+  const yo = req.vendedoraId ?? "";
+  if (!esSupervisor(yo, process.env)) {
+    res.status(403).json({ ok: false, motivo: "no_es_supervisor", message: "no repartís el padrón" });
+    return;
+  }
+
+  const parseo = cuerpoHabilitar.safeParse(req.body);
+  if (!parseo.success) {
+    res.status(400).json({
+      ok: false,
+      message: `se esperan \`contactoIds\` (1 a ${LOTE_MAX}) y \`vendedoraId\``,
+      detalle: parseo.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
+    });
+    return;
+  }
+  const { contactoIds, vendedoraId } = parseo.data;
+
+  try {
+    // El destino se verifica contra lo que Hermes ya conoce. Un dedazo acá no da
+    // error: escribe una fila válida y los contactos no le aparecen a NADIE.
+    const destinos = await destinosDelPadron(db);
+    if (!esDestinoValido(vendedoraId, destinos)) {
+      res.status(409).json({
+        ok: false,
+        motivo: "destino_desconocido",
+        message: `no conozco a «${vendedoraId}». Se le puede habilitar a: ${destinos.join(", ") || "(nadie todavía)"}`,
+        destinos,
+      });
+      return;
+    }
+
+    const habilitados = await habilitar(db, { contactoIds, vendedoraId, por: yo });
+    res.json({ ok: true, habilitados, vendedoraId });
+  } catch (e) {
+    if (esTablaAusente(e)) {
+      sinMigracion(res);
+      return;
+    }
+    throw e;
+  }
+});
+
+/** DEVOLVER contactos al pozo común. */
+padronRouter.post("/quitar", async (req, res) => {
+  if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
+    res.status(403).json({ ok: false, motivo: "no_es_supervisor", message: "no repartís el padrón" });
+    return;
+  }
+  const parseo = cuerpoQuitar.safeParse(req.body);
+  if (!parseo.success) {
+    res.status(400).json({ ok: false, message: `se esperan \`contactoIds\` (1 a ${LOTE_MAX})` });
+    return;
+  }
+  try {
+    const quitados = await quitar(db, parseo.data.contactoIds);
+    res.json({ ok: true, quitados });
+  } catch (e) {
+    if (esTablaAusente(e)) {
+      sinMigracion(res);
+      return;
+    }
+    throw e;
+  }
+});
+
+/** El tope de página, publicado para que el front no lo adivine. */
+export const PADRON_POR_PAGINA_MAX = POR_PAGINA_MAX;
