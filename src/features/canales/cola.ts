@@ -103,6 +103,15 @@ export const KEY_LINEA = 'hermes.colaLinea';
  * chats de sus seis compañeros.
  */
 export const KEY_MIOS = 'hermes.colaMios';
+/**
+ * ¿Ya se decidió dónde abre la cola de esta persona? (`arranque.ts`).
+ *
+ * Es una key aparte y no «¿hay algo en KEY_LINEA?» porque **elegir «Todas» es una
+ * elección**, y en `KEY_LINEA` se guarda como `''` — indistinguible de no haber
+ * elegido nunca. Sin esto, quien elige ver todo a propósito se lo encuentra
+ * pisado en cada arranque.
+ */
+export const KEY_ARRANQUE = 'hermes.colaArranque';
 
 /**
  * «LAS MÍAS» — el valor reservado del MISMO eje de línea, no un estado aparte.

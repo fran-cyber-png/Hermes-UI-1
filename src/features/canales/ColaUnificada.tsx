@@ -15,6 +15,7 @@ import {
   KEY_TAB,
   KEY_LINEA,
   KEY_MIOS,
+  KEY_ARRANQUE,
   LINEA_MIAS,
   TABS,
   filtrosActivos,
@@ -23,6 +24,7 @@ import {
   type FiltroSec,
   type Tab,
 } from './cola';
+import { arranqueDeLaCola } from './arranque';
 import { BarraFiltros } from './BarraFiltros';
 import { useConversaciones, useEstadoConversacion, type Conversacion } from './conversaciones';
 import { useLineas } from './lineas';
@@ -106,6 +108,13 @@ export function ColaUnificada({
    * desde que siete personas comparten un número, la línea ya no separa a nadie.
    */
   const [miosGuardado, setMios] = useLocalStorage<boolean>(KEY_MIOS, false);
+  /**
+   * ¿Ya se decidió dónde abre su cola? (`arranque.ts`). Key propia: elegir
+   * «Todas» ES una elección y se guarda como `''` en `KEY_LINEA`, o sea
+   * indistinguible de no haber elegido — sin esto, a quien quiere ver todo se lo
+   * pisaríamos en cada arranque.
+   */
+  const [yaEligio, setYaEligio] = useLocalStorage<boolean>(KEY_ARRANQUE, false);
   // Filtros secundarios y modo Listas: efímeros (la sesión arranca en limpio).
   const [filtroSec, setFiltroSec] = useState<FiltroSec>('');
   const [modoListas, setModoListas] = useState(false);
@@ -176,6 +185,38 @@ export function ColaUnificada({
    * no te tocó ninguna— y se sale de ella con un click, desde donde estás.
    */
   const mios = miosGuardado && !sinAsignacion;
+
+  /**
+   * DÓNDE ABRE LA COLA LA PRIMERA VEZ (`arranque.ts`, puro y con tests).
+   *
+   * Con cinco personas compartiendo una línea, el default de siempre —«Todas»—
+   * le muestra a cada una las conversaciones de las otras tres líneas el día uno.
+   * Acá se elige mejor, **una sola vez y solo si nunca eligió**: sus asignados si
+   * tiene, su línea si no, y nada si no hay nada mejor.
+   *
+   * Corre en un efecto y no en el render porque necesita la respuesta del server
+   * (`conteosFiltro.mios`), que llega después del primer pintado. Y se registra en
+   * su propia key: elegir «Todas» es una elección, y en `KEY_LINEA` se guarda
+   * como `''` — igual que no haber elegido nunca.
+   *
+   * ⚠️ **Es un default, no una pared.** Salir cuesta un click y toda la API sigue
+   * sirviendo cualquier conversación a cualquier token: Hermes no tiene modelo de
+   * permisos y esto no lo inventa.
+   */
+  useEffect(() => {
+    if (yaEligio || cargando) return;
+    const elegido = arranqueDeLaCola({
+      yaEligio,
+      asignadas: conteosFiltro?.mios ?? 0,
+      tieneLineasPropias: hayMias,
+    });
+    // `null` = no hay nada mejor que «Todas». NO se registra: gastaría la única
+    // oportunidad de ayudarla el día que sí tenga línea o leads asignados.
+    if (!elegido) return;
+    setMios(elegido.mios);
+    setLinea(elegido.linea);
+    setYaEligio(true);
+  }, [yaEligio, cargando, conteosFiltro?.mios, hayMias, setMios, setLinea, setYaEligio]);
   // Al abrir la app la cola viene del caché persistido: hasta que llegue lo
   // fresco hay que decir de cuándo es lo que se está mirando.
   const deAntes = useSelloDeViejo(traidoEn);
