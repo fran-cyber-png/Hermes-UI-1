@@ -14,6 +14,7 @@ import type { DatosDashboard } from '../dashboard/dashboard';
 import {
   KEY_TAB,
   KEY_LINEA,
+  KEY_MIOS,
   LINEA_MIAS,
   TABS,
   filtrosActivos,
@@ -94,6 +95,17 @@ export function ColaUnificada({
       : lineas.some((l) => l.numero === lineaGuardada)
         ? lineaGuardada
         : '';
+  /**
+   * «MÍOS» — el recorte del REPARTO (4-ago-2026), y **persiste como la línea**.
+   *
+   * Por lo mismo que persiste la línea: quien atiende sus leads asignados abre la
+   * app para trabajar SU cola, y hacérselo elegir cada mañana es pedirle que se
+   * acuerde de un filtro para no leer los chats de sus seis compañeros.
+   *
+   * ⚠️ Es OTRO eje que `LINEA_MIAS`. Aquél acota por línea, éste por conversación:
+   * desde que siete personas comparten un número, la línea ya no separa a nadie.
+   */
+  const [miosGuardado, setMios] = useLocalStorage<boolean>(KEY_MIOS, false);
   // Filtros secundarios y modo Listas: efímeros (la sesión arranca en limpio).
   const [filtroSec, setFiltroSec] = useState<FiltroSec>('');
   const [modoListas, setModoListas] = useState(false);
@@ -142,7 +154,28 @@ export function ColaUnificada({
     actualizando,
     sinEstado,
     sinLineasPropias,
-  } = useConversaciones({ tab, filtroSec, categoria: categoriaActiva?.nombre ?? null, linea });
+    sinAsignacion,
+  } = useConversaciones({
+    tab,
+    filtroSec,
+    categoria: categoriaActiva?.nombre ?? null,
+    linea,
+    mios: miosGuardado,
+  });
+  /**
+   * Sin la migración del reparto, «Míos» se APAGA en la pantalla.
+   *
+   * El server, en ese estado, sirve la cola entera y lo dice (`sinAsignacion`) en
+   * vez de devolver cero filas — recortar por una columna que no existe se leería
+   * como «no te asignaron nada». Acá se completa la mitad honesta: el chip no se
+   * dibuja apretado sobre una cola que no está recortada. Es la misma guarda que
+   * hace caer la línea guardada cuando ese número dejó de correr.
+   *
+   * Lo que NO se apaga solo es «Míos» con cero asignadas: ahí el chip queda
+   * encendido, dice «Míos 0» y lleva su ✕. Esa cola vacía es la verdad —todavía
+   * no te tocó ninguna— y se sale de ella con un click, desde donde estás.
+   */
+  const mios = miosGuardado && !sinAsignacion;
   // Al abrir la app la cola viene del caché persistido: hasta que llegue lo
   // fresco hay que decir de cuándo es lo que se está mirando.
   const deAntes = useSelloDeViejo(traidoEn);
@@ -468,6 +501,9 @@ export function ColaUnificada({
             lineaActiva={linea}
             onLinea={setLinea}
             hayMias={hayMias}
+            mios={mios}
+            onMios={setMios}
+            conteoMios={conteosFiltro?.mios ?? 0}
             catalogo={catalogo}
             categoriaActiva={categoriaActiva?.nombre ?? null}
             /* Desde la BARRA la categoría afina lo que ya se está mirando (el tab
@@ -659,6 +695,8 @@ export function ColaUnificada({
                 etapa={etapas?.[c.persona_id ?? '']}
                 mostrarPideInfo={filtroSec !== 'pide-info'}
                 catalogoCategorias={catalogo}
+                miVendedora={miVendedora}
+                enMiCola={mios}
                 esNueva={esNueva(c)}
                 indice={i}
                 tabIndex={i === idxSeguro ? 0 : -1}

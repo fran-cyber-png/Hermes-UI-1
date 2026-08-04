@@ -39,6 +39,19 @@ import { normalizarTelefono } from "../whatsapp/identidadWa.js";
  * lo dueña Cerberus y lo lee el server; si el front mandara los números, habría
  * dos lugares que deciden cuáles son «las mías». Sin líneas asignadas se sirve
  * TODO y la respuesta lo dice (`sinLineasPropias`): fail-open, ver `cola/lineas.ts`.
+ *
+ * `?mios=1` (reparto): solo las CONVERSACIONES que el reparto le asignó a quien
+ * pregunta (`conversacion_asignada`, `cola/asignadaSql.ts`). El `vendedoraId`
+ * sale del token y nunca del body — si el front mandara el id, habría dos lugares
+ * decidiendo de quién es cada cosa, y encima cualquiera podría pedir la cola de
+ * otra persona.
+ *
+ * ⚠️ **`mias` y `mios` son dos recortes distintos y se escriben casi igual.**
+ * `mias` = mis LÍNEAS (el mapa que empuja Cerberus). `mios` = mis
+ * CONVERSACIONES asignadas. Se combinan sin problema —«las mías de mi línea»— y
+ * confundirlos NO rompe nada visible: devuelve otra cola, sin un solo síntoma.
+ * Por eso adentro se llaman `misLineas` y `misAsignadas`, que no se parecen, y
+ * por eso los dos `req.query` se leen juntos y acá abajo, donde se ven de a dos.
  */
 export const conversacionesRouter = Router();
 
@@ -62,6 +75,14 @@ conversacionesRouter.get("/", async (req, res) => {
   // Después de la guarda solo quedan dos casos: sin filtro (`""`) o un número ya
   // canónico. El `?? ""` es para el tipo, no para un caso que pueda pasar.
   const linea = lineaNormalizada ?? "";
+
+  // LOS DOS RECORTES «MÍOS», JUNTOS Y A LA VISTA (ver el docblock): `mias` son
+  // LÍNEAS y `mios` son CONVERSACIONES asignadas. Se leen acá, uno al lado del
+  // otro y con nombres que no se parecen, para que la diferencia sea imposible de
+  // pasar por alto al agregar el próximo filtro.
+  const misLineas = req.query.mias === "1";
+  const misAsignadas = req.query.mios === "1";
+
   try {
     const r = await consultarCola(db, {
       canal: typeof req.query.canal === "string" ? req.query.canal : "",
@@ -71,7 +92,8 @@ conversacionesRouter.get("/", async (req, res) => {
       categoria: typeof req.query.categoria === "string" ? req.query.categoria : "",
       precio: req.query.precio === "1",
       linea,
-      misLineas: req.query.mias === "1",
+      misLineas,
+      misAsignadas,
       vendedoraId: req.vendedoraId,
       limit: Number(req.query.limit) || 40,
       offset: Number(req.query.offset) || 0,

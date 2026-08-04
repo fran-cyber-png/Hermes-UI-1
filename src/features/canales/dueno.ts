@@ -1,0 +1,113 @@
+/**
+ * «ESTA CONVERSACIÓN ES DE…» — la marca de dueño en la fila de la cola, pura.
+ *
+ * ── Por qué existe ──
+ * Desde el 4-ago-2026 SIETE personas comparten la línea `51984429504`. El reparto
+ * (`server/src/reparto/`) le pone dueño a cada conversación nueva, pero mientras
+ * ese dueño no se VEA en el listado el reparto no evita nada: las dos cosas que
+ * se querían impedir —**dos contestando al mismo lead** y **nadie contestando a
+ * otro**— pasan igual, porque la fila se ve idéntica a como se veía.
+ *
+ * ── Qué dice, y por qué así ──
+ * Dos lecturas, no tres:
+ *
+ *   · `Vos`     — te tocó a vos. En navy, que en esta app ya significa «tuyo»
+ *                 (el pin y la estrella de favorita son navy). Sin oro: el oro es
+ *                 tiempo que se acaba y una asignación no es un reloj.
+ *   · `Sindy`   — es de otra persona. La señal accionable de verdad: **no la
+ *                 agarres, ya tiene dueño**.
+ *
+ * ── Lo que NO hace ──
+ * **No dibuja «sin dueño».** Una conversación sin asignar es el estado más común
+ * y más aburrido que hay —las 91 que ya existían el día del reparto, todo lo que
+ * entra por las otras tres líneas, y cualquier cosa que llegue con la rueda
+ * vacía—: una píldora en 1.900 filas no es información, es ruido. Ausencia de
+ * dato = no se dibuja nada, igual que `cliente.ts` con el nivel desconocido.
+ *
+ * **Y no dice «Vos» adentro de tu propia cola.** Con el filtro «Míos» puesto,
+ * TODAS las filas son tuyas: repetirlo en cada una es la misma píldora 14 veces
+ * diciendo lo que ya dice el filtro de arriba.
+ *
+ * El color y la forma viven en el componente (misma división que `cliente.ts` y
+ * `bot.ts`): acá se decide QUÉ se dice, no cómo se ve.
+ */
+
+export type TonoDueno = 'vos' | 'otra';
+
+export interface MarcaDueno {
+  tono: TonoDueno;
+  /** Lo que se lee en la píldora. Corto: la fila mide 360 px y ya lleva mucho. */
+  texto: string;
+  /** El `title`, donde entra el detalle sin gastar ancho. */
+  titulo: string;
+}
+
+/** Lo mínimo que la marca necesita de una fila de la cola. */
+export interface FilaConDueno {
+  /** El username de Cerberus de quien la tiene. `null`/ausente = sin dueño. */
+  asignada_a?: string | null;
+}
+
+export interface QuienMira {
+  /** El username de quien está logueada. Sin esto no se puede decir «Vos». */
+  yo?: string | null;
+  /**
+   * La cola ya está filtrada a «Míos». Ahí lo propio no se rotula: lo dice el
+   * filtro. Lo de otra persona **sí** se seguiría rotulando si apareciera — no
+   * debería, y si aparece es un defecto que conviene ver, no esconder.
+   */
+  enMiCola?: boolean;
+}
+
+/**
+ * El nombre corto que va en la píldora.
+ *
+ * El `vendedora_id` es el username de Cerberus, que puede venir como `sindy`,
+ * `sindy.rojas` o `srojas`. Se corta en el primer separador y se capitaliza: en
+ * 360 px entra un nombre, no una dirección.
+ *
+ * **No inventa un nombre propio**: si el username no tiene forma de nombre
+ * (`srojas`), se muestra tal cual capitalizado. Preferimos un rótulo feo y cierto
+ * a uno lindo y adivinado — el `title` lleva el username completo igual.
+ */
+/**
+ * ¿Es el mismo humano? — el gemelo de `mismaVendedora` del server
+ * (`reparto/destino.ts`) y de `lower()` en `cola/asignadaSql.ts`. Los tres tienen
+ * que decir lo mismo, o la fila diría «Vos» sobre algo que el recorte «Míos» no
+ * trae (o al revés).
+ *
+ * ⚠️ Normaliza de los DOS lados, y eso es una corrección con evidencia: en
+ * producción (medido el 4-ago-2026) Cerberus empuja `Luz` y ella entra como
+ * `luz`. Con la comparación exacta, sus propias conversaciones le aparecían como
+ * si fueran de otra persona.
+ */
+function mismaVendedora(a: string, b: string): boolean {
+  const x = a.trim().toLowerCase();
+  return x !== '' && x === b.trim().toLowerCase();
+}
+
+export function nombreCorto(vendedoraId: string): string {
+  const base = vendedoraId.trim().split(/[.\-_@\s]/)[0] ?? '';
+  if (!base) return vendedoraId.trim();
+  return base.charAt(0).toUpperCase() + base.slice(1);
+}
+
+export function marcaDeDueno(fila: FilaConDueno, quien: QuienMira = {}): MarcaDueno | null {
+  const dueno = typeof fila.asignada_a === 'string' ? fila.asignada_a.trim() : '';
+  // Sin dueño no se dibuja nada. Ausencia de dato NO es «es de nadie, agarrala»:
+  // un server sin la migración del reparto manda exactamente esto en cada fila.
+  if (!dueno) return null;
+
+  const esMia = mismaVendedora(dueno, quien.yo ?? '');
+
+  if (esMia) {
+    if (quien.enMiCola) return null;
+    return { tono: 'vos', texto: 'Vos', titulo: 'El reparto te asignó esta conversación' };
+  }
+
+  return {
+    tono: 'otra',
+    texto: nombreCorto(dueno),
+    titulo: `Asignada a ${dueno} — podés abrirla igual, pero ya tiene dueño`,
+  };
+}

@@ -30,6 +30,7 @@ import {
 } from "./cursoSql.js";
 import { padronCteSql, padronJoinSql, yaComproSql } from "./clienteSql.js";
 import { botCalienteSql, botEscaladaSql, botJoinSql } from "./botSql.js";
+import { asignadaJoinSql, duenoSql, esMiaSql } from "./asignadaSql.js";
 import { recorteDeLineas } from "./lineas.js";
 import { lineasDeVendedora } from "../numeros/repositorio.js";
 
@@ -82,6 +83,18 @@ import { lineasDeVendedora } from "../numeros/repositorio.js";
  * frenaba a propósito y del otro lado no había nadie. Va en el listado y no en
  * la ficha porque la pregunta que responde es «¿a quién atiendo AHORA?», y esa
  * se hace antes de abrir la conversación.
+ *
+ * EL DUEÑO (`cola/asignadaSql.ts`): `asignada_a` dice a quién le tocó esta
+ * conversación en el reparto, y `?mios=1` recorta a las propias. Desde el
+ * 4-ago-2026 siete personas comparten la línea `51984429504`; sin el dueño EN LA
+ * FILA, el reparto no evita ni que dos contesten al mismo lead ni que nadie
+ * conteste a otro, porque la fila se ve igual. Es un FILTRO, no un permiso —
+ * mismo argumento que `cola/lineas.ts`.
+ *
+ * ⚠️ `?mios=1` (conversaciones asignadas) NO es `?mias=1` (líneas del mapa
+ * `numero_vendedora`). Se escriben casi igual, viven en la misma ruta y
+ * confundirlos no rompe nada visible: devuelve otra cola. Por eso adentro se
+ * llaman `misAsignadas` y `misLineas`, que no se parecen.
  *
  * EX-CLIENTE (#133): `cliente_nivel` y `cliente_compras` dicen si quien escribe
  * YA LE COMPRÓ a Goberna, y cuánto. 140 de las 1.997 conversaciones vivas son de
@@ -291,6 +304,20 @@ export interface OpcionesCola {
    * con `sinLineasPropias`. Una línea explícita en `linea` le gana.
    */
   misLineas?: boolean;
+  /**
+   * «Míos»: solo las conversaciones que el REPARTO le asignó a `vendedoraId`
+   * (`conversacion_asignada`, `cola/asignadaSql.ts`).
+   *
+   * ⚠️ **No confundir con `misLineas`.** Aquél acota por LÍNEA (`numero_vendedora`,
+   * el mapa que empuja Cerberus); éste, por CONVERSACIÓN. Una vendedora puede
+   * atender una línea entera sin tener una sola conversación asignada, y al revés.
+   *
+   * Y a diferencia de `misLineas`, esto **no es fail-open**: cero asignadas es
+   * una respuesta honesta y verdadera («todavía no te tocó ninguna»), no un mapa
+   * incompleto. Lo que evita la cola vacía sin explicación es otra cosa: el chip
+   * lleva su número, así que no se entra a ciegas (`BarraFiltros`).
+   */
+  misAsignadas?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -320,6 +347,13 @@ export interface ResultadoCola {
     botEscalada: number;
     /** El bot la ve caliente: preguntó precio, cuotas o forma de pago. */
     botCaliente: number;
+    /**
+     * Cuántas de estas te asignó el reparto. Se cuenta SIEMPRE dentro del recorte
+     * **sin** aplicar «Míos» — si se contara con el filtro puesto, el chip diría
+     * su propio total y dejaría de responder «¿cuánto me tocó?» cuando está apagado,
+     * que es justo cuando se lo mira.
+     */
+    mios: number;
   };
   /**
    * La MISMA foto, abierta por las preguntas que el tablero no sabía responder —
@@ -335,6 +369,12 @@ export interface ResultadoCola {
   sinPadron?: boolean;
   /** true = la cola vino SIN el veredicto del bot (`bot_calificaciones` no existe acá). */
   sinBot?: boolean;
+  /**
+   * true = la cola vino SIN el dueño de cada conversación: falta la migración del
+   * reparto (`conversacion_asignada`). Se dice para que la pantalla no ofrezca un
+   * filtro «Míos» que devolvería cero por una razón que no es «no te tocó nada».
+   */
+  sinAsignacion?: boolean;
   /**
    * true = se pidió «las mías» y `numero_vendedora` no le asigna ninguna, así que
    * se sirvió TODO. Se dice en voz alta: un filtro que no filtra y no avisa se ve
@@ -371,6 +411,7 @@ export async function consultarCola(
   let conEstado = true;
   let conPadron = true;
   let conBot = true;
+  let conAsignacion = true;
 
   // A QUÉ LÍNEAS SE ACOTA — se resuelve UNA vez, ANTES del loop: el recorte no
   // depende de qué tabla degradó, así que releer `numero_vendedora` en cada
@@ -386,21 +427,31 @@ export async function consultarCola(
         : [],
   });
 
-  // Tres degradaciones posibles ⇒ como mucho cuatro intentos.
+  // Cuatro degradaciones posibles ⇒ como mucho cinco intentos.
   for (let intento = 0; ; intento++) {
     try {
-      const r = await ejecutarCola(base, opciones, lineas, conEstado, conPadron, conBot);
+      const r = await ejecutarCola(base, opciones, lineas, conEstado, conPadron, conBot, conAsignacion);
       return {
         ...r,
         ...(conEstado ? {} : { sinEstado: true }),
         ...(conPadron ? {} : { sinPadron: true }),
         ...(conBot ? {} : { sinBot: true }),
+        ...(conAsignacion ? {} : { sinAsignacion: true }),
         ...(sinLineasPropias ? { sinLineasPropias: true } : {}),
       };
     } catch (e) {
-      if (!esTablaAusente(e) || intento >= 3) throw e;
-      // El bot va primero por la misma razón que el padrón: apagar lo que el
-      // error NOMBRA evita que una tabla ausente se lleve puestas las otras dos.
+      if (!esTablaAusente(e) || intento >= 4) throw e;
+      // El reparto va primero por la misma razón que el bot y el padrón: apagar
+      // lo que el error NOMBRA evita que una tabla ausente se lleve puestas las
+      // otras tres.
+      if (conAsignacion && mencionaTabla(e, "conversacion_asignada")) {
+        console.warn(
+          "[cola] `conversacion_asignada` no existe: sirvo la cola SIN el dueño de cada " +
+            "conversación. Falta la migración del reparto (`0015_minor_reavers`).",
+        );
+        conAsignacion = false;
+        continue;
+      }
       if (conBot && mencionaTabla(e, "bot_calificaciones")) {
         console.warn(
           "[cola] `bot_calificaciones` no existe: sirvo la cola SIN el veredicto del bot. " +
@@ -429,7 +480,11 @@ export async function consultarCola(
         conPadron = false;
         continue;
       }
-      conBot = false;
+      if (conBot) {
+        conBot = false;
+        continue;
+      }
+      conAsignacion = false;
     }
   }
 }
@@ -452,6 +507,7 @@ async function ejecutarCola(
   conEstado: boolean,
   conPadron: boolean,
   conBot: boolean,
+  conAsignacion: boolean,
 ): Promise<ResultadoCola> {
   const canal = opciones.canal ?? "";
   const intencion = opciones.intencion ?? "";
@@ -506,7 +562,23 @@ async function ejecutarCola(
   if (conEstado && tab === "favoritos") condicionesRecorte.push(sql`COALESCE(ec.favorita, false)`);
   if (categoria) condicionesRecorte.push(sql`${categoria} = ANY(COALESCE(cats.categorias, '{}'::text[]))`);
 
-  const condiciones = [...condicionesBase, ...condicionesRecorte];
+  /**
+   * «MÍOS» VA APARTE DE LOS OTROS RECORTES, y no por prolijidad.
+   *
+   * Es el UNIVERSO de la foto, como la línea: con «Míos» puesto, «Piden info ·
+   * 12» tiene que decir 12 DE LAS MÍAS. Por eso entra a la página, al total y al
+   * desglose. Pero su PROPIO chip se cuenta sin él —«¿cuánto me tocó?» se
+   * pregunta cuando el filtro está apagado—, y eso no se puede expresar metiendo
+   * el predicado en la lista que arma el `WHERE` de la consulta de conteos.
+   *
+   * Sin la tabla migrada no hay recorte posible: se sirve la cola entera y la
+   * respuesta lo dice con `sinAsignacion`. Recortar por una columna que no existe
+   * daría cero filas y se leería como «no te asignaron nada».
+   */
+  const esMia = conAsignacion ? esMiaSql(vendedoraId) : null;
+  const soloMias = conAsignacion && opciones.misAsignadas && esMia ? [esMia] : [];
+
+  const condiciones = [...condicionesBase, ...condicionesRecorte, ...soloMias];
 
   const donde = (c: SQL[]) => (c.length ? sql`WHERE ${sql.join(c, sql` AND `)}` : sql``);
   const yTodas = (c: SQL[]) => (c.length ? sql.join(c, sql` AND `) : sql`true`);
@@ -554,6 +626,10 @@ async function ejecutarCola(
            (${botEscaladaSql}) AS bot_escalada,
            bq.temperatura       AS bot_temperatura,
            bq.motivo            AS bot_motivo,
+           -- DE QUIÉN ES (cola/asignadaSql.ts). Viaja el vendedora_id CRUDO: el
+           -- nombre corto y el «Vos» son presentación, y eso vive del lado del
+           -- front (canales/dueno.ts), igual que la marca de ex-cliente y el bot.
+           (${duenoSql})        AS asignada_a,
            (${etapaEfectivaSql}) AS etapa_efectiva,
            extract(day from now() - referencia)::int AS dias,
            (${nivelUrgenciaSql}) AS nivel,
@@ -572,6 +648,7 @@ async function ejecutarCola(
     ${leadCursoJoinSql}
     ${padronJoinSql(conPadron)}
     ${botJoinSql(conBot)}
+    ${asignadaJoinSql(conAsignacion)}
     ${donde(condiciones)}
     ORDER BY ${bandaPinOrdenSql}, nivel ASC, orden ASC
     LIMIT ${limit} OFFSET ${offset}
@@ -588,6 +665,10 @@ async function ejecutarCola(
     // Una sola pasada da las tres cifras: el total del recorte actual (con el
     // filtro secundario puesto) y cuántas daría cada chip dentro del MISMO
     // recorte. El `FILTER` es lo que evita una consulta por chip.
+    // Cada chip cuenta DENTRO de «Míos» cuando está puesto: si no, con el recorte
+    // activo la barra diría «Piden info · 311» sobre una cola de 14 filas.
+    const conMias = (pred: SQL): SQL =>
+      soloMias.length ? sql`(${pred}) AND (${soloMias[0]!})` : pred;
     const [r] = await base.execute<{
       n: number;
       pide_info: number;
@@ -595,23 +676,29 @@ async function ejecutarCola(
       ya_compraron: number;
       bot_escalada: number;
       bot_caliente: number;
+      mios: number;
     }>(sql`
       ${conTodo(filtroCanal, pins, lineas)},
       ultimas_gestiones AS (${ultimasGestionesSql}),
       cats AS (${categoriasCteSql}),
       padron AS (${padronCteSql(conPadron)})
-      SELECT count(*) FILTER (WHERE ${yTodas(condicionesBase)})::int AS n,
-             count(*) FILTER (WHERE pide_info)::int                 AS pide_info,
-             count(*) FILTER (WHERE NOT respondida)::int            AS sin_responder,
-             count(*) FILTER (WHERE ${yaComproSql})::int            AS ya_compraron,
-             count(*) FILTER (WHERE ${botEscaladaSql})::int         AS bot_escalada,
-             count(*) FILTER (WHERE ${botCalienteSql})::int         AS bot_caliente
+      SELECT count(*) FILTER (WHERE ${yTodas([...condicionesBase, ...soloMias])})::int AS n,
+             count(*) FILTER (WHERE ${conMias(sql`pide_info`)})::int        AS pide_info,
+             count(*) FILTER (WHERE ${conMias(sql`NOT respondida`)})::int   AS sin_responder,
+             count(*) FILTER (WHERE ${conMias(yaComproSql)})::int           AS ya_compraron,
+             count(*) FILTER (WHERE ${conMias(botEscaladaSql)})::int        AS bot_escalada,
+             count(*) FILTER (WHERE ${conMias(botCalienteSql)})::int        AS bot_caliente,
+             -- El de «Míos» es el único que NO se cuenta con el filtro puesto:
+             -- responde «¿cuánto me tocó?», y esa pregunta se hace justo cuando
+             -- el filtro está apagado. Con él puesto, coincide con el total.
+             count(*) FILTER (WHERE ${esMia ?? sql`false`})::int            AS mios
       FROM todo
       LEFT JOIN ultimas_gestiones USING (clave)
       ${estadoJoinSql(vendedoraId, conEstado)}
       LEFT JOIN cats ON cats.clave = todo.clave
       ${padronJoinSql(conPadron)}
       ${botJoinSql(conBot)}
+      ${asignadaJoinSql(conAsignacion)}
       ${donde(condicionesRecorte)}
     `);
     total = r?.n;
@@ -621,8 +708,20 @@ async function ejecutarCola(
       yaCompraron: r?.ya_compraron ?? 0,
       botEscalada: r?.bot_escalada ?? 0,
       botCaliente: r?.bot_caliente ?? 0,
+      mios: r?.mios ?? 0,
     };
-    desglose = await desglosarEmbudo(base, filtroCanal, condicionesBase, conPadron, conBot, lineas);
+    desglose = await desglosarEmbudo(
+      base,
+      filtroCanal,
+      // «Míos» entra al desglose como entra la línea: define el universo de la
+      // foto. Sin esto, con la cola en «Míos» la banda seguiría contando las
+      // conversaciones de los otros cinco.
+      [...condicionesBase, ...soloMias],
+      conPadron,
+      conBot,
+      conAsignacion,
+      lineas,
+    );
     conteos = plegarConteos(desglose);
   }
 
@@ -653,6 +752,9 @@ async function desglosarEmbudo(
   // y sin el join la consulta ni compila. Es la misma razón por la que ya estaba
   // el del padrón.
   conBot: boolean,
+  // Y el del reparto por lo mismo: si `condiciones` trae el predicado de «Míos»,
+  // nombra `ca` y sin el join la consulta ni compila.
+  conAsignacion: boolean,
   // Las líneas entran acá por lo mismo que entra el canal: definen el UNIVERSO de
   // la foto, no un recorte de columna. Sin esto, con la cola filtrada a Walter la
   // banda de desglose seguiría contando las conversaciones de la otra línea.
@@ -672,6 +774,7 @@ async function desglosarEmbudo(
     LEFT JOIN ultimas_gestiones USING (clave)
     ${padronJoinSql(conPadron)}
     ${botJoinSql(conBot)}
+    ${asignadaJoinSql(conAsignacion)}
     ${donde}
     GROUP BY 1, 2, 3, 4
   `);
@@ -699,9 +802,10 @@ export function plegarConteos(desglose: readonly FilaDesglose[]): Record<string,
  * bug de verdad, no una diferencia de definición.
  */
 export async function contarPorEtapaEfectiva(base: typeof db): Promise<Record<string, number>> {
-  // Sin condiciones no hay nada que preguntarle al padrón ni al bot: el join
-  // saldría gratis pero igual costaría una pasada. Los `false` dejan la consulta
-  // idéntica a la de antes de #133 — y de paso no dependen de que
-  // `clientes_padron` ni `bot_calificaciones` existan en esa base.
-  return plegarConteos(await desglosarEmbudo(base, sql``, [], false, false, []));
+  // Sin condiciones no hay nada que preguntarle al padrón, al bot ni al reparto:
+  // el join saldría gratis pero igual costaría una pasada. Los `false` dejan la
+  // consulta idéntica a la de antes de #133 — y de paso no dependen de que
+  // `clientes_padron`, `bot_calificaciones` ni `conversacion_asignada` existan en
+  // esa base.
+  return plegarConteos(await desglosarEmbudo(base, sql``, [], false, false, false, []));
 }

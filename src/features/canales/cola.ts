@@ -96,6 +96,13 @@ export const KEY_TAB = 'hermes.colaTab';
  * persona. Es la misma razón por la que el tab se guarda.
  */
 export const KEY_LINEA = 'hermes.colaLinea';
+/**
+ * «Míos» (reparto) también PERSISTE, y por la misma razón que la línea: quien
+ * atiende sus leads asignados abre la app para trabajar SU cola, y hacérselo
+ * elegir cada mañana es pedirle que se acuerde de un filtro para no leer los
+ * chats de sus seis compañeros.
+ */
+export const KEY_MIOS = 'hermes.colaMios';
 
 /**
  * «LAS MÍAS» — el valor reservado del MISMO eje de línea, no un estado aparte.
@@ -244,6 +251,19 @@ export interface EstadoCola {
    * asigna a quien está logueada (lo resuelve el server).
    */
   linea?: string;
+  /**
+   * «MÍOS» — solo las conversaciones que el REPARTO me asignó (4-ago-2026).
+   *
+   * ⚠️ **Es otro eje que `linea === LINEA_MIAS`.** Aquél recorta por LÍNEA («las
+   * mías» = los números que atiendo); éste, por CONVERSACIÓN («míos» = los leads
+   * que me tocaron). Se combinan sin problema y son preguntas distintas: con siete
+   * personas en UNA línea, la línea ya no separa a nadie.
+   *
+   * Viaja como `?mios=1`. El `vendedoraId` lo resuelve el server desde el token —
+   * si el front mandara el id, habría dos lugares decidiendo de quién es cada cosa
+   * (la lección de #37) y cualquiera podría pedir la cola de otra persona.
+   */
+  mios?: boolean;
 }
 
 /**
@@ -259,9 +279,14 @@ export function parametrosDeCola(e: EstadoCola): Record<string, string> {
   if (e.canal) p.canal = e.canal;
   if (e.etapa) p.etapa = e.etapa;
   if (e.precio) p.precio = '1';
-  // «Las mías» es el mismo eje con otro nombre, y sale por otro parámetro: no es
-  // un teléfono, así que mandarlo como `?linea=` sería un 400 del server.
+  // ⚠️ `mias` (LÍNEAS) y `mios` (CONVERSACIONES asignadas) son DOS recortes, se
+  // escriben con una vocal de diferencia y salen los dos de acá. Confundirlos no
+  // rompe nada visible: devuelve otra cola. Van juntos y comentados a propósito.
+  //
+  // «Las mías» es el mismo eje de la línea con otro nombre, y sale por otro
+  // parámetro: no es un teléfono, así que mandarlo como `?linea=` sería un 400.
   if (e.linea === LINEA_MIAS) p.mias = '1';
   else if (e.linea) p.linea = e.linea;
+  if (e.mios) p.mios = '1';
   return p;
 }

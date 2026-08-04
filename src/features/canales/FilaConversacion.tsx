@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type Ref } from 'react';
-import { Bot, Check, Clock, Pin, Star } from 'lucide-react';
+import { Bot, Check, Clock, Pin, Star, UserRound } from 'lucide-react';
 import { temperatureOf, TEMPERATURE_META } from '../leads/temperature';
 import { hace } from '../../lib/datos/frescura';
 import { formatoTelefono } from '../../lib/formato';
@@ -15,6 +15,7 @@ import {
 import { cursoDeFila, detalleDeCurso } from './curso';
 import { marcaDeCliente, type NivelCliente } from './cliente';
 import { marcaDelBot, type TonoBot } from './bot';
+import { marcaDeDueno, type TonoDueno } from './dueno';
 import { BadgeCanal } from './BadgeCanal';
 import { Avatar } from './Avatar';
 import { VENTANA_DIAS } from './types';
@@ -93,6 +94,26 @@ const CLASE_BOT: Record<TonoBot, string> = {
 };
 
 /**
+ * DE QUIÉN ES ESTA CONVERSACIÓN (reparto, 4-ago-2026) — píldora de BORDE, no de
+ * fondo, y ahí está la mitad del significado: el fondo tenue es el idioma de lo
+ * automático («Cotizado», «Se enfrió», el bot) y el borde el de lo que decidió
+ * alguien. El reparto es una decisión del equipo sobre quién atiende a quién, no
+ * una lectura de la máquina sobre el hilo.
+ *
+ * `vos` en NAVY, que en esta fila ya significa «tuyo» (el pin y la estrella son
+ * navy). `otra` en neutro: informa sin gritar — la fila ajena no es una alarma,
+ * es un «ya tiene dueño». **Sin oro**, que es tiempo que se acaba.
+ *
+ * El ícono no es decoración: sin él, la píldora de borde neutro se confunde con
+ * la de categoría manual, que es exactamente igual de forma. Acá la forma sola no
+ * alcanza y el ícono dice «esto es una persona» antes de leer el nombre.
+ */
+const CLASE_DUENO: Record<TonoDueno, string> = {
+  vos: 'border-navy/50 text-navy',
+  otra: 'border-border text-muted-foreground',
+};
+
+/**
  * Una conversación en la cola, en dos renglones: quién (con su urgencia a la
  * derecha) y qué dijo. Lo pendiente habla en tinta plena; lo respondido baja a
  * gris — la página decide qué se lee primero.
@@ -108,6 +129,8 @@ export function FilaConversacion({
   etapa,
   mostrarPideInfo = true,
   catalogoCategorias,
+  miVendedora,
+  enMiCola = false,
   esNueva = false,
   indice,
   tabIndex,
@@ -123,6 +146,10 @@ export function FilaConversacion({
   mostrarPideInfo?: boolean;
   /** El catálogo de la vendedora, para resolver el color de la píldora de categoría (#49). */
   catalogoCategorias?: readonly { nombre: string; color: string }[];
+  /** Quién está mirando: sin esto la fila no puede decir «Vos» (`dueno.ts`). */
+  miVendedora?: string | null;
+  /** La cola ya está filtrada a «Míos»: ahí lo propio no se rotula, lo dice el filtro. */
+  enMiCola?: boolean;
   /** Solo la fila recién llegada por SSE entra animada, nunca la lista entera. */
   esNueva?: boolean;
   /** Posición en la lista — decide si es de las primeras N con foto prioritaria (`fotoVisible.ts`). */
@@ -195,6 +222,24 @@ export function FilaConversacion({
    * varios cursos hay que volver acá.
    */
   const bot = marcaDelBot(c);
+  /**
+   * DE QUIÉN ES (`dueno.ts`), y va en el RENGLÓN 1 — al lado de la marca de
+   * cliente, no abajo con el bot y el curso.
+   *
+   * ⚠️ Primero se probó en el renglón 2 y **no entra**. Ese renglón ya lleva
+   * bot/curso + categoría + preview + conteo, y el peor caso no es raro: es el
+   * MÁS FRECUENTE de la línea que importa, porque el bot corre justo en la línea
+   * que se reparte. Con dueño + bot ahí, el preview quedaba en «Bue…» —o sea, la
+   * fila perdía lo único que dice de qué se está hablando— (captura:
+   * `docs/evidencia/reparto-cola.png`).
+   *
+   * Arriba el costo ya está pagado y decidido: lo que cede ancho es el NOMBRE,
+   * que ya truncaba, y «un nombre cortado sigue reconociéndose» (la misma razón
+   * escrita para la marca de ex-cliente, #133). Además son preguntas del mismo
+   * plano —«¿de quién es esto?» junto a «¿quién es esta persona?»—, mientras que
+   * el renglón 2 responde «¿qué pasa con la conversación?».
+   */
+  const dueno = marcaDeDueno(c, { yo: miVendedora, enMiCola });
 
   return (
     <button
@@ -250,7 +295,13 @@ export function FilaConversacion({
             {c.no_leido && (
               <span className="size-2 shrink-0 rounded-full bg-primary" role="img" aria-label="Sin leer" title="Sin leer" />
             )}
-            <span className={`truncate text-sm ${pesoNombre} ${tintaNombre}`}>{nombre}</span>
+            {/* `title`: el renglón 1 acumula marcas (cliente, dueño, etapa) y en el
+                peor caso —los tres a la vez, ~4 % de las filas— el nombre trunca
+                fuerte. «Un nombre cortado sigue reconociéndose» vale hasta cierto
+                punto: con el hover, siempre. */}
+            <span title={nombre} className={`truncate text-sm ${pesoNombre} ${tintaNombre}`}>
+              {nombre}
+            </span>
             {marca && (
               <span
                 title={marca.titulo}
@@ -261,6 +312,26 @@ export function FilaConversacion({
                 }
               >
                 {marca.texto}
+              </span>
+            )}
+            {/* DE QUIÉN ES: pegado a la identidad, porque «¿es mía?» se responde
+                junto con «¿quién es?» y antes que «¿qué pasa con esta?». Lo que
+                cede ancho es el nombre, que ya truncaba — el mismo precio que
+                acordó pagar la marca de ex-cliente, y por el mismo motivo. */}
+            {dueno && (
+              <span
+                title={dueno.titulo}
+                className={
+                  // `max-w` + `truncate`: `nombreCorto` corta en el separador del
+                  // username, pero un nombre de pila largo («Maximiliano») entra
+                  // entero igual y le comería el renglón al nombre del lead.
+                  'flex max-w-[5.5rem] shrink-0 items-center gap-0.5 truncate rounded-full border ' +
+                  'bg-card px-1.5 py-px text-[11px] font-semibold ' +
+                  CLASE_DUENO[dueno.tono]
+                }
+              >
+                <UserRound size={10} className="shrink-0" aria-hidden="true" />
+                {dueno.texto}
               </span>
             )}
             {/* Favorita: estrella navy (el oro es SOLO tiempo que se acaba). */}

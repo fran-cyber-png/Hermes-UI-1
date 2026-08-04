@@ -83,6 +83,11 @@ export interface Conversacion {
   /** El motivo CRUDO: uno de los seis `EscaladaMotivo` si escaló, o el texto
    *  libre del modelo si solo calificó. La traducción a criollo vive en `bot.ts`. */
   bot_motivo?: string | null;
+  /** DE QUIÉN ES (reparto de leads, 4-ago-2026): el username de Cerberus de quien
+   *  la tiene. `null`/ausente = sin dueño, y eso NO se lee como «es de nadie,
+   *  agarrala»: un server sin la migración del reparto manda esto en cada fila.
+   *  La marca de la píldora la decide `canales/dueno.ts`, puro y con tests. */
+  asignada_a?: string | null;
 }
 
 type Pagina = {
@@ -101,11 +106,16 @@ type Pagina = {
     /** El bot se frenó y espera a una persona. Opcional: un server viejo no lo manda. */
     botEscalada?: number;
     botCaliente?: number;
+    /** Cuántas te asignó el reparto — SIEMPRE contadas con el filtro apagado, así
+     *  el chip puede decir su número antes de que lo toquen. */
+    mios?: number;
   };
   /** El server sirvió la cola SIN la marca de ex-cliente (falta el `db:push` de #133). */
   sinPadron?: boolean;
   /** Se pidió «las mías» y `numero_vendedora` no le asigna ninguna: vino TODO. */
   sinLineasPropias?: boolean;
+  /** El server sirvió la cola SIN dueño: falta la migración del reparto. */
+  sinAsignacion?: boolean;
   /** La misma foto abierta por «ya le hablamos» × precio × viva. Solo primera página. */
   desglose?: FilaDesglose[];
 };
@@ -191,6 +201,12 @@ export function useConversaciones(
      * esas conversaciones son suyas.
      */
     sinLineasPropias: q.data?.pages[0]?.sinLineasPropias === true,
+    /**
+     * El server sirvió la cola SIN el dueño de cada conversación: falta la
+     * migración del reparto. Se dice para que la pantalla no ofrezca un filtro
+     * «Míos» que devolvería cero por una razón que no es «no te tocó nada».
+     */
+    sinAsignacion: q.data?.pages[0]?.sinAsignacion === true,
   };
 }
 
