@@ -426,6 +426,74 @@ el dueño estaba mirando la sala a mano — o sea que **el bot solo servía mien
   (serían 50 de 66 filas). La lectura de los seis motivos vive pura en `src/features/canales/bot.ts`,
   y un motivo que el front no conoce cae en «Pidió ayuda», nunca en un throw ni en un motivo parecido.
 
+## El reparto de leads — de quién es cada conversación cuando 7 comparten una línea
+
+Hasta el 4-ago-2026 cada vendedora tenía SU número. Desde ese día **varias personas comparten
+uno**: la línea del bot `51984429504`. Sin reparto pasan las dos cosas de siempre —**dos
+contestan al mismo lead** y **nadie contesta a otro**—, porque la fila se ve igual para todos.
+Server en `server/src/reparto/`, plan y decisiones en `docs/plan-reparto-de-leads.md`.
+
+- **Round-robin, y se elige por CARGA, no con un puntero** (`reparto/rueda.ts`, puro): se le da
+  **al que menos tiene**. Un puntero se desincroniza —alguien entra, otro sale, se borra una
+  asignación— y queda apuntando a quien ya no está, sin que nadie lo note. Elegir por carga es
+  equivalente desde cero y **se auto-corrige**: quien se suma tarde recibe hasta emparejar.
+  La propiedad que se le promete al equipo y que fija el test: **entre el que más y el que menos
+  recibe nunca hay más de 1**. Al azar, 10 leads entre 6 pueden caer 4 y 0, y esa varianza **se
+  lee como favoritismo** aunque sea mala suerte.
+- **Dos tablas** (`db/reparto.ts`, migración `0015`): `reparto_rueda` (quiénes participan, por
+  línea) y `conversacion_asignada` (de quién es cada `clave`). La rueda **no se deriva de
+  `numero_vendedora`** a propósito: ese mapa responde «¿quién atiende este número?», no «¿entre
+  quiénes se reparte?» — y como lo empuja Cerberus, derivarla movería el reparto en silencio.
+- **Se asigna en el webhook de Cloud API** (`webhook/whatsapp.ts`), después de persistir el
+  mensaje y **después** de notificar al bot: el despachador es lo único de ese bloque con una
+  persona esperando. **Fail-open**: sin tabla o sin rueda no asigna y devuelve `null` — un lead
+  perdido por un fallo del reparto es infinitamente peor que un lead sin repartir.
+- **Es un FILTRO, no un permiso**, como «Las mías» y por lo mismo: `requiereVendedora` dice «es
+  una vendedora», no «cuál», y el hilo, la ficha y el envío siguen sirviendo cualquier
+  conversación a cualquier token. Cualquiera abre y pasa cualquier cosa; lo que hay es **rastro**
+  (`asignada_por`).
+- 🔴 **`?mios=1` NO es `?mias=1`.** Una vocal de diferencia, la misma ruta, y confundirlos **no
+  rompe nada visible: devuelve otra cola**. `mias` = mis LÍNEAS (`cola/lineas.ts`); `mios` = mis
+  CONVERSACIONES asignadas (`cola/asignadaSql.ts`). Adentro se llaman `misLineas` y `misAsignadas`,
+  se leen juntos en la ruta y un test los cruza (`consultarCola.mios.test.db.ts`).
+- **«Míos» recorta el UNIVERSO**, no una columna: con el filtro puesto, «Piden info · 12» dice 12
+  *de las mías*, y el desglose también. Su propio chip se cuenta **con el filtro apagado**, que es
+  cuando se lo mira. **No es fail-open** (a diferencia de «Las mías»): cero asignadas es un hecho
+  verdadero, y lo que evita la cola vacía sin explicación es que el chip **lleva su número**. Lo
+  único que se apaga solo es sin la migración (`sinAsignacion`), donde el 0 mentiría del motivo.
+- ⚠️ **El join proyecta DOS columnas, no la tabla**: `conversacion_asignada.numero_propio` choca
+  con el de la cola y un `LEFT JOIN conversacion_asignada` a secas rompe la consulta entera con
+  `42702`. Lo atrapó el test con base.
+- **En la fila, el dueño va en el RENGLÓN 1**, junto a la marca de ex-cliente (`canales/dueno.ts`,
+  puro): «Vos» en navy —el color que ahí ya significa «tuyo»— y el nombre de la otra persona en
+  neutro. **Sin dueño no se dibuja nada** (sería ruido en 1.900 filas) y **dentro de «Míos»
+  tampoco se rotula lo propio** (lo dice el filtro). Abajo NO entra: con el chip del bot al lado
+  el preview quedaba en «Bue…», y el bot corre justo en la línea que se reparte.
+- **El destino de una reasignación se VERIFICA** (`reparto/destino.ts`, puro). `vendedora_id` es
+  el username de Cerberus y **Hermes no tiene padrón**: un dedazo escribe una fila válida y la
+  conversación desaparece de la cola de todos, sin un solo síntoma. Un destino que no está ni en
+  la rueda (aun inactiva) ni en `numero_vendedora` es **409 enumerando a quién sí se puede**.
+  Con la lista vacía rechaza a todos: fail-open ahí reabriría el agujero entero.
+- 🔴 **EL MISMO HUMANO TIENE DOS GRAFÍAS VIVAS EN PROD.** Medido en VPS1 el 4-ago-2026:
+  `numero_vendedora` dice **`Luz`** (lo empuja Cerberus) y `sesiones_cerberus` dice **`luz`** (lo
+  que se tipea al entrar, que es de donde sale el `vendedoraId` del token); en `gestiones`
+  conviven `Usuario1` y `luz`. Con comparación exacta, una conversación asignada como `Luz` es
+  **invisible para su propia dueña**. Se compara normalizando **de los DOS lados** —`lower()` en
+  `cola/asignadaSql.ts`, `mismaVendedora` en `reparto/destino.ts` y en `canales/dueno.ts`— y se
+  **guarda la grafía que vino** (reescribirla rompería el cruce con `gestiones` y
+  `estado_conversacion`). Lo que reabre el agujero es normalizar de UN lado, no normalizar.
+- **El `vendedora_id` de las vendedoras nuevas ES el correo completo** (`ventas10@grupogoberna.com`),
+  verificado en el panel de Cerberus el 4-ago: el usuario se llama así y no tiene email registrado.
+  Las viejas son cortas (`luz`, `alan`, `Usuario1`). En la fila se lee «Ventas10»: `nombreCorto()`
+  corta en el `@`.
+- **La rueda se carga con `cd server && npm run reparto:rueda`** (dry-run por default), nunca con
+  SQL a mano. `--agregar a,b,c` · `--sacar x` · sin flags imprime cómo va y **verifica la
+  propiedad**. Sacar a alguien es **baja lógica**: conserva lo que tenía. La ruta `/api/reparto`
+  solo LEE la rueda y pasa conversaciones — quiénes entran al reparto no puede estar a un clic de
+  cualquier token de vendedora.
+- **Ver la UI sin server ni base**: `npx vite --port 5199` → `http://localhost:5199/galeria-reparto.html`.
+  Captura en `docs/evidencia/reparto-cola.png`.
+
 ## El panel derecho — ordenado por lo que decide una venta (ADR 0017)
 
 `src/features/panel/PanelDerecho.tsx` (360 px, `w-[22.5rem]` en `App.tsx`). El orden **no es
