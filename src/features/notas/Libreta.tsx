@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { BlockNoteView } from '@blocknote/mantine';
 import { useCreateBlockNote } from '@blocknote/react';
-import { ChevronLeft, Notebook, Pin, PinOff, Plus, Search, Trash2 } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, Notebook, Pin, PinOff, Plus, Search, Trash2, Undo2 } from 'lucide-react';
 import '@blocknote/mantine/style.css';
+import { DICCIONARIO_LIBRETA, ESQUEMA_LIBRETA } from './editor';
+import { renglonDeEstado } from './guardado';
+import { useAutoguardado } from './useAutoguardado';
 import {
   type Nota,
   docParaEditor,
@@ -53,9 +56,6 @@ type Seleccion = { tipo: 'nota'; id: number; origen: Nota['origen'] } | { tipo: 
 
 const CLAVE_LIBRETA = 'general';
 
-/** Cuánto se espera después de la última tecla para guardar. */
-const ESPERA_AUTOGUARDADO_MS = 800;
-
 function mismaSeleccion(a: Seleccion, b: Seleccion): boolean {
   if (a === null || b === null) return a === b;
   if (a.tipo !== b.tipo) return false;
@@ -81,6 +81,10 @@ function EditorDePagina({
     // BlockNote pero el tipo viaja como `unknown` desde la base — tiparlo fuerte
     // más arriba sería afirmar sobre un `jsonb` algo que nadie verificó.
     initialContent: contenidoInicial as never,
+    // Sin esto el editor entero sale en INGLÉS dentro de una app en español, y
+    // ofrece bloques de archivo que no se pueden guardar. Ver `editor.ts`.
+    schema: ESQUEMA_LIBRETA,
+    dictionary: DICCIONARIO_LIBRETA,
   });
 
   return (
@@ -162,70 +166,35 @@ function FilaPagina({
 export function Libreta() {
   const [busqueda, setBusqueda] = useState('');
   const [seleccion, setSeleccion] = useState<Seleccion>(null);
-  const [guardando, setGuardando] = useState(false);
-  const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /** Lo que el temporizador va a hacer cuando venza. Existe para poder ADELANTARLO. */
-  const pendiente = useRef<(() => Promise<void>) | null>(null);
+  /** Lo recién archivado, para poder deshacerlo. Se limpia solo. */
+  const [archivada, setArchivada] = useState<{ id: number; titulo: string } | null>(null);
 
   const termino = busqueda.trim();
   const lista = useNotas(CLAVE_LIBRETA);
   const encontradas = useBuscarNotas(termino);
-  const { crear, editar, archivar, autoguardar } = useMutacionesNotas(CLAVE_LIBRETA);
+  const { crear, editar, archivar, desarchivar, autoguardar } = useMutacionesNotas(CLAVE_LIBRETA);
 
   const notas = termino ? (encontradas.data ?? []) : (lista.data ?? []);
   const paginaAbierta =
     seleccion?.tipo === 'nota' ? notas.find((n) => n.id === seleccion.id && n.origen === seleccion.origen) : undefined;
 
   /**
-   * AL IRSE, LO QUE ESTABA POR GUARDARSE SE GUARDA.
+   * El autoguardado vive en su propio hook (`useAutoguardado`), y no por
+   * prolijidad: adentro de este componente era un `catch {}` que nadie podía
+   * interrogar, y de ahí salieron el «Guardado» falso, la doble creación y la
+   * pérdida de lo pendiente al salir. Ahí están los tres, con sus tests.
    *
-   * Antes esto solo limpiaba el temporizador, y como cerrar la libreta la
-   * DESMONTABA, escribir y salir dentro de los 800 ms de la espera perdía lo
-   * escrito, sin aviso. Como hoja encima de la app era una ventana chica —había
-   * que apretar Escape justo—; como vista del riel se sale con ⌘1..⌘8 y con un
-   * clic en cualquier ícono, así que la ventana se abre de par en par.
-   *
-   * Se dispara y no se espera: el desmontaje no puede esperar a la red. La
-   * mutación sale igual porque el `QueryClient` es el de la app, no el del
-   * componente — sobrevive a que este se vaya.
+   * Una página `nueva` todavía no tiene fila: `idActual: null` es lo que le
+   * dice al hook que el primer guardado es un POST.
    */
-  useEffect(
-    () => () => {
-      if (temporizador.current) clearTimeout(temporizador.current);
-      void pendiente.current?.();
+  const { estado: estadoGuardado, alCambiar } = useAutoguardado({
+    idActual: seleccion?.tipo === 'nota' ? seleccion.id : null,
+    puertas: {
+      actualizar: (v) => autoguardar.mutateAsync(v),
+      crear: (v) => crear.mutateAsync(v),
     },
-    [],
-  );
-
-  /**
-   * El autoguardado con espera. La página EN BLANCO no existe en la base hasta
-   * que se escribe algo: recién ahí se crea. Así «Nueva página» no ensucia la
-   * lista con filas vacías si la vendedora se arrepiente.
-   */
-  function alCambiar(doc: unknown) {
-    if (temporizador.current) clearTimeout(temporizador.current);
-    setGuardando(true);
-
-    const guardar = async () => {
-      pendiente.current = null;
-      try {
-        if (seleccion?.tipo === 'nota') {
-          await autoguardar.mutateAsync({ id: seleccion.id, doc });
-        } else if (seleccion?.tipo === 'nueva') {
-          const r = await crear.mutateAsync({ doc });
-          setSeleccion({ tipo: 'nota', id: r.nota.id, origen: 'nota' });
-        }
-      } catch {
-        // El error se ve en el renglón de estado; no se pierde lo escrito
-        // porque el editor conserva su documento.
-      } finally {
-        setGuardando(false);
-      }
-    };
-
-    pendiente.current = guardar;
-    temporizador.current = setTimeout(guardar, ESPERA_AUTOGUARDADO_MS);
-  }
+    alCrear: (id) => setSeleccion({ tipo: 'nota', id, origen: 'nota' }),
+  });
 
   const cargando = termino ? encontradas.isPending : lista.isPending;
   const fallo = termino ? encontradas.isError : lista.isError;
@@ -272,9 +241,27 @@ export function Libreta() {
           />
         </div>
 
-        <span className="ml-auto text-xs text-muted-foreground" aria-live="polite">
-          {guardando ? 'Guardando…' : paginaAbierta?.editadoAt ? 'Guardado' : ''}
-        </span>
+        {/* EL RENGLÓN DE ESTADO. Quién decide qué dice es una función pura
+            (`renglonDeEstado`), porque el defecto no estaba en el `catch` sino
+            en el ternario que sólo sabía decir «Guardando…» o «Guardado» — y
+            volvía a decir «Guardado» DESPUÉS de un 400. */}
+        {(() => {
+          const r = renglonDeEstado(estadoGuardado, Boolean(paginaAbierta?.editadoAt));
+          if (!r.texto) return <span className="ml-auto" />;
+          return (
+            <span
+              className={
+                'ml-auto flex items-center gap-1 text-xs ' +
+                (r.hayFallo ? 'font-medium text-destructive' : 'text-muted-foreground')
+              }
+              aria-live="polite"
+              role={r.hayFallo ? 'alert' : undefined}
+            >
+              {r.hayFallo && <AlertTriangle className="size-3 shrink-0" />}
+              {r.texto}
+            </span>
+          );
+        })()}
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -325,11 +312,38 @@ export function Libreta() {
                 onFijar={() => editar.mutate({ id: n.id, fijada: !n.fijada })}
                 onArchivar={() => {
                   archivar.mutate(n.id);
+                  // El camino de VUELTA. Lo pidió el review del PR #47 y el
+                  // arreglo quedó en `PanelNotas`, el componente que ya no se
+                  // monta: al pasar la Libreta al riel volvió a ser un clic sin
+                  // retorno sobre algo que la vendedora escribió.
+                  setArchivada({ id: n.id, titulo: tituloDeNota(n) || 'Sin título' });
                   if (seleccion?.tipo === 'nota' && seleccion.id === n.id) setSeleccion(null);
                 }}
               />
             ))}
           </div>
+
+          {/* DESHACER — al pie de la lista y no como toast flotante: la lista es
+              donde la página desapareció, así que es donde se la busca. Se va
+              sola en cuanto se archiva otra o se toca «Deshacer». */}
+          {archivada && (
+            <div className="m-2 flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
+              <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                Archivaste «{archivada.titulo}»
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  desarchivar.mutate(archivada.id);
+                  setArchivada(null);
+                }}
+                className="flex shrink-0 items-center gap-1 text-xs font-medium text-primary hover:underline"
+              >
+                <Undo2 className="size-3.5" />
+                Deshacer
+              </button>
+            </div>
+          )}
         </aside>
 
         {/* EL EDITOR */}

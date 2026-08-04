@@ -541,6 +541,17 @@ que se CONSULTA, nunca lo que se DECIDE.**
    no acordeón: con 360 px, el acordeón obliga a plegar y scrollear; la barra cuesta 30 px fijos.
    La bandeja va **hundida** (`bg-muted/60`): el panel se lee en tres planos —blanco decide, bandeja
    consulta, blanco actúa.
+   > 🔴 **La pestaña «Notas» de esa lista es CÓDIGO MUERTO.** Verificado el 4-ago-2026 por grep:
+   > `pestanas.ts` la declara y **ningún componente la renderiza** (a `pestanas.ts` solo lo importa
+   > su propio test). `PanelNotas.tsx` —el que dejaba anotar sobre una conversación— tiene un único
+   > consumidor, `canales/PanelContexto.tsx`, y a ése **no lo importa nadie**: quedó huérfano en
+   > `79b239b`, cuando el panel derecho se reescribió por ADR 0017.
+   > Consecuencia, y no es menor: **hoy no hay ninguna forma en la app de anotar sobre una
+   > conversación.** Todo lo que se escribe va a `clave='general'` (la Libreta). Por eso
+   > `notas_filas = 0` y `clave_general = 0` son **un solo hecho, no dos** — la nota pegada al
+   > contacto no fue rechazada por nadie: nunca estuvo disponible. Es la hipótesis C de
+   > `docs/plan-libreta-que-deberia-tener.md`, y decidir si se reconecta o se archiva va **antes**
+   > de tocar `buscarNotas`, que sigue clavado a `'general'` (`server/src/notas/notas.ts:191`).
 5. **Qué hago** — `panel/AccionesContacto`, al pie y **siempre visible**, con **una sola acción
    primaria** según el estado. Antes vivía dentro de la pestaña Ficha y abrir «Notas» hacía
    desaparecer el botón que cierra la venta.
