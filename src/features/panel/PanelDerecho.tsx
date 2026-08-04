@@ -13,6 +13,7 @@ import { EncabezadoTimeline } from './EncabezadoTimeline';
 import { EventoLinea } from './EventoLinea';
 import { PieAccionTimeline } from './PieAccionTimeline';
 import { ZonaPendientes } from './ZonaPendientes';
+import { FichaContacto } from '../cerberus/FichaContacto';
 import { VentaDesdeElPanel } from '../venta/VentaDesdeElPanel';
 
 function fichaDeCliente(f: Ficha | undefined): Extract<Ficha, { estado: 'cliente' }> | null {
@@ -122,6 +123,26 @@ export function PanelDerecho({ conversacion }: { conversacion: Conversacion }) {
               </li>
             ))}
           </ol>
+
+          {/* ══ LA FICHA DE CERBERUS ══════════════════════════════════════
+              `FichaContacto` estaba HUÉRFANO: el componente que muestra DNI,
+              correo, código de cliente y los folios con estado, fecha y monto
+              existía entero y `grep '<FichaContacto' src/` daba **cero**. Se
+              dejó de renderizar cuando el rediseño del timeline reemplazó al
+              panel viejo, y solo sobrevivió su hook `useFicha` —que es por lo
+              que la banda de arriba seguía diciendo «Cliente» sin que se
+              pudiera ver una sola compra.
+
+              Va DEBAJO del timeline y no arriba: el timeline es la narración
+              («qué pasó con esta persona») y la ficha es la referencia («cuál
+              es su DNI, qué folios tiene»). Se consulta, no se lee de corrido.
+
+              `embebida`: el marco y el encabezado los pone el panel; sin esto
+              dibujaría una segunda tarjeta con el nombre repetido. */}
+          <div className="mt-3 border-t border-border pt-3">
+            <h3 className="mb-1.5 text-xs font-semibold text-muted-foreground">Ficha de Cerberus</h3>
+            <FichaContacto conversacion={conversacion} embebida />
+          </div>
         </div>
       </div>
       {/* ⚠️ EL `onVender` ES LO QUE FALTABA. Sin él, `PieAccionTimeline` no

@@ -9,12 +9,14 @@ import {
   Send,
   Sparkles,
   Trash2,
+  Users,
   X,
 } from 'lucide-react';
 import { sectionLabel } from '../../lib/styles';
 import type { Conversacion } from '../canales/conversaciones';
 import {
   useArchivarPlantilla,
+  useCompartirPlantilla,
   usePlantillas,
   usePrepararSecuencia,
   type PasoPreparado,
@@ -109,6 +111,7 @@ export function PanelPlantillas({
   const { data, isPending, isError } = usePlantillas();
   const preparar = usePrepararSecuencia();
   const archivar = useArchivarPlantilla();
+  const compartir = useCompartirPlantilla();
   const envio = useEnvioSecuencia(conversacion);
 
   const [abierta, setAbierta] = useState<number | null>(null);
@@ -268,6 +271,17 @@ export function PanelPlantillas({
                         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
                           {p.nombre}
                         </span>
+                        {p.alcance === 'equipo' && (
+                          /* La marca del equipo se VE sin abrir la tarjeta: con
+                             cinco personas en una línea, saber cuál comparten
+                             todas cambia si la editás o la dejás quieta. */
+                          <span
+                            title={`Del equipo — la ven y la mandan las cinco. La edita ${p.vendedoraId ?? 'su dueña'}.`}
+                            className="flex shrink-0 items-center gap-0.5 rounded-full border border-navy/40 px-1.5 py-px text-[10px] font-semibold text-navy"
+                          >
+                            <Users size={9} aria-hidden="true" /> Equipo
+                          </span>
+                        )}
                         {p.usos > 0 && (
                           <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
                             {p.usos}×
@@ -355,8 +369,32 @@ export function PanelPlantillas({
 
                               <button
                                 type="button"
+                                onClick={() =>
+                                  compartir.mutate({
+                                    id: p.id,
+                                    alcance: p.alcance === 'equipo' ? 'personal' : 'equipo',
+                                  })
+                                }
+                                disabled={compartir.isPending}
+                                className={
+                                  'ml-auto rounded-lg p-1.5 transition-colors disabled:opacity-50 ' +
+                                  (p.alcance === 'equipo'
+                                    ? 'text-navy hover:bg-navy/10'
+                                    : 'text-muted-foreground hover:bg-muted hover:text-navy')
+                                }
+                                title={
+                                  p.alcance === 'equipo'
+                                    ? 'Dejar de compartirla: vuelve a ser solo tuya'
+                                    : 'Compartirla con el equipo: la ven y la mandan las cinco'
+                                }
+                                aria-label={p.alcance === 'equipo' ? 'Dejar de compartir' : 'Compartir con el equipo'}
+                              >
+                                <Users size={12} />
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => setEditando(p)}
-                                className="ml-auto rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                 title="Editar la secuencia"
                                 aria-label="Editar la secuencia"
                               >

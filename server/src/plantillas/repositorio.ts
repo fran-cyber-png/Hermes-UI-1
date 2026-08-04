@@ -48,6 +48,10 @@ export interface Plantilla {
   origen: string;
   respaldo: number;
   usos: number;
+  /** `personal` (solo su dueña la ve) | `equipo` (la ven y la mandan todas). */
+  alcance: string;
+  /** Quién la escribió. Con `alcance='equipo'` es quien PUEDE EDITARLA. */
+  vendedoraId: string;
   pasos: PasoPlantilla[];
 }
 
@@ -125,6 +129,32 @@ function visiblePara(vendedoraId: string) {
     or(
       eq(plantillas.vendedoraId, vendedoraId),
       and(eq(plantillas.origen, "minado"), eq(plantillas.estado, "propuesta")),
+      // LO DEL EQUIPO LO VE TODO EL EQUIPO (4-ago-2026). Con cinco personas
+      // compartiendo una línea, un catálogo personal hace que cada una arranque
+      // vacía y que la primera que aprueba una propuesta se la lleve. Ver es
+      // compartido; EDITAR sigue siendo de la dueña (`puedeEditar`).
+      eq(plantillas.alcance, "equipo"),
+    ),
+    isNull(plantillas.archivadoAt),
+  );
+}
+
+/**
+ * ¿PUEDE ESTA VENDEDORA EDITAR/ARCHIVAR ESTA PLANTILLA?
+ *
+ * Separado de `visiblePara` a propósito: **compartir para usar no es compartir
+ * para editar**. Cinco personas mandando la misma plantilla no rompen nada;
+ * cinco editándola sin historial de quién cambió qué hacen que un cambio
+ * silencioso en la más usada se descubra por el resultado y no por el aviso.
+ *
+ * Una propuesta minada sin dueño efectivo sigue siendo editable por cualquiera
+ * —es el paso previo a aprobarla, y aprobarla ya la reasigna—.
+ */
+function puedeEditar(vendedoraId: string) {
+  return and(
+    or(
+      eq(plantillas.vendedoraId, vendedoraId),
+      and(eq(plantillas.origen, "minado"), eq(plantillas.estado, "propuesta")),
     ),
     isNull(plantillas.archivadoAt),
   );
@@ -157,6 +187,8 @@ export async function listarPlantillas(base: typeof db, vendedoraId: string): Pr
       origen: f.origen,
       respaldo: f.respaldo,
       usos: f.usos,
+      alcance: f.alcance,
+      vendedoraId: f.vendedoraId,
       pasos: pasos.get(f.id) ?? [],
     }))
     .sort((a, b) => {
@@ -187,6 +219,8 @@ export async function obtenerPlantilla(
     negocio: f.negocio as LineaDeNegocio,
     origen: f.origen,
     respaldo: f.respaldo,
+    alcance: f.alcance,
+    vendedoraId: f.vendedoraId,
     usos: f.usos,
     pasos: pasos.get(id) ?? [],
   };
@@ -243,8 +277,21 @@ export async function editarPlantilla(
   id: number,
   patch: { nombre?: string; familiaCurso?: string | null; pasos?: PasoPlantilla[] },
 ): Promise<Plantilla | null> {
-  const actual = await obtenerPlantilla(base, vendedoraId, id);
-  if (!actual) return null;
+  /**
+   * ⚠️ LA GUARDA DE EDICIÓN ES `puedeEditar`, NO `visiblePara`.
+   *
+   * Antes esto se apoyaba en `obtenerPlantilla` —que usa `visiblePara`— y estaba
+   * bien mientras ver y editar eran lo mismo. Desde que existe `alcance='equipo'`
+   * dejaron de serlo: si esta guarda siguiera siendo la de ver, compartir una
+   * plantilla para MANDARLA la habría abierto también para que cualquiera la
+   * REESCRIBA, y un cambio silencioso en la plantilla más usada se descubre por
+   * el resultado, no por el aviso.
+   */
+  const [mia] = await base
+    .select({ id: plantillas.id })
+    .from(plantillas)
+    .where(and(eq(plantillas.id, id), puedeEditar(vendedoraId)));
+  if (!mia) return null;
 
   const cambios: Record<string, unknown> = { actualizadoAt: new Date() };
   if (patch.nombre !== undefined) cambios.nombre = patch.nombre;
@@ -296,10 +343,37 @@ export async function archivarPlantilla(
   vendedoraId: string,
   id: number,
 ): Promise<boolean> {
+  // Archivar es la edición más destructiva que hay, así que va por `puedeEditar`:
+  // una plantilla del equipo la puede mandar cualquiera, pero solo su dueña la
+  // saca de circulación para las cinco.
   const filas = await base
     .update(plantillas)
     .set({ archivadoAt: new Date() })
-    .where(and(eq(plantillas.id, id), visiblePara(vendedoraId)))
+    .where(and(eq(plantillas.id, id), puedeEditar(vendedoraId)))
+    .returning({ id: plantillas.id });
+  return filas.length > 0;
+}
+
+/**
+ * COMPARTIR (o dejar de compartir) UNA PLANTILLA CON EL EQUIPO.
+ *
+ * Va por `puedeEditar` y no por `visiblePara`: compartir es un acto de la DUEÑA.
+ * Si fuera por visibilidad, cualquiera de las cinco podría des-compartir la
+ * plantilla de otra y hacerla desaparecer de la lista de las demás, sin aviso.
+ *
+ * Devuelve `false` si no existe o no es suya (→ 404), nunca un OK falso: quien
+ * llama tiene que poder decirle a la vendedora «no se pudo».
+ */
+export async function fijarAlcance(
+  base: typeof db,
+  vendedoraId: string,
+  id: number,
+  alcance: "personal" | "equipo",
+): Promise<boolean> {
+  const filas = await base
+    .update(plantillas)
+    .set({ alcance, actualizadoAt: new Date() })
+    .where(and(eq(plantillas.id, id), puedeEditar(vendedoraId)))
     .returning({ id: plantillas.id });
   return filas.length > 0;
 }

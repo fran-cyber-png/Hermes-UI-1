@@ -50,8 +50,15 @@ import { type EstadoPieza, type Pieza } from "./pieza.js";
  * app se la muestra a todas (ADR 0019). Aprobarla es hacerse cargo, y ahí sí
  * pasa a ser personal.
  */
-function esDelEquipo(origen: string, estado: string): boolean {
-  return origen === "minado" && estado === "propuesta";
+function esDelEquipo(origen: string, estado: string, alcance: string): boolean {
+  // Desde el 4-ago-2026 hay DOS formas de ser del equipo, y las dos tienen que
+  // llegarle a Ivi igual: la vieja —una propuesta minada, que no es de nadie— y
+  // la nueva y explícita: `alcance='equipo'`, que una persona eligió. Si esta
+  // segunda no se reflejara acá, Ivi seguiría creyendo que una plantilla que las
+  // cinco pueden mandar es de una sola, y al filtrar por vendedora se la
+  // escondería a las otras cuatro — el mismo bug que ADR 0019 arregló en la app,
+  // reencarnado del lado del catálogo.
+  return alcance === "equipo" || (origen === "minado" && estado === "propuesta");
 }
 
 /** El estado de una plantilla, traducido al vocabulario del catálogo. */
@@ -100,7 +107,7 @@ export async function leerPiezas(base: typeof db): Promise<Pieza[]> {
       // `vendedora_id`, así que el minado guarda uno cualquiera). Marcarla como
       // personal la escondería de `?vendedora=` para todas menos una, que es
       // exactamente el bug que ADR 0019 arregló en la app.
-      alcance: esDelEquipo(f.origen, f.estado) ? "negocio" : "vendedora",
+      alcance: esDelEquipo(f.origen, f.estado, f.alcance) ? "negocio" : "vendedora",
       propietario: f.vendedoraId,
       familia: f.familiaCurso ? { vocabulario: "sku-cerberus", valor: f.familiaCurso } : null,
     }),

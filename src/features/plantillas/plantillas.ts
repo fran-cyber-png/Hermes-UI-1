@@ -39,6 +39,14 @@ export interface Plantilla {
   /** Cuántas conversaciones del histórico respaldan la propuesta. */
   respaldo: number;
   usos: number;
+  /**
+   * `personal` (solo su dueña la ve) | `equipo` (la ven y la mandan todas).
+   * Opcional: un server viejo no lo manda, y ahí se lee como `personal` — que es
+   * el comportamiento de siempre, no un downgrade silencioso.
+   */
+  alcance?: 'personal' | 'equipo' | string;
+  /** Quién la escribió. Con `alcance='equipo'`, quien la puede EDITAR. */
+  vendedoraId?: string;
   pasos: PasoPlantilla[];
 }
 
@@ -118,6 +126,25 @@ export function useArchivarPlantilla() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api(`/api/plantillas/${id}`, { method: 'DELETE' }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: CLAVE }),
+  });
+}
+
+/**
+ * COMPARTIR CON EL EQUIPO — la mitad de «los 5 tienen el creador de plantillas».
+ *
+ * Con cinco personas en una línea, un catálogo personal hace que cada una
+ * arranque vacía. Esto las junta. Solo la dueña puede cambiarlo: el server
+ * responde 404 si no lo es, y ese 404 se muestra en vez de tragarse.
+ */
+export function useCompartirPlantilla() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: number; alcance: 'personal' | 'equipo' }) =>
+      api(`/api/plantillas/${v.id}/alcance`, {
+        method: 'PUT',
+        body: JSON.stringify({ alcance: v.alcance }),
+      }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: CLAVE }),
   });
 }

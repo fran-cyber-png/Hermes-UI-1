@@ -26,6 +26,8 @@ const plantilla = (p: Partial<Plantilla> & { id: number; nombre: string }): Plan
   negocio: "escuela",
   origen: "manual",
   respaldo: 0,
+  alcance: "personal",
+  vendedoraId: "ana",
   usos: 0,
   pasos: [{ orden: 1, texto: p.nombre, media: null, mediaPendiente: false }],
   ...p,

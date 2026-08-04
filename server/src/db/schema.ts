@@ -1081,8 +1081,35 @@ export const plantillas = pgTable(
   "plantillas",
   {
     id: bigserial({ mode: "number" }).primaryKey(),
-    /** Personal, como `categorias`/`recordatorios`. La 2ª vendedora arranca vacía. */
+    /**
+     * De quién es. Con `alcance='equipo'` sigue diciendo QUIÉN LA ESCRIBIÓ —y
+     * quién puede editarla—, pero ya no decide quién la ve.
+     */
     vendedoraId: text("vendedora_id").notNull(),
+    /**
+     * QUIÉN LA VE Y LA PUEDE MANDAR: `personal` (solo su dueña) | `equipo`
+     * (todas la ven y la mandan; solo la dueña la edita).
+     *
+     * ── Por qué hizo falta ──
+     * Este catálogo nació personal, como `categorias` y `recordatorios`, y con
+     * una vendedora por línea eso era correcto. Desde el 4-ago-2026 **cinco
+     * personas comparten una línea**, y ahí «personal» deja de ser una decisión
+     * de privacidad y pasa a ser un impuesto: **cada una arranca con el catálogo
+     * vacío**, y como `aprobarPlantilla` reasigna el dueño, la primera que
+     * aprueba una propuesta minada se la lleva y **desaparece para las otras
+     * cuatro**. El costo ya estaba escrito con nombre y apellido en
+     * `scripts/sembrarGuionConsultoria.ts` («es de Walter… Sindy y Luz no la van
+     * a ver, y el próximo asesor arranca vacío»).
+     *
+     * ── Ver ≠ editar, y es a propósito ──
+     * Decisión del dueño (4-ago): compartir para USAR, personal para EDITAR.
+     * Cinco personas editando el mismo texto sin historial de quién cambió qué
+     * hace que un cambio silencioso en la plantilla más usada se descubra por el
+     * resultado y no por el aviso. Mandar no rompe nada; editar sí.
+     *
+     * `personal` por default: ninguna fila existente cambia de sentido al migrar.
+     */
+    alcance: text("alcance").notNull().default("personal"),
     nombre: text("nombre").notNull(),
     /** Prefijo de SKU (`DIPICOT`), no un producto: resuelve `{curso}`/`{precio}` a la última edición. */
     familiaCurso: text("familia_curso"),

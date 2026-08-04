@@ -1,0 +1,1 @@
+ALTER TABLE "plantillas" ADD COLUMN "alcance" text DEFAULT 'personal' NOT NULL;

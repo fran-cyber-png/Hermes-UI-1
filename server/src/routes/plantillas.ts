@@ -17,6 +17,7 @@ import { decidirAprobacion } from "../plantillas/aprobacion.js";
 import {
   aprobarPlantilla,
   archivarPlantilla,
+  fijarAlcance,
   crearPlantilla,
   editarPlantilla,
   listarPlantillas,
@@ -253,6 +254,36 @@ plantillasRouter.post("/:id/aprobar", async (req, res) => {
 
   const plantilla = await aprobarPlantilla(db, req.vendedoraId!, id, decision.familiaCurso);
   res.json({ ok: true, plantilla });
+});
+
+/**
+ * COMPARTIR CON EL EQUIPO — `PUT /api/plantillas/:id/alcance {alcance}`.
+ *
+ * Desde el 4-ago-2026 cinco personas comparten una línea, y un catálogo personal
+ * hace que cada una arranque vacía. Esto es lo que las junta: `equipo` = todas la
+ * ven y la mandan; `personal` = solo su dueña.
+ *
+ * Solo la dueña lo cambia (`fijarAlcance` va por `puedeEditar`). Un alcance
+ * desconocido es 400 y no un default silencioso: caer a `personal` ante un typo
+ * escondería la plantilla de las otras cuatro sin que nadie lo pidiera.
+ */
+plantillasRouter.put("/:id/alcance", async (req, res) => {
+  const id = Number(req.params.id);
+  const alcance = (req.body as { alcance?: unknown })?.alcance;
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ ok: false, message: "id inválido" });
+    return;
+  }
+  if (alcance !== "personal" && alcance !== "equipo") {
+    res.status(400).json({ ok: false, message: "alcance inválido (personal | equipo)" });
+    return;
+  }
+  const ok = await fijarAlcance(db, req.vendedoraId!, id, alcance);
+  if (!ok) {
+    res.status(404).json({ ok: false, message: "esa plantilla no existe o no es tuya" });
+    return;
+  }
+  res.json({ ok: true, alcance });
 });
 
 plantillasRouter.delete("/:id", async (req, res) => {
