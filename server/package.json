@@ -44,7 +44,8 @@
     "lazo": "tsx src/scripts/cerberus.ts lazo",
     "backfill": "tsx src/scripts/backfill.ts",
     "backfill:categorias": "tsx src/scripts/backfillCategorias.ts",
-    "guion:consultoria": "tsx src/scripts/sembrarGuionConsultoria.ts"
+    "guion:consultoria": "tsx src/scripts/sembrarGuionConsultoria.ts",
+    "campana": "tsx src/scripts/campana.ts"
   },
   "dependencies": {
     "@anthropic-ai/bedrock-sdk": "^0.32.0",

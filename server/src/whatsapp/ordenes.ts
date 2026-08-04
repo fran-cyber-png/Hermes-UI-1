@@ -1,4 +1,4 @@
-import type { MediaSaliente } from "./transporte.js";
+import type { MediaSaliente, PlantillaSaliente } from "./transporte.js";
 import type { OrdenEnvioMedia } from "./envioControlado.js";
 import type { Procedencia } from "../procedencia/pieza.js";
 
@@ -36,6 +36,18 @@ export interface OrdenTexto extends ExtrasDeLaOrden {
   telefono: string;
   texto: string;
   referencia: string;
+}
+
+/**
+ * UNA PLANTILLA APROBADA (HSM). Sin `texto`: el cuerpo lo tiene Meta, y lo que
+ * Hermes audita y proyecta es la copia local (`plantilla.cuerpoRenderizado`).
+ */
+export interface OrdenPlantilla extends ExtrasDeLaOrden {
+  vendedoraId: string;
+  numeroPropio: string;
+  telefono: string;
+  referencia: string;
+  plantilla: PlantillaSaliente;
 }
 
 export interface OrdenMedia extends ExtrasDeLaOrden {

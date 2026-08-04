@@ -3,14 +3,14 @@ import { puertaDe } from "./gestor.js";
 import { proyectarMensaje } from "./proyectar.js";
 import { repositorioDrizzle } from "./repositorioDrizzle.js";
 import type { ResultadoControlado } from "./envioControlado.js";
-import { ordenDeMedia, type OrdenMedia, type OrdenTexto } from "./ordenes.js";
+import { ordenDeMedia, type OrdenMedia, type OrdenPlantilla, type OrdenTexto } from "./ordenes.js";
 import { db } from "../db/client.js";
 import { momentoDelEnvio } from "../procedencia/momento.js";
 import { A_MANO, aMano, type Procedencia } from "../procedencia/pieza.js";
 
 // La FORMA de una orden vive en `ordenes.ts` (sin `db` adentro, para poder
 // testearla). Se re-exporta para que quien la importaba de acá siga andando.
-export { ordenDeMedia, type OrdenMedia, type OrdenTexto };
+export { ordenDeMedia, type OrdenMedia, type OrdenPlantilla, type OrdenTexto };
 
 /**
  * MANDAR Y DEJAR RASTRO — el par indivisible que toda salida de Hermes hace.
@@ -87,6 +87,37 @@ export async function enviarTextoYProyectar(o: OrdenTexto): Promise<ResultadoCon
     ocurridoEn: r.ocurridoEn,
     nombreVisible: null,
     texto: o.texto,
+    clase: "texto",
+  });
+  if ("evento" in proy) await repositorioDrizzle.persistir(proy.evento, proy.interaccion);
+
+  return r;
+}
+
+/**
+ * UNA PLANTILLA APROBADA, y su eco en el hilo.
+ *
+ * Lo que se proyecta es `cuerpoRenderizado` —la copia local del cuerpo que Meta
+ * aprobó—, porque Meta devuelve solo un id. Sin esto, la vendedora abre la
+ * conversación y ve que "se mandó algo" sin poder leer qué: el mensaje más
+ * importante del día sería el único invisible en el CRM.
+ */
+export async function enviarPlantillaYProyectar(o: OrdenPlantilla): Promise<ResultadoControlado> {
+  const puerta = puertaDe(o.numeroPropio, gestorWhatsapp());
+  if (!puerta.ok) return puerta;
+
+  const r = await puerta.envio.enviarPlantilla({ ...o, procedencia: o.procedencia ?? (await conMomento(o)) });
+  if (!r.ok) return r;
+
+  const proy = proyectarMensaje({
+    idExterno: r.idExterno,
+    numeroPropio: o.numeroPropio,
+    telefono: o.telefono,
+    esMio: true,
+    esGrupo: false,
+    ocurridoEn: r.ocurridoEn,
+    nombreVisible: null,
+    texto: o.plantilla.cuerpoRenderizado,
     clase: "texto",
   });
   if ("evento" in proy) await repositorioDrizzle.persistir(proy.evento, proy.interaccion);
