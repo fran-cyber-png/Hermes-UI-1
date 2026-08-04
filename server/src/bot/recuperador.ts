@@ -14,6 +14,7 @@
 
 import type { Pieza } from "../catalogo/pieza.js";
 import type { ResumenPieza } from "./acciones.js";
+import type { ClaseQueElBotManda } from "./acciones.js";
 
 /**
  * EL ENFOQUE DEL BOT, HOY: UN SOLO PRODUCTO.
@@ -60,7 +61,17 @@ export const ENFOQUE_PRODUCTO: string =
  * acuse) son de OTRO frente: darle al bot la opción de mandar un «gracias por
  * escribirnos» en mitad de una conversación sería mezclar dos canales.
  */
-const CLASES_QUE_MANDA_EL_BOT = new Set(["plantilla", "hecho"]);
+const CLASES_QUE_MANDA_EL_BOT = ["plantilla", "hecho"] as const satisfies readonly ClaseQueElBotManda[];
+
+/**
+ * El filtro y el TIPO dicen lo mismo, y eso no es adorno: sin el predicado, el
+ * runtime ya excluía `hsm` pero el tipo seguía admitiéndolo, así que el día que
+ * alguien tocara la lista el compilador no iba a decir nada. Con `satisfies` +
+ * predicado, agregar una clase obliga a decidir si el bot la puede mandar.
+ */
+function elBotLaPuedeMandar(p: Pieza): p is Pieza & { clase: ClaseQueElBotManda } {
+  return (CLASES_QUE_MANDA_EL_BOT as readonly string[]).includes(p.clase);
+}
 
 /**
  * Del catálogo entero, lo que el bot puede ver en este turno.
@@ -71,7 +82,7 @@ const CLASES_QUE_MANDA_EL_BOT = new Set(["plantilla", "hecho"]);
  */
 export function piezasParaElBot(piezas: Pieza[], enfoque: string): ResumenPieza[] {
   return piezas
-    .filter((p) => CLASES_QUE_MANDA_EL_BOT.has(p.clase))
+    .filter(elBotLaPuedeMandar)
     .filter((p) => p.familia === null || p.familia.valor === enfoque)
     .map((p) => ({
       clase: p.clase,

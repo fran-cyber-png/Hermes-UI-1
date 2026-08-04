@@ -102,6 +102,6 @@ describe("lo que el catálogo publica = lo que el lazo estampa", () => {
   });
 
   test("las clases publicadas son el vocabulario compartido, no una lista propia", () => {
-    assert.deepEqual([...CLASES_DE_PIEZA], ["plantilla", "hecho", "acuse", "gancho"]);
+    assert.deepEqual([...CLASES_DE_PIEZA], ["plantilla", "hecho", "acuse", "gancho", "hsm"]);
   });
 });

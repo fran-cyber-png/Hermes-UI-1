@@ -1,4 +1,4 @@
-import type { MediaSaliente, ResultadoEnvio, TransporteWhatsapp } from './transporte.js';
+import type { MediaSaliente, PlantillaSaliente, ResultadoEnvio, TransporteWhatsapp } from './transporte.js';
 import { normalizarTelefono } from './identidadWa.js';
 import { A_MANO, type Procedencia } from '../procedencia/pieza.js';
 
@@ -62,6 +62,14 @@ export interface OrdenEnvioMedia extends Omit<OrdenEnvio, 'texto'> {
   media: MediaSaliente;
 }
 
+/**
+ * Una orden de PLANTILLA APROBADA (HSM). Sin `texto` porque el cuerpo lo tiene
+ * Meta: lo que se audita es `plantilla.cuerpoRenderizado`, la copia local.
+ */
+export interface OrdenEnvioPlantilla extends Omit<OrdenEnvio, 'texto'> {
+  plantilla: PlantillaSaliente;
+}
+
 export type ResultadoControlado =
   | { ok: true; idExterno: string; ocurridoEn: Date }
   | { ok: false; motivo: string };
@@ -116,6 +124,50 @@ export class EnvioControlado {
     return this.conGuardas(
       { ...orden, texto: descripcion, procedencia: orden.procedencia ?? A_MANO },
       () => this.transporte.enviarMedia(orden.telefono, orden.media),
+    );
+  }
+
+  /**
+   * UNA PLANTILLA APROBADA por la MISMA puerta: idénticas guardas, idéntica
+   * auditoría. Es lo único que se puede mandar con la ventana de 24 h cerrada.
+   *
+   * ── Por qué el texto se fabrica acá, como en `enviarMedia` ──
+   * Meta devuelve solo un id: el cuerpo de la HSM vive allá. Sin la copia local
+   * (`cuerpoRenderizado`), `envios_wa` guardaría una fila que no dice qué se
+   * mandó y el hilo de la vendedora mostraría un envío vacío. La copia es lo que
+   * hace auditable un mensaje cuyo texto no controlamos.
+   *
+   * ── Por qué puede fallar por transporte, y no es un bug ──
+   * `enviarPlantilla` es OPCIONAL en la interfaz: whatsmeow no puede mandar
+   * plantillas. Si la línea no lo soporta se rechaza con motivo, sin auditar
+   * —igual que una orden malformada—, porque no llegó a ser un intento.
+   */
+  async enviarPlantilla(orden: OrdenEnvioPlantilla): Promise<ResultadoControlado> {
+    if (
+      !orden.vendedoraId ||
+      !orden.numeroPropio ||
+      !orden.telefono ||
+      !orden.referencia ||
+      !orden.plantilla?.nombre ||
+      !orden.plantilla?.idioma ||
+      !orden.plantilla?.cuerpoRenderizado?.trim()
+    ) {
+      return {
+        ok: false,
+        motivo: 'faltan datos obligatorios del envío (vendedora, número, teléfono, referencia o plantilla)',
+      };
+    }
+    const lineaAjena = this.lineaAjena(orden);
+    if (lineaAjena) return lineaAjena;
+
+    const enviar = this.transporte.enviarPlantilla?.bind(this.transporte);
+    if (!enviar) {
+      return { ok: false, motivo: 'esta línea no puede mandar plantillas aprobadas (no es Cloud API)' };
+    }
+
+    return this.conGuardas(
+      { ...orden, texto: orden.plantilla.cuerpoRenderizado, procedencia: orden.procedencia ?? A_MANO },
+      () => enviar(orden.telefono, orden.plantilla),
     );
   }
 

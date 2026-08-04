@@ -146,6 +146,30 @@ export class FotoNoDisponibleError extends Error {
   }
 }
 
+/**
+ * UNA PLANTILLA APROBADA, lista para pedirle a Meta.
+ *
+ * `nombre` + `idioma` son la IDENTIDAD con la que Meta la resuelve: si el par no
+ * coincide exactamente con lo aprobado, contesta 132001 («the template does not
+ * exist in the specified language»). No se adivina: se lee del catálogo local,
+ * que a su vez se sincroniza con Meta.
+ *
+ * `componentes` viaja tal cual al payload. Se deja crudo a propósito: la forma
+ * de un componente (header de imagen, body con variables, botones con índice) la
+ * define Meta y cambia con sus versiones — tiparla acá sería una copia que
+ * envejece mal, y esta capa no la interpreta.
+ *
+ * `cuerpoRenderizado` NO va a Meta: es lo que Hermes escribe en `envios_wa.texto`
+ * y proyecta al hilo. Meta devuelve solo un id, así que sin esta copia el envío
+ * quedaría auditado como una fila sin contenido.
+ */
+export interface PlantillaSaliente {
+  nombre: string;
+  idioma: string;
+  componentes?: unknown[];
+  cuerpoRenderizado: string;
+}
+
 export interface TransporteWhatsapp {
   /** Qué hay del otro lado. Se muestra en la UI: el equipo tiene que saberlo. */
   readonly nombre: 'whatsmeow' | 'cloud-api' | 'falso';
@@ -188,6 +212,23 @@ export interface TransporteWhatsapp {
    * anti-masivo que `enviarTexto`: un archivo, un destinatario, una orden.
    */
   enviarMedia(telefono: string, media: MediaSaliente): Promise<ResultadoEnvio>;
+
+  /**
+   * UNA plantilla aprobada por Meta (HSM) a UN teléfono. Misma forma anti-masivo
+   * que las otras dos: una plantilla, un destinatario, una orden.
+   *
+   * ── Por qué es OPCIONAL ──
+   * Es la única capacidad que **no todos los transportes pueden tener**: una HSM
+   * es un objeto de la Cloud API, y whatsmeow —que es una cuenta real vinculada—
+   * no tiene concepto de plantilla ni forma de adquirirlo. Es el mismo patrón que
+   * `fotoDePerfil?`, al revés: allá la tienen whatsmeow y falso, y no cloud-api.
+   *
+   * ── Para qué existe ──
+   * Es lo ÚNICO que se puede mandar cuando la ventana de 24 h está cerrada. Sin
+   * esto, a quien escribió hace tres días no se le puede escribir: Meta rechaza
+   * el texto libre con el error 131047.
+   */
+  enviarPlantilla?(telefono: string, plantilla: PlantillaSaliente): Promise<ResultadoEnvio>;
 
   marcarLeido(telefono: string, idsExternos: string[]): Promise<void>;
 

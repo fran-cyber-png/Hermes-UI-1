@@ -11,8 +11,21 @@ import {
 import { VECTORES_DE_MENSAJE, VECTORES_DE_SECUENCIA } from "./vectores.js";
 
 describe("el vocabulario de clases", () => {
-  test("son las cuatro, y en este orden — es contrato publicado a Ivi", () => {
-    assert.deepEqual([...CLASES_DE_PIEZA], ["plantilla", "hecho", "acuse", "gancho"]);
+  /**
+   * SON CINCO, Y EN ESTE ORDEN — es contrato publicado a Ivi.
+   *
+   * `hsm` se sumó el 4-ago-2026 para las campañas por plantilla aprobada. Que
+   * exista acá NO significa que Ivi vaya a elegir una: el catálogo que Ivi lee
+   * no sirve piezas de esa clase, porque Ivi arma respuestas DENTRO de una
+   * conversación viva y una HSM existe justamente para cuando no la hay.
+   *
+   * Vive en esta lista porque es donde tiene que vivir: es el vocabulario de
+   * `envios_wa.pieza_clase`, y sin ella los envíos de campaña caerían en
+   * `A_MANO` —la línea de base— y contaminarían el número contra el que se
+   * compara todo lo demás.
+   */
+  test("son las cinco, y en este orden — es contrato publicado a Ivi", () => {
+    assert.deepEqual([...CLASES_DE_PIEZA], ["plantilla", "hecho", "acuse", "gancho", "hsm"]);
   });
 
   test("no hay clase `paso` ni clase `dato`: eran los dos nombres del choque", () => {

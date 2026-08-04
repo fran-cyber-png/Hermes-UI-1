@@ -156,6 +156,22 @@ export const VIAS_DE_PIEZA = [
    * el acuse nocturno quedaría midiendo el rendimiento de un flyer.
    */
   "bot",
+  /**
+   * UNA CAMPAÑA por plantilla aprobada: un lote que una persona armó, revisó y
+   * autorizó, despachado con ritmo.
+   *
+   * ⚠️ **No es `automatica` ni `bot`, y separarla tampoco es prolijidad.**
+   * `automatica` tiene UN productor —el acuse fuera de horario— y responde
+   * «¿sirve el acuse nocturno?»; `bot` responde «¿elige mejor la máquina que la
+   * persona?». Meter una campaña en cualquiera de las dos deja al acuse midiendo
+   * el rendimiento de un flyer, que es exactamente el error que el comentario de
+   * `bot` dice que hay que evitar.
+   *
+   * Y la pregunta que esta vía habilita no la contesta ninguna otra: la MISMA
+   * pieza mandada en masa y mandada a mano por una vendedora quedan comparables
+   * sin partir la fila, porque `porVia` las separa.
+   */
+  "campana",
 ] as const;
 export type ViaDePieza = (typeof VIAS_DE_PIEZA)[number];
 
@@ -322,6 +338,37 @@ export function deUnAcuse(o: {
     ref: refDeDireccion({ clase: "acuse", id: o.plantillaId }),
     version: versionDePieza(o.contenido),
     via: "automatica",
+    editada: false,
+    momento: o.momento ?? null,
+  };
+}
+
+/**
+ * UNA CAMPAÑA POR PLANTILLA APROBADA (HSM).
+ *
+ * `nombre` es la identidad con la que Meta la resuelve (`promo_3x1_cursos`) y es
+ * lo que va como `ref`: es estable, legible en un reporte, y sobrevive a que se
+ * cambie el texto —para eso está la versión—.
+ *
+ * ⚠️ El `contenido` que se hashea es **el cuerpo aprobado tal como está en
+ * Meta**, sin renderizar. Si alguien edita la plantilla allá y la copia local no
+ * se entera, el sha no cambia y dos textos distintos se miden como uno: es
+ * exactamente el modo de fallo que este módulo existe para no cometer, y por eso
+ * la copia local tiene que sincronizarse contra Meta, no copiarse a mano.
+ */
+export function deUnaCampana(o: {
+  /** El `name` de la plantilla en Meta. */
+  nombre: string;
+  /** El cuerpo APROBADO, sin renderizar. */
+  contenido: ContenidoDePieza | null;
+  momento?: MomentoDeVenta | null;
+}): DeUnaPieza {
+  return {
+    tipo: "pieza",
+    clase: "hsm",
+    ref: refDeDireccion({ clase: "hsm", id: o.nombre }),
+    version: versionDePieza(o.contenido),
+    via: "campana",
     editada: false,
     momento: o.momento ?? null,
   };

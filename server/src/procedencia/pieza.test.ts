@@ -84,7 +84,12 @@ describe("la pieza se identifica por (clase, ref) — estable a través del fren
   });
 
   test("las clases y las vías son listas cerradas: un typo no entra a la base", () => {
-    assert.deepEqual([...CLASES_DE_PIEZA], ["plantilla", "hecho", "acuse", "gancho"]);
+    // ⚠️ `hsm` se AGREGÓ (campañas, 4-ago-2026): una plantilla aprobada por Meta
+    // no es una `plantilla` interna —su cuerpo vive allá y no tiene pasos— y sin
+    // clase propia `direccionDesdeRef` devuelve null y la procedencia cae a
+    // `A_MANO`, o sea que la campaña ensuciaría la LÍNEA DE BASE. Igual que con
+    // las vías: hay que venir a tocar esta lista, y de eso se trata el test.
+    assert.deepEqual([...CLASES_DE_PIEZA], ["plantilla", "hecho", "acuse", "gancho", "hsm"]);
     // ⚠️ `bot` se AGREGÓ (F3): el bot conversacional manda piezas que él mismo
     // eligió. La lista sigue cerrada —de eso se trata este test— y por eso hay
     // que venir a tocarla: `procedenciaDesdeColumnas` degrada a la línea de base
@@ -95,7 +100,9 @@ describe("la pieza se identifica por (clase, ref) — estable a través del fren
     // horario) y responde otra pregunta. Ver el comentario en `pieza.ts`.
     assert.deepEqual(
       [...VIAS_DE_PIEZA],
-      ["panel-sugerencia", "panel-secuencias", "panel-datos", "automatica", "bot"],
+      // `campana` se agregó por el mismo motivo que `bot`: mezclarla con
+      // `automatica` dejaría al acuse nocturno midiendo el rendimiento de un flyer.
+      ["panel-sugerencia", "panel-secuencias", "panel-datos", "automatica", "bot", "campana"],
     );
   });
 });

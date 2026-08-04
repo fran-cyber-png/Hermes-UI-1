@@ -5,6 +5,7 @@ import {
   type MediaSaliente,
   type MediaWhatsapp,
   type MensajeWhatsapp,
+  type PlantillaSaliente,
   type ResultadoEnvio,
   type TransporteWhatsapp,
 } from './transporte.js';
@@ -134,6 +135,41 @@ export class TransporteCloudApi implements TransporteWhatsapp {
     const data = await r.json();
     if (!r.ok) throw new Error(`Cloud API (${r.status}): ${JSON.stringify(data)}`);
     return data;
+  }
+
+  /**
+   * UNA PLANTILLA APROBADA (HSM) — lo único que atraviesa la ventana de 24 h.
+   *
+   * Es el MISMO `POST /{phoneNumberId}/messages` que `enviarTexto`: cambia el
+   * `type` y aparece el objeto `template`. Por eso reusa `post()` entero, la
+   * misma guarda de sesión y el mismo `normalizarTelefono`.
+   *
+   * ⚠️ El par `(name, language)` tiene que coincidir EXACTAMENTE con lo aprobado
+   * en Meta o contesta **132001**. Ojo con el caso real de esta casa:
+   * `promo_3x1_cursos` está registrada en idioma `en` aunque su cuerpo esté en
+   * español — pedirla como `es` falla.
+   *
+   * Y los errores se propagan tal cual: el **131049** («per-user marketing
+   * limit») es adaptativo y sin número publicado, así que una parte de cualquier
+   * lote va a fallar sin que se pueda predecir cuál. Quien llame tiene que
+   * tratarlo como resultado normal, no como caída.
+   */
+  async enviarPlantilla(telefono: string, plantilla: PlantillaSaliente): Promise<ResultadoEnvio> {
+    if (this.sesion.estado !== 'conectado') {
+      throw new Error(`No se puede enviar: la sesión está "${this.sesion.estado}".`);
+    }
+    const numero = normalizarTelefono(telefono);
+    if (!numero) throw new Error(`Teléfono inválido: "${telefono}"`);
+    const data = await this.post({
+      to: numero,
+      type: 'template',
+      template: {
+        name: plantilla.nombre,
+        language: { code: plantilla.idioma },
+        ...(plantilla.componentes?.length ? { components: plantilla.componentes } : {}),
+      },
+    });
+    return { idExterno: data.messages[0].id, ocurridoEn: new Date() };
   }
 
   async enviarTexto(telefono: string, texto: string): Promise<ResultadoEnvio> {

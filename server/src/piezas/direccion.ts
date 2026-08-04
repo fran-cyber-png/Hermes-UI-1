@@ -91,10 +91,23 @@
 
 /**
  * Las clases que existen. Lista cerrada: un typo no llega ni a la base ni al
- * contrato. Son cuatro porque hoy hay cuatro catálogos —dos tablas y dos
- * arreglos en código—, no porque haya cuatro tablas.
+ * contrato. Son CINCO porque hoy hay cinco catálogos —dos tablas, dos arreglos
+ * en código y uno que vive en Meta—, no porque haya cinco tablas.
+ *
+ * ── Por qué `hsm` es una clase propia y no una `plantilla` ──
+ * `plantilla` significa la secuencia interna de `plantillas` + `plantilla_pasos`
+ * (por eso es la única que admite `orden`: un paso se direcciona DENTRO de su
+ * secuencia). Una HSM es otra cosa: su cuerpo vive en Meta, su identidad es un
+ * nombre y no un id numérico, y no tiene pasos. Meterla en `plantilla` colisiona
+ * los espacios de ids de los dos catálogos.
+ *
+ * Y sobre todo: sin una clase propia, `direccionDesdeRef` devuelve `null` ante
+ * una clase desconocida y la procedencia cae a `A_MANO` — «ante la duda, la
+ * línea de base». Esa política es correcta para una fila vieja y **venenosa**
+ * para una campaña: los envíos contaminarían justo la fila contra la que se
+ * compara todo lo demás, y no se pueden re-atribuir después.
  */
-export const CLASES_DE_PIEZA = ["plantilla", "hecho", "acuse", "gancho"] as const;
+export const CLASES_DE_PIEZA = ["plantilla", "hecho", "acuse", "gancho", "hsm"] as const;
 export type ClasePieza = (typeof CLASES_DE_PIEZA)[number];
 
 /** La única clase que tiene pasos adentro, y por lo tanto la única que admite `orden`. */
