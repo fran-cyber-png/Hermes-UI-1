@@ -506,6 +506,56 @@ Server en `server/src/reparto/`, plan y decisiones en `docs/plan-reparto-de-lead
 - **Ver la UI sin server ni base**: `npx vite --port 5199` → `http://localhost:5199/galeria-reparto.html`.
   Captura en `docs/evidencia/reparto-cola.png`.
 
+## El padrón de contactos — los 72.923 que NUNCA escribieron (ADR 0035)
+
+La cola ordena por urgencia a quien **ya escribió**. El padrón responde la otra pregunta: **¿a
+quiénes les hablamos ahora?** Son los contactos de **`icarus.contacts`**, que hasta el 4-ago-2026 no
+estaban en ninguna pantalla. Vive en la vista **Contactos**, primera solapa (`src/features/padron/`,
+server en `server/src/padron/` + `routes/padron.ts`).
+
+Medido en VPS1 el 4-ago-2026: **72.923** contactos · 71.341 con teléfono usable (97,8 %) · 72.770 con
+nombre · 61.298 con correo.
+
+- 🔴 **ACÁ EL RECORTE ES UNA FRONTERA, NO UN FILTRO** — y es la única de Hermes. Todo lo demás
+  («Las mías» `cola/lineas.ts`, «Míos» `cola/asignadaSql.ts`) es explícitamente un filtro, porque la
+  cola es compartida y presentar un recorte como frontera sería una frontera imaginaria. Acá la
+  decisión del dueño es la contraria: **la vendedora no ve el padrón, ve lo que le habilitaron**. Por
+  eso el recorte está en el `WHERE` de la ruta y **no** en un `if` del navegador — un recorte dibujado
+  en el front no existe: los datos ya viajaron. Lo que NO cambia: el resto de Hermes sigue sin modelo
+  de permisos.
+- **Quién es supervisor sale de `HERMES_SUPERVISORES`** (CSV de `vendedora_id`), no de una tabla:
+  Hermes no tiene padrón de usuarios donde colgar un rol. **Fail-closed** — sin la variable nadie es
+  supervisor y nadie ve el padrón, y la pantalla lo **dice** (`sinSupervisores`) en vez de mostrar una
+  lista vacía. Se compara normalizando los dos lados (`ventas10@…` == `Ventas10@…`): el `vendedora_id`
+  es lo que se TIPEA al entrar, y un supervisor con una mayúscula distinta no vería un error, vería su
+  pantalla vacía. **No se edita desde la app**, igual que la rueda del reparto.
+- **El reparto se guarda en Hermes** (`contacto_habilitado`, migración `0017`), nunca en icarus: la
+  conexión fuerza `default_transaction_read_only=on` y **icarus sirve a un cliente real de
+  consultoría**. ⚠️ `icarus.contacts.assigned_to` **parece** esto y no lo es: sus cinco valores son
+  **números de línea** (`+51944531711`, `+51986394450`…), o sea «por qué línea pasó», no «de quién es».
+- ⚠️ **Dos bases, sin JOIN**: los ids se leen de `hermes_db` y las filas se piden a icarus
+  (`= ANY(...)::bigint[]`). Por eso hay tope de página duro, y por eso con icarus caído la lista **no
+  se puede servir** — ahí va un error que lo dice, jamás una lista vacía (cicatriz de ADR 0023).
+- 🔴 **«Compró» se pregunta a `icarus.sales`, NUNCA a `n_purchases`**: 10.564 contactos dicen haber
+  comprado y solo **4.783** tienen una venta que lo respalde (el mismo 55 % de #133, por otra puerta).
+  Con el contador, más de la mitad de un lote de «clientes» nunca compró nada. En la tabla los tres
+  estados se distinguen: verde **Sí** con venta real · gris **sin respaldo** cuando icarus afirma sin
+  nada detrás · `—`.
+- **Un contacto, una dueña**: `contacto_id` es PRIMARY KEY. Habilitar el mismo a dos personas es el
+  defecto que el reparto existe para evitar. Re-habilitar **pisa** (vacaciones, bajas).
+- **El destino se VERIFICA** contra la rueda + `numero_vendedora` (`padron/destinos.ts` reusa
+  `destinosPosibles`): un dedazo escribe una fila válida y los contactos **no le aparecen a nadie**.
+  409 enumerando a quién sí se puede.
+- **Repartir NO manda nada.** Lo que sigue —plantilla + escribirle a alguien que nunca escribió— es
+  outbound en frío y tiene un problema de canal antes que de código: las líneas de las vendedoras son
+  whatsmeow y abrir en frío es el camino corto al ban. La línea del bot es Cloud API y puede abrir con
+  **plantilla aprobada por Meta**. Es otro frente.
+- **El buscador por teléfono no se archivó**: quedó en la segunda solapa. Pregunta a **Cerberus en
+  vivo** y trae folios y montos por venta; el padrón es una copia de icarus y no los tiene.
+- **Ver la UI sin server ni base**: `npx vite --port 5199` → `/galeria-padron.html`
+  (`?vendedora=1` la vista de quien no reparte, `?lote=1` la barra de reparto). Capturas en
+  `docs/evidencia/padron-*.png`.
+
 ## El panel derecho — ordenado por lo que decide una venta (ADR 0017)
 
 `src/features/panel/PanelDerecho.tsx` (360 px, `w-[22.5rem]` en `App.tsx`). El orden **no es
@@ -1011,7 +1061,10 @@ Solo en `server/.env` (gitignored). **Se referencian por nombre, jamás se pegan
 #107 — sin él todo POST a `/webhook/whatsapp` es 403), `IVI_URL`, `IVI_SERVICE_TOKEN`,
 `HERMES_ADMIN_SERVICE_TOKEN`, `HERMES_CATALOGO_SERVICE_TOKEN` (el de Ivi para leer el catálogo de
 piezas — **otro secreto**, a propósito), `AUTO_RESPUESTA` (+ sus `AUTO_RESPUESTA_*`, todos con default
-sensato). Ver `server/.env.example` (solo nombres).
+sensato), `ICARUS_DATABASE_URL` (read-only al Postgres de icarus: el padrón de clientes de #133 **y**
+los 72.923 contactos de ADR 0035), `HERMES_SUPERVISORES` (quién ve el padrón entero — **no es un
+secreto, es una lista de `vendedora_id`**, pero fail-closed: sin ella nadie lo ve).
+Ver `server/.env.example` (solo nombres).
 
 ## Reglas duras (Goberna)
 
