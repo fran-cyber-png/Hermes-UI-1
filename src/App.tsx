@@ -9,7 +9,6 @@ import {
   BrainCircuit,
   Columns3,
   LayoutDashboard,
-  LogOut,
   Mail,
   MessagesSquare,
   Notebook,
@@ -39,6 +38,7 @@ import { pendientesQueApuran, useAgenda } from './features/agenda/agenda';
 import { Login } from './features/auth/Login';
 import { useSesion } from './features/auth/sesion';
 import { AvisoCerberus } from './features/auth/AvisoCerberus';
+import { PanelUsuario } from './features/auth/PanelUsuario';
 import { useSesionWa } from './features/whatsapp/conversacionWa';
 import { useDashboard } from './features/dashboard/dashboard';
 import { useTiempoReal } from './lib/datos/tiempoReal';
@@ -99,12 +99,6 @@ const VISTAS = [
 
 type Vista = (typeof VISTAS)[number]['id'];
 
-/** Iniciales del avatar: "Ana Lucía" → "AL". */
-function iniciales(nombre: string): string {
-  const partes = nombre.trim().split(/\s+/).filter(Boolean);
-  if (partes.length >= 2) return (partes[0][0] + partes[1][0]).toUpperCase();
-  return nombre.slice(0, 2).toUpperCase();
-}
 
 /**
  * ¿El teclado está "ocupado" escribiendo? Ningún atajo global pisa un input.
@@ -472,21 +466,14 @@ export default function App() {
           })}
         </div>
 
+        {/* QUIÉN SOY. Era un `<span>` con un `title`: la única forma de saber
+            con qué usuario estabas era esperar el tooltip del sistema. Con cinco
+            vendedoras compartiendo una línea, «¿entré con el usuario que era?» y
+            «¿por qué no veo mis leads?» son la misma pregunta, y no había dónde
+            contestarla. El botón de salir se mudó adentro del panel: vivía suelto
+            debajo del avatar, que es donde uno lo aprieta sin querer. */}
         <div className="mt-auto flex flex-col items-center gap-2" style={NO_ARRASTRABLE}>
-          <span
-            title={vendedora.nombre}
-            className="flex size-9 items-center justify-center rounded-lg bg-secondary font-heading text-[11px] font-bold text-navy"
-          >
-            {iniciales(vendedora.nombre)}
-          </span>
-          <button
-            type="button"
-            onClick={salir}
-            title="Salir"
-            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-          >
-            <LogOut size={14} />
-          </button>
+          <PanelUsuario vendedora={vendedora} cerberusVivo={cerberusVivo} onSalir={salir} />
         </div>
       </nav>
 

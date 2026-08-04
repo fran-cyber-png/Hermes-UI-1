@@ -6,6 +6,7 @@ import { queryClient } from '../../lib/datos/cliente';
 import { BarraFiltros } from '../canales/BarraFiltros';
 import { FilaConversacion } from '../canales/FilaConversacion';
 import { PanelDerecho } from '../panel/PanelDerecho';
+import { ContenidoUsuario } from '../auth/PanelUsuario';
 import type { Conversacion } from '../canales/conversaciones';
 
 /**
@@ -85,6 +86,13 @@ const LINEAS = [
 
 const CONTEOS = { pideInfo: 311, sinResponder: 478, yaCompraron: 78, botEscalada: 3, botCaliente: 14 };
 
+// `useLineas()` pide `/api/whatsapp/lineas`. Acá no hay server, así que se le
+// siembra la respuesta en el caché: el componente no se entera de la diferencia
+// y la galería sigue sin depender de la red.
+queryClient.setQueryData(['lineas-whatsapp'], {
+  lineas: [{ numero: '51984429504', etiqueta: 'Ventas Meta', estado: 'conectado', mias: true }],
+});
+
 function Galeria() {
   return (
     <div className="min-h-screen bg-muted/30 p-8">
@@ -145,7 +153,34 @@ function Galeria() {
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-sm font-bold text-foreground">
+          <h2 className="text-sm font-bold text-foreground">«Quién soy» — el avatar del riel</h2>
+          <p className="text-xs text-muted-foreground">
+            Era un <code>&lt;span&gt;</code> con un <code>title</code>: la única forma de saber con qué
+            usuario estabas era esperar el tooltip del sistema. Con cinco vendedoras compartiendo una
+            línea, «¿entré con el usuario que era?» y «¿por qué no veo mis leads?» son la misma
+            pregunta. El usuario va en mono y completo porque <b>es la clave con la que el reparto le
+            asigna las conversaciones</b>.
+          </p>
+          <div className="flex gap-4">
+            <div className="w-64 rounded-xl border border-border bg-card p-3 shadow-panel">
+              <ContenidoUsuario
+                vendedora={{ id: 'ventas10@grupogoberna.com', nombre: 'Ventas10' }}
+                cerberusVivo={true}
+                mias={[{ numero: '51984429504', etiqueta: 'Ventas Meta' }]}
+                onSalir={() => {}}
+              />
+            </div>
+            <div className="w-64 rounded-xl border border-border bg-card p-3 shadow-panel">
+              <ContenidoUsuario
+                vendedora={{ id: 'luz', nombre: 'Luz' }}
+                cerberusVivo={false}
+                mias={[]}
+                onSalir={() => {}}
+              />
+            </div>
+          </div>
+
+          <h2 className="pt-4 text-sm font-bold text-foreground">
             El pie del panel: «Registrar venta», y siempre está
           </h2>
           <p className="text-xs text-muted-foreground">
