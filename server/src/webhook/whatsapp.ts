@@ -6,6 +6,7 @@ import { TransporteCloudApi } from "../whatsapp/transporteCloudApi.js";
 import { notificarEntrante } from "../bot/ingesta.js";
 import { configDesdeEnv } from "../bot/config.js";
 import { claveDeLlamada } from "./llamadas.js";
+import { asignarSiHaceFalta } from "../reparto/asignar.js";
 
 /**
  * Receptor de la WhatsApp Cloud API — la ACTIVACIÓN de la atribución de click-to-WhatsApp (docs/36 §2).
@@ -144,17 +145,46 @@ export async function recibirWhatsapp(req: Request, res: Response): Promise<void
             console.error("[webhook whatsapp] cloud-api recibirEntrante falló:", (err as Error).message);
           });
 
-          // Notificar al despachador del bot (si la línea está habilitada)
           const cfgBot = configDesdeEnv();
           const numeroLinea = linea.numero;
-          if (cfgBot.lineas.includes(numeroLinea)) {
-            for (const m of value.messages ?? []) {
-              if (!m?.id || !m?.from) continue;
-              const clave = `conv:whatsapp:${m.from}:${numeroLinea}`;
+          const conBot = cfgBot.lineas.includes(numeroLinea);
+
+          for (const m of value.messages ?? []) {
+            if (!m?.id || !m?.from) continue;
+            const clave = `conv:whatsapp:${m.from}:${numeroLinea}`;
+
+            // El despachador del bot va PRIMERO y sigue siendo fire-and-forget: es
+            // lo único de este bloque con una persona esperando del otro lado, así
+            // que no se le mete nada adelante. El reparto puede esperar; el lead no.
+            if (conBot) {
               notificarEntrante(clave, numeroLinea, new Date(), cfgBot).catch((err) =>
                 console.error("[bot] notificarEntrante falló:", (err as Error).message),
               );
             }
+
+            /**
+             * EL REPARTO DE LEADS — a quién le toca esta conversación.
+             *
+             * Va DESPUÉS de `recibirEntrante`, o sea después de que el mensaje esté
+             * persistido: el orden importa porque el reparto es lo prescindible de
+             * los dos. Un lead sin repartir se atiende igual (queda sin dueño, que
+             * es el comportamiento de antes del 4-ago); un lead perdido no vuelve.
+             *
+             * `asignarSiHaceFalta` **ya atrapa todo adentro y devuelve `null`**
+             * (fail-open, ver `reparto/asignar.ts`). El `.catch` de acá es una
+             * segunda línea de defensa a propósito: este bucle es el punto donde un
+             * fallo del reparto podría hacer perder un mensaje, y esa garantía no
+             * puede depender de que nadie toque el `try` de otro archivo.
+             *
+             * Solo la línea de Cloud API pasa por acá; las tres de las vendedoras
+             * son whatsmeow y entran por otro camino. No hace falta más: la rueda es
+             * POR LÍNEA, así que en una línea sin rueda esto devuelve `null` y no
+             * escribe nada. El día que haya que repartir otra, se cuelga del mismo
+             * seam.
+             */
+            await asignarSiHaceFalta(db, clave, numeroLinea).catch((err: unknown) =>
+              console.error("[reparto] asignarSiHaceFalta falló:", (err as Error).message),
+            );
           }
         }
       }

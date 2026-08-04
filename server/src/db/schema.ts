@@ -1344,3 +1344,7 @@ export { corridas, corridaRespuestas } from "./corridas.js";
 // Las Lecciones (#259): lo único que se le puede ENSEÑAR al bot en caliente.
 // El bot vivo lee solo las `publicada` — ver `db/lecciones.ts`.
 export { lecciones } from "./lecciones.js";
+
+// El reparto de leads: quién está en la rueda y de quién es cada conversación.
+// Es un FILTRO, no un permiso — ver `db/reparto.ts`.
+export { repartoRueda, conversacionAsignada } from "./reparto.js";
