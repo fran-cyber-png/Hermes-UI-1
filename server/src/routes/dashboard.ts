@@ -7,6 +7,7 @@ import { consultarRadar } from '../cola/consultarRadar.js';
 import { contarPorEtapaEfectiva } from '../cola/consultarCola.js';
 import { consultarSeriesDashboard } from '../dashboard/series.js';
 import { consultarPorVendedora } from '../dashboard/porVendedora.js';
+import { separarEquipo } from '../dashboard/equipo.js';
 import { consultarNegocio, DIMENSIONES, type Dimension } from '../dashboard/negocio.js';
 import { rangoLibre, resolverRango } from '../dashboard/periodo.js';
 
@@ -20,7 +21,8 @@ import { rangoLibre, resolverRango } from '../dashboard/periodo.js';
  *   · `etapas` y `etiquetas`: los mapas por clave para pintar Estado/Etiquetas.
  *   · `porVendedora`: conversaciones atendidas, mensajes enviados y ventas
  *     registradas — hoy y últimos 7 días. Los números de los que sale la
- *     comisión, a la vista.
+ *     comisión, a la vista. **Solo personas**: lo que firma el software va
+ *     aparte, en `automaticos` (`dashboard/equipo.ts`).
  *
  * El país y la relevancia se derivan en el front (son presentación).
  */
@@ -139,7 +141,15 @@ dashboardRouter.get('/', async (_req, res) => {
   // ── Por vendedora: los números del equipo, hoy y la semana.
   // El corte de «hoy» es en hora de Lima, no UTC — mismo `ahora` que ordena el
   // radar (#4: `dashboard/porVendedora.ts`).
-  const porVendedora = await consultarPorVendedora(db, ahora);
+  //
+  // `vendedora_id` NO guarda solo personas: `bot` (el bot comercial) y
+  // `goberna-admin` (la sala de leads) firman envíos igual que una vendedora, y
+  // en producción eran 537 de los 620 envíos de la tabla. `separarEquipo`
+  // los aparta — no los descarta: van como renglón aparte para que la resta no
+  // sea invisible. El porqué del criterio, en `dashboard/equipo.ts`.
+  const { equipo: porVendedora, automaticos } = separarEquipo(
+    await consultarPorVendedora(db, ahora),
+  );
 
   // ── El embudo de un vistazo: conteos por ETAPA EFECTIVA sobre la ventana de
   //    30 días de la cola (#89, ADR 0013). El MISMO seam que /api/conversaciones
@@ -166,6 +176,7 @@ dashboardRouter.get('/', async (_req, res) => {
     etapas: Object.fromEntries(etapas.map((e) => [e.clave, norm(e.etapa)])),
     etiquetas: etiquetasPorClave,
     porVendedora,
+    automaticos,
     embudo,
     cursos,
     series: { leads_dia: leadsDia, envios_dia: enviosDia, ventas_dia: ventasDia },

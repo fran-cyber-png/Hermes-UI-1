@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, MessageSquareText, Search, X } from 'lucide-react';
+import { ArrowRight, Bot, MessageSquareText, Search, X } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/datos/cliente';
 import { hace } from '../../lib/datos/frescura';
@@ -320,6 +320,12 @@ export function VistaDashboard({
     lista.sort((a, b) => (a.vendedora === miVendedora ? -1 : b.vendedora === miVendedora ? 1 : 0));
     return lista;
   }, [data, miVendedora]);
+
+  // El server ya apartó lo que firma el software (`dashboard/equipo.ts`). Un
+  // server viejo —o una respuesta rehidratada del caché de IndexedDB, ADR 0007—
+  // no manda el campo: `undefined` y el renglón no se dibuja, que es exactamente
+  // el comportamiento de antes.
+  const automaticos = data?.automaticos ?? null;
 
   const copiarCorreo = (correo: string, clave: string) => {
     void navigator.clipboard.writeText(correo);
@@ -861,7 +867,7 @@ export function VistaDashboard({
                   <div key={i} className="h-6 animate-pulse rounded bg-muted" />
                 ))}
               </div>
-            ) : equipo.length === 0 ? (
+            ) : equipo.length === 0 && !automaticos ? (
               <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
                 Nadie registró actividad todavía — el día arranca con la primera respuesta.
               </p>
@@ -873,6 +879,11 @@ export function VistaDashboard({
                   <span className="w-9 text-right">msj</span>
                   <span className="w-9 text-right">vtas</span>
                 </div>
+                {equipo.length === 0 && (
+                  <p className="border-t border-border/60 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                    Nadie del equipo registró actividad todavía.
+                  </p>
+                )}
                 {equipo.map((v) => {
                   const soyYo = v.vendedora === miVendedora;
                   const [conv, msj, vtas] =
@@ -899,6 +910,32 @@ export function VistaDashboard({
                     </div>
                   );
                 })}
+                {/* Lo que mandó el SOFTWARE — `bot` y `goberna-admin` firman
+                    `envios_wa` igual que una vendedora, y salían como filas del
+                    equipo (537 de 620 envíos el 4-ago). Va como RENGLÓN y no
+                    como fila: sin avatar de iniciales ni ring de «vos», porque
+                    no es alguien. Pero va: borrarlo dejaría el cuadro diciendo
+                    que el equipo mandó 83 mensajes cuando salieron 620, y esa
+                    resta invisible es peor que el ruido que vino a sacar.
+                    `conv` y `vtas` son «—» de verdad: las conversaciones son un
+                    DISTINCT por actor y sumarlas contaría dos veces a quien
+                    atendieron los dos. */}
+                {automaticos && (
+                  <div
+                    className="flex items-center gap-2 border-t border-border/60 py-1.5 text-[11px] text-muted-foreground"
+                    title={`No son del equipo: ${automaticos.quienes.join(', ')}`}
+                  >
+                    <span className="flex size-7 shrink-0 items-center justify-center">
+                      <Bot size={13} aria-hidden="true" />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">Automático</span>
+                    <span className="w-9 text-right">—</span>
+                    <span className="w-9 text-right font-mono tabular-nums">
+                      {periodo === 'hoy' ? automaticos.mensajes_hoy : automaticos.mensajes_7d}
+                    </span>
+                    <span className="w-9 text-right">—</span>
+                  </div>
+                )}
               </div>
             )}
           </section>

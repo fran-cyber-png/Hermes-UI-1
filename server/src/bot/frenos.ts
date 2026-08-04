@@ -27,7 +27,18 @@ import { and, desc, eq, ne } from "drizzle-orm";
 import type { db as Base } from "../db/client.js";
 import { enviosWa } from "../db/schema.js";
 
-/** Con qué `vendedora_id` firma el bot sus envíos. Un envío con otro id es de una persona. */
+/**
+ * Con qué `vendedora_id` firma el bot sus envíos.
+ *
+ * ⚠️ Acá decía «un envío con otro id es de una persona», y **es falso**: la sala
+ * de leads firma `goberna-admin` —un id elegido a propósito para no ser `bot`,
+ * justamente para que estos frenos no lo confundan con el bot
+ * (`docs/prompt-sala-de-leads.md`)—. Para los frenos la distinción sigue
+ * sirviendo tal cual está; lo que no se puede es leerla como «bot o humano»,
+ * que fue lo que puso a dos actores automáticos en el cuadro «Equipo» del
+ * Dashboard, firmando 537 de los 620 envíos de la tabla. La lista completa de
+ * lo que NO es una persona vive en `dashboard/equipo.ts`.
+ */
 export const VENDEDORA_ID_DEL_BOT = "bot";
 
 // ── vendedora_activa ─────────────────────────────────────────────────────

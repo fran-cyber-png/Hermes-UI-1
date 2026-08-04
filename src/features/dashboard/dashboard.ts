@@ -94,12 +94,36 @@ export interface PuntoLeadsDia {
   formularios: number;
 }
 
+/**
+ * Lo que mandó el SOFTWARE, agregado — el renglón al pie del cuadro «Equipo».
+ *
+ * `bot` y `goberna-admin` firman `envios_wa` igual que una vendedora, así que
+ * salían como filas del equipo (537 de 618 mensajes, medido el 4-ago-2026). El
+ * server los aparta en `dashboard/equipo.ts`; acá llegan sumados para decirlos
+ * sin dibujarlos como personas.
+ *
+ * `null`/ausente = no hay nada automático que contar (o el server es viejo y no
+ * manda el campo: el caché de IndexedDB rehidrata respuestas de antes de este
+ * deploy, ADR 0007). En los dos casos el renglón no se dibuja.
+ *
+ * Solo mensajes: las conversaciones son un `DISTINCT` por actor y sumarlas
+ * contaría dos veces a quien atendieron los dos.
+ */
+export interface Automaticos {
+  mensajes_hoy: number;
+  mensajes_7d: number;
+  /** Quiénes: va al `title`, para que el número tenga dueño. */
+  quienes: string[];
+}
+
 export interface DatosDashboard {
   chats: LeadChat[];
   formularios: LeadFormulario[];
   etapas: Record<string, string>;
   etiquetas: Record<string, string[]>;
+  /** **Solo personas.** Lo que firma el software va en `automaticos`. */
   porVendedora: StatsVendedora[];
+  automaticos?: Automaticos | null;
   /** Counts por etapa del embudo (normalizada). */
   embudo: Record<string, number>;
   /** Qué cursos pide la gente: el ranking de intereses. */
