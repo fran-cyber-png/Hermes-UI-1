@@ -72,17 +72,44 @@ async function sinDueno(linea: string): Promise<number> {
   return Number(fila?.n ?? 0);
 }
 
-/** ¿Alguna de éstas entró alguna vez a Hermes? El único chequeo de username posible. */
-async function yaEntraronAHermes(usuarios: readonly string[]): Promise<Set<string>> {
-  if (usuarios.length === 0) return new Set();
-  const filas = await db.execute<{ vendedora_id: string }>(sql`
-    SELECT DISTINCT vendedora_id FROM sesiones_cerberus
-     WHERE vendedora_id IN (${sql.join(usuarios.map((u) => sql`${u}`), sql`, `)})
+/**
+ * ¿QUIÉNES ENTRARON A HERMES, Y CUÁNDO? El único chequeo de username posible.
+ *
+ * Devuelve la fecha de la última sesión guardada por username, ya normalizado a
+ * minúsculas: en producción el mismo humano tiene dos grafías —Cerberus empuja
+ * `Luz`, ella entra como `luz`— y comparar exacto acá diría «nunca entró» sobre
+ * alguien que entra todos los días.
+ */
+async function entradasAHermes(usuarios: readonly string[]): Promise<Map<string, Date>> {
+  if (usuarios.length === 0) return new Map();
+  const filas = await db.execute<{ vendedora_id: string; guardada_en: string }>(sql`
+    SELECT lower(btrim(vendedora_id)) AS vendedora_id, max(guardada_en) AS guardada_en
+      FROM sesiones_cerberus
+     WHERE lower(btrim(vendedora_id)) IN (${sql.join(
+       usuarios.map((u) => sql`${u.trim().toLowerCase()}`),
+       sql`, `,
+     )})
+     GROUP BY 1
   `);
-  return new Set(filas.map((f) => f.vendedora_id));
+  return new Map(filas.map((f) => [f.vendedora_id, new Date(f.guardada_en)]));
 }
 
-function imprimirReparto(linea: string, filas: readonly EnElReparto[], huerfanas: number): void {
+function imprimirReparto(
+  linea: string,
+  filas: readonly EnElReparto[],
+  huerfanas: number,
+  /**
+   * QUIÉN ENTRÓ A HERMES, Y CUÁNDO. Va en la vista de auditoría y no solo al
+   * agregar, porque **es la única confirmación de que el username está bien
+   * escrito**: Hermes no tiene padrón de Cerberus, así que un dedazo escribe una
+   * fila válida y la persona simplemente nunca ve sus asignados.
+   *
+   * Esta columna faltaba y era un agujero de verdad: el runbook decía «después de
+   * que entren, `npm run reparto:rueda` lo confirma solo» y esta vista no lo
+   * mostraba. La instrucción era falsa.
+   */
+  entradas: ReadonlyMap<string, Date>,
+): void {
   console.log(`\nLínea ${linea} — la rueda del reparto\n`);
   if (filas.length === 0) {
     console.log("  (nadie en la rueda: el reparto no asigna nada y las conversaciones");
@@ -90,8 +117,26 @@ function imprimirReparto(linea: string, filas: readonly EnElReparto[], huerfanas
   } else {
     for (const f of filas) {
       const marca = f.activa ? "·" : "✗";
+      const entro = entradas.get(f.vendedoraId.trim().toLowerCase());
+      const login = entro
+        ? `entró ${entro.toISOString().slice(0, 10)}`
+        : "🔴 NUNCA ENTRÓ";
       const nota = f.activa ? "" : "  (fuera de la rueda: no recibe nuevas, conserva las suyas)";
-      console.log(`  ${marca} ${f.vendedoraId.padEnd(20)} ${String(f.asignadas).padStart(4)} asignadas${nota}`);
+      console.log(
+        `  ${marca} ${f.vendedoraId.padEnd(28)} ${String(f.asignadas).padStart(4)} asignadas  ${login.padEnd(16)}${nota}`,
+      );
+    }
+
+    // El aviso, una sola vez y en criollo. Que alguien no haya entrado todavía es
+    // NORMAL si recién arranca; lo que no es normal es que siga sin entrar
+    // después de habérselo instalado, porque entonces el username está mal.
+    const sinEntrar = filas.filter((f) => !entradas.has(f.vendedoraId.trim().toLowerCase()));
+    if (sinEntrar.length) {
+      console.log(
+        `\n  ⚠️  ${sinEntrar.length} sin entrar todavía a Hermes. Normal si recién arrancan.`,
+      );
+      console.log("     Si YA entraron y siguen apareciendo así, el username está mal escrito:");
+      console.log("     sus leads no les salen en «Míos» (no se pierden: siguen en la cola de todos).");
     }
 
     // LA PROPIEDAD QUE EL REPARTO PROMETE, verificada acá y no de memoria: entre
@@ -141,7 +186,8 @@ async function main() {
   // Sin órdenes: modo VER. Es el default a propósito — el uso más frecuente de
   // esto no es cambiar la rueda, es mirar si el reparto está saliendo parejo.
   if (agregar.length === 0 && sacar.length === 0) {
-    imprimirReparto(linea, antes, huerfanas);
+    const entradas = await entradasAHermes(antes.map((f) => f.vendedoraId)).catch(() => new Map<string, Date>());
+    imprimirReparto(linea, antes, huerfanas, entradas);
     console.log("\nPara cargar la rueda:  npm run reparto:rueda -- --agregar usuario1,usuario2 --aplicar");
     console.log("Para sacar a alguien:  npm run reparto:rueda -- --sacar usuario --aplicar\n");
     process.exit(0);
@@ -199,8 +245,8 @@ async function main() {
       console.log("   Elegí la grafía con la que entra al login y sacá la otra con `--sacar`.");
     }
 
-    const conocidos = await yaEntraronAHermes(agregar).catch(() => new Set<string>());
-    const nuevos = agregar.filter((u) => !conocidos.has(u) && !enLaRueda.has(u));
+    const conocidos = await entradasAHermes(agregar).catch(() => new Map<string, Date>());
+    const nuevos = agregar.filter((u) => !conocidos.has(u.trim().toLowerCase()) && !enLaRueda.has(u));
     if (nuevos.length) {
       console.log(`\n⚠️  Estos nunca entraron a Hermes: ${nuevos.join(", ")}`);
       console.log("   Normal si recién arrancan. Pero un username mal escrito se ve IGUAL que");
@@ -237,7 +283,8 @@ async function main() {
 
   const despues = await comoVaElReparto(db, linea);
   console.log("\n✓ Aplicado.");
-  imprimirReparto(linea, despues, await sinDueno(linea).catch(() => 0));
+  const entradas = await entradasAHermes(despues.map((f) => f.vendedoraId)).catch(() => new Map<string, Date>());
+  imprimirReparto(linea, despues, await sinDueno(linea).catch(() => 0), entradas);
   console.log("");
   process.exit(0);
 }
