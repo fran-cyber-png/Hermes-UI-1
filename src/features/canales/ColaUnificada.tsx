@@ -142,6 +142,7 @@ export function ColaUnificada({
     actualizando,
     sinEstado,
     sinLineasPropias,
+    enElReparto,
   } = useConversaciones({
     tab,
     filtroSec,
@@ -457,8 +458,22 @@ export function ColaUnificada({
             !cargando &&
             total > 0 &&
             !hayFiltroActivo && (
-              <span className="pr-1 font-mono text-[11px] tabular-nums text-muted-foreground">
-                {total.toLocaleString('es')} en cola
+              /* «TUYOS» Y NO «EN COLA» CUANDO LA COLA YA ES LA SUYA.
+                 Al sacar la píldora «Vos» —que en una cola propia sería la misma
+                 marca en todas las filas— quedó una pantalla sin UN SOLO indicio
+                 de que lo que se ve es lo asignado a quien mira. 18 filas sin
+                 dueño visible se leen exactamente igual que la cola de todos, y
+                 así se leyeron: «sigo viendo todos». El dato ya estaba del lado
+                 del server (`enElReparto`); lo que faltaba era decirlo. */
+              <span
+                title={
+                  enElReparto
+                    ? 'El reparto te asignó estas conversaciones. Nadie más las tiene.'
+                    : undefined
+                }
+                className="pr-1 font-mono text-[11px] tabular-nums text-muted-foreground"
+              >
+                {total.toLocaleString('es')} {enElReparto ? 'tuyos' : 'en cola'}
               </span>
             )
           )}

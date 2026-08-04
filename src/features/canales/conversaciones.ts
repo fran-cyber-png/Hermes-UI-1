@@ -116,6 +116,8 @@ type Pagina = {
   sinLineasPropias?: boolean;
   /** El server sirvió la cola SIN dueño: falta la migración del reparto. */
   sinAsignacion?: boolean;
+  /** Quien pregunta está en una rueda: esta cola YA es solo lo suyo. */
+  enElReparto?: boolean;
   /** La misma foto abierta por «ya le hablamos» × precio × viva. Solo primera página. */
   desglose?: FilaDesglose[];
 };
@@ -207,6 +209,13 @@ export function useConversaciones(
      * «Míos» que devolvería cero por una razón que no es «no te tocó nada».
      */
     sinAsignacion: q.data?.pages[0]?.sinAsignacion === true,
+    /**
+     * Quien pregunta participa del reparto, así que **esta cola ya es solo lo
+     * suyo** — lo decide el server, no una preferencia local. La pantalla lo usa
+     * para DECIRLO: sin la píldora «Vos» (retirada por ser la misma marca en
+     * todas las filas), una cola propia se ve idéntica a la de todos.
+     */
+    enElReparto: q.data?.pages[0]?.enElReparto === true,
   };
 }
 
