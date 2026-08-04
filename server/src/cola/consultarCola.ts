@@ -32,6 +32,7 @@ import { padronCteSql, padronJoinSql, yaComproSql } from "./clienteSql.js";
 import { botCalienteSql, botEscaladaSql, botJoinSql } from "./botSql.js";
 import { asignadaJoinSql, duenoSql, esMiaSql } from "./asignadaSql.js";
 import { recorteDeLineas } from "./lineas.js";
+import { estaEnAlgunaRueda } from "../reparto/asignar.js";
 import { lineasDeVendedora } from "../numeros/repositorio.js";
 
 /**
@@ -318,6 +319,24 @@ export interface OpcionesCola {
    * lleva su número, así que no se entra a ciegas (`BarraFiltros`).
    */
   misAsignadas?: boolean;
+  /**
+   * QUIEN ESTÁ EN UNA RUEDA DEL REPARTO VE **SOLO LO SUYO**, sin pedirlo.
+   *
+   * Es la diferencia entre un filtro y una cola. Con cinco personas compartiendo
+   * una línea, un chip que hay que acordarse de encender no evita nada: la
+   * primera mañana que alguien se olvide, vuelve a leer los chats de las otras
+   * cuatro. Así que el recorte lo decide el SERVER a partir de un hecho —¿está
+   * en la rueda?— y no de una preferencia guardada que puede quedar vieja.
+   *
+   * Lo resuelve `consultarCola` con `estaEnAlgunaRueda`, igual que resuelve
+   * `misLineas` contra `numero_vendedora`: la ruta no lo manda.
+   *
+   * ⚠️ **Sigue sin ser un permiso** (ver `cola/asignadaSql.ts`). Y quien NO está
+   * en ninguna rueda ve todo — Luz, que quedó afuera a propósito, y quien
+   * supervisa: ése es el fail-open que hace que una conversación sin asignar o
+   * mal asignada le aparezca a alguien en vez de desaparecer.
+   */
+  enElReparto?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -376,6 +395,12 @@ export interface ResultadoCola {
    */
   sinAsignacion?: boolean;
   /**
+   * true = quien pregunta está en una rueda del reparto, así que **esta cola ya
+   * es solo lo suyo**. El front lo usa para no dibujar lo que sobra: un chip
+   * «Míos» que no filtra nada y una píldora «Vos» repetida en cada fila.
+   */
+  enElReparto?: boolean;
+  /**
    * true = se pidió «las mías» y `numero_vendedora` no le asigna ninguna, así que
    * se sirvió TODO. Se dice en voz alta: un filtro que no filtra y no avisa se ve
    * igual que uno que sí, y la vendedora creería que esas conversaciones son suyas.
@@ -427,16 +452,32 @@ export async function consultarCola(
         : [],
   });
 
+  // ¿PARTICIPA DEL REPARTO? Se pregunta UNA vez, antes del loop, por lo mismo
+  // que el mapa de líneas: no depende de qué tabla degradó. Y se resuelve acá y
+  // no en la ruta para que el recorte sea un HECHO del server —«está en la
+  // rueda»— y no una bandera que el cliente pueda dejar de mandar.
+  const enElReparto =
+    opciones.misAsignadas === true || (await estaEnAlgunaRueda(base, opciones.vendedoraId));
+
   // Cuatro degradaciones posibles ⇒ como mucho cinco intentos.
   for (let intento = 0; ; intento++) {
     try {
-      const r = await ejecutarCola(base, opciones, lineas, conEstado, conPadron, conBot, conAsignacion);
+      const r = await ejecutarCola(
+        base,
+        { ...opciones, enElReparto },
+        lineas,
+        conEstado,
+        conPadron,
+        conBot,
+        conAsignacion,
+      );
       return {
         ...r,
         ...(conEstado ? {} : { sinEstado: true }),
         ...(conPadron ? {} : { sinPadron: true }),
         ...(conBot ? {} : { sinBot: true }),
         ...(conAsignacion ? {} : { sinAsignacion: true }),
+        ...(enElReparto ? { enElReparto: true } : {}),
         ...(sinLineasPropias ? { sinLineasPropias: true } : {}),
       };
     } catch (e) {
@@ -576,7 +617,7 @@ async function ejecutarCola(
    * daría cero filas y se leería como «no te asignaron nada».
    */
   const esMia = conAsignacion ? esMiaSql(vendedoraId) : null;
-  const soloMias = conAsignacion && opciones.misAsignadas && esMia ? [esMia] : [];
+  const soloMias = conAsignacion && (opciones.misAsignadas || opciones.enElReparto) && esMia ? [esMia] : [];
 
   const condiciones = [...condicionesBase, ...condicionesRecorte, ...soloMias];
 

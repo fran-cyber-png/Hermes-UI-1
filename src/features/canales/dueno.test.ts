@@ -14,26 +14,18 @@ describe('marcaDeDueno', () => {
     expect(marcaDeDueno({ asignada_a: '   ' }, { yo: 'ana' })).toBeNull();
   });
 
-  it('lo propio se lee «Vos», en la cola de todos', () => {
-    const m = marcaDeDueno({ asignada_a: 'ana' }, { yo: 'ana' });
-    expect(m).toEqual({
-      tono: 'vos',
-      texto: 'Vos',
-      titulo: 'El reparto te asignó esta conversación',
-    });
-  });
-
-  it('dentro de «Míos», lo propio NO se rotula: lo dice el filtro', () => {
-    expect(marcaDeDueno({ asignada_a: 'ana' }, { yo: 'ana', enMiCola: true })).toBeNull();
-  });
-
   /**
-   * Lo de otra persona se rotula SIEMPRE, incluso dentro de «Míos». No debería
-   * aparecer ahí; si aparece es un defecto del recorte, y esconderlo lo volvería
-   * invisible justo donde importa.
+   * ⚠️ «Vos» SE RETIRÓ (4-ago-2026). Existía para marcar lo propio dentro de una
+   * cola compartida, y esa cola dejó de existir: quien está en una rueda del
+   * reparto ve solo lo suyo, así que habría sido la misma píldora en todas las
+   * filas. Lo propio no se rotula nunca; lo ajeno sí, que es donde importa.
    */
-  it('lo ajeno se rotula aunque la cola esté filtrada a lo propio', () => {
-    const m = marcaDeDueno({ asignada_a: 'sindy' }, { yo: 'ana', enMiCola: true });
+  it('lo propio NO se rotula: sería la misma píldora en todas las filas', () => {
+    expect(marcaDeDueno({ asignada_a: 'ana' }, { yo: 'ana' })).toBeNull();
+  });
+
+  it('lo ajeno SÍ se rotula: es la señal accionable', () => {
+    const m = marcaDeDueno({ asignada_a: 'sindy' }, { yo: 'ana' });
     expect(m?.tono).toBe('otra');
     expect(m?.texto).toBe('Sindy');
   });
@@ -47,7 +39,7 @@ describe('marcaDeDueno', () => {
    * Sin saber quién mira no se puede decir «Vos», pero SÍ se puede decir de quién
    * es — que es el dato que evita que dos contesten al mismo lead.
    */
-  it('sin sesión sigue diciendo de quién es, solo que nunca «Vos»', () => {
+  it('sin sesión rotula todo: no hay con qué saber qué es propio', () => {
     const m = marcaDeDueno({ asignada_a: 'ana' }, {});
     expect(m?.tono).toBe('otra');
     expect(m?.texto).toBe('Ana');
@@ -63,9 +55,9 @@ describe('marcaDeDueno', () => {
    * `esMiaSql` y `destino.ts` — si los tres no dicen lo mismo, la fila diría
    * «Vos» sobre algo que el recorte «Míos» no trae.
    */
-  it('la misma persona con otra grafía sigue siendo «Vos» (`Luz` ≡ `luz`)', () => {
-    expect(marcaDeDueno({ asignada_a: 'Ana' }, { yo: 'ana' })?.tono).toBe('vos');
-    expect(marcaDeDueno({ asignada_a: 'luz' }, { yo: '  LUZ ' })?.tono).toBe('vos');
+  it('la misma persona con otra grafía sigue siendo propia (`Luz` ≡ `luz`)', () => {
+    expect(marcaDeDueno({ asignada_a: 'Ana' }, { yo: 'ana' })).toBeNull();
+    expect(marcaDeDueno({ asignada_a: 'luz' }, { yo: '  LUZ ' })).toBeNull();
   });
 
   it('pero otra persona sigue siendo otra persona', () => {

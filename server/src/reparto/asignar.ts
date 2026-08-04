@@ -110,6 +110,53 @@ export async function vendedorasDeLaRueda(
   return filas.map((f) => f.vendedoraId);
 }
 
+/**
+ * ¿ESTA PERSONA PARTICIPA DEL REPARTO EN ALGUNA LÍNEA?
+ *
+ * Es lo que convierte «Míos» de FILTRO en la cola misma. Quien está en una rueda
+ * trabaja lo que le tocó y nada más: no hace falta un chip que lo pida —y
+ * tenerlo sería peor, porque cinco personas compartiendo una línea no tienen por
+ * qué acordarse de encender un filtro para no leer los chats de las otras
+ * cuatro—.
+ *
+ * Se pregunta acá y no en el front por lo de siempre: si el cliente decidiera
+ * quién está en el reparto habría dos lugares decidiéndolo, y una preferencia
+ * vieja en localStorage podría devolverle la cola entera a alguien que sí está.
+ *
+ * ⚠️ **Sigue sin ser un permiso.** El hilo, la ficha y el envío responden
+ * cualquier conversación a cualquier token; esto cambia lo que la cola MUESTRA.
+ * Quien no está en ninguna rueda —Luz, que quedó afuera a propósito, y quien
+ * supervisa— sigue viendo todo: es el fail-open que hace que una conversación
+ * mal asignada, o sin asignar, le aparezca a alguien.
+ *
+ * Compara normalizado de los dos lados: en producción el mismo humano tiene dos
+ * grafías (`Luz` de Cerberus, `luz` del login) y la exacta diría que no está.
+ */
+export async function estaEnAlgunaRueda(
+  base: typeof Base,
+  vendedoraId: string | undefined,
+): Promise<boolean> {
+  const limpio = (vendedoraId ?? "").trim().toLowerCase();
+  if (!limpio) return false;
+  try {
+    const [fila] = await base
+      .select({ vendedoraId: repartoRueda.vendedoraId })
+      .from(repartoRueda)
+      .where(
+        and(
+          sql`lower(btrim(${repartoRueda.vendedoraId})) = ${limpio}`,
+          eq(repartoRueda.activa, "si"),
+        ),
+      )
+      .limit(1);
+    return fila != null;
+  } catch {
+    // Sin la tabla migrada nadie está en ninguna rueda, y la cola se sirve
+    // entera: fail-open, igual que todo lo demás de este frente.
+    return false;
+  }
+}
+
 /** Una fila del reparto tal como se AUDITA: quién, cuántas tiene, si sigue recibiendo. */
 export interface EnElReparto {
   vendedoraId: string;

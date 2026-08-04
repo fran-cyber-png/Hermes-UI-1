@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { Smartphone, Tags, UserRound, X } from 'lucide-react';
+import { Smartphone, Tags, X } from 'lucide-react';
 import type { LineaWhatsapp } from './lineas';
 import {
   CLASE_BORDE,
@@ -53,9 +53,6 @@ export function BarraFiltros({
   lineaActiva = '',
   onLinea,
   hayMias = false,
-  mios = false,
-  onMios,
-  conteoMios = 0,
 }: {
   filtroSec: FiltroSec;
   onFiltro: (f: FiltroSec) => void;
@@ -79,17 +76,6 @@ export function BarraFiltros({
   onLinea?: (numero: string) => void;
   /** `numero_vendedora` le asigna alguna línea viva: recién ahí se ofrece «Las mías». */
   hayMias?: boolean;
-  /**
-   * «MÍOS» — el recorte del REPARTO: solo las conversaciones que me tocaron.
-   *
-   * ⚠️ No confundir con `hayMias`/`LINEA_MIAS`, que es por LÍNEA. Desde que siete
-   * personas comparten un número, la línea ya no separa a nadie: la pregunta
-   * nueva es de quién es cada conversación.
-   */
-  mios?: boolean;
-  onMios?: (valor: boolean) => void;
-  /** Cuántas me asignó el reparto DENTRO del recorte actual (el server las cuenta). */
-  conteoMios?: number;
 }) {
   const pista = useRef<HTMLDivElement>(null);
   const [sombra, setSombra] = useState({ izq: false, der: false });
@@ -250,56 +236,6 @@ export function BarraFiltros({
                 );
               })}
             </div>
-            <span className="h-4 w-px shrink-0 bg-border" aria-hidden="true" />
-          </>
-        )}
-
-        {/* ══ «MÍOS» — EL REPARTO, Y VA ANTES QUE LOS FILTROS DE CONTENIDO ═══
-            Los chips de abajo preguntan «¿qué pasa con esta conversación?»; éste
-            pregunta «¿es mía?», que con siete personas en una sola línea se
-            responde ANTES. Por eso va pegado al selector de línea: los dos eligen
-            QUÉ COLA, no qué recortar dentro de ella.
-            Se esconde en cero, como los dos del bot y por lo mismo: en las líneas
-            sin reparto sería un chip muerto comiéndose el ancho, y así el chip
-            APARECIENDO es el aviso de que te tocó trabajo. El activo se dibuja
-            siempre —aunque el recorte lo deje en cero— o la vendedora se quedaría
-            mirando una cola vacía sin el chip que la apaga.
-            Y va PRIMERO también porque la barra scrollea: `limpiarFiltros` no lo
-            toca a propósito (es universo, como la línea), así que tiene que quedar
-            donde no se pierda de vista. Sin oro: acá no se acaba ningún tiempo. */}
-        {onMios && (conteoMios > 0 || mios) && (
-          <>
-            <button
-              data-chip
-              type="button"
-              aria-pressed={mios}
-              title={
-                mios
-                  ? 'Volver a ver la cola de todo el equipo'
-                  : 'Ver solo las conversaciones que el reparto te asignó'
-              }
-              onClick={() => onMios(!mios)}
-              className={
-                'flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ' +
-                'transition-[background-color,border-color,color] duration-200 ease-house active:scale-[0.97] ' +
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ' +
-                (mios
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground')
-              }
-            >
-              <UserRound size={11} className="shrink-0" aria-hidden="true" />
-              Míos
-              <span
-                className={
-                  'font-mono tabular-nums ' +
-                  (mios ? 'text-primary-foreground/70' : 'text-muted-foreground/70')
-                }
-              >
-                {conteoMios.toLocaleString('es')}
-              </span>
-              {mios && <X size={11} className="shrink-0" aria-hidden="true" />}
-            </button>
             <span className="h-4 w-px shrink-0 bg-border" aria-hidden="true" />
           </>
         )}

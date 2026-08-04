@@ -47,23 +47,18 @@ function fila(over: Partial<Conversacion>): Conversacion {
 }
 
 /** Los cinco estados que hay que poder distinguir sin leer. */
-const FILAS: { rotulo: string; c: Conversacion; enMiCola?: boolean }[] = [
+const FILAS: { rotulo: string; c: Conversacion }[] = [
   {
     rotulo: 'SIN DUEÑO — no se dibuja nada. Es el estado más común (las 91 anteriores al reparto y las otras tres líneas): una píldora acá sería ruido en 1.900 filas.',
     c: fila({ persona_id: '51900000001', persona_nombre: 'Marta Quispe' }),
-  },
-  {
-    rotulo: 'ES TUYA — «Vos» en navy, el color que en esta fila ya significa «tuyo» (el pin y la estrella).',
-    c: fila({ persona_id: '51900000002', persona_nombre: 'Javier Ramos', asignada_a: 'ana' }),
   },
   {
     rotulo: 'ES DE OTRA PERSONA — la señal accionable: no la agarres, ya tiene dueño. Neutro: informa sin gritar.',
     c: fila({ persona_id: '51900000003', persona_nombre: 'Rosa Huamán', asignada_a: 'sindy.rojas' }),
   },
   {
-    rotulo: 'DENTRO DE «MÍOS» — lo propio NO se rotula: lo dice el filtro de arriba. Repetirlo en cada fila sería la misma píldora 14 veces.',
+    rotulo: 'ES TUYA — tampoco se dibuja nada. «Vos» se retiró: quien está en el reparto ve SOLO lo suyo, así que sería la misma píldora en todas las filas.',
     c: fila({ persona_id: '51900000004', persona_nombre: 'Carlos Vega', asignada_a: 'ana' }),
-    enMiCola: true,
   },
   {
     rotulo: 'EL PEOR CASO (~4 % de las filas) — dueño + cliente + bot a la vez. El dueño vive arriba, con la identidad, para no comerse el preview: acá lo que cede es el nombre del lead, que trunca (el hover lo devuelve entero). Puesto abajo, con el bot al lado, el preview quedaba en «Bue…» — y eso pasa en la línea del bot, que es justo la que se reparte.',
@@ -123,9 +118,6 @@ function Galeria() {
               lineaActiva="51984429504"
               onLinea={() => {}}
               hayMias
-              mios={false}
-              onMios={() => {}}
-              conteoMios={14}
             />
           </div>
           <p className="text-xs text-muted-foreground">
@@ -146,58 +138,14 @@ function Galeria() {
               lineaActiva="mias"
               onLinea={() => {}}
               hayMias
-              mios={false}
-              onMios={() => {}}
-              conteoMios={14}
             />
           </div>
 
-          <h2 className="pt-4 text-sm font-bold text-foreground">
-            La barra: «Míos» va antes que los filtros de contenido
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Los chips de la derecha preguntan «¿qué pasa con esta conversación?»; «Míos» pregunta
-            «¿es mía?», que con siete personas en una línea se responde antes. Trae su número, así
-            que no se entra a ciegas.
-          </p>
-          <div className="rounded-2xl bg-card p-3 shadow-panel">
-            <BarraFiltros
-              filtroSec=""
-              onFiltro={() => {}}
-              conteos={CONTEOS}
-              categoriaActiva={null}
-              onCategoria={() => {}}
-              onListas={() => {}}
-              lineas={LINEAS}
-              lineaActiva=""
-              onLinea={() => {}}
-              mios={false}
-              onMios={() => {}}
-              conteoMios={14}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">Con el filtro puesto — se apaga desde su propia ✕:</p>
-          <div className="rounded-2xl bg-card p-3 shadow-panel">
-            <BarraFiltros
-              filtroSec=""
-              onFiltro={() => {}}
-              conteos={{ ...CONTEOS, pideInfo: 4, sinResponder: 9 }}
-              categoriaActiva={null}
-              onCategoria={() => {}}
-              onListas={() => {}}
-              lineas={LINEAS}
-              lineaActiva=""
-              onLinea={() => {}}
-              mios
-              onMios={() => {}}
-              conteoMios={14}
-            />
-          </div>
         </section>
 
         <section className="space-y-4">
           <h2 className="text-sm font-bold text-foreground">La fila: de quién es, en un vistazo</h2>
-          {FILAS.map(({ rotulo, c, enMiCola }) => (
+          {FILAS.map(({ rotulo, c }) => (
             <div key={c.clave} className="space-y-1.5">
               <p className="text-xs text-muted-foreground">{rotulo}</p>
               {/* 360 px: el ancho real del panel de la cola. Si la píldora no
@@ -208,7 +156,6 @@ function Galeria() {
                   seleccionada={false}
                   onAbrir={() => {}}
                   miVendedora="ana"
-                  enMiCola={enMiCola}
                   indice={0}
                 />
               </div>

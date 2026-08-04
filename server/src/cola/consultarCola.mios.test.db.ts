@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { baseDePrueba } from "../pruebas/base.js";
 import { sembrarLineaDeVendedora, sembrarMensaje } from "../pruebas/sembrar.js";
 import { conversacionAsignada, repartoRueda } from "../db/reparto.js";
@@ -46,19 +46,60 @@ async function llegaUnLead(
   return asignarSiHaceFalta(db, `conv:whatsapp:${personaId}:${linea}`, linea);
 }
 
-test("cada fila dice de quién es, y sin dueño viaja null (no una cadena vacía)", async (t) => {
+/**
+ * 🔴 ESTAR EN LA RUEDA **ES** EL RECORTE — no hay filtro que encender.
+ *
+ * Con cinco personas compartiendo una línea, un chip que hay que acordarse de
+ * prender no evita nada: la primera mañana que alguien se olvide vuelve a leer
+ * los chats de las otras cuatro. Así que lo decide el SERVER, a partir de un
+ * hecho («¿está en la rueda?») y no de una preferencia guardada que envejece.
+ */
+test("quien está en la rueda ve SOLO lo suyo, sin pedirlo", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarRueda(db);
+  await llegaUnLead(db, "51900000001", "DeAna");
+  await llegaUnLead(db, "51900000002", "DeBeto");
+  // Una de las viejas: entró antes del reparto y nadie se la asignó.
+  await sembrarMensaje(db, { personaId: "51900000009", personaNombre: "Huerfana", numeroPropio: BOT });
+
+  // Sin `misAsignadas` en las opciones: no hace falta pedirlo.
+  const { conversaciones, enElReparto } = await consultarCola(db, { vendedoraId: "ana" });
+  assert.equal(enElReparto, true, "la respuesta lo dice, para que el front no dibuje lo que sobra");
+  assert.deepEqual((conversaciones as Fila[]).map((c) => c.persona_nombre), ["DeAna"]);
+});
+
+/**
+ * EL FAIL-OPEN, y es lo que evita que un lead desaparezca del mundo. Quien NO
+ * está en ninguna rueda —Luz, que quedó afuera a propósito, y quien supervisa—
+ * ve todo, huérfanas incluidas. Sin esto, una conversación sin asignar no
+ * aparecería en la cola de NADIE.
+ */
+test("quien NO está en la rueda ve todo, huérfanas incluidas", async (t) => {
   const db = await baseDePrueba(t);
   await sembrarRueda(db);
   await llegaUnLead(db, "51900000001", "Repartida");
-  // Una de las 91 viejas: entró antes del reparto, nadie se la asignó.
   await sembrarMensaje(db, { personaId: "51900000002", personaNombre: "Huerfana", numeroPropio: BOT });
 
-  const { conversaciones } = await consultarCola(db, { vendedoraId: "ana" });
+  const { conversaciones, enElReparto } = await consultarCola(db, { vendedoraId: "luz" });
+  assert.equal(enElReparto, undefined);
   const porNombre = new Map((conversaciones as Fila[]).map((c) => [c.persona_nombre, c.asignada_a]));
+  assert.equal(porNombre.size, 2);
   assert.equal(porNombre.get("Repartida"), "ana");
   // `null` y no `''`: «no se sabe de quién es» tiene que ser distinguible de un
   // dueño con nombre vacío, porque el front decide NO dibujar nada con el primero.
   assert.equal(porNombre.get("Huerfana"), null);
+});
+
+/** Sacar a alguien de la rueda le devuelve la cola entera: deja de recortarse. */
+test("una vendedora INACTIVA en la rueda vuelve a ver todo", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarRueda(db);
+  await llegaUnLead(db, "51900000001", "DeAna");
+  await llegaUnLead(db, "51900000002", "DeBeto");
+  await db.update(repartoRueda).set({ activa: "no" }).where(eq(repartoRueda.vendedoraId, "ana"));
+
+  const { conversaciones } = await consultarCola(db, { vendedoraId: "ana" });
+  assert.equal(conversaciones.length, 2);
 });
 
 test("«míos» recorta a las asignadas a quien pregunta", async (t) => {
@@ -115,14 +156,15 @@ test("el conteo de «míos» se cuenta con el filtro APAGADO", async (t) => {
     await llegaUnLead(db, `5190000${String(i).padStart(4, "0")}`, `Lead ${i}`);
   }
 
-  const apagado = await consultarCola(db, { vendedoraId: "ana" });
-  assert.equal(apagado.conversaciones.length, 12);
-  assert.equal(apagado.conteosFiltro?.mios, 2, "12 leads entre 6 → 2 a cada uno");
+  // Desde afuera de la rueda se ve el reparto entero y cuánto le tocó a cada uno.
+  const deAfuera = await consultarCola(db, { vendedoraId: "luz" });
+  assert.equal(deAfuera.conversaciones.length, 12);
+  assert.equal(deAfuera.conteosFiltro?.mios, 0, "luz no está en la rueda: no le tocó ninguna");
 
-  // Y con el filtro puesto sigue diciendo lo mismo (ahí coincide con el total).
-  const puesto = await consultarCola(db, { misAsignadas: true, vendedoraId: "ana" });
-  assert.equal(puesto.total, 2);
-  assert.equal(puesto.conteosFiltro?.mios, 2);
+  // Y desde adentro, la cola YA es la suya.
+  const deAna = await consultarCola(db, { vendedoraId: "ana" });
+  assert.equal(deAna.total, 2, "12 leads entre 6 → 2 a cada uno");
+  assert.equal(deAna.conteosFiltro?.mios, 2);
 });
 
 /**
@@ -184,18 +226,26 @@ test("sin la tabla migrada sirve la cola SIN dueño, lo dice, y NO recorta", asy
 test("«míos» (conversaciones) y «las mías» (líneas) son recortes DISTINTOS", async (t) => {
   const db = await baseDePrueba(t);
   await sembrarRueda(db);
-  await llegaUnLead(db, "51900000001", "DelBot", BOT);
+  await sembrarMensaje(db, { personaId: "51900000001", personaNombre: "DelBot", numeroPropio: BOT });
   await sembrarMensaje(db, { personaId: "51900000009", personaNombre: "DeWalter", numeroPropio: WALTER });
-  await sembrarLineaDeVendedora(db, WALTER, ["ana"]);
 
-  const mios = await consultarCola(db, { misAsignadas: true, vendedoraId: "ana" });
+  // `zoe` NO está en la rueda, así que acá los dos recortes se pueden comparar
+  // sin que el del reparto se aplique solo.
+  await db.insert(conversacionAsignada).values({
+    clave: `conv:whatsapp:51900000001:${BOT}`,
+    numeroPropio: BOT,
+    vendedoraId: "zoe",
+  });
+  await sembrarLineaDeVendedora(db, WALTER, ["zoe"]);
+
+  const mios = await consultarCola(db, { misAsignadas: true, vendedoraId: "zoe" });
   assert.deepEqual((mios.conversaciones as Fila[]).map((c) => c.persona_nombre), ["DelBot"]);
 
-  const mias = await consultarCola(db, { misLineas: true, vendedoraId: "ana" });
+  const mias = await consultarCola(db, { misLineas: true, vendedoraId: "zoe" });
   assert.deepEqual((mias.conversaciones as Fila[]).map((c) => c.persona_nombre), ["DeWalter"]);
 
   // Y se combinan: «lo mío de mi línea» no es ninguna de las dos.
-  const ambos = await consultarCola(db, { misAsignadas: true, misLineas: true, vendedoraId: "ana" });
+  const ambos = await consultarCola(db, { misAsignadas: true, misLineas: true, vendedoraId: "zoe" });
   assert.equal(ambos.conversaciones.length, 0);
 });
 

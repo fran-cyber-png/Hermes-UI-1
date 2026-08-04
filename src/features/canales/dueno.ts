@@ -11,11 +11,14 @@
  * ── Qué dice, y por qué así ──
  * Dos lecturas, no tres:
  *
- *   · `Vos`     — te tocó a vos. En navy, que en esta app ya significa «tuyo»
- *                 (el pin y la estrella de favorita son navy). Sin oro: el oro es
- *                 tiempo que se acaba y una asignación no es un reloj.
  *   · `Sindy`   — es de otra persona. La señal accionable de verdad: **no la
- *                 agarres, ya tiene dueño**.
+ *                 agarres, ya tiene dueño**. Es la ÚNICA lectura que queda.
+ *
+ * ⚠️ **«Vos» se retiró** (4-ago-2026, decisión del dueño). Existía para marcar lo
+ * propio dentro de la cola compartida, y esa cola dejó de existir: quien está en
+ * una rueda del reparto ve **solo lo suyo**, así que «Vos» sería la misma píldora
+ * en todas las filas — la definición de ruido. Lo propio ya no se rotula en
+ * ningún caso; lo ajeno sí, y ahí es donde importa.
  *
  * ── Lo que NO hace ──
  * **No dibuja «sin dueño».** Una conversación sin asignar es el estado más común
@@ -32,7 +35,7 @@
  * `bot.ts`): acá se decide QUÉ se dice, no cómo se ve.
  */
 
-export type TonoDueno = 'vos' | 'otra';
+export type TonoDueno = 'otra';
 
 export interface MarcaDueno {
   tono: TonoDueno;
@@ -51,12 +54,6 @@ export interface FilaConDueno {
 export interface QuienMira {
   /** El username de quien está logueada. Sin esto no se puede decir «Vos». */
   yo?: string | null;
-  /**
-   * La cola ya está filtrada a «Míos». Ahí lo propio no se rotula: lo dice el
-   * filtro. Lo de otra persona **sí** se seguiría rotulando si apareciera — no
-   * debería, y si aparece es un defecto que conviene ver, no esconder.
-   */
-  enMiCola?: boolean;
 }
 
 /**
@@ -100,10 +97,8 @@ export function marcaDeDueno(fila: FilaConDueno, quien: QuienMira = {}): MarcaDu
 
   const esMia = mismaVendedora(dueno, quien.yo ?? '');
 
-  if (esMia) {
-    if (quien.enMiCola) return null;
-    return { tono: 'vos', texto: 'Vos', titulo: 'El reparto te asignó esta conversación' };
-  }
+  // Lo propio NO se rotula, nunca. Ver el docblock: «Vos» se retiró.
+  if (esMia) return null;
 
   return {
     tono: 'otra',

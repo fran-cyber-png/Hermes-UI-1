@@ -4,6 +4,7 @@ import { db } from "../db/client.js";
 import { normalizarTelefono } from "../whatsapp/identidadWa.js";
 import {
   agregarALaRueda,
+  asignarSiHaceFalta,
   comoVaElReparto,
   proximoOrden,
   sacarDeLaRueda,
@@ -23,6 +24,7 @@ import {
  *   npm run reparto:rueda -- --agregar luz,ana,beto          ← dry-run
  *   npm run reparto:rueda -- --agregar luz,ana,beto --aplicar
  *   npm run reparto:rueda -- --sacar beto --aplicar
+ *   npm run reparto:rueda -- --repartir-huerfanas [--aplicar] ← darle dueño a lo viejo
  *   npm run reparto:rueda -- --linea 51941654039             ← otra línea
  *
  * **Dry-run por default**, como todo script que escribe en esta casa
@@ -58,18 +60,83 @@ function lista(crudo: string | null): string[] {
  * parejo entre seis puede convivir con 91 leads que no son de nadie, y la tabla
  * de arriba se vería impecable.
  */
-async function sinDueno(linea: string): Promise<number> {
-  const [fila] = await db.execute<{ n: number }>(sql`
-    SELECT count(*)::int AS n FROM (
-      SELECT DISTINCT 'conv:' || i.canal || ':' || i.persona_id || ':' || ${linea} AS clave
+async function huerfanas(linea: string): Promise<string[]> {
+  const filas = await db.execute<{ clave: string }>(sql`
+    SELECT v.clave FROM (
+      SELECT 'conv:' || i.canal || ':' || i.persona_id || ':' || ${linea} AS clave,
+             min(i.occurred_at) AS desde
         FROM interactions i
        WHERE i.tipo = 'mensaje'
          AND i.numero_propio = ${linea}
          AND i.occurred_at > now() - interval '30 days'
+       GROUP BY 1
     ) v
     WHERE v.clave NOT IN (SELECT clave FROM conversacion_asignada)
+    -- Orden determinista y de la más VIEJA a la más nueva: el reparto tiene que
+    -- ser reproducible para poder auditarse, y sin ORDER BY la base no promete
+    -- ninguno. La más vieja primero porque es la que más tiempo lleva esperando.
+    ORDER BY v.desde, v.clave
   `);
-  return Number(fila?.n ?? 0);
+  return filas.map((f) => f.clave);
+}
+
+async function sinDueno(linea: string): Promise<number> {
+  return (await huerfanas(linea)).length;
+}
+
+/**
+ * REPARTIR LAS QUE QUEDARON SIN DUEÑO.
+ *
+ * Al prender el reparto se decidió **no** repartir lo que ya existía (arranca con
+ * lo nuevo), asumiendo que se atendería igual porque seguía a la vista de todas.
+ * Eso deja de ser cierto en cuanto la cola pasa a mostrarle a cada una **solo lo
+ * suyo**: una conversación sin dueño no aparece en la cola de nadie. Ahí las
+ * huérfanas dejan de ser un riesgo y pasan a ser leads invisibles.
+ *
+ * ⚠️ **Usa `asignarSiHaceFalta`, una por una, y no un `UPDATE` masivo.** Un SQL
+ * de reparto acá sería una SEGUNDA implementación de la regla —la lección de
+ * #37—: la de verdad elige por carga y desempata por orden, y a los tres meses
+ * las dos habrían divergido sin que nadie lo note. Que sean 90 llamadas y no una
+ * consulta es exactamente el precio que se paga por tener una sola regla.
+ *
+ * Es idempotente por construcción: `asignarSiHaceFalta` no toca lo que ya tiene
+ * dueño, así que correrlo dos veces no mueve nada.
+ */
+async function repartirHuerfanas(linea: string, aplicar: boolean): Promise<void> {
+  const claves = await huerfanas(linea);
+  if (claves.length === 0) {
+    console.log("\nNo hay conversaciones sin dueño: no hay nada que repartir.\n");
+    return;
+  }
+
+  const rueda = (await comoVaElReparto(db, linea)).filter((f) => f.activa);
+  if (rueda.length === 0) {
+    console.log(`\n🔴 Hay ${claves.length} sin dueño pero NADIE en la rueda: no hay a quién dárselas.`);
+    console.log("   Cargá la rueda primero (`--agregar`).\n");
+    return;
+  }
+
+  console.log(`\n${claves.length} conversaciones sin dueño, ${rueda.length} en la rueda.`);
+  if (!aplicar) {
+    // El dry-run no simula el reparto a mano —eso sería la segunda
+    // implementación por la puerta de atrás—: dice cuántas y a cuántos, que es
+    // lo que hay que decidir. El cómo lo garantiza la propiedad de `rueda.ts`.
+    console.log(`Quedarían ~${Math.ceil(claves.length / rueda.length)} por persona (diferencia máxima 1).`);
+    console.log("Dry-run: no se escribió nada. Repetí con `--aplicar`.\n");
+    return;
+  }
+
+  let hechas = 0;
+  for (const clave of claves) {
+    const quien = await asignarSiHaceFalta(db, clave, linea);
+    if (quien) hechas++;
+  }
+  console.log(`✓ ${hechas} de ${claves.length} quedaron con dueño.`);
+  if (hechas < claves.length) {
+    // `asignarSiHaceFalta` es fail-open y devuelve `null` sin explicar: lo único
+    // honesto es decir cuántas no se pudieron, no inventar un motivo.
+    console.log(`  ${claves.length - hechas} no se pudieron asignar (el reparto degrada en silencio a propósito).`);
+  }
 }
 
 /**
@@ -182,6 +249,19 @@ async function main() {
     process.exit(1);
   }
   const huerfanas = await sinDueno(linea).catch(() => 0);
+
+  // Repartir lo que quedó sin dueño. Va antes del modo VER porque es una orden,
+  // no una consulta — y después imprime cómo quedó.
+  if (process.argv.includes("--repartir-huerfanas")) {
+    await repartirHuerfanas(linea, aplicar);
+    const despues = await comoVaElReparto(db, linea);
+    const entradas = await entradasAHermes(despues.map((f) => f.vendedoraId)).catch(
+      () => new Map<string, Date>(),
+    );
+    imprimirReparto(linea, despues, await sinDueno(linea).catch(() => 0), entradas);
+    console.log("");
+    process.exit(0);
+  }
 
   // Sin órdenes: modo VER. Es el default a propósito — el uso más frecuente de
   // esto no es cambiar la rueda, es mirar si el reparto está saliendo parejo.

@@ -96,22 +96,6 @@ export const KEY_TAB = 'hermes.colaTab';
  * persona. Es la misma razón por la que el tab se guarda.
  */
 export const KEY_LINEA = 'hermes.colaLinea';
-/**
- * «Míos» (reparto) también PERSISTE, y por la misma razón que la línea: quien
- * atiende sus leads asignados abre la app para trabajar SU cola, y hacérselo
- * elegir cada mañana es pedirle que se acuerde de un filtro para no leer los
- * chats de sus seis compañeros.
- */
-export const KEY_MIOS = 'hermes.colaMios';
-/**
- * ¿Ya se decidió dónde abre la cola de esta persona? (`arranque.ts`).
- *
- * Es una key aparte y no «¿hay algo en KEY_LINEA?» porque **elegir «Todas» es una
- * elección**, y en `KEY_LINEA` se guarda como `''` — indistinguible de no haber
- * elegido nunca. Sin esto, quien elige ver todo a propósito se lo encuentra
- * pisado en cada arranque.
- */
-export const KEY_ARRANQUE = 'hermes.colaArranque';
 
 /**
  * «LAS MÍAS» — el valor reservado del MISMO eje de línea, no un estado aparte.

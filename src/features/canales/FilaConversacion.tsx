@@ -100,16 +100,17 @@ const CLASE_BOT: Record<TonoBot, string> = {
  * alguien. El reparto es una decisión del equipo sobre quién atiende a quién, no
  * una lectura de la máquina sobre el hilo.
  *
- * `vos` en NAVY, que en esta fila ya significa «tuyo» (el pin y la estrella son
- * navy). `otra` en neutro: informa sin gritar — la fila ajena no es una alarma,
- * es un «ya tiene dueño». **Sin oro**, que es tiempo que se acaba.
+ * Neutro: informa sin gritar — una fila ajena no es una alarma, es un «ya tiene
+ * dueño». **Sin oro**, que es tiempo que se acaba.
+ *
+ * ⚠️ Hubo un tono `vos` en navy y **se retiró**: quien está en el reparto ve solo
+ * lo suyo, así que habría sido la misma píldora en todas las filas.
  *
  * El ícono no es decoración: sin él, la píldora de borde neutro se confunde con
  * la de categoría manual, que es exactamente igual de forma. Acá la forma sola no
  * alcanza y el ícono dice «esto es una persona» antes de leer el nombre.
  */
 const CLASE_DUENO: Record<TonoDueno, string> = {
-  vos: 'border-navy/50 text-navy',
   otra: 'border-border text-muted-foreground',
 };
 
@@ -130,7 +131,6 @@ export function FilaConversacion({
   mostrarPideInfo = true,
   catalogoCategorias,
   miVendedora,
-  enMiCola = false,
   esNueva = false,
   indice,
   tabIndex,
@@ -146,10 +146,8 @@ export function FilaConversacion({
   mostrarPideInfo?: boolean;
   /** El catálogo de la vendedora, para resolver el color de la píldora de categoría (#49). */
   catalogoCategorias?: readonly { nombre: string; color: string }[];
-  /** Quién está mirando: sin esto la fila no puede decir «Vos» (`dueno.ts`). */
+  /** Quién está mirando: sin esto no se puede saber qué fila es ajena (`dueno.ts`). */
   miVendedora?: string | null;
-  /** La cola ya está filtrada a «Míos»: ahí lo propio no se rotula, lo dice el filtro. */
-  enMiCola?: boolean;
   /** Solo la fila recién llegada por SSE entra animada, nunca la lista entera. */
   esNueva?: boolean;
   /** Posición en la lista — decide si es de las primeras N con foto prioritaria (`fotoVisible.ts`). */
@@ -239,7 +237,7 @@ export function FilaConversacion({
    * plano —«¿de quién es esto?» junto a «¿quién es esta persona?»—, mientras que
    * el renglón 2 responde «¿qué pasa con la conversación?».
    */
-  const dueno = marcaDeDueno(c, { yo: miVendedora, enMiCola });
+  const dueno = marcaDeDueno(c, { yo: miVendedora });
 
   return (
     <button

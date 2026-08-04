@@ -14,8 +14,6 @@ import type { DatosDashboard } from '../dashboard/dashboard';
 import {
   KEY_TAB,
   KEY_LINEA,
-  KEY_MIOS,
-  KEY_ARRANQUE,
   TABS,
   filtrosActivos,
   migracionDesdeKeyVieja,
@@ -23,7 +21,6 @@ import {
   type FiltroSec,
   type Tab,
 } from './cola';
-import { arranqueDeLaCola } from './arranque';
 import { lineaEfectiva, opcionesDeLinea } from './alcance';
 import { BarraFiltros } from './BarraFiltros';
 import { useConversaciones, useEstadoConversacion, type Conversacion } from './conversaciones';
@@ -97,24 +94,6 @@ export function ColaUnificada({
    */
   const opcionesLinea = opcionesDeLinea(lineas, hayMias);
   const linea = lineaEfectiva(lineaGuardada, opcionesLinea);
-  /**
-   * «MÍOS» — el recorte del REPARTO (4-ago-2026), y **persiste como la línea**.
-   *
-   * Por lo mismo que persiste la línea: quien atiende sus leads asignados abre la
-   * app para trabajar SU cola, y hacérselo elegir cada mañana es pedirle que se
-   * acuerde de un filtro para no leer los chats de sus seis compañeros.
-   *
-   * ⚠️ Es OTRO eje que `LINEA_MIAS`. Aquél acota por línea, éste por conversación:
-   * desde que siete personas comparten un número, la línea ya no separa a nadie.
-   */
-  const [miosGuardado, setMios] = useLocalStorage<boolean>(KEY_MIOS, false);
-  /**
-   * ¿Ya se decidió dónde abre su cola? (`arranque.ts`). Key propia: elegir
-   * «Todas» ES una elección y se guarda como `''` en `KEY_LINEA`, o sea
-   * indistinguible de no haber elegido — sin esto, a quien quiere ver todo se lo
-   * pisaríamos en cada arranque.
-   */
-  const [yaEligio, setYaEligio] = useLocalStorage<boolean>(KEY_ARRANQUE, false);
   // Filtros secundarios y modo Listas: efímeros (la sesión arranca en limpio).
   const [filtroSec, setFiltroSec] = useState<FiltroSec>('');
   const [modoListas, setModoListas] = useState(false);
@@ -163,60 +142,13 @@ export function ColaUnificada({
     actualizando,
     sinEstado,
     sinLineasPropias,
-    sinAsignacion,
   } = useConversaciones({
     tab,
     filtroSec,
     categoria: categoriaActiva?.nombre ?? null,
     linea,
-    mios: miosGuardado,
   });
-  /**
-   * Sin la migración del reparto, «Míos» se APAGA en la pantalla.
-   *
-   * El server, en ese estado, sirve la cola entera y lo dice (`sinAsignacion`) en
-   * vez de devolver cero filas — recortar por una columna que no existe se leería
-   * como «no te asignaron nada». Acá se completa la mitad honesta: el chip no se
-   * dibuja apretado sobre una cola que no está recortada. Es la misma guarda que
-   * hace caer la línea guardada cuando ese número dejó de correr.
-   *
-   * Lo que NO se apaga solo es «Míos» con cero asignadas: ahí el chip queda
-   * encendido, dice «Míos 0» y lleva su ✕. Esa cola vacía es la verdad —todavía
-   * no te tocó ninguna— y se sale de ella con un click, desde donde estás.
-   */
-  const mios = miosGuardado && !sinAsignacion;
 
-  /**
-   * DÓNDE ABRE LA COLA LA PRIMERA VEZ (`arranque.ts`, puro y con tests).
-   *
-   * Con cinco personas compartiendo una línea, el default de siempre —«Todas»—
-   * le muestra a cada una las conversaciones de las otras tres líneas el día uno.
-   * Acá se elige mejor, **una sola vez y solo si nunca eligió**: sus asignados si
-   * tiene, su línea si no, y nada si no hay nada mejor.
-   *
-   * Corre en un efecto y no en el render porque necesita la respuesta del server
-   * (`conteosFiltro.mios`), que llega después del primer pintado. Y se registra en
-   * su propia key: elegir «Todas» es una elección, y en `KEY_LINEA` se guarda
-   * como `''` — igual que no haber elegido nunca.
-   *
-   * ⚠️ **Es un default, no una pared.** Salir cuesta un click y toda la API sigue
-   * sirviendo cualquier conversación a cualquier token: Hermes no tiene modelo de
-   * permisos y esto no lo inventa.
-   */
-  useEffect(() => {
-    if (yaEligio || cargando) return;
-    const elegido = arranqueDeLaCola({
-      yaEligio,
-      asignadas: conteosFiltro?.mios ?? 0,
-      tieneLineasPropias: hayMias,
-    });
-    // `null` = no hay nada mejor que «Todas». NO se registra: gastaría la única
-    // oportunidad de ayudarla el día que sí tenga línea o leads asignados.
-    if (!elegido) return;
-    setMios(elegido.mios);
-    setLinea(elegido.linea);
-    setYaEligio(true);
-  }, [yaEligio, cargando, conteosFiltro?.mios, hayMias, setMios, setLinea, setYaEligio]);
   // Al abrir la app la cola viene del caché persistido: hasta que llegue lo
   // fresco hay que decir de cuándo es lo que se está mirando.
   const deAntes = useSelloDeViejo(traidoEn);
@@ -542,9 +474,6 @@ export function ColaUnificada({
             lineaActiva={linea}
             onLinea={setLinea}
             hayMias={hayMias}
-            mios={mios}
-            onMios={setMios}
-            conteoMios={conteosFiltro?.mios ?? 0}
             catalogo={catalogo}
             categoriaActiva={categoriaActiva?.nombre ?? null}
             /* Desde la BARRA la categoría afina lo que ya se está mirando (el tab
@@ -737,7 +666,6 @@ export function ColaUnificada({
                 mostrarPideInfo={filtroSec !== 'pide-info'}
                 catalogoCategorias={catalogo}
                 miVendedora={miVendedora}
-                enMiCola={mios}
                 esNueva={esNueva(c)}
                 indice={i}
                 tabIndex={i === idxSeguro ? 0 : -1}
