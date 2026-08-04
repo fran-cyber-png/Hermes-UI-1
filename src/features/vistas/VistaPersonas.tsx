@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, BadgeCheck, ExternalLink, MessageCircle, Search, ShoppingBag, ShoppingCart, UserPlus } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, ExternalLink, MessageCircle, Search, ShoppingBag, ShoppingCart, UserPlus, Users2 } from 'lucide-react';
 import { api } from '../../lib/datos/cliente';
 import { sectionLabel } from '../../lib/styles';
 import { fechaCorta, formatoTelefono } from '../../lib/formato';
 import { BotonLlamar } from '../gestion/BotonLlamar';
 import { FormularioVenta } from '../venta/FormularioVenta';
+import { PantallaPadron } from '../padron/PantallaPadron';
 
 /**
  * PERSONAS — buscar a alguien por teléfono y ver su ficha de Cerberus.
@@ -97,12 +98,80 @@ function AccionesFicha({ telefono, onEscribir, onVenta }: { telefono: string; on
   );
 }
 
+/**
+ * CONTACTOS — el padrón en una tabla, y la ficha viva de Cerberus por teléfono.
+ *
+ * Son DOS preguntas distintas y por eso conviven en vez de reemplazarse:
+ *
+ *   · **Padrón** (lo de siempre desde el 4-ago): los 72.923 contactos de icarus
+ *     que nunca escribieron. El supervisor los recorta y los reparte; la
+ *     vendedora ve los suyos. Es una LISTA, y es lo que la pantalla abre.
+ *   · **Por teléfono**: alguien te dicta un número, o llegó por Messenger sin
+ *     teléfono. Pregunta a **Cerberus en vivo** —otra fuente, con las ventas
+ *     reales y el folio— y responde por UNA persona.
+ *
+ * El buscador no se archivó al llegar la tabla porque no consulta lo mismo: el
+ * padrón es una copia de icarus y no tiene folios ni montos por venta.
+ */
 export function VistaPersonas({
   telefonoInicial,
   onEscribir,
 }: {
   telefonoInicial?: string | null;
   /** Puente a Mensajes (Fase 3): abre (o crea) el chat con ese número. */
+  onEscribir?: (telefono: string) => void;
+}) {
+  // Con un teléfono en la mano se abre directo en la ficha: quien llega así ya
+  // sabe a quién busca, y mostrarle la tabla primero sería un paso de más.
+  const [modo, setModo] = useState<'padron' | 'telefono'>(telefonoInicial ? 'telefono' : 'padron');
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-center gap-1 border-b border-border bg-card px-4 py-2">
+        <Solapa activa={modo === 'padron'} onClick={() => setModo('padron')}>
+          <Users2 size={13} /> Padrón
+        </Solapa>
+        <Solapa activa={modo === 'telefono'} onClick={() => setModo('telefono')}>
+          <Search size={13} /> Buscar por teléfono
+        </Solapa>
+      </div>
+
+      {modo === 'padron' ? (
+        <PantallaPadron onEscribir={onEscribir} />
+      ) : (
+        <BuscarPorTelefono telefonoInicial={telefonoInicial} onEscribir={onEscribir} />
+      )}
+    </div>
+  );
+}
+
+function Solapa({
+  activa,
+  onClick,
+  children,
+}: {
+  activa: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors duration-200 ${FOCO_ANILLO} ${
+        activa ? 'bg-navy text-white' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function BuscarPorTelefono({
+  telefonoInicial,
+  onEscribir,
+}: {
+  telefonoInicial?: string | null;
   onEscribir?: (telefono: string) => void;
 }) {
   const [entrada, setEntrada] = useState(telefonoInicial ?? '');
