@@ -50,6 +50,19 @@ export const PORQUE_DEL_MOMENTO: Record<MomentoDeVenta, string> = {
   'en-conversacion': 'La conversación está abierta',
 };
 
+/**
+ * Los seis momentos como LISTA, para recorrerlos en la pantalla del catálogo.
+ *
+ * Se DERIVA del `Record` de arriba en vez de escribirse otra vez: el `Record<
+ * MomentoDeVenta, string>` no compila si falta uno, así que agregar un momento
+ * al union type obliga a describirlo y la lista se actualiza sola. Una tercera
+ * copia a mano en este mismo archivo sería la que se olvida.
+ *
+ * El orden es el de declaración, que es el mismo de `MOMENTOS_DE_VENTA` en el
+ * server — y eso lo fija su test de paridad, que lee este archivo.
+ */
+export const MOMENTOS = Object.keys(PORQUE_DEL_MOMENTO) as MomentoDeVenta[];
+
 export function useHechos(clave: string | null, activo: boolean) {
   return useQuery({
     queryKey: ['hechos', clave],

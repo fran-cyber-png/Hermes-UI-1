@@ -574,7 +574,24 @@ todo un año» (dicho **1** vez), «se puede pagar en cuotas» (**2**), «es par
   cierra ventas cambia, y agregarlo no puede costar un deploy. `hechos/catalogo.ts` es el punto de
   partida medido; se siembra con `cd server && npm run hechos:sembrar -- --aplicar` (sin `--aplicar`
   es dry-run). **Sin la migración aplicada degrada**: sirve el default y avisa que no se puede editar.
+- **Y desde el 4-ago se edita DESDE LA APP**: `src/features/hechos/PantallaHechos.tsx`, que se abre
+  con **«Ver todos»** en el bloque del panel — la puerta va donde está el anuncio (ADR 0016). Acá
+  decía solo «`POST`/`PUT`/`DELETE`» y era la verdad entera: la API existía desde #153 con **cero
+  consumidores en el front**, así que el catálogo se mantenía por SQL a mano.
+  Lo que la pantalla hace y una lista no puede: **decir qué llega a verse**. El panel muestra
+  `TOPE_HECHOS` (3) por momento, y medido el 4-ago en prod había **27 activos** con 21 sin momentos
+  y las 13 frases de plata en `orden = 100` (el default del schema) — o sea que **precio y dónde
+  pagar no aparecían nunca**, y mirando la lista eso no se ve. Cada fila dice `n/6` o **«no se ve»**.
+  · El recorte lo calcula el SERVER (`vistaPreviaPorMomento` en `hechos/elegir.ts`, la misma función
+    que recorta en el panel) y viaja en `vistaPrevia`. **No se reimplementa en el navegador**: dos
+    cabezas divergen y la pantalla afirmaría «esto se ve» sobre algo que la vendedora no ve (#37).
+  · `GET /api/hechos/catalogo` sirve **también lo apagado** (`leerCatalogoParaEditar`), o no habría
+    cómo volver a prender nada: «borrar es apagar» y `leerCatalogo` filtra por `activo`.
+  · La **`clave` es la identidad y no se edita**: es contra lo que se estampa la procedencia de cada
+    envío (`hecho:<clave>`, ADR 0022). Se propone desde el rótulo al crear y después se congela.
 - Ver el catálogo que se serviría, sin base ni red: `npx tsx src/scripts/imprimirHechos.ts`.
+  Y la pantalla, sin base ni Cerberus: `node scratchpad/api-hechos.mjs` +
+  `VITE_API_URL=http://localhost:4199 npx vite --port 5199` → `/galeria-hechos.html`.
 - **Follow-up declarado**: la objeción #1 del informe es el **aplazamiento** (13%, «avisame para la
   próxima edición») y no hay mecanismo para capturarla. Acá solo entra la frase; la lista de espera
   real es un frente propio.

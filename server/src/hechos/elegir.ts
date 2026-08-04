@@ -1,4 +1,4 @@
-import type { MomentoDeVenta } from "../sugerencias/estado.js";
+import { MOMENTOS_DE_VENTA, type MomentoDeVenta } from "../sugerencias/estado.js";
 import type { Hecho } from "./catalogo.js";
 
 /**
@@ -29,4 +29,34 @@ export function elegirHechos(
     .slice()
     .sort((a, b) => a.orden - b.orden || a.clave.localeCompare(b.clave))
     .slice(0, tope);
+}
+
+/**
+ * QUÉ LLEGA A VERSE EN CADA MOMENTO — la misma decisión de arriba, corrida seis
+ * veces, una por momento.
+ *
+ * ── Por qué existe ──
+ * Medido el 4-ago-2026 en producción: el catálogo tiene **27 datos activos** y
+ * el panel muestra **3**. Además 21 de los 27 tienen `momentos = []` («vale para
+ * todos») y las 13 frases de plata quedaron con `orden = 100`, que es el default
+ * del schema — así que las de precio y las de dónde pagar **no aparecen nunca**.
+ * Mirando la lista eso no se ve: hay que correr el recorte para saberlo.
+ *
+ * ── Por qué vive ACÁ y no en el navegador ──
+ * Es la MISMA regla que decide qué chips salen en el panel. Implementarla otra
+ * vez del lado del cliente daría dos cabezas que se separan sin que nada falle:
+ * la pantalla de edición diría «esto se ve» y la vendedora no lo vería. Es
+ * exactamente la lección de #37, y por eso la vista previa viaja calculada.
+ *
+ * Devuelve **claves**, no hechos: quien la consume ya tiene el catálogo entero.
+ */
+export function vistaPreviaPorMomento(
+  catalogo: readonly Hecho[],
+  tope: number = TOPE_HECHOS,
+): Record<MomentoDeVenta, string[]> {
+  const salida = {} as Record<MomentoDeVenta, string[]>;
+  for (const momento of MOMENTOS_DE_VENTA) {
+    salida[momento] = elegirHechos(catalogo, momento, tope).map((h) => h.clave);
+  }
+  return salida;
 }

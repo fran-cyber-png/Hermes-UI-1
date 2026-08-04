@@ -5,6 +5,7 @@ import { sectionLabel } from '../../lib/styles';
 import type { Conversacion } from '../canales/conversaciones';
 import { ponerEnComposer } from '../whatsapp/puenteComposer';
 import { PORQUE_DEL_MOMENTO, useHechos, type HechoRecomendado } from './hechos';
+import { PantallaHechos } from './PantallaHechos';
 
 /**
  * LOS DATOS RECOMENDADOS — la munición que la vendedora tiene y no usa.
@@ -84,6 +85,11 @@ export function BloqueHechos({ conversacion }: { conversacion: Conversacion }) {
   const esWa = conversacion.canal === 'whatsapp';
   const { data, isPending, error } = useHechos(conversacion.clave, esWa);
   const telefono = conversacion.persona_id;
+  // La puerta al catálogo vive ACÁ, donde está el anuncio: es el criterio de
+  // ADR 0016 —«el anuncio y la acción tienen que estar en el mismo lugar»—. La
+  // vendedora nota que le faltan frases justo mirando estas tres, no abriendo
+  // un menú. Sin esta puerta el catálogo se mantenía por SQL a mano.
+  const [catalogoAbierto, setCatalogoAbierto] = useState(false);
 
   if (!esWa) return null;
 
@@ -133,10 +139,24 @@ export function BloqueHechos({ conversacion }: { conversacion: Conversacion }) {
         ))}
       </ul>
 
-      <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
-        {data ? PORQUE_DEL_MOMENTO[data.momento] : ''}
-        {data?.origen === 'sin-tabla' && ' · catálogo de fábrica: falta el db:push para poder editarlo'}
-      </p>
+      <div className="mt-1 flex items-baseline justify-between gap-2">
+        <p className="min-w-0 text-[10px] leading-snug text-muted-foreground">
+          {data ? PORQUE_DEL_MOMENTO[data.momento] : ''}
+          {data?.origen === 'sin-tabla' && ' · catálogo de fábrica: falta la migración para poder editarlo'}
+        </p>
+        {/* Discreto a propósito: mantener el catálogo NO es la acción de esta
+            pantalla —acá se vende—, pero tiene que estar alcanzable desde donde
+            se nota que falta una frase. Sin oro: no hay tiempo que se acabe. */}
+        <button
+          type="button"
+          onClick={() => setCatalogoAbierto(true)}
+          className="shrink-0 text-[10px] font-medium text-muted-foreground underline-offset-2 transition-colors hover:text-navy hover:underline"
+        >
+          Ver todos
+        </button>
+      </div>
+
+      {catalogoAbierto && <PantallaHechos onCerrar={() => setCatalogoAbierto(false)} />}
     </section>
   );
 }

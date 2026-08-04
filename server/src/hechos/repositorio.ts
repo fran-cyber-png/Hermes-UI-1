@@ -58,6 +58,63 @@ export async function leerCatalogo(base: typeof db): Promise<CatalogoDeHechos> {
   }
 }
 
+/**
+ * EL CATÁLOGO PARA EDITARLO — el de arriba, más lo APAGADO.
+ *
+ * Función aparte y no un parámetro de `leerCatalogo` a propósito: aquella está
+ * en el camino de la venta (el panel de la vendedora y el bot la llaman en cada
+ * conversación) y no se le agrega una rama para servir a una pantalla de
+ * mantenimiento. Acá el criterio es el contrario: se quiere ver TODO.
+ *
+ * Sin esto, apagar un dato lo volvía invisible para siempre —«borrar es apagar»
+ * (`DELETE /api/hechos/:clave` escribe `activo = false`), pero `leerCatalogo`
+ * filtra por `activo`, así que nada podía volver a prenderlo desde la app.
+ *
+ * Degrada igual que su gemela: sin tabla, el catálogo de fábrica y `editable:
+ * false`. Ahí todo viaja como activo, porque el default no tiene apagados.
+ */
+export interface HechoEditable extends Hecho {
+  activo: boolean;
+}
+
+export interface CatalogoParaEditar {
+  hechos: HechoEditable[];
+  editable: boolean;
+  origen: "tabla" | "defecto" | "sin-tabla";
+}
+
+export async function leerCatalogoParaEditar(base: typeof db): Promise<CatalogoParaEditar> {
+  try {
+    const filas = await base.select().from(tabla).orderBy(asc(tabla.orden), asc(tabla.clave));
+
+    if (filas.length === 0) {
+      return {
+        hechos: CATALOGO_POR_DEFECTO.map((h) => ({ ...h, activo: true })),
+        editable: true,
+        origen: "defecto",
+      };
+    }
+    return {
+      hechos: filas.map((f) => ({
+        clave: f.clave,
+        rotulo: f.rotulo,
+        texto: f.texto,
+        momentos: normalizarMomentos(f.momentos),
+        orden: f.orden,
+        activo: f.activo,
+      })),
+      editable: true,
+      origen: "tabla",
+    };
+  } catch {
+    return {
+      hechos: CATALOGO_POR_DEFECTO.map((h) => ({ ...h, activo: true })),
+      editable: false,
+      origen: "sin-tabla",
+    };
+  }
+}
+
 /** Siembra el catálogo medido. Idempotente por `clave`: correrlo dos veces no duplica. */
 export async function sembrarCatalogo(base: typeof db): Promise<number> {
   let n = 0;

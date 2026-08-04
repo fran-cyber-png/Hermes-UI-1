@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hermes — el catálogo de datos recomendados (galería de evidencia)</title>
+    <!--
+      Entry APARTE de la app. `vite build` compila solo `index.html`, así que esto NO entra
+      al bundle que usan las vendedoras: se abre a mano para producir las capturas de
+      `docs/evidencia/`. Necesita el server de mentira de `scratchpad/api-hechos.mjs`
+      —sin base, sin Cerberus y sin secretos— porque lo que hay que poder mirar es el
+      RECORTE, y fabricarlo adentro del componente sería duplicar la regla del server.
+
+          node scratchpad/api-hechos.mjs
+          VITE_API_URL=http://localhost:4199 npx vite --port 5199
+          →  http://localhost:5199/galeria-hechos.html
+    -->
+  </head>
+  <body>
+    <div id="galeria"></div>
+    <script type="module" src="/src/features/hechos/galeria.tsx"></script>
+  </body>
+</html>

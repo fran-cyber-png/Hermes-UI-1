@@ -6,8 +6,8 @@ import { hechos as tabla } from "../db/schema.js";
 import { requiereVendedora } from "../auth/sesion.js";
 import { MOMENTOS_DE_VENTA, momentoDeVenta } from "../sugerencias/estado.js";
 import { estadoDeLaVenta } from "../sugerencias/consultarSugerencias.js";
-import { elegirHechos } from "../hechos/elegir.js";
-import { leerCatalogo } from "../hechos/repositorio.js";
+import { TOPE_HECHOS, elegirHechos, vistaPreviaPorMomento } from "../hechos/elegir.js";
+import { leerCatalogo, leerCatalogoParaEditar } from "../hechos/repositorio.js";
 
 /**
  * LOS DATOS RECOMENDADOS — `GET /api/hechos?clave=…`.
@@ -40,10 +40,33 @@ const Hecho = z.object({
   activo: z.boolean().default(true),
 });
 
-/** El catálogo entero — para editarlo. */
+/**
+ * EL CATÁLOGO ENTERO, PARA EDITARLO — con lo apagado y con el recorte hecho.
+ *
+ * Trae tres cosas que la pantalla no puede deducir sola:
+ *
+ *   · `hechos` incluye los **apagados** (`activo: false`), o no habría forma de
+ *     volver a prender uno: «borrar es apagar», y `leerCatalogo` filtra.
+ *   · `vistaPrevia` dice, por momento, **qué claves llegan a verse**. Se calcula
+ *     con la MISMA función que recorta en el panel; si el navegador la
+ *     reimplementara, la pantalla podría afirmar «esto se ve» mientras la
+ *     vendedora no lo ve, y nada fallaría (la lección de #37).
+ *   · `tope` es el número con el que se recortó, para poder decirlo en pantalla
+ *     en vez de que la vendedora lo adivine contando.
+ *
+ * El recorte se corre sobre los ACTIVOS: un dato apagado no compite por el
+ * lugar, y mostrarlo compitiendo sería mentir sobre lo que pasaría al prenderlo.
+ */
 hechosRouter.get("/catalogo", async (_req, res) => {
-  const c = await leerCatalogo(db);
-  res.json(c);
+  const c = await leerCatalogoParaEditar(db);
+  res.json({
+    ...c,
+    tope: TOPE_HECHOS,
+    vistaPrevia: vistaPreviaPorMomento(
+      c.hechos.filter((h) => h.activo),
+      TOPE_HECHOS,
+    ),
+  });
 });
 
 /** Los que corresponden a ESTA conversación, ya filtrados por el momento de la venta. */
