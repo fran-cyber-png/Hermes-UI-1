@@ -79,7 +79,9 @@ contra el schema nuevo — es justamente lo que hace seguro el rollback automát
 | **Rendimiento** | Track «Rendimiento 2026-07» (spec #29). **En `main`**: techo de scan del radar (#19) y la cola con **ventana de 30 días** — 3,8 s → 30 ms, y de paso saca de la pantalla mensajes de 2016 (#30) |
 
 Suite: **285 tests del server + 18 del front**. Sidebar: Dashboard · Pipeline · Contactos · Mensajes ·
-Correos · Agenda (Tablero fuera por decisión; componente conservado).
+Correos · Agenda · Entrenar bot · **Libreta** (Tablero fuera por decisión; componente conservado).
+La Libreta entró al riel el 4-ago (**ADR 0034**) tras medirse **cero filas** en `notas` en producción:
+la herramienta estaba entera y no se descubría.
 
 ### El mapa: `docs/arquitectura.md`
 

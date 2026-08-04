@@ -63,10 +63,16 @@ espeja, y —si `LAZO_RELOJ` estuviera encendido, que no lo está— se la conta
 
 ### Front (`src/`) — React 19 + Vite 8 + Tailwind 4
 
-**Sin router** (ADR 0002): un espacio con **6 vistas conmutadas por estado** en `App.tsx`
-(Dashboard · Pipeline · Contactos · Mensajes · Correos · Agenda). El riel vertical izquierdo navega;
-⌘1-6 también. Agregar una vista es tocar `VISTAS` en `App.tsx:56` — y acordarse del `e.key <= '6'`
-hardcodeado en la línea 159, que es el punto de falla silenciosa.
+**Sin router** (ADR 0002): un espacio con **8 vistas conmutadas por estado** en `App.tsx`
+(Dashboard · Pipeline · Contactos · Mensajes · Correos · Agenda · Entrenar bot · **Libreta**). El
+riel vertical izquierdo navega; ⌘1..⌘8 también. Agregar una vista es tocar `VISTAS` en `App.tsx` y
+nada más: **el rango del atajo se DERIVA de ese array** (`e.key <= String(VISTAS.length)`), así que
+el punto de falla silenciosa que este párrafo describía —un `'6'` escrito a mano que dejaba a ⌘7 sin
+hacer nada mientras la Cabina anunciaba el atajo— ya no existe.
+
+Qué entra al riel no es un número sino un criterio (**ADR 0034**, que enmienda 0002 y regulariza las
+tres vistas que entraron sin hacerlo): un **LUGAR** donde se está un rato (ADR 0016), con una
+**acción primaria nombrable**. Lo que se consulta y se cierra —la Cabina (`?`), Ivi (`i`)— no entra.
 
 **Mensajes está SIEMPRE montada** (oculta con `hidden`, nunca desmontada): el borrador del composer y
 el hilo abierto sobreviven a pasear por otras vistas. Las demás vistas se montan y desmontan, con

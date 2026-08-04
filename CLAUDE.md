@@ -24,7 +24,12 @@ de la casa, los bordes externos y la deuda. Los cuatro documentos y para qué si
 
 - **Front** (`src/`): React 19 + Vite 8 (React Compiler), Tailwind 4, TanStack Query, lucide-react.
   **Sin router** — un espacio con vistas conmutadas por estado (ADR 0002): Dashboard · Pipeline ·
-  Contactos · Mensajes · Correos · Agenda. Marca Goberna en `src/index.css` (azul + dorado, Montserrat; el dorado significa
+  Contactos · Mensajes · Correos · Agenda · Entrenar bot · Libreta (⌘1..⌘8; el rango **se deriva de
+  `VISTAS`**, agregar una vista es tocar ese array y nada más). Qué entra al riel es un criterio y no
+  un número (**ADR 0034**, que enmienda 0002): un **LUGAR** con **acción primaria nombrable**; lo que
+  se consulta y se cierra —Cabina `?`, Ivi `i`— no entra. La **Libreta** (`n` o ⌘8) es la octava desde
+  el 4-ago: la herramienta existía entera desde #47 y `notas` tenía **cero filas** en producción.
+  Marca Goberna en `src/index.css` (azul + dorado, Montserrat; el dorado significa
   **tiempo que se acaba**, nada más). El norte de producto: `docs/plan-crm-definitivo.md`.
   El **caché de consultas se persiste en IndexedDB** y se restaura antes del primer render, así la
   app abre con el último estado conocido en vez de un spinner (ADR 0007, `src/lib/datos/`).
