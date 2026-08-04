@@ -8,7 +8,8 @@ import {
   CLASE_TEXTO,
   esColorCategoria,
 } from '../gestion/paletaCategorias';
-import { categoriasDeLaBarra, FILTROS_SEC, LINEA_MIAS, type CategoriaEnBarra, type FiltroSec } from './cola';
+import { categoriasDeLaBarra, FILTROS_SEC, type CategoriaEnBarra, type FiltroSec } from './cola';
+import { opcionesDeLinea, seDibujaElSelector } from './alcance';
 
 /**
  * LA BARRA DE FILTROS DE LA COLA — una sola fila que se corre de izquierda a
@@ -176,19 +177,12 @@ export function BarraFiltros({
     return filtroSec === f.valor || (conteoDe(f.valor) ?? 0) > 0;
   });
 
-  /** Las opciones del segmentado de línea, en el orden en que se leen. */
-  const opcionesDeLinea = [
-    // «Las mías» va PRIMERA porque es la más específica y la que se busca al
-    // abrir la app. El default NO cambia: sigue siendo «Todas» — esto ordena la
-    // lectura, no elige por ella.
-    ...(hayMias ? [{ numero: LINEA_MIAS, etiqueta: 'Las mías', titulo: 'Ver solo las líneas que tenés asignadas' }] : []),
-    { numero: '', etiqueta: 'Todas', titulo: 'Ver todas las líneas juntas' },
-    ...lineas.map((l) => ({
-      numero: l.numero,
-      etiqueta: l.etiqueta,
-      titulo: `Ver solo lo que entró por ${l.etiqueta} (${l.numero})`,
-    })),
-  ];
+  /**
+   * Las opciones del segmentado, y **son las TUYAS cuando el mapa te asigna
+   * alguna**: la regla vive pura y con tests en `alcance.ts`. Con una sola línea
+   * propia queda una opción y el control no se dibuja — no hay elección que tomar.
+   */
+  const opciones = opcionesDeLinea(lineas, hayMias);
 
   return (
     /* `-mx-3` + `px-3` en la pista: la barra SANGRA hasta el borde del panel. Si
@@ -219,7 +213,7 @@ export function BarraFiltros({
             son la misma pregunta —¿qué cola miro?—, y con dos controles
             existiría el estado imposible «las mías Y solo Walter».
             Sin oro: acá no se está acabando ningún tiempo. */}
-        {lineas.length > 1 && onLinea && (
+        {seDibujaElSelector(opciones) && onLinea && (
           <>
             <div
               className="flex shrink-0 items-center gap-0.5 rounded-full border border-border bg-muted/40 p-0.5"
@@ -227,7 +221,7 @@ export function BarraFiltros({
               aria-label="Línea de WhatsApp"
             >
               <Smartphone size={11} className="ml-1.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-              {opcionesDeLinea.map((l) => {
+              {opciones.map((l) => {
                 const activa = lineaActiva === l.numero;
                 return (
                   <button

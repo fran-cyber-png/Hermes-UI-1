@@ -16,7 +16,6 @@ import {
   KEY_LINEA,
   KEY_MIOS,
   KEY_ARRANQUE,
-  LINEA_MIAS,
   TABS,
   filtrosActivos,
   migracionDesdeKeyVieja,
@@ -25,6 +24,7 @@ import {
   type Tab,
 } from './cola';
 import { arranqueDeLaCola } from './arranque';
+import { lineaEfectiva, opcionesDeLinea } from './alcance';
 import { BarraFiltros } from './BarraFiltros';
 import { useConversaciones, useEstadoConversacion, type Conversacion } from './conversaciones';
 import { useLineas } from './lineas';
@@ -84,19 +84,19 @@ export function ColaUnificada({
   // seguir escondiendo el trabajo.
   const [lineaGuardada, setLinea] = useLocalStorage<string>(KEY_LINEA, '');
   const { lineas, hayMias } = useLineas();
-  // `LINEA_MIAS` sobrevive a la validación aunque no sea el número de ninguna
-  // línea (es el mismo eje con otro nombre, ver `cola.ts`) — pero solo mientras
-  // el mapa siga asignándole alguna: si le sacan las líneas, el recorte se cae a
-  // «todas» igual que una línea que dejó de correr. Nunca una cola vacía sin
-  // explicación.
-  const linea =
-    lineaGuardada === LINEA_MIAS
-      ? hayMias
-        ? LINEA_MIAS
-        : ''
-      : lineas.some((l) => l.numero === lineaGuardada)
-        ? lineaGuardada
-        : '';
+  /**
+   * ⚠️ **El fallback ya NO es «Todas».** La regla vive pura en `alcance.ts` y es
+   * la misma que decide qué ofrece el selector, para que no puedan divergir.
+   *
+   * Lo que cambió y por qué: cuando el mapa te asigna una sola línea, el selector
+   * **no se dibuja** —una opción no es una elección—, y entonces ya no hay
+   * control en pantalla para corregir un valor guardado malo. Con el fallback
+   * viejo, quien alguna vez eligió «Todas» se quedaba viendo las cuatro líneas
+   * para siempre, sin nada que lo explicara ni que lo apagara. Ahora cae a lo
+   * suyo. Sin mapa sigue cayendo a «Todas», que ahí sí es lo correcto (fail-open).
+   */
+  const opcionesLinea = opcionesDeLinea(lineas, hayMias);
+  const linea = lineaEfectiva(lineaGuardada, opcionesLinea);
   /**
    * «MÍOS» — el recorte del REPARTO (4-ago-2026), y **persiste como la línea**.
    *

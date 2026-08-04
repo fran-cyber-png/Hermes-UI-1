@@ -93,23 +93,51 @@ describe('los chips del bot', () => {
   });
 });
 
+/**
+ * ⚠️ ESTE BLOQUE CAMBIÓ DE REGLA EL 4-AGO-2026, y los tres tests de abajo
+ * afirmaban la anterior.
+ *
+ * Antes el selector ofrecía **todas las líneas vivas** más «Todas», y «Las mías»
+ * era una opción más. Eso era razonable con una línea y una vendedora; con cinco
+ * vendedoras nuevas que atienden UNA sola, les ponía adelante tres colas ajenas
+ * —y dos de esos rótulos se distinguen por una `s` y una tilde, «Ventas Perú» y
+ * «Venta Peru»—. Ahora el selector ofrece **lo tuyo** cuando el mapa te asigna
+ * algo, y con una sola línea propia directamente no se dibuja: una opción no es
+ * una elección. La decisión vive pura en `alcance.ts`; acá se fija el CABLEADO.
+ */
 describe('el segmentado de línea', () => {
-  it('ofrece «Las mías» solo cuando el mapa le asigna alguna', () => {
-    const conMias = pintar({ lineas: LINEAS, onLinea: () => {}, hayMias: true });
-    expect(rotulos(conMias).join('|')).toContain('Las mías');
-    montado?.desmontar();
-    montado = null;
-
-    const sinMias = pintar({ lineas: LINEAS, onLinea: () => {}, hayMias: false });
-    const texto = rotulos(sinMias).join('|');
-    // Sin asignación no hay opción, y sin opción se ve todo: fail-open también acá.
-    expect(texto).not.toContain('Las mías');
+  it('sin líneas propias ofrece «Todas» y las cuatro: fail-open, como siempre', () => {
+    const texto = rotulos(pintar({ lineas: LINEAS, onLinea: () => {}, hayMias: false })).join('|');
     expect(texto).toContain('Todas');
+    expect(texto).toContain('Escuela');
+    expect(texto).toContain('Bot');
+  });
+
+  /**
+   * EL CASO DE LAS CINCO NUEVAS: una sola línea propia ⇒ el control desaparece.
+   * Y con él tiene que desaparecer «Todas», que es la puerta a las colas ajenas.
+   */
+  it('con UNA línea propia el selector no se dibuja — ni «Todas» ni las ajenas', () => {
+    const texto = rotulos(pintar({ lineas: LINEAS, onLinea: () => {}, hayMias: true })).join('|');
+    expect(texto).not.toContain('Todas');
+    expect(texto).not.toContain('Escuela');
+    expect(texto).not.toContain('Las mías');
+    // La barra sigue viva: lo que se fue es el selector, no los filtros.
+    expect(texto).toContain('Piden info');
+  });
+
+  it('con VARIAS propias sí hay elección: «Las mías» + las suyas, sin «Todas»', () => {
+    const dosPropias = LINEAS.map((l) => ({ ...l, mias: true }));
+    const c = pintar({ lineas: dosPropias, onLinea: () => {}, hayMias: true });
+    const texto = rotulos(c).join('|');
+    expect(texto).toContain('Las mías');
+    expect(texto).toContain('Escuela');
+    expect(texto).not.toContain('Todas');
   });
 
   it('«Las mías» manda el valor reservado del MISMO eje, no una bandera aparte', () => {
     const onLinea = vi.fn();
-    const c = pintar({ lineas: LINEAS, onLinea, hayMias: true });
+    const c = pintar({ lineas: LINEAS.map((l) => ({ ...l, mias: true })), onLinea, hayMias: true });
     const boton = Array.from(c.querySelectorAll<HTMLButtonElement>('[data-chip]')).find((b) =>
       b.textContent?.includes('Las mías'),
     );
@@ -117,14 +145,17 @@ describe('el segmentado de línea', () => {
     expect(onLinea).toHaveBeenCalledWith(LINEA_MIAS);
   });
 
-  it('«Todas» sigue siendo el default y se llega en un click desde «Las mías»', () => {
+  it('lo activo se ve activo, y se cambia de línea con un click', () => {
     const onLinea = vi.fn();
-    const c = pintar({ lineas: LINEAS, onLinea, hayMias: true, lineaActiva: LINEA_MIAS });
+    const c = pintar({
+      lineas: LINEAS.map((l) => ({ ...l, mias: true })),
+      onLinea,
+      hayMias: true,
+      lineaActiva: LINEA_MIAS,
+    });
     const botones = Array.from(c.querySelectorAll<HTMLButtonElement>('[data-chip]'));
-    const mias = botones.find((b) => b.textContent?.includes('Las mías'));
-    const todas = botones.find((b) => b.textContent?.trim() === 'Todas');
-    expect(mias?.getAttribute('aria-pressed')).toBe('true');
-    todas?.click();
-    expect(onLinea).toHaveBeenCalledWith('');
+    expect(botones.find((b) => b.textContent?.includes('Las mías'))?.getAttribute('aria-pressed')).toBe('true');
+    botones.find((b) => b.textContent?.trim() === 'Escuela')?.click();
+    expect(onLinea).toHaveBeenCalledWith('51986394450');
   });
 });

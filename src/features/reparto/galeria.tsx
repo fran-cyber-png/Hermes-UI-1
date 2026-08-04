@@ -81,9 +81,10 @@ const FILAS: { rotulo: string; c: Conversacion; enMiCola?: boolean }[] = [
 ];
 
 const LINEAS = [
-  { numero: '51984429504', etiqueta: 'Bot', estado: 'conectado', mias: true },
-  { numero: '51941654039', etiqueta: 'Walter', estado: 'conectado' },
-  { numero: '51944531711', etiqueta: 'Sindy', estado: 'conectado' },
+  { numero: '51986394450', etiqueta: 'Ventas Perú', estado: 'conectado' },
+  { numero: '51941654039', etiqueta: 'Walter Ventas', estado: 'conectado' },
+  { numero: '51944531711', etiqueta: 'Venta Peru', estado: 'conectado' },
+  { numero: '51984429504', etiqueta: 'Ventas Meta', estado: 'conectado' },
 ];
 
 const CONTEOS = { pideInfo: 311, sinResponder: 478, yaCompraron: 78, botEscalada: 3, botCaliente: 14 };
@@ -102,6 +103,56 @@ function Galeria() {
 
         <section className="space-y-3">
           <h2 className="text-sm font-bold text-foreground">
+            El selector ofrece TUS líneas, no todas las vivas
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Antes listaba las cuatro. Con cinco vendedoras que atienden una sola, eso les ponía
+            adelante tres colas ajenas — y «Ventas Perú» y «Venta Peru» se distinguen por una{' '}
+            <code>s</code> y una tilde.
+          </p>
+          <p className="text-xs text-muted-foreground">Lo que ve una de las 5 (una línea propia): sin selector.</p>
+          <div className="rounded-2xl bg-card p-3 shadow-panel">
+            <BarraFiltros
+              filtroSec=""
+              onFiltro={() => {}}
+              conteos={CONTEOS}
+              categoriaActiva={null}
+              onCategoria={() => {}}
+              onListas={() => {}}
+              lineas={LINEAS.map((l) => ({ ...l, mias: l.numero === '51984429504' }))}
+              lineaActiva="51984429504"
+              onLinea={() => {}}
+              hayMias
+              mios={false}
+              onMios={() => {}}
+              conteoMios={14}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Lo que ve Luz (dos líneas propias): «Las mías» + las suyas, sin «Todas».
+          </p>
+          <div className="rounded-2xl bg-card p-3 shadow-panel">
+            <BarraFiltros
+              filtroSec=""
+              onFiltro={() => {}}
+              conteos={CONTEOS}
+              categoriaActiva={null}
+              onCategoria={() => {}}
+              onListas={() => {}}
+              lineas={LINEAS.map((l) => ({
+                ...l,
+                mias: l.numero === '51984429504' || l.numero === '51986394450',
+              }))}
+              lineaActiva="mias"
+              onLinea={() => {}}
+              hayMias
+              mios={false}
+              onMios={() => {}}
+              conteoMios={14}
+            />
+          </div>
+
+          <h2 className="pt-4 text-sm font-bold text-foreground">
             La barra: «Míos» va antes que los filtros de contenido
           </h2>
           <p className="text-xs text-muted-foreground">
@@ -120,7 +171,6 @@ function Galeria() {
               lineas={LINEAS}
               lineaActiva=""
               onLinea={() => {}}
-              hayMias
               mios={false}
               onMios={() => {}}
               conteoMios={14}
@@ -138,7 +188,6 @@ function Galeria() {
               lineas={LINEAS}
               lineaActiva=""
               onLinea={() => {}}
-              hayMias
               mios
               onMios={() => {}}
               conteoMios={14}
