@@ -5,11 +5,19 @@ import type { Nota } from './notas';
 /** Cuánto se espera después de la última tecla para guardar. */
 export const ESPERA_AUTOGUARDADO_MS = 800;
 
+/**
+ * A DÓNDE VA LO QUE SE ESTÁ ESCRIBIENDO.
+ *
+ * `null` = no hay nada editable abierto (nada seleccionado, o una página
+ * histórica de `gestiones`, que es de solo lectura y **cuyo id es de otra
+ * tabla**: mandarlo a `PATCH /api/notas/:id` escribiría sobre la nota que
+ * casualmente tenga ese número).
+ */
+export type DestinoDeGuardado = { tipo: 'nueva' } | { tipo: 'nota'; id: number } | null;
+
 /** Lo que el hook necesita del mundo. Inyectado para poder testearlo sin server. */
 export interface PuertasDeGuardado {
-  /** Actualiza una página que ya existe. */
   actualizar(v: { id: number; doc: unknown }): Promise<unknown>;
-  /** Crea la página en blanco recién cuando se escribió algo. */
   crear(v: { doc: unknown }): Promise<{ nota: Nota }>;
 }
 
@@ -20,34 +28,42 @@ export interface Autoguardado {
 }
 
 /**
- * EL AUTOGUARDADO DE LA LIBRETA — con espera, con adelanto al salir, y con el
- * fallo VISIBLE.
+ * EL AUTOGUARDADO DE LA LIBRETA.
  *
- * Vivía suelto adentro de `Libreta.tsx`, y de ahí salieron tres defectos que
- * ningún test podía ver porque no había nada que interrogar:
+ * ══ LA REGLA QUE LO ORDENA TODO ═════════════════════════════════════════════
  *
- *  1. **El error se tragaba.** Un `catch {}` y un renglón de estado sin rama de
- *     fallo: pasado el tope de 2.000 caracteres, todos los guardados fallaban y
- *     la pantalla decía «Guardado». Ahora el fallo es un estado, y quién lo lee
- *     es una función pura (`renglonDeEstado`).
- *  2. **La doble creación.** `guardar` decidía crear-o-actualizar mirando la
- *     selección, y la selección recién cambiaba cuando resolvía el POST —que a
- *     su vez espera el refetch de la lista—. Dos disparos dentro de esa ventana
- *     creaban **dos páginas**. Acá lo cierra `creando`, que es un ref y no un
- *     estado a propósito: tiene que valer YA, en el mismo tick, no en el
- *     próximo render.
- *  3. **Lo pendiente se perdía al salir.** El cleanup solo limpiaba el
- *     temporizador. Como vista del riel se sale con ⌘1..⌘8 y con un clic en
- *     cualquier ícono, así que la ventana de 800 ms se abre de par en par.
- *     Ahora el desmontaje ADELANTA lo que estaba por guardarse.
+ * **El destino se captura cuando se AGENDA, no cuando se dispara.**
+ *
+ * Parece un detalle y es la causa de cuatro defectos distintos, todos con la
+ * misma forma: los 800 ms de espera son tiempo suficiente para que la vendedora
+ * cambie de página, y el guardado salía hacia «lo que esté abierto ahora».
+ *
+ *   · escribo en A, toco B → el texto de A se guardaba **en B**;
+ *   · escribo en A, toco «Nueva página» → en vez de guardar A, **duplicaba A**;
+ *   · escribo en A, abro una página histórica → `PATCH` con el id de `gestiones`,
+ *     que en `notas` es **otra nota mía**;
+ *   · escribo en A, la archivo → se creaba una página **fantasma**.
+ *
+ * Con el destino capturado, cada guardado va a donde se escribió. Punto.
+ *
+ * ══ Y LO QUE CAE MIENTRAS SE ESTÁ CREANDO NO SE TIRA ════════════════════════
+ *
+ * La primera vez que se escribe en una página nueva sale un POST. Ese POST
+ * espera además el refetch de la lista, así que contra VPS1 pasa de los 800 ms
+ * sin esfuerzo — y garantizado en el primer request después de un restart.
+ * Lo que se teclee mientras tanto **no se puede crear otra vez** (serían dos
+ * páginas), pero tampoco se puede descartar: se guarda como `ultimoDoc` y se
+ * manda apenas se sabe el id.
+ *
+ * Descartarlo en silencio era el mismo falso «Guardado» que este archivo
+ * existe para matar, entrando por una puerta más chica.
  */
 export function useAutoguardado({
-  idActual,
+  destino,
   puertas,
   alCrear,
 }: {
-  /** `null` = página nueva todavía sin fila en la base. */
-  idActual: number | null;
+  destino: DestinoDeGuardado;
   puertas: PuertasDeGuardado;
   /** Avisa qué id le tocó a la página recién creada, para que la lista la siga. */
   alCrear(id: number): void;
@@ -56,46 +72,67 @@ export function useAutoguardado({
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Lo que el temporizador va a hacer cuando venza. Existe para poder ADELANTARLO. */
   const pendiente = useRef<(() => Promise<void>) | null>(null);
-  /** ¿Hay un POST de creación en vuelo? Ref y no estado: tiene que valer en el mismo tick. */
-  const creando = useRef(false);
-
-  // Lo último que se sabe, leído dentro del closure del temporizador: sin esto,
-  // un guardado agendado antes de cambiar de página escribiría en la anterior.
-  const idRef = useRef(idActual);
-  idRef.current = idActual;
 
   /**
-   * EL ID DE LA PÁGINA QUE ACABAMOS DE CREAR, sin esperar al render.
+   * LA CREACIÓN EN VUELO. `null` = no hay ninguna.
    *
-   * `idActual` llega por props y solo cambia cuando React vuelve a pintar. Entre
-   * que el POST resuelve y ese repintado ocurre hay una ventana —chica pero
-   * real— en la que un guardado nuevo ve `idActual === null` y **crea una
-   * segunda página**. Con `creando` sola no alcanza: para entonces el POST ya
-   * terminó, así que la bandera está en `false`.
-   *
-   * Lo encontró el test de la doble creación, no la lectura del código.
+   * `ultimoDoc` es lo que se tecleó mientras el POST viajaba: se manda apenas
+   * vuelve el id, con un `PATCH`. Sin esto se perdía sin aviso.
    */
-  const idCreado = useRef<number | null>(null);
+  const creacion = useRef<{ ultimoDoc: unknown; huboMas: boolean } | null>(null);
 
-  // Cambió la página desde afuera (otra nota, o «Nueva página»): lo que
-  // habíamos creado localmente ya no aplica. Sin esto, empezar una página nueva
-  // después de crear una escribiría encima de la anterior.
-  const idPrevio = useRef(idActual);
-  if (idPrevio.current !== idActual) {
-    idPrevio.current = idActual;
-    idCreado.current = null;
-  }
+  /**
+   * EL ID QUE LE TOCÓ A LA PÁGINA NUEVA QUE SE ESTÁ EDITANDO.
+   *
+   * Hace falta además del destino capturado, y por un motivo distinto: un
+   * guardado agendado como `{tipo:'nueva'}` puede vencer DESPUÉS de que el POST
+   * ya terminó. Ahí no hay creación en vuelo que lo frene, y sin esto volvería
+   * a crear — la doble página otra vez.
+   *
+   * Se olvida al ENTRAR a una página en blanco (`clave` pasa a `'nueva'`), no
+   * en cualquier cambio: entre crear y que la selección pase a `nota`, los
+   * guardados tardíos todavía tienen que caer en la que se acaba de crear.
+   */
+  const ultimaCreada = useRef<number | null>(null);
+
+  const destinoRef = useRef(destino);
+  destinoRef.current = destino;
   const alCrearRef = useRef(alCrear);
   alCrearRef.current = alCrear;
   const puertasRef = useRef(puertas);
   puertasRef.current = puertas;
+
+  // Cambió la página: el estado de la anterior no describe a esta. Sin esto,
+  // abrir una página nueva mostraba «Guardado» heredado de la que se venía.
+  const destinoPrevio = useRef(destino);
+  const claveDestino = destino === null ? 'nada' : destino.tipo === 'nueva' ? 'nueva' : `n${destino.id}`;
+  const clavePrevia = useRef(claveDestino);
+  if (clavePrevia.current !== claveDestino) {
+    const empiezaUnaEnBlanco = claveDestino === 'nueva';
+    /**
+     * `nueva → n42` NO es cambiar de página: es la MISMA que acaba de recibir su
+     * id al crearse. Resetear ahí hacía parpadear el indicador a vacío justo
+     * después de guardar bien — decía «Guardado» y se borraba solo.
+     */
+    const esLaMismaQueSeAcabaDeCrear =
+      clavePrevia.current === 'nueva' && claveDestino === `n${ultimaCreada.current}`;
+
+    clavePrevia.current = claveDestino;
+    destinoPrevio.current = destino;
+    if (empiezaUnaEnBlanco) ultimaCreada.current = null;
+    if (!esLaMismaQueSeAcabaDeCrear) {
+      // No se pisa un FALLO: si lo último que pasó fue que no se pudo guardar,
+      // eso sigue siendo verdad y la vendedora tiene que verlo.
+      setEstado((e) => (e.tipo === 'fallo' ? e : QUIETO));
+    }
+  }
 
   /**
    * AL IRSE, LO QUE ESTABA POR GUARDARSE SE GUARDA.
    *
    * Se dispara y no se espera: el desmontaje no puede esperar a la red. La
    * mutación sale igual porque el `QueryClient` es el de la app, no el del
-   * componente — sobrevive a que este se vaya (fijado en `guardadoAlSalir.test.tsx`).
+   * componente (fijado en `guardadoAlSalir.test.tsx`).
    */
   useEffect(
     () => () => {
@@ -106,32 +143,49 @@ export function useAutoguardado({
   );
 
   function alCambiar(doc: unknown) {
+    // EL DESTINO, AHORA. Lo que se escriba va a donde se está escribiendo,
+    // aunque la vendedora cambie de página antes de que venza la espera.
+    const aDonde = destinoRef.current;
+    if (aDonde === null) return; // histórica o nada abierto: no hay dónde guardar
+
     if (temporizador.current) clearTimeout(temporizador.current);
     setEstado({ tipo: 'guardando' });
 
     const guardar = async () => {
       pendiente.current = null;
-      // El de afuera manda; si todavía no llegó, vale el que acabamos de crear.
-      const id = idRef.current ?? idCreado.current;
-
-      // Segundo disparo mientras el primero está en vuelo: si se dejara pasar,
-      // los dos verían `id === null` y crearían una página cada uno.
-      if (id === null && creando.current) return;
-
       try {
-        if (id !== null) {
-          await puertasRef.current.actualizar({ id, doc });
-        } else {
-          creando.current = true;
-          try {
-            const r = await puertasRef.current.crear({ doc });
-            // Primero el ref, DESPUÉS el aviso: entre el aviso y el repintado
-            // hay una ventana en la que otro guardado podría volver a crear.
-            idCreado.current = r.nota.id;
-            alCrearRef.current(r.nota.id);
-          } finally {
-            creando.current = false;
+        if (aDonde.tipo === 'nota') {
+          await puertasRef.current.actualizar({ id: aDonde.id, doc });
+          setEstado({ tipo: 'guardado' });
+          return;
+        }
+
+        // ── Página nueva ──
+        // Ya se creó y este guardado venía agendado de antes: va como update.
+        if (ultimaCreada.current !== null && !creacion.current) {
+          await puertasRef.current.actualizar({ id: ultimaCreada.current, doc });
+          setEstado({ tipo: 'guardado' });
+          return;
+        }
+        if (creacion.current) {
+          // Ya hay un POST viajando: esto no puede crear otra página, pero
+          // tampoco se tira. Se manda apenas se sepa el id.
+          creacion.current.ultimoDoc = doc;
+          creacion.current.huboMas = true;
+          return;
+        }
+
+        creacion.current = { ultimoDoc: doc, huboMas: false };
+        try {
+          const r = await puertasRef.current.crear({ doc });
+          ultimaCreada.current = r.nota.id;
+          alCrearRef.current(r.nota.id);
+          // Lo que se tecleó mientras el POST viajaba, ahora que hay id.
+          if (creacion.current?.huboMas) {
+            await puertasRef.current.actualizar({ id: r.nota.id, doc: creacion.current.ultimoDoc });
           }
+        } finally {
+          creacion.current = null;
         }
         setEstado({ tipo: 'guardado' });
       } catch (e) {

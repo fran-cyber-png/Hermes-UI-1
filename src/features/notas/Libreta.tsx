@@ -3,7 +3,7 @@ import { BlockNoteView } from '@blocknote/mantine';
 import { useCreateBlockNote } from '@blocknote/react';
 import { AlertTriangle, ChevronLeft, Notebook, Pin, PinOff, Plus, Search, Trash2, Undo2 } from 'lucide-react';
 import '@blocknote/mantine/style.css';
-import { DICCIONARIO_LIBRETA, ESQUEMA_LIBRETA } from './editor';
+import { DICCIONARIO_LIBRETA, ESQUEMA_LIBRETA, soloBloquesConocidos } from './editor';
 import { renglonDeEstado } from './guardado';
 import { useAutoguardado } from './useAutoguardado';
 import {
@@ -80,7 +80,9 @@ function EditorDePagina({
     // El cast es el borde con la librería: `docParaEditor` produce la forma de
     // BlockNote pero el tipo viaja como `unknown` desde la base — tiparlo fuerte
     // más arriba sería afirmar sobre un `jsonb` algo que nadie verificó.
-    initialContent: contenidoInicial as never,
+    // Saneado ANTES de entrar: un bloque que el esquema no conoce lanza durante
+    // el render y, sin ErrorBoundary, deja la app en blanco (ver `editor.ts`).
+    initialContent: (contenidoInicial ? soloBloquesConocidos(contenidoInicial) : undefined) as never,
     // Sin esto el editor entero sale en INGLÉS dentro de una app en español, y
     // ofrece bloques de archivo que no se pueden guardar. Ver `editor.ts`.
     schema: ESQUEMA_LIBRETA,
@@ -188,7 +190,17 @@ export function Libreta() {
    * dice al hook que el primer guardado es un POST.
    */
   const { estado: estadoGuardado, alCambiar } = useAutoguardado({
-    idActual: seleccion?.tipo === 'nota' ? seleccion.id : null,
+    // El `origen` IMPORTA: el id de una página histórica es de `gestiones`, y
+    // mandarlo a `PATCH /api/notas/:id` escribiría sobre la nota que
+    // casualmente tenga ese número. Esas son de solo lectura: destino `null`.
+    destino:
+      seleccion === null
+        ? null
+        : seleccion.tipo === 'nueva'
+          ? { tipo: 'nueva' as const }
+          : seleccion.origen === 'nota'
+            ? { tipo: 'nota' as const, id: seleccion.id }
+            : null,
     puertas: {
       actualizar: (v) => autoguardar.mutateAsync(v),
       crear: (v) => crear.mutateAsync(v),

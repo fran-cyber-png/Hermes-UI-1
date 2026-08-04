@@ -3,7 +3,7 @@ import { act, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { montar, type Montado } from '../../pruebas/dom';
 import { ErrorApi } from '../../lib/datos/cliente';
-import { useAutoguardado, type PuertasDeGuardado } from './useAutoguardado';
+import { useAutoguardado, type DestinoDeGuardado, type PuertasDeGuardado } from './useAutoguardado';
 import { renglonDeEstado } from './guardado';
 
 /**
@@ -51,7 +51,7 @@ afterEach(() => {
 function Anfitrion({ puertas, idInicial = null }: { puertas: PuertasDeGuardado; idInicial?: number | null }) {
   const [id, setId] = useState<number | null>(idInicial);
   const { estado, alCambiar } = useAutoguardado({
-    idActual: id,
+    destino: id === null ? { tipo: 'nueva' } : { tipo: 'nota', id },
     puertas,
     alCrear: setId,
   });
@@ -71,7 +71,11 @@ function Anfitrion({ puertas, idInicial = null }: { puertas: PuertasDeGuardado; 
 /** Como el de arriba, más el botón que vuelve a poner la página en «nueva». */
 function AnfitrionConCambioDePagina({ puertas }: { puertas: PuertasDeGuardado }) {
   const [id, setId] = useState<number | null>(null);
-  const { estado, alCambiar } = useAutoguardado({ idActual: id, puertas, alCrear: setId });
+  const { estado, alCambiar } = useAutoguardado({
+    destino: id === null ? { tipo: 'nueva' } : { tipo: 'nota', id },
+    puertas,
+    alCrear: setId,
+  });
   return (
     <div>
       <button type="button" onClick={() => alCambiar({ escrito: true })}>
@@ -289,5 +293,184 @@ describe('la espera agrupa', () => {
     await vencerLaEspera();
 
     expect(guardados).toBe(1);
+  });
+});
+
+/**
+ * LO QUE ENCONTRÓ LA REVISIÓN ADVERSARIA — cuatro defectos con la misma forma:
+ * el guardado salía hacia «la página abierta AHORA» en vez de hacia la que se
+ * estaba editando cuando se agendó. Los 800 ms alcanzan de sobra para cambiar
+ * de página.
+ */
+
+/** Anfitrión que permite saltar a cualquier destino, como la lista real. */
+function AnfitrionConDestinos({
+  puertas,
+  inicial,
+}: {
+  puertas: PuertasDeGuardado;
+  inicial: DestinoDeGuardado;
+}) {
+  const [destino, setDestino] = useState<DestinoDeGuardado>(inicial);
+  const { estado, alCambiar } = useAutoguardado({ destino, puertas, alCrear: () => {} });
+  return (
+    <div>
+      <button type="button" onClick={() => alCambiar({ escrito: true })}>
+        escribir
+      </button>
+      <button type="button" data-ir-b onClick={() => setDestino({ tipo: 'nota', id: 9 })}>
+        ir a B
+      </button>
+      <button type="button" data-ir-nueva onClick={() => setDestino({ tipo: 'nueva' })}>
+        nueva
+      </button>
+      <button type="button" data-ir-historica onClick={() => setDestino(null)}>
+        histórica
+      </button>
+      <p data-estado>{estado.tipo}</p>
+    </div>
+  );
+}
+
+function tocar(m: Montado, marca: string) {
+  act(() => {
+    (m.contenedor.querySelector(`[data-${marca}]`) as HTMLButtonElement).click();
+  });
+}
+
+describe('🔴 el destino se captura al AGENDAR, no al disparar', () => {
+  function espia() {
+    const actualizados: { id: number }[] = [];
+    const creados: unknown[] = [];
+    const puertas: PuertasDeGuardado = {
+      actualizar: (v) => {
+        actualizados.push({ id: v.id });
+        return Promise.resolve({});
+      },
+      crear: (v) => {
+        creados.push(v.doc);
+        return Promise.resolve({ nota: { id: 99 } as never });
+      },
+    };
+    return { puertas, actualizados, creados };
+  }
+
+  it('escribo en A y salto a B: se guarda en A, no en B', async () => {
+    relojDeMentira();
+    const { puertas, actualizados } = espia();
+    montado = montar(<AnfitrionConDestinos puertas={puertas} inicial={{ tipo: 'nota', id: 7 }} />);
+
+    escribir(montado);
+    tocar(montado, 'ir-b'); // dentro de los 800 ms
+    await vencerLaEspera();
+
+    expect(actualizados).toEqual([{ id: 7 }]);
+  });
+
+  it('escribo en A y toco «Nueva página»: guarda A, NO duplica A', async () => {
+    relojDeMentira();
+    const { puertas, actualizados, creados } = espia();
+    montado = montar(<AnfitrionConDestinos puertas={puertas} inicial={{ tipo: 'nota', id: 7 }} />);
+
+    escribir(montado);
+    tocar(montado, 'ir-nueva');
+    await vencerLaEspera();
+
+    expect(actualizados).toEqual([{ id: 7 }]);
+    expect(creados, 'no puede haber creado una página fantasma').toHaveLength(0);
+  });
+
+  it('escribo en A y abro una página histórica: NO escribe con el id de `gestiones`', async () => {
+    relojDeMentira();
+    const { puertas, actualizados } = espia();
+    montado = montar(<AnfitrionConDestinos puertas={puertas} inicial={{ tipo: 'nota', id: 7 }} />);
+
+    escribir(montado);
+    tocar(montado, 'ir-historica');
+    await vencerLaEspera();
+
+    expect(actualizados).toEqual([{ id: 7 }]);
+  });
+
+  it('sobre una página histórica no se guarda nada: su id es de otra tabla', async () => {
+    relojDeMentira();
+    const { puertas, actualizados, creados } = espia();
+    montado = montar(<AnfitrionConDestinos puertas={puertas} inicial={null} />);
+
+    escribir(montado);
+    await vencerLaEspera();
+
+    expect(actualizados).toHaveLength(0);
+    expect(creados).toHaveLength(0);
+  });
+});
+
+describe('🔴 lo tecleado mientras se crea la página NO se descarta', () => {
+  it('sale como update apenas se sabe el id, y no queda diciendo «Guardado» sobre lo que no salió', async () => {
+    relojDeMentira();
+    const actualizados: unknown[] = [];
+    let creaciones = 0;
+    const puertas: PuertasDeGuardado = {
+      // El POST tarda MÁS que la espera: es lo garantizado contra VPS1, porque
+      // además del POST espera el refetch de la lista.
+      crear: async (v) => {
+        creaciones++;
+        await new Promise((listo) => setTimeout(listo, 2000));
+        return { nota: { id: 42, doc: v.doc } as never };
+      },
+      actualizar: (v) => {
+        actualizados.push(v.doc);
+        return Promise.resolve({});
+      },
+    };
+    montado = montar(<Anfitrion puertas={puertas} />);
+
+    escribir(montado);
+    await correrElReloj(900); // vence la espera → arranca el POST (tarda 2 s)
+    escribir(montado); // sigue tecleando mientras viaja
+    await correrElReloj(900); // el segundo timer vence CON el POST en vuelo
+    await correrElReloj(3000); // el POST resuelve
+
+    expect(creaciones, 'una sola página').toBe(1);
+    expect(actualizados, 'lo tecleado durante el POST tiene que haber salido').toHaveLength(1);
+    expect(leer(montado, 'estado')).toBe('guardado');
+  });
+});
+
+describe('el estado no se hereda entre páginas', () => {
+  it('abrir otra página no muestra el «Guardado» de la anterior', async () => {
+    relojDeMentira();
+    const puertas: PuertasDeGuardado = {
+      actualizar: () => Promise.resolve({}),
+      crear: () => Promise.resolve({ nota: { id: 1 } as never }),
+    };
+    montado = montar(<AnfitrionConDestinos puertas={puertas} inicial={{ tipo: 'nota', id: 7 }} />);
+
+    escribir(montado);
+    await vencerLaEspera();
+    expect(leer(montado, 'estado')).toBe('guardado');
+
+    tocar(montado, 'ir-b');
+    await correrElReloj(0);
+
+    expect(leer(montado, 'estado')).toBe('quieto');
+  });
+
+  it('pero un FALLO no se borra al cambiar de página: sigue siendo verdad', async () => {
+    relojDeMentira();
+    const puertas: PuertasDeGuardado = {
+      actualizar: () => Promise.reject(new ErrorApi('no se pudo', 400)),
+      crear: () => Promise.resolve({ nota: { id: 1 } as never }),
+    };
+    montado = montar(<AnfitrionConDestinos puertas={puertas} inicial={{ tipo: 'nota', id: 7 }} />);
+
+    escribir(montado);
+    await vencerLaEspera();
+    expect(leer(montado, 'estado')).toBe('fallo');
+
+    tocar(montado, 'ir-b');
+    await correrElReloj(0);
+
+    expect(leer(montado, 'estado')).toBe('fallo');
   });
 });

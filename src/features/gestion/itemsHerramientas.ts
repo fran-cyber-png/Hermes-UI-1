@@ -1,4 +1,4 @@
-import { Mail, MessageSquareQuote, NotebookPen, Package, Tag, type LucideIcon } from 'lucide-react';
+import { Lightbulb, Mail, MessageSquareQuote, NotebookPen, Package, Tag, type LucideIcon } from 'lucide-react';
 
 /**
  * EL MENÚ DE HERRAMIENTAS — el contenedor, no las herramientas.
@@ -12,7 +12,7 @@ import { Mail, MessageSquareQuote, NotebookPen, Package, Tag, type LucideIcon } 
  * con pasarle su callback acá para que el item cobre vida solo.
  */
 
-export type IdHerramienta = 'correo' | 'mensajes' | 'etiquetas' | 'notas' | 'catalogo';
+export type IdHerramienta = 'correo' | 'mensajes' | 'etiquetas' | 'notas' | 'catalogo' | 'datos';
 
 export interface DefinicionHerramienta {
   id: IdHerramienta;
@@ -27,6 +27,21 @@ export const HERRAMIENTAS: DefinicionHerramienta[] = [
   { id: 'etiquetas', etiqueta: 'Etiquetas', Icono: Tag },
   { id: 'notas', etiqueta: 'Listas / notas', Icono: NotebookPen },
   { id: 'catalogo', etiqueta: 'Catálogo', Icono: Package },
+  /**
+   * La sexta, y no estaba en `FLUJO.md`: **«Datos recomendados»** — el catálogo
+   * `hechos`, las frases que la vendedora toca en el panel.
+   *
+   * No reusa el slot `catalogo` porque ése es otra cosa: el catálogo de CURSOS
+   * con contexto (#51), que se consulta desde el chat. Éste se EDITA, es del
+   * equipo, y hasta ahora se mantenía por SQL a mano — su API existía desde
+   * #153 con cero consumidores en el front.
+   *
+   * Vive acá y no en el panel derecho por un motivo medido: el bloque que
+   * mostraba estas frases (`hechos/BloqueHechos.tsx`) **quedó huérfano** cuando
+   * el panel se reescribió como timeline (`0b3d17b`), igual que `PanelNotas`.
+   * Nadie lo monta. Una puerta ahí no se abre desde ningún lado.
+   */
+  { id: 'datos', etiqueta: 'Datos recomendados', Icono: Lightbulb },
 ];
 
 export interface ItemMenu extends DefinicionHerramienta {

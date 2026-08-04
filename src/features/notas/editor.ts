@@ -50,6 +50,40 @@ export const ESQUEMA_LIBRETA = BlockNoteSchema.create({
 });
 
 /**
+ * 🔴 UN BLOQUE QUE EL ESQUEMA NO CONOCE TUMBA LA APP ENTERA, NO LA NOTA.
+ *
+ * `useCreateBlockNote` construye el editor **durante el render** y su
+ * constructor mapea `initialContent` con `blockToNode`, que lanza
+ * `node type <x> not found in schema`. En `src/` no hay ningún ErrorBoundary
+ * (verificado: cero `componentDidCatch`), así que ese throw no deja «la nota no
+ * abre»: deja **la ventana en blanco**, y de nuevo cada vez que se toque esa
+ * página.
+ *
+ * Y el caso no es hipotético aunque la tabla haya arrancado en cero. N4
+ * despliega el front sin reiniciar nada, así que hay app abiertas con el bundle
+ * VIEJO —el que sí ofrece «Image» en el `/` y deja pegar una URL— escribiendo
+ * mientras tanto. Una página con texto + imagen aplana a texto no vacío, pasa
+ * `validarTexto`, y el bloque `image` queda guardado en el `jsonb`.
+ *
+ * Apoyar la seguridad en «hoy no hay documentos así» era apoyarla en una
+ * afirmación sobre datos de producción que este repo no puede verificar. Acá se
+ * verifica el dato, que es lo que sí se puede.
+ *
+ * Se DESCARTA el bloque en vez de convertirlo a texto: su URL vive en `props`,
+ * y el server nunca la indexó, así que no hay nada que rescatar sin inventar.
+ * Lo que había alrededor —que es lo que la vendedora escribió— se conserva.
+ */
+const TIPOS_CONOCIDOS = new Set(Object.keys(BLOQUES_QUE_SE_PUEDEN_GUARDAR));
+
+export function soloBloquesConocidos(doc: unknown[]): unknown[] {
+  return doc.filter((b) => {
+    const tipo = (b as { type?: unknown } | null)?.type;
+    // Sin `type` BlockNote asume `paragraph`, que sí existe: se deja pasar.
+    return typeof tipo !== 'string' || TIPOS_CONOCIDOS.has(tipo);
+  });
+}
+
+/**
  * EL DICCIONARIO — la locale `es` que trae el paquete, con el castellano
  * peninsular pisado.
  *

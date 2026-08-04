@@ -5,6 +5,7 @@ import { armarItemsMenu } from './itemsHerramientas';
 import { GestorCategorias } from './GestorCategorias';
 import type { Conversacion } from '../canales/conversaciones';
 import { PanelPlantillas } from '../plantillas/PanelPlantillas';
+import { PantallaHechos } from '../hechos/PantallaHechos';
 
 /**
  * EL BOTÓN `···` — la puerta única a las herramientas de venta, siempre en
@@ -28,6 +29,7 @@ export function MenuHerramientas({ conversacion }: { conversacion: Conversacion 
   const [abierto, setAbierto] = useState(false);
   const [gestorAbierto, setGestorAbierto] = useState(false);
   const [plantillasAbiertas, setPlantillasAbiertas] = useState(false);
+  const [datosAbiertos, setDatosAbiertos] = useState(false);
   const primerItemRef = useRef<HTMLButtonElement>(null);
 
   // Cambió la conversación (otro lead, otra vista): el menú no puede
@@ -51,6 +53,10 @@ export function MenuHerramientas({ conversacion }: { conversacion: Conversacion 
   const items = armarItemsMenu(clave, {
     etiquetas: () => setGestorAbierto(true),
     mensajes: () => setPlantillasAbiertas(true),
+    // El catálogo de datos recomendados (`hechos`). Vive acá porque el bloque
+    // que los mostraba en el panel derecho quedó huérfano al rediseño de ADR
+    // 0017 y nadie lo monta: una puerta ahí no se abre desde ningún lado.
+    datos: () => setDatosAbiertos(true),
   });
 
   return (
@@ -128,6 +134,11 @@ export function MenuHerramientas({ conversacion }: { conversacion: Conversacion 
           </aside>
         </>
       )}
+
+      {/* El catálogo de datos recomendados: pantalla completa, porque lo que
+          hay que poder mirar —qué llega a verse en cada momento— no entra en un
+          cajón de 22rem. Cierra con Escape (contrato de `useEscape`). */}
+      {datosAbiertos && <PantallaHechos onCerrar={() => setDatosAbiertos(false)} />}
     </span>
   );
 }
