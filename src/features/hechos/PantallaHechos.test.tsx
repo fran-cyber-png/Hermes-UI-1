@@ -159,11 +159,19 @@ describe('sin la tabla migrada', () => {
  * `vistaPrevia`. Con el campo tipado como requerido, la pantalla reventaba ahí.
  */
 describe('contra un server que todavía no manda el recorte', () => {
+  /**
+   * La respuesta del server VIEJO, de verdad: sin `tope`, sin `vistaPrevia` y
+   * **sin `activo` en cada fila** — ese campo lo agrega `leerCatalogoParaEditar`,
+   * que es parte de este mismo despliegue.
+   *
+   * Antes este fixture reusaba `CATALOGO.hechos`, que ya trae `activo`: el
+   * describe decía cubrir la ventana de despliegue y no la modelaba. Un test que
+   * miente sobre lo que cubre es peor que no tenerlo — se confía en él.
+   */
   const VIEJO = {
-    hechos: CATALOGO.hechos,
+    hechos: CATALOGO.hechos.map(({ activo: _a, ...resto }) => resto),
     editable: true,
     origen: 'tabla' as const,
-    // sin `tope` y sin `vistaPrevia`: exactamente lo que devuelve el server de hoy
   };
 
   async function abrirViejo() {
@@ -196,6 +204,17 @@ describe('contra un server que todavía no manda el recorte', () => {
   it('y editar sigue funcionando: lo único que falta es el recorte', async () => {
     const m = await abrirViejo();
     expect(boton(m, 'Agregar un dato')!.disabled).toBe(false);
+  });
+
+  /**
+   * Sin `activo` en la respuesta, `h.activo` es `undefined`. Leerlo como falsy
+   * pintaba **el catálogo entero** tachado y con la píldora «apagado»: la
+   * pantalla afirmando sobre un campo que el server nunca mandó.
+   */
+  it('sin `activo` NO da todo por apagado: el server no dijo eso', async () => {
+    const m = await abrirViejo();
+    const texto = m.contenedor.textContent ?? '';
+    expect(texto).not.toContain('apagado');
   });
 });
 

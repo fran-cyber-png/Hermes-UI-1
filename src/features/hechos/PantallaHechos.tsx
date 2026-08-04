@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ChevronLeft, Eye, EyeOff, Lightbulb, Plus, RotateCcw, ServerCrash, X } from 'lucide-react';
+import { ErrorApi } from '../../lib/datos/cliente';
 import { useEscape } from '../../lib/teclado/useEscape';
 import { sectionLabel } from '../../lib/styles';
 import { MOMENTOS, PORQUE_DEL_MOMENTO, type MomentoDeVenta } from './hechos';
@@ -55,6 +56,19 @@ import {
  */
 type Seleccion = { tipo: 'nuevo' } | { tipo: 'previa' } | { tipo: 'hecho'; clave: string } | null;
 
+/**
+ * EL MOTIVO QUE MANDÓ EL SERVER, no «Error 400».
+ *
+ * `routes/hechos.ts` arma `errores` desde los `issues` de Zod, así que ahí
+ * viene «el orden va entre 0 y 999» o «la clave va en minúsculas, sin
+ * espacios». Descartarlo dejaba a la vendedora sin saber qué campo corregir.
+ */
+function motivoDelError(e: unknown): string {
+  if (e instanceof ErrorApi && e.errores?.length) return e.errores.join(' · ');
+  if (e instanceof ErrorApi && e.status === 404) return 'Ese dato ya no existe: refrescá la pantalla';
+  return e instanceof Error && e.message ? e.message : 'No se pudo guardar';
+}
+
 const ORDEN_MIN = 0;
 const ORDEN_MAX = 999;
 
@@ -84,12 +98,12 @@ function Fila({
         <span
           className={
             'min-w-0 flex-1 truncate text-sm font-medium ' +
-            (h.activo ? 'text-foreground' : 'text-muted-foreground line-through')
+            (h.activo !== false ? 'text-foreground' : 'text-muted-foreground line-through')
           }
         >
           {h.rotulo}
         </span>
-        {h.activo && seVeEn !== null ? (
+        {h.activo !== false && seVeEn !== null ? (
           <span
             title={
               seVeEn === 0
@@ -103,7 +117,7 @@ function Fila({
           >
             {seVeEn === 0 ? 'no se ve' : `${seVeEn}/${MOMENTOS.length}`}
           </span>
-        ) : !h.activo ? (
+        ) : h.activo === false ? (
           <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground">
             apagado
           </span>
@@ -127,7 +141,7 @@ function QueVeLaVendedora({
   onElegir: (clave: string) => void;
 }) {
   const rotuloDe = (clave: string) => hechos.find((h) => h.clave === clave)?.rotulo ?? clave;
-  const activos = hechos.filter((h) => h.activo).length;
+  const activos = hechos.filter((h) => h.activo !== false).length;
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-8">
@@ -177,10 +191,18 @@ function QueVeLaVendedora({
 function Editor({
   hecho,
   editable,
+  deFabrica,
   onListo,
 }: {
   hecho: HechoDelCatalogo | null;
   editable: boolean;
+  /**
+   * `true` = la tabla está migrada pero VACÍA, así que lo que se ve son las
+   * filas de fábrica y **no existen en la base**. Guardar una tiene que ser un
+   * POST: con `PUT` el server contesta 404 sobre algo que la pantalla acaba de
+   * mostrar como editable.
+   */
+  deFabrica: boolean;
   onListo: (clave: string) => void;
 }) {
   const { crear, editar, apagar, prender } = useMutacionesHechos();
@@ -208,17 +230,28 @@ function Editor({
             ? 'La frase no puede pasar de 600 caracteres'
             : clave.length < 2
               ? 'Del rótulo no sale una clave usable: poné al menos dos letras o números'
-              : null;
+              : !Number.isInteger(Number(orden)) || orden.trim() === ''
+                ? 'El orden tiene que ser un número entero'
+                : // `|| 0` guardaba CERO —la máxima prioridad— cuando el campo
+                  // quedaba vacío: el dato le ganaba el lugar a todos los demás
+                  // en los seis momentos, y la vendedora había visto un campo en
+                  // blanco, no un cero.
+                  Number(orden) < ORDEN_MIN || Number(orden) > ORDEN_MAX
+                  ? `El orden va entre ${ORDEN_MIN} y ${ORDEN_MAX}`
+                  : null;
 
   async function guardar() {
     setError(null);
-    const campos = { rotulo: rotulo.trim(), texto: texto.trim(), momentos, orden: Number(orden) || 0 };
+    const campos = { rotulo: rotulo.trim(), texto: texto.trim(), momentos, orden: Number(orden) };
     try {
-      if (esNuevo) await crear.mutateAsync({ clave, ...campos });
+      if (esNuevo || deFabrica) await crear.mutateAsync({ clave, ...campos });
       else await editar.mutateAsync({ clave, ...campos });
       onListo(clave);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo guardar');
+      // El server ya calculó el motivo y lo manda en `errores` (`routes/hechos.ts`
+      // arma la lista desde Zod). Descartarlo dejaba «Error 400» sin decir qué
+      // campo ni por qué — que es lo mismo que no decir nada.
+      setError(motivoDelError(e));
     }
   }
 
@@ -320,7 +353,7 @@ function Editor({
           {trabajando ? 'Guardando…' : esNuevo ? 'Agregar el dato' : 'Guardar'}
         </button>
 
-        {!esNuevo && editable && (
+        {!esNuevo && editable && !deFabrica && (
           <button
             type="button"
             onClick={() => {
@@ -339,9 +372,14 @@ function Editor({
         )}
       </div>
 
-      {!esNuevo && (
+      {!esNuevo && !deFabrica && (
         <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
           Apagar no borra: la frase queda para poder mirar contra qué ventas se usó.
+        </p>
+      )}
+      {deFabrica && (
+        <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+          Este viene de fábrica y todavía no está en la base: al guardarlo se crea.
         </p>
       )}
     </div>
@@ -516,6 +554,7 @@ export function PantallaHechos({ onCerrar }: { onCerrar: () => void }) {
               key="nuevo"
               hecho={null}
               editable={editable}
+              deFabrica={false}
               onListo={(clave) => setSeleccion({ tipo: 'hecho', clave })}
             />
           )}
@@ -524,6 +563,7 @@ export function PantallaHechos({ onCerrar }: { onCerrar: () => void }) {
               key={elegido.clave}
               hecho={elegido}
               editable={editable}
+              deFabrica={data?.origen === 'defecto'}
               onListo={(clave) => setSeleccion({ tipo: 'hecho', clave })}
             />
           )}
