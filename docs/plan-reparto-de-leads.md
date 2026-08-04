@@ -4,8 +4,10 @@
 > **Disparador**: entran vendedores nuevos y a todos se les da **una sola línea**,
 > la del bot: `51984429504`.
 >
-> ✅ **Implementado el 4-ago** (§5 completo). Falta **una sola cosa para prenderlo**: cargar la
-> rueda, y eso está bloqueado por Cerberus, no por Hermes — ver §10.
+> ✅ **VIVO EN PRODUCCIÓN desde el 4-ago-2026, 15:25 UTC.** VPS1 corre `9f33b5e`, las dos
+> tablas están creadas y la rueda tiene a los cinco. Desde ese momento, cada lead nuevo que
+> escribe a `51984429504` sale con dueño. Ver §10 para lo que se verificó y lo que queda por
+> mirar en los próximos días.
 >
 > ⚠️ **Son 5 vendedores, no 6** (confirmado por Estephano el 4-ago). Todo lo escrito acá vale
 > igual: la rueda no tiene número fijo.
@@ -286,10 +288,10 @@ Dos cosas para más adelante, cada una su propio PR:
 
 ---
 
-## 10 · Lo único que falta para prenderlo
+## 10 · Cómo quedó en producción
 
-El código está entero y verificado (1.619 tests puros + 404 con base del lado server, 580 del
-front, lint sin errores, captura de la UI). Faltan **dos pasos, en este orden**.
+Se prendió el 4-ago-2026. El código está verificado con 1.619 tests puros + 404 con base del
+lado server, 580 del front, lint sin errores y captura de la UI.
 
 ### Los 5 usernames — resueltos
 
@@ -315,27 +317,55 @@ ventas14@grupogoberna.com
 En la píldora de la fila eso se lee **«Ventas10»**, no el correo entero: `nombreCorto()` corta
 en el `@`.
 
-### Paso 1 — desplegar (la tabla no existe todavía en prod)
+### Paso 1 — desplegar ✅
 
-Verificado en VPS1 el 4-ago: prod corre `d015928` y la migración `0015` **no está aplicada**.
-El camino es el de la casa (§9): rama → PR → CI verde → merge con rebase → **N5 a mano**.
-Hasta que eso pase, la app se comporta exactamente como hoy — sin dueño en las filas, sin chip
-«Míos» y sin botón de pasar la conversación (todo degrada, nada rompe).
+Hecho por el camino de la casa (§9): PR **#273** → N1/N2/N2b verdes → merge con rebase → N5.
+Verificado en VPS1 después del deploy: commit `9f33b5e`, `systemctl is-active hermes` → `active`,
+`/health` → `{"ok":true}`, y **las dos tablas creadas** (`reparto_rueda`, `conversacion_asignada`).
+Las rutas nuevas responden **401** sin token —montadas y detrás del perímetro, no 404— y el bundle
+del front que sirve producción ya trae «Míos», `asignada_a` y el puente a `/api/reparto/rueda`.
 
-### Paso 2 — cargar la rueda (un comando)
+### Paso 2 — cargar la rueda ✅
+
+Corrido **en VPS1**, que es donde vive el `.env` de producción — no en la máquina de nadie:
 
 ```bash
-cd server
-npm run reparto:rueda -- --agregar ventas10@grupogoberna.com,ventas11@grupogoberna.com,ventas12@grupogoberna.com,ventas13@grupogoberna.com,ventas14@grupogoberna.com
-# ↑ dry-run: imprime qué haría y no escribe nada. Repetir con `--aplicar`.
-npm run reparto:rueda   # confirmar cómo quedó
+ssh deploy@161.132.39.165 'cd /srv/hermes/server && npm run reparto:rueda -- \
+  --agregar ventas10@grupogoberna.com,…,ventas14@grupogoberna.com [--aplicar]'
 ```
+
+Cómo quedó, leído de vuelta:
+
+```
+Línea 51984429504 — la rueda del reparto
+  · ventas10@grupogoberna.com    0 asignadas
+  · ventas11@grupogoberna.com    0 asignadas
+  · ventas12@grupogoberna.com    0 asignadas
+  · ventas13@grupogoberna.com    0 asignadas
+  · ventas14@grupogoberna.com    0 asignadas
+  ✓ Reparto parejo: la diferencia entre el que más y el que menos es 0.
+  0 conversaciones con dueño · 91 sin dueño (últimos 30 días)
+```
+
+Las **91 sin dueño** coinciden con el censo del 3-ago que abre este documento: es la señal de
+que el script está mirando la línea correcta.
 
 **Luz queda afuera de la rueda** (decisión 2): sigue viendo la cola completa y se le puede
 pasar una conversación a mano, pero no recibe asignados.
 
-Después de que cada una entre a Hermes una vez, `npm run reparto:rueda` las marca como
-conocidas — esa es la confirmación de que el username quedó bien escrito.
+### Lo que hay que mirar en los próximos días
+
+1. **Que los cinco usernames sean los correctos.** El script avisó que **ninguno entró a Hermes
+   todavía** —normal, los crearon ese día—, y ése es el único chequeo que Hermes puede hacer.
+   Después de que cada una entre una vez, `npm run reparto:rueda` las marca como conocidas: **esa
+   es la confirmación**. Si alguna sigue apareciendo como desconocida después de haber entrado,
+   el username está mal y sus leads no le aparecen en «Míos» (siguen visibles para todos en la
+   cola compartida — no se pierde ninguno).
+2. **Que el reparto salga parejo**: `npm run reparto:rueda`. Si la diferencia entre el que más y
+   el que menos pasa de 1, algo anda mal — es la propiedad que los tests fijan.
+3. **Las 91 sin dueño.** No se reparten solas (decisión 3). El riesgo asumido es que se atienda
+   lo que tiene nombre y lo viejo se muera. Si en unos días se ve que pasa, repartirlas es un
+   script sobre el mismo seam, no un rediseño.
 
 ---
 

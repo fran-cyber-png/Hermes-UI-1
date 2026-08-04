@@ -426,12 +426,19 @@ el dueño estaba mirando la sala a mano — o sea que **el bot solo servía mien
   (serían 50 de 66 filas). La lectura de los seis motivos vive pura en `src/features/canales/bot.ts`,
   y un motivo que el front no conoce cae en «Pidió ayuda», nunca en un throw ni en un motivo parecido.
 
-## El reparto de leads — de quién es cada conversación cuando 7 comparten una línea
+## El reparto de leads — de quién es cada conversación cuando varias comparten una línea
 
 Hasta el 4-ago-2026 cada vendedora tenía SU número. Desde ese día **varias personas comparten
 uno**: la línea del bot `51984429504`. Sin reparto pasan las dos cosas de siempre —**dos
 contestan al mismo lead** y **nadie contesta a otro**—, porque la fila se ve igual para todos.
 Server en `server/src/reparto/`, plan y decisiones en `docs/plan-reparto-de-leads.md`.
+
+> ✅ **VIVO EN PRODUCCIÓN desde el 4-ago-2026** (PR #273, prod en `9f33b5e`). La rueda de
+> `51984429504` tiene **5 vendedoras** —`ventas10@grupogoberna.com` … `ventas14@…`, el username
+> de Cerberus **es el correo completo**— y Luz queda afuera a propósito (ve la cola entera, no
+> recibe asignados). Al prenderlo había **91 conversaciones sin dueño**: las anteriores al
+> reparto **no se reparten solas**, les toca dueño cuando vuelvan a escribir.
+> Para auditar: `ssh deploy@161.132.39.165 'cd /srv/hermes/server && npm run reparto:rueda'`.
 
 - **Round-robin, y se elige por CARGA, no con un puntero** (`reparto/rueda.ts`, puro): se le da
   **al que menos tiene**. Un puntero se desincroniza —alguien entra, otro sale, se borra una
