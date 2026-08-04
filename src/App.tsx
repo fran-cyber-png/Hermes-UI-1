@@ -12,6 +12,7 @@ import {
   LogOut,
   Mail,
   MessagesSquare,
+  Notebook,
   Users,
   Bot,
 } from 'lucide-react';
@@ -47,14 +48,14 @@ import { esAtajoLibreta } from './features/notas/notas';
 import { ConsultaIvi } from './features/ivi/ConsultaIvi';
 
 /**
- * La Libreta se carga PEREZOSA y solo se monta cuando está abierta. BlockNote
- * pesa **269 KB gzip medidos** (el bundle principal pasa de 222 a 491 KB si
- * entra estático), y esto se abre con una tecla: cargarlo al arrancar se lo
- * cobra a todas las vendedoras que hoy no lo usan.
+ * La Libreta se carga PEREZOSA y solo se monta cuando su vista está a la vista.
+ * BlockNote pesa **269 KB gzip medidos** (el bundle principal pasa de 222 a 491
+ * KB si entra estático). Que ahora sea una vista del riel no cambia el cálculo:
+ * seguiría siendo un cuarto del bundle cobrado en el arranque a todas, incluso
+ * las que ese día no entran a escribir nada.
  *
- * Montarlo condicionalmente es seguro acá porque la Libreta **no registra
- * `useEscape`** — su Escape lo resuelve la cascada de este archivo. Si algún día
- * registra uno propio, hay que pasarle `abierta` (la trampa de ADR 0024).
+ * Y como toda vista que no es la Bandeja, se DESMONTA al salir: por eso la
+ * Libreta adelanta su autoguardado pendiente en el desmontaje (ver su archivo).
  */
 const Libreta = lazy(() => import('./features/notas/Libreta').then((m) => ({ default: m.Libreta })));
 
@@ -68,10 +69,10 @@ const Libreta = lazy(() => import('./features/notas/Libreta').then((m) => ({ def
  * SIEMPRE montada (oculta, no desmontada): el borrador del composer y el hilo
  * abierto sobreviven a cualquier paseo por las demás vistas.
  *
- * Teclado global (§2.8 del spec): ⌘1-6 cambia de vista · «/» va a la búsqueda
- * de la cola · Escape cierra la conversación (solo en Mensajes, nunca desde un
- * input) · «?» abre la cabina con el mapa completo · «n» abre la libreta
- * personal (#47).
+ * Teclado global (§2.8 del spec): ⌘1..⌘N cambia de vista (el rango sale de
+ * `VISTAS`, no de un número escrito a mano) · «/» va a la búsqueda de la cola ·
+ * Escape cierra la conversación (solo en Mensajes, nunca desde un input) · «?»
+ * abre la cabina con el mapa completo · «n» va a la libreta personal (#47).
  */
 
 /** `WebkitAppRegion` no está en los tipos de CSSProperties; Electron sí lo lee. */
@@ -89,6 +90,11 @@ const VISTAS = [
   // No es trabajo diario de la vendedora, pero vive en el riel igual — fuera de
   // la app quedaría huérfana, y lo que no está a la vista no se usa.
   { id: 'entrenamiento', label: 'Entrenar bot', icono: Bot },
+  // La octava (ADR 0034). Entra por el MISMO criterio que dejó afuera a la
+  // Cabina y a Ivi —«el riel es para LUGARES»—, no por una excepción: a Ivi se
+  // lo consulta, a la libreta se entra. Vivió 12 días detrás de la tecla «n»
+  // sin ícono en ningún lado, y `notas` terminó con cero filas.
+  { id: 'libreta', label: 'Libreta', icono: Notebook },
 ] as const;
 
 type Vista = (typeof VISTAS)[number]['id'];
@@ -184,7 +190,6 @@ export default function App() {
   const [direccion, setDireccion] = useState<'abajo' | 'arriba'>('abajo');
   const [telefonoPersonas, setTelefonoPersonas] = useState<string | null>(null);
   const [cabina, setCabina] = useState(false);
-  const [libreta, setLibreta] = useState(false);
   // La consulta a Ivi (H3). Capa aparte, global: se pregunta desde donde sea que estés y
   // el panel derecho —que es de la persona abierta, no del negocio— no se toca.
   const [ivi, setIvi] = useState(false);
@@ -241,24 +246,25 @@ export default function App() {
   useEffect(() => {
     function alTeclear(e: KeyboardEvent) {
       if (e.key === 'Escape') {
-        // Escape cierra en orden: libreta → cabina → revisión → conversación
-        // abierta (solo en Mensajes). La revisión sale ANTES que la
-        // conversación: adentro del modo, Escape significa «salime de acá».
+        // Escape cierra en orden: cabina → revisión → conversación abierta
+        // (solo en Mensajes). La revisión sale ANTES que la conversación:
+        // adentro del modo, Escape significa «salime de acá».
+        //
+        // LA LIBRETA YA NO ESTÁ EN ESTA LISTA (ADR 0034) y no es un olvido: es
+        // una VISTA, y de una vista no se sale con Escape —de Dashboard tampoco—
+        // se va a otra. Lo único que hay que cuidar al leer esto es que lo de
+        // abajo siga andando: la cascada se acortó por arriba, no por el medio.
         //
         // Y sale AUN CON EL FOCO EN EL COMPOSER, que es la única excepción a la
         // guarda de «no pises un input». Sin esto Escape no funcionaba nunca en
         // revisión: ahí el foco vive siempre en el borrador, así que la guarda
         // se comía la tecla y la única salida era el botón. Se acota al
         // `textarea` a propósito —los popovers de la barra usan `input` y
-        // siguen manejando su propio Escape— y libreta/cabina se atienden
-        // antes, así que nunca se le roba el Escape a algo abierto encima.
+        // siguen manejando su propio Escape— y la cabina se atiende antes, así
+        // que nunca se le roba el Escape a algo abierto encima.
         const enElBorrador =
           revision.activo && e.target instanceof HTMLElement && e.target.tagName === 'TEXTAREA';
         if (tecleandoEn(e) && !enElBorrador) return;
-        if (libreta) {
-          setLibreta(false);
-          return;
-        }
         if (cabina) {
           setCabina(false);
           return;
@@ -319,9 +325,13 @@ export default function App() {
         return;
       }
       // La libreta personal (#47): «n» sola, nunca ⌘N/Ctrl+N (eso es del navegador).
+      // NAVEGA, no alterna: desde que es una vista (ADR 0034), «n» es el atajo de
+      // ⌘8 y nada más. Alternar la dejaría contestando dos cosas distintas según
+      // dónde estés parada, y peor: la tecla de ir a la libreta te sacaría de la
+      // libreta. Volver es ⌘1..⌘8 o el riel, como con cualquier otra vista.
       if (esAtajoLibreta(e)) {
         e.preventDefault();
-        setLibreta((v) => !v);
+        cambiarVista('libreta');
         return;
       }
       // La revisión de las auto-respuestas: «a» sola. Es lo que se hace a las 9
@@ -343,7 +353,7 @@ export default function App() {
     window.addEventListener('keydown', alTeclear);
     return () => window.removeEventListener('keydown', alTeclear);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vista, cabina, abierta, libreta, revision.activo, revision.actualId, revision.fila]);
+  }, [vista, cabina, abierta, revision.activo, revision.actualId, revision.fila]);
 
   if (cargando) {
     // El esqueleto con la anatomía del shell: riel, header, tres placas.
@@ -630,6 +640,26 @@ export default function App() {
             )}
             {vista === 'personas' && <VistaPersonas telefonoInicial={telefonoPersonas} onEscribir={escribirA} />}
             {vista === 'entrenamiento' && <VistaEntrenamiento />}
+            {/* El fallback dibuja la anatomía de la vista (lista + página) en vez
+                de un texto: lo que se está esperando son 269 KB de editor, y un
+                cartel de «cargando» donde después va a haber una hoja hace
+                parpadear la pantalla dos veces. */}
+            {vista === 'libreta' && (
+              <Suspense
+                fallback={
+                  <div className="flex min-h-0 flex-1">
+                    <div className="hidden w-[19rem] shrink-0 border-r border-border p-3 md:block">
+                      <div className="h-9 animate-pulse rounded-lg bg-muted" />
+                    </div>
+                    <div className="min-h-0 flex-1 px-6 py-8">
+                      <div className="mx-auto h-40 max-w-3xl animate-pulse rounded-lg bg-muted" />
+                    </div>
+                  </div>
+                }
+              >
+                <Libreta />
+              </Suspense>
+            )}
 
             {vista === 'correos' && (
               <VistaCorreos correoInicial={puente?.tipo === 'correo' ? puente.para : null} onConsumido={() => setPuente(null)} />
@@ -639,11 +669,6 @@ export default function App() {
       </div>
 
       {cabina && <Cabina onCerrar={() => setCabina(false)} enRevision={revision.activo} />}
-      {libreta && (
-        <Suspense fallback={null}>
-          <Libreta abierta onCerrar={() => setLibreta(false)} />
-        </Suspense>
-      )}
       <ConsultaIvi abierta={ivi} onCerrar={() => setIvi(false)} />
     </div>
   );
