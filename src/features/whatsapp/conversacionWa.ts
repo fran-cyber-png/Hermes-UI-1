@@ -49,14 +49,34 @@ export function urlMedia(archivo: string): string {
   return `${API_URL}/api/whatsapp/media/${encodeURIComponent(archivo)}`;
 }
 
+/**
+ * CUÁNTO ACEPTA ESTA LÍNEA, por clase de adjunto (bytes).
+ *
+ * Lo publica `GET /api/whatsapp/sesion` porque el tope **es de la línea, no de
+ * Hermes**: la del bot es Cloud API y Meta corta el video en 16 MB y la imagen
+ * en 5; las de las vendedoras son whatsmeow y no tienen ese tope. Sin esto, la
+ * app dejaba elegir un video de 17,9 MB, lo subía entero y mostraba el JSON de
+ * Meta con su `fbtrace_id`.
+ *
+ * **Opcional a propósito**: un server viejo no lo manda, y ahí el front no
+ * frena nada — que es exactamente como se comportaba antes. La garantía no es
+ * ésta: el server verifica igual y responde 409 con el motivo redactado.
+ */
+export type LimitesMediaWa = Partial<Record<'imagen' | 'video' | 'audio' | 'documento', number>>;
+
 /** El estado de la sesión de WhatsApp (para el banner). Espeja `EstadoSesion` del server. */
-export type EstadoSesionWa =
+export type EstadoSesionWa = {
+  /** Qué hay del otro lado. Ausente en un server viejo. */
+  transporte?: 'whatsmeow' | 'cloud-api' | 'falso';
+  limitesMedia?: LimitesMediaWa;
+} & (
   | { estado: 'sin-vincular'; qr: string | null; codigo: string | null }
   | { estado: 'conectando' }
   | { estado: 'conectado'; telefono: string }
   | { estado: 'desconectado'; motivo: string }
   | { estado: 'cerrada'; motivo: string }
-  | { estado: 'baneado'; codigo: string; expira: string };
+  | { estado: 'baneado'; codigo: string; expira: string }
+);
 
 export function useSesionWa(numeroPropio?: string | null) {
   const params = numeroPropio ? `?numeroPropio=${encodeURIComponent(numeroPropio)}` : '';

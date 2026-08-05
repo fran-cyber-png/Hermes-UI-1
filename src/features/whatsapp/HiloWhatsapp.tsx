@@ -5,6 +5,7 @@ import { useBlobAutenticado } from '../../lib/datos/blobAutenticado';
 import { formatoTelefono, tempClass } from '../../lib/formato';
 import { usePopover } from '../../lib/teclado/usePopover';
 import { ejecutarEnvioComposer, guardarBorrador, leerBorrador } from './borradorComposer';
+import { decidirPegado, motivoPorTamano, nombreFinalDePegado, pesoLegible } from './pegarAdjunto';
 import { alPonerEnComposer } from './puenteComposer';
 import { piezaDelTexto } from './procedenciaComposer';
 import { textoDelBoton } from '../autorespuesta/revision';
@@ -16,6 +17,7 @@ import {
   useConversacionWa,
   useSesionWa,
   type EstadoSesionWa,
+  type LimitesMediaWa,
   type MediaHilo,
   type OrigenLead,
 } from './conversacionWa';
@@ -483,11 +485,38 @@ export function HiloWhatsapp({
         conversacionClave={conversacion.clave}
         personaNombre={conversacion.persona_nombre}
         conectado={conectado}
+        limitesMedia={sesion?.limitesMedia}
         enviar={enviar}
         enviarMedia={enviarMedia}
       />
     </div>
   );
+}
+
+/**
+ * La miniatura del adjunto elegido — UN objectURL por archivo, revocado al
+ * soltarlo.
+ *
+ * Estaba inline como `URL.createObjectURL(adjunto)` dentro del JSX, o sea que
+ * creaba un blob nuevo EN CADA RENDER y no revocaba ninguno: escribir la
+ * leyenda de una captura de 3 MB fugaba 3 MB por tecla. Con el clip pasaba poco
+ * (adjuntar era raro); con ⌘V pasa todo el tiempo.
+ */
+function useVistaPreviaAdjunto(adjunto: File | null): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!adjunto?.type.startsWith('image/')) {
+      setUrl(null);
+      return;
+    }
+    const u = URL.createObjectURL(adjunto);
+    setUrl(u);
+    return () => {
+      URL.revokeObjectURL(u);
+      setUrl(null);
+    };
+  }, [adjunto]);
+  return url;
 }
 
 type MutacionEnviar = ReturnType<typeof useConversacionWa>['enviar'];
@@ -513,6 +542,7 @@ function ComposerWa({
   conversacionClave,
   personaNombre,
   conectado,
+  limitesMedia,
   enviar,
   enviarMedia,
   sugerencia,
@@ -522,6 +552,8 @@ function ComposerWa({
   conversacionClave: string;
   personaNombre: string | null;
   conectado: boolean;
+  /** Cuánto acepta ESTA línea por clase. Ausente en un server viejo: solo el techo. */
+  limitesMedia?: LimitesMediaWa;
   enviar: MutacionEnviar;
   enviarMedia: MutacionEnviarMedia;
   sugerencia?: SugerenciaEnComposer;
@@ -536,10 +568,13 @@ function ComposerWa({
   // `borradorComposer.ts` existe para evitar, cometido desde adentro.
   const [texto, setTexto] = useState(() => (sugerencia ? sugerencia.texto : leerBorrador(telefono)));
   const [adjunto, setAdjunto] = useState<File | null>(null);
+  /** Lo que el pegado dejó afuera o rechazó. Se limpia solo al elegir otro adjunto. */
+  const [avisoPegado, setAvisoPegado] = useState<string | null>(null);
   const archivoRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const telefonoActualRef = useRef(telefono);
   telefonoActualRef.current = telefono;
+  const vistaPrevia = useVistaPreviaAdjunto(adjunto);
 
   const enviando = enviar.isPending || enviarMedia.isPending;
 
@@ -576,6 +611,34 @@ function ComposerWa({
     [telefono],
   );
 
+  /**
+   * ⌘V CON UNA CAPTURA EN EL PORTAPAPELES — la deja como adjunto, y lo que ya
+   * estaba escrito en la caja se va de leyenda (igual que con el clip).
+   *
+   * PEGAR NO ENVÍA, a propósito: queda en la vista previa con su «quitar», y
+   * sale recién con Enter o con el botón. Es la regla de la casa (un envío = una
+   * acción humana) y también lo que hace WhatsApp Web, así que no hay nada que
+   * aprender.
+   *
+   * El `preventDefault` va SOLO cuando hay archivo: sin esa guarda, pegar texto
+   * copiado —que es el 99 % de los ⌘V— dejaría de funcionar. Y cuando sí hay
+   * archivo hace falta, porque Chrome además pega su ruta como texto.
+   */
+  function onPegar(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const r = decidirPegado(e.clipboardData.files, {
+      enRevision: Boolean(sugerencia),
+      limites: limitesMedia,
+    });
+    if (r.tipo === 'texto') return;
+    e.preventDefault();
+    if (r.tipo === 'rechazado') {
+      setAvisoPegado(r.motivo);
+      return;
+    }
+    setAdjunto(new File([r.archivo], nombreFinalDePegado(r.archivo, new Date()), { type: r.archivo.type }));
+    setAvisoPegado(r.aviso);
+  }
+
   async function onEnviar() {
     try {
       await ejecutarEnvioComposer({
@@ -597,7 +660,10 @@ function ComposerWa({
           enviarMedia.mutateAsync({ numeroPropio, telefono, referencia: conversacionClave, archivo, caption }),
         telefonoVisibleAhora: () => telefonoActualRef.current,
         limpiarTextoVisible: () => setTexto(''),
-        limpiarAdjuntoVisible: () => setAdjunto(null),
+        limpiarAdjuntoVisible: () => {
+          setAdjunto(null);
+          setAvisoPegado(null);
+        },
       });
     } catch {
       // El error se muestra abajo; no limpiamos texto ni adjunto para no perderlos.
@@ -644,18 +710,37 @@ function ComposerWa({
         </div>
       )}
 
+      {/* Lo que el pegado dejó afuera. NO es la banda de error de arriba: ahí
+          falló un envío, acá no salió nada — el mensaje sigue en la caja. Por
+          eso ámbar y no rojo, y por eso se puede cerrar. El silencio no era una
+          opción: un ⌘V que no hace nada se lee como app rota. */}
+      {avisoPegado && (
+        <div className="mb-2 flex items-start gap-1.5 rounded-lg border border-warning/30 bg-warning/10 p-2 text-xs text-warning-foreground">
+          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+          <span className="min-w-0 flex-1">{avisoPegado}</span>
+          <button
+            type="button"
+            onClick={() => setAvisoPegado(null)}
+            title="Entendido"
+            className="shrink-0 rounded p-0.5 transition-colors hover:bg-warning/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
+
       {/* El adjunto elegido, antes de mandarlo: se ve, se puede sacar. */}
       {adjunto && (
         <div className="mb-2 flex items-center gap-2 rounded-xl border border-border bg-secondary/50 px-3 py-2">
-          {adjunto.type.startsWith('image/') ? (
-            <img src={URL.createObjectURL(adjunto)} alt="" className="size-10 rounded-lg object-cover" />
+          {vistaPrevia ? (
+            <img src={vistaPrevia} alt="" className="size-10 rounded-lg object-cover" />
           ) : (
             <FileText size={18} className="shrink-0 text-navy" />
           )}
           <div className="min-w-0 flex-1">
             <div className="truncate text-xs font-semibold text-foreground">{adjunto.name}</div>
             <div className="text-[11px] text-muted-foreground">
-              {(adjunto.size / 1024 / 1024).toFixed(1)} MB · el texto de abajo va como leyenda
+              {pesoLegible(adjunto.size)} · el texto de abajo va como leyenda
             </div>
           </div>
           <button
@@ -682,8 +767,19 @@ function ComposerWa({
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0] ?? null;
-            if (f) setAdjunto(f);
             e.target.value = '';
+            if (!f) return;
+            // El MISMO control que el pegado, y no por simetría: el video de
+            // 17,9 MB que Meta rechazó entró por acá. Si el clip no verificara,
+            // el camino más usado seguiría subiendo el archivo entero para
+            // recibir un `fbtrace_id` al final.
+            const motivo = motivoPorTamano(f, limitesMedia);
+            if (motivo) {
+              setAvisoPegado(motivo);
+              return;
+            }
+            setAdjunto(f);
+            setAvisoPegado(null);
           }}
         />
         <button
@@ -699,6 +795,7 @@ function ComposerWa({
         <textarea
           ref={textareaRef}
           value={texto}
+          onPaste={onPegar}
           onChange={(e) => {
             const valor = e.target.value;
             setTexto(valor);

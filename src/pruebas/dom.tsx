@@ -38,17 +38,30 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
  * · `localStorage`: vitest no lo copia de la ventana de jsdom a los globales, y `token.ts`
  *   lo usa sin guarda — sin esto, TODA request muere con «reading 'getItem'» y un test que
  *   mira si salió la request lee un falso negativo.
+ * · `URL.createObjectURL`: jsdom no lo trae y lo usa toda vista previa de un archivo elegido
+ *   (la miniatura del adjunto en el composer). El stub devuelve una cadena `blob:` distinta
+ *   por llamada y anota las revocadas, así un test puede verificar que el objectURL se
+ *   suelta — que es el defecto que el hook existe para evitar, no un detalle de dibujo.
  * · `ResizeObserver`: jsdom tampoco lo trae, y lo usa toda barra que mide su propio ancho
  *   (`BarraFiltros` decide con eso si dibuja el degradado de «hay más chips a la derecha»).
  *   El stub NO simula nada: jsdom no hace layout, así que cualquier medida sería mentira.
  *   Solo evita que un componente que mide se caiga al montar — lo que se testea acá es qué
  *   chips existen, no cuántos entran.
  */
+/** Los objectURL que la app soltó. Lo llena el stub de `revokeObjectURL`. */
+export const objectUrlsRevocados = new Set<string>();
+
 function remendarJsdom() {
   if (typeof document === 'undefined') return;
   if (!Element.prototype.scrollIntoView) {
     Element.prototype.scrollIntoView = function () {};
   }
+  // Se pisa SIEMPRE, no solo si falta: jsdom no lo trae, pero Node sí tiene el
+  // suyo (para `Blob` de Node), así que la guarda «si no existe» nunca entraba y
+  // las revocaciones quedaban sin anotar — el test verde por el motivo equivocado.
+  let n = 0;
+  URL.createObjectURL = () => `blob:prueba/${++n}`;
+  URL.revokeObjectURL = (u: string) => void objectUrlsRevocados.add(u);
   const conObserver = globalThis as { ResizeObserver?: unknown };
   if (!conObserver.ResizeObserver) {
     conObserver.ResizeObserver = class {
@@ -168,6 +181,47 @@ export function arrastrar(elemento: Element): void {
     elemento.dispatchEvent(evento);
     elemento.dispatchEvent(new Event('dragend', { bubbles: true, cancelable: true }));
   });
+}
+
+/**
+ * ESCRIBIR EN UNA CAJA CONTROLADA POR REACT.
+ *
+ * `elemento.value = 'x'` + un `input` a mano NO alcanza: React le pone al nodo un tracker
+ * del último valor, ve que no cambió respecto de lo que él escribió y **descarta el evento
+ * en silencio**. El test queda verde o rojo por el motivo equivocado: el `onChange` nunca
+ * corrió. Se escribe con el setter nativo del prototipo, que es el que el tracker vigila.
+ */
+export function escribir(elemento: HTMLTextAreaElement | HTMLInputElement, texto: string): void {
+  const proto = elemento instanceof HTMLTextAreaElement ? HTMLTextAreaElement : HTMLInputElement;
+  const setter = Object.getOwnPropertyDescriptor(proto.prototype, 'value')?.set;
+  if (!setter) throw new Error('sin setter nativo de value: ¿cambió jsdom?');
+  act(() => {
+    setter.call(elemento, texto);
+    elemento.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
+/**
+ * ⌘V DE VERDAD sobre `elemento`, con lo que traiga el portapapeles.
+ *
+ * jsdom no implementa `ClipboardEvent` ni `DataTransfer`, así que el `clipboardData` se
+ * arma a mano — igual que en `arrastrar`. Lo único que la app le pide es `.files`, y sin
+ * la propiedad el handler revienta antes de llegar a lo que se está probando.
+ *
+ * Devuelve el evento para poder preguntar si se canceló: **que un pegado de TEXTO no se
+ * cancele es la mitad de lo que hay que fijar acá**, y eso no se ve en el DOM resultante
+ * (el `preventDefault` de más no rompe nada visible en jsdom — rompe en la app real, donde
+ * la vendedora pega una frase copiada y no pasa nada).
+ */
+export function pegar(elemento: Element, archivos: File[] = []): Event {
+  const evento = new Event('paste', { bubbles: true, cancelable: true });
+  Object.defineProperty(evento, 'clipboardData', {
+    value: { files: archivos, items: archivos, getData: () => '' },
+  });
+  act(() => {
+    elemento.dispatchEvent(evento);
+  });
+  return evento;
 }
 
 /**
