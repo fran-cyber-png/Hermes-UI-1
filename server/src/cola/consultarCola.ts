@@ -568,7 +568,36 @@ async function ejecutarCola(
   // el total y los conteos; el filtro de etapa/tab/categoría solo recorta la
   // página y el total (los conteos son del embudo, no de la vendedora).
   const condicionesBase: SQL[] = [];
-  if (intencion === "pide-info") condicionesBase.push(sql`pide_info`);
+  /**
+   * ⚠️ «PIDEN INFO» ES `pide_info` **Y SIN RESPONDER**, y esa segunda mitad es
+   * la que lo vuelve un chip usable.
+   *
+   * ── El número que lo obligó ──
+   * Medido en producción el 5-ago-2026: `pide_info` a secas daba **675**
+   * conversaciones, de las cuales **647 (96 %) YA habían sido respondidas**. Un
+   * chip que ofrece 675 en una cola de 2.565 no ayuda a elegir a quién atender:
+   * es la quinta parte de la mesa, y de cada 25 filas 24 son trabajo hecho.
+   * Con la segunda condición son **28** — y esas 28 sí son una lista de tareas.
+   *
+   * ── Por qué se angosta el FILTRO y no el PREDICADO ──
+   * `pideInfoAgrupadoSql` responde «¿lo último que dijo fue pedir info?», y eso
+   * es un hecho verdadero sobre la conversación que la FILA muestra y que el
+   * radar del Dashboard comparte. Cambiarlo ahí haría que una fila ya atendida
+   * dejara de decir qué pidió esa persona — se perdería información correcta
+   * para arreglar un problema que es de otro nivel.
+   *
+   * El chip no pregunta «¿qué dijo?», pregunta «¿a quién atiendo?». Son dos
+   * preguntas distintas sobre el mismo hecho, y sólo la segunda necesita saber
+   * si alguien ya contestó.
+   *
+   * ── Consecuencia buscada: queda DENTRO de «Sin responder» ──
+   * Ahora «Piden info» es un subconjunto estricto de «Sin responder»: de las
+   * 454 que esperan, éstas 28 pidieron algo concreto. Es exactamente lo que
+   * significa «angostan dentro del tab», y es la prioridad dentro de la deuda.
+   *
+   * `respondida` sale de `urgenciaSql.ts` — no se define ningún criterio propio.
+   */
+  if (intencion === "pide-info") condicionesBase.push(sql`pide_info AND NOT respondida`);
   // `sin-responder`: la deuda real de la mesa. Reusa la columna `respondida` que
   // ya deriva `urgenciaSql.ts` — no define ningún criterio propio.
   if (intencion === "sin-responder") condicionesBase.push(sql`NOT respondida`);
@@ -724,7 +753,7 @@ async function ejecutarCola(
       cats AS (${categoriasCteSql}),
       padron AS (${padronCteSql(conPadron)})
       SELECT count(*) FILTER (WHERE ${yTodas([...condicionesBase, ...soloMias])})::int AS n,
-             count(*) FILTER (WHERE ${conMias(sql`pide_info`)})::int        AS pide_info,
+             count(*) FILTER (WHERE ${conMias(sql`pide_info AND NOT respondida`)})::int AS pide_info,
              count(*) FILTER (WHERE ${conMias(sql`NOT respondida`)})::int   AS sin_responder,
              count(*) FILTER (WHERE ${conMias(yaComproSql)})::int           AS ya_compraron,
              count(*) FILTER (WHERE ${conMias(botEscaladaSql)})::int        AS bot_escalada,

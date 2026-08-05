@@ -165,7 +165,7 @@ export const seguimientosPendientesSql: SQL = sql`
  * constante fija (no entra input de nadie), así que `sql.raw` es seguro y produce
  * el MISMO SQL que el literal inline que tenía `pideInfoSql` antes.
  */
-const PIDE_INFO_REGEX_SQL = `'(informaci|info\\b|precio|costo|cuánto|cuanto|inscri|matricul|interes|quiero|cómo|más datos|mas datos|detalle|inversion|temario)'`;
+const PIDE_INFO_REGEX_SQL = `'(informaci|info\\y|precio|costo|cuánto|cuanto|inscri|matricul|interes|quiero|cómo|más datos|mas datos|detalle|inversion|temario)'`;
 
 /**
  * ¿ESTE TEXTO PIDE QUE LA CONTACTEN? — el PREDICADO base, sobre un texto suelto.

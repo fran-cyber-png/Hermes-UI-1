@@ -32,8 +32,33 @@ export const TABS: { valor: Tab; label: string; vacio: string }[] = [
 ];
 
 export const FILTROS_SEC: { valor: Exclude<FiltroSec, ''>; label: string; ayuda: string }[] = [
-  { valor: 'pide-info', label: 'Piden info', ayuda: 'Lo último que escribió fue un pedido de información' },
-  { valor: 'sin-responder', label: 'Sin responder', ayuda: 'Nadie del equipo contestó todavía' },
+  /**
+   * «PIDEN INFO» = pidió algo Y NADIE LE CONTESTÓ. La segunda mitad es la que lo
+   * vuelve usable.
+   *
+   * Medido en prod el 5-ago-2026: el predicado a secas daba **675**, y **647 de
+   * esas (96 %) ya estaban respondidas**. Un chip que ofrece 675 en una cola de
+   * 2.565 no ayuda a elegir a quién atender — es la quinta parte de la mesa, y
+   * de cada 25 filas 24 son trabajo hecho. Con la condición son 28.
+   *
+   * Queda DENTRO de «Sin responder», a propósito: de las 454 que esperan, éstas
+   * pidieron algo concreto. Por eso va primero en la barra — es la prioridad
+   * dentro de la deuda, no otra deuda.
+   *
+   * El HECHO no cambió: la fila sigue sabiendo que esa persona pidió info aunque
+   * ya se le haya contestado. Lo que se angostó es la pregunta del chip, que no
+   * es «¿qué dijo?» sino «¿a quién atiendo?».
+   */
+  {
+    valor: 'pide-info',
+    label: 'Piden info',
+    ayuda: 'Pidió información o precio y todavía nadie le contestó',
+  },
+  {
+    valor: 'sin-responder',
+    label: 'Sin responder',
+    ayuda: 'Nadie del equipo contestó todavía — la deuda entera, incluidos los que no pidieron nada',
+  },
   /**
    * «Ya compraron» (#133) va PRIMERO de los tres cuando la vendedora elige a
    * quién atender: son 140 de 1.997 y convierten mucho más barato que un frío.
