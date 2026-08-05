@@ -27,6 +27,7 @@
     "ventas:sincronizar": "tsx src/scripts/sincronizarVentas.ts",
     "medir:correo": "tsx src/scripts/medirCorreoFichas.ts",
     "medir:cotizaciones": "tsx src/scripts/medirCotizaciones.ts",
+    "medir:atencion": "tsx src/scripts/medirAtencion.ts",
     "piezas:resultados": "tsx src/scripts/resultadosDePiezas.ts",
     "plantillas:proponer": "tsx src/scripts/proponerPlantillas.ts",
     "cursos:gaps": "tsx src/scripts/gapsDeCurso.ts",
