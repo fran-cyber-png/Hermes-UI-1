@@ -160,6 +160,17 @@ function Corrida({ c, abierta, onAbrir }: { c: ComoVaLaCorrida; abierta: boolean
             </span>
           )}
           {c.enLaPrimeraHora > 0 && <span>{c.enLaPrimeraHora} en la primera hora</span>}
+          {/*
+            SE DICEN, NO SE ESCONDEN. Quien mira tiene que poder enterarse de
+            que hay NEGOCIOS en la lista: es el dato con el que se arma mejor
+            la próxima campaña. Escondiéndolos del todo, «628 enviados, 5
+            respondieron» no dejaría rastro de por qué la tasa es tan baja.
+          */}
+          {c.autoRespuestas > 0 && (
+            <span title="Son el saludo automático del WhatsApp Business de otra empresa: la lista tiene números de negocios, no de personas.">
+              🤖 {c.autoRespuestas} contestador{c.autoRespuestas > 1 ? 'es' : ''} de otra empresa
+            </span>
+          )}
           {c.masViejaSinAtenderMin !== null && (
             <span className={tono === 'mal' ? 'font-bold text-destructive' : ''}>
               <Clock size={11} className="mr-1 inline" />

@@ -186,3 +186,41 @@ test("alguien que contestó recién NO dispara la alarma todavía", () => {
   const c = comoVa([envio({ contestoEn: min(280) })], "promo", AHORA);
   assert.equal(hayQuePreocuparse(c), null, "20 minutos es tiempo razonable");
 });
+
+test("🔴 EL CONTESTADOR DE OTRO NEGOCIO NO CUENTA COMO RESPUESTA", () => {
+  // Medido el 5-ago-2026: 5 de 13 «respuestas» eran el WhatsApp Business de
+  // otras empresas. Contarlas inflaba la tasa Y mandaba a una vendedora a
+  // atender el saludo automático de un taller mecánico.
+  const c = comoVa(
+    [
+      envio({ contestoEn: min(1), textoDeRespuesta: "Quiero el paquete" }),
+      envio({ contestoEn: min(2), textoDeRespuesta: "Gracias por comunicarte con JM RUSH AUTOMOTRIZ" }),
+      envio({ contestoEn: min(3), textoDeRespuesta: "¡Hola! Gracias por contactar a Reynaldo Marketing" }),
+      envio(),
+    ],
+    "promo",
+    AHORA,
+  );
+  assert.equal(c.respondieron.n, 1, "una sola persona");
+  assert.equal(c.autoRespuestas, 2, "los dos bots se cuentan APARTE");
+  assert.equal(c.sinAtender.de, 1, "y no engordan la lista de tareas");
+});
+
+test("los bots se DICEN, no se esconden", () => {
+  // Esconderlos del todo sería la otra forma de mentir: quien mira tiene que
+  // poder enterarse de que hay negocios en la lista.
+  const c = comoVa(
+    [envio({ contestoEn: min(1), textoDeRespuesta: "Gracias por comunicarte con ACME" })],
+    "promo",
+    AHORA,
+  );
+  assert.equal(c.autoRespuestas, 1);
+  assert.equal(c.respondieron.n, 0);
+});
+
+test("sin texto se asume PERSONA: el sesgo va al falso negativo", () => {
+  // Esconder a alguien real cuesta un lead que nadie va a buscar.
+  const c = comoVa([envio({ contestoEn: min(1), textoDeRespuesta: null })], "promo", AHORA);
+  assert.equal(c.respondieron.n, 1);
+  assert.equal(c.autoRespuestas, 0);
+});

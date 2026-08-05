@@ -30,6 +30,8 @@ export interface ComoVaLaCorrida {
   fallidos: number;
   fallosPorMotivo: { motivo: string; n: number }[];
   respondieron: Proporcion;
+  /** «Respuestas» que eran el WhatsApp Business de otra empresa. */
+  autoRespuestas: number;
   medianaRespuestaMin: number | null;
   enLaPrimeraHora: number;
   sinAtender: Proporcion;

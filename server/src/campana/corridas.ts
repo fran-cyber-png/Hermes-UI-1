@@ -1,3 +1,5 @@
+import { esAutoRespuestaDeNegocio } from "./autoRespuesta.js";
+
 /**
  * CÓMO VA UNA CAMPAÑA — el veredicto, puro.
  *
@@ -37,6 +39,12 @@ export interface EnvioDeCorrida {
   motivo: string | null;
   /** Cuándo escribió la persona DESPUÉS de recibirlo. `null` = no contestó. */
   contestoEn: Date | null;
+  /**
+   * Lo que dijo al contestar. Hace falta para distinguir a una persona del
+   * CONTESTADOR de otro negocio: la campaña sale a números que nunca
+   * escribieron, y una parte de esos son empresas con saludo automático.
+   */
+  textoDeRespuesta?: string | null;
   /** Cuándo le respondió una PERSONA nuestra después de que contestó. */
   loAtendieronEn: Date | null;
   /** De quién es la conversación. `null` = sin dueña. */
@@ -71,7 +79,16 @@ export interface ComoVaLaCorrida {
   fallosPorMotivo: { motivo: string; n: number }[];
 
   // ── 2 · ¿contestaron? ──
+  /** PERSONAS. Los contestadores de otros negocios NO entran acá. */
   respondieron: Proporcion;
+  /**
+   * Cuántas de las «respuestas» eran el WhatsApp Business de otra empresa.
+   *
+   * Se cuentan y se DICEN, no se esconden: alguien que mira «628 enviados, 5
+   * respondieron» tiene que poder enterarse de que hay negocios en la lista —
+   * es justo el dato con el que se arma mejor la próxima campaña.
+   */
+  autoRespuestas: number;
   /** Minutos hasta la primera respuesta, mediana. `null` si no contestó nadie. */
   medianaRespuestaMin: number | null;
   /** Cuántos contestaron dentro de la primera hora. Es donde se concentra todo. */
@@ -124,7 +141,14 @@ export function comoVa(envios: readonly EnvioDeCorrida[], pieza: string, ahora: 
   const empezo = fechas.length ? new Date(Math.min(...fechas)) : null;
   const termino = fechas.length ? new Date(Math.max(...fechas)) : null;
 
-  const contestaron = salieron.filter((e) => e.contestoEn !== null);
+  /**
+   * ⚠️ UN CONTESTADOR NO ES UNA RESPUESTA, y contarlo tiene dos costos: infla
+   * la tasa (medido: 5 de 13 el 5-ago) y —peor— manda a una vendedora a
+   * atender el saludo automático de un taller mecánico.
+   */
+  const escribieron = salieron.filter((e) => e.contestoEn !== null);
+  const bots = escribieron.filter((e) => esAutoRespuestaDeNegocio(e.textoDeRespuesta));
+  const contestaron = escribieron.filter((e) => !esAutoRespuestaDeNegocio(e.textoDeRespuesta));
   const demoras = contestaron.map((e) => (e.contestoEn!.getTime() - e.creadoAt.getTime()) / MIN);
 
   /**
@@ -167,6 +191,7 @@ export function comoVa(envios: readonly EnvioDeCorrida[], pieza: string, ahora: 
       .map(([motivo, n]) => ({ motivo, n }))
       .sort((a, b) => b.n - a.n),
     respondieron: proporcion(contestaron.length, salieron.length),
+    autoRespuestas: bots.length,
     medianaRespuestaMin: mediana(demoras),
     enLaPrimeraHora: demoras.filter((m) => m <= 60).length,
     sinAtender: proporcion(sinAtender.length, contestaron.length),

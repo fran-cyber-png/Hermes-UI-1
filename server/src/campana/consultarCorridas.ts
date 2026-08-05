@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { db as Db } from "../db/client.js";
 import { comoVa, type ComoVaLaCorrida, type EnvioDeCorrida } from "./corridas.js";
+import { esAutoRespuestaDeNegocio } from "./autoRespuesta.js";
 
 /**
  * LOS HECHOS CRUDOS DE UNA CAMPAÑA — el SQL, y nada más que el SQL.
@@ -28,6 +29,7 @@ interface FilaCorrida {
   creado_at: string;
   motivo: string | null;
   contesto_en: string | null;
+  texto_de_respuesta: string | null;
   lo_atendieron_en: string | null;
   duena: string | null;
 }
@@ -61,6 +63,13 @@ export async function consultarCorridas(
            (SELECT min(i.occurred_at) FROM interactions i
              WHERE i.persona_id = e.telefono AND i.canal = 'whatsapp'
                AND i.direccion = 'entrante' AND i.occurred_at > e.creado_at) AS contesto_en,
+           -- QUE DIJO al contestar. Sin esto no se puede distinguir a una
+           -- persona del CONTESTADOR de otro negocio, y la campana sale a
+           -- numeros que nunca escribieron -- una parte de esos son empresas.
+           (SELECT i.texto FROM interactions i
+             WHERE i.persona_id = e.telefono AND i.canal = 'whatsapp'
+               AND i.direccion = 'entrante' AND i.occurred_at > e.creado_at
+             ORDER BY i.occurred_at LIMIT 1) AS texto_de_respuesta,
            -- CUANDO LO ATENDIERON: un saliente HUMANO posterior a su respuesta.
            -- La condicion automatico = false es lo que hace que el acuse
            -- nocturno, el bot y la propia campana NO cuenten como atencion
@@ -87,6 +96,7 @@ export async function consultarCorridas(
       creadoAt: new Date(f.creado_at),
       motivo: f.motivo,
       contestoEn: f.contesto_en ? new Date(f.contesto_en) : null,
+      textoDeRespuesta: f.texto_de_respuesta,
       loAtendieronEn: f.lo_atendieron_en ? new Date(f.lo_atendieron_en) : null,
       duena: f.duena,
     };
@@ -153,7 +163,16 @@ export async function consultarEsperando(
     duena: string | null;
   }[];
 
-  return filas.map((f) => {
+  return filas
+    /**
+     * ⚠️ EL CONTESTADOR DE OTRO NEGOCIO NO ES UNA TAREA.
+     *
+     * Se filtra ACÁ y no en el SQL porque el criterio vive puro y con tests
+     * (`autoRespuesta.ts`, con el corpus real de producción). Un regex en el
+     * WHERE sería la segunda implementación, y la que nadie vuelve a mirar.
+     */
+    .filter((f) => !esAutoRespuestaDeNegocio(f.texto))
+    .map((f) => {
     const contestoEn = new Date(f.contesto_en);
     return {
       telefono: f.telefono,
