@@ -21,6 +21,28 @@ import { PantallaPadron } from './PantallaPadron';
 
 const SOY_VENDEDORA = new URLSearchParams(location.search).has('vendedora');
 
+/** Las facetas REALES medidas en VPS1 el 4-ago-2026, con sus conteos. */
+const FACETAS = {
+  pais: [
+    ['Perú', 17013], ['México', 11646], ['Ecuador', 11310], ['Bolivia', 8646],
+    ['República Dominicana', 4270], ['Colombia', 3886], ['Guatemala', 2906],
+    ['Panamá', 1753], ['Honduras', 1400], ['Chile', 1351], ['Paraguay', 945],
+  ],
+  curso: [
+    ['Diploma Internacional de Inteligencia', 4820], ['Diplomado en Gestión Pública', 3910],
+    ['Manual del Consultor Político', 2140], ['Foro de Estado', 1290], ['War Room', 980],
+  ],
+  etapa: [
+    ['contacted', 61324], ['delivered', 5801], ['sold', 4774], ['interested', 666],
+    ['new', 140], ['follow_up', 136],
+  ],
+  nivel: [['prospect', 39306], ['single', 6784], ['repeat', 2544], ['vip', 460]],
+  fuente: [
+    ['crm_import', 39627], ['landing', 19776], ['google_contacts', 5349], ['import', 3366],
+    ['whatsapp', 1939], ['escuela_erp', 1828], ['cerberus', 477],
+  ],
+};
+
 const NOMBRES = [
   ['Ana Lucía Quispe Mamani', 'PE', 'Diplomado en Gestión Pública', 'anuncio'],
   ['Roberto Carlos Medina', 'MX', 'Inteligencia y Contrainteligencia', 'formulario'],
@@ -52,7 +74,10 @@ function contactos() {
     // «compró». `conVenta` es el único afirmable.
     compras: i % 3 === 0 ? 3 : null,
     conVenta: i % 5 === 0,
-    curso,
+    // 🔴 El caso que se veía al revés: quien compró por Cerberus tiene producto y
+    // NO tiene curso declarado; quien declaró curso muchas veces no compró.
+    comprado: i % 5 === 0 ? 'Diploma Internacional de Inteligencia y Contrainteligencia' : null,
+    curso: i % 5 === 0 && i % 2 === 0 ? null : curso,
     fuente,
     creadoEn: new Date(Date.UTC(2026, 6, 28 - i, 12)).toISOString(),
   }));
@@ -61,7 +86,16 @@ function contactos() {
 /** Todo endpoint responde de mentira: la galería no toca la red ni una vez. */
 window.fetch = (async (entrada: RequestInfo | URL) => {
   const url = String(typeof entrada === 'string' ? entrada : entrada instanceof URL ? entrada : entrada.url);
-  const cuerpo = url.includes('/api/padron/reparto')
+  const cuerpo = url.includes('/api/padron/facetas')
+    ? {
+        facetas: Object.fromEntries(
+          Object.entries(FACETAS).map(([d, ops]) => [
+            d,
+            (ops as [string, number][]).map(([valor, contactos]) => ({ valor, contactos })),
+          ]),
+        ),
+      }
+    : url.includes('/api/padron/reparto')
     ? {
         destinos: [
           'ventas11@grupogoberna.com',
@@ -98,13 +132,31 @@ const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
  * sembrar por props — y el estado que hay que MIRAR es justamente ése: el número
  * del lote junto al destino, antes de apretar (regla dura #7).
  */
-if (new URLSearchParams(location.search).has('lote')) {
+const PARAMS = new URLSearchParams(location.search);
+
+/** `?filtro=1` abre el desplegable de País, para capturar las facetas con conteo. */
+if (PARAMS.has('filtro')) {
+  setTimeout(() => {
+    const botones = [...document.querySelectorAll('button')];
+    botones.find((b) => b.textContent?.trim().startsWith('País'))?.click();
+  }, 400);
+}
+
+if (PARAMS.has('lote') || PARAMS.has('destino')) {
   setTimeout(() => {
     document
       .querySelectorAll<HTMLInputElement>('tbody input[type="checkbox"]')
       .forEach((casilla, i) => {
         if (i < 4) casilla.click();
       });
+    // `?destino=1` abre además el desplegable de destino: la carga de cada
+    // persona al lado del nombre es lo que evita repartir 3.000 a una y 40 a otra.
+    if (PARAMS.has('destino')) {
+      setTimeout(() => {
+        const botones = [...document.querySelectorAll('button')];
+        botones.find((b) => b.textContent?.trim() === 'Elegir a quién')?.click();
+      }, 200);
+    }
   }, 400);
 }
 

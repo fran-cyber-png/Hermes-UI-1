@@ -32,7 +32,18 @@ export interface ContactoPadron {
   compras: number | null;
   /** El único «compró» afirmable: hay fila en `icarus.sales`. */
   conVenta: boolean;
+  /**
+   * ⚠️ **El curso que DECLARÓ, no el que compró.** Lo llena la landing con lo que
+   * la persona dijo que le interesaba: de los 19.776 contactos de `landing`,
+   * 19.405 tienen curso y solo 1.086 compraron. Los 477 que entran por el webhook
+   * de Cerberus tienen venta en el 100 % de los casos y curso en NINGUNO.
+   *
+   * Por eso una fila puede decir «Sí compró» con el curso vacío: son datos
+   * distintos y se dibujan distinto.
+   */
   curso: string | null;
+  /** QUÉ COMPRÓ — el producto de su última venta. Los 4.783 compradores lo tienen. */
+  comprado: string | null;
   fuente: string | null;
   creadoEn: string | null;
 }
@@ -48,14 +59,34 @@ export interface PaginaPadron {
   sinSupervisores: boolean;
 }
 
-/** Los filtros tal como viajan. Todos opcionales: lo ausente no recorta. */
+/**
+ * Las cinco dimensiones multivalor. El orden es el de la pantalla, y el rótulo
+ * vive con ellas: si mañana entra una sexta, se agrega acá y aparece sola.
+ */
+export const DIMENSIONES = [
+  { id: 'pais', rotulo: 'País' },
+  { id: 'curso', rotulo: 'Curso' },
+  { id: 'etapa', rotulo: 'Etapa' },
+  { id: 'nivel', rotulo: 'Nivel' },
+  { id: 'fuente', rotulo: 'Fuente' },
+] as const;
+
+export type Dimension = (typeof DIMENSIONES)[number]['id'];
+
+/**
+ * Los filtros tal como viajan. Todos opcionales: lo ausente no recorta.
+ *
+ * Las dimensiones son LISTAS: OR adentro de cada una, AND entre ellas. Con un
+ * valor por dimensión, «Perú o México» no se podía pedir en una sola pasada y el
+ * supervisor perdía el total, que es el número con el que decide.
+ */
 export interface FiltrosPadron {
   q?: string;
-  etapa?: string;
-  nivel?: string;
-  pais?: string;
-  curso?: string;
-  fuente?: string;
+  etapa?: string[];
+  nivel?: string[];
+  pais?: string[];
+  curso?: string[];
+  fuente?: string[];
   conVenta?: boolean;
   conTelefono?: boolean;
   sinHabilitar?: boolean;
@@ -64,15 +95,37 @@ export interface FiltrosPadron {
   porPagina?: number;
 }
 
-function comoQuery(f: FiltrosPadron): string {
+export function comoQuery(f: FiltrosPadron): string {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(f)) {
-    // `false` y `''` no se mandan: un filtro apagado es un filtro ausente, y
-    // mandarlo como `conVenta=false` haría que el server filtre por lo contrario.
+    // `false`, `''` y la lista vacía no se mandan: un filtro apagado es un filtro
+    // AUSENTE. Mandar `conVenta=false` haría filtrar por lo contrario, y una lista
+    // vacía leída como filtro significaría «ninguno» en vez de «cualquiera».
     if (v === undefined || v === null || v === '' || v === false) continue;
+    if (Array.isArray(v)) {
+      if (v.length === 0) continue;
+      p.set(k, v.join(','));
+      continue;
+    }
     p.set(k, String(v));
   }
   return p.toString();
+}
+
+/** Cuántas cosas están recortando ahora — para el contador de «filtros activos». */
+export function contarActivos(f: FiltrosPadron): number {
+  let n = DIMENSIONES.reduce((s, d) => s + (f[d.id]?.length ?? 0), 0);
+  if (f.q?.trim()) n += 1;
+  if (f.conVenta) n += 1;
+  if (f.conTelefono) n += 1;
+  if (f.sinHabilitar) n += 1;
+  return n;
+}
+
+/** Prende o apaga un valor de una dimensión, sin mutar. */
+export function alternar(actuales: string[] | undefined, valor: string): string[] {
+  const previos = actuales ?? [];
+  return previos.includes(valor) ? previos.filter((v) => v !== valor) : [...previos, valor];
 }
 
 /**
@@ -89,6 +142,33 @@ export function usePadron(filtros: FiltrosPadron) {
     queryFn: () => api<PaginaPadron>(`/api/padron/contactos?${comoQuery(filtros)}`),
     placeholderData: (previa) => previa,
     staleTime: 30_000,
+  });
+}
+
+/** Un valor elegible, con cuántos contactos tiene en el recorte actual. */
+export interface OpcionFaceta {
+  valor: string;
+  contactos: number;
+}
+
+export type Facetas = Record<Dimension, OpcionFaceta[]>;
+
+/**
+ * QUÉ SE PUEDE ELEGIR, con su conteo.
+ *
+ * ⚠️ **La queryKey ignora `pagina` a propósito.** Las facetas no dependen de la
+ * página, así que pasar de la 3 a la 4 no tiene por qué disparar cinco `GROUP BY`
+ * sobre 72.923 filas: con la página adentro de la clave, react-query las pediría
+ * de nuevo en cada paso.
+ */
+export function useFacetas(filtros: FiltrosPadron, habilitado: boolean) {
+  const { pagina: _pagina, porPagina: _porPagina, ...sinPaginar } = filtros;
+  return useQuery({
+    queryKey: ['padron-facetas', sinPaginar],
+    queryFn: () => api<{ facetas: Facetas }>(`/api/padron/facetas?${comoQuery(sinPaginar)}`),
+    enabled: habilitado,
+    placeholderData: (previa) => previa,
+    staleTime: 60_000,
   });
 }
 

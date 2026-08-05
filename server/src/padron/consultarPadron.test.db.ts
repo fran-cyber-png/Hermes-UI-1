@@ -1,8 +1,6 @@
-import { test, describe, type TestContext } from "node:test";
+import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import postgres from "postgres";
-import { guardarAntiProd, URL_ADMIN } from "../pruebas/base.js";
+import { icarusDePrueba, sembrarIcarus as sembrar } from "../pruebas/icarusFalso.js";
 import { consultarPadron } from "./consultarPadron.js";
 import { filtrosSchema } from "./filtros.js";
 
@@ -21,58 +19,6 @@ import { filtrosSchema } from "./filtros.js";
  * una columna que icarus no tiene, este test falla — que es exactamente el aviso
  * que hace falta cuando la fuente es de otro equipo.
  */
-
-/** Monta una base efímera con un `icarus` mínimo y devuelve el driver crudo. */
-async function icarusDePrueba(t: TestContext) {
-  guardarAntiProd(URL_ADMIN);
-
-  const admin = postgres(URL_ADMIN, { max: 1, onnotice: () => {} });
-  const nombre = `t_padron_${randomUUID().replace(/-/g, "").slice(0, 20)}`;
-  await admin.unsafe(`CREATE DATABASE "${nombre}"`);
-
-  const sql = postgres(URL_ADMIN.replace(/\/[^/]+$/, `/${nombre}`), { max: 2, onnotice: () => {} });
-
-  t.after(async () => {
-    await sql.end({ timeout: 5 });
-    await admin.unsafe(`DROP DATABASE IF EXISTS "${nombre}" WITH (FORCE)`);
-    await admin.end({ timeout: 5 });
-  });
-
-  await sql.unsafe(`
-    CREATE SCHEMA icarus;
-    CREATE TABLE icarus.contacts (
-      id bigint PRIMARY KEY,
-      name text, email text, phone text, dni varchar,
-      country text, stage text, buyer_tier text,
-      total_usd_spent numeric, n_purchases integer,
-      course text, last_course text, source text,
-      created_at timestamptz
-    );
-    CREATE TABLE icarus.sales (id bigint PRIMARY KEY, contact_id bigint);
-  `);
-
-  return sql;
-}
-
-/** El corpus: chico, pero con la forma real de los defectos medidos en producción. */
-async function sembrar(sql: postgres.Sql) {
-  await sql.unsafe(`
-    INSERT INTO icarus.contacts
-      (id, name, email, phone, dni, country, stage, buyer_tier, total_usd_spent, n_purchases, course, last_course, source, created_at)
-    VALUES
-      -- Dice 3 compras y NO tiene ninguna venta: el 55% del padrón, medido.
-      (1,'Ana Mentira','ana@x.com','51986394450','111','PE','sold','vip',900,3,'Curso A','Curso A','anuncio','2026-01-10'),
-      -- Compradora de verdad: tiene fila en sales.
-      (2,'Beto Real','beto@x.com','51999888777','222','PE','sold','single',450,1,'Curso B','Curso B','formulario','2026-03-15'),
-      -- Sin teléfono usable.
-      (3,'Cami SinTel','cami@x.com','12','333','MX','contacted','prospect',NULL,0,'Curso A',NULL,'anuncio','2026-05-20'),
-      -- Guatemalteca: local de 8 dígitos, el caso que rompía el match por sufijo.
-      (4,'Dora Guate','dora@x.com','50255123456','444','GT','interested','prospect',NULL,0,NULL,'Curso C','organico','2026-07-01'),
-      -- Sin fecha: tiene que quedar AL FINAL en los dos órdenes, no arriba.
-      (5,'Eva SinFecha','eva@x.com','51911222333','555','PE','contacted',NULL,NULL,NULL,NULL,NULL,NULL,NULL);
-    INSERT INTO icarus.sales (id, contact_id) VALUES (10, 2);
-  `);
-}
 
 const filtros = (over: Record<string, unknown> = {}) => filtrosSchema.parse(over);
 

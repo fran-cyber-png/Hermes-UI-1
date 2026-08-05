@@ -5,6 +5,7 @@ import { esTablaAusente } from "../cola/estadoSql.js";
 import { esDestinoValido } from "../reparto/destino.js";
 import { icarus, IcarusNoConfigurado } from "../padron/conexion.js";
 import { consultarPadron } from "../padron/consultarPadron.js";
+import { consultarFacetas } from "../padron/facetas.js";
 import { destinosDelPadron } from "../padron/destinos.js";
 import { filtrosSchema, POR_PAGINA_MAX } from "../padron/filtros.js";
 import {
@@ -92,6 +93,59 @@ function fallaDeIcarus(res: Parameters<Parameters<Router["get"]>[1]>[1], e: unkn
 }
 
 /**
+ * El recorte que le corresponde a este token, resuelto UNA vez.
+ *
+ * Lo comparten `/contactos` y `/facetas`, y tienen que resolverlo igual: unas
+ * facetas calculadas sobre el padrón entero le ofrecerían a la vendedora
+ * «México · 11.646» sobre una lista donde tiene tres contactos. Devuelve `null`
+ * cuando ya respondió (falta de migración), para que quien llama corte.
+ */
+async function recorteDe(
+  req: { vendedoraId?: string; query: unknown },
+  res: Parameters<Parameters<Router["get"]>[1]>[1],
+  filtros: ReturnType<typeof filtrosSchema.parse>,
+): Promise<{ habilitados: number[]; soloEstos: number[] | null; mando: boolean } | null> {
+  const yo = req.vendedoraId ?? "";
+  const mando = esSupervisor(yo, process.env);
+
+  // Los habilitados salen de la base de Hermes. Si la tabla no está migrada, el
+  // supervisor puede seguir MIRANDO el padrón (no hay reparto que cruzar) y la
+  // vendedora no puede ver nada — que es la respuesta correcta, dicha.
+  let habilitados: number[] = [];
+  let mios: number[] = [];
+  try {
+    habilitados = mando && filtros.sinHabilitar ? await leerHabilitados(db) : [];
+    mios = mando ? [] : await leerHabilitadosDe(db, yo);
+  } catch (e) {
+    if (!esTablaAusente(e)) throw e;
+    if (!mando) {
+      sinMigracion(res);
+      return null;
+    }
+  }
+
+  // `soloEstos: null` es «sin recorte» y es la rama del supervisor. Para la
+  // vendedora SIEMPRE es una lista —vacía incluida—, así un bug que la dejara en
+  // `null` no abre el padrón: sería `undefined`, y el tipo no lo permite.
+  return { habilitados, soloEstos: mando ? null : mios, mando };
+}
+
+/** Parsea los filtros o responde 400 con el detalle. `null` = ya respondió. */
+function filtrosDe(
+  query: unknown,
+  res: Parameters<Parameters<Router["get"]>[1]>[1],
+): ReturnType<typeof filtrosSchema.parse> | null {
+  const parseo = filtrosSchema.safeParse(query);
+  if (parseo.success) return parseo.data;
+  res.status(400).json({
+    ok: false,
+    message: "filtros inválidos",
+    detalle: parseo.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
+  });
+  return null;
+}
+
+/**
  * LA LISTA. Dos pantallas distintas detrás de la misma ruta:
  *
  *   · supervisor  → el padrón entero, con filtros, para armar lotes.
@@ -102,43 +156,15 @@ function fallaDeIcarus(res: Parameters<Parameters<Router["get"]>[1]>[1], e: unkn
  * un `?supervisor=1` sería la frontera entera a un clic de curl.
  */
 padronRouter.get("/contactos", async (req, res) => {
-  const yo = req.vendedoraId ?? "";
-  const mando = esSupervisor(yo, process.env);
-
-  const parseo = filtrosSchema.safeParse(req.query);
-  if (!parseo.success) {
-    res.status(400).json({
-      ok: false,
-      message: "filtros inválidos",
-      detalle: parseo.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
-    });
-    return;
-  }
-  const filtros = parseo.data;
+  const filtros = filtrosDe(req.query, res);
+  if (!filtros) return;
 
   try {
-    // Los habilitados salen de la base de Hermes. Si la tabla no está migrada,
-    // el supervisor puede seguir MIRANDO el padrón (no hay reparto que cruzar) y
-    // la vendedora no puede ver nada — que es la respuesta correcta, dicha.
-    let habilitados: number[] = [];
-    let mios: number[] = [];
-    try {
-      habilitados = mando && filtros.sinHabilitar ? await leerHabilitados(db) : [];
-      mios = mando ? [] : await leerHabilitadosDe(db, yo);
-    } catch (e) {
-      if (!esTablaAusente(e)) throw e;
-      if (!mando) {
-        sinMigracion(res);
-        return;
-      }
-    }
+    const recorte = await recorteDe(req, res, filtros);
+    if (!recorte) return;
+    const { mando, ...soloYHabilitados } = recorte;
 
-    // `soloEstos: null` es «sin recorte» y es la rama del supervisor. Para la
-    // vendedora SIEMPRE es una lista —vacía incluida—, así un bug que la dejara
-    // en `null` no abre el padrón: sería `undefined`, y el tipo no lo permite.
-    const soloEstos = mando ? null : mios;
-
-    const pagina = await consultarPadron(icarus(), { filtros, habilitados, soloEstos });
+    const pagina = await consultarPadron(icarus(), { filtros, ...soloYHabilitados });
 
     res.json({
       ...pagina,
@@ -153,6 +179,30 @@ padronRouter.get("/contactos", async (req, res) => {
        */
       sinSupervisores: supervisoresConfigurados(process.env).length === 0,
     });
+  } catch (e) {
+    fallaDeIcarus(res, e);
+  }
+});
+
+/**
+ * QUÉ SE PUEDE ELEGIR, con cuántos contactos cada valor.
+ *
+ * Va en una ruta aparte y no adentro de `/contactos` a propósito: las facetas no
+ * dependen de la página, así que pasar de la 3 a la 4 no tiene por qué recalcular
+ * cinco `GROUP BY` sobre 72.923 filas. El front la pide con los mismos filtros
+ * pero sin `pagina`, y react-query la cachea sola.
+ */
+padronRouter.get("/facetas", async (req, res) => {
+  const filtros = filtrosDe(req.query, res);
+  if (!filtros) return;
+
+  try {
+    const recorte = await recorteDe(req, res, filtros);
+    if (!recorte) return;
+    const { mando: _mando, ...soloYHabilitados } = recorte;
+
+    const facetas = await consultarFacetas(icarus(), { filtros, ...soloYHabilitados });
+    res.json({ facetas });
   } catch (e) {
     fallaDeIcarus(res, e);
   }

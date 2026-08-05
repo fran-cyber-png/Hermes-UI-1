@@ -8,11 +8,18 @@ import {
   MessageCircle,
   Search,
   ShieldOff,
+  SlidersHorizontal,
+  X,
 } from 'lucide-react';
 import { fechaCorta, formatoTelefono } from '../../lib/formato';
 import { BarraReparto } from './BarraReparto';
+import { FiltroFaceta } from './FiltroFaceta';
 import {
+  alternar,
+  contarActivos,
+  DIMENSIONES,
   usePadron,
+  useFacetas,
   useRepartoPadron,
   type ContactoPadron,
   type FiltrosPadron,
@@ -24,14 +31,13 @@ import {
  * ── Qué pregunta responde, y por qué no es la cola ──
  * La cola ordena por urgencia a quien YA escribió. Acá no hay urgencia: nadie
  * escribió. La pregunta es «¿a quiénes les hablamos ahora?», y se responde
- * recortando (país, curso, si compró) y repartiendo. Por eso es una tabla densa
- * y no una lista de tarjetas: se lee comparando renglones, no de a uno.
+ * recortando y repartiendo. Por eso es una tabla densa y no una lista de
+ * tarjetas: se lee comparando renglones, no de a uno.
  *
  * ── Dos pantallas, una ruta ──
  * El supervisor ve el padrón entero y reparte. La vendedora ve **lo que le
- * habilitaron**, sin filtros de universo — no hay universo que recortar. Quién
- * es quién lo decide el server y llega en `supervisor`: acá no se decide nada,
- * se dibuja lo que vino.
+ * habilitaron**, sin filtros de universo. Quién es quién lo decide el server y
+ * llega en `supervisor`: acá no se decide nada, se dibuja lo que vino.
  */
 export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string) => void }) {
   const [texto, setTexto] = useState('');
@@ -41,13 +47,17 @@ export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string)
   // El texto se difiere: escribir «gonzález» son ocho requests si cada tecla
   // dispara una consulta sobre 72.923 filas.
   const q = useDeferredValue(texto);
-  const { data, isPending, isError, error, isFetching } = usePadron({ ...filtros, q: q.trim() || undefined });
+  const conBusqueda: FiltrosPadron = { ...filtros, q: q.trim() || undefined };
+
+  const { data, isPending, isError, error, isFetching } = usePadron(conBusqueda);
   const soySupervisor = data?.supervisor ?? false;
+  const facetas = useFacetas(conBusqueda, soySupervisor);
   const reparto = useRepartoPadron(soySupervisor);
 
+  /** Cualquier cambio de recorte vuelve a la página 1 y suelta la selección. */
   function cambiar(parcial: Partial<FiltrosPadron>) {
-    // Cualquier cambio de filtro vuelve a la página 1: quedarse en la 7 de un
-    // recorte que ahora tiene 2 páginas muestra una tabla vacía sin motivo.
+    // Quedarse en la página 7 de un recorte que ahora tiene 2 muestra una tabla
+    // vacía sin motivo; y conservar la selección repartiría filas que ya no se ven.
     setFiltros((f) => ({ ...f, ...parcial, pagina: 1 }));
     setSeleccion([]);
   }
@@ -57,18 +67,19 @@ export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string)
   const porPagina = data?.porPagina ?? 50;
   const paginaActual = data?.paginaActual ?? 1;
   const ultimaPagina = Math.max(1, Math.ceil(total / porPagina));
+  const activos = contarActivos(conBusqueda);
 
-  const todosDeLaPagina = contactos.map((c) => c.id);
+  const idsDeLaPagina = contactos.map((c) => c.id);
   const todaLaPaginaElegida =
-    todosDeLaPagina.length > 0 && todosDeLaPagina.every((id) => seleccion.includes(id));
+    idsDeLaPagina.length > 0 && idsDeLaPagina.every((id) => seleccion.includes(id));
 
   if (isError) {
     return (
       <Aviso
         tono="error"
         titulo="No se pudo leer el padrón"
-        // «no se pudo preguntar» ≠ «no hay». Es la cicatriz de ADR 0023: una
-        // lista vacía acá se leería como que no hay contactos, y son 72.923.
+        // «no se pudo preguntar» ≠ «no hay». Cicatriz de ADR 0023: una lista vacía
+        // acá se leería como que no hay contactos, y son 72.923.
         detalle={error instanceof Error ? error.message : 'El padrón no respondió.'}
       />
     );
@@ -88,72 +99,93 @@ export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string)
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="shrink-0 border-b border-border bg-card px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
-          <label className="relative min-w-[16rem] flex-1">
+          <label className="relative min-w-[15rem] flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               value={texto}
               onChange={(e) => {
                 setTexto(e.target.value);
                 setFiltros((f) => ({ ...f, pagina: 1 }));
+                setSeleccion([]);
               }}
               placeholder="Nombre, teléfono, correo o DNI"
-              className="w-full rounded-full border border-border bg-muted py-2 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="w-full rounded-full border border-border bg-muted py-2 pl-9 pr-8 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             />
+            {texto && (
+              <button
+                type="button"
+                aria-label="Borrar la búsqueda"
+                onClick={() => setTexto('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground hover:bg-border hover:text-foreground"
+              >
+                <X size={13} />
+              </button>
+            )}
           </label>
 
           {soySupervisor && (
-            <>
-              <Chip
-                activo={filtros.sinHabilitar === true}
-                onClick={() => cambiar({ sinHabilitar: !filtros.sinHabilitar || undefined })}
-              >
+            <select
+              value={filtros.orden ?? 'recientes'}
+              onChange={(e) => cambiar({ orden: e.target.value as FiltrosPadron['orden'] })}
+              aria-label="Ordenar"
+              className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground"
+            >
+              <option value="recientes">Más nuevos</option>
+              <option value="antiguos">Más antiguos</option>
+              <option value="mas_gastaron">Los que más gastaron</option>
+              <option value="nombre">Por nombre</option>
+            </select>
+          )}
+        </div>
+
+        {soySupervisor && (
+          <>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <SlidersHorizontal size={13} className="mr-0.5 shrink-0 text-muted-foreground" />
+              {DIMENSIONES.map((d) => (
+                <FiltroFaceta
+                  key={d.id}
+                  rotulo={d.rotulo}
+                  opciones={facetas.data?.facetas[d.id] ?? []}
+                  elegidos={filtros[d.id] ?? []}
+                  cargando={facetas.isPending}
+                  onAlternar={(v) => cambiar({ [d.id]: alternar(filtros[d.id], v) })}
+                  onLimpiar={() => cambiar({ [d.id]: [] })}
+                />
+              ))}
+
+              <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
+
+              <Toggle activo={filtros.sinHabilitar === true} onClick={() => cambiar({ sinHabilitar: !filtros.sinHabilitar || undefined })}>
                 Sin repartir
-              </Chip>
-              <Chip
+              </Toggle>
+              <Toggle
                 activo={filtros.conVenta === true}
                 onClick={() => cambiar({ conVenta: !filtros.conVenta || undefined })}
                 titulo="Los que tienen una venta de verdad, no los que dicen tenerla"
               >
                 Ya compraron
-              </Chip>
-              <Chip
-                activo={filtros.conTelefono === true}
-                onClick={() => cambiar({ conTelefono: !filtros.conTelefono || undefined })}
-              >
+              </Toggle>
+              <Toggle activo={filtros.conTelefono === true} onClick={() => cambiar({ conTelefono: !filtros.conTelefono || undefined })}>
                 Con teléfono
-              </Chip>
-              <select
-                value={filtros.orden ?? 'recientes'}
-                onChange={(e) => cambiar({ orden: e.target.value as FiltrosPadron['orden'] })}
-                className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground"
-              >
-                <option value="recientes">Más nuevos</option>
-                <option value="antiguos">Más antiguos</option>
-                <option value="mas_gastaron">Los que más gastaron</option>
-                <option value="nombre">Por nombre</option>
-              </select>
-            </>
-          )}
-        </div>
+              </Toggle>
+            </div>
+
+            {activos > 0 && <ChipsActivos filtros={conBusqueda} onCambiar={cambiar} onLimpiarTexto={() => setTexto('')} />}
+          </>
+        )}
 
         <p className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
           {isFetching && <Loader2 size={11} className="animate-spin" />}
+          <span className="font-semibold tabular-nums text-foreground">{total.toLocaleString('es')}</span>
           {soySupervisor ? (
             <>
-              <span className="font-semibold tabular-nums text-foreground">{total.toLocaleString('es')}</span>{' '}
-              {total === 1 ? 'contacto' : 'contactos'} en este recorte
+              {total === 1 ? 'contacto en este recorte' : 'contactos en este recorte'}
               {/* El aviso de la regla dura #7: cuántos NO se están viendo. */}
-              {total > porPagina && (
-                <span className="text-muted-foreground">
-                  · se ven {contactos.length} en esta página
-                </span>
-              )}
+              {total > porPagina && <span>· se ven {contactos.length} en esta página</span>}
             </>
           ) : (
-            <>
-              <span className="font-semibold tabular-nums text-foreground">{total.toLocaleString('es')}</span>{' '}
-              {total === 1 ? 'contacto habilitado para vos' : 'contactos habilitados para vos'}
-            </>
+            <>{total === 1 ? 'contacto habilitado para vos' : 'contactos habilitados para vos'}</>
           )}
         </p>
       </div>
@@ -166,7 +198,7 @@ export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string)
             ))}
           </div>
         ) : contactos.length === 0 ? (
-          <Vacio soySupervisor={soySupervisor} hayFiltro={Boolean(q.trim()) || tieneFiltros(filtros)} />
+          <Vacio soySupervisor={soySupervisor} hayFiltro={activos > 0} />
         ) : (
           <table className="w-full border-collapse text-sm">
             <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
@@ -180,8 +212,8 @@ export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string)
                       onChange={(e) =>
                         setSeleccion((prev) =>
                           e.target.checked
-                            ? [...new Set([...prev, ...todosDeLaPagina])]
-                            : prev.filter((id) => !todosDeLaPagina.includes(id)),
+                            ? [...new Set([...prev, ...idsDeLaPagina])]
+                            : prev.filter((id) => !idsDeLaPagina.includes(id)),
                         )
                       }
                       className="size-3.5 accent-navy"
@@ -191,7 +223,7 @@ export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string)
                 <th className="px-3 py-2 font-semibold">Quién</th>
                 <th className="px-3 py-2 font-semibold">Teléfono</th>
                 <th className="px-3 py-2 font-semibold">País</th>
-                <th className="px-3 py-2 font-semibold">Curso</th>
+                <th className="px-3 py-2 font-semibold">Curso / compra</th>
                 <th className="px-3 py-2 font-semibold">Compró</th>
                 <th className="px-3 py-2 font-semibold">Entró</th>
                 <th className="w-10 px-3 py-2" />
@@ -252,8 +284,71 @@ export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string)
   );
 }
 
-function tieneFiltros(f: FiltrosPadron): boolean {
-  return Boolean(f.conVenta || f.conTelefono || f.sinHabilitar || f.pais || f.curso || f.etapa);
+/**
+ * LO QUE ESTÁ PUESTO, EN UNA LÍNEA.
+ *
+ * Con cinco desplegables cerrados no hay forma de saber qué está recortando sin
+ * abrirlos de a uno. Cada chip se saca de a uno con su ×, que es la operación
+ * que más se hace al armar un lote: probar un país, medirlo, sacarlo.
+ */
+function ChipsActivos({
+  filtros,
+  onCambiar,
+  onLimpiarTexto,
+}: {
+  filtros: FiltrosPadron;
+  onCambiar: (p: Partial<FiltrosPadron>) => void;
+  onLimpiarTexto: () => void;
+}) {
+  const puestos: { llave: string; rotulo: string; quitar: () => void }[] = [];
+
+  for (const d of DIMENSIONES) {
+    for (const v of filtros[d.id] ?? []) {
+      puestos.push({
+        llave: `${d.id}:${v}`,
+        rotulo: v,
+        quitar: () => onCambiar({ [d.id]: (filtros[d.id] ?? []).filter((x) => x !== v) }),
+      });
+    }
+  }
+  if (filtros.sinHabilitar) puestos.push({ llave: 'sinHabilitar', rotulo: 'Sin repartir', quitar: () => onCambiar({ sinHabilitar: undefined }) });
+  if (filtros.conVenta) puestos.push({ llave: 'conVenta', rotulo: 'Ya compraron', quitar: () => onCambiar({ conVenta: undefined }) });
+  if (filtros.conTelefono) puestos.push({ llave: 'conTelefono', rotulo: 'Con teléfono', quitar: () => onCambiar({ conTelefono: undefined }) });
+  if (filtros.q) puestos.push({ llave: 'q', rotulo: `«${filtros.q}»`, quitar: onLimpiarTexto });
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      {puestos.map((p) => (
+        <span
+          key={p.llave}
+          className="flex items-center gap-1 rounded-full bg-navy/10 py-0.5 pl-2.5 pr-1 text-[11px] font-semibold text-navy"
+        >
+          {p.rotulo}
+          <button
+            type="button"
+            onClick={p.quitar}
+            aria-label={`Quitar ${p.rotulo}`}
+            className="rounded-full p-0.5 transition-colors hover:bg-navy/20"
+          >
+            <X size={10} />
+          </button>
+        </span>
+      ))}
+      <button
+        type="button"
+        onClick={() => {
+          onLimpiarTexto();
+          onCambiar({
+            pais: [], curso: [], etapa: [], nivel: [], fuente: [],
+            sinHabilitar: undefined, conVenta: undefined, conTelefono: undefined,
+          });
+        }}
+        className="ml-1 text-[11px] font-semibold text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+      >
+        Limpiar todo
+      </button>
+    </div>
+  );
 }
 
 function Fila({
@@ -291,7 +386,31 @@ function Fila({
         {telefono ? formatoTelefono(telefono) : '—'}
       </td>
       <td className="px-3 py-2 text-xs text-muted-foreground">{c.pais ?? '—'}</td>
-      <td className="max-w-[12rem] truncate px-3 py-2 text-xs text-muted-foreground">{c.curso ?? '—'}</td>
+      {/*
+        🔴 DOS DATOS DISTINTOS EN UNA COLUMNA, y por eso se dibujan distinto.
+        `comprado` es lo que PAGÓ (sale de la venta) y va con peso; `curso` es lo
+        que DECLARÓ en la landing y va tenue, en cursiva y rotulado. Antes se
+        mostraba solo el declarado, y por eso la tabla se leía al revés: filas con
+        curso que decían «no compró» junto a filas sin curso que decían «Sí».
+      */}
+      <td className="max-w-[14rem] px-3 py-2">
+        {c.comprado ? (
+          <span className="block truncate text-xs font-medium text-foreground" title={c.comprado}>
+            {c.comprado}
+          </span>
+        ) : c.curso ? (
+          <span className="block truncate text-xs italic text-muted-foreground" title={`Le interesa: ${c.curso}`}>
+            {c.curso}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
+        {c.comprado && c.curso && c.curso !== c.comprado && (
+          <span className="block truncate text-[10px] italic text-muted-foreground" title={`Le interesa: ${c.curso}`}>
+            le interesa: {c.curso}
+          </span>
+        )}
+      </td>
       <td className="px-3 py-2">
         {/* 🔴 Verde SOLO con venta real. `compras` (el contador de icarus) miente
             en más de la mitad de los casos, así que cuando afirma sin respaldo se
@@ -330,7 +449,7 @@ function Fila({
   );
 }
 
-function Chip({
+function Toggle({
   activo,
   onClick,
   titulo,
@@ -358,14 +477,14 @@ function Chip({
 }
 
 function Vacio({ soySupervisor, hayFiltro }: { soySupervisor: boolean; hayFiltro: boolean }) {
-  // Tres textos distintos para tres situaciones que se ven igual: un recorte que
-  // no dio nada, un padrón sin repartir, y una vendedora sin nada habilitado.
+  // Tres textos para tres situaciones que se ven igual: un recorte que no dio
+  // nada, un padrón vacío, y una vendedora sin nada habilitado.
   return (
     <div className="flex flex-col items-center gap-2 p-12 text-center">
       <ShieldOff size={26} className="text-muted-foreground/40" />
       <p className="max-w-sm text-sm text-muted-foreground">
         {hayFiltro
-          ? 'Ningún contacto entra en este recorte. Probá aflojando algún filtro.'
+          ? 'Ningún contacto entra en este recorte. Probá sacando algún filtro.'
           : soySupervisor
             ? 'El padrón no devolvió contactos.'
             : 'Todavía no te habilitaron ningún contacto. Cuando el supervisor te reparta un lote, aparece acá.'}

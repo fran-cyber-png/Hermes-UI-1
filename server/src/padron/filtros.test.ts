@@ -1,6 +1,12 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { esLoteCiego, filtrosSchema, POR_PAGINA_DEFAULT, POR_PAGINA_MAX } from "./filtros.js";
+import {
+  esLoteCiego,
+  filtrosActivos,
+  filtrosSchema,
+  POR_PAGINA_DEFAULT,
+  POR_PAGINA_MAX,
+} from "./filtros.js";
 
 /** El contrato de los filtros, sin base: qué se acepta, qué se rechaza y qué queda por default. */
 
@@ -35,7 +41,7 @@ describe("los filtros del padrón", () => {
     // del otro lado no puede volverse un 400 acá: devuelve cero filas, que es la
     // respuesta correcta. Mismo criterio que `TIPO_IVI` (ADR 0021).
     const f = filtrosSchema.parse({ etapa: "una_etapa_que_no_existe_todavia" });
-    assert.equal(f.etapa, "una_etapa_que_no_existe_todavia");
+    assert.deepEqual(f.etapa, ["una_etapa_que_no_existe_todavia"]);
   });
 
   test("un orden inventado sí se rechaza: cada uno es una columna, no texto libre", () => {
@@ -63,5 +69,60 @@ describe("el aviso de lote ciego", () => {
     // No bloquea: la regla dura #7 pide que la lista esté A LA VISTA, y esto es
     // el dato para ese aviso. Repartir 4.000 contactos es decisión del supervisor.
     assert.equal(esLoteCiego(4000, 50), true);
+  });
+});
+
+describe("los filtros multivalor", () => {
+  test("una coma separa valores: «Perú,México» son dos, no uno", () => {
+    assert.deepEqual(filtrosSchema.parse({ pais: "Perú,México" }).pais, ["Perú", "México"]);
+  });
+
+  test("también acepta la forma repetida de la query string (`pais=a&pais=b`)", () => {
+    assert.deepEqual(filtrosSchema.parse({ pais: ["Perú", "México"] }).pais, ["Perú", "México"]);
+  });
+
+  test("recorta, descarta vacíos y no repite", () => {
+    assert.deepEqual(filtrosSchema.parse({ pais: " Perú , ,México, Perú " }).pais, ["Perú", "México"]);
+  });
+
+  test("🔴 una lista vacía es filtro AUSENTE, no «ninguno»", () => {
+    // `IN ()` no existe, y un array vacío tratado como filtro devolvería cero
+    // filas: «ningún país» en vez de «cualquier país», que es lo contrario.
+    assert.equal(filtrosSchema.parse({ pais: "" }).pais, undefined);
+    assert.equal(filtrosSchema.parse({ pais: ",, " }).pais, undefined);
+    assert.equal(filtrosSchema.parse({ pais: [] }).pais, undefined);
+  });
+
+  test("hay techo de valores por dimensión", () => {
+    const muchos = Array.from({ length: 41 }, (_, i) => `p${i}`).join(",");
+    assert.equal(filtrosSchema.safeParse({ pais: muchos }).success, false);
+  });
+
+  test("las cinco dimensiones son multivalor", () => {
+    const f = filtrosSchema.parse({
+      pais: "Perú", curso: "Foro", etapa: "sold", nivel: "vip", fuente: "landing",
+    });
+    for (const d of ["pais", "curso", "etapa", "nivel", "fuente"] as const) {
+      assert.ok(Array.isArray(f[d]), `${d} tiene que ser lista`);
+    }
+  });
+});
+
+describe("cuántos filtros están puestos", () => {
+  test("cuenta cada VALOR, no cada dimensión", () => {
+    // Tres países son tres chips que se sacan de a uno: contando dimensiones, el
+    // contador diría 1 y la barra mostraría 3.
+    assert.equal(filtrosActivos(filtrosSchema.parse({ pais: "Perú,México,Bolivia" })), 3);
+  });
+
+  test("suma texto y toggles", () => {
+    assert.equal(
+      filtrosActivos(filtrosSchema.parse({ q: "javier", conVenta: "true", pais: "Perú" })),
+      3,
+    );
+  });
+
+  test("sin nada, cero", () => {
+    assert.equal(filtrosActivos(filtrosSchema.parse({})), 0);
   });
 });

@@ -1,19 +1,22 @@
 import type { ConexionIcarus } from "./conexion.js";
-import type { Filtros } from "./filtros.js";
+import { donde, recorteVacio, type Recorte } from "./donde.js";
 
 /**
  * EL PADRÓN, RECORTADO — el SQL contra icarus.
  *
  * Recibe la conexión INYECTADA (patrón de la casa, ADR 0008): la ruta le pasa el
- * pool, un test le pasaría el suyo. Este archivo **solo lee**, y lee de una base
- * que no es nuestra.
+ * pool, un test le pasa el suyo. Este archivo **solo lee**, y lee de una base que
+ * no es nuestra.
  *
  * ── El SQL no opina ──
  * Trae columnas, no veredictos: ni un `CASE` que decida «este es cliente», ni un
  * umbral, ni una etiqueta. Lo único parecido a un juicio es `con_venta`, y es un
  * `EXISTS` sobre `icarus.sales` —un hecho, no una interpretación— que está acá y
- * no en una función pura por una razón medible: es el filtro, y filtrar en el
+ * no en una función pura por una razón medible: es el filtro, y filtrarlo en el
  * navegador significaría traer las 72.923 filas para tirar 68.000.
+ *
+ * El `WHERE` vive en `donde.ts`, compartido con las facetas: dos versiones del
+ * mismo recorte ofrecerían «México · 11.646» y devolverían otra cosa al tildarlo.
  */
 
 export interface ContactoPadron {
@@ -27,98 +30,66 @@ export interface ContactoPadron {
   /** Lo que icarus dice que gastó. Ver la advertencia de `compras`. */
   gastado: string | null;
   /**
-   * ⚠️ `n_purchases` de icarus, que **miente en más de la mitad de los casos**:
-   * 10.564 contactos lo tienen en > 0 y solo 4.783 tienen una venta real. Viaja
-   * porque es lo que la fuente dice, y se muestra junto a `conVenta`, que es lo
-   * que se puede sostener. Nunca solo.
+   * ⚠️ `n_purchases` de icarus, que **no se puede sostener solo**: 10.564
+   * contactos lo tienen en > 0 y solo 4.783 tienen una venta real — y también hay
+   * filas al revés, con venta y el contador en 0. Viaja porque es lo que la
+   * fuente dice, y se muestra junto a `conVenta`, que es lo verificable.
    */
   compras: number | null;
-  /** El único «compró» que se puede afirmar: hay fila en `icarus.sales`. */
+  /** El único «compró» afirmable: hay fila en `icarus.sales`. */
   conVenta: boolean;
+  /**
+   * ⚠️ **El curso que DECLARÓ, no el que compró.**
+   *
+   * `course`/`last_course` los llena la landing con lo que la persona dijo que le
+   * interesaba. Medido el 4-ago-2026: de los 19.776 contactos de `landing`,
+   * 19.405 tienen curso y solo 1.086 compraron. Y al revés — los 477 que entran
+   * por el webhook de `cerberus` tienen **venta en el 100 % de los casos y curso
+   * en NINGUNO**.
+   *
+   * Por eso la tabla se veía al revés de lo intuitivo: fila con curso y «no
+   * compró» es un lead que dijo qué quería; fila sin curso y «Sí» es alguien que
+   * pagó y nunca llenó un formulario. Las dos son correctas y son datos
+   * distintos, así que ahora viajan separados (ver `comprado`).
+   */
   curso: string | null;
+  /**
+   * QUÉ COMPRÓ — el producto de su última venta (`sale_items` → `products`).
+   *
+   * Es el dato que faltaba: los 4.783 compradores lo tienen **todos**
+   * (`sales` → `sale_items` → `products` cierra 4.783/4.783, medido). Sin él, la
+   * única forma de saber qué le vendimos a alguien era abrir Cerberus.
+   *
+   * Se elige la venta más reciente y, dentro de ella, el ítem más caro: una
+   * compra suele traer el curso y sus add-ons («Certificado», «Certificado con
+   * Portadiploma» son los #2 y #3 del catálogo por volumen), y mostrar el
+   * add-on en vez del curso diría bastante menos.
+   */
+  comprado: string | null;
   fuente: string | null;
   creadoEn: string | null;
 }
 
 export interface PaginaPadron {
   contactos: ContactoPadron[];
-  /** El total del RECORTE, no del padrón: es el número que el supervisor está por repartir. */
+  /** El total del RECORTE, no del padrón: es el número que se está por repartir. */
   total: number;
 }
 
-export interface OpcionesPadron {
-  filtros: Filtros;
-  /**
-   * Los ids que ya están habilitados a alguien, leídos de la base de Hermes.
-   *
-   * ⚠️ **Viajan como array porque no hay JOIN posible**: el reparto vive en
-   * `hermes_db` y los datos en icarus (ver `db/padron.ts`). Con el padrón entero
-   * repartido esto son 72.923 enteros en un `= ANY(...)` — pesado, pero medible
-   * y honesto. La alternativa (un FDW o replicar los ids) es infraestructura
-   * nueva para un problema que hoy tiene cero filas; se paga cuando duela.
-   */
-  habilitados: readonly number[];
-  /**
-   * El recorte de la vendedora: SOLO estos ids, y ninguno más.
-   *
-   * Es distinto de un filtro y por eso es un campo aparte: `null` significa «sin
-   * recorte» (el supervisor), y una lista VACÍA significa «no te habilitaron
-   * nada» — que devuelve cero filas de verdad. Si esto fuera un filtro más,
-   * un `undefined` accidental abriría el padrón entero a cualquier token.
-   */
-  soloEstos: readonly number[] | null;
-}
+export type OpcionesPadron = Recorte;
 
 export async function consultarPadron(
   sql: ConexionIcarus,
-  { filtros, habilitados, soloEstos }: OpcionesPadron,
+  recorte: OpcionesPadron,
 ): Promise<PaginaPadron> {
-  // FRONTERA, NO FILTRO: con la lista vacía no se consulta nada. Dejar que el
-  // SQL resuelva `id = ANY('{}')` daría el mismo resultado hoy, pero pone la
-  // garantía en una expresión que alguien puede reescribir sin notarlo.
-  if (soloEstos !== null && soloEstos.length === 0) return { contactos: [], total: 0 };
+  if (recorteVacio(recorte)) return { contactos: [], total: 0 };
 
-  const cond: ReturnType<ConexionIcarus>[] = [sql`TRUE`];
+  const { filtros } = recorte;
+  const where = donde(sql, recorte);
 
-  // ⚠️ El `::bigint[]` NO es decorativo. `sql.array` de postgres.js serializa una
-  // lista de números JS como `text[]`, y `bigint = text` no existe en Postgres:
-  // la consulta revienta entera. Compila perfecto y ningún test puro lo ve — lo
-  // atrapó `consultarPadron.test.db.ts`, que es para lo que existe.
-  if (soloEstos !== null) cond.push(sql`c.id = ANY(${sql.array([...soloEstos])}::bigint[])`);
-
-  if (filtros.q) {
-    const patron = `%${filtros.q}%`;
-    cond.push(sql`(
-      c.name ILIKE ${patron} OR c.email ILIKE ${patron}
-      OR c.phone ILIKE ${patron} OR c.dni ILIKE ${patron}
-    )`);
-  }
-  if (filtros.etapa) cond.push(sql`c.stage = ${filtros.etapa}`);
-  if (filtros.nivel) cond.push(sql`c.buyer_tier = ${filtros.nivel}`);
-  if (filtros.pais) cond.push(sql`c.country = ${filtros.pais}`);
-  if (filtros.fuente) cond.push(sql`c.source = ${filtros.fuente}`);
-  if (filtros.curso) {
-    const patron = `%${filtros.curso}%`;
-    cond.push(sql`(c.course ILIKE ${patron} OR c.last_course ILIKE ${patron})`);
-  }
-
-  // El teléfono se limpia acá y no en JS por lo mismo que el resto: filtrar en el
-  // navegador obliga a traer todo primero.
-  if (filtros.conTelefono) {
-    cond.push(sql`length(regexp_replace(coalesce(c.phone,''), '\\D', '', 'g')) >= 8`);
-  }
-  if (filtros.conVenta) {
-    cond.push(sql`EXISTS (SELECT 1 FROM icarus.sales s WHERE s.contact_id = c.id)`);
-  }
-  if (filtros.sinHabilitar && habilitados.length > 0) {
-    cond.push(sql`NOT (c.id = ANY(${sql.array([...habilitados])}::bigint[]))`);
-  }
-
-  const where = cond.reduce((a, b) => sql`${a} AND ${b}`);
-
-  // Cerrado por `ORDENES`, así que no hay interpolación de texto: cada rama es
-  // un fragmento literal. `NULLS LAST` en las dos que pueden venir vacías —
-  // 23.829 contactos sin nivel arriba de todo sería una tabla que no sirve.
+  // Cerrado por `ORDENES`, así que no hay interpolación de texto: cada rama es un
+  // fragmento literal. `NULLS LAST` en las que pueden venir vacías — 23.829
+  // contactos sin nivel arriba de todo sería una tabla que no sirve.
   const orden =
     filtros.orden === "antiguos"
       ? sql`c.created_at ASC NULLS LAST`
@@ -135,10 +106,24 @@ export async function consultarPadron(
       c.id, c.name, c.phone, c.email, c.country, c.stage, c.buyer_tier,
       c.total_usd_spent, c.n_purchases, c.course, c.last_course, c.source, c.created_at,
       EXISTS (SELECT 1 FROM icarus.sales s WHERE s.contact_id = c.id) AS con_venta,
+      compra.name AS comprado,
       -- El total del recorte en la misma pasada: una segunda consulta con el
       -- mismo WHERE es una segunda implementación del filtro, y esas divergen (#37).
       count(*) OVER () AS total_recorte
     FROM icarus.contacts c
+    -- QUÉ COMPRÓ. LATERAL y no un JOIN a secas: un contacto puede tener varias
+    -- ventas y cada venta varios ítems, y un join plano multiplicaría la fila —
+    -- el mismo contacto tres veces en la tabla, y un total inflado con el que el
+    -- supervisor repartiría mal.
+    LEFT JOIN LATERAL (
+      SELECT p.name
+      FROM icarus.sales s
+      JOIN icarus.sale_items si ON si.sale_id = s.id
+      JOIN icarus.products p ON p.id = si.product_id
+      WHERE s.contact_id = c.id
+      ORDER BY s.sale_date DESC NULLS LAST, si.total_price DESC NULLS LAST
+      LIMIT 1
+    ) compra ON TRUE
     WHERE ${where}
     ORDER BY ${orden}, c.id DESC
     LIMIT ${filtros.porPagina} OFFSET ${salto}
@@ -167,6 +152,7 @@ interface FilaCruda {
   source: string | null;
   created_at: Date | null;
   con_venta: boolean;
+  comprado: string | null;
   total_recorte: number | string;
 }
 
@@ -182,6 +168,7 @@ function traducir(f: FilaCruda): ContactoPadron {
     gastado: f.total_usd_spent,
     compras: f.n_purchases,
     conVenta: f.con_venta,
+    comprado: f.comprado,
     // `last_course` primero: es en qué anda AHORA. `course` es con qué entró, y
     // para hablarle hoy sirve menos.
     curso: f.last_course ?? f.course,

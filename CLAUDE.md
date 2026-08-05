@@ -552,8 +552,29 @@ nombre · 61.298 con correo.
   **plantilla aprobada por Meta**. Es otro frente.
 - **El buscador por teléfono no se archivó**: quedó en la segunda solapa. Pregunta a **Cerberus en
   vivo** y trae folios y montos por venta; el padrón es una copia de icarus y no los tiene.
+- **MULTIFILTROS con facetas**: cinco dimensiones **multivalor** (país · curso · etapa · nivel ·
+  fuente), **OR adentro de cada una y AND entre ellas** — «(peruanos o mexicanos) Y que ya
+  compraron». Cada opción llega con **su conteo** (`GET /api/padron/facetas`), y ese número **es**
+  el total que el filtro después devuelve (fijado con test): sin él, un desplegable de 62 países es
+  una lista de nombres y filtrar se vuelve tantear. ⚠️ **Cada dimensión se cuenta SIN su propio
+  filtro** (`donde.ts` con `omitir`): si se contara con él, tildar «Perú» reduciría la lista a Perú
+  y no habría forma de AGREGAR México. Las opciones **se derivan de los datos**, nunca de una lista
+  a mano: `stage`/`source`/`country` los escribe icarus y una constante nuestra envejecería en
+  silencio. El `WHERE` vive UNA vez en `padron/donde.ts`, compartido por la lista y las facetas —
+  con dos, la pantalla ofrecería «México · 11.646» y devolvería otra cosa (#37).
+- 🔴 **«Curso» y «qué compró» son DOS DATOS DISTINTOS, y la tabla los mezclaba.** `course`/
+  `last_course` los llena **la landing** con lo que la persona DIJO que le interesaba; lo que
+  **pagó** vive en `sales` → `sale_items` → `products`. Medido el 4-ago: de los 19.776 de `landing`,
+  19.405 tienen curso y solo 1.086 compraron; y los **477 que entran por el webhook de `cerberus`
+  tienen venta en el 100 % de los casos y curso en NINGUNO**. Por eso la tabla se leía al revés
+  —filas con curso que decían «no compró» al lado de filas sin curso que decían «Sí»— y las dos
+  eran correctas. Ahora viajan separados (`curso` · `comprado`) y se dibujan distinto: lo pagado con
+  peso, lo declarado en cursiva tenue. El producto sale por **LATERAL** (venta más reciente, ítem
+  más caro: «Certificado» y «Certificado con Portadiploma» son el #2 y #3 del catálogo por volumen);
+  un JOIN plano multiplicaría la fila e inflaría el total con el que se reparte.
 - **Ver la UI sin server ni base**: `npx vite --port 5199` → `/galeria-padron.html`
-  (`?vendedora=1` la vista de quien no reparte, `?lote=1` la barra de reparto). Capturas en
+  (`?vendedora=1` la vista de quien no reparte, `?filtro=1` las facetas abiertas, `?lote=1` la barra
+  de reparto, `?destino=1` el desplegable con la carga de cada vendedora). Capturas en
   `docs/evidencia/padron-*.png`.
 
 ## El panel derecho — ordenado por lo que decide una venta (ADR 0017)
