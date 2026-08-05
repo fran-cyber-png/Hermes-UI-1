@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ALTURA_MINIMA,
+  duracionAproximada,
   bytesDe,
   kbpsMinimoPara,
   kbpsQueEntran,
@@ -152,5 +153,35 @@ describe('la aritmética', () => {
     expect(kbpsMinimoPara(720)).toBe(400);
     expect(kbpsMinimoPara(240)).toBeGreaterThan(0);
     expect(kbpsMinimoPara(2160)).toBe(700);
+  });
+});
+
+describe('duracionAproximada', () => {
+  it('redondea grueso y en criollo', () => {
+    // «3:19» prometería una precisión que una estimación sobre una máquina
+    // desconocida no tiene.
+    expect(duracionAproximada(199)).toBe('unos 3 minutos');
+    expect(duracionAproximada(61)).toBe('como un minuto');
+    expect(duracionAproximada(45)).toBe('menos de un minuto');
+  });
+
+  it('🔴 el margen se aplica UNA vez, no dos', () => {
+    // `RATIO_ENCODE` ya es 2x sobre el 1,5x medido. Redondear además hacia
+    // arriba anunciaría 5 minutos para algo que tarda 3:19, y un margen que se
+    // nota es un margen que se deja de creer.
+    expect(duracionAproximada(150)).toBe('unos 3 minutos');
+  });
+
+  it('un número imposible no dibuja «NaN minutos»', () => {
+    expect(duracionAproximada(Number.NaN)).toBe('menos de un minuto');
+  });
+
+  it('el plan del video real anuncia el orden correcto', () => {
+    const p = planDeCompresion(FORO, TOPE_VIDEO_CLOUD_API);
+    if (p.tipo !== 'comprimir') throw new Error('debía comprimir');
+    // Medido: 199 s reales (1,5x). El plan estima 2x = 266 s y lo anuncia como
+    // 4 minutos: por encima de lo real, sin exagerar.
+    expect(p.segundosEstimados).toBe(266);
+    expect(duracionAproximada(p.segundosEstimados)).toBe('unos 4 minutos');
   });
 });

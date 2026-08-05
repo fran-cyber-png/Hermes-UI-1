@@ -166,3 +166,20 @@ export function planDeCompresion(video: EntradaVideo, topeBytes: number): Plan {
         : 'No entra sin dejarlo ilegible. Recortalo y volvé a intentar.',
   };
 }
+
+/**
+ * «unos 3 minutos» — cuánto va a esperar, dicho como lo diría una persona.
+ *
+ * El redondeo grueso es a propósito: es una estimación sobre una máquina que no
+ * conocemos, y un «3:19» prometería una precisión que no existe.
+ *
+ * Redondea al MÁS CERCANO, no hacia arriba: el margen ya está en `RATIO_ENCODE`
+ * (2x sobre el 1,5x medido) y aplicarlo dos veces anunciaría 5 minutos para
+ * algo que tarda 3:19. Un margen de seguridad que se nota es un margen que se
+ * deja de creer.
+ */
+export function duracionAproximada(segundos: number): string {
+  if (!Number.isFinite(segundos) || segundos < 60) return 'menos de un minuto';
+  const min = Math.max(1, Math.round(segundos / 60));
+  return min === 1 ? 'como un minuto' : `unos ${min} minutos`;
+}

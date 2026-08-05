@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Loader2, Play, X } from 'lucide-react';
 import { pesoLegible } from './pegarAdjunto';
 import { leerMetadatosVideo } from './metadatosVideo';
-import { planDeCompresion, type Plan } from './planDeCompresion';
+import { duracionAproximada, planDeCompresion, type Plan } from './planDeCompresion';
 
 /**
  * UN VIDEO QUE NO ENTRA — y qué se puede hacer al respecto.
@@ -30,16 +30,6 @@ export type EstadoAdjuntoPesado =
   | { fase: 'comprimiendo'; progreso: number }
   | { fase: 'listo'; comprimido: File }
   | { fase: 'fallo'; motivo: string };
-
-/**
- * «unos 3 minutos» — el redondeo grueso es a propósito: es una estimación sobre
- * una máquina que no conocemos, y un «3:19» prometería una precisión falsa.
- */
-function duracionAproximada(segundos: number): string {
-  if (segundos < 60) return 'menos de un minuto';
-  const min = Math.ceil(segundos / 60);
-  return min === 1 ? 'como un minuto' : `unos ${min} minutos`;
-}
 
 /** La vista previa del resultado: se mira, se escucha, y recién ahí se usa. */
 function VistaPreviaComprimido({
