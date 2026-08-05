@@ -77,7 +77,52 @@ export const PROMO_3X1: PlantillaAprobada = {
   ].join("\n"),
 };
 
-export const PLANTILLAS_APROBADAS: readonly PlantillaAprobada[] = [PROMO_3X1];
+/**
+ * EL XII FORO DE ESTADO — un evento presencial, no un curso.
+ *
+ * ⚠️ Tres diferencias con `PROMO_3X1` que cambian cómo se manda:
+ *
+ *   · **El idioma es `es_PE`**, y esta vez es el correcto. La 3x1 quedó
+ *     registrada como `en` con el cuerpo en español y hay que pedirla así o da
+ *     **132001**; acá no hay que compensar nada. El par `(name, language)` es
+ *     lo que resuelve el envío: se copia de Meta, no se deduce del texto.
+ *   · **No tiene variables.** El cuerpo trae la fecha, el lugar y el precio
+ *     escritos — `{{1}}` no aparece. Es lo que hace que el mensaje envejezca
+ *     solo: después del 29 de agosto esta plantilla no se puede volver a usar,
+ *     y eso es correcto que duela al mandarla, no al descubrirlo.
+ *   · **Las negritas son Unicode**, no el `*asterisco*` de WhatsApp
+ *     (`𝗫𝗜𝗜 𝗙𝗢𝗥𝗢 𝗗𝗘 𝗘𝗦𝗧𝗔𝗗𝗢`). Entran en el sha de la versión como cualquier
+ *     otro carácter: este cuerpo se generó desde la respuesta de Meta, no se
+ *     transcribió, justamente para que un carácter parecido no cuente como una
+ *     versión distinta.
+ */
+export const FORO_ESTADO: PlantillaAprobada = {
+  nombre: "foro_estado_5_ago",
+  idioma: "es_PE",
+  headerDeImagen: true,
+  cuerpo: [
+    "👋 Hola buen día. Te saluda Luz asesora comercial de Goberna. Quiero invitarlo a participar en el:",
+    "",
+    "🏛️𝗫𝗜𝗜 𝗙𝗢𝗥𝗢 𝗗𝗘 𝗘𝗦𝗧𝗔𝗗𝗢 - Aniversario GOBERNA 🏛️",
+    "Si eres político, candidato, autoridad electa, miembro del personal militar/policial o líder de seguridad en el sector corporativo, este es el espacio donde debes estar este 29 de agosto.",
+    "",
+    "🗓️Fecha: Sábado 29 de agosto",
+    "📍Lugar: Hotel Westin, Lima.",
+    "Hora 2:00 PM a 10:00 PM.",
+    "👥 𝗔𝗳𝗼𝗿𝗼: Exclusivo para 200 personas.",
+    "(Audiencia internacional exclusiva).",
+    "",
+    "⚡¿𝗣𝗼𝗿 𝗾𝘂é 𝗮𝘀𝗶𝘀𝘁𝗶𝗿?",
+    "💼8 𝗵𝗼𝗿𝗮𝘀 de ponencias y mesas de análisis con expertos de primer nivel.",
+    "🤝𝗡𝗲𝘁𝘄𝗼𝗿𝗸𝗶𝗻𝗴 de altísimo valor con una red internacional selecta.",
+    "",
+    "*Único pago de S/360.00*",
+    " Categoría General",
+    "¿Aprovechas la oferta?",
+  ].join("\n"),
+};
+
+export const PLANTILLAS_APROBADAS: readonly PlantillaAprobada[] = [PROMO_3X1, FORO_ESTADO];
 
 export function plantillaPorNombre(nombre: string): PlantillaAprobada | null {
   return PLANTILLAS_APROBADAS.find((p) => p.nombre === nombre) ?? null;

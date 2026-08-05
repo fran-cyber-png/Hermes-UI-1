@@ -8,6 +8,12 @@ import { deUnaCampana } from "../procedencia/pieza.js";
 import { enviarPlantillaYProyectar } from "../whatsapp/enviarYProyectar.js";
 import { contarPorMotivo, elegirPublico } from "../campana/publico.js";
 import {
+  contarMotivosDeLista,
+  leerLista,
+  parsearCsv,
+  type FilaDescartada,
+} from "../campana/lista.js";
+import {
   contarCancelaciones,
   vetoAlSalir,
   type EstadoAlSalir,
@@ -41,10 +47,29 @@ import {
  * **Frena entero** ante un error que no sea 131049: si Meta empieza a rechazar
  * por otra cosa, seguir mandando es cavar.
  *
+ * ══ DOS ORÍGENES PARA LA LISTA, Y NO SON LA MISMA CAMPAÑA ═══════════════════
+ *
+ * **`--desde/--hasta`** — el original: gente que le **escribió** a esta línea en
+ * esas fechas. Es seguimiento; no cae en «no inicia conversaciones» (ADR 0015
+ * §37) porque la conversación ya la abrió la persona.
+ *
+ * **`--lista <archivo.csv>`** — un padrón de afuera. La mayoría **nunca escribió
+ * a este número**: eso ES contacto en frío, y el ADR lo prohíbe. Que el modo
+ * exista no lo autoriza — lo autoriza una decisión escrita del dueño, y este
+ * script sólo se encarga de que lo que salga sea auditable y de que nadie
+ * reciba un mensaje que no le corresponde. El parseo y la normalización viven
+ * puros y con tests en `campana/lista.ts`.
+ *
+ * Las dos ramas comparten TODO lo que viene después: el veto al salir, la
+ * procedencia, la puerta de envío y el freno. Sólo cambia de dónde sale la
+ * lista y qué se puede decir de cada persona en el simulacro.
+ *
  * ══ USO ═════════════════════════════════════════════════════════════════════
  *
  *   npm run campana -- --linea 51984429504 --desde 2026-07-31 --hasta 2026-08-02
  *   npm run campana -- --linea 51984429504 --desde … --hasta … --imagen <URL> --enviar
+ *   npm run campana -- --linea 51984429504 --plantilla foro_estado_5_ago \
+ *                      --lista base-foro.csv --tope 1000 --imagen-id <id>
  */
 
 const args = process.argv.slice(2);
@@ -71,11 +96,17 @@ const TOPE = Number(opcion("tope") ?? "0") || Infinity;
 const ASIGNAR_A = opcion("asignar-a");
 /** Espaciado entre envíos. El mismo orden de magnitud que el acuse nocturno. */
 const ESPERA_MIN_MS = Number(opcion("espera") ?? "60") * 1000;
+/** El CSV con el padrón de afuera. Su presencia ES el modo (ver cabecera). */
+const LISTA = opcion("lista");
 
 // `--subir` es un modo aparte y no necesita lista: la validación de abajo se
 // saltea a propósito (si no, subir el flyer pide fechas que no usa para nada).
-if (!args.includes("--subir") && (!LINEA || !DESDE || !HASTA)) {
-  console.error("Faltan --linea, --desde y --hasta (YYYY-MM-DD, hora de Lima).");
+if (!args.includes("--subir") && (!LINEA || (!LISTA && (!DESDE || !HASTA)))) {
+  console.error(
+    "Falta --linea, y después una de dos:\n" +
+      "  · --desde y --hasta (YYYY-MM-DD, hora de Lima) para los que escribieron;\n" +
+      "  · --lista <archivo.csv> para un padrón de afuera (contacto en frío).",
+  );
   process.exit(1);
 }
 
@@ -218,6 +249,10 @@ interface Destinatario {
   yaLeLlego: boolean;
   /** Tiene una compra que la respalda en `clientes_padron` (nunca `n_purchases`). */
   yaCompro: boolean;
+  /** Sólo en el modo `--lista`: ¿esta persona ya nos escribió alguna vez? */
+  yaNosEscribio?: boolean;
+  /** Sólo en el modo `--lista`: su fila en el archivo, para poder señalarla. */
+  lineaDelArchivo?: number;
 }
 
 /**
@@ -291,6 +326,89 @@ async function traerCandidatos(): Promise<Destinatario[]> {
 }
 
 /**
+ * LA LISTA DE AFUERA, CRUZADA CONTRA LO QUE HERMES YA SABE.
+ *
+ * El archivo sólo trae teléfono, nombre y estado. Eso alcanza para saber a
+ * quién NO escribirle por lo que dice la planilla (`campana/lista.ts`), y no
+ * alcanza para lo que Hermes sabe y la planilla no:
+ *
+ *   · que esa persona **ya nos escribió** alguna vez, y qué dijo — porque si en
+ *     esa conversación dijo que no, el archivo no se enteró;
+ *   · que **ya recibió esta misma pieza** en una corrida frenada;
+ *   · que **ya compró** algo (informativo acá: quien hizo un curso es mejor
+ *     candidato a un foro, no peor — ver `elegirPublico` más abajo).
+ *
+ * Una sola consulta con `= ANY(...)` y no una por persona: con 1.000
+ * destinatarios, mil consultas antes de empezar es media hora de nada.
+ *
+ * ⚠️ El cruce contra `interactions` va por `persona_id` **sin importar la
+ * línea**: si alguien de esta lista habló con la línea de una vendedora y ahí
+ * dijo que no, ese «no» vale igual. Un rechazo es de la persona, no del número
+ * por el que entró.
+ */
+async function traerDeLista(ruta: string): Promise<{
+  destinatarios: Destinatario[];
+  descartadasDelArchivo: FilaDescartada[];
+  filasLeidas: number;
+}> {
+  const { readFile } = await import("node:fs/promises");
+  const filas = parsearCsv(await readFile(ruta, "utf8"));
+  const { destinatarios: crudos, descartadas } = leerLista(filas);
+
+  const telefonos = crudos.map((d) => d.telefono);
+  const conocidos = await db.execute(sql`
+    select t.telefono,
+           (select array_agg(i.texto order by i.occurred_at)
+              from ${interactions} i
+             where i.persona_id = t.telefono and i.direccion = 'entrante'
+               and i.texto is not null)                                as mensajes,
+           (select max(i.occurred_at) from ${interactions} i
+             where i.persona_id = t.telefono and i.direccion = 'entrante') as ultimo_suyo,
+           exists (select 1 from clientes_padron p
+                    where right(t.telefono, 9) = p.sufijo)              as ya_compro,
+           exists (select 1 from envios_wa w
+                    where w.telefono = t.telefono
+                      and w.pieza_clase = 'hsm' and w.pieza_ref = ${NOMBRE}
+                      and w.estado = 'enviado')                         as ya_le_llego
+      from unnest(${telefonos}::text[]) as t(telefono)
+  `);
+
+  const porTelefono = new Map(
+    (conocidos as unknown as Record<string, unknown>[]).map((f) => [String(f.telefono), f]),
+  );
+
+  return {
+    destinatarios: crudos.map((d) => {
+      const f = porTelefono.get(d.telefono) ?? {};
+      const ultimo = f.ultimo_suyo ? new Date(String(f.ultimo_suyo)) : null;
+      return {
+        telefono: d.telefono,
+        nombre: d.nombre,
+        mensajes: (f.mensajes as string[] | null) ?? [],
+        /**
+         * ⚠️ `ultimoSuyo` es la fecha de su último mensaje ENTRANTE, y en esta
+         * rama la mayoría no tiene ninguno. Se pone la época y no `now()`: con
+         * `now()` la columna «ventana» diría **ABIERTA** para gente que jamás
+         * escribió, que es exactamente la clase de dato inventado que el
+         * simulacro existe para no producir. En el modo lista esa columna no se
+         * dibuja; la fecha queda por si alguien la mira.
+         */
+        ultimoSuyo: ultimo ?? new Date(0),
+        yaTienePrecio: false,
+        anuncio: null,
+        yaLeLlego: Boolean(f.ya_le_llego),
+        yaCompro: Boolean(f.ya_compro),
+        /** Sólo en el modo lista: ¿esta persona ya habló con nosotros? */
+        yaNosEscribio: ultimo !== null,
+        lineaDelArchivo: d.linea,
+      };
+    }),
+    descartadasDelArchivo: descartadas,
+    filasLeidas: filas.length,
+  };
+}
+
+/**
  * EL ESTADO DE UNA PERSONA EN EL INSTANTE DE MANDARLE.
  *
  * Es el lector del veto: cinco hechos crudos, ni un veredicto. El veredicto lo
@@ -334,6 +452,47 @@ async function estadoAlSalir(
   };
 }
 
+/**
+ * ¿EXISTE LA PERSONA A LA QUE SE LE VAN A ASIGNAR?
+ *
+ * ⚠️ `reasignar()` **no verifica nada**: hace un upsert y listo. La guarda vive
+ * en la ruta `/api/reparto`, y este script no pasa por ahí — así que hasta acá
+ * un dedazo en `--asignar-a` escribía mil filas perfectamente válidas con un
+ * `vendedora_id` que no existe, y esas mil conversaciones desaparecían de la
+ * cola de todo el mundo **sin un solo síntoma**. Es el fallo exacto que
+ * `reparto/destino.ts` existe para impedir, entrando por la puerta de atrás.
+ *
+ * Se reusa `destinosPosibles`/`esDestinoValido`, no se escribe un criterio
+ * nuevo: comparan normalizando los DOS lados, que es lo que hace falta cuando
+ * el mismo humano vive como `Luz` en el mapa de Cerberus y como `luz` en las
+ * asignaciones que ya tiene escritas.
+ *
+ * **Se guarda la grafía que vino**, no la de la lista: reescribirla rompería el
+ * cruce con `gestiones` y `estado_conversacion`, que ya tienen filas.
+ */
+async function verificarDestino(numeroPropio: string, destino: string): Promise<void> {
+  const { destinosPosibles, esDestinoValido } = await import("../reparto/destino.js");
+  const filas = await db.execute(sql`
+    select vendedora_id, 'rueda' as de from reparto_rueda where numero_propio = ${numeroPropio}
+    union all
+    select vendedora_id, 'mapa'  as de from numero_vendedora where numero = ${numeroPropio}
+  `);
+  const todas = filas as unknown as { vendedora_id: string; de: string }[];
+  const posibles = destinosPosibles({
+    rueda: todas.filter((f) => f.de === "rueda").map((f) => f.vendedora_id),
+    mapa: todas.filter((f) => f.de === "mapa").map((f) => f.vendedora_id),
+  });
+
+  if (!esDestinoValido(destino, posibles)) {
+    console.error(
+      `\n🛑 «${destino}» no atiende la línea ${numeroPropio}, y asignarle mil conversaciones\n` +
+        `   las haría invisibles para todos sin ningún error.\n\n` +
+        `   A quién sí se le puede: ${posibles.join(" · ")}\n`,
+    );
+    process.exit(1);
+  }
+}
+
 /** Horas desde su último mensaje. La ventana de servicio son 24. */
 const horasDesde = (d: Date, ahora: Date) => (ahora.getTime() - d.getTime()) / 3_600_000;
 
@@ -342,9 +501,14 @@ const hora = (d: Date) =>
 
 async function main() {
   const ahora = new Date();
+  // Fail-closed y barato, antes de tocar la base: la plantilla la valida Meta
+  // (no una constante compilada) y un destino inexistente mata el simulacro acá,
+  // y no después de imprimir mil renglones que dan la impresión de estar bien.
   const plantilla = await resolverPlantilla();
   exigirImagenSiHaceFalta(plantilla);
-  const todos = await traerCandidatos();
+  if (ASIGNAR_A) await verificarDestino(LINEA!, ASIGNAR_A);
+  const deLista = LISTA ? await traerDeLista(LISTA) : null;
+  const todos = deLista ? deLista.destinatarios : await traerCandidatos();
 
   /**
    * ⚠️ ACÁ VIVÍA EL DEFECTO QUE MANDÓ DOS PROMOS A QUIEN HABÍA DICHO QUE NO.
@@ -370,8 +534,14 @@ async function main() {
    *
    * `--todos` lo desactiva, a propósito y con nombre feo: que ampliar la lista
    * cueste escribir algo.
+   *
+   * ⚠️ **En el modo `--lista` no aplica, y no es una excepción cómoda**: nadie
+   * de un padrón de afuera llegó por un anuncio, así que dejarlo prendido
+   * descartaría el 100 % de la lista. Que el filtro no corra es justamente lo
+   * que hace que esa campaña sea fría — y por eso el encabezado lo dice con
+   * todas las letras en vez de callarlo.
    */
-  const soloDeAnuncio = !bandera("todos");
+  const soloDeAnuncio = !LISTA && !bandera("todos");
 
   /**
    * EL PÚBLICO y LOS ELEGIBLES los decide `campana/publico.ts`, puro y con tests.
@@ -389,7 +559,25 @@ async function main() {
       yaLeLlego: d.yaLeLlego,
       yaCompro: d.yaCompro,
     })),
-    { soloDeAnuncio, tope: TOPE },
+    {
+      soloDeAnuncio,
+      /**
+       * ⚠️ EN EL MODO LISTA, HABER COMPRADO NO DESCALIFICA — Y ES AL REVÉS DE
+       * LA CAMPAÑA ANTERIOR A PROPÓSITO.
+       *
+       * Allá el descarte era correcto: la 3x1 vendía cursos y mandársela a
+       * alguien que ya los compró es ofrecerle lo que ya tiene. Acá el producto
+       * es OTRO —una entrada a un foro presencial— y quien ya hizo un curso con
+       * nosotros es **mejor** candidato, no peor.
+       *
+       * Lo que sí protege a quien ya tiene su lugar en el Foro es el estado del
+       * propio archivo (`Inscrito`/`RESERVADO` → `ya_inscrito`, en
+       * `campana/lista.ts`), que es el dato pertinente. `clientes_padron` no
+       * sabe nada de este evento: habla de cursos.
+       */
+      excluirClientes: !LISTA,
+      tope: TOPE,
+    },
   );
   const porTelefono = new Map(todos.map((d) => [d.telefono, d]));
   const publico = seleccion.publico.map((c) => porTelefono.get(c.telefono)!);
@@ -397,18 +585,56 @@ async function main() {
   const cuenta = contarPorMotivo(seleccion.descartados);
 
   console.log(`\n═══ CAMPAÑA «${plantilla.nombre}» (idioma ${plantilla.idioma}) ═══`);
-  console.log(`línea ${LINEA} · leads que escribieron entre ${DESDE} y ${HASTA}`);
+  if (deLista) {
+    /**
+     * EL ENCABEZADO DICE QUE ES EN FRÍO, y no es adorno.
+     *
+     * Los dos modos imprimen tablas parecidas y el que mira el simulacro tiene
+     * que poder distinguirlos de un vistazo: uno es seguimiento a quien
+     * escribió, el otro cruza ADR 0015 §37. Si eso hay que deducirlo de los
+     * flags de la línea de comandos, tarde o temprano alguien no lo deduce.
+     */
+    console.log(`línea ${LINEA} · 🧊 CONTACTO EN FRÍO desde ${LISTA}`);
+    console.log(`   ${deLista.filasLeidas} filas leídas del archivo`);
+  } else {
+    console.log(`línea ${LINEA} · leads que escribieron entre ${DESDE} y ${HASTA}`);
+  }
   console.log(`${ENVIAR ? "🔴 ENVÍO REAL" : "simulacro (agregá --enviar para mandar)"}\n`);
 
+  const anchos = deLista ? [5, 15, 30, 8, 14, 12] : [4, 15, 16, 7, 10, 8, 40];
+  const titulos = deLista
+    ? ["#", "teléfono", "nombre", "fila", "¿nos escribió?", "¿ya compró?"]
+    : ["#", "teléfono", "escribió", "hace", "ventana", "precio", "anuncio por el que llegó"];
+
   console.log("─".repeat(124));
-  console.log(
-    ["#", "teléfono", "escribió", "hace", "ventana", "precio", "anuncio por el que llegó"]
-      .map((s, i) => s.padEnd([4, 15, 16, 7, 10, 8, 40][i]))
-      .join(""),
-  );
+  console.log(titulos.map((s, i) => s.padEnd(anchos[i]!)).join(""));
   console.log("─".repeat(124));
 
   elegibles.forEach((d, i) => {
+    if (deLista) {
+      /**
+       * ⚠️ ACÁ NO SE IMPRIME «ventana ABIERTA/cerrada», y es deliberado.
+       *
+       * Esa columna contesta «¿le puedo escribir texto libre?», y para quien
+       * nunca escribió la respuesta es no, siempre. Mostrarla igual —con la
+       * fecha de época que `traerDeLista` pone— la haría decir «cerrada · 500000h»,
+       * un dato correcto y sin significado que empuja a leer el resto de la
+       * tabla como si fuera lo mismo que la del otro modo. Se muestran los
+       * hechos que ACÁ deciden: quién es, de qué fila salió, y si ya tuvimos
+       * algo que ver con esta persona.
+       */
+      console.log(
+        [
+          String(i + 1).padEnd(anchos[0]!),
+          d.telefono.padEnd(anchos[1]!),
+          (d.nombre ?? "(sin nombre)").slice(0, 28).padEnd(anchos[2]!),
+          String(d.lineaDelArchivo ?? "—").padEnd(anchos[3]!),
+          (d.yaNosEscribio ? `sí · ${d.mensajes.length} msj` : "nunca").padEnd(anchos[4]!),
+          d.yaCompro ? "sí" : "—",
+        ].join(""),
+      );
+      return;
+    }
     const h = horasDesde(d.ultimoSuyo, ahora);
     console.log(
       [
@@ -423,12 +649,20 @@ async function main() {
     );
   });
 
-  const abiertas = elegibles.filter((d) => horasDesde(d.ultimoSuyo, ahora) < 24).length;
   console.log("─".repeat(124));
-  console.log(`\nTotal a mandar: ${elegibles.length}   (de ${todos.length} que escribieron en esas fechas)`);
-  console.log(`  · ventana abierta: ${abiertas} (a estos se les puede escribir texto libre también)`);
-  console.log(`  · ventana cerrada: ${elegibles.length - abiertas} (solo alcanzables con esta plantilla)`);
-  console.log(`  · con precio ya enviado: ${elegibles.filter((d) => d.yaTienePrecio).length}`);
+  if (deLista) {
+    const conocidos = elegibles.filter((d) => d.yaNosEscribio).length;
+    console.log(`\nTotal a mandar: ${elegibles.length}   (de ${todos.length} teléfonos legibles del archivo)`);
+    console.log(`  · ya nos habían escrito alguna vez: ${conocidos}`);
+    console.log(`  · nunca hablaron con este número: ${elegibles.length - conocidos} 🧊`);
+    console.log(`  · ya compraron algún curso: ${elegibles.filter((d) => d.yaCompro).length} (no descalifica: el Foro es otro producto)`);
+  } else {
+    const abiertas = elegibles.filter((d) => horasDesde(d.ultimoSuyo, ahora) < 24).length;
+    console.log(`\nTotal a mandar: ${elegibles.length}   (de ${todos.length} que escribieron en esas fechas)`);
+    console.log(`  · ventana abierta: ${abiertas} (a estos se les puede escribir texto libre también)`);
+    console.log(`  · ventana cerrada: ${elegibles.length - abiertas} (solo alcanzables con esta plantilla)`);
+    console.log(`  · con precio ya enviado: ${elegibles.filter((d) => d.yaTienePrecio).length}`);
+  }
   /**
    * LOS DESCARTADOS SE IMPRIMEN TODOS, incluso los que dieron cero.
    *
@@ -437,10 +671,44 @@ async function main() {
    * justamente el que dio 0 en la primera corrida **porque estaba roto**: verlo
    * en 0 al lado de los otros es lo que habría hecho sospechar.
    */
-  console.log(`\nDescartados:`);
-  console.log(`  · ${cuenta.rechazo} porque ya dijeron que no`);
+  if (deLista) {
+    /**
+     * LOS DESCARTES DEL ARCHIVO VAN APARTE DE LOS DE HERMES, y en ese orden.
+     *
+     * Son dos preguntas distintas y confundirlas es lo que hace ilegible un
+     * informe: arriba, «qué traía el archivo que no sirve» (se arregla editando
+     * la planilla); abajo, «qué sabe Hermes que el archivo no sabe» (no se
+     * arregla, y es lo que justifica el cruce). Un solo montón de números
+     * respondería las dos a medias.
+     */
+    const enArchivo = contarMotivosDeLista(deLista.descartadasDelArchivo);
+    console.log(`\nDescartados POR EL ARCHIVO (${deLista.descartadasDelArchivo.length} de ${deLista.filasLeidas} filas):`);
+    console.log(`  · ${enArchivo.dijo_que_no} marcados «Desinteresado»`);
+    console.log(`  · ${enArchivo.ya_inscrito} ya inscritos o con reserva`);
+    console.log(`  · ${enArchivo.sin_telefono} sin teléfono`);
+    console.log(`  · ${enArchivo.otro_pais} de otro país`);
+    console.log(`  · ${enArchivo.telefono_ilegible} con el teléfono ilegible (no se adivina ninguno)`);
+    console.log(`  · ${enArchivo.duplicado} repetidos dentro del archivo`);
+
+    /**
+     * Y UNA MUESTRA DE LOS ILEGIBLES, CON EL NÚMERO TAL COMO VENÍA.
+     *
+     * Un contador dice cuántas filas se perdieron; sólo el crudo dice si el
+     * archivo está mal cargado o si el normalizador es demasiado angosto. Sin
+     * esto, «412 ilegibles» es indistinguible de un bug nuestro.
+     */
+    const muestra = deLista.descartadasDelArchivo
+      .filter((d) => d.motivo === "telefono_ilegible" || d.motivo === "otro_pais")
+      .slice(0, 8);
+    if (muestra.length) {
+      console.log(`    muestra: ${muestra.map((d) => `fila ${d.linea} «${d.crudo}»`).join(" · ")}`);
+    }
+  }
+
+  console.log(`\nDescartados POR LO QUE HERMES YA SABE:`);
+  console.log(`  · ${cuenta.rechazo} porque ya dijeron que no en una conversación`);
   console.log(`  · ${cuenta.despedida} porque se despidieron`);
-  console.log(`  · ${cuenta.ya_compro} porque YA compraron`);
+  if (!LISTA) console.log(`  · ${cuenta.ya_compro} porque YA compraron`);
   if (soloDeAnuncio) console.log(`  · ${cuenta.sin_anuncio} porque NO llegaron por un anuncio (--todos los incluye)`);
   console.log(`  · ${cuenta.ya_le_llego} porque YA recibieron esta campaña`);
   console.log(
