@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, BadgeCheck, ExternalLink, MessageCircle, Search, ShoppingBag, ShoppingCart, UserPlus, Users2 } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, ExternalLink, Megaphone, MessageCircle, Search, ShoppingBag, ShoppingCart, UserPlus, Users2 } from 'lucide-react';
 import { api } from '../../lib/datos/cliente';
 import { sectionLabel } from '../../lib/styles';
 import { fechaCorta, formatoTelefono } from '../../lib/formato';
 import { BotonLlamar } from '../gestion/BotonLlamar';
 import { FormularioVenta } from '../venta/FormularioVenta';
+import { PantallaCampanas } from '../campana/PantallaCampanas';
 import { PantallaPadron } from '../padron/PantallaPadron';
 
 /**
@@ -126,7 +127,9 @@ export function VistaPersonas({
 }) {
   // Con un teléfono en la mano se abre directo en la ficha: quien llega así ya
   // sabe a quién busca, y mostrarle la tabla primero sería un paso de más.
-  const [modo, setModo] = useState<'padron' | 'telefono'>(telefonoInicial ? 'telefono' : 'padron');
+  const [modo, setModo] = useState<'padron' | 'telefono' | 'campanas'>(
+    telefonoInicial ? 'telefono' : 'padron',
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -137,10 +140,28 @@ export function VistaPersonas({
         <Solapa activa={modo === 'telefono'} onClick={() => setModo('telefono')}>
           <Search size={13} /> Buscar por teléfono
         </Solapa>
+        {/*
+          CAMPAÑAS va acá y no en el riel, y el precedente es el de al lado: el
+          padrón (ADR 0035) también es supervisor-only, también es gente en
+          bulto, y entró como solapa de Contactos. Una vista del riel tiene que
+          ser un LUGAR con acción primaria nombrable (ADR 0034), y esto es una
+          tarea con ventana — lo que ADR 0016 ya rechazó por escrito. Además el
+          riel lo comparten cinco vendedoras: un ícono que a la mayoría le
+          responde 403 no es un mapa diluido, es una promesa incumplida.
+
+          La solapa se dibuja siempre y el 403 lo explica la pantalla: quién es
+          supervisor lo dice el SERVER, y esconderla acá exigiría preguntarlo
+          antes de que haga falta.
+        */}
+        <Solapa activa={modo === 'campanas'} onClick={() => setModo('campanas')}>
+          <Megaphone size={13} /> Campañas
+        </Solapa>
       </div>
 
       {modo === 'padron' ? (
         <PantallaPadron onEscribir={onEscribir} miVendedora={miVendedora} />
+      ) : modo === 'campanas' ? (
+        <PantallaCampanas />
       ) : (
         <BuscarPorTelefono telefonoInicial={telefonoInicial} onEscribir={onEscribir} />
       )}

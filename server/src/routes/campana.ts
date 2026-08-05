@@ -1,6 +1,9 @@
 import { Router } from "express";
+import { db } from "../db/client.js";
 import { esSupervisor, supervisoresConfigurados } from "../padron/supervisor.js";
 import { ErrorDeMeta, traerPlantillasDeMeta } from "../campana/metaPlantillas.js";
+import { consultarCorridas, consultarEsperando } from "../campana/consultarCorridas.js";
+import { hayQuePreocuparse } from "../campana/corridas.js";
 
 /**
  * LAS PLANTILLAS DE WHATSAPP — solo lectura, y solo para el supervisor.
@@ -97,4 +100,51 @@ campanaRouter.get("/plantillas", async (req, res) => {
   } catch (e) {
     seRindio(res, e);
   }
+});
+
+/**
+ * CÓMO VAN LAS CAMPAÑAS — lo que la pantalla dibuja.
+ *
+ * ══ POR QUÉ ESTA RUTA NO ES «SOLO UN REPORTE» ═══════════════════════════════
+ *
+ * Responde tres preguntas y la tercera es la que ninguna herramienta de Meta
+ * puede contestar: **¿alguien está atendiendo a los que contestaron?** Una
+ * campaña que despierta a 40 personas y no tiene quién las atienda es peor que
+ * no haberla mandado — y hoy eso solo se ve mirando la cola a mano.
+ *
+ * `aviso` viene calculado del server (`hayQuePreocuparse`), no derivado en el
+ * navegador: es el mismo criterio que decide si la pantalla grita, y con dos
+ * cabezas una podría decir «todo bien» sobre una plantilla pausada.
+ */
+campanaRouter.get("/corridas", async (req, res) => {
+  if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
+    res.status(403).json({
+      ok: false,
+      motivo: "no_es_supervisor",
+      sinSupervisores: supervisoresConfigurados(process.env).length === 0,
+      message: "las campañas las mira un supervisor",
+    });
+    return;
+  }
+  const dias = Number(req.query.dias) || 30;
+  const corridas = await consultarCorridas(db, { dias });
+  res.json({
+    corridas: corridas.map((c) => ({ ...c, aviso: hayQuePreocuparse(c) })),
+  });
+});
+
+/**
+ * QUIÉN CONTESTÓ Y NADIE ATENDIÓ — la lista de tareas de la campaña.
+ *
+ * Va con el TEXTO de lo que dijeron: es lo que decide a cuál entrar primero.
+ * «Quiero el paquete» y «ok» no valen lo mismo, y sin el texto la lista es una
+ * columna de teléfonos que hay que abrir de a uno para saber cuál urge.
+ */
+campanaRouter.get("/corridas/:pieza/esperando", async (req, res) => {
+  if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
+    res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
+    return;
+  }
+  const esperando = await consultarEsperando(db, req.params.pieza);
+  res.json({ esperando });
 });

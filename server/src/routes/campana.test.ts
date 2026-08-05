@@ -4,7 +4,21 @@ import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 import express from "express";
 import { firmarSesion } from "../auth/sesion.js";
-import { campanaRouter } from "./campana.js";
+
+/**
+ * ⚠️ EL ROUTER SE IMPORTA DINÁMICAMENTE, y no es capricho.
+ *
+ * `routes/campana.ts` importa el singleton `db/client.ts`, que **lanza al
+ * importarse** si no hay `DATABASE_URL`. Con un `import` estático, este archivo
+ * ni siquiera carga en un checkout sin `.env` — y lo que se prueba acá (la
+ * puerta de supervisor, la traducción de un fallo de Meta) no toca la base ni
+ * una vez.
+ *
+ * La URL es de mentira a propósito: `postgres.js` no conecta hasta la primera
+ * consulta, y ninguno de estos tests llega a hacer una.
+ */
+process.env.DATABASE_URL ??= "postgres://nadie@127.0.0.1:1/no-se-usa";
+const { campanaRouter } = await import("./campana.js");
 
 /**
  * La puerta de la ruta de campañas: que exija supervisor, que distinga «no sos
