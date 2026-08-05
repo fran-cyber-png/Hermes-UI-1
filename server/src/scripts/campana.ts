@@ -243,6 +243,24 @@ async function main() {
     process.exit(0);
   }
 
+  /**
+   * ARRANCAR EL TRANSPORTE — el script corre FUERA del server.
+   *
+   * `enviarPlantillaYProyectar` pide `gestorWhatsapp()`, que lanza «WhatsApp no
+   * está arrancado todavía» si nadie lo montó: en producción lo monta
+   * `index.ts:142` al levantar el proceso, y un script suelto no pasa por ahí.
+   * Se descubrió mandando de verdad — el primer envío murió acá.
+   *
+   * Va DESPUÉS del simulacro a propósito: un dry-run no tiene por qué abrir una
+   * sesión de WhatsApp, y así se puede correr en cualquier lado sin efectos.
+   */
+  const { arrancarWhatsapp } = await import("../whatsapp/wiring.js");
+  arrancarWhatsapp();
+  // La Cloud API confirma su sesión con un GET a Meta: sin esta espera, el
+  // primer envío sale con la sesión en «conectando» y `EnvioControlado` lo
+  // rechaza sin auditar.
+  await new Promise((listo) => setTimeout(listo, 5000));
+
   console.log(`\n🔴 Mandando de verdad. Ctrl-C corta.\n`);
   const procedencia = deUnaCampana({ nombre: plantilla!.nombre, contenido: contenidoDe(plantilla!) });
   // `id` gana sobre `link`: no depende de que un hosting esté arriba durante los
