@@ -83,10 +83,53 @@ function contactos() {
   }));
 }
 
+/**
+ * LO QUE LA HOJA DE LA FICHA LE PREGUNTA A CERBERUS (`?ficha=1`).
+ *
+ * La fila del padrón dice lo que icarus guardó; la hoja dice lo que Cerberus sabe
+ * HOY. Acá se siembra el caso que hace útil abrirla: alguien que la tabla marca
+ * «sin respaldo» —icarus dice que compró y no hay venta— y que en Cerberus sí
+ * tiene dos folios pagados. Ver esa diferencia es el punto de la hoja.
+ */
+const FICHA_CERBERUS = {
+  estado: 'cliente',
+  id: 4821,
+  nombre: 'Ana Lucía Quispe Mamani',
+  codigo: 'CL-4821',
+  dni: '41287654',
+  pais: 'Perú',
+  correo: 'ana0@correo.com',
+  ventasCount: 2,
+  ventas: [
+    { folio: 'F001-2291', estado: 'Pagado', monto: '750.00', moneda: 'PEN', fecha: '2026-07-14' },
+    { folio: 'F001-1877', estado: 'Pagado', monto: '500.00', moneda: 'PEN', fecha: '2026-04-02' },
+  ],
+};
+
 /** Todo endpoint responde de mentira: la galería no toca la red ni una vez. */
 window.fetch = (async (entrada: RequestInfo | URL) => {
   const url = String(typeof entrada === 'string' ? entrada : entrada instanceof URL ? entrada : entrada.url);
-  const cuerpo = url.includes('/api/padron/facetas')
+  const cuerpo = url.includes('/api/contactos/ficha')
+    ? FICHA_CERBERUS
+    : url.includes('/api/contactos/lead')
+    ? {
+        lead: {
+          nombre: 'Ana Lucía Quispe Mamani',
+          fuente: 'meta',
+          campana: 'Gestión Pública · julio',
+          anuncio: 'Adquiérelo ahora',
+          fecha: '2026-07-02T15:12:00.000Z',
+        },
+      }
+    : // Nunca escribió: no hay hilo del que derivar señales ni intereses. Vacío
+      // acá es la VERDAD, y por eso la hoja no dibuja nada en esos bloques.
+      url.includes('/api/senales')
+    ? { senales: {}, umbralDias: 3 }
+    : url.includes('/api/gestiones/intereses')
+    ? { lista: [], derivados: [] }
+    : url.includes('/api/whatsapp/sesion')
+    ? { estado: 'conectado', telefono: '51986394450' }
+    : url.includes('/api/padron/facetas')
     ? {
         facetas: Object.fromEntries(
           Object.entries(FACETAS).map(([d, ops]) => [
@@ -133,6 +176,19 @@ const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
  * del lote junto al destino, antes de apretar (regla dura #7).
  */
 const PARAMS = new URLSearchParams(location.search);
+
+/**
+ * `?ficha=1` abre la hoja de la ficha de la primera fila.
+ *
+ * Es la evidencia de lo que la tabla NO puede decir: la fila afirma «sin
+ * respaldo» (icarus dice 3 compras y no hay venta) y Cerberus, preguntado en
+ * vivo por teléfono, devuelve dos folios pagados.
+ */
+if (PARAMS.has('ficha')) {
+  setTimeout(() => {
+    document.querySelector<HTMLElement>('tbody tr[role="button"]')?.click();
+  }, 400);
+}
 
 /** `?filtro=1` abre el desplegable de País, para capturar las facetas con conteo. */
 if (PARAMS.has('filtro')) {

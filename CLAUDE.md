@@ -552,6 +552,14 @@ nombre · 61.298 con correo.
   **plantilla aprobada por Meta**. Es otro frente.
 - **El buscador por teléfono no se archivó**: quedó en la segunda solapa. Pregunta a **Cerberus en
   vivo** y trae folios y montos por venta; el padrón es una copia de icarus y no los tiene.
+- **Un clic en la fila abre la ficha al costado** (5-ago): el mismo `PanelDerecho` de Mensajes. La
+  tabla dice lo que icarus guardó; la hoja pregunta a **Cerberus en vivo**, que es donde se ve si
+  el «sin respaldo» de la fila tiene folios detrás. La `Conversacion` se **sintetiza** del teléfono
+  (`canales/conversacionNueva.ts`, la fábrica que estaba suelta dentro de `escribirA`): timeline,
+  señales e intereses vienen **vacíos**, y eso es la verdad —el padrón son los que nunca
+  escribieron—, mientras que todo lo que se busca por teléfono responde igual. Sin teléfono usable
+  la fila no se abre: una hoja vacía se leería como «no es cliente» y lo que pasa es que no se lo
+  pudo preguntar.
 - **MULTIFILTROS con facetas**: cinco dimensiones **multivalor** (país · curso · etapa · nivel ·
   fuente), **OR adentro de cada una y AND entre ellas** — «(peruanos o mexicanos) Y que ya
   compraron». Cada opción llega con **su conteo** (`GET /api/padron/facetas`), y ese número **es**
@@ -594,7 +602,9 @@ nombre · 61.298 con correo.
 - **Ver la UI sin server ni base**: `npx vite --port 5199` → `/galeria-padron.html`
   (`?vendedora=1` la vista de quien no reparte, `?filtro=1` las facetas abiertas, `?lote=1` la barra
   de reparto, `?destino=1` el desplegable con la carga, `?todo=1` el recorte entero elegido,
-  `?todo=1&confirmar=1` la confirmación). Capturas en `docs/evidencia/padron-*.png`.
+  `?todo=1&confirmar=1` la confirmación, **`?ficha=1` la hoja del contacto abierta**). Capturas en
+  `docs/evidencia/padron-*.png` y `docs/evidencia/sidebar-padron.png`. El Pipeline tiene la suya:
+  `/galeria-embudo.html` (`?ficha=1`) → `docs/evidencia/sidebar-pipeline*.png`.
 
 ## El timeline se puede ESCRIBIR, y dice quién (ADR 0037)
 
@@ -656,6 +666,17 @@ conversación**. Server en `server/src/eventos/`, front en `src/features/eventos
 `src/features/panel/PanelDerecho.tsx` (360 px, `w-[22.5rem]` en `App.tsx`). El orden **no es
 temático**: es el de las preguntas que la vendedora se hace mientras escribe. **Una pestaña guarda lo
 que se CONSULTA, nunca lo que se DECIDE.**
+
+> **Y desde el 5-ago vive en TRES lugares, con un solo componente**: en Mensajes como columna, y en
+> el **Pipeline** y el **padrón** como hoja al costado (`panel/HojaContacto.tsx`) — un clic en la
+> tarjeta o en la fila. Antes, saber quién era esa persona costaba **irse a Mensajes** y volver.
+> La hoja **se superpone y no empuja**, y el motivo es aritmético, no estético: el `GRID` del
+> Pipeline declara mínimos que suman **1.000 px** y a 1280 el contenido son ~1.180 — empujando
+> quedarían ~810 px para el tablero y aparecería scroll horizontal, que en esta app no existe.
+> Sin scrim a propósito: se toca otra tarjeta y la hoja cambia de persona sin cerrarse.
+> ⚠️ La tarjeta es `draggable`, así que **un arrastre no puede contar como clic** (guarda con ref en
+> `TarjetaEmbudo`, con su test de componente) y el Escape de la hoja **se apaga** mientras hay un
+> modal de compuerta encima — los dos escuchan en captura y una sola tecla cerraría las dos cosas.
 
 1. **Quién es** — `panel/BandaEstado`. El estado **se ve, no se lee**: filete de 3 px + fondo tenue,
    verde cliente · `--temp-frio` conversación fría · ámbar «no se pudo saber» · gris lead nuevo.

@@ -1,4 +1,4 @@
-import { useDeferredValue, useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   BadgeCheck,
@@ -12,6 +12,9 @@ import {
   X,
 } from 'lucide-react';
 import { fechaCorta, formatoTelefono } from '../../lib/formato';
+import { conversacionDeTelefono } from '../canales/conversacionNueva';
+import { HojaContacto } from '../panel/HojaContacto';
+import { useSesionWa } from '../whatsapp/conversacionWa';
 import { BarraReparto } from './BarraReparto';
 import { FiltroFaceta } from './FiltroFaceta';
 import {
@@ -53,6 +56,33 @@ export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string)
   const [texto, setTexto] = useState('');
   const [filtros, setFiltros] = useState<FiltrosPadron>({ pagina: 1, porPagina: 50 });
   const [seleccion, setSeleccion] = useState<Seleccion>(NADA);
+  /**
+   * DE QUIÉN SE ESTÁ LEYENDO LA FICHA. La tabla dice lo que icarus guardó; la
+   * ficha dice lo que Cerberus sabe HOY — si compró, cuánto y con qué folios.
+   * Son dos fuentes distintas y la segunda es la que decide a quién repartir.
+   */
+  const [ficha, setFicha] = useState<ContactoPadron | null>(null);
+  // La línea propia con la que se arma la clave de conversación. Sin WhatsApp
+  // conectado queda `null` y la ficha se abre igual (ver `conversacionDeTelefono`).
+  const { data: sesionWa } = useSesionWa();
+  const miLinea = sesionWa?.estado === 'conectado' ? sesionWa.telefono : null;
+  /**
+   * La conversación que consume el panel. Memoizada porque la fábrica estampa
+   * `new Date()`: sin esto, cada render de la tabla —y la tabla se repinta con
+   * cada tecla del buscador— devolvería un objeto nuevo y el panel entero se
+   * recalcularía por debajo de una hoja que no cambió de persona.
+   */
+  const conversacionDeLaFicha = useMemo(
+    () =>
+      ficha?.telefono
+        ? conversacionDeTelefono({
+            telefono: ficha.telefono,
+            numeroPropio: miLinea,
+            nombre: ficha.nombre,
+          })
+        : null,
+    [ficha?.telefono, ficha?.nombre, miLinea],
+  );
 
   // El texto se difiere: escribir «gonzález» son ocho requests si cada tecla
   // dispara una consulta sobre 72.923 filas.
@@ -107,7 +137,8 @@ export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string)
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    // `relative`: la hoja de la ficha se ancla acá adentro, no al viewport.
+    <div className="relative flex min-h-0 flex-1 flex-col">
       <div className="shrink-0 border-b border-border bg-card px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
           <label className="relative min-w-[15rem] flex-1">
@@ -284,6 +315,8 @@ export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string)
                   elegido={estaElegido(seleccion, c.id)}
                   onElegir={() => setSeleccion((prev) => alternarFila(prev, c.id))}
                   onEscribir={onEscribir}
+                  onFicha={setFicha}
+                  abierta={ficha?.id === c.id}
                 />
               ))}
             </tbody>
@@ -325,6 +358,15 @@ export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string)
           onListo={() => setSeleccion(NADA)}
           onLimpiar={() => setSeleccion(NADA)}
         />
+      )}
+
+      {/* LA FICHA AL COSTADO. Lo que se ve acá no sale del padrón: la ficha de
+          Cerberus y el formulario que llenó se buscan por TELÉFONO, en vivo. El
+          timeline y las señales, en cambio, van por clave de conversación y para
+          alguien que nunca escribió vienen vacíos — que es la verdad, no una
+          falla de carga: el padrón son justamente los que nunca escribieron. */}
+      {conversacionDeLaFicha && (
+        <HojaContacto conversacion={conversacionDeLaFicha} onCerrar={() => setFicha(null)} />
       )}
     </div>
   );
@@ -403,18 +445,58 @@ function Fila({
   elegido,
   onElegir,
   onEscribir,
+  onFicha,
+  abierta,
 }: {
   c: ContactoPadron;
   elegible: boolean;
   elegido: boolean;
   onElegir: () => void;
   onEscribir?: (telefono: string) => void;
+  /** Un clic en la fila abre la ficha al costado. */
+  onFicha?: (c: ContactoPadron) => void;
+  abierta?: boolean;
 }) {
   const telefono = (c.telefono ?? '').replace(/\D/g, '');
+  // La ficha se busca POR TELÉFONO (así habla `cerberus/ficha.ts`): sin uno
+  // usable no hay nada que abrir, y una hoja vacía se leería como «no es
+  // cliente» cuando lo que pasa es que no se lo pudo preguntar.
+  const conFicha = onFicha && telefono.length >= 8 ? () => onFicha(c) : null;
   return (
-    <tr className={`border-b border-border/60 transition-colors ${elegido ? 'bg-primary/5' : 'hover:bg-muted/50'}`}>
+    <tr
+      role={conFicha ? 'button' : undefined}
+      tabIndex={conFicha ? 0 : undefined}
+      aria-label={conFicha ? `Ver la ficha de ${c.nombre ?? telefono}` : undefined}
+      onClick={conFicha ?? undefined}
+      onKeyDown={
+        conFicha
+          ? (e) => {
+              // Solo con el foco en la fila: si no, Espacio sobre el checkbox
+              // de reparto abriría la ficha además de tildar.
+              if (e.target !== e.currentTarget) return;
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                conFicha();
+              }
+            }
+          : undefined
+      }
+      className={
+        `border-b border-border/60 transition-colors ${elegido ? 'bg-primary/5' : 'hover:bg-muted/50'}` +
+        (conFicha ? ' cursor-pointer' : '') +
+        // De cuál se está leyendo la ficha. Tiene que ganarle al `hover:` de
+        // arriba: con la hoja abierta el puntero está del otro lado de la
+        // pantalla, y sin marca no hay forma de saber a quién se está mirando.
+        // `bg-secondary` y no `bg-muted`: el gris de la casa es #F5F7FB, a un
+        // pelo del blanco de la tabla, y sobre un renglón de 32 px no se ve. El
+        // tinte azul es el mismo que marca «mirá esta» en el radar.
+        (abierta ? ' bg-secondary hover:bg-secondary' : '')
+      }
+    >
       {elegible && (
-        <td className="px-3 py-2">
+        // El clic del check NO abre la ficha: repartir es la acción de esta
+        // columna, y tildar 50 filas abriendo 50 hojas sería inusable.
+        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
           <input
             type="checkbox"
             aria-label={`Elegir a ${c.nombre ?? c.id}`}
@@ -483,7 +565,12 @@ function Fila({
         {onEscribir && telefono.length >= 8 && (
           <button
             type="button"
-            onClick={() => onEscribir(telefono)}
+            onClick={(e) => {
+              // Abrir el chat se lleva la vista entera a Mensajes: dejar además
+              // una ficha abierta atrás sería un rastro que nadie pidió.
+              e.stopPropagation();
+              onEscribir(telefono);
+            }}
             title="Abrir el chat con esta persona"
             className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-navy hover:text-white"
           >
