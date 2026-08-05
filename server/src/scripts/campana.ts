@@ -190,9 +190,13 @@ async function traerCandidatos(): Promise<Destinatario[]> {
              order by i2.occurred_at limit 1) as anuncio,
            -- Ya se le mandó ESTA campaña. La guarda contra el doble envío
            -- después de una corrida frenada a la mitad.
+           -- OJO: pieza_ref NO lleva el prefijo de la clase. refDeDireccion solo
+           -- pega el orden con # y solo para las clases con pasos. Comparar
+           -- contra 'hsm:promo_3x1_cursos' daba SIEMPRE falso, y el simulacro
+           -- estaba por mandar un segundo mensaje a los 13 de la corrida frenada.
            exists (select 1 from envios_wa w
                     where w.telefono = e.persona_id
-                      and w.pieza_clase = 'hsm' and w.pieza_ref = ${`hsm:${NOMBRE}`}
+                      and w.pieza_clase = 'hsm' and w.pieza_ref = ${NOMBRE}
                       and w.estado = 'enviado') as ya_le_llego
       from entrantes e
      order by e.ultimo_suyo
