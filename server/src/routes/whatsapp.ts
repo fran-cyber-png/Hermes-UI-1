@@ -13,6 +13,7 @@ import { resolverAnuncio } from '../meta/anuncio.js';
 import { RUTA_MEDIA, nombreSeguro } from '../whatsapp/mediaDir.js';
 import { normalizarTelefono } from '../whatsapp/identidadWa.js';
 import { FotoNoDisponibleError, type FotoPerfil, type MediaSaliente } from '../whatsapp/transporte.js';
+import { claseDeMime, limitesDe, motivoPorTamano } from '../whatsapp/limitesMedia.js';
 import { cancelarPorRespuestaHumana, faltaEsquema } from '../autorespuesta/repositorio.js';
 import { procedenciaDelComposer, type LeerPasoDeSecuencia } from '../procedencia/desdeElComposer.js';
 import { obtenerPlantilla } from '../plantillas/repositorio.js';
@@ -73,7 +74,15 @@ whatsappRouter.get('/sesion', (req, res) => {
       res.status(404).json({ ok: false, message: 'esa línea no está corriendo' });
       return;
     }
-    res.json(linea.transporte.estado());
+    // Además del estado, QUÉ HAY DEL OTRO LADO y cuánto acepta. La app usa los
+    // límites para frenar un adjunto pesado ANTES de subirlo (18 MB de video
+    // tardan, y el rechazo llegaba recién al final). El server los verifica
+    // igual: esto es conveniencia, no la garantía.
+    res.json({
+      ...linea.transporte.estado(),
+      transporte: linea.transporte.nombre,
+      limitesMedia: limitesDe(linea.transporte.nombre),
+    });
     return;
   }
   // Semáforo global: la primera conectada, si hay; si no, la primera cualquiera.
@@ -333,13 +342,20 @@ whatsappRouter.post(
       return;
     }
 
-    const clase: MediaSaliente['clase'] = mime.startsWith('image/')
-      ? 'imagen'
-      : mime.startsWith('video/')
-        ? 'video'
-        : mime.startsWith('audio/')
-          ? 'audio'
-          : 'documento';
+    const clase = claseDeMime(mime);
+
+    // ── EL TOPE, ANTES DE GASTAR NADA ──
+    // Los límites son de la LÍNEA, no de Hermes: 16 MB de video es de la Cloud
+    // API, y las líneas whatsmeow no lo tienen. Verificar acá —antes de escribir
+    // el archivo y antes de subirlo a Meta— es lo que evita pagar la subida de
+    // 18 MB para recibir un `fbtrace_id` que la vendedora no puede leer.
+    // Ver `whatsapp/limitesMedia.ts`.
+    const linea = gestorWhatsapp().de(String(numeroPropio ?? ''));
+    const motivo = motivoPorTamano(clase, bytes.length, limitesDe(linea?.transporte.nombre ?? 'whatsmeow'));
+    if (motivo) {
+      res.status(409).json({ ok: false, message: motivo, codigo: 'adjunto_muy_pesado' });
+      return;
+    }
 
     // Se guarda primero: el archivo enviado también es parte de la conversación.
     const archivo = nombreSeguro(`out-${Date.now()}-${nombre || 'archivo'}`);
