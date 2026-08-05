@@ -1,7 +1,7 @@
 import "dotenv/config";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { events, interactions } from "../db/schema.js";
+import { clientesPadron, enviosWa, events, interactions } from "../db/schema.js";
 import { contenidoDe, type PlantillaAprobada } from "../campana/plantillasAprobadas.js";
 import { comoPlantillaAprobada, ErrorDeMeta, traerPlantillasDeMeta } from "../campana/metaPlantillas.js";
 import { deUnaCampana } from "../procedencia/pieza.js";
@@ -356,35 +356,67 @@ async function traerDeLista(ruta: string): Promise<{
   const { destinatarios: crudos, descartadas } = leerLista(filas);
 
   const telefonos = crudos.map((d) => d.telefono);
-  const conocidos = await db.execute(sql`
-    select t.telefono,
-           (select array_agg(i.texto order by i.occurred_at)
-              from ${interactions} i
-             where i.persona_id = t.telefono and i.direccion = 'entrante'
-               and i.texto is not null)                                as mensajes,
-           (select max(i.occurred_at) from ${interactions} i
-             where i.persona_id = t.telefono and i.direccion = 'entrante') as ultimo_suyo,
-           exists (select 1 from clientes_padron p
-                    where right(t.telefono, 9) = p.sufijo)              as ya_compro,
-           exists (select 1 from envios_wa w
-                    where w.telefono = t.telefono
-                      and w.pieza_clase = 'hsm' and w.pieza_ref = ${NOMBRE}
-                      and w.estado = 'enviado')                         as ya_le_llego
-      from unnest(${telefonos}::text[]) as t(telefono)
-  `);
 
-  const porTelefono = new Map(
-    (conocidos as unknown as Record<string, unknown>[]).map((f) => [String(f.telefono), f]),
+  /**
+   * TRES CONSULTAS AGRUPADAS, NO UNA CON SUBCONSULTAS CORRELACIONADAS.
+   *
+   * La forma obvia —`unnest(lista)` como tabla y cuatro `select` correlacionados
+   * al lado— es cuatro mil consultas escondidas adentro de una para un lote de
+   * mil. Acá cada pregunta se hace UNA vez sobre el conjunto y el cruce lo hace
+   * JS, que para mil filas es gratis.
+   *
+   * ⚠️ El `inArray` de drizzle y no un `unnest`: `sql.array()` es un helper de
+   * **postgres.js** (lo usa `padron/donde.ts`, que habla con icarus por esa
+   * conexión) y no existe en el `sql` de drizzle. Interpolar el arreglo pelado
+   * lo expande en mil parámetros sueltos — que es exactamente lo que `IN (…)`
+   * necesita y lo que `unnest(…)` no puede recibir.
+   */
+  const sufijos = [...new Set(telefonos.map((t) => t.slice(-9)))];
+  const [hablaron, lesLlego, compraron] = await Promise.all([
+    db.execute(sql`
+      select persona_id,
+             array_agg(texto order by occurred_at) as mensajes,
+             max(occurred_at)                      as ultimo_suyo
+        from ${interactions}
+       where direccion = 'entrante' and texto is not null
+         and ${inArray(interactions.personaId, telefonos)}
+       group by persona_id
+    `),
+    db.execute(sql`
+      select distinct telefono from ${enviosWa}
+       where pieza_clase = 'hsm' and pieza_ref = ${NOMBRE} and estado = 'enviado'
+         and ${inArray(enviosWa.telefono, telefonos)}
+    `),
+    /**
+     * El sufijo de 9 y no el E.164, porque así está guardado `clientes_padron`
+     * (`sufijoTelefonoSql`, la llave de la casa). Acá es seguro sin la guarda de
+     * país de #119: todos estos números ya se validaron como peruanos en
+     * `campana/lista.ts`, así que no hay un mexicano compartiendo sufijo.
+     */
+    db.execute(sql`
+      select distinct sufijo from ${clientesPadron}
+       where ${inArray(clientesPadron.sufijo, sufijos)}
+    `),
+  ]);
+
+  const conversaciones = new Map(
+    (hablaron as unknown as Record<string, unknown>[]).map((f) => [String(f.persona_id), f]),
+  );
+  const yaLesLlego = new Set(
+    (lesLlego as unknown as Record<string, unknown>[]).map((f) => String(f.telefono)),
+  );
+  const sufijosCliente = new Set(
+    (compraron as unknown as Record<string, unknown>[]).map((f) => String(f.sufijo)),
   );
 
   return {
     destinatarios: crudos.map((d) => {
-      const f = porTelefono.get(d.telefono) ?? {};
-      const ultimo = f.ultimo_suyo ? new Date(String(f.ultimo_suyo)) : null;
+      const f = conversaciones.get(d.telefono);
+      const ultimo = f?.ultimo_suyo ? new Date(String(f.ultimo_suyo)) : null;
       return {
         telefono: d.telefono,
         nombre: d.nombre,
-        mensajes: (f.mensajes as string[] | null) ?? [],
+        mensajes: (f?.mensajes as string[] | null) ?? [],
         /**
          * ⚠️ `ultimoSuyo` es la fecha de su último mensaje ENTRANTE, y en esta
          * rama la mayoría no tiene ninguno. Se pone la época y no `now()`: con
@@ -396,8 +428,8 @@ async function traerDeLista(ruta: string): Promise<{
         ultimoSuyo: ultimo ?? new Date(0),
         yaTienePrecio: false,
         anuncio: null,
-        yaLeLlego: Boolean(f.ya_le_llego),
-        yaCompro: Boolean(f.ya_compro),
+        yaLeLlego: yaLesLlego.has(d.telefono),
+        yaCompro: sufijosCliente.has(d.telefono.slice(-9)),
         /** Sólo en el modo lista: ¿esta persona ya habló con nosotros? */
         yaNosEscribio: ultimo !== null,
         lineaDelArchivo: d.linea,
@@ -580,7 +612,9 @@ async function main() {
     },
   );
   const porTelefono = new Map(todos.map((d) => [d.telefono, d]));
-  const publico = seleccion.publico.map((c) => porTelefono.get(c.telefono)!);
+  // `aAsignar` y NO `publico`: con `--tope` no son lo mismo, y asignar el
+  // público entero le pone dueña a gente a la que nunca se le escribió.
+  const publico = seleccion.aAsignar.map((c) => porTelefono.get(c.telefono)!);
   const elegibles = seleccion.elegibles.map((c) => porTelefono.get(c.telefono)!);
   const cuenta = contarPorMotivo(seleccion.descartados);
 

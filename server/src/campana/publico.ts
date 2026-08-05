@@ -85,6 +85,24 @@ export interface Seleccion {
   publico: Candidato[];
   /** A quién se le manda: el público menos quien ya lo recibió, hasta el tope. */
   elegibles: Candidato[];
+  /**
+   * A QUIÉN SE LE ASIGNA LA CONVERSACIÓN — y no es `publico`.
+   *
+   * ⚠️ Acá había un defecto que sólo se ve cuando hay `tope`, y se vio con la
+   * campaña del Foro: el script asignaba sobre `publico` entero y anunciaba
+   * «3.069 conversaciones · las 1.000 que reciben el mensaje MÁS las 2.069 que
+   * ya lo habían recibido». Las 2.069 **no habían recibido nada**: eran las que
+   * el tope dejó afuera. El texto era falso y la asignación, peor — le ponía
+   * dueña a dos mil personas a las que nadie les escribió, y esa dueña las ve
+   * en «Míos» como trabajo suyo.
+   *
+   * Lo que justifica asignar sin mandar es una sola cosa: **que el mensaje ya
+   * haya salido** en una corrida anterior, porque cuando esa persona conteste
+   * tiene que caer en la cola de alguien. Recortar por tope no es eso.
+   *
+   * `aAsignar` = los que reciben ahora + los que ya lo recibieron antes.
+   */
+  aAsignar: Candidato[];
   descartados: Descartado[];
 }
 
@@ -136,7 +154,9 @@ export function elegirPublico(
   const sinRepetir = publico.filter((c) => !c.yaLeLlego);
   const elegibles = opciones.tope === undefined ? sinRepetir : sinRepetir.slice(0, opciones.tope);
 
-  return { publico, elegibles, descartados };
+  // Los que reciben ahora, más los que ya lo habían recibido — nunca los que el
+  // tope dejó afuera. Ver el comentario de `aAsignar` en `Seleccion`.
+  return { publico, elegibles, aAsignar: [...elegibles, ...yaLoRecibieron], descartados };
 }
 
 function motivoDeDescarte(
