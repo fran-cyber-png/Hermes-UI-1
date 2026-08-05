@@ -456,6 +456,19 @@ async function estadoAlSalir(
   autorizadoEn: Date,
   nombrePieza: string,
 ): Promise<EstadoAlSalir> {
+  /**
+   * ⚠️ EL INSTANTE VIAJA COMO TEXTO ISO CON SU CAST, NO COMO `Date`.
+   *
+   * Interpolar el `Date` pelado hace que postgres.js muera al bindear —«The
+   * "string" argument must be of type string … Received an instance of Date»— y
+   * el veto entero se cae con él. Es un fallo de la PRIMERA fila del lote, o
+   * sea que el envío no arranca: no hay forma de que esto pase inadvertido,
+   * pero sí de que llegue hasta acá sin que nadie lo note. Llegó: `vetoAlSalir`
+   * tiene sus tests puros (le pasan el estado, no la hora) y esta consulta —el
+   * lector— nunca había corrido contra una base real hasta el primer envío del
+   * Foro.
+   */
+  const desde = autorizadoEn.toISOString();
   const filas = await db.execute(sql`
     select
       (select array_agg(i.texto order by i.occurred_at)
@@ -464,12 +477,12 @@ async function estadoAlSalir(
           and i.texto is not null)                                    as mensajes,
       exists (select 1 from ${interactions} i
                where i.persona_id = ${telefono} and i.direccion = 'entrante'
-                 and i.occurred_at > ${autorizadoEn})                 as escribio,
+                 and i.occurred_at > ${desde}::timestamptz)           as escribio,
       -- Un saliente HUMANO: el de la campaña es automatico y no cuenta como
       -- atencion (misma regla que atencion/tiempos.ts).
       exists (select 1 from envios_wa w
                where w.telefono = ${telefono} and w.estado = 'enviado'
-                 and w.creado_at > ${autorizadoEn}
+                 and w.creado_at > ${desde}::timestamptz
                  and coalesce(w.automatico, false) = false)           as le_escribieron,
       exists (select 1 from envios_wa w
                where w.telefono = ${telefono} and w.estado = 'enviado'
