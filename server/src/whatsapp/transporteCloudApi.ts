@@ -10,6 +10,7 @@ import {
   type TransporteWhatsapp,
 } from './transporte.js';
 import { normalizarTelefono } from './identidadWa.js';
+import { fueRetenido } from '../campana/estadoDePlantilla.js';
 import { RUTA_MEDIA, nombreSeguro } from './mediaDir.js';
 import { detectarOrigen, detectarOrigenReferral, type Origen } from './origen.js';
 
@@ -169,7 +170,14 @@ export class TransporteCloudApi implements TransporteWhatsapp {
         ...(plantilla.componentes?.length ? { components: plantilla.componentes } : {}),
       },
     });
-    return { idExterno: data.messages[0].id, ocurridoEn: new Date() };
+    // El pacing sólo existe acá: es una plantilla, y es la Cloud API la única
+    // que lo informa. `fueRetenido` vive en `campana/estadoDePlantilla.ts` con
+    // su test — acá no se re-implementa la lectura del campo.
+    return {
+      idExterno: data.messages[0].id,
+      ocurridoEn: new Date(),
+      retenidoPorCalidad: fueRetenido(data),
+    };
   }
 
   async enviarTexto(telefono: string, texto: string): Promise<ResultadoEnvio> {

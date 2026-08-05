@@ -113,6 +113,23 @@ export type EstadoSesion =
 export interface ResultadoEnvio {
   idExterno: string;
   ocurridoEn: Date;
+  /**
+   * ⚠️ META LO ACEPTÓ, ¿PERO LO MANDÓ?
+   *
+   * `true` cuando la Cloud API responde `message_status:
+   * "held_for_quality_assessment"` en vez de `"accepted"`. Es el **pacing**:
+   * con una plantilla nueva, despausada o sin calidad `GREEN`, Meta retiene
+   * parte de los mensajes para juntar feedback — y **si las señales son malas,
+   * los siguientes se descartan**.
+   *
+   * Sin este campo, «salieron 1000» puede querer decir «Meta aceptó 1000 POSTs
+   * y soltó 200», sin un solo error que lo delate. Es la versión con nombre
+   * propio de una cicatriz conocida: los 200 de Meta son acuses, no mensajes.
+   *
+   * `undefined` = el transporte no informa (whatsmeow no tiene este concepto).
+   * **`undefined` no es `false`**: no sabemos, y eso es distinto de «salió».
+   */
+  retenidoPorCalidad?: boolean;
 }
 
 /**

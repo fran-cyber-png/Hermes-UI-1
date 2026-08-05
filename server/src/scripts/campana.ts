@@ -2,7 +2,8 @@ import "dotenv/config";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { events, interactions } from "../db/schema.js";
-import { contenidoDe, plantillaPorNombre } from "../campana/plantillasAprobadas.js";
+import { contenidoDe, type PlantillaAprobada } from "../campana/plantillasAprobadas.js";
+import { comoPlantillaAprobada, ErrorDeMeta, traerPlantillasDeMeta } from "../campana/metaPlantillas.js";
 import { deUnaCampana } from "../procedencia/pieza.js";
 import { enviarPlantillaYProyectar } from "../whatsapp/enviarYProyectar.js";
 import { contarPorMotivo, elegirPublico } from "../campana/publico.js";
@@ -80,10 +81,55 @@ if (!args.includes("--subir") && (!LINEA || !DESDE || !HASTA)) {
 
 const SUBIR = opcion("subir");
 
-const plantilla = plantillaPorNombre(NOMBRE);
-if (!plantilla) {
-  console.error(`No conozco la plantilla «${NOMBRE}». Están en campana/plantillasAprobadas.ts`);
-  process.exit(1);
+/**
+ * LA PLANTILLA SE LE PREGUNTA A META, QUE ES QUIEN LA APRUEBA Y QUIEN LA PAUSA.
+ *
+ * Acá había `plantillaPorNombre(NOMBRE)` contra una constante compilada, y el
+ * 5-ago-2026 eso significó que una plantilla aprobada esa misma mañana
+ * (`foro_estado_5_ago`) **no se podía mandar sin un deploy**.
+ *
+ * Preguntarle a Meta arregla dos cosas de una: el catálogo deja de envejecer, y
+ * —más importante— cada campaña **verifica que la plantilla siga aprobada antes
+ * de mandar**. Una constante no puede contestar eso: diría «aprobada» sobre algo
+ * que Meta pausó hace dos horas, y el resultado es un `132015` por destinatario
+ * con la calidad del número cayendo con cada uno.
+ *
+ * Fail-closed: si no se puede preguntar, no se manda.
+ */
+async function resolverPlantilla(): Promise<PlantillaAprobada> {
+  try {
+    const deMeta = await traerPlantillasDeMeta();
+    const encontrada = deMeta.find((p) => p.nombre === NOMBRE);
+    if (!encontrada) {
+      const nombres = deMeta.map((p) => `${p.nombre} [${p.idioma}] ${p.estado}`).join("\n    · ");
+      console.error(`\n❌ Meta no tiene ninguna plantilla «${NOMBRE}». Las que hay:\n    · ${nombres}\n`);
+      process.exit(1);
+    }
+    console.log(
+      `Plantilla «${encontrada.nombre}» [${encontrada.idioma}] · ${encontrada.lectura.titulo}` +
+        ` · calidad: ${encontrada.calidad.texto}`,
+    );
+    if (encontrada.lectura.detalle) console.log(`  ${encontrada.lectura.detalle}`);
+
+    const lista = comoPlantillaAprobada(encontrada);
+    if (!lista) {
+      console.error(
+        `\n🛑 NO SE PUEDE MANDAR: ${encontrada.lectura.titulo}.` +
+          (encontrada.cuerpo === null
+            ? " Meta no devolvió el cuerpo, y sin cuerpo no hay versión de pieza (el envío quedaría fuera del lazo de resultados)."
+            : "") +
+          "\n",
+      );
+      process.exit(1);
+    }
+    return lista;
+  } catch (e) {
+    const codigo = e instanceof ErrorDeMeta ? e.codigo : "desconocido";
+    console.error(`\n🛑 No se le pudo preguntar a Meta por las plantillas (${codigo}).`);
+    console.error(`   No se manda: una copia local no puede saber si Meta la pausó.\n`);
+    console.error(e);
+    process.exit(1);
+  }
 }
 
 /**
@@ -137,12 +183,19 @@ if (SUBIR) {
 }
 
 const IMAGEN_ID = opcion("imagen-id");
-if (!SUBIR && plantilla.headerDeImagen && !IMAGEN && !IMAGEN_ID) {
+
+/**
+ * ⚠️ Esta guarda se corrió DENTRO de `main()` porque ahora la plantilla la
+ * decide Meta, no una constante: a nivel de módulo todavía no se sabe si pide
+ * imagen. Sin ella el envío falla con `132012` en el primer destinatario.
+ */
+function exigirImagenSiHaceFalta(p: PlantillaAprobada) {
+  if (!p.headerDeImagen || IMAGEN || IMAGEN_ID) return;
   console.error(
-    `«${NOMBRE}» tiene header de IMAGEN: Meta la exige en cada envío.\n` +
+    `\n«${p.nombre}» tiene header de IMAGEN: Meta la exige en cada envío.\n` +
       `  · subila:  npm run campana -- --subir /ruta/al/flyer.jpg\n` +
       `  · o pasá:  --imagen-id <id>   o   --imagen <URL pública>\n` +
-      `Sin eso el envío falla con 132012.`,
+      `Sin eso el envío falla con 132012.\n`,
   );
   process.exit(1);
 }
@@ -289,6 +342,8 @@ const hora = (d: Date) =>
 
 async function main() {
   const ahora = new Date();
+  const plantilla = await resolverPlantilla();
+  exigirImagenSiHaceFalta(plantilla);
   const todos = await traerCandidatos();
 
   /**
@@ -341,7 +396,7 @@ async function main() {
   const elegibles = seleccion.elegibles.map((c) => porTelefono.get(c.telefono)!);
   const cuenta = contarPorMotivo(seleccion.descartados);
 
-  console.log(`\n═══ CAMPAÑA «${plantilla!.nombre}» (idioma ${plantilla!.idioma}) ═══`);
+  console.log(`\n═══ CAMPAÑA «${plantilla.nombre}» (idioma ${plantilla.idioma}) ═══`);
   console.log(`línea ${LINEA} · leads que escribieron entre ${DESDE} y ${HASTA}`);
   console.log(`${ENVIAR ? "🔴 ENVÍO REAL" : "simulacro (agregá --enviar para mandar)"}\n`);
 
@@ -448,7 +503,7 @@ async function main() {
   await new Promise((listo) => setTimeout(listo, 5000));
 
   console.log(`\n🔴 Mandando de verdad. Ctrl-C corta.\n`);
-  const procedencia = deUnaCampana({ nombre: plantilla!.nombre, contenido: contenidoDe(plantilla!) });
+  const procedencia = deUnaCampana({ nombre: plantilla.nombre, contenido: contenidoDe(plantilla!) });
   // `id` gana sobre `link`: no depende de que un hosting esté arriba durante los
   // ~90 minutos que dura el reparto.
   const imagen = IMAGEN_ID ? { id: IMAGEN_ID } : IMAGEN ? { link: IMAGEN } : null;
@@ -458,6 +513,7 @@ async function main() {
 
   let ok = 0;
   const topeados: string[] = [];
+  const retenidos: string[] = [];
   const cancelados: Veredicto[] = [];
   /** Desde cuándo se cuenta «pasó algo mientras esperaba su turno». */
   const autorizadoEn = new Date();
@@ -472,7 +528,7 @@ async function main() {
      * alguien que escribe «sacame de esta lista» a las 15:00 recibe el flyer a
      * las 17:30. La regla vive pura en `campana/vetoAlSalir.ts`.
      */
-    const estado = await estadoAlSalir(d.telefono, autorizadoEn, plantilla!.nombre);
+    const estado = await estadoAlSalir(d.telefono, autorizadoEn, plantilla.nombre);
     const veredicto = vetoAlSalir(estado);
     if (!veredicto.sale) {
       cancelados.push(veredicto);
@@ -497,16 +553,29 @@ async function main() {
       automatico: true,
       procedencia,
       plantilla: {
-        nombre: plantilla!.nombre,
-        idioma: plantilla!.idioma,
+        nombre: plantilla.nombre,
+        idioma: plantilla.idioma,
         componentes,
-        cuerpoRenderizado: plantilla!.cuerpo,
+        cuerpoRenderizado: plantilla.cuerpo,
       },
     });
 
     if (r.ok) {
       ok++;
-      console.log(`[${i + 1}/${elegibles.length}] ✅ ${d.telefono}`);
+      /**
+       * ⚠️ META LO ACEPTÓ, ¿PERO LO MANDÓ?
+       *
+       * `held_for_quality_assessment` es el PACING: con una plantilla nueva
+       * (o despausada, o sin calidad GREEN) Meta retiene parte de los mensajes
+       * para juntar feedback, y **si las señales son malas descarta los que
+       * siguen**. Sin este renglón, «salieron 1000» puede querer decir «Meta
+       * aceptó 1000 POSTs y soltó 200», sin un solo error que lo delate.
+       */
+      if (r.retenidoPorCalidad) retenidos.push(d.telefono);
+      console.log(
+        `[${i + 1}/${elegibles.length}] ${r.retenidoPorCalidad ? "⏳" : "✅"} ${d.telefono}` +
+          (r.retenidoPorCalidad ? "  — RETENIDO por Meta (pacing)" : ""),
+      );
     } else {
       const esTope = /131049/.test(r.motivo);
       console.log(`[${i + 1}/${elegibles.length}] ${esTope ? "⏸" : "❌"} ${d.telefono} — ${r.motivo.slice(0, 120)}`);
@@ -532,7 +601,17 @@ async function main() {
    * Son cosas distintas y la diferencia es la que defiende el envío.
    */
   const porMotivo = contarCancelaciones(cancelados);
-  console.log(`\n─── salieron ${ok} · topeados por Meta ${topeados.length} · cancelados al salir ${cancelados.length} ───`);
+  console.log(
+    `\n─── salieron ${ok} · topeados por Meta ${topeados.length} · cancelados al salir ${cancelados.length} ───`,
+  );
+  if (retenidos.length) {
+    console.log(
+      `\n⏳ META RETUVO ${retenidos.length} de ${ok} por PACING.\n` +
+        `   No es un error: es Meta juntando feedback antes de soltar el resto.\n` +
+        `   Pasa con plantillas nuevas o sin calidad GREEN. Si la proporción es alta,\n` +
+        `   PARÁ y esperá — si las señales salen mal, los siguientes se descartan.\n`,
+    );
+  }
   if (cancelados.length) {
     for (const [motivo, n] of Object.entries(porMotivo)) {
       if (n > 0) console.log(`      ⊘ ${n} — ${motivo}`);

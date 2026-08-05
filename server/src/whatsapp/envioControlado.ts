@@ -71,7 +71,17 @@ export interface OrdenEnvioPlantilla extends Omit<OrdenEnvio, 'texto'> {
 }
 
 export type ResultadoControlado =
-  | { ok: true; idExterno: string; ocurridoEn: Date }
+  | {
+      ok: true;
+      idExterno: string;
+      ocurridoEn: Date;
+      /**
+       * Meta lo aceptó pero lo RETUVO (pacing). Ver `ResultadoEnvio` en
+       * `transporte.ts`: `undefined` es «el transporte no informa», que **no es
+       * lo mismo que `false`**.
+       */
+      retenidoPorCalidad?: boolean;
+    }
   | { ok: false; motivo: string };
 
 /**
@@ -234,7 +244,15 @@ export class EnvioControlado {
     try {
       const r = await ejecutar();
       await this.registro.marcarEnviado(auditId, r.idExterno, r.ocurridoEn);
-      return { ok: true, idExterno: r.idExterno, ocurridoEn: r.ocurridoEn };
+      // `retenidoPorCalidad` viaja tal cual: la puerta no lo interpreta, solo
+      // lo deja pasar. Perderlo acá dejaria al llamador sin saber si Meta
+      // solto el mensaje o lo retuvo por pacing.
+      return {
+        ok: true,
+        idExterno: r.idExterno,
+        ocurridoEn: r.ocurridoEn,
+        retenidoPorCalidad: r.retenidoPorCalidad,
+      };
     } catch (err) {
       const motivo = (err as Error).message;
       await this.registro.marcarFallido(auditId, motivo);
