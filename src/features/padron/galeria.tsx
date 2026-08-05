@@ -142,6 +142,38 @@ if (PARAMS.has('filtro')) {
   }, 400);
 }
 
+/** `?todo=1` tilda la página entera y salta al recorte completo (17.014). */
+if (PARAMS.has('todo')) {
+  setTimeout(() => {
+    document.querySelector<HTMLInputElement>('thead input[type="checkbox"]')?.click();
+    setTimeout(() => {
+      const b = [...document.querySelectorAll('button')].find((x) =>
+        x.textContent?.includes('de este filtro'),
+      );
+      b?.click();
+      // …y abre el destino, para ver el botón con la cifra grande.
+      setTimeout(() => {
+        [...document.querySelectorAll('button')]
+          .find((x) => x.textContent?.trim() === 'Elegir a quién')
+          ?.click();
+        // `?confirmar=1` elige destino y dispara el paso de confirmación.
+        if (PARAMS.has('confirmar')) {
+          setTimeout(() => {
+            [...document.querySelectorAll('button')]
+              .find((x) => x.textContent?.includes('Ventas13'))
+              ?.click();
+            setTimeout(() => {
+              [...document.querySelectorAll('button')]
+                .find((x) => x.textContent?.startsWith('Habilitar'))
+                ?.click();
+            }, 200);
+          }, 200);
+        }
+      }, 200);
+    }, 200);
+  }, 400);
+}
+
 if (PARAMS.has('lote') || PARAMS.has('destino')) {
   setTimeout(() => {
     document

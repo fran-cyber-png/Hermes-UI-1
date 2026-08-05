@@ -7,6 +7,7 @@ import { icarus, IcarusNoConfigurado } from "../padron/conexion.js";
 import { consultarPadron } from "../padron/consultarPadron.js";
 import { consultarFacetas } from "../padron/facetas.js";
 import { destinosDelPadron } from "../padron/destinos.js";
+import { idsDelRecorte, RecorteDemasiadoGrande, RECORTE_MAX } from "../padron/idsDelRecorte.js";
 import { filtrosSchema, POR_PAGINA_MAX } from "../padron/filtros.js";
 import {
   cargaPorVendedora,
@@ -59,6 +60,22 @@ export const padronRouter = Router();
 const cuerpoHabilitar = z.object({
   contactoIds: z.array(z.number().int().positive()).min(1).max(LOTE_MAX),
   vendedoraId: z.string().trim().min(1).max(200),
+});
+
+/**
+ * REPARTIR TODO LO FILTRADO — el recorte, no la página.
+ *
+ * Viaja el RECORTE y no 17.014 ids: la lista pesaría ~700 KB en cada sentido para
+ * algo que el server resuelve con una consulta, y además es lo que el supervisor
+ * quiso decir («todos los peruanos con venta»), no su fotografía.
+ *
+ * `excluidos` son los que destildó a mano después de marcar todo — un puñado, y
+ * por eso viajan como lista.
+ */
+const cuerpoHabilitarRecorte = z.object({
+  vendedoraId: z.string().trim().min(1).max(200),
+  filtros: z.record(z.string(), z.unknown()).default({}),
+  excluidos: z.array(z.number().int().positive()).max(5_000).default([]),
 });
 
 const cuerpoQuitar = z.object({
@@ -272,6 +289,78 @@ padronRouter.post("/habilitar", async (req, res) => {
       return;
     }
     throw e;
+  }
+});
+
+/**
+ * REPARTIR TODO EL RECORTE.
+ *
+ * ⚠️ **El recorte se resuelve DE NUEVO acá**, así que puede no dar el mismo número
+ * que la pantalla mostró: entre que el supervisor leyó «17.014» y apretó, pudieron
+ * entrar tres peruanos. Por eso la respuesta devuelve **cuántos se habilitaron de
+ * verdad** y la pantalla muestra ESE número — repetir la cifra vieja es cómo una
+ * diferencia se vuelve invisible.
+ */
+padronRouter.post("/habilitar-recorte", async (req, res) => {
+  const yo = req.vendedoraId ?? "";
+  if (!esSupervisor(yo, process.env)) {
+    res.status(403).json({ ok: false, motivo: "no_es_supervisor", message: "no repartís el padrón" });
+    return;
+  }
+
+  const parseo = cuerpoHabilitarRecorte.safeParse(req.body);
+  if (!parseo.success) {
+    res.status(400).json({
+      ok: false,
+      message: "se esperan `vendedoraId`, `filtros` y opcionalmente `excluidos`",
+      detalle: parseo.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
+    });
+    return;
+  }
+  const { vendedoraId, excluidos } = parseo.data;
+
+  // Los filtros pasan por el MISMO schema que el GET: si el reparto los leyera
+  // distinto que la lista, se repartiría un recorte que nadie vio en pantalla.
+  const filtros = filtrosDe(parseo.data.filtros, res);
+  if (!filtros) return;
+
+  try {
+    const destinos = await destinosDelPadron(db);
+    if (!esDestinoValido(vendedoraId, destinos)) {
+      res.status(409).json({
+        ok: false,
+        motivo: "destino_desconocido",
+        message: `no conozco a «${vendedoraId}». Se le puede habilitar a: ${destinos.join(", ") || "(nadie todavía)"}`,
+        destinos,
+      });
+      return;
+    }
+
+    const recorte = await recorteDe(req, res, filtros);
+    if (!recorte) return;
+    const { mando: _mando, ...soloYHabilitados } = recorte;
+
+    const ids = await idsDelRecorte(icarus(), { filtros, ...soloYHabilitados }, excluidos);
+    const habilitados = await habilitar(db, { contactoIds: ids, vendedoraId, por: yo });
+    res.json({ ok: true, habilitados, vendedoraId });
+  } catch (e) {
+    if (e instanceof RecorteDemasiadoGrande) {
+      // 409 y no 400: el pedido está bien formado, lo que no entra es el tamaño.
+      // Y el mensaje trae el número, para que acotar sea una decisión informada.
+      res.status(409).json({
+        ok: false,
+        motivo: "recorte_demasiado_grande",
+        message: e.message,
+        cuantos: e.cuantos,
+        maximo: RECORTE_MAX,
+      });
+      return;
+    }
+    if (esTablaAusente(e)) {
+      sinMigracion(res);
+      return;
+    }
+    fallaDeIcarus(res, e);
   }
 });
 

@@ -130,3 +130,29 @@ describe("repartir el padrón", () => {
     assert.equal(fila.vendedoraId, "Luz");
   });
 });
+
+describe("repartir un recorte grande", () => {
+  test("🔴 20.000 contactos entran: el INSERT se parte en tandas", async (t) => {
+    const db = await baseDePrueba(t);
+
+    // Postgres corta en 65.535 parámetros por statement y acá van 4 por fila: sin
+    // tandas, esto falla entero a partir de ~16.383. Desde que se puede repartir
+    // «todos los peruanos» (17.014 medidos) dejó de ser hipotético.
+    const muchos = Array.from({ length: 20_000 }, (_, i) => i + 1);
+    const n = await habilitar(db, { contactoIds: muchos, vendedoraId: "ventas13", por: "sup" });
+
+    assert.equal(n, 20_000);
+    assert.equal((await leerHabilitadosDe(db, "ventas13")).length, 20_000);
+  });
+
+  test("re-repartir un recorte grande a otra persona lo pisa entero", async (t) => {
+    const db = await baseDePrueba(t);
+    const muchos = Array.from({ length: 18_000 }, (_, i) => i + 1);
+
+    await habilitar(db, { contactoIds: muchos, vendedoraId: "ventas13", por: "sup" });
+    await habilitar(db, { contactoIds: muchos, vendedoraId: "ventas14", por: "sup" });
+
+    assert.equal((await leerHabilitadosDe(db, "ventas13")).length, 0);
+    assert.equal((await leerHabilitadosDe(db, "ventas14")).length, 18_000);
+  });
+});

@@ -15,6 +15,16 @@ import { fechaCorta, formatoTelefono } from '../../lib/formato';
 import { BarraReparto } from './BarraReparto';
 import { FiltroFaceta } from './FiltroFaceta';
 import {
+  alternarFila,
+  alternarPagina,
+  cuantos,
+  estaElegido,
+  NADA,
+  ofrecerElRecorte,
+  todoElRecorte,
+  type Seleccion,
+} from './seleccion';
+import {
   alternar,
   contarActivos,
   DIMENSIONES,
@@ -42,7 +52,7 @@ import {
 export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string) => void }) {
   const [texto, setTexto] = useState('');
   const [filtros, setFiltros] = useState<FiltrosPadron>({ pagina: 1, porPagina: 50 });
-  const [seleccion, setSeleccion] = useState<number[]>([]);
+  const [seleccion, setSeleccion] = useState<Seleccion>(NADA);
 
   // El texto se difiere: escribir «gonzález» son ocho requests si cada tecla
   // dispara una consulta sobre 72.923 filas.
@@ -59,7 +69,7 @@ export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string)
     // Quedarse en la página 7 de un recorte que ahora tiene 2 muestra una tabla
     // vacía sin motivo; y conservar la selección repartiría filas que ya no se ven.
     setFiltros((f) => ({ ...f, ...parcial, pagina: 1 }));
-    setSeleccion([]);
+    setSeleccion(NADA);
   }
 
   const contactos = data?.contactos ?? [];
@@ -71,7 +81,8 @@ export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string)
 
   const idsDeLaPagina = contactos.map((c) => c.id);
   const todaLaPaginaElegida =
-    idsDeLaPagina.length > 0 && idsDeLaPagina.every((id) => seleccion.includes(id));
+    idsDeLaPagina.length > 0 && idsDeLaPagina.every((id) => estaElegido(seleccion, id));
+  const elegidos = cuantos(seleccion, total);
 
   if (isError) {
     return (
@@ -106,7 +117,7 @@ export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string)
               onChange={(e) => {
                 setTexto(e.target.value);
                 setFiltros((f) => ({ ...f, pagina: 1 }));
-                setSeleccion([]);
+                setSeleccion(NADA);
               }}
               placeholder="Nombre, teléfono, correo o DNI"
               className="w-full rounded-full border border-border bg-muted py-2 pl-9 pr-8 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
@@ -191,6 +202,45 @@ export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string)
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
+        {/*
+          LA BANDA DEL RECORTE ENTERO — el puente entre «los 50 de esta página» y
+          «los 17.014 que filtré». Aparece SOLO con la página completa tildada y
+          más contactos afuera: ofrecerla siempre sería ruido, y ofrecerla con la
+          página a medias invita a saltar de 3 elegidos a 17.014 sin querer.
+        */}
+        {soySupervisor && ofrecerElRecorte(seleccion, idsDeLaPagina, total) && (
+          <div className="flex flex-wrap items-center justify-center gap-2 border-b border-border bg-navy/5 px-4 py-2 text-xs">
+            <span className="text-muted-foreground">
+              Elegiste {idsDeLaPagina.length} de esta página.
+            </span>
+            <button
+              type="button"
+              onClick={() => setSeleccion(todoElRecorte())}
+              className="font-bold text-navy underline underline-offset-2 hover:text-navy/80"
+            >
+              Elegir los {total.toLocaleString('es')} de este filtro
+            </button>
+          </div>
+        )}
+
+        {soySupervisor && seleccion.modo === 'recorte' && (
+          <div className="flex flex-wrap items-center justify-center gap-2 border-b border-border bg-navy/5 px-4 py-2 text-xs">
+            <span className="font-semibold text-navy">
+              Están elegidos los {elegidos.toLocaleString('es')} contactos de este filtro
+              {seleccion.excluidos.length > 0 &&
+                ` (sacaste ${seleccion.excluidos.length})`}
+              .
+            </span>
+            <button
+              type="button"
+              onClick={() => setSeleccion(NADA)}
+              className="font-bold text-navy underline underline-offset-2 hover:text-navy/80"
+            >
+              Elegir solo esta página
+            </button>
+          </div>
+        )}
+
         {isPending ? (
           <div className="space-y-2 p-4">
             {Array.from({ length: 8 }, (_, i) => (
@@ -210,11 +260,7 @@ export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string)
                       aria-label="Elegir toda la página"
                       checked={todaLaPaginaElegida}
                       onChange={(e) =>
-                        setSeleccion((prev) =>
-                          e.target.checked
-                            ? [...new Set([...prev, ...idsDeLaPagina])]
-                            : prev.filter((id) => !idsDeLaPagina.includes(id)),
-                        )
+                        setSeleccion((prev) => alternarPagina(prev, idsDeLaPagina, e.target.checked))
                       }
                       className="size-3.5 accent-navy"
                     />
@@ -235,10 +281,8 @@ export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string)
                   key={c.id}
                   c={c}
                   elegible={soySupervisor}
-                  elegido={seleccion.includes(c.id)}
-                  onElegir={(on) =>
-                    setSeleccion((prev) => (on ? [...prev, c.id] : prev.filter((id) => id !== c.id)))
-                  }
+                  elegido={estaElegido(seleccion, c.id)}
+                  onElegir={() => setSeleccion((prev) => alternarFila(prev, c.id))}
                   onEscribir={onEscribir}
                 />
               ))}
@@ -274,10 +318,12 @@ export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string)
       {soySupervisor && (
         <BarraReparto
           seleccion={seleccion}
+          total={total}
+          filtros={conBusqueda}
           destinos={reparto.data?.destinos ?? []}
           carga={reparto.data?.carga ?? []}
-          onListo={() => setSeleccion([])}
-          onLimpiar={() => setSeleccion([])}
+          onListo={() => setSeleccion(NADA)}
+          onLimpiar={() => setSeleccion(NADA)}
         />
       )}
     </div>
@@ -361,7 +407,7 @@ function Fila({
   c: ContactoPadron;
   elegible: boolean;
   elegido: boolean;
-  onElegir: (on: boolean) => void;
+  onElegir: () => void;
   onEscribir?: (telefono: string) => void;
 }) {
   const telefono = (c.telefono ?? '').replace(/\D/g, '');
@@ -373,7 +419,7 @@ function Fila({
             type="checkbox"
             aria-label={`Elegir a ${c.nombre ?? c.id}`}
             checked={elegido}
-            onChange={(e) => onElegir(e.target.checked)}
+            onChange={() => onElegir()}
             className="size-3.5 accent-navy"
           />
         </td>

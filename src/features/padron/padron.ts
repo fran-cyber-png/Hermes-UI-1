@@ -211,6 +211,39 @@ export function useHabilitar() {
   });
 }
 
+/**
+ * REPARTIR TODO LO FILTRADO — viaja el recorte, no 17.014 ids.
+ *
+ * La lista pesaría ~700 KB en cada sentido para algo que el server resuelve con
+ * una consulta. Y el recorte es lo que el supervisor quiso decir («todos los
+ * peruanos con venta»); una lista de ids es su fotografía, y las dos dejan de
+ * coincidir apenas entra un contacto nuevo.
+ *
+ * ⚠️ Por eso mismo el server puede habilitar un número distinto al que la
+ * pantalla mostraba: devuelve **cuántos habilitó de verdad**, y eso es lo que se
+ * muestra en el acuse.
+ */
+export function useHabilitarRecorte() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { filtros: FiltrosPadron; excluidos: number[]; vendedoraId: string }) =>
+      api<{ ok: true; habilitados: number; vendedoraId: string }>('/api/padron/habilitar-recorte', {
+        method: 'POST',
+        body: JSON.stringify({
+          vendedoraId: v.vendedoraId,
+          excluidos: v.excluidos,
+          // Sin paginar: repartir «lo filtrado» no depende de en qué página estaba.
+          filtros: { ...v.filtros, pagina: undefined, porPagina: undefined },
+        }),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['padron'] });
+      void qc.invalidateQueries({ queryKey: ['padron-facetas'] });
+      void qc.invalidateQueries({ queryKey: ['padron-reparto'] });
+    },
+  });
+}
+
 export function useQuitarDelReparto() {
   const qc = useQueryClient();
   return useMutation({

@@ -11,8 +11,17 @@ import { contactoHabilitado } from "../db/schema.js";
  * y no escribe nada**.
  */
 
-/** Tope de un reparto de una vez. Ver `LOTE_MAX` en la ruta para el porqué. */
+/** Tope de un reparto por lista explícita de ids. Ver la ruta para el porqué. */
 export const LOTE_MAX = 500;
+
+/**
+ * Filas por INSERT.
+ *
+ * Postgres corta en 65.535 parámetros por statement y acá van 4 por fila, así que
+ * el techo real está en ~16.383: con 5.000 hay margen de sobra. No es velocidad,
+ * es que el statement no reviente cuando se reparte un recorte entero.
+ */
+const TANDA_INSERT = 5_000;
 
 /**
  * Todos los ids ya repartidos.
@@ -73,25 +82,34 @@ export async function habilitar(
   // («cannot affect row a second time»), y un 500 por un doble clic en la lista
   // se lee como que el reparto no funciona.
   const unicos = [...new Set(contactoIds)];
+  const cuando = new Date();
 
-  await base
-    .insert(contactoHabilitado)
-    .values(
-      unicos.map((id) => ({
-        contactoId: id,
-        vendedoraId,
-        habilitadoPor: por,
-        habilitadoEn: new Date(),
-      })),
-    )
-    .onConflictDoUpdate({
-      target: contactoHabilitado.contactoId,
-      set: {
-        vendedoraId: sql`excluded.vendedora_id`,
-        habilitadoPor: sql`excluded.habilitado_por`,
-        habilitadoEn: sql`excluded.habilitado_en`,
-      },
-    });
+  // ⚠️ EN TANDAS, Y NO ES UNA OPTIMIZACIÓN. El protocolo de Postgres corta en
+  // **65.535 parámetros por statement**, y acá van 4 por fila: a partir de ~16.383
+  // contactos el INSERT falla entero. Desde que se puede repartir un recorte
+  // completo (17.014 peruanos, por ejemplo) eso dejó de ser hipotético. 5.000
+  // deja margen de sobra y sigue siendo una sola ida por tanda.
+  for (let i = 0; i < unicos.length; i += TANDA_INSERT) {
+    const tanda = unicos.slice(i, i + TANDA_INSERT);
+    await base
+      .insert(contactoHabilitado)
+      .values(
+        tanda.map((id) => ({
+          contactoId: id,
+          vendedoraId,
+          habilitadoPor: por,
+          habilitadoEn: cuando,
+        })),
+      )
+      .onConflictDoUpdate({
+        target: contactoHabilitado.contactoId,
+        set: {
+          vendedoraId: sql`excluded.vendedora_id`,
+          habilitadoPor: sql`excluded.habilitado_por`,
+          habilitadoEn: sql`excluded.habilitado_en`,
+        },
+      });
+  }
 
   return unicos.length;
 }
