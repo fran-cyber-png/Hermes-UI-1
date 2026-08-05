@@ -5,7 +5,13 @@ import { events, interactions } from "../db/schema.js";
 import { contenidoDe, plantillaPorNombre } from "../campana/plantillasAprobadas.js";
 import { deUnaCampana } from "../procedencia/pieza.js";
 import { enviarPlantillaYProyectar } from "../whatsapp/enviarYProyectar.js";
-import { huboRechazo } from "../autorespuesta/rechazo.js";
+import { contarPorMotivo, elegirPublico } from "../campana/publico.js";
+import {
+  contarCancelaciones,
+  vetoAlSalir,
+  type EstadoAlSalir,
+  type Veredicto,
+} from "../campana/vetoAlSalir.js";
 
 /**
  * LA CAMPAÑA POR PLANTILLA APROBADA — dry-run por default.
@@ -144,12 +150,21 @@ if (!SUBIR && plantilla.headerDeImagen && !IMAGEN && !IMAGEN_ID) {
 interface Destinatario {
   telefono: string;
   nombre: string | null;
-  primerMensaje: string;
+  /**
+   * TODOS sus mensajes entrantes, en orden.
+   *
+   * ⚠️ Acá había `primerMensaje: string`, y esa forma del dato ES el defecto:
+   * un campo que sólo puede contener un texto obliga a preguntarle el rechazo a
+   * un texto. Con la lista, `huboRechazo` recibe lo que su firma pide.
+   */
+  mensajes: string[];
   ultimoSuyo: Date;
   yaTienePrecio: boolean;
   /** El anuncio por el que llegó, si llegó por uno. `null` = entró de otra forma. */
   anuncio: string | null;
   yaLeLlego: boolean;
+  /** Tiene una compra que la respalda en `clientes_padron` (nunca `n_purchases`). */
+  yaCompro: boolean;
 }
 
 /**
@@ -170,9 +185,17 @@ async function traerCandidatos(): Promise<Destinatario[]> {
        group by persona_id
     )
     select e.persona_id, e.nombre, e.ultimo_suyo,
-           (select i.texto from ${interactions} i
+           -- TODOS sus mensajes, en orden. Antes acá salía sólo el primero
+           -- (limit 1) y eso hacía imposible ver un rechazo posterior.
+           (select array_agg(i.texto order by i.occurred_at)
+              from ${interactions} i
              where i.persona_id = e.persona_id and i.direccion = 'entrante'
-             order by i.occurred_at limit 1) as primer_mensaje,
+               and i.texto is not null) as mensajes,
+           -- Ya compró: se exige una venta que lo respalde. El nivel de
+           -- clientes_padron se congela al sincronizar y sale del EXISTS sobre
+           -- icarus.sales, nunca del contador n_purchases (55% infundado, #133).
+           exists (select 1 from clientes_padron p
+                    where right(e.persona_id, 9) = p.sufijo) as ya_compro,
            exists (select 1 from ${interactions} i
                     where i.persona_id = e.persona_id and i.direccion = 'saliente'
                       and i.texto ~ '(S/|USD|\\$|soles|precio|inversi)') as ya_tiene_precio,
@@ -205,12 +228,57 @@ async function traerCandidatos(): Promise<Destinatario[]> {
   return (filas as unknown as Record<string, unknown>[]).map((f) => ({
     telefono: String(f.persona_id),
     nombre: (f.nombre as string | null) ?? null,
-    primerMensaje: (f.primer_mensaje as string | null) ?? "",
+    mensajes: (f.mensajes as string[] | null) ?? [],
     ultimoSuyo: new Date(String(f.ultimo_entrante_global ?? f.ultimo_suyo)),
     yaTienePrecio: Boolean(f.ya_tiene_precio),
     anuncio: (f.anuncio as string | null) ?? null,
     yaLeLlego: Boolean(f.ya_le_llego),
+    yaCompro: Boolean(f.ya_compro),
   }));
+}
+
+/**
+ * EL ESTADO DE UNA PERSONA EN EL INSTANTE DE MANDARLE.
+ *
+ * Es el lector del veto: cinco hechos crudos, ni un veredicto. El veredicto lo
+ * da `vetoAlSalir`, que es puro y tiene tests — acá no puede haber un `if` que
+ * decida, porque sería una segunda implementación de la regla.
+ *
+ * Cuesta una consulta por envío. Es barato al lado de lo que evita: con 30–60 s
+ * entre mensajes, esta consulta es ruido y la promo a quien dijo que no no
+ * se puede deshacer.
+ */
+async function estadoAlSalir(
+  telefono: string,
+  autorizadoEn: Date,
+  nombrePieza: string,
+): Promise<EstadoAlSalir> {
+  const filas = await db.execute(sql`
+    select
+      (select array_agg(i.texto order by i.occurred_at)
+         from ${interactions} i
+        where i.persona_id = ${telefono} and i.direccion = 'entrante'
+          and i.texto is not null)                                    as mensajes,
+      exists (select 1 from ${interactions} i
+               where i.persona_id = ${telefono} and i.direccion = 'entrante'
+                 and i.occurred_at > ${autorizadoEn})                 as escribio,
+      -- Un saliente HUMANO: el de la campaña es automatico y no cuenta como
+      -- atencion (misma regla que atencion/tiempos.ts).
+      exists (select 1 from envios_wa w
+               where w.telefono = ${telefono} and w.estado = 'enviado'
+                 and w.creado_at > ${autorizadoEn}
+                 and coalesce(w.automatico, false) = false)           as le_escribieron,
+      exists (select 1 from envios_wa w
+               where w.telefono = ${telefono} and w.estado = 'enviado'
+                 and w.pieza_clase = 'hsm' and w.pieza_ref = ${nombrePieza}) as ya_le_llego
+  `);
+  const f = (filas as unknown as Record<string, unknown>[])[0] ?? {};
+  return {
+    mensajes: (f.mensajes as string[] | null) ?? [],
+    escribioDesdeQueSeAutorizo: Boolean(f.escribio),
+    leEscribieronDesdeQueSeAutorizo: Boolean(f.le_escribieron),
+    yaLeLlego: Boolean(f.ya_le_llego),
+  };
 }
 
 /** Horas desde su último mensaje. La ventana de servicio son 24. */
@@ -223,13 +291,18 @@ async function main() {
   const ahora = new Date();
   const todos = await traerCandidatos();
 
-  // El único descarte con criterio, y no es nuevo: quien ya dijo que no.
-  // `rechazo.ts` es puro, tiene tests y está sesgado al falso negativo a
-  // propósito — se reusa tal cual en vez de escribir un segundo criterio.
-  const conRechazo = new Set<string>();
-  for (const d of todos) {
-    if (huboRechazo([d.primerMensaje])) conRechazo.add(d.telefono);
-  }
+  /**
+   * ⚠️ ACÁ VIVÍA EL DEFECTO QUE MANDÓ DOS PROMOS A QUIEN HABÍA DICHO QUE NO.
+   *
+   * Decía `huboRechazo([d.primerMensaje])`. Esa función mira una LISTA
+   * (`textos.some(expresaRechazo)`) porque un «ya no quiero» del tercer mensaje
+   * vale igual que uno del primero — y con un solo texto, quien saludó con
+   * «Hola» calificaba como público. Medido sobre los 88 de la primera corrida:
+   * detectó 0 rechazos donde había 2.
+   *
+   * Ahora la selección entera vive pura y con tests en `campana/publico.ts`, y
+   * pregunta las TRES formas de decir que no que `rechazo.ts` distingue.
+   */
 
   /**
    * SOLO LOS QUE LLEGARON POR UN ANUNCIO (por default).
@@ -245,24 +318,28 @@ async function main() {
    */
   const soloDeAnuncio = !bandera("todos");
 
-  const sinAnuncio = todos.filter((d) => soloDeAnuncio && !d.anuncio);
-  const yaLesLlego = todos.filter((d) => d.yaLeLlego);
-
   /**
-   * EL PÚBLICO de la campaña: a quién le corresponde este mensaje.
+   * EL PÚBLICO y LOS ELEGIBLES los decide `campana/publico.ts`, puro y con tests.
    *
-   * Se separa de `elegibles` a propósito. La ASIGNACIÓN va sobre este conjunto
-   * —incluidos los que ya recibieron el mensaje en una corrida anterior—, porque
-   * la conversación es suya igual: dejarlos sin dueño porque el envío llegó
-   * primero es exactamente al revés de lo que hace falta cuando contesten.
+   * Se separan a propósito: la ASIGNACIÓN va sobre el público —incluidos los que
+   * ya recibieron el mensaje en una corrida anterior—, porque la conversación es
+   * suya igual. Dejarlos sin dueño porque el envío llegó primero es al revés de
+   * lo que hace falta cuando contesten.
    */
-  const publico = todos
-    .filter((d) => !conRechazo.has(d.telefono))
-    .filter((d) => !soloDeAnuncio || d.anuncio);
-
-  // A quién se le MANDA: el público menos quien ya lo recibió. Una corrida
-  // frenada a la mitad no puede convertirse en un segundo mensaje.
-  const elegibles = publico.filter((d) => !d.yaLeLlego).slice(0, TOPE);
+  const seleccion = elegirPublico(
+    todos.map((d) => ({
+      telefono: d.telefono,
+      mensajes: d.mensajes,
+      anuncio: d.anuncio,
+      yaLeLlego: d.yaLeLlego,
+      yaCompro: d.yaCompro,
+    })),
+    { soloDeAnuncio, tope: TOPE },
+  );
+  const porTelefono = new Map(todos.map((d) => [d.telefono, d]));
+  const publico = seleccion.publico.map((c) => porTelefono.get(c.telefono)!);
+  const elegibles = seleccion.elegibles.map((c) => porTelefono.get(c.telefono)!);
+  const cuenta = contarPorMotivo(seleccion.descartados);
 
   console.log(`\n═══ CAMPAÑA «${plantilla!.nombre}» (idioma ${plantilla!.idioma}) ═══`);
   console.log(`línea ${LINEA} · leads que escribieron entre ${DESDE} y ${HASTA}`);
@@ -297,10 +374,20 @@ async function main() {
   console.log(`  · ventana abierta: ${abiertas} (a estos se les puede escribir texto libre también)`);
   console.log(`  · ventana cerrada: ${elegibles.length - abiertas} (solo alcanzables con esta plantilla)`);
   console.log(`  · con precio ya enviado: ${elegibles.filter((d) => d.yaTienePrecio).length}`);
+  /**
+   * LOS DESCARTADOS SE IMPRIMEN TODOS, incluso los que dieron cero.
+   *
+   * Un motivo que desaparece de la lista cuando no agarró a nadie se lee como
+   * «ese filtro no existe». Y el que más importa —«ya dijeron que no»— es
+   * justamente el que dio 0 en la primera corrida **porque estaba roto**: verlo
+   * en 0 al lado de los otros es lo que habría hecho sospechar.
+   */
   console.log(`\nDescartados:`);
-  if (soloDeAnuncio) console.log(`  · ${sinAnuncio.length} porque NO llegaron por un anuncio (--todos los incluye)`);
-  if (yaLesLlego.length) console.log(`  · ${yaLesLlego.length} porque YA recibieron esta campaña`);
-  if (conRechazo.size) console.log(`  · ${conRechazo.size} porque ya dijeron que no`);
+  console.log(`  · ${cuenta.rechazo} porque ya dijeron que no`);
+  console.log(`  · ${cuenta.despedida} porque se despidieron`);
+  console.log(`  · ${cuenta.ya_compro} porque YA compraron`);
+  if (soloDeAnuncio) console.log(`  · ${cuenta.sin_anuncio} porque NO llegaron por un anuncio (--todos los incluye)`);
+  console.log(`  · ${cuenta.ya_le_llego} porque YA recibieron esta campaña`);
   console.log(
     `\nEspaciado: ${ESPERA_MIN_MS / 1000}s entre envíos · imagen: ${IMAGEN_ID ? `media_id ${IMAGEN_ID}` : (IMAGEN ?? "(ninguna)")}`,
   );
@@ -371,13 +458,42 @@ async function main() {
 
   let ok = 0;
   const topeados: string[] = [];
+  const cancelados: Veredicto[] = [];
+  /** Desde cuándo se cuenta «pasó algo mientras esperaba su turno». */
+  const autorizadoEn = new Date();
 
   for (const [i, d] of elegibles.entries()) {
+    /**
+     * ⚠️ EL VETO SE PREGUNTA ACÁ, NO ALLÁ ARRIBA.
+     *
+     * `elegirPublico` decidió hace rato. Este lote dura horas, y en ese rato la
+     * persona puede haber contestado, haberse despedido o haber dicho que no.
+     * Su lugar en la fila se decidió antes de que hablara: sin esta pregunta,
+     * alguien que escribe «sacame de esta lista» a las 15:00 recibe el flyer a
+     * las 17:30. La regla vive pura en `campana/vetoAlSalir.ts`.
+     */
+    const estado = await estadoAlSalir(d.telefono, autorizadoEn, plantilla!.nombre);
+    const veredicto = vetoAlSalir(estado);
+    if (!veredicto.sale) {
+      cancelados.push(veredicto);
+      console.log(`[${i + 1}/${elegibles.length}] ⊘ ${d.telefono} — cancelado: ${veredicto.motivo}`);
+      continue;
+    }
+
     const r = await enviarPlantillaYProyectar({
       vendedoraId: "campana",
       numeroPropio: LINEA!,
       telefono: d.telefono,
-      referencia: `campana:${plantilla!.nombre}:${d.telefono}`,
+      /**
+       * LA REFERENCIA ES LA CLAVE DE LA CONVERSACIÓN, no una sintética.
+       *
+       * Decía `campana:<pieza>:<telefono>`, y eso dejó los 88 envíos INVISIBLES
+       * para el lazo de resultados: `consultarResultados.ts` filtra por
+       * `referencia LIKE 'conv:%'`, así que la procedencia se estampó perfecta
+       * y no la ve nadie. Además partía cada conversación en dos y el join
+       * contra `conversacion_asignada` daba cero filas en silencio.
+       */
+      referencia: `conv:whatsapp:${d.telefono}:${LINEA}`,
       automatico: true,
       procedencia,
       plantilla: {
@@ -408,7 +524,21 @@ async function main() {
     }
   }
 
-  console.log(`\n─── salieron ${ok} · topeados por Meta ${topeados.length} ───\n`);
+  /**
+   * EL RESUMEN DICE LO CANCELADO CON SU MOTIVO.
+   *
+   * Sin este renglón, «salieron 46 de 75» se lee como que fallaron 29 — y lo
+   * que pasó es que a 29 personas se decidió, con criterio, no escribirles.
+   * Son cosas distintas y la diferencia es la que defiende el envío.
+   */
+  const porMotivo = contarCancelaciones(cancelados);
+  console.log(`\n─── salieron ${ok} · topeados por Meta ${topeados.length} · cancelados al salir ${cancelados.length} ───`);
+  if (cancelados.length) {
+    for (const [motivo, n] of Object.entries(porMotivo)) {
+      if (n > 0) console.log(`      ⊘ ${n} — ${motivo}`);
+    }
+  }
+  console.log("");
   process.exit(0);
 }
 
