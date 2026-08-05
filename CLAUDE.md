@@ -572,10 +572,29 @@ nombre · 61.298 con correo.
   peso, lo declarado en cursiva tenue. El producto sale por **LATERAL** (venta más reciente, ítem
   más caro: «Certificado» y «Certificado con Portadiploma» son el #2 y #3 del catálogo por volumen);
   un JOIN plano multiplicaría la fila e inflaría el total con el que se reparte.
+- **SE PUEDE REPARTIR TODO LO FILTRADO, no solo la página**: con la página entera tildada aparece
+  «Elegir los 17.014 de este filtro». Ahí la selección **cambia de forma** (`seleccion.ts`, puro y
+  con tests): deja de ser una lista de ids y pasa a ser `{modo:'recorte', excluidos}` — «todo lo
+  filtrado menos estos». **Viaja el FILTRO, no los ids** (`POST /api/padron/habilitar-recorte`): 72.923
+  ids son ~700 KB en cada sentido para algo que el server resuelve con una consulta, y el recorte es
+  lo que el supervisor quiso decir, no su fotografía.
+  · ⚠️ **Destildar en modo recorte NO rompe el modo** — volver a `lista` con los ids de la página
+    sería el bug clásico (destildás uno de 17.014 y te quedan 49), sin síntoma hasta ver el acuse.
+  · ⚠️ **El INSERT va en tandas de 5.000, y no es optimización**: Postgres corta en **65.535
+    parámetros por statement** y acá van 4 por fila, así que a partir de ~16.383 el insert fallaba
+    entero. Desde que se puede repartir un recorte completo dejó de ser hipotético.
+  · **`RECORTE_MAX` (100.000) cubre el padrón entero a propósito**: un tope por debajo haría que la
+    pantalla ofrezca «los 72.923» y el server los rechace DESPUÉS de confirmar. Cuando se topa, el
+    error dice el número y pide acotar — **nunca recorta en silencio**.
+  · **A partir de 500 hay confirmación** con la cifra escrita (`CONFIRMAR_DESDE`). No bloquea —
+    repartir 17.014 es decisión del supervisor— pero deja de ser un clic suelto (regla dura #7). El
+    diálogo aclara que **repartir no manda ningún mensaje**.
+  · El acuse muestra **cuántos habilitó el SERVER**, no la cifra que la pantalla tenía: el recorte se
+    resuelve de nuevo allá y pueden haber entrado contactos nuevos.
 - **Ver la UI sin server ni base**: `npx vite --port 5199` → `/galeria-padron.html`
   (`?vendedora=1` la vista de quien no reparte, `?filtro=1` las facetas abiertas, `?lote=1` la barra
-  de reparto, `?destino=1` el desplegable con la carga de cada vendedora). Capturas en
-  `docs/evidencia/padron-*.png`.
+  de reparto, `?destino=1` el desplegable con la carga, `?todo=1` el recorte entero elegido,
+  `?todo=1&confirmar=1` la confirmación). Capturas en `docs/evidencia/padron-*.png`.
 
 ## El panel derecho — ordenado por lo que decide una venta (ADR 0017)
 
