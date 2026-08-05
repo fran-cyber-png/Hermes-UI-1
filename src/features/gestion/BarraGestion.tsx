@@ -6,6 +6,7 @@ import { usePopover } from '../../lib/teclado/usePopover';
 import type { Conversacion } from '../canales/conversaciones';
 import { opcionesRapidas, useAgenda } from '../agenda/agenda';
 import { PasarConversacion } from '../reparto/PasarConversacion';
+import { RegistrarEvento } from '../eventos/RegistrarEvento';
 import { BotonLlamar } from './BotonLlamar';
 import { Intereses } from './Intereses';
 import { MenuHerramientas } from './MenuHerramientas';
@@ -457,7 +458,14 @@ export function BarraGestion({
           {conversacion.canal === 'whatsapp' && conversacion.persona_id && (
             <BotonLlamar telefono={conversacion.persona_id} />
           )}
+          {/* AGENDAR es una PROMESA a futuro («la llamo mañana 9:00», cae en la
+              Agenda); REGISTRAR es un HECHO del pasado («preguntó por gestión
+              pública»), que cae en el timeline del contacto y queda firmado.
+              Van pegados porque son los dos gestos de «esto que acaba de pasar,
+              que no se pierda» — y separados porque uno mira adelante y el otro
+              atrás. Ninguno de los dos envía nada. */}
           <AgendarRapido conversacion={conversacion} />
+          <RegistrarEvento clave={conversacion.clave} />
           <MenuHerramientas conversacion={conversacion} />
         </span>
       </div>

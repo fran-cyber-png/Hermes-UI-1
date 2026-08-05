@@ -6,6 +6,8 @@ import type { Ficha } from '../cerberus/ficha';
 import { useLeadForm } from '../cerberus/BloqueLeadForm';
 import { useIntereses } from '../gestion/Intereses';
 import { useSenales } from '../senales/senales';
+import { useEventos, useMutacionesEventos } from '../eventos/eventos';
+import { RegistrarEvento } from '../eventos/RegistrarEvento';
 import { estadoDelContacto } from './estadoContacto';
 import { nombreDelContacto } from './identidad';
 import { ensamblarTimeline } from './timeline';
@@ -29,7 +31,19 @@ function formatearTelefono(raw: string): string {
   return '+' + [cc, ...grupos].join(' ');
 }
 
-export function PanelDerecho({ conversacion }: { conversacion: Conversacion }) {
+export function PanelDerecho({
+  conversacion,
+  miVendedora,
+}: {
+  conversacion: Conversacion;
+  /**
+   * Quién está mirando. Lo usa el timeline para decidir qué eventos podés
+   * editar o borrar — solo los tuyos. Opcional porque la galería monta este
+   * panel sin sesión: sin esto, `esMio` da `false` y no se dibuja ningún botón,
+   * que es la degradación correcta (nunca al revés).
+   */
+  miVendedora?: string | null;
+}) {
   /**
    * El registro de la venta. Vive acá y no adentro del pie porque el pie es
    * presentación: decide cómo se ve el botón, no qué pasa al tocarlo.
@@ -42,6 +56,8 @@ export function PanelDerecho({ conversacion }: { conversacion: Conversacion }) {
   const lead = useLeadForm(telefono, esWa);
   const { data: senales } = useSenales([conversacion.clave]);
   const { data: intereses } = useIntereses(conversacion.clave);
+  const { data: eventos } = useEventos(conversacion.clave);
+  const { editar, borrar } = useMutacionesEventos(conversacion.clave);
 
   const padron = marcaDeCliente(conversacion);
   const estado = estadoDelContacto({
@@ -67,6 +83,8 @@ export function PanelDerecho({ conversacion }: { conversacion: Conversacion }) {
     senales: senales?.senales[conversacion.clave],
     leadForm: lead.data?.lead ? { campana: lead.data.lead.campana ?? undefined, fecha: lead.data.lead.fecha } : undefined,
     conversacion: { persona_nombre: conversacion.persona_nombre ?? undefined, lead_nombre: conversacion.lead_nombre ?? undefined },
+    eventos,
+    yo: miVendedora,
   });
 
   const nombre = nombreData.principal ?? 'Sin nombre';
@@ -117,12 +135,29 @@ export function PanelDerecho({ conversacion }: { conversacion: Conversacion }) {
                 </h4>
                 <ol className="mt-0.5">
                   {grupo.eventos.map((e, i) => (
-                    <EventoLinea key={e.id} e={e} esUltimo={i === grupo.eventos.length - 1} />
+                    <EventoLinea
+                      key={e.id}
+                      e={e}
+                      esUltimo={i === grupo.eventos.length - 1}
+                      onEditar={(id, nota) => editar.mutate({ id, nota: nota || null, curso: e.valor ?? null })}
+                      onBorrar={(id) => borrar.mutate(id)}
+                    />
                   ))}
                 </ol>
               </li>
             ))}
           </ol>
+
+          {/* ══ REGISTRAR ALGO EN EL TIMELINE ══════════════════════════════
+              Va al PIE de la lista y no arriba: la pregunta que contesta es
+              «pasó algo más», y esa se hace después de leer lo que ya pasó.
+
+              El mismo componente que el chip de la barra del chat: uno está
+              donde la vendedora escribe, el otro donde lee. Dos componentes
+              distintos serían dos vocabularios en dos meses. */}
+          <div className="mt-3">
+            <RegistrarEvento clave={conversacion.clave} variante="bloque" />
+          </div>
 
           {/* ══ LA FICHA DE CERBERUS ══════════════════════════════════════
               `FichaContacto` estaba HUÉRFANO: el componente que muestra DNI,

@@ -627,6 +627,76 @@ export const intereses = pgTable(
 );
 
 /**
+ * EVENTOS DEL CONTACTO — lo que la vendedora ESCUCHÓ, fechado y firmado.
+ *
+ * El timeline del panel derecho se armaba solo con lo DERIVADO: la compra que
+ * dice Cerberus, la llegada que dice Meta, el enfriamiento que calcula
+ * `senales/`. Nada de lo que pasa en la conversación —«preguntó por el diploma
+ * de gestión pública», «dijo que lo ve con su jefe», «está caro»— tenía dónde
+ * caer. Esta tabla es ese lugar.
+ *
+ * Por qué una tabla nueva y no `gestiones` ni `notas`, que ya existen:
+ *   · **`gestiones`** tiene `etapa` NOT NULL — registrar «preguntó por X»
+ *     obligaría a declarar una etapa del embudo y a pasar por las compuertas de
+ *     `registrarGestion.ts`. Anotar un hecho no es mover el embudo.
+ *   · **`notas`** es PRIVADA por autora (`listarNotas` filtra por
+ *     `vendedora_id`) y es prosa libre. Acá el punto es el contrario: se ve en
+ *     equipo, y el `tipo` existe para poder CONTAR («¿cuántos preguntaron por
+ *     este curso esta semana?»), que es lo que un texto libre nunca permite.
+ *
+ * **Se ve en equipo, se edita por autora.** La conversación es compartida
+ * (Hermes no tiene modelo de permisos, ver ADR 0036), así que todas leen todo;
+ * pero un evento es una AFIRMACIÓN de quien lo escribió, y por eso corregirlo o
+ * borrarlo es solo de ella. El borrado es lógico (`archivado_at`), como en
+ * `notas`: lo que se afirmó y después se retiró es un dato, no un no-evento.
+ */
+export const eventosContacto = pgTable(
+  "eventos_contacto",
+  {
+    id: bigserial({ mode: "number" }).primaryKey(),
+    /** La conversación (clave de la cola). No hay FK: la clave es derivada. */
+    clave: text("clave").notNull(),
+    /**
+     * El término del vocabulario (`eventos/catalogo.ts`): `pregunto_curso`,
+     * `objecion`… `text` y no un enum de Postgres A PROPÓSITO — el vocabulario
+     * crece desde el front, que se despliega sin reiniciar el server (N4 va
+     * solo, N5 es un botón). Un enum convertiría cada tipo nuevo en una
+     * migración, y la ventana entre los dos deploys en un error para la
+     * vendedora. La forma del término la valida `tipoValido`.
+     */
+    tipo: text("tipo").notNull(),
+    /** El dato estructurado del tipo. Hoy solo lo usa `pregunto_curso`. */
+    curso: text("curso"),
+    /**
+     * `codigo_producto` de Cerberus cuando el curso salió del catálogo vivo.
+     * Es lo que hace que esto se pueda cruzar con ventas y con la pauta en vez
+     * de ser un nombre parecido. `NULL` = texto libre (el curso no está en
+     * Cerberus), igual que en `intereses`.
+     */
+    productoId: text("producto_id"),
+    /** El comentario en criollo. El matiz — el `tipo` es lo que se cuenta. */
+    nota: text("nota"),
+    /**
+     * QUIÉN LO REGISTRÓ. El username de Cerberus, **en la grafía que vino**
+     * (`Luz` y `luz` son la misma persona y las dos están vivas en prod). No se
+     * reescribe: reescribirla rompería el cruce con `gestiones` y
+     * `estado_conversacion`. Se compara normalizando los DOS lados
+     * (`mismaVendedora`).
+     */
+    vendedoraId: text("vendedora_id").notNull(),
+    creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+    /** null = nunca editado; se setea en cada PATCH. */
+    editadoAt: timestamp("editado_at", { withTimezone: true }),
+    /** null = vivo. No hay borrado físico. */
+    archivadoAt: timestamp("archivado_at", { withTimezone: true }),
+  },
+  (t) => [
+    // (clave, creado_at DESC): el orden exacto con el que el timeline los pide.
+    index("eventos_contacto_clave_idx").on(t.clave.asc(), t.creadoAt.desc()),
+  ],
+);
+
+/**
  * CORREOS ENVIADOS — la auditoría del canal email.
  *
  * Un correo = UNA vendedora, UN destinatario, una acción humana — la misma

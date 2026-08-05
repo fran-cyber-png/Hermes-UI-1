@@ -19,6 +19,7 @@ import { authRouter } from "./routes/auth.js";
 import { contactosRouter } from "./routes/contactos.js";
 import { agendaRouter } from "./routes/agenda.js";
 import { gestionesRouter } from "./routes/gestiones.js";
+import { eventosRouter } from "./routes/eventos.js";
 import { categoriasRouter } from "./routes/categorias.js";
 import { senalesRouter } from "./routes/senales.js";
 import { resultadosRouter } from "./routes/resultados.js";
@@ -95,6 +96,7 @@ app.use("/api/auth", authRouter); // login de vendedoras contra Cerberus
 app.use("/api/contactos", contactosRouter); // la ficha del contacto contra Cerberus
 app.use("/api/agenda", agendaRouter); // los seguimientos agendados de cada vendedora
 app.use("/api/gestiones", gestionesRouter); // bitácora comercial: etapas, próximas acciones, etiquetas
+app.use("/api/eventos", eventosRouter); // lo que la vendedora ESCUCHÓ, en el timeline del contacto — con autora
 app.use("/api/categorias", categoriasRouter); // catálogo de categorías con color, por vendedora (#48)
 app.use("/api/senales", senalesRouter); // cotizado / se enfrió: etiquetas derivadas, no guardadas (ADR 0016)
 app.use("/api/resultados", resultadosRouter); // el lazo: qué pieza cierra ventas y cuál solo gasta mensajes (#169)

@@ -591,7 +591,12 @@ export default function App() {
                   siempre: el bloque del porqué es `shrink-0` y él `flex-1`. Sin
                   esto, apilarlos dejaba al de abajo aplastado a media frase. */}
               <div className="min-h-0 flex-1">
-                <PanelDerecho conversacion={abierta} />
+                {/* `miVendedora` viaja como prop y no llamando a `useSesion()`
+                    adentro: ese hook hace su propio `fetch` a `/api/auth/yo`
+                    al montar (no es react-query), así que ahí abajo sería un
+                    request más por cada conversación que se abre. Lo necesita
+                    el timeline para saber cuáles eventos podés editar. */}
+                <PanelDerecho conversacion={abierta} miVendedora={vendedora.id} />
               </div>
             </aside>
           )}
