@@ -5,7 +5,14 @@ import { useBlobAutenticado } from '../../lib/datos/blobAutenticado';
 import { formatoTelefono, tempClass } from '../../lib/formato';
 import { usePopover } from '../../lib/teclado/usePopover';
 import { ejecutarEnvioComposer, guardarBorrador, leerBorrador } from './borradorComposer';
-import { decidirPegado, motivoPorTamano, nombreFinalDePegado, pesoLegible } from './pegarAdjunto';
+import {
+  decidirPegado,
+  motivoPorTamano,
+  nombreFinalDePegado,
+  pesoLegible,
+  TOPE_ADJUNTO_BYTES,
+} from './pegarAdjunto';
+import { AdjuntoPesado } from './AdjuntoPesado';
 import { alPonerEnComposer } from './puenteComposer';
 import { piezaDelTexto } from './procedenciaComposer';
 import { textoDelBoton } from '../autorespuesta/revision';
@@ -570,6 +577,12 @@ function ComposerWa({
   const [adjunto, setAdjunto] = useState<File | null>(null);
   /** Lo que el pegado dejó afuera o rechazó. Se limpia solo al elegir otro adjunto. */
   const [avisoPegado, setAvisoPegado] = useState<string | null>(null);
+  /**
+   * Un VIDEO que no entra por el tope de la línea. No es lo mismo que
+   * `avisoPegado`: acá hay algo que hacer —achicarlo— y hay un archivo que
+   * conservar mientras se hace. Un zip pesado sigue siendo un aviso a secas.
+   */
+  const [videoPesado, setVideoPesado] = useState<{ archivo: File; motivo: string } | null>(null);
   const archivoRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const telefonoActualRef = useRef(telefono);
@@ -632,11 +645,24 @@ function ComposerWa({
     if (r.tipo === 'texto') return;
     e.preventDefault();
     if (r.tipo === 'rechazado') {
+      // Un video pesado no es un callejón: se puede achicar acá mismo.
+      const soloUno = e.clipboardData.files.length === 1 ? e.clipboardData.files[0] : null;
+      if (soloUno?.type.startsWith('video/') && motivoPorTamano(soloUno, limitesMedia)) {
+        ofrecerAchicar(soloUno, r.motivo);
+        return;
+      }
       setAvisoPegado(r.motivo);
       return;
     }
     setAdjunto(new File([r.archivo], nombreFinalDePegado(r.archivo, new Date()), { type: r.archivo.type }));
     setAvisoPegado(r.aviso);
+  }
+
+  /** Abre el flujo de compresión y limpia lo que había: es un solo adjunto por mensaje. */
+  function ofrecerAchicar(archivo: File, motivo: string) {
+    setAdjunto(null);
+    setAvisoPegado(null);
+    setVideoPesado({ archivo, motivo });
   }
 
   async function onEnviar() {
@@ -729,6 +755,22 @@ function ComposerWa({
         </div>
       )}
 
+      {/* Un video que no entra. No es un cartel: se puede achicar acá, y el
+          resultado SE MIRA antes de mandarlo — comprimir es destructivo y lo
+          que sale va a un lead. */}
+      {videoPesado && (
+        <AdjuntoPesado
+          archivo={videoPesado.archivo}
+          topeBytes={limitesMedia?.video ?? TOPE_ADJUNTO_BYTES}
+          motivo={videoPesado.motivo}
+          onListo={(comprimido) => {
+            setAdjunto(comprimido);
+            setVideoPesado(null);
+          }}
+          onCerrar={() => setVideoPesado(null)}
+        />
+      )}
+
       {/* El adjunto elegido, antes de mandarlo: se ve, se puede sacar. */}
       {adjunto && (
         <div className="mb-2 flex items-center gap-2 rounded-xl border border-border bg-secondary/50 px-3 py-2">
@@ -775,11 +817,15 @@ function ComposerWa({
             // recibir un `fbtrace_id` al final.
             const motivo = motivoPorTamano(f, limitesMedia);
             if (motivo) {
-              setAvisoPegado(motivo);
+              // El video del reporte entró justo por acá: es el camino más usado
+              // para adjuntar, y es donde más falta la salida.
+              if (f.type.startsWith('video/')) ofrecerAchicar(f, motivo);
+              else setAvisoPegado(motivo);
               return;
             }
             setAdjunto(f);
             setAvisoPegado(null);
+            setVideoPesado(null);
           }}
         />
         <button

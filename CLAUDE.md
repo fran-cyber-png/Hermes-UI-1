@@ -211,6 +211,48 @@ npm install && npm run dev:app                     # Vite :5173 + la app de escr
     y cualquier mecanismo cuyo fin sea que el tráfico no se detecte (ADR 0015 §«Lo que
     deliberadamente no se hizo»).
 
+## Adjuntos: el tope es de la LÍNEA, y un video que no entra se achica acá
+
+**El tope de un adjunto NO es de Hermes, es del transporte de esa línea**
+(`server/src/whatsapp/limitesMedia.ts`). Cloud API: imagen **5 MB** (solo JPEG/PNG) · video
+**16 MB** (H.264+AAC) · audio 16 MB — verificado contra la doc de Meta el 5-ago-2026. Las líneas
+whatsmeow **no** tienen esos topes: el único es el de `express.raw({ limit: '64mb' })`, y
+aplicarles los de Meta rechazaría envíos que hoy salen bien. Por eso el límite lo declara el
+transporte (`TransporteWhatsapp.nombre`), no una tabla suelta.
+
+- Se verifica **antes** de escribir a disco y de subir a Meta → **409 `adjunto_muy_pesado`** con
+  las dos cifras («pesa 17,9 MB y por esta línea entran hasta 16 MB»); con una sola no se puede
+  decidir qué hacer. `GET /api/whatsapp/sesion` publica `transporte` + `limitesMedia` para que la
+  app frene antes de subir — eso es conveniencia, la garantía es el 409.
+  ⚠️ El front lee `limitesMedia` como **opcional**: un server viejo no lo manda y ahí no frena,
+  que es como se comportaba antes. **Sin N5 el arreglo no existe.**
+- `server/src/whatsapp/limitesMedia.paridad.test.ts` lee el archivo del front y falla si las dos
+  redacciones divergen (la lección de #37).
+- **⌘V pega adjuntos en el composer** (`pegarAdjunto.ts`). El `preventDefault` va **solo cuando
+  hay archivo**: uno de más rompe pegar texto y eso no se ve ni en un test de DOM ni en una
+  captura. El nombre genérico (`image.png`, que es como TODOS los navegadores llaman a la captura
+  del portapapeles) se renombra por fecha; el de un archivo copiado del explorador **se conserva**,
+  porque entra en la versión de la pieza (ADR 0022).
+- **Un video que no entra se achica en la app** (**ADR 0038**): `planDeCompresion.ts` (puro) decide
+  y `comprimirVideo.ts` ejecuta con ffmpeg.wasm. **Bitrate primero, resolución solo cuando el
+  bitrate ya no alcanza** — el video del reporte perdía 11 % y se salvó **sin bajar de 1080p**.
+  Nunca devuelve un plan por debajo del mínimo de su resolución: un 1080p a 200 kbps *entra* y es
+  basura. El resultado **se mira antes de mandarlo** (pegar no envía, comprimir tampoco).
+  · 🔴 **El core sale de `public/ffmpeg/`, que `scripts/preparar-ffmpeg.mjs` copia en `predev` y
+    `prebuild`** (gitignored, 32 MB). Tiene que ser el build **ESM**: el worker de
+    `@ffmpeg/ffmpeg` es `type: "module"` siempre, así que termina en `import(coreURL)` y pide un
+    `export default` que el UMD no tiene. No se puede importar con `?url` — Vite lo pre-bundlea y
+    deja de devolver una URL. Y **sin `toBlobURL`**: es para CDNs cross-origin, y con blob el core
+    pierde su `import.meta.url`.
+  · El motor entra con `import()` diferido: 32 MB solo para quien adjunta un video pesado.
+  · **Medido**: 199 s para 2:13 de video (ffmpeg.wasm single-thread). Se anuncia antes de empezar.
+    Bajarlo pide COOP/COEP (multi-hilo) o WebCodecs con feature-detection — ninguna urgente.
+- ⚠️ **«Mandarlo como documento» NO es una salida.** El rechazo pasa en la **subida** a `/media`,
+  donde el archivo se declara con su mime: mandarlo como documento exigiría mentir el mime y al
+  lead le llegaría un adjunto que WhatsApp no sabe reproducir. Para medirlo sin mandar mensajes:
+  `cd server && npm run wa:cloud-api:limites` (sube archivos de ceros; el CONTROL va primero y
+  **frena la conclusión** si la credencial no sirve).
+
 ## Auth
 
 Login de vendedoras **contra Cerberus** (Django, sin API REST): `cerberus/auth.ts` hace el handshake
