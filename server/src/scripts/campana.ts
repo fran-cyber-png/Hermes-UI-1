@@ -8,6 +8,11 @@ import { deUnaCampana } from "../procedencia/pieza.js";
 import { enviarPlantillaYProyectar } from "../whatsapp/enviarYProyectar.js";
 import { contarPorMotivo, elegirPublico } from "../campana/publico.js";
 import {
+  clasificarFallo,
+  esperaDeReintento,
+  REINTENTOS_MAXIMOS,
+} from "../campana/reintento.js";
+import {
   contarMotivosDeLista,
   leerLista,
   parsearCsv,
@@ -40,12 +45,21 @@ import {
  * **No decide a quién**: la lista se acota por línea y por fechas desde la línea
  * de comandos, y se imprime entera. No hay heurística escondida.
  *
- * **No reintenta.** El 131049 (tope de marketing por usuario) es adaptativo y
- * sin número publicado: una parte del lote va a fallar y no se puede predecir
- * cuál. Se cuenta aparte y se sigue — no es una caída.
+ * **No reintenta lo que Meta DECIDIÓ.** El 131049 (tope de marketing por
+ * usuario) es adaptativo y sin número publicado: una parte del lote va a fallar
+ * y no se puede predecir cuál. Se cuenta aparte y se sigue — no es una caída.
  *
- * **Frena entero** ante un error que no sea 131049: si Meta empieza a rechazar
- * por otra cosa, seguir mandando es cavar.
+ * **Sí reintenta lo que se cayó en el camino.** Acá decía «no reintenta» a
+ * secas y «frena entero ante cualquier error que no sea 131049», y esa regla
+ * cortó la campaña del Foro en el mensaje 446 de 999 con un `fetch failed`
+ * mientras Meta estaba GREEN y CONNECTED. Un socket cortado no es una decisión
+ * de nadie; tratarlo como una convierte cada bache de red en una campaña
+ * trunca, y a 15 s por mensaje una corrida dura horas. La clasificación
+ * —tope · transitorio · definitivo— vive pura en `campana/reintento.ts`, con el
+ * mismo criterio que `esReintentable` del cliente de Ivi.
+ *
+ * **Frena entero** ante un rechazo de Meta que no sea el tope, y también si la
+ * red no vuelve en tres intentos: eso ya no es un hipo.
  *
  * ══ DOS ORÍGENES PARA LA LISTA, Y NO SON LA MISMA CAMPAÑA ═══════════════════
  *
@@ -827,11 +841,46 @@ async function main() {
     : undefined;
 
   let ok = 0;
+  let reintentados = 0;
   const topeados: string[] = [];
   const retenidos: string[] = [];
   const cancelados: Veredicto[] = [];
   /** Desde cuándo se cuenta «pasó algo mientras esperaba su turno». */
   const autorizadoEn = new Date();
+
+  /**
+   * Una orden de envío, aislada para poder REPETIRLA sin duplicar su forma.
+   *
+   * Que el reintento mande exactamente lo mismo no es un detalle: si la orden
+   * se rearmara en cada intento, un reintento podría diferir del original en
+   * algo —la procedencia, el `automatico`, la referencia— y entonces las dos
+   * filas de `envios_wa` no serían el mismo envío contado dos veces, sino dos
+   * envíos distintos. El lazo de resultados leería eso como dos piezas.
+   */
+  const mandarle = (telefono: string) =>
+    enviarPlantillaYProyectar({
+      vendedoraId: "campana",
+      numeroPropio: LINEA!,
+      telefono,
+      /**
+       * LA REFERENCIA ES LA CLAVE DE LA CONVERSACIÓN, no una sintética.
+       *
+       * Decía `campana:<pieza>:<telefono>`, y eso dejó los 88 envíos INVISIBLES
+       * para el lazo de resultados: `consultarResultados.ts` filtra por
+       * `referencia LIKE 'conv:%'`, así que la procedencia se estampó perfecta
+       * y no la ve nadie. Además partía cada conversación en dos y el join
+       * contra `conversacion_asignada` daba cero filas en silencio.
+       */
+      referencia: `conv:whatsapp:${telefono}:${LINEA}`,
+      automatico: true,
+      procedencia,
+      plantilla: {
+        nombre: plantilla.nombre,
+        idioma: plantilla.idioma,
+        componentes,
+        cuerpoRenderizado: plantilla.cuerpo,
+      },
+    });
 
   for (const [i, d] of elegibles.entries()) {
     /**
@@ -851,29 +900,26 @@ async function main() {
       continue;
     }
 
-    const r = await enviarPlantillaYProyectar({
-      vendedoraId: "campana",
-      numeroPropio: LINEA!,
-      telefono: d.telefono,
-      /**
-       * LA REFERENCIA ES LA CLAVE DE LA CONVERSACIÓN, no una sintética.
-       *
-       * Decía `campana:<pieza>:<telefono>`, y eso dejó los 88 envíos INVISIBLES
-       * para el lazo de resultados: `consultarResultados.ts` filtra por
-       * `referencia LIKE 'conv:%'`, así que la procedencia se estampó perfecta
-       * y no la ve nadie. Además partía cada conversación en dos y el join
-       * contra `conversacion_asignada` daba cero filas en silencio.
-       */
-      referencia: `conv:whatsapp:${d.telefono}:${LINEA}`,
-      automatico: true,
-      procedencia,
-      plantilla: {
-        nombre: plantilla.nombre,
-        idioma: plantilla.idioma,
-        componentes,
-        cuerpoRenderizado: plantilla.cuerpo,
-      },
-    });
+    /**
+     * EL ENVÍO, CON REINTENTO SOLO PARA LO QUE ES DE RED.
+     *
+     * La campaña del Foro se frenó en el 446 de 999 con un `fetch failed`
+     * mientras Meta estaba GREEN y CONNECTED: un hipo de TCP mató una corrida
+     * de cuatro horas, porque el freno trataba todo lo que no fuera 131049 como
+     * una decisión de Meta. La clasificación vive pura en `campana/reintento.ts`.
+     */
+    let r = await mandarle(d.telefono);
+    let intento = 0;
+    while (!r.ok && clasificarFallo(r.motivo) === "transitorio" && intento < REINTENTOS_MAXIMOS) {
+      intento++;
+      const espera = esperaDeReintento(intento);
+      console.log(
+        `[${i + 1}/${elegibles.length}] … ${d.telefono} — ${r.motivo.slice(0, 60)} · reintento ${intento}/${REINTENTOS_MAXIMOS} en ${espera / 1000}s`,
+      );
+      await new Promise((listo) => setTimeout(listo, espera));
+      r = await mandarle(d.telefono);
+    }
+    if (intento > 0 && r.ok) reintentados++;
 
     if (r.ok) {
       ok++;
@@ -892,13 +938,21 @@ async function main() {
           (r.retenidoPorCalidad ? "  — RETENIDO por Meta (pacing)" : ""),
       );
     } else {
-      const esTope = /131049/.test(r.motivo);
-      console.log(`[${i + 1}/${elegibles.length}] ${esTope ? "⏸" : "❌"} ${d.telefono} — ${r.motivo.slice(0, 120)}`);
-      if (esTope) {
+      const clase = clasificarFallo(r.motivo);
+      console.log(
+        `[${i + 1}/${elegibles.length}] ${clase === "tope_por_usuario" ? "⏸" : "❌"} ${d.telefono} — ${r.motivo.slice(0, 120)}`,
+      );
+      if (clase === "tope_por_usuario") {
         // El tope por usuario es de Meta y es adaptativo: no es una caída.
         topeados.push(d.telefono);
+      } else if (clase === "transitorio") {
+        console.error(
+          `\n🛑 FRENO: la red no volvió en ${REINTENTOS_MAXIMOS} intentos. Eso ya no es un hipo.\n` +
+            `   Se puede reanudar: los enviados no se repiten (guarda por pieza).\n`,
+        );
+        break;
       } else {
-        console.error(`\n🛑 FRENO: un error que no es el tope por usuario. No sigo.\n`);
+        console.error(`\n🛑 FRENO: Meta rechazó por algo que no es el tope. No sigo.\n`);
         break;
       }
     }
@@ -907,6 +961,7 @@ async function main() {
       await new Promise((listo) => setTimeout(listo, ESPERA_MIN_MS));
     }
   }
+
 
   /**
    * EL RESUMEN DICE LO CANCELADO CON SU MOTIVO.
@@ -917,16 +972,12 @@ async function main() {
    */
   const porMotivo = contarCancelaciones(cancelados);
   console.log(
-    `\n─── salieron ${ok} · topeados por Meta ${topeados.length} · cancelados al salir ${cancelados.length} ───`,
+    `\n─── salieron ${ok} · topeados por Meta ${topeados.length} · cancelados al salir ${cancelados.length}` +
+      // Los rescatados se dicen sólo si hubo: un «0 rescatados» en cada corrida
+      // enseña a ignorar el renglón, y el día que diga 40 nadie lo va a leer.
+      (reintentados ? ` · rescatados de un corte de red ${reintentados}` : "") +
+      ` ───`,
   );
-  if (retenidos.length) {
-    console.log(
-      `\n⏳ META RETUVO ${retenidos.length} de ${ok} por PACING.\n` +
-        `   No es un error: es Meta juntando feedback antes de soltar el resto.\n` +
-        `   Pasa con plantillas nuevas o sin calidad GREEN. Si la proporción es alta,\n` +
-        `   PARÁ y esperá — si las señales salen mal, los siguientes se descartan.\n`,
-    );
-  }
   if (cancelados.length) {
     for (const [motivo, n] of Object.entries(porMotivo)) {
       if (n > 0) console.log(`      ⊘ ${n} — ${motivo}`);
