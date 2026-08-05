@@ -596,6 +596,61 @@ nombre · 61.298 con correo.
   de reparto, `?destino=1` el desplegable con la carga, `?todo=1` el recorte entero elegido,
   `?todo=1&confirmar=1` la confirmación). Capturas en `docs/evidencia/padron-*.png`.
 
+## El timeline se puede ESCRIBIR, y dice quién (ADR 0037)
+
+El timeline del panel derecho tenía **seis tipos de evento y los seis eran DERIVADOS** (la
+compra que afirma Cerberus, la llegada de Meta, el nombre, el interés, el enfriamiento, la
+cotización). Contaba lo que las máquinas sabían de esa persona y **nada de lo que pasó en la
+conversación**. Server en `server/src/eventos/`, front en `src/features/eventos/`, tabla
+`eventos_contacto` (migración `0018`), ruta `/api/eventos`.
+
+- **Un evento es TIPO + dato estructurado + comentario**, nunca texto libre: un
+  `notas LIKE '%cuotas%'` no se suma, no se agrupa por curso y no se cruza con la pauta (el
+  mismo argumento que `db/schema.ts` ya tiene escrito sobre `conversiones_wa`). El comentario
+  es el matiz; **el tipo es lo que se cuenta**. Seis: `pregunto_curso` · `pidio_precio` ·
+  `objecion` · `quedamos_en` · `llamada` · `otro`.
+- **Tabla nueva y no `gestiones` ni `notas`**: `gestiones` tiene `etapa` NOT NULL —anotar un
+  hecho obligaría a declarar una etapa y a pasar las compuertas— y `notas` es **privada por
+  autora** y es prosa. Acá se ve en equipo, y el `tipo` existe para poder contar.
+- 🔴 **«Preguntó por un curso» ASIENTA el interés**, por el mismo seam que el botón «+ interés».
+  `intereses` es la ÚNICA fuente de verdad de «qué curso quiere» (la consultan la compuerta de
+  Cotizado, el chip de la cola, la ficha y el Pipeline): con el curso guardado también acá
+  habría **dos lugares diciendo qué quiere el lead** (#37). Y sin eso la vendedora registra
+  «preguntó por Gestión Pública» y al minuto Cotizado le rebota con «no se sabe qué curso le
+  interesa». El interés va **primero** y el evento guarda **el nombre que resolvió el catálogo**,
+  no el que mandó el navegador — si no, el timeline dice uno y el chip de la cola otro. Es
+  seguro porque `registrarInteres` no tira con Cerberus caído: degrada y devuelve el motivo.
+- **Se ve en EQUIPO, se edita por AUTORA.** La conversación es compartida (Hermes no tiene
+  modelo de permisos), pero un evento es una AFIRMACIÓN de quien lo escribió. El error nombra a
+  la dueña. 🔴 **Se compara normalizando los DOS lados** (`mismaVendedora` server, `esMio`
+  front): con `Luz` vs `luz` la comparación exacta no da error, da que **Luz no ve los botones
+  de sus propios eventos**.
+- **Borrar es archivar** (`archivado_at`) y **el `tipo` no se edita**: cambiarlo convertiría una
+  objeción en una llamada sobre la misma fila y el mismo timestamp. El PATCH tampoco puede
+  agregarle un curso a un evento que no lo tenía. Archivar **no des-asienta el interés**.
+- **Un tipo desconocido se LEE, nunca tira.** `tipo` es `text` y no un enum, y el server acepta
+  términos fuera de su lista (solo valida la forma `^[a-z][a-z_]{0,31}$`): el front sale sin
+  reiniciar el server (N4 va solo, N5 es un botón) y rechazar ahí convierte un deploy escalonado
+  en «no se pudo registrar». `rotuloDeTipo` lo muestra tal cual, nunca como otro tipo. Y **no se
+  le inventa una regla**: no exige nota, no la perdona, y no asienta interés aunque traiga curso.
+- **Se dice QUIÉN**, en nombre corto (`ventas10@grupogoberna.com` → «Ventas10»). Antes
+  `EventoLinea` calculaba `fuente` y **no la dibujaba en ningún lado** — lo que afirmó Cerberus
+  se leía igual que lo que dedujo una señal. El tag «MANUAL» ahora sale **solo si no hay autor**:
+  «MANUAL · por Luz» es la misma cosa dos veces en 360 px.
+- **Dos lugares, UN componente** (`RegistrarEvento`, con `variante`): el chip **«Registrar»** al
+  lado de «Agendar» en la `BarraGestion` y el botón al pie del timeline. **Agendar es una promesa
+  a futuro** (cae en la Agenda), **registrar es un hecho del pasado** (cae en el timeline).
+  Ninguno de los dos envía nada, y el pie del popover lo dice.
+- **Los candados**: `eventos/paridad.test.ts` cruza el catálogo del server con **la copia a mano
+  del front** y falla si divergen (mismo mecanismo que `hechos.ts`); `registrarEvento.test.db.ts`
+  fija el asiento del interés y la normalización de grafías; y
+  `src/features/eventos/RegistrarEvento.test.tsx` (jsdom) fija **el cableado del teclado** —
+  existe porque el defecto real apareció capturando la evidencia: con el foco en el buscador de
+  curso, el Escape hacía `stopPropagation()` y **no cerraba nada**. Ningún test puro lo veía
+  (ADR 0024, otra vez).
+- **Ver la UI**: no hay galería — se capturó la app REAL con un stub de ~60 líneas en `:4199` y
+  `VITE_API_URL` apuntándole. Capturas en `docs/evidencia/eventos-*.png`.
+
 ## El panel derecho — ordenado por lo que decide una venta (ADR 0017)
 
 `src/features/panel/PanelDerecho.tsx` (360 px, `w-[22.5rem]` en `App.tsx`). El orden **no es
@@ -636,12 +691,18 @@ que se CONSULTA, nunca lo que se DECIDE.**
    > su propio test). `PanelNotas.tsx` —el que dejaba anotar sobre una conversación— tiene un único
    > consumidor, `canales/PanelContexto.tsx`, y a ése **no lo importa nadie**: quedó huérfano en
    > `79b239b`, cuando el panel derecho se reescribió por ADR 0017.
-   > Consecuencia, y no es menor: **hoy no hay ninguna forma en la app de anotar sobre una
+   > Consecuencia: durante meses **no hubo ninguna forma en la app de anotar sobre una
    > conversación.** Todo lo que se escribe va a `clave='general'` (la Libreta). Por eso
    > `notas_filas = 0` y `clave_general = 0` son **un solo hecho, no dos** — la nota pegada al
    > contacto no fue rechazada por nadie: nunca estuvo disponible. Es la hipótesis C de
    > `docs/plan-libreta-que-deberia-tener.md`, y decidir si se reconecta o se archiva va **antes**
    > de tocar `buscarNotas`, que sigue clavado a `'general'` (`server/src/notas/notas.ts:191`).
+   >
+   > ⚠️ **Desde el 5-ago (ADR 0037) el caso que más dolía ya tiene puerta**, y no es ésta: los
+   > **eventos del contacto** (`eventos_contacto`) se registran desde el chip «Registrar» de la
+   > barra y desde el pie del timeline. **No los reemplaza**: un evento es un hecho tipado y
+   > compartido; `PanelNotas` era prosa libre y privada. La pestaña muerta sigue muerta y la
+   > decisión sobre `PanelNotas` sigue abierta — lo que cambió es que ya no es urgente.
 5. **Qué hago** — `panel/AccionesContacto`, al pie y **siempre visible**, con **una sola acción
    primaria** según el estado. Antes vivía dentro de la pestaña Ficha y abrir «Notas» hacía
    desaparecer el botón que cierra la venta.
