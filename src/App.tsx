@@ -19,6 +19,7 @@ import { Escudo } from './components/Marca';
 import { ColaUnificada } from './features/canales/ColaUnificada';
 import { ConversacionActiva } from './features/canales/ConversacionActiva';
 import type { Conversacion } from './features/canales/conversaciones';
+import { conversacionDeTelefono } from './features/canales/conversacionNueva';
 import BarraFrescura from './features/canales/BarraFrescura';
 import { EstadoWhatsapp } from './features/whatsapp/EstadoWhatsapp';
 import { InterruptorAutoRespuesta } from './features/autorespuesta/InterruptorAutoRespuesta';
@@ -383,30 +384,16 @@ export default function App() {
 
   // «Escribirle» desde una ficha: el chat nuevo, con el número propio de la
   // sesión WA (la misma fábrica que el + de la cola). Solo existe con WA conectado.
+  //
+  // La `Conversacion` se arma en `conversacionDeTelefono` y no acá: desde que el
+  // padrón abre la ficha al costado hay un SEGUNDO llamador, y dos copias de la
+  // clave `conv:…` son dos claves distintas el día que una cambie.
   const escribirA =
     sesionWa?.estado === 'conectado'
-      ? (telefono: string) => {
-          const tel = telefono.replace(/\D/g, '');
-          const numeroPropio = sesionWa.telefono;
-          abrirConversacion({
-            clave: `conv:whatsapp:${tel}:${numeroPropio}`,
-            canal: 'whatsapp',
-            tipo: 'mensaje',
-            persona_id: tel,
-            persona_nombre: null,
-            numero_propio: numeroPropio,
-            texto: null,
-            contexto_texto: null,
-            respondida: false,
-            ventana_abierta: false,
-            pide_info: false,
-            n: 0,
-            referencia: new Date().toISOString(),
-            ultimo_at: new Date().toISOString(),
-            dias: 0,
-            nivel: 5, // neutro: el «resto» de la escala 0–5; la cola recalcula el real al cargar
-          });
-        }
+      ? (telefono: string) =>
+          abrirConversacion(
+            conversacionDeTelefono({ telefono, numeroPropio: sesionWa.telefono }),
+          )
       : undefined;
 
   function mandarCorreoA(para: string) {
