@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { interactions } from "../db/schema.js";
+import { events, interactions } from "../db/schema.js";
 import { contenidoDe, plantillaPorNombre } from "../campana/plantillasAprobadas.js";
 import { deUnaCampana } from "../procedencia/pieza.js";
 import { enviarPlantillaYProyectar } from "../whatsapp/enviarYProyectar.js";
@@ -54,6 +54,14 @@ const NOMBRE = opcion("plantilla") ?? "promo_3x1_cursos";
 const IMAGEN = opcion("imagen");
 const ENVIAR = bandera("enviar");
 const TOPE = Number(opcion("tope") ?? "0") || Infinity;
+/**
+ * A quién quedan asignadas estas conversaciones.
+ *
+ * ⚠️ **No hace falta que esté en la rueda.** `asignarSiHaceFalta` devuelve
+ * temprano si la conversación ya tiene dueño, así que una asignación manual
+ * sobrevive al round-robin: la rueda solo reparte lo que NO tiene dueño.
+ */
+const ASIGNAR_A = opcion("asignar-a");
 /** Espaciado entre envíos. El mismo orden de magnitud que el acuse nocturno. */
 const ESPERA_MIN_MS = Number(opcion("espera") ?? "60") * 1000;
 
@@ -139,6 +147,9 @@ interface Destinatario {
   primerMensaje: string;
   ultimoSuyo: Date;
   yaTienePrecio: boolean;
+  /** El anuncio por el que llegó, si llegó por uno. `null` = entró de otra forma. */
+  anuncio: string | null;
+  yaLeLlego: boolean;
 }
 
 /**
@@ -166,7 +177,23 @@ async function traerCandidatos(): Promise<Destinatario[]> {
                     where i.persona_id = e.persona_id and i.direccion = 'saliente'
                       and i.texto ~ '(S/|USD|\\$|soles|precio|inversi)') as ya_tiene_precio,
            (select max(i.occurred_at) from ${interactions} i
-             where i.persona_id = e.persona_id and i.direccion = 'entrante') as ultimo_entrante_global
+             where i.persona_id = e.persona_id and i.direccion = 'entrante') as ultimo_entrante_global,
+           -- El ANUNCIO por el que llegó. Vive en el evento crudo y no en la
+           -- interacción: es lo que Meta manda en el referral de un
+           -- Click-to-WhatsApp. fuente='anuncio' es el discriminador, la misma
+           -- expresión que usa cola/cursoSql.ts — no una segunda copia.
+           (select coalesce(ev.payload->'origen'->>'titulo', ev.payload->'origen'->>'adId')
+              from ${interactions} i2
+              join events ev on ev.id = i2.event_id
+             where i2.persona_id = e.persona_id and i2.direccion = 'entrante'
+               and ev.payload->'origen'->>'fuente' = 'anuncio'
+             order by i2.occurred_at limit 1) as anuncio,
+           -- Ya se le mandó ESTA campaña. La guarda contra el doble envío
+           -- después de una corrida frenada a la mitad.
+           exists (select 1 from envios_wa w
+                    where w.telefono = e.persona_id
+                      and w.pieza_clase = 'hsm' and w.pieza_ref = ${`hsm:${NOMBRE}`}
+                      and w.estado = 'enviado') as ya_le_llego
       from entrantes e
      order by e.ultimo_suyo
   `);
@@ -177,6 +204,8 @@ async function traerCandidatos(): Promise<Destinatario[]> {
     primerMensaje: (f.primer_mensaje as string | null) ?? "",
     ultimoSuyo: new Date(String(f.ultimo_entrante_global ?? f.ultimo_suyo)),
     yaTienePrecio: Boolean(f.ya_tiene_precio),
+    anuncio: (f.anuncio as string | null) ?? null,
+    yaLeLlego: Boolean(f.ya_le_llego),
   }));
 }
 
@@ -198,19 +227,50 @@ async function main() {
     if (huboRechazo([d.primerMensaje])) conRechazo.add(d.telefono);
   }
 
-  const elegibles = todos.filter((d) => !conRechazo.has(d.telefono)).slice(0, TOPE);
+  /**
+   * SOLO LOS QUE LLEGARON POR UN ANUNCIO (por default).
+   *
+   * Es el pedido explícito del dueño y tiene sentido de negocio: quien hizo
+   * clic en un anuncio de la Escuela ya levantó la mano por ESTO. Los que
+   * entraron por otra vía —el número compartido por un conocido, un comentario,
+   * un formulario— no pidieron una promo de este diploma, y mandársela es
+   * ruido para ellos y riesgo de bloqueo para el número.
+   *
+   * `--todos` lo desactiva, a propósito y con nombre feo: que ampliar la lista
+   * cueste escribir algo.
+   */
+  const soloDeAnuncio = !bandera("todos");
+
+  const sinAnuncio = todos.filter((d) => soloDeAnuncio && !d.anuncio);
+  const yaLesLlego = todos.filter((d) => d.yaLeLlego);
+
+  /**
+   * EL PÚBLICO de la campaña: a quién le corresponde este mensaje.
+   *
+   * Se separa de `elegibles` a propósito. La ASIGNACIÓN va sobre este conjunto
+   * —incluidos los que ya recibieron el mensaje en una corrida anterior—, porque
+   * la conversación es suya igual: dejarlos sin dueño porque el envío llegó
+   * primero es exactamente al revés de lo que hace falta cuando contesten.
+   */
+  const publico = todos
+    .filter((d) => !conRechazo.has(d.telefono))
+    .filter((d) => !soloDeAnuncio || d.anuncio);
+
+  // A quién se le MANDA: el público menos quien ya lo recibió. Una corrida
+  // frenada a la mitad no puede convertirse en un segundo mensaje.
+  const elegibles = publico.filter((d) => !d.yaLeLlego).slice(0, TOPE);
 
   console.log(`\n═══ CAMPAÑA «${plantilla!.nombre}» (idioma ${plantilla!.idioma}) ═══`);
   console.log(`línea ${LINEA} · leads que escribieron entre ${DESDE} y ${HASTA}`);
   console.log(`${ENVIAR ? "🔴 ENVÍO REAL" : "simulacro (agregá --enviar para mandar)"}\n`);
 
-  console.log("─".repeat(112));
+  console.log("─".repeat(124));
   console.log(
-    ["#", "teléfono", "escribió", "hace", "ventana", "precio", "qué preguntó"]
-      .map((s, i) => s.padEnd([4, 15, 14, 8, 10, 8, 40][i]))
+    ["#", "teléfono", "escribió", "hace", "ventana", "precio", "anuncio por el que llegó"]
+      .map((s, i) => s.padEnd([4, 15, 16, 7, 10, 8, 40][i]))
       .join(""),
   );
-  console.log("─".repeat(112));
+  console.log("─".repeat(124));
 
   elegibles.forEach((d, i) => {
     const h = horasDesde(d.ultimoSuyo, ahora);
@@ -218,29 +278,64 @@ async function main() {
       [
         String(i + 1).padEnd(4),
         d.telefono.padEnd(15),
-        hora(d.ultimoSuyo).padEnd(14),
-        `${Math.round(h)} h`.padEnd(8),
+        hora(d.ultimoSuyo).padEnd(16),
+        `${Math.round(h)}h`.padEnd(7),
         (h < 24 ? "ABIERTA" : "cerrada").padEnd(10),
         (d.yaTienePrecio ? "sí" : "—").padEnd(8),
-        d.primerMensaje.replace(/\s+/g, " ").slice(0, 40),
+        (d.anuncio ?? "(sin anuncio)").slice(0, 40),
       ].join(""),
     );
   });
 
   const abiertas = elegibles.filter((d) => horasDesde(d.ultimoSuyo, ahora) < 24).length;
-  console.log("─".repeat(112));
-  console.log(`\nTotal a mandar: ${elegibles.length}`);
+  console.log("─".repeat(124));
+  console.log(`\nTotal a mandar: ${elegibles.length}   (de ${todos.length} que escribieron en esas fechas)`);
   console.log(`  · ventana abierta: ${abiertas} (a estos se les puede escribir texto libre también)`);
   console.log(`  · ventana cerrada: ${elegibles.length - abiertas} (solo alcanzables con esta plantilla)`);
   console.log(`  · con precio ya enviado: ${elegibles.filter((d) => d.yaTienePrecio).length}`);
-  if (conRechazo.size) console.log(`  · descartados por haber dicho que no: ${conRechazo.size}`);
+  console.log(`\nDescartados:`);
+  if (soloDeAnuncio) console.log(`  · ${sinAnuncio.length} porque NO llegaron por un anuncio (--todos los incluye)`);
+  if (yaLesLlego.length) console.log(`  · ${yaLesLlego.length} porque YA recibieron esta campaña`);
+  if (conRechazo.size) console.log(`  · ${conRechazo.size} porque ya dijeron que no`);
   console.log(
     `\nEspaciado: ${ESPERA_MIN_MS / 1000}s entre envíos · imagen: ${IMAGEN_ID ? `media_id ${IMAGEN_ID}` : (IMAGEN ?? "(ninguna)")}`,
   );
 
+  if (ASIGNAR_A) {
+    console.log(
+      `\nSe van a asignar ${publico.length} conversaciones a «${ASIGNAR_A}»` +
+        (publico.length !== elegibles.length
+          ? ` (las ${elegibles.length} que reciben el mensaje MÁS las ${publico.length - elegibles.length} que ya lo habían recibido).`
+          : "."),
+    );
+  }
+
   if (!ENVIAR) {
-    console.log("\nSimulacro. No salió ningún mensaje.\n");
+    console.log("\nSimulacro. No salió ningún mensaje y no se asignó nada.\n");
     process.exit(0);
+  }
+
+  /**
+   * ASIGNAR ANTES DE MANDAR, y a propósito.
+   *
+   * Si el envío se frena a la mitad —pasó: la primera corrida se detuvo en 13
+   * de 91—, los que ya recibieron el mensaje tienen que estar en la cola de
+   * quien va a atenderlos. Al revés, quedarían mensajes contestando a una
+   * conversación que nadie tiene asignada.
+   *
+   * ⚠️ Esto es un FILTRO, no un permiso. Hermes no tiene modelo de permisos:
+   * `requiereVendedora` dice «es una vendedora», no «cuál». Asignarlas hace que
+   * aparezcan como suyas y que el segmento «Las mías» las muestre solo a ella,
+   * pero cualquier otra vendedora las sigue pudiendo abrir si no filtra.
+   */
+  if (ASIGNAR_A) {
+    const { reasignar } = await import("../reparto/asignar.js");
+    let asignadas = 0;
+    for (const d of publico) {
+      await reasignar(db, `conv:whatsapp:${d.telefono}:${LINEA}`, LINEA!, ASIGNAR_A, "campana");
+      asignadas++;
+    }
+    console.log(`✅ ${asignadas} conversaciones asignadas a «${ASIGNAR_A}».\n`);
   }
 
   /**
