@@ -57,7 +57,9 @@ const TOPE = Number(opcion("tope") ?? "0") || Infinity;
 /** Espaciado entre envíos. El mismo orden de magnitud que el acuse nocturno. */
 const ESPERA_MIN_MS = Number(opcion("espera") ?? "60") * 1000;
 
-if (!LINEA || !DESDE || !HASTA) {
+// `--subir` es un modo aparte y no necesita lista: la validación de abajo se
+// saltea a propósito (si no, subir el flyer pide fechas que no usa para nada).
+if (!args.includes("--subir") && (!LINEA || !DESDE || !HASTA)) {
   console.error("Faltan --linea, --desde y --hasta (YYYY-MM-DD, hora de Lima).");
   process.exit(1);
 }
@@ -103,17 +105,21 @@ async function subirImagen(ruta: string): Promise<string> {
   return data.id;
 }
 
+/**
+ * ⚠️ Con `await` y no con `.then()`: el módulo sigue ejecutándose mientras la
+ * promesa está en vuelo, y `main()` más abajo llama a `process.exit(0)` — que
+ * mata la subida antes de que imprima el id. Pasó en el primer intento real.
+ */
 if (SUBIR) {
-  subirImagen(SUBIR)
-    .then((id) => {
-      console.log(`\nmedia_id: ${id}\n`);
-      console.log(`Usalo así:\n  npm run campana -- --linea … --desde … --hasta … --imagen-id ${id}\n`);
-      process.exit(0);
-    })
-    .catch((e) => {
-      console.error(String(e));
-      process.exit(1);
-    });
+  try {
+    const id = await subirImagen(SUBIR);
+    console.log(`\nmedia_id: ${id}\n`);
+    console.log(`Ahora:\n  npm run campana -- --linea … --desde … --hasta … --imagen-id ${id}\n`);
+    process.exit(0);
+  } catch (e) {
+    console.error(String(e));
+    process.exit(1);
+  }
 }
 
 const IMAGEN_ID = opcion("imagen-id");
