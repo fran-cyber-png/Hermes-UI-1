@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { db } from "../db/client.js";
+import { soloMisClavesSql } from "../dashboard/personal.js";
 import { ordenarRadar } from "./radar.js";
 import {
   pideInfoAgrupadoSql,
@@ -68,6 +69,16 @@ export type ChatRadar = {
 export async function consultarRadar(
   base: typeof db,
   ahora: Date = new Date(),
+  /**
+   * A quién se le acota el radar (Dashboard personal, 5-ago-2026). `null` = todo.
+   *
+   * ⚠️ El recorte es **estricto**: se queda con las conversaciones asignadas a
+   * esa vendedora y con nada más. Los **comentarios** de FB/IG se caen enteros,
+   * y no es un olvido — su clave es `int:<id>` y nunca se asigna, así que no hay
+   * forma de que sean «de alguien». El porqué de la decisión está en
+   * `dashboard/personal.ts`.
+   */
+  soloAsignadasA: string | null = null,
 ): Promise<(ChatRadar & { nivel: number; orden: number })[]> {
   // Lo que cayó por CHAT (misma clave que la cola, para que Estado/Etiquetas
   // matcheen): conversaciones con su último ENTRANTE de los últimos 7 días.
@@ -171,6 +182,11 @@ export async function consultarRadar(
            s.seguimiento_en, s.seguimiento_nota
     FROM (SELECT * FROM conv UNION ALL SELECT * FROM comentarios) t
     LEFT JOIN seguimientos s USING (clave)
+    -- El recorte del Dashboard personal. Va DESPUÉS del UNION y no adentro de
+    -- la CTE conv: así se aplica a las dos ramas con una sola condición, y que
+    -- los comentarios queden afuera es una consecuencia visible del criterio
+    -- (no tienen dueño posible) y no un filtro escondido en una de las mitades.
+    WHERE ${soloMisClavesSql(sql`t.clave`, soloAsignadasA)}
     -- Este orden NO es el que ve la vendedora: solo elige QUÉ 60 filas viajan.
     -- El orden real lo decide ordenarRadar abajo, con el módulo de urgencia.
     -- El tope de 60 se hereda tal cual: hoy el front ya ordenaba estas mismas 60,

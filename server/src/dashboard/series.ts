@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import type { db } from "../db/client.js";
 import { corteDiasAtras, diaLimaISO } from "../lib/horaLima.js";
 import { diaLimaSql } from "../lib/horaLimaSql.js";
+import { clavesAsignadasSql, mismaVendedoraSql } from "./personal.js";
 
 /**
  * LAS SERIES DE 14 DÍAS DEL DASHBOARD — extraídas de `routes/dashboard.ts` a
@@ -63,7 +64,29 @@ function rangoDias(hoy: string) {
   return sql`generate_series(${hoy}::date - 13, ${hoy}::date, interval '1 day')::date`;
 }
 
-export async function consultarSeriesDashboard(base: typeof db, ahora: Date): Promise<SeriesDashboard> {
+/**
+ * EL RECORTE PERSONAL, APLICADO A LAS TRES SERIES (Dashboard personal, 5-ago-2026).
+ *
+ * Cada una se acota por donde se puede acotar, y no todas por lo mismo:
+ *
+ *  · **leads/día** por la CLAVE de la conversación asignada. Eso obliga a mirar
+ *    el `numeroPropio`, que vive en el payload del evento — o sea el join a
+ *    `events` que la versión entera no necesita. Se paga **solo cuando hay
+ *    recorte**: sin él la consulta queda idéntica a la de siempre.
+ *  · **envíos/día** y **ventas/día** por `vendedora_id`, que es lo que esas dos
+ *    tablas guardan. No es la misma pregunta que «mis conversaciones» y hay que
+ *    saberlo: son los mensajes que MANDÉ y las ventas que REGISTRÉ, aunque la
+ *    conversación fuera de otra. Acotarlas por clave sería más consistente y más
+ *    falso — `envios_wa` no tiene clave de conversación, tiene teléfono.
+ *
+ * Los comentarios de FB/IG y los formularios se van a cero con el recorte puesto:
+ * no tienen dueño posible (ver `dashboard/personal.ts`).
+ */
+export async function consultarSeriesDashboard(
+  base: typeof db,
+  ahora: Date,
+  soloAsignadasA: string | null = null,
+): Promise<SeriesDashboard> {
   const hoy = diaLimaISO(ahora);
   // postgres.js serializa un `Date` crudo distinto según el camino: el `sql`
   // TAGGED de la librería `postgres` lo detecta y lo formatea solo, pero el
@@ -76,27 +99,45 @@ export async function consultarSeriesDashboard(base: typeof db, ahora: Date): Pr
   // no confiado a la inferencia de Postgres.
   const corte = corteDiasAtras(ahora, 13).toISOString();
 
-  const leadsDia = await base.execute<PuntoLeadsDia>(sql`
-    WITH dias AS (
-      SELECT ${rangoDias(hoy)} AS dia
-    ),
-    c AS (
+  // Sin recorte, la rama de siempre: un solo escaneo de `interactions`, sin join.
+  const chatsPorDia =
+    soloAsignadasA === null
+      ? sql`
       SELECT ${diaLimaSql("occurred_at")} AS dia, count(DISTINCT (canal, persona_id))::int AS n
       FROM interactions
       WHERE tipo = 'mensaje' AND direccion = 'entrante' AND persona_id IS NOT NULL
         AND occurred_at >= ${corte}::timestamptz
-      GROUP BY 1
+      GROUP BY 1`
+      : sql`
+      SELECT ${diaLimaSql("i.occurred_at")} AS dia, count(DISTINCT (i.canal, i.persona_id))::int AS n
+      FROM interactions i
+      JOIN events e ON e.id = i.event_id
+      WHERE i.tipo = 'mensaje' AND i.direccion = 'entrante' AND i.persona_id IS NOT NULL
+        AND i.occurred_at >= ${corte}::timestamptz
+        AND ('conv:' || i.canal || ':' || i.persona_id || ':' ||
+             COALESCE(e.payload->>'numeroPropio', '')) IN (${clavesAsignadasSql(soloAsignadasA)})
+      GROUP BY 1`;
+
+  // Comentarios y formularios NO tienen dueño posible: con recorte, la serie dice
+  // cero de verdad. `WHERE false` y no borrar la CTE, así el SELECT de abajo no
+  // cambia de forma según quién pregunte.
+  const sinDuenoPosible = soloAsignadasA === null ? sql`TRUE` : sql`FALSE`;
+
+  const leadsDia = await base.execute<PuntoLeadsDia>(sql`
+    WITH dias AS (
+      SELECT ${rangoDias(hoy)} AS dia
     ),
+    c AS (${chatsPorDia}),
     co AS (
       SELECT ${diaLimaSql("occurred_at")} AS dia, count(*)::int AS n
       FROM interactions
-      WHERE tipo = 'comentario' AND occurred_at >= ${corte}::timestamptz
+      WHERE ${sinDuenoPosible} AND tipo = 'comentario' AND occurred_at >= ${corte}::timestamptz
       GROUP BY 1
     ),
     f AS (
       SELECT ${diaLimaSql("created_time")} AS dia, count(*)::int AS n
       FROM leads
-      WHERE created_time >= ${corte}::timestamptz
+      WHERE ${sinDuenoPosible} AND created_time >= ${corte}::timestamptz
       GROUP BY 1
     )
     SELECT d.dia::text AS dia,
@@ -118,7 +159,9 @@ export async function consultarSeriesDashboard(base: typeof db, ahora: Date): Pr
     FROM dias d
     LEFT JOIN (
       SELECT ${diaLimaSql("creado_at")} AS dia, count(*)::int AS n
-      FROM envios_wa WHERE estado = 'enviado' AND creado_at >= ${corte}::timestamptz
+      FROM envios_wa
+      WHERE estado = 'enviado' AND creado_at >= ${corte}::timestamptz
+        AND ${mismaVendedoraSql(sql`vendedora_id`, soloAsignadasA)}
       GROUP BY 1
     ) e ON e.dia = d.dia
     ORDER BY d.dia
@@ -132,7 +175,9 @@ export async function consultarSeriesDashboard(base: typeof db, ahora: Date): Pr
     FROM dias d
     LEFT JOIN (
       SELECT ${diaLimaSql("iniciada_at")} AS dia, count(*)::int AS n
-      FROM conversiones_wa WHERE iniciada_at >= ${corte}::timestamptz
+      FROM conversiones_wa
+      WHERE iniciada_at >= ${corte}::timestamptz
+        AND ${mismaVendedoraSql(sql`vendedora_id`, soloAsignadasA)}
       GROUP BY 1
     ) v ON v.dia = d.dia
     ORDER BY d.dia

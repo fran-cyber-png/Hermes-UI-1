@@ -1,5 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { db } from "../db/client.js";
+import { soloMisClavesSql } from "../dashboard/personal.js";
 import {
   nivelUrgenciaSql,
   ordenUrgenciaSql,
@@ -871,11 +872,23 @@ export function plegarConteos(desglose: readonly FilaDesglose[]): Record<string,
  * Mismo seam que `/api/conversaciones`: si un día dicen cosas distintas, es un
  * bug de verdad, no una diferencia de definición.
  */
-export async function contarPorEtapaEfectiva(base: typeof db): Promise<Record<string, number>> {
+export async function contarPorEtapaEfectiva(
+  base: typeof db,
+  /** El recorte del Dashboard personal. `null` = el embudo entero, como siempre. */
+  soloAsignadasA: string | null = null,
+): Promise<Record<string, number>> {
   // Sin condiciones no hay nada que preguntarle al padrón, al bot ni al reparto:
   // el join saldría gratis pero igual costaría una pasada. Los `false` dejan la
   // consulta idéntica a la de antes de #133 — y de paso no dependen de que
   // `clientes_padron`, `bot_calificaciones` ni `conversacion_asignada` existan en
   // esa base.
-  return plegarConteos(await desglosarEmbudo(base, sql``, [], false, false, false, []));
+  //
+  // Con recorte se usa la MISMA subconsulta que el radar (`soloMisClavesSql`) y
+  // no el `esMiaSql` del join: acá no hace falta el dueño de cada fila, solo si
+  // la fila es mía — y con la subconsulta el `conAsignacion` del desglose sigue
+  // en `false`, o sea que una base sin la tabla del reparto se comporta igual que
+  // antes mientras nadie pida un recorte.
+  const condiciones =
+    soloAsignadasA === null ? [] : [soloMisClavesSql(sql`todo.clave`, soloAsignadasA)];
+  return plegarConteos(await desglosarEmbudo(base, sql``, condiciones, false, false, false, []));
 }
