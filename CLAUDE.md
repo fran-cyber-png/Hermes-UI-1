@@ -606,6 +606,41 @@ nombre · 61.298 con correo.
   `docs/evidencia/padron-*.png` y `docs/evidencia/sidebar-padron.png`. El Pipeline tiene la suya:
   `/galeria-embudo.html` (`?ficha=1`) → `docs/evidencia/sidebar-pipeline*.png`.
 
+## El Dashboard es de quien lo mira (ADR 0036)
+
+`GET /api/dashboard` servía **todo a todos** —radar, embudo, series y las filas de las cinco
+vendedoras— detrás de `requiereVendedora`, que dice «es una vendedora», no «cuál». Con el reparto
+vivo desde el 4-ago, cada una abría Hermes y veía el trabajo de las otras cuatro mezclado con el
+suyo. Server en `server/src/dashboard/personal.ts`, front en `VistaDashboard.tsx`.
+
+- **Quien NO es supervisor ve SOLO sus conversaciones asignadas**, y el recorte baja a las **cinco**
+  consultas: radar · embudo · series de 14 días · «qué piden» · el cuadro Equipo (una sola fila).
+  Recortar la lista y dejar el riel global daría dos respuestas a la misma pregunta en la misma
+  pantalla. Quién es supervisor sale de `HERMES_SUPERVISORES` — el mismo mecanismo del padrón.
+- 🔴 **Es una frontera, y hay que decir DE QUÉ**: la del **Dashboard**, no la del dato. El hilo, la
+  ficha y el envío siguen sirviendo cualquier conversación a cualquier token (Hermes no tiene modelo
+  de permisos). Lo que cambia es qué pantalla te arma la mañana. Es la **segunda** frontera del repo
+  —la primera es el padrón— y el resto sigue siendo **filtro, no permiso**.
+- **«El negocio» es 403, no un recorte** (`no_es_supervisor`, mismo nombre que `/api/padron`): no
+  existe una versión personal de «cuánto factura cada curso». Y no como query-param, que sería la
+  frontera a un clic de curl.
+- **Lo que no tiene dueño POSIBLE se cae**: los leads de formulario y los comentarios de FB/IG no se
+  reparten (la clave de un comentario es `int:<id>`). Por eso la respuesta lleva `soloMisAsignadas`,
+  y con eso la pantalla **explica el vacío** —«todavía no tenés conversaciones asignadas», nunca
+  «nada cayó con estos filtros», que sería falso: cayó, no es tuyo—, **apaga** los chips de
+  Landing/Lead Ads (serían ceros permanentes) y rotula **«Vos»** en vez de «Equipo».
+- ⚠️ **En el front el campo ausente se lee `?? true`**, y no es una contradicción con el fail-closed
+  del server: falta en un server viejo y en una respuesta rehidratada del caché (ADR 0007), y con
+  `false` por default «El negocio» desaparecería **para todos, incluido el supervisor**, en la
+  ventana entre N4 (front, sin restart) y N5 (server, a botón).
+- 🔴 **MEDIDO EN VPS1 EL 5-AGO, Y ES LA PRECONDICIÓN PARA PRENDERLO**: el radar de 7 días tiene
+  **213 conversaciones y solo 83 con dueño** (`luz` 78; las cinco `ventas1X`, **una cada una**).
+  Prendido así, cuatro vendedoras abren un Dashboard de una fila. **Hay que repartir la cola antes**
+  — es operación, no código, y no hay línea que tocar.
+- **Ver la UI sin server ni base**: `npx vite --port 5199` → `/galeria-dashboard.html`
+  (`?supervisor=1` lo que ve quien reparte, `?vacio=1` sin nada asignado). Capturas en
+  `docs/evidencia/dashboard-personal*.png`.
+
 ## El timeline se puede ESCRIBIR, y dice quién (ADR 0037)
 
 El timeline del panel derecho tenía **seis tipos de evento y los seis eran DERIVADOS** (la
@@ -1184,8 +1219,9 @@ Solo en `server/.env` (gitignored). **Se referencian por nombre, jamás se pegan
 `HERMES_ADMIN_SERVICE_TOKEN`, `HERMES_CATALOGO_SERVICE_TOKEN` (el de Ivi para leer el catálogo de
 piezas — **otro secreto**, a propósito), `AUTO_RESPUESTA` (+ sus `AUTO_RESPUESTA_*`, todos con default
 sensato), `ICARUS_DATABASE_URL` (read-only al Postgres de icarus: el padrón de clientes de #133 **y**
-los 72.923 contactos de ADR 0035), `HERMES_SUPERVISORES` (quién ve el padrón entero — **no es un
-secreto, es una lista de `vendedora_id`**, pero fail-closed: sin ella nadie lo ve).
+los 72.923 contactos de ADR 0035), `HERMES_SUPERVISORES` (quién ve el padrón entero **y el Dashboard
+entero** — ADR 0035 + 0036; **no es un secreto, es una lista de `vendedora_id`**, pero fail-closed:
+sin ella nadie es supervisor, y entonces **todas ven solo lo suyo**).
 Ver `server/.env.example` (solo nombres).
 
 ## Reglas duras (Goberna)

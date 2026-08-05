@@ -134,6 +134,25 @@ export interface DatosDashboard {
     envios_dia: { dia: string; n: number }[];
     ventas_dia: { dia: string; n: number }[];
   };
+  /**
+   * ¿Quien mira ve TODO? Lo decide el server (`HERMES_SUPERVISORES`), acá no hay
+   * ninguna lista ni ningún `if` que decida antes de preguntar: la pantalla
+   * dibuja lo que llegó. Ausente = server viejo, o una respuesta rehidratada del
+   * caché de IndexedDB (ADR 0007) — y ahí `false` sería mentir sobre un recorte
+   * que no se aplicó, así que se lee como «no se sabe».
+   */
+  supervisor?: boolean;
+  /**
+   * Lo que vino está recortado a las conversaciones asignadas de quien mira.
+   *
+   * Es lo que permite que un radar vacío diga el MOTIVO. Sin esto, la pantalla
+   * diría «nada cayó con estos filtros», que es falso: cayó, no es tuyo. Y los
+   * chips de Landing/Lead Ad se apagan, porque un lead de formulario no tiene
+   * dueño posible y serían ceros permanentes.
+   */
+  soloMisAsignadas?: boolean;
+  /** Nadie configurado como supervisor (fail-closed): todas ven solo lo suyo. */
+  sinSupervisores?: boolean;
 }
 
 export function useDashboard() {

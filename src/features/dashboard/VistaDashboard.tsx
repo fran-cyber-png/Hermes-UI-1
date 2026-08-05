@@ -186,7 +186,27 @@ export function VistaDashboard({
   // ── Las dos lecturas. El default es el radar: quien abre Hermes viene a atender. ──
   const [lectura, setLectura] = useState<'turno' | 'negocio'>('turno');
   const [filtros, setFiltros] = useState<FiltrosNegocioState>({ periodo: '7d', numero: null, dimension: 'curso' });
-  const negocio = useNegocio({ ...filtros, activo: lectura === 'negocio' });
+
+  /**
+   * DE QUIÉN ES ESTE DASHBOARD (5-ago-2026). Lo decide el SERVER y viaja en la
+   * respuesta: acá no hay lista de supervisores ni recorte propio — un recorte
+   * hecho en el navegador sería cosmético, los datos ya viajaron.
+   *
+   * ⚠️ **`?? true` y no `?? false`.** El campo falta en dos casos reales: un
+   * server viejo, y una respuesta rehidratada del caché de IndexedDB (ADR 0007).
+   * Con `false` por default, «El negocio» desaparecería **para todos, incluido
+   * el supervisor**, en la ventana entre el deploy del front (N4, sin restart) y
+   * el del server (N5, a botón). Ausente = como era antes.
+   */
+  const puedeVerNegocio = data?.supervisor ?? true;
+  /** El server sirvió SOLO lo asignado a quien mira. Lo que explica los huecos. */
+  const soloMisAsignadas = data?.soloMisAsignadas ?? false;
+  const negocio = useNegocio({ ...filtros, activo: lectura === 'negocio' && puedeVerNegocio });
+
+  // Si estaba en «El negocio» y la respuesta dice que no le toca, vuelve al radar.
+  // Pasa de verdad: el caché persistido pinta la pantalla antes de que llegue lo
+  // fresco, así que la primera respuesta del server puede cambiar la respuesta.
+  const lecturaEfectiva = lectura === 'negocio' && !puedeVerNegocio ? 'turno' : lectura;
 
   // ── A · Tu mañana: la deuda personal, de la Agenda ya cargada. ──
   const { vencidas, deHoy } = useMemo(() => {
@@ -291,6 +311,20 @@ export function VistaDashboard({
   const countPor = (id: string) =>
     !data ? 0 : id === '' ? data.chats.length + data.formularios.length : [...data.chats, ...data.formularios].filter((x) => x.fuente === id).length;
 
+  /**
+   * Con el Dashboard personal, los chips de lo que NO tiene dueño no se dibujan.
+   *
+   * Un lead de formulario y un comentario de FB/IG no se reparten —el reparto
+   * asigna conversaciones, y su clave es `int:<id>`— así que para quien ve solo
+   * lo suyo esos chips serían ceros permanentes: tres botones que no filtran
+   * nada y que se leen como «hoy no cayó ninguno», que es distinto de «esto no
+   * te toca». El mismo criterio de los chips del bot: se dibujan donde tienen
+   * algo que decir.
+   */
+  const fuentesVisibles = soloMisAsignadas
+    ? FUENTES.filter((f) => f.id === '' || f.id === 'chat')
+    : FUENTES;
+
   const totalEmbudo = ETAPAS.reduce((n, e) => n + (data?.embudo[e] ?? 0), 0);
   const maxCurso = Math.max(1, ...(data?.cursos ?? []).map((c) => c.n));
 
@@ -338,30 +372,38 @@ export function VistaDashboard({
       {/* ═══ A · LA BANDA — el conmutador fijo + lo que cada lectura necesita.
               Altura fija h-16 en las DOS: conmutar no mueve nada de lugar. ═══ */}
       <section className="flex h-16 shrink-0 items-center gap-3 overflow-hidden rounded-2xl bg-card px-4 shadow-panel">
-        <div className="flex shrink-0 rounded-full bg-muted p-0.5">
-          {(
-            [
-              ['turno', 'Mi turno'],
-              ['negocio', 'El negocio'],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setLectura(id)}
-              aria-pressed={lectura === id}
-              className={
-                'rounded-full px-3 py-1 text-xs font-bold transition-[background-color,color] duration-200 ease-house ' +
-                (lectura === id ? 'bg-card text-navy shadow-panel' : 'text-muted-foreground hover:text-foreground')
-              }
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {/* El conmutador solo existe si hay entre qué conmutar: para quien no ve
+            «El negocio», un segmentado de un solo segmento es un botón que no
+            hace nada. En su lugar va el rótulo de qué se está mirando — que ahora
+            hace falta, porque el radar dejó de ser el de todos. */}
+        {puedeVerNegocio ? (
+          <div className="flex shrink-0 rounded-full bg-muted p-0.5">
+            {(
+              [
+                ['turno', 'Mi turno'],
+                ['negocio', 'El negocio'],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setLectura(id)}
+                aria-pressed={lecturaEfectiva === id}
+                className={
+                  'rounded-full px-3 py-1 text-xs font-bold transition-[background-color,color] duration-200 ease-house ' +
+                  (lecturaEfectiva === id ? 'bg-card text-navy shadow-panel' : 'text-muted-foreground hover:text-foreground')
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <h2 className="shrink-0 font-heading text-xs font-bold text-navy">Mi turno</h2>
+        )}
         <span className="h-7 w-px shrink-0 bg-border" aria-hidden="true" />
 
-        {lectura === 'negocio' ? (
+        {lecturaEfectiva === 'negocio' ? (
           <FiltrosNegocio valor={filtros} onCambio={setFiltros} datos={negocio.data} />
         ) : (
           <>
@@ -432,7 +474,7 @@ export function VistaDashboard({
         )}
       </section>
 
-      {lectura === 'negocio' && (
+      {lecturaEfectiva === 'negocio' && (
         <PanelNegocio
           datos={negocio.data}
           cargando={negocio.isPending || (negocio.isFetching && !negocio.data)}
@@ -442,7 +484,7 @@ export function VistaDashboard({
       )}
 
       {/* ═══ B + C — MI TURNO ═══ */}
-      <div className={'min-h-0 flex-1 gap-2.5 ' + (lectura === 'turno' ? 'flex' : 'hidden')}>
+      <div className={'min-h-0 flex-1 gap-2.5 ' + (lecturaEfectiva === 'turno' ? 'flex' : 'hidden')}>
         {/* ── B · EL RADAR — el punto vivo + el contador identifican la zona ── */}
         <section aria-label="El radar" className="flex min-h-0 min-w-0 flex-1 flex-col rounded-2xl bg-card shadow-panel">
           <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
@@ -470,7 +512,7 @@ export function VistaDashboard({
             )}
 
             <div className="ml-auto flex flex-wrap items-center gap-1">
-              {FUENTES.map((f) => {
+              {fuentesVisibles.map((f) => {
                 const ult = f.id && ultimaPor[f.id] ? (Date.now() - ultimaPor[f.id]) / 3_600_000 : null;
                 return (
                   <button
@@ -515,7 +557,15 @@ export function VistaDashboard({
                 {/* para sistemas: conectar Bravo → Hermes está en el runbook §9 (docs/plan-hermes-mvp.md). */}
                 {fuente === 'landing'
                   ? 'Las landings todavía no llegan a Hermes — falta que Sistemas conecte Bravo. No es que no caigan.'
-                  : 'Nada cayó con estos filtros. Si la frescura del header está verde, este vacío es real.'}
+                  : /* 🔴 EL VACÍO TIENE QUE DECIR SU MOTIVO. Con el Dashboard
+                       personal, «nada cayó» sería FALSO: cayó, no es tuyo. Y sin
+                       el motivo, la vendedora lee «se rompió algo» o «hoy no hay
+                       trabajo», que son las dos conclusiones equivocadas. */
+                    soloMisAsignadas && !fuente && !etapaFiltro && !soloCalientes
+                    ? 'Todavía no tenés conversaciones asignadas. Acá aparecen las que te reparte el supervisor — no es que no haya caído nada.'
+                    : soloMisAsignadas
+                      ? 'Ninguna de las tuyas con estos filtros. Este radar muestra solo lo que te asignaron.'
+                      : 'Nada cayó con estos filtros. Si la frescura del header está verde, este vacío es real.'}
                 {(fuente || etapaFiltro || soloCalientes) && (
                   <button
                     type="button"
@@ -811,9 +861,15 @@ export function VistaDashboard({
                     falla — y el dato bueno (el curso que la persona eligió en el
                     formulario) ya está, del otro lado del conmutador. */}
                 Nadie tipeó un curso todavía — los intereses se registran a mano desde el chat o al cotizar.{' '}
-                <button type="button" onClick={() => setLectura('negocio')} className="font-semibold text-primary hover:underline">
-                  El curso que eligieron en el formulario está en El negocio →
-                </button>
+                {/* ⚠️ El atajo a «El negocio» solo se ofrece a quien puede
+                    abrirlo. Para el resto sería un callejón: un link a una
+                    pantalla que no existe en su app, y el 403 del server
+                    esperándolo del otro lado. */}
+                {puedeVerNegocio && (
+                  <button type="button" onClick={() => setLectura('negocio')} className="font-semibold text-primary hover:underline">
+                    El curso que eligieron en el formulario está en El negocio →
+                  </button>
+                )}
               </p>
             ) : (
               <div className="mt-2 flex flex-col gap-1.5">
@@ -837,7 +893,9 @@ export function VistaDashboard({
           <section className="rounded-xl bg-card p-3.5 shadow-panel">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <h3 className={kicker}>Equipo</h3>
+                {/* Con una sola fila —la propia— «Equipo» es un rótulo falso: no
+                    hay equipo del que este cuadro hable. */}
+                <h3 className={kicker}>{soloMisAsignadas ? 'Vos' : 'Equipo'}</h3>
                 {enviosValores.length >= 2 && (
                   <Chispa
                     valores={enviosValores}
@@ -881,7 +939,9 @@ export function VistaDashboard({
                 </div>
                 {equipo.length === 0 && (
                   <p className="border-t border-border/60 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                    Nadie del equipo registró actividad todavía.
+                    {soloMisAsignadas
+                      ? 'Todavía no registraste actividad hoy.'
+                      : 'Nadie del equipo registró actividad todavía.'}
                   </p>
                 )}
                 {equipo.map((v) => {
