@@ -23,11 +23,31 @@ import type { MediaSaliente, TransporteWhatsapp } from './transporte.js';
  * más de 5 MB sin problema. Aplicarles el tope de Meta rechazaría envíos que
  * funcionan. Por eso el límite lo declara el transporte que lo impone.
  *
- * Fuente de los números de la Cloud API (verificado el 5-ago-2026 contra
- * developers.facebook.com/docs/whatsapp/cloud-api/reference/media):
- * imagen 5 MB (solo JPEG/PNG) · video 16 MB (H.264+AAC) · audio 16 MB ·
- * documento 100 MB. El nodo `/media` acepta hasta 64 MB en la subida, pero el
- * límite que rechaza es el POST-procesamiento por tipo — que es el que se ve.
+ * ── MEDIDO contra la línea de producción, no leído ───────────────────────
+ * `npm run wa:cloud-api:limites` el 5-ago-2026 (sube archivos de ceros a
+ * `/media`, no manda ningún mensaje). Con el control en verde:
+ *
+ *     video/mp4        15 MB  ✓ aceptado   ← control: la credencial sirve
+ *     video/mp4      17,9 MB  ✗ File Too Large
+ *     application/pdf 17,9 MB ✓ aceptado   ← el MISMO peso, con otro mime
+ *     application/pdf   70 MB ✓ aceptado
+ *     image/png          9 MB ✗ File Too Large
+ *
+ * Dos conclusiones, las dos con consecuencias:
+ *
+ * 1. **El tope se aplica en la SUBIDA y sale del MIME declarado en el form.**
+ *    Por eso «mandar el video como documento» —que tendría 100 MB de margen— no
+ *    existe como opción: habría que declarar un mime que no es el del archivo, y
+ *    al lead le llegaría un adjunto mal rotulado que WhatsApp no sabe
+ *    reproducir. La salida para un video pesado es comprimirlo (ADR 0038).
+ * 2. **Los 100 MB de documento son REALES**: el PDF de 70 MB entró. O sea que en
+ *    documentos el que corta en 64 somos NOSOTROS, con `express.raw`. Si algún
+ *    día hace falta mandar un PDF más gordo, se sube ese `limit` y `documento`
+ *    acá — no hay nada del lado de Meta que lo impida.
+ *
+ * Coincide con la doc oficial (developers.facebook.com/docs/whatsapp/cloud-api/
+ * reference/media): imagen 5 MB (solo JPEG/PNG) · video 16 MB (H.264+AAC) ·
+ * audio 16 MB · documento 100 MB.
  */
 
 export type ClaseSaliente = MediaSaliente['clase'];
@@ -47,8 +67,9 @@ export const LIMITES_CLOUD_API: LimitesMedia = {
   imagen: 5 * MB,
   video: 16 * MB,
   audio: 16 * MB,
-  // Meta acepta 100 MB de documento, pero el cuerpo entra por `express.raw`
-  // con tope de 64: prometer 100 daría un 413 sin mensaje nuestro.
+  // Meta acepta 100 MB y está MEDIDO (un PDF de 70 MB entró), pero el cuerpo
+  // pasa por `express.raw` con tope de 64: prometer 100 daría un 413 sin
+  // mensaje nuestro. El que corta acá somos nosotros, y se puede subir.
   documento: TOPE_HTTP_BYTES,
 };
 

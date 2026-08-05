@@ -115,12 +115,26 @@ se descarta al instante, sin 32 MB de por medio.
 
 ## Lo que deliberadamente NO se hizo
 
-- **Mandarlo como documento.** El tope de documento es 100 MB, así que parecía la salida barata. No
-  lo es: el error dice `Cloud API subiendo media (400)`, o sea que el rechazo pasa en la **subida** a
-  `/media`, donde el archivo se declara con su mime. Mandarlo como documento exigiría declarar un
-  mime que no es el del archivo, y al lead le llegaría un adjunto mal rotulado que WhatsApp no sabe
-  reproducir. Para no dejarlo en inferencia se escribió `npm run wa:cloud-api:limites`, que lo mide
-  sin mandar ningún mensaje.
+- **Mandarlo como documento.** El tope de documento es 100 MB, así que parecía la salida barata.
+  **Medido contra la línea de producción** con `npm run wa:cloud-api:limites` (sube archivos de
+  ceros, no manda ningún mensaje), con el control en verde:
+
+  | mime declarado | peso | Meta |
+  |---|---|---|
+  | `video/mp4` | 15 MB | ✓ aceptado *(control)* |
+  | `video/mp4` | 17,9 MB | ✗ File Too Large |
+  | `application/pdf` | 17,9 MB | ✓ **aceptado** |
+  | `application/pdf` | 70 MB | ✓ aceptado |
+  | `image/png` | 9 MB | ✗ File Too Large |
+
+  El tope se aplica **en la subida** y sale del **mime declarado**: el mismo peso que rebota como
+  video entra como documento. O sea que la opción existiría solo declarando un mime que no es el
+  del archivo — y al lead le llegaría un adjunto mal rotulado que WhatsApp no sabe reproducir.
+  Descartado con evidencia, no por corazonada.
+
+  De yapa: **los 100 MB de documento son reales** (el PDF de 70 MB entró), así que ahí el que corta
+  en 64 somos nosotros con `express.raw`. Si alguna vez hace falta mandar un PDF más gordo, es subir
+  ese `limit` — no hay nada del lado de Meta que lo impida.
 - **Comprimir automáticamente.** Se ofrece, no se hace solo. Un minuto de CPU sin que nadie lo haya
   pedido, sobre un archivo que la vendedora quizá quería mandar por otro lado.
 - **Comprimir imágenes.** El tope de imagen de la Cloud API es 5 MB y es un frente distinto (otro
