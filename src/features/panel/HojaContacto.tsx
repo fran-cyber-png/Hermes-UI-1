@@ -48,11 +48,23 @@ export function HojaContacto({
   conversacion,
   onCerrar,
   escapeActivo = true,
+  miVendedora,
 }: {
   conversacion: Conversacion;
   onCerrar: () => void;
   /** `false` cuando hay un modal encima que ya maneja su propio Escape. */
   escapeActivo?: boolean;
+  /**
+   * Quién está mirando. Baja hasta `PanelDerecho` para el timeline (ADR 0037):
+   * un evento del contacto lo edita y lo borra SOLO quien lo registró, y sin
+   * esto `esMio` da `false` para todos.
+   *
+   * Sin este cable la hoja no se rompía —degrada a no dibujar los botones, que
+   * es el lado correcto del fail— pero la ficha de Pipeline y la del padrón
+   * quedaban en solo lectura sin que nada lo dijera: la misma acción se podía
+   * hacer desde Mensajes y no desde acá.
+   */
+  miVendedora?: string | null;
 }) {
   useEscape(onCerrar, escapeActivo);
 
@@ -84,7 +96,7 @@ export function HojaContacto({
           Mensajes: su pie («Registrar venta») está clavado y no se puede empujar
           fuera de la hoja. */}
       <div className="min-h-0 flex-1">
-        <PanelDerecho conversacion={conversacion} />
+        <PanelDerecho conversacion={conversacion} miVendedora={miVendedora} />
       </div>
     </aside>
   );

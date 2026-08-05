@@ -61,12 +61,15 @@ export function VistaEmbudo({
   onAbrir,
   onAgendarBienvenida,
   onIrAMensajes,
+  miVendedora,
 }: {
   onAbrir: (c: Conversacion) => void;
   /** La siguiente jugada del recibo de venta (cae en la Agenda vía puente). */
   onAgendarBienvenida?: (telefono: string | null) => void;
   /** La bandeja no se trabaja acá: este botón lleva a Mensajes. */
   onIrAMensajes?: () => void;
+  /** Quién mira — la `HojaContacto` la necesita para el timeline (ADR 0037). */
+  miVendedora?: string | null;
 }) {
   const qc = useQueryClient();
   /** El recorte de Contactados: solo las que ya tienen un precio encima. */
@@ -564,6 +567,7 @@ export function VistaEmbudo({
           conversacion={ficha}
           onCerrar={() => setFicha(null)}
           escapeActivo={pendienteInteres == null && ventaPara == null}
+          miVendedora={miVendedora}
         />
       )}
 

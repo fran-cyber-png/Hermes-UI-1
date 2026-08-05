@@ -116,10 +116,13 @@ function AccionesFicha({ telefono, onEscribir, onVenta }: { telefono: string; on
 export function VistaPersonas({
   telefonoInicial,
   onEscribir,
+  miVendedora,
 }: {
   telefonoInicial?: string | null;
   /** Puente a Mensajes (Fase 3): abre (o crea) el chat con ese número. */
   onEscribir?: (telefono: string) => void;
+  /** Quién mira — la `HojaContacto` del padrón la necesita (ADR 0037). */
+  miVendedora?: string | null;
 }) {
   // Con un teléfono en la mano se abre directo en la ficha: quien llega así ya
   // sabe a quién busca, y mostrarle la tabla primero sería un paso de más.
@@ -137,7 +140,7 @@ export function VistaPersonas({
       </div>
 
       {modo === 'padron' ? (
-        <PantallaPadron onEscribir={onEscribir} />
+        <PantallaPadron onEscribir={onEscribir} miVendedora={miVendedora} />
       ) : (
         <BuscarPorTelefono telefonoInicial={telefonoInicial} onEscribir={onEscribir} />
       )}

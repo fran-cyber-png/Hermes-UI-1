@@ -52,7 +52,14 @@ import {
  * habilitaron**, sin filtros de universo. Quién es quién lo decide el server y
  * llega en `supervisor`: acá no se decide nada, se dibuja lo que vino.
  */
-export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string) => void }) {
+export function PantallaPadron({
+  onEscribir,
+  miVendedora,
+}: {
+  onEscribir?: (telefono: string) => void;
+  /** Quién mira — la `HojaContacto` la necesita para el timeline (ADR 0037). */
+  miVendedora?: string | null;
+}) {
   const [texto, setTexto] = useState('');
   const [filtros, setFiltros] = useState<FiltrosPadron>({ pagina: 1, porPagina: 50 });
   const [seleccion, setSeleccion] = useState<Seleccion>(NADA);
@@ -366,7 +373,11 @@ export function PantallaPadron({ onEscribir }: { onEscribir?: (telefono: string)
           alguien que nunca escribió vienen vacíos — que es la verdad, no una
           falla de carga: el padrón son justamente los que nunca escribieron. */}
       {conversacionDeLaFicha && (
-        <HojaContacto conversacion={conversacionDeLaFicha} onCerrar={() => setFicha(null)} />
+        <HojaContacto
+          conversacion={conversacionDeLaFicha}
+          onCerrar={() => setFicha(null)}
+          miVendedora={miVendedora}
+        />
       )}
     </div>
   );

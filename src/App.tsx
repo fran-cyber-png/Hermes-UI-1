@@ -608,6 +608,7 @@ export default function App() {
                 onAgendarBienvenida={agendarBienvenida}
                 // La bandeja de Interesados no se trabaja en el kanban: se responde en Mensajes.
                 onIrAMensajes={() => cambiarVista('bandeja')}
+                miVendedora={vendedora.id}
               />
             )}
             {vista === 'agenda' && (
@@ -617,7 +618,7 @@ export default function App() {
                 onCrearInicialUsado={() => setPuente(null)}
               />
             )}
-            {vista === 'personas' && <VistaPersonas telefonoInicial={telefonoPersonas} onEscribir={escribirA} />}
+            {vista === 'personas' && <VistaPersonas telefonoInicial={telefonoPersonas} onEscribir={escribirA} miVendedora={vendedora.id} />}
             {vista === 'entrenamiento' && <VistaEntrenamiento />}
             {/* El fallback dibuja la anatomía de la vista (lista + página) en vez
                 de un texto: lo que se está esperando son 269 KB de editor, y un
