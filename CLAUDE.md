@@ -247,11 +247,16 @@ transporte (`TransporteWhatsapp.nombre`), no una tabla suelta.
   · El motor entra con `import()` diferido: 32 MB solo para quien adjunta un video pesado.
   · **Medido**: 199 s para 2:13 de video (ffmpeg.wasm single-thread). Se anuncia antes de empezar.
     Bajarlo pide COOP/COEP (multi-hilo) o WebCodecs con feature-detection — ninguna urgente.
-- ⚠️ **«Mandarlo como documento» NO es una salida.** El rechazo pasa en la **subida** a `/media`,
-  donde el archivo se declara con su mime: mandarlo como documento exigiría mentir el mime y al
-  lead le llegaría un adjunto que WhatsApp no sabe reproducir. Para medirlo sin mandar mensajes:
-  `cd server && npm run wa:cloud-api:limites` (sube archivos de ceros; el CONTROL va primero y
-  **frena la conclusión** si la credencial no sirve).
+- ⚠️ **«Mandarlo como documento» NO es una salida — MEDIDO**, no supuesto
+  (`cd server && npm run wa:cloud-api:limites`, 5-ago-2026 contra la línea de producción; sube
+  archivos de ceros y **no manda ningún mensaje**; el CONTROL va primero y **frena la conclusión**
+  si la credencial no sirve). Con el control en verde: `video/mp4` 17,9 MB **rechazado** ·
+  `application/pdf` 17,9 MB **aceptado** · `application/pdf` 70 MB **aceptado** · `image/png` 9 MB
+  rechazado. O sea: **el tope se aplica en la SUBIDA y sale del MIME declarado** — el mismo peso que
+  rebota como video entra como documento, así que la opción existiría solo mintiendo el mime, y al
+  lead le llegaría un adjunto que WhatsApp no sabe reproducir.
+  · **Los 100 MB de documento son reales**: ahí el que corta en 64 somos NOSOTROS con `express.raw`.
+    Si hace falta mandar un PDF más gordo, se sube ese `limit` y `LIMITES_CLOUD_API.documento`.
 
 ## Auth
 

@@ -93,8 +93,14 @@ versión que nadie editó y **partiría en dos las mediciones de una pieza que e
 sumaría 32 MB a lo que baja por OTA cada vendedora peruana después de cada deploy, para una función
 que la mayoría de los días no usa.
 
-Y sale de `dist/assets` (Vite lo emite con hash desde `?url`), no de un CDN: con `unpkg` en el
-camino, adjuntar un video dependería de que un tercero esté vivo.
+Y sale de `public/ffmpeg/` —que `scripts/preparar-ffmpeg.mjs` copia desde `node_modules` en
+`predev`/`prebuild`, gitignored— no de un CDN: con `unpkg` en el camino, adjuntar un video
+dependería de que un tercero esté vivo. **No se puede importar con `?url`**: Vite pre-bundlea el
+paquete y deja de devolver una URL, que es lo único que sirve para el worker. Y tiene que ser el
+build **ESM**, porque el worker es `type: "module"` siempre y termina en `import(coreURL)` pidiendo
+un `export default` que el UMD no tiene — el error (`failed to import ffmpeg-core.js`) no distingue
+«no pude traerlo» de «lo traje y no exporta lo que esperaba», así que el primer diagnóstico fue
+exactamente al revés.
 
 ## Lo que esto destapó
 
