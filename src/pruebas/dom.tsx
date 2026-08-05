@@ -141,6 +141,36 @@ export async function reposar() {
 }
 
 /**
+ * Un clic que VIAJA. Mismo motivo que `teclear`: React escucha en la raíz, así que un
+ * evento sin `bubbles` no llega a ningún `onClick` y el test daría siempre que no pasó nada.
+ *
+ * Existe para lo que un test puro no puede ver: que un `stopPropagation` esté puesto donde
+ * hace falta (un botón adentro de una fila clickeable) y que un arrastre no termine
+ * contando como clic.
+ */
+export function tocar(elemento: Element): void {
+  act(() => {
+    elemento.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  });
+}
+
+/**
+ * Un `dragstart` de verdad sobre `elemento`, con el `dataTransfer` que el handler toca.
+ *
+ * jsdom no implementa `DragEvent`, así que el objeto se arma a mano: lo único que la app
+ * hace con él es escribir `effectAllowed`, y sin la propiedad el handler revienta antes de
+ * llegar a lo que se está probando.
+ */
+export function arrastrar(elemento: Element): void {
+  act(() => {
+    const evento = new Event('dragstart', { bubbles: true, cancelable: true });
+    Object.defineProperty(evento, 'dataTransfer', { value: { effectAllowed: '' } });
+    elemento.dispatchEvent(evento);
+    elemento.dispatchEvent(new Event('dragend', { bubbles: true, cancelable: true }));
+  });
+}
+
+/**
  * Un `keydown` que VIAJA: nace en `target` (o en el `body`), sube y se puede cancelar.
  *
  * `bubbles: true` no es decoración — sin eso el evento nunca llega a los listeners de

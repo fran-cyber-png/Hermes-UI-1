@@ -7,6 +7,7 @@ import type { Etapa } from '../../lib/etapas';
 import { decidirDrop, decidirRebote, reintentoTrasInteres } from './compuertas';
 import { ModalInteresCotizado, ModalVentaCierre } from './ModalesCompuerta';
 import { BandejaDeuda } from './BandejaDeuda';
+import { HojaContacto } from '../panel/HojaContacto';
 import { TarjetaEmbudo } from './TarjetaEmbudo';
 import { cotizarEnUnClic } from './tarjeta';
 import {
@@ -110,6 +111,16 @@ export function VistaEmbudo({
    * foto local que podría deshacer movimientos de OTRAS tarjetas.
    */
   const [overrides, setOverrides] = useState<Record<string, Etapa>>({});
+  /**
+   * DE QUIÉN SE ESTÁ LEYENDO LA FICHA, al costado del tablero. Un clic en la
+   * tarjeta la abre; antes la única forma de saber quién era esa persona era
+   * irse a Mensajes y volver — o sea, perder el tablero para consultarlo.
+   *
+   * Guarda la conversación entera y no la clave: `PanelDerecho` la pide así, y
+   * releerla de `repartidas` obligaría a decidir qué hacer cuando la tarjeta se
+   * mueve de columna mientras la ficha está abierta (nada: es la misma persona).
+   */
+  const [ficha, setFicha] = useState<Conversacion | null>(null);
   /** La tarjeta que la compuerta de Cotizados dejó ESPERANDO el curso de interés. */
   const [pendienteInteres, setPendienteInteres] = useState<Conversacion | null>(null);
   /** La conversación soltada en Cierre: abre el formulario de Registrar venta. */
@@ -311,7 +322,10 @@ export function VistaEmbudo({
     (desglose?.length ?? Object.keys(conteos ?? {}).length) === 0;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col p-3">
+    // `relative`: la hoja de la ficha se ancla acá adentro (`absolute inset-y-3
+    // right-3`), no al viewport — así respeta el padding del tablero y no se
+    // mete abajo de la barra de la cabecera.
+    <div className="relative flex min-h-0 flex-1 flex-col p-3">
       <BandejaDeuda
         desglose={desglose}
         conteos={conteos}
@@ -483,6 +497,8 @@ export function VistaEmbudo({
                       c={c}
                       indice={i}
                       onAbrir={onAbrir}
+                      onFicha={setFicha}
+                      abierta={ficha?.clave === c.clave}
                       alArrastrar={empezarArrastre}
                       alTerminar={terminarArrastre}
                       arrastrando={arrastrada?.clave === c.clave}
@@ -533,6 +549,22 @@ export function VistaEmbudo({
             );
           })}
         </div>
+      )}
+
+      {/* LA FICHA AL COSTADO — se superpone al tablero a propósito (el porqué,
+          con la cuenta de píxeles, está en `HojaContacto`). Sin scrim: se puede
+          tocar otra tarjeta y la hoja cambia de persona sin cerrarse, que es
+          justo lo que se hace cuando se está eligiendo a quién atender.
+
+          El Escape se le apaga mientras hay un modal de compuerta encima: los
+          dos escuchan en captura, y sin esto una sola tecla cerraría el modal de
+          la venta Y la ficha de la persona a la que se le estaba por registrar. */}
+      {ficha && (
+        <HojaContacto
+          conversacion={ficha}
+          onCerrar={() => setFicha(null)}
+          escapeActivo={pendienteInteres == null && ventaPara == null}
+        />
       )}
 
       {/* Las compuertas guían: el modal pide lo que falta, ahí mismo. */}

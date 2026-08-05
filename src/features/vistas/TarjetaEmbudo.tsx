@@ -103,6 +103,8 @@ export function TarjetaEmbudo({
   c,
   indice,
   onAbrir,
+  onFicha,
+  abierta,
   alArrastrar,
   alTerminar,
   arrastrando,
@@ -113,6 +115,10 @@ export function TarjetaEmbudo({
   c: Conversacion;
   indice: number;
   onAbrir: (c: Conversacion) => void;
+  /** Un clic en la tarjeta abre la ficha al costado, sin salir del tablero. */
+  onFicha?: (c: Conversacion) => void;
+  /** Esta es la que está en la hoja: se marca, o no se sabe de cuál se está leyendo. */
+  abierta?: boolean;
   alArrastrar: (c: Conversacion) => void;
   alTerminar: () => void;
   arrastrando: boolean;
@@ -122,6 +128,17 @@ export function TarjetaEmbudo({
   cotizando: boolean;
 }) {
   const { conFoto, elRef } = useConFotoVisible(indice, c.canal);
+  /**
+   * ⚠️ ARRASTRAR NO ES CLICKEAR, y el navegador no siempre está de acuerdo.
+   *
+   * La tarjeta es `draggable` desde #60: soltarla en otra columna la mueve de
+   * etapa. Un drag que empieza y termina sobre la misma tarjeta —soltar sin
+   * moverse, o cancelar con Escape— puede terminar disparando `click`, y ahí
+   * cada arrastre fallido abriría la ficha encima del tablero que se estaba
+   * ordenando. La marca se levanta en el tick siguiente al `dragend`, que es
+   * cuando el `click` ya pasó de largo.
+   */
+  const huboArrastre = useRef(false);
   const nombre = nombreDeTarjeta(c);
   const { turno, apremia } = turnoDeTarjeta(c);
   const curso = cursoDeTarjeta(c);
@@ -142,16 +159,49 @@ export function TarjetaEmbudo({
     <div
       ref={elRef}
       draggable
+      role={onFicha ? 'button' : undefined}
+      tabIndex={onFicha ? 0 : undefined}
+      aria-label={onFicha ? `Ver la ficha de ${nombre.texto}` : undefined}
+      onClick={
+        onFicha
+          ? () => {
+              if (huboArrastre.current) return;
+              onFicha(c);
+            }
+          : undefined
+      }
+      onKeyDown={
+        onFicha
+          ? (e) => {
+              // Solo cuando el foco está en la tarjeta misma: si no, Enter sobre
+              // el botón de «Cotizado» abriría la ficha además de cotizar.
+              if (e.target !== e.currentTarget) return;
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onFicha(c);
+              }
+            }
+          : undefined
+      }
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = 'move';
+        huboArrastre.current = true;
         alArrastrar(c);
       }}
-      onDragEnd={alTerminar}
+      onDragEnd={() => {
+        window.setTimeout(() => {
+          huboArrastre.current = false;
+        }, 0);
+        alTerminar();
+      }}
       className={
-        'group cursor-grab rounded-xl border-l-2 bg-card px-2.5 py-1.5 shadow-[0_1px_2px_rgba(14,42,82,0.06)] transition-[box-shadow,opacity,transform] duration-200 ease-house hover:shadow-panel active:cursor-grabbing ' +
+        'group cursor-grab rounded-xl border-l-2 bg-card px-2.5 py-1.5 shadow-[0_1px_2px_rgba(14,42,82,0.06)] transition-[box-shadow,opacity,transform] duration-200 ease-house hover:shadow-panel active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
         tempBorde(c.referencia) +
         (arrastrando ? ' scale-[0.98] opacity-40' : '') +
-        (rebotada ? ' ring-1 ring-temp-frio' : '')
+        (rebotada ? ' ring-1 ring-temp-frio' : '') +
+        // De cuál se está leyendo la ficha. Navy y no oro: acá no hay ningún
+        // reloj corriendo, es solo «esta es la que estás mirando».
+        (abierta ? ' ring-1 ring-navy' : '')
       }
     >
       {/* ── QUIÉN, Y DE QUIÉN ES EL TURNO ── */}
@@ -217,7 +267,12 @@ export function TarjetaEmbudo({
         <button
           type="button"
           title="Abrir en Mensajes"
-          onClick={() => onAbrir(c)}
+          onClick={(e) => {
+            // Sin esto el clic también abriría la ficha al costado, y la vista ya
+            // se está yendo a Mensajes: quedaría una hoja abierta atrás.
+            e.stopPropagation();
+            onAbrir(c);
+          }}
           className="shrink-0 rounded-md p-1 text-muted-foreground opacity-0 transition-[color,background-color,opacity] duration-200 group-hover:opacity-100 hover:bg-secondary hover:text-navy focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.96]"
         >
           <MessageSquareText size={13} />
@@ -264,7 +319,10 @@ export function TarjetaEmbudo({
             <button
               type="button"
               disabled={cotizando}
-              onClick={() => onCotizar(c)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onCotizar(c);
+              }}
               title={
                 unClic
                   ? `Marcar cotizado por «${unClic.etiqueta}»`

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hermes — el Pipeline con la ficha al costado (galería de evidencia)</title>
+    <!--
+      Entry APARTE de la app. `vite build` compila solo `index.html`, así que esto NO entra
+      al bundle que usan las vendedoras: se abre a mano con `npx vite` para producir las
+      capturas de `docs/evidencia/`. Sin server, sin base, sin red.
+          npx vite --port 5199  →  http://localhost:5199/galeria-embudo.html
+          …/galeria-embudo.html?ficha=1  →  con la hoja de la ficha abierta
+
+      La captura que importa es a 1280×720: el tablero declara 1.000 px de mínimos y la
+      hoja se lleva 360, así que ese ancho es justamente donde se decide si la hoja podía
+      empujar o tenía que superponerse.
+    -->
+  </head>
+  <body>
+    <div id="galeria"></div>
+    <script type="module" src="/src/features/vistas/galeria.tsx"></script>
+  </body>
+</html>
