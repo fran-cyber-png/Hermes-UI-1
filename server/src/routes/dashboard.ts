@@ -10,6 +10,9 @@ import { consultarPorVendedora } from '../dashboard/porVendedora.js';
 import { separarEquipo } from '../dashboard/equipo.js';
 import { consultarNegocio, DIMENSIONES, type Dimension } from '../dashboard/negocio.js';
 import { rangoLibre, resolverRango } from '../dashboard/periodo.js';
+import { recorteDelDashboard, soloMisClavesSql } from '../dashboard/personal.js';
+import { supervisoresConfigurados } from '../padron/supervisor.js';
+import { mismaVendedora } from '../reparto/destino.js';
 
 /**
  * EL DASHBOARD — el radar de la mesa: los leads CAYENDO, de todas las fuentes.
@@ -29,6 +32,24 @@ import { rangoLibre, resolverRango } from '../dashboard/periodo.js';
 export const dashboardRouter = Router();
 dashboardRouter.use(requiereVendedora);
 
+/** Un lead de formulario, como lo devuelve Postgres. `type` y no `interface`:
+ *  `db.execute<T>` exige la index signature implícita que las interfaces no tienen. */
+type FilaFormulario = {
+  clave: string;
+  fuente: string;
+  canal: string;
+  persona_nombre: string | null;
+  telefono: string | null;
+  correo: string | null;
+  pais_dato: string | null;
+  producto: string | null;
+  campana: string | null;
+  flyer: string | null;
+  es_organico: boolean | null;
+  estado_lead: string;
+  cayo_at: string;
+};
+
 /**
  * EL PANEL DEL NEGOCIO — la segunda lectura del Dashboard (#128, #126).
  *
@@ -44,6 +65,17 @@ dashboardRouter.use(requiereVendedora);
  * nadie pidió.
  */
 dashboardRouter.get('/negocio', async (req, res) => {
+  // 🔴 SOLO EL SUPERVISOR. «El negocio» es la facturación por curso y por
+  // anuncio de toda la Escuela: es la lectura del que pone la plata, no la de
+  // quien atiende. Va con el mismo motivo y la misma forma que `/api/padron`
+  // (`no_es_supervisor`), y NO como un query-param —un `?supervisor=1` sería la
+  // frontera entera a un clic de curl.
+  const mando = recorteDelDashboard(req.vendedoraId, process.env);
+  if (!mando.supervisor) {
+    res.status(403).json({ ok: false, motivo: 'no_es_supervisor', message: 'no ves el negocio' });
+    return;
+  }
+
   const q = req.query as Record<string, string | undefined>;
 
   if (q.desde && q.hasta && rangoLibre(q.desde, q.hasta) === null) {
@@ -69,30 +101,30 @@ dashboardRouter.get('/negocio', async (req, res) => {
   res.json({ ...negocio, periodo: rango.clave });
 });
 
-dashboardRouter.get('/', async (_req, res) => {
+dashboardRouter.get('/', async (req, res) => {
+  // ── DE QUIÉN ES ESTE DASHBOARD (5-ago-2026). El supervisor ve todo; quien no,
+  //    ve SOLO sus conversaciones asignadas — y eso recorta las cinco consultas
+  //    de abajo, no una. La decisión, su costo y por qué es una frontera y no un
+  //    filtro están en `dashboard/personal.ts`.
+  const { supervisor, soloAsignadasA } = recorteDelDashboard(req.vendedoraId, process.env);
+
   // ── Lo que cayó por CHAT: el seam `cola/consultarRadar.ts` (testeable contra
   //    la base, ADR 0008) trae las conversaciones YA ordenadas por la urgencia
   //    canónica — recordatorios vencidos incluidos (#38). Un solo `ahora` para
   //    las dos listas: con dos relojes las claves no serían comparables entre sí.
   const ahora = new Date();
-  const chatsOrdenados = await consultarRadar(db, ahora);
+  const chatsOrdenados = await consultarRadar(db, ahora, soloAsignadasA);
 
   // ── Lo que cayó por FORMULARIO: Lead Ads de Meta + landings (webhook Bravo).
-  const formularios = await db.execute<{
-    clave: string;
-    fuente: string;
-    canal: string;
-    persona_nombre: string | null;
-    telefono: string | null;
-    correo: string | null;
-    pais_dato: string | null;
-    producto: string | null;
-    campana: string | null;
-    flyer: string | null;
-    es_organico: boolean | null;
-    estado_lead: string;
-    cayo_at: string;
-  }>(sql`
+  //
+  // ⚠️ CON RECORTE PERSONAL NO VAN. Un lead de formulario no tiene dueño: el
+  // reparto asigna CONVERSACIONES (`conversacion_asignada`, por clave `conv:…`) y
+  // un lead todavía no es una. Servirlos igual sería mezclar «lo mío» con «lo de
+  // todos» adentro de una misma lista que se presenta como propia, y elegir a
+  // cuál de los dos criterios pertenece cada fila quedaría del lado de quien
+  // mira. Se van enteros, y la respuesta lo DICE (`soloMisAsignadas`) para que la
+  // pantalla explique el hueco en vez de mostrar chips en cero sin motivo.
+  const formularios: FilaFormulario[] = soloAsignadasA !== null ? [] : await db.execute<FilaFormulario>(sql`
     SELECT
       'lead:' || lead_id AS clave,
       CASE WHEN platform = 'landing' THEN 'landing' ELSE 'lead-ad' END AS fuente,
@@ -147,9 +179,17 @@ dashboardRouter.get('/', async (_req, res) => {
   // en producción eran 537 de los 620 envíos de la tabla. `separarEquipo`
   // los aparta — no los descarta: van como renglón aparte para que la resta no
   // sea invisible. El porqué del criterio, en `dashboard/equipo.ts`.
-  const { equipo: porVendedora, automaticos } = separarEquipo(
-    await consultarPorVendedora(db, ahora),
-  );
+  //
+  // Con recorte personal queda UNA fila, la propia, y `automaticos` se va a
+  // `null`: el renglón del software es la resta del EQUIPO («salieron 620, el
+  // equipo mandó 83»), y al lado de una sola persona no resta nada — diría que
+  // el bot es parte de sus números.
+  const equipoCompleto = separarEquipo(await consultarPorVendedora(db, ahora));
+  const porVendedora =
+    soloAsignadasA === null
+      ? equipoCompleto.equipo
+      : equipoCompleto.equipo.filter((v) => mismaVendedora(v.vendedora, soloAsignadasA));
+  const automaticos = soloAsignadasA === null ? equipoCompleto.automaticos : null;
 
   // ── El embudo de un vistazo: conteos por ETAPA EFECTIVA sobre la ventana de
   //    30 días de la cola (#89, ADR 0013). El MISMO seam que /api/conversaciones
@@ -157,18 +197,22 @@ dashboardRouter.get('/', async (_req, res) => {
   //    ventana, que hacía incomparable el «N de M» del kanban. `norm` sigue para
   //    el mapa de chips (`etapas`), que sí es «lo asentado a mano».
   const norm = (e: string) => (e === 'nuevo' ? 'interesado' : e === 'venta' ? 'cierre' : e);
-  const embudo = await contarPorEtapaEfectiva(db);
+  const embudo = await contarPorEtapaEfectiva(db, soloAsignadasA);
 
   // ── Qué cursos pide la gente: el ranking de intereses. Señal de negocio pura. ──
+  //    `intereses` se cuelga de la CLAVE de la conversación, así que el recorte
+  //    personal es el mismo de siempre y no hace falta una segunda definición.
   const cursos = await db.execute<{ curso: string; n: number }>(sql`
-    SELECT curso, count(*)::int AS n FROM intereses GROUP BY curso ORDER BY n DESC, curso LIMIT 6
+    SELECT curso, count(*)::int AS n FROM intereses
+    WHERE ${soloMisClavesSql(sql`clave`, soloAsignadasA)}
+    GROUP BY curso ORDER BY n DESC, curso LIMIT 6
   `);
 
   // ── Las series de 14 días para las gráficas del riel. Siempre 14 puntos:
   //    los días sin datos van en 0 desde acá (el front no inventa continuidad).
   //    El corte de día es en hora de Lima, no en la del server — #4.
   const { leads_dia: leadsDia, envios_dia: enviosDia, ventas_dia: ventasDia } =
-    await consultarSeriesDashboard(db, ahora);
+    await consultarSeriesDashboard(db, ahora, soloAsignadasA);
 
   res.json({
     chats: chatsOrdenados,
@@ -180,5 +224,14 @@ dashboardRouter.get('/', async (_req, res) => {
     embudo,
     cursos,
     series: { leads_dia: leadsDia, envios_dia: enviosDia, ventas_dia: ventasDia },
+    // ── DE QUIÉN ES LO QUE VIAJÓ. La pantalla no lo decide: lo dibuja.
+    supervisor,
+    // Lo que la pantalla necesita para explicar los huecos en vez de mostrar
+    // ceros sin motivo: sin esto, un radar vacío dice «nada cayó con estos
+    // filtros», que es falso — cayó, no es tuyo.
+    ...(soloAsignadasA !== null ? { soloMisAsignadas: true } : {}),
+    // Fail-closed visible: sin la variable NADIE es supervisor, y eso hay que
+    // decirlo o se lee como que el reparto se comió todo (igual que en el padrón).
+    ...(supervisoresConfigurados(process.env).length === 0 ? { sinSupervisores: true } : {}),
   });
 });
