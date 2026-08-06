@@ -3,6 +3,11 @@ import { db } from "../db/client.js";
 import { esSupervisor, supervisoresConfigurados } from "../padron/supervisor.js";
 import { ErrorDeMeta, traerPlantillasDeMeta } from "../campana/metaPlantillas.js";
 import { consultarCorridas, consultarEsperando } from "../campana/consultarCorridas.js";
+import { crearPlantilla, ErrorAlCrear } from "../campana/crearPlantilla.js";
+import { revisar, sugerirNombre } from "../campana/nombrePlantilla.js";
+import { archivarLista, guardarLista, leerListas, nombreLibre } from "../campana/listas.js";
+import { corridasVivas, frenarCorrida, historial } from "../campana/autorizar.js";
+import { esTablaAusente } from "../cola/estadoSql.js";
 import { hayQuePreocuparse } from "../campana/corridas.js";
 
 /**
@@ -147,4 +152,198 @@ campanaRouter.get("/corridas/:pieza/esperando", async (req, res) => {
   }
   const esperando = await consultarEsperando(db, req.params.pieza);
   res.json({ esperando });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+//  PLANTILLAS — crear una nueva en Meta
+// ══════════════════════════════════════════════════════════════════════════
+
+/**
+ * REVISAR SIN MANDAR. Devuelve los reparos mecánicos de una plantilla.
+ *
+ * Existe aparte de crear porque el ciclo con Meta es de 24 h: la pantalla revisa
+ * mientras se escribe, y el error aparece al lado del campo en vez de al día
+ * siguiente como un enum pelado.
+ */
+campanaRouter.post("/plantillas/revisar", (req, res) => {
+  if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
+    res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
+    return;
+  }
+  const p = req.body as Record<string, string>;
+  res.json({
+    reparos: revisar({
+      nombre: p.nombre ?? "",
+      idioma: p.idioma ?? "",
+      categoria: p.categoria ?? "",
+      cuerpo: p.cuerpo ?? "",
+      headerTexto: p.headerTexto,
+      pie: p.pie,
+    }),
+    nombreSugerido: sugerirNombre(p.nombre ?? ""),
+  });
+});
+
+/**
+ * CREAR LA PLANTILLA EN META.
+ *
+ * ⚠️ **Crear no manda nada**: queda `PENDING` hasta que Meta la revise, hasta
+ * 24 h. Por eso vive detrás del mismo permiso que el resto y no pide la
+ * ceremonia de un envío.
+ *
+ * Lo que sí cuesta es el CUPO (250 por WABA sin portafolio verificado, y cada
+ * idioma cuenta como una), y por eso `cupo_lleno` se distingue de «tu texto está
+ * mal»: piden acciones distintas.
+ */
+campanaRouter.post("/plantillas", async (req, res) => {
+  const quien = req.vendedoraId ?? "";
+  if (!esSupervisor(quien, process.env)) {
+    res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
+    return;
+  }
+  const p = req.body as Record<string, never>;
+  try {
+    const creada = await crearPlantilla({
+      nombre: String(p.nombre ?? ""),
+      idioma: String(p.idioma ?? ""),
+      categoria: String(p.categoria ?? ""),
+      cuerpo: String(p.cuerpo ?? ""),
+      headerTexto: p.headerTexto ?? null,
+      pie: p.pie ?? null,
+      headerImagenHandle: p.headerImagenHandle ?? null,
+      botones: p.botones ?? undefined,
+    });
+    // La creación de una plantilla también se firma: queda quién la registró.
+    console.log(`[campana] PLANTILLA CREADA ${creada.id} «${p.nombre}» por=${quien} estado=${creada.estado}`);
+    res.status(201).json(creada);
+  } catch (e) {
+    if (e instanceof ErrorAlCrear) {
+      const estado = e.codigo === "reparos" ? 422 : e.codigo === "sin_permiso" ? 502 : 502;
+      res.status(estado).json({ ok: false, motivo: e.codigo, message: e.message, reparos: e.reparos });
+      return;
+    }
+    throw e;
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+//  LISTAS — recortes del padrón, guardados con nombre
+// ══════════════════════════════════════════════════════════════════════════
+
+campanaRouter.get("/listas", async (req, res) => {
+  if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
+    res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
+    return;
+  }
+  try {
+    res.json({ listas: await leerListas(db) });
+  } catch (e) {
+    if (esTablaAusente(e)) {
+      // Sin la migración aplicada se dice, no se sirve una lista vacía: «todavía
+      // no hay listas» y «falta migrar» piden acciones distintas.
+      res.status(503).json({ ok: false, motivo: "sin_migracion", message: "falta aplicar la migración 0019" });
+      return;
+    }
+    throw e;
+  }
+});
+
+campanaRouter.post("/listas", async (req, res) => {
+  const quien = req.vendedoraId ?? "";
+  if (!esSupervisor(quien, process.env)) {
+    res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
+    return;
+  }
+  const b = req.body as { nombre?: string; filtros?: unknown; nota?: string };
+  const nombre = (b.nombre ?? "").trim();
+  if (!nombre) {
+    res.status(400).json({ ok: false, motivo: "sin_nombre", message: "la lista necesita un nombre" });
+    return;
+  }
+  if (!(await nombreLibre(db, nombre))) {
+    res.status(409).json({ ok: false, motivo: "nombre_repetido", message: `ya existe una lista «${nombre}»` });
+    return;
+  }
+  const lista = await guardarLista(db, {
+    nombre,
+    filtros: (b.filtros ?? {}) as never,
+    nota: b.nota,
+    creadaPor: quien,
+  });
+  console.log(`[campana] LISTA CREADA ${lista.id} «${lista.nombre}» por=${quien}`);
+  res.status(201).json(lista);
+});
+
+campanaRouter.delete("/listas/:id", async (req, res) => {
+  const quien = req.vendedoraId ?? "";
+  if (!esSupervisor(quien, process.env)) {
+    res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
+    return;
+  }
+  const archivada = await archivarLista(db, Number(req.params.id));
+  console.log(`[campana] LISTA ARCHIVADA ${req.params.id} por=${quien} (${archivada ? "ok" : "no estaba viva"})`);
+  res.json({ archivada });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+//  CORRIDAS — la firma, y el freno
+// ══════════════════════════════════════════════════════════════════════════
+
+/**
+ * QUIÉN MANDÓ QUÉ — el historial con su firma.
+ *
+ * Es la respuesta literal a «que se vigile quién mandó la campaña», y la razón
+ * por la que esto es una tabla y no un log: un log no se puede consultar seis
+ * meses después.
+ */
+campanaRouter.get("/historial", async (req, res) => {
+  if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
+    res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
+    return;
+  }
+  try {
+    res.json({ historial: await historial(db, Number(req.query.dias) || 90) });
+  } catch (e) {
+    if (esTablaAusente(e)) {
+      res.status(503).json({ ok: false, motivo: "sin_migracion" });
+      return;
+    }
+    throw e;
+  }
+});
+
+/** Qué está saliendo AHORA. Es lo que dibuja el chip y habilita el freno. */
+campanaRouter.get("/vivas", async (req, res) => {
+  if (!req.vendedoraId) {
+    res.status(401).json({ ok: false });
+    return;
+  }
+  /**
+   * ⚠️ ESTA NO PIDE SER SUPERVISOR, a propósito.
+   *
+   * El kill-switch es la condición 3 del ADR 0036: «cualquiera de las cinco ve
+   * el chip y frena el lote de un clic». Si sólo lo viera un supervisor, frenar
+   * dependería de que esa persona esté mirando — y el freno existe justamente
+   * para cuando no lo está.
+   */
+  try {
+    res.json({ vivas: await corridasVivas(db) });
+  } catch (e) {
+    if (esTablaAusente(e)) {
+      res.json({ vivas: [] });
+      return;
+    }
+    throw e;
+  }
+});
+
+/** FRENAR. Cualquier vendedora puede, y queda escrito quién fue. */
+campanaRouter.post("/corridas/:id/frenar", async (req, res) => {
+  const quien = req.vendedoraId;
+  if (!quien) {
+    res.status(401).json({ ok: false });
+    return;
+  }
+  const paro = await frenarCorrida(db, Number(req.params.id), quien, "frenada a mano");
+  res.json({ frenada: paro });
 });
