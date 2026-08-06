@@ -180,6 +180,9 @@ export class FotoNoDisponibleError extends Error {
  * y proyecta al hilo. Meta devuelve solo un id, así que sin esta copia el envío
  * quedaría auditado como una fila sin contenido.
  */
+import type { ReaccionEntrante } from '../reacciones/dominio.js';
+export type { ReaccionEntrante };
+
 export interface PlantillaSaliente {
   nombre: string;
   idioma: string;
@@ -216,6 +219,20 @@ export interface TransporteWhatsapp {
   vincularConCodigo?(telefono: string): Promise<string>;
 
   onMensaje(cb: (m: MensajeWhatsapp) => void): void;
+
+  /**
+   * UNA REACCIÓN a un mensaje (👍 al flyer, ❤️ al temario).
+   *
+   * Aparte de `onMensaje` a propósito: **una reacción no es un mensaje**. Entra
+   * por el mismo canal de WhatsApp, pero no ocupa un renglón del hilo — cuelga
+   * del mensaje al que reacciona. Mezclarlas fue el bug #70, donde un 👍 se
+   * dibujaba como una burbuja vacía que decía «(no es texto)».
+   *
+   * **Opcional**: es la única capacidad que un transporte puede no tener sin
+   * que nada más se rompa (el falso, por ejemplo, no la emite). Los consumidores
+   * llaman con `?.` y siguen andando.
+   */
+  onReaccion?(cb: (r: ReaccionEntrante) => void): void;
   onEstado(cb: (e: EstadoSesion) => void): void;
 
   /**

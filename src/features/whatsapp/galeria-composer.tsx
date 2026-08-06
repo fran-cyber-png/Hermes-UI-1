@@ -26,8 +26,21 @@ const HACE = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
 const MENSAJES = [
   { id: 1, direccion: 'entrante', autor: TELEFONO, texto: 'Hola, buenas tardes 👋', occurred_at: HACE(94), external_id: 'e1' },
   { id: 2, direccion: 'entrante', autor: TELEFONO, texto: '¿El diploma de Gestión Pública sigue abierto?', occurred_at: HACE(93), external_id: 'e2' },
-  { id: 3, direccion: 'saliente', autor: 'luz', texto: '¡Hola Javier! Sí, todavía hay cupos.', occurred_at: HACE(41), external_id: 'e3' },
-  { id: 4, direccion: 'entrante', autor: TELEFONO, texto: '¿Me pasás el temario y el precio?', occurred_at: HACE(6), external_id: 'e4' },
+  {
+    id: 3,
+    direccion: 'saliente',
+    autor: 'luz',
+    texto: '¡Hola Javier! Sí, todavía hay cupos. Te paso el temario.',
+    occurred_at: HACE(41),
+    external_id: 'e3',
+    // Lo que hasta hoy se descartaba: el lead reaccionó y nadie lo veía.
+    reacciones: [{ emoji: '👍', nuestra: false }],
+  },
+  { id: 4, direccion: 'entrante', autor: TELEFONO, texto: '¿Me pasás el precio y las formas de pago?', occurred_at: HACE(9), external_id: 'e4',
+    // Una reacción NUESTRA se ve distinta: delineada en navy.
+    reacciones: [{ emoji: '❤️', nuestra: true }] },
+  { id: 5, direccion: 'entrante', autor: TELEFONO, texto: 'Perfecto, gracias', occurred_at: HACE(6), external_id: 'e5',
+    reacciones: [{ emoji: '🙌', nuestra: false }, { emoji: '🙌', nuestra: true }] },
 ];
 
 const CONVERSACION = {

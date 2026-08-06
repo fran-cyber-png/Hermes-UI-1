@@ -134,6 +134,13 @@
       "when": 1786619568155,
       "tag": "0018_fair_jamie_braddock",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1786705968155,
+      "tag": "0019_living_stature",
+      "breakpoints": true
     }
   ]
 }

@@ -10,6 +10,8 @@ import { GestorWhatsapp, numerosConfigurados, type WhatsappArmado } from './gest
 import { emitirRT } from '../realtime/bus.js';
 import { notificarEntrante } from '../bot/ingesta.js';
 import { configDesdeEnv } from '../bot/config.js';
+import { db } from '../db/client.js';
+import { guardarReaccion } from '../reacciones/repositorio.js';
 import type { TransporteWhatsapp } from './transporte.js';
 
 /**
@@ -101,6 +103,29 @@ function montar(numero: string, cual: string): WhatsappArmado {
     });
   });
   ingesta.iniciar();
+
+  /**
+   * LAS REACCIONES, por su propio canal.
+   *
+   * No pasan por `IngestaWhatsapp` a propósito: esa clase proyecta MENSAJES a
+   * `interactions`, y una reacción no lo es — meterla ahí la dibujaría como una
+   * burbuja vacía, que es el bug #70 exacto. Va derecho a su tabla.
+   *
+   * Fail-open y ruidoso: si guardarla falla, se loguea y la conversación sigue.
+   * Un hilo sin un 👍 sigue siendo el hilo; un hilo que no carga no es nada.
+   */
+  transporte.onReaccion?.((r) => {
+    void guardarReaccion(db, r)
+      .then((que) => {
+        // El hilo abierto se refresca solo: una reacción que aparece 5 s
+        // después de que la pusieron se siente rota.
+        if (que !== 'sin_tabla') emitirRT({ tipo: 'mensaje', canal: 'whatsapp', telefono: r.dePersona });
+      })
+      .catch((err: unknown) => {
+        // eslint-disable-next-line no-console
+        console.error('[reacciones] no se pudo guardar:', (err as Error).message);
+      });
+  });
 
   // Cada cambio de estado (conectado/desconectado/baneado) se empuja en vivo: el
   // header y el banner de sesión se actualizan sin recargar. Con varias líneas el

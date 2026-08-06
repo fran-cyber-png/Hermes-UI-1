@@ -10,6 +10,7 @@ import {
   type TransporteWhatsapp,
 } from './transporte.js';
 import { normalizarTelefono } from './identidadWa.js';
+import { reaccionDeCloudApi, type ReaccionEntrante } from '../reacciones/dominio.js';
 import { fueRetenido } from '../campana/estadoDePlantilla.js';
 import { RUTA_MEDIA, nombreSeguro } from './mediaDir.js';
 import { detectarOrigen, detectarOrigenReferral, type Origen } from './origen.js';
@@ -82,6 +83,7 @@ export class TransporteCloudApi implements TransporteWhatsapp {
   private readonly token: string;
   private sesion: EstadoSesion = { estado: 'conectando' };
   private susMensaje: ((m: MensajeWhatsapp) => void)[] = [];
+  private susReaccion: ((r: ReaccionEntrante) => void)[] = [];
   private susEstado: ((e: EstadoSesion) => void)[] = [];
 
   constructor(opts: OpcionesCloudApi) {
@@ -122,6 +124,10 @@ export class TransporteCloudApi implements TransporteWhatsapp {
   }
   onMensaje(cb: (m: MensajeWhatsapp) => void): void {
     this.susMensaje.push(cb);
+  }
+
+  onReaccion(cb: (r: ReaccionEntrante) => void): void {
+    this.susReaccion.push(cb);
   }
   onEstado(cb: (e: EstadoSesion) => void): void {
     this.susEstado.push(cb);
@@ -295,6 +301,14 @@ export class TransporteCloudApi implements TransporteWhatsapp {
       if (c?.wa_id) nombrePorWaId[c.wa_id] = c?.profile?.name ?? null;
     }
     for (const m of value?.messages ?? []) {
+      // La reacción sale por su propio canal: no es un mensaje del hilo. Si
+      // fuera por `aMensaje` entraría como una burbuja con `texto: null`, que
+      // es exactamente el fantasma de #70 por la otra puerta.
+      const reaccion = reaccionDeCloudApi(m);
+      if (reaccion) {
+        for (const cb of this.susReaccion) cb(reaccion);
+        continue;
+      }
       const mensaje = await this.aMensaje(m, nombrePorWaId);
       if (mensaje) for (const cb of this.susMensaje) cb(mensaje);
     }

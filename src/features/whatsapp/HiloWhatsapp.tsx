@@ -27,6 +27,7 @@ import {
   type LimitesMediaWa,
   type MediaHilo,
   type OrigenLead,
+  type ReaccionWa,
 } from './conversacionWa';
 
 /** Etiqueta editorial del día: «hoy», «ayer» o «lun 14 jul». */
@@ -121,6 +122,58 @@ function MediaEnBurbuja({ media }: { media: MediaHilo }) {
   if (media.clase === 'imagen' || media.clase === 'sticker') return <ImagenEnBurbuja media={media} />;
   if (media.clase === 'video' || media.clase === 'audio') return <ReproducirBajoDemanda media={media} />;
   return <DocumentoBajoDemanda media={media} />;
+}
+
+/**
+ * LAS REACCIONES DE UNA BURBUJA — 👍 al flyer, ❤️ al temario.
+ *
+ * ── Por qué cuelga y no ocupa un renglón ─────────────────────────────────
+ * Una reacción no es un mensaje. Meterla como burbuja propia fue el bug #70 —
+ * un contacto que nunca escribió aparecía con un «(no es texto)»— y por eso
+ * durante meses la ingesta las descartó enteras: la vendedora no veía la señal
+ * de compra más barata que existe. Ahora entran, y se dibujan donde WhatsApp las
+ * dibuja: montadas sobre el borde de abajo del mensaje al que reaccionan.
+ *
+ * El margen negativo es lo que las «cuelga»: sin él la burbuja crece hacia
+ * abajo y el hilo se desalinea cada vez que alguien reacciona.
+ */
+function ReaccionesEnBurbuja({
+  reacciones,
+  saliente,
+}: {
+  reacciones: ReaccionWa[];
+  saliente: boolean;
+}) {
+  if (reacciones.length === 0) return null;
+
+  // Se agrupan por emoji con su cuenta: tres 👍 son «👍 3», no tres píldoras.
+  // En un 1:1 casi siempre es uno solo, pero la regla tiene que existir igual —
+  // el mismo emoji del lead y nuestro son dos filas en la base.
+  const porEmoji = new Map<string, { n: number; nuestra: boolean }>();
+  for (const r of reacciones) {
+    const actual = porEmoji.get(r.emoji) ?? { n: 0, nuestra: false };
+    porEmoji.set(r.emoji, { n: actual.n + 1, nuestra: actual.nuestra || r.nuestra });
+  }
+
+  return (
+    <div className={'-mt-1.5 flex flex-wrap gap-1 px-1 ' + (saliente ? 'justify-end' : 'justify-start')}>
+      {[...porEmoji].map(([emoji, { n, nuestra }]) => (
+        <span
+          key={emoji}
+          title={nuestra ? 'Reaccionaste vos' : 'Reaccionó esta persona'}
+          className={
+            'inline-flex items-center gap-0.5 rounded-full border bg-card px-1.5 py-px text-[11px] leading-relaxed shadow-[0_1px_2px_rgba(14,42,82,0.08)] ' +
+            // La nuestra se delinea en navy — el mismo color que ya significa
+            // «tuyo» en la fila de la cola. Sin oro: el oro es tiempo que se acaba.
+            (nuestra ? 'border-navy/40' : 'border-border')
+          }
+        >
+          <span aria-hidden="true">{emoji}</span>
+          {n > 1 && <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{n}</span>}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function AdjuntoRoto() {
@@ -409,12 +462,21 @@ export function HiloWhatsapp({
                       className={
                         'flex ' +
                         (esNuevo ? 'duration-300 ease-house animate-in fade-in slide-in-from-bottom-1 ' : '') +
+                        // Una burbuja con reacción necesita más aire abajo que el
+                        // `space-y-2` del hilo: la píldora cuelga hacia afuera y,
+                        // con el espaciado normal, queda a mitad de camino entre
+                        // dos mensajes — se lee como si fuera del de abajo.
+                        (m.reacciones?.length ? 'pb-2 ' : '') +
                         (m.direccion === 'saliente' ? 'justify-end' : 'justify-start')
                       }
                     >
+                      {/* Columna: la burbuja y, colgando de su borde, las
+                          reacciones. El `max-w` vive acá para que la píldora del
+                          emoji no ensanche el mensaje. */}
+                      <div className="flex max-w-[75%] flex-col">
                       <div
                         className={
-                          'max-w-[75%] rounded-2xl text-sm ' +
+                          'rounded-2xl text-sm ' +
                           (m.media && (m.media.clase === 'imagen' || m.media.clase === 'video') ? 'p-1.5 ' : 'px-3.5 py-2 ') +
                           (m.direccion === 'saliente'
                             ? 'rounded-br-md bg-secondary text-navy shadow-[0_1px_2px_rgba(14,42,82,0.06)]'
@@ -467,6 +529,13 @@ export function HiloWhatsapp({
                             {new Date(m.occurred_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
+                      </div>
+                      {m.reacciones && (
+                        <ReaccionesEnBurbuja
+                          reacciones={m.reacciones}
+                          saliente={m.direccion === 'saliente'}
+                        />
+                      )}
                       </div>
                     </div>
                   );

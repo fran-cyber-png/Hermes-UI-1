@@ -258,6 +258,43 @@ transporte (`TransporteWhatsapp.nombre`), no una tabla suelta.
   · **Los 100 MB de documento son reales**: ahí el que corta en 64 somos NOSOTROS con `express.raw`.
     Si hace falta mandar un PDF más gordo, se sube ese `limit` y `LIMITES_CLOUD_API.documento`.
 
+## Las reacciones — 👍 al flyer, y por qué estuvieron invisibles
+
+Un 👍 es la señal de compra más barata que existe y la vendedora no la veía. **No era un bug de
+dibujo: la ingesta las descartaba enteras.** `whatsapp/contenido.ts` las tiene en
+`CLAVES_SIN_CONTENIDO` desde el fix #70, cuando entraban a `interactions` como cualquier entrante y
+la UI las pintaba como una burbuja vacía que decía «(no es texto)» — un contacto que solo había
+reaccionado aparecía con un mensaje fantasma. Server en `server/src/reacciones/`, tabla
+`reacciones_wa` (migración **0019**), UI en la burbuja de `HiloWhatsapp.tsx`.
+
+- 🔴 **`tieneContenido` sigue diciendo que NO es contenido, y tiene que seguir diciéndolo.** La
+  reacción se rescata **arriba** de ese descarte (`esSoloReaccion`), no relajándolo: si alguien
+  saca `reactionMessage` de la lista, vuelve el fantasma. `reacciones/cicloCompleto.test.ts` cruza
+  los dos módulos y falla si el acuerdo se rompe.
+- **Una reacción no es un mensaje**: no ocupa un renglón, **cuelga** del mensaje al que reacciona.
+  Por eso tabla propia y no una fila en `interactions`, y por eso `onReaccion` es un canal aparte
+  de `onMensaje` en la interfaz del transporte (opcional: el falso no la emite).
+- **La PK es `(mensaje, persona)` — es un ESTADO, no un historial.** Reaccionar de nuevo
+  **reemplaza**; el emoji **vacío QUITA** (borra la fila), que es como WhatsApp desreacciona y
+  llega por el mismo camino. Con historial, un mensaje mostraría 👍❤️😮 de la misma persona.
+- **`mensaje_external_id` es texto y no una FK**, a propósito: una reacción puede llegar **antes**
+  que el mensaje (reordenamiento del webhook) y una FK la rechazaría; y el hilo solo trae 200
+  mensajes, pero la reacción a uno más viejo sigue siendo cierta. El JOIN va por el mismo `wa:<id>`
+  de la proyección — un test lee `proyectar.ts` para que ese prefijo no cambie en silencio.
+- **Los dos canales, una sola forma**: `reaccionDeCloudApi` (`type:'reaction'`) y
+  `reaccionDeWhatsmeow` (`reactionMessage`) producen el mismo objeto, con test de paridad. En
+  whatsmeow gana el **sello propio** de la reacción sobre el del sobre: con el server caído un rato,
+  el de llegada agruparía todas en el mismo instante.
+- **Degrada, no tumba**: sin la migración, `guardar` avisa por log y `porMensaje` devuelve vacío —
+  un hilo sin un 👍 sigue siendo el hilo. Es lo contrario del catálogo de piezas (ADR 0023) y por el
+  mismo criterio: acá el consumidor es una persona mirando, no un índice que cachea.
+- En la UI: píldora colgada del borde inferior, agrupada por emoji con su cuenta («🙌 2»), y la
+  **nuestra delineada en navy** — el color que ya significa «tuyo» en la cola. **Sin oro.** La
+  burbuja con reacción lleva `pb-2`: con el `space-y-2` normal la píldora queda a mitad de camino y
+  se lee como del mensaje de abajo.
+- Ver sin server: `npx vite --port 5199` → `/galeria-composer.html`. Captura en
+  `docs/evidencia/reacciones-en-el-hilo.png`.
+
 ## Auth
 
 Login de vendedoras **contra Cerberus** (Django, sin API REST): `cerberus/auth.ts` hace el handshake

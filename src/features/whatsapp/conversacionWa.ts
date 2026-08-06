@@ -12,6 +12,20 @@ export interface MediaHilo {
   nombre?: string | null;
 }
 
+/**
+ * Una reacción a un mensaje — 👍 al flyer, ❤️ al temario.
+ *
+ * **Opcional a propósito, y ausente en vez de `[]`**: un server viejo no la
+ * manda y la migración puede no estar aplicada. Sin el campo, la burbuja se
+ * dibuja como siempre; con `[]` habría que distinguir «no tiene reacciones» de
+ * «no se pudo saber», y esa diferencia no le sirve a nadie acá.
+ */
+export interface ReaccionWa {
+  emoji: string;
+  /** La puso Goberna por esta línea, no el lead. */
+  nuestra: boolean;
+}
+
 /** Un mensaje del hilo, tal como lo devuelve el backend. */
 export interface MensajeHilo {
   id: number;
@@ -37,6 +51,8 @@ export interface MensajeHilo {
    * días después.
    */
   aprobada_por?: string | null;
+  /** Las reacciones a ESTE mensaje, en el orden en que se pusieron. */
+  reacciones?: ReaccionWa[];
 }
 
 /**

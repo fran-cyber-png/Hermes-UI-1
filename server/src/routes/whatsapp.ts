@@ -18,6 +18,7 @@ import { cancelarPorRespuestaHumana, faltaEsquema } from '../autorespuesta/repos
 import { procedenciaDelComposer, type LeerPasoDeSecuencia } from '../procedencia/desdeElComposer.js';
 import { obtenerPlantilla } from '../plantillas/repositorio.js';
 import { listarNumeros } from '../numeros/repositorio.js';
+import { reaccionesPorMensaje } from '../reacciones/repositorio.js';
 
 /**
  * LA CONVERSACIÓN NATIVA DE WHATSAPP dentro de Hermes: ver el hilo y responder,
@@ -162,7 +163,28 @@ whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
     origen = { ...origen, ...(anuncio ? { anuncio: anuncio.anuncio, campana: anuncio.campana } : {}) };
   }
 
-  res.json({ telefono, mensajes, origen });
+  /**
+   * LAS REACCIONES, colgadas de su mensaje.
+   *
+   * Una consulta para todo el hilo (no una por burbuja) y **fuera de `hiloDe`**:
+   * ese SQL ya carga dos LEFT JOIN para la marca de automático, y un tercero
+   * agregando emojis lo volvería ilegible por un dato que casi siempre está
+   * vacío. Acá se pega, que es donde se arma la respuesta.
+   */
+  const porMensaje = await reaccionesPorMensaje(
+    db,
+    mensajes.map((m) => String((m as { external_id: string }).external_id)),
+    numeroPropio,
+  );
+  const conReacciones = mensajes.map((m) => {
+    const fila = m as Record<string, unknown> & { external_id: string };
+    const r = porMensaje.get(fila.external_id);
+    // Ausente y no `[]`: el front distingue «no tiene» de «no se pudo saber»
+    // sin tener que inventarse la diferencia.
+    return r?.length ? { ...fila, reacciones: r } : fila;
+  });
+
+  res.json({ telefono, mensajes: conReacciones, origen });
 });
 
 /**

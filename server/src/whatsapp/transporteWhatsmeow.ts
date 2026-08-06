@@ -21,6 +21,7 @@ import {
 import { normalizarTelefono, telefonoDeContacto, jidDeTelefono, esJidDeGrupo } from './identidadWa.js';
 import { detectarOrigen } from './origen.js';
 import { tieneContenido } from './contenido.js';
+import { esSoloReaccion, reaccionDeWhatsmeow, type ReaccionEntrante } from '../reacciones/dominio.js';
 import { MapaLids } from './lidMap.js';
 import { RUTA_MEDIA, nombreSeguro } from './mediaDir.js';
 
@@ -69,6 +70,7 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
   private lids: MapaLids;
   private sesion: EstadoSesion = { estado: 'conectando' };
   private susMensaje: ((m: MensajeWhatsapp) => void)[] = [];
+  private susReaccion: ((r: ReaccionEntrante) => void)[] = [];
   private susEstado: ((e: EstadoSesion) => void)[] = [];
 
   // Público y de solo lectura desde #50: `EnvioControlado` lo compara contra el
@@ -175,7 +177,14 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
     // «(no es texto)»). Se descartan igual que el caso «ni teléfono», antes de
     // gastar un lookup de lid o bajar media. Los que ya se ingirieron antes de
     // este fix NO se limpian acá — es forward-only, ver el issue.
-    if (!tieneContenido(message)) return null;
+    // ── LA REACCIÓN SE RESCATA ANTES DEL DESCARTE ──
+    // `tieneContenido` sigue diciendo que NO es contenido, y eso está bien: un
+    // 👍 no ocupa un renglón del hilo. Pero tampoco se tira — cuelga del mensaje
+    // al que reacciona. Se atiende acá, arriba del descarte, porque abajo ya no
+    // existe. Sí paga el lookup de lid que el comentario de arriba se ahorra: es
+    // una señal real de una persona, no un recibo de protocolo.
+    const esReaccion = esSoloReaccion(message);
+    if (!esReaccion && !tieneContenido(message)) return null;
 
     // Primero el camino directo (JID con teléfono); si el chat vino como @lid,
     // el mapa que whatsmeow sincroniza en su store baja el lid al teléfono real.
@@ -186,6 +195,17 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
       if (telefono) console.log(`[wa lid] ${info.chat} → ${telefono}`);
     }
     if (!telefono) return null; // Ni teléfono ni lid mapeado: se descarta, no se inventa.
+
+    if (esReaccion) {
+      // Quién reaccionó: el lead, o nosotros desde el teléfono de la línea. Se
+      // guarda de los dos lados — una reacción nuestra también se dibuja.
+      const reaccion = reaccionDeWhatsmeow(message, {
+        dePersona: info.isFromMe ? this.numeroPropio : telefono,
+        cuando: new Date(info.timestamp * 1000),
+      });
+      if (reaccion) for (const cb of this.susReaccion) cb(reaccion);
+      return null; // No es un mensaje: no entra al hilo como burbuja.
+    }
 
     // El adjunto (si hay) se baja ANTES de emitir: el mensaje canónico sale
     // completo, con su archivo local, o con el hueco declarado si falló.
@@ -283,6 +303,10 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
 
   onMensaje(cb: (m: MensajeWhatsapp) => void): void {
     this.susMensaje.push(cb);
+  }
+
+  onReaccion(cb: (r: ReaccionEntrante) => void): void {
+    this.susReaccion.push(cb);
   }
   onEstado(cb: (e: EstadoSesion) => void): void {
     this.susEstado.push(cb);
