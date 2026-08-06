@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { FileText, ListChecks, Megaphone, ShieldCheck } from 'lucide-react';
+import { FileText, ListChecks, Megaphone, Send, ShieldCheck } from 'lucide-react';
 import { PantallaCorridas } from './PantallaCorridas';
 import { PantallaPlantillas } from './PantallaPlantillas';
 import { PantallaHistorial } from './PantallaHistorial';
+import { PantallaListas } from './PantallaListas';
+import { ArmarCampana } from './ArmarCampana';
 
 /**
  * CAMPAÑAS — el lugar donde se administra todo lo de campañas.
@@ -38,6 +40,7 @@ const SECCIONES: { id: Seccion; rotulo: string; icono: typeof Megaphone }[] = [
 
 export function PantallaCampanas() {
   const [seccion, setSeccion] = useState<Seccion>('corridas');
+  const [armando, setArmando] = useState(false);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -56,35 +59,27 @@ export function PantallaCampanas() {
             <s.icono size={12} /> {s.rotulo}
           </button>
         ))}
+        {/*
+          EL BOTÓN VIVE EN LA BARRA, no adentro de una sección: armar una
+          campaña es la acción primaria del lugar, y tenerla que buscar en la
+          solapa correcta la escondería detrás de un paso que no aporta nada.
+        */}
+        <button
+          type="button"
+          onClick={() => setArmando(true)}
+          className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-navy px-3 py-1 text-xs font-bold text-white transition-colors hover:bg-navy/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          <Send size={12} /> Armar una campaña
+        </button>
       </nav>
 
       {seccion === 'corridas' && <PantallaCorridas />}
       {seccion === 'plantillas' && <PantallaPlantillas />}
       {seccion === 'listas' && <PantallaListas />}
       {seccion === 'historial' && <PantallaHistorial />}
+
+      {armando && <ArmarCampana onCerrar={() => setArmando(false)} />}
     </div>
   );
 }
 
-/**
- * LISTAS — todavía no está.
- *
- * Se dibuja el hueco en vez de esconder la sección: una solapa que aparece
- * cuando la feature llega es una sorpresa; un «esto viene» es un plan. Y evita
- * que alguien busque las listas en Plantillas.
- */
-function PantallaListas() {
-  return (
-    <div className="flex flex-col items-center gap-2 p-12 text-center">
-      <ListChecks size={26} className="text-muted-foreground/40" />
-      <p className="max-w-sm text-sm text-muted-foreground">
-        Acá van a vivir las listas: un recorte del padrón guardado con nombre.
-      </p>
-      <p className="max-w-md text-xs text-muted-foreground/80">
-        Se guardan como <strong>filtro</strong>, no como una lista de contactos — así no envejecen
-        cuando entran contactos nuevos. Mientras tanto, el recorte se arma en{' '}
-        <strong>Contactos → Padrón</strong>.
-      </p>
-    </div>
-  );
-}

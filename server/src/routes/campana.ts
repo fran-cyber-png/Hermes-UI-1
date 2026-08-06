@@ -8,6 +8,8 @@ import { revisar, sugerirNombre } from "../campana/nombrePlantilla.js";
 import { archivarLista, guardarLista, leerListas, nombreLibre } from "../campana/listas.js";
 import { corridasVivas, frenarCorrida, historial } from "../campana/autorizar.js";
 import { esTablaAusente } from "../cola/estadoSql.js";
+import { icarus, IcarusNoConfigurado } from "../padron/conexion.js";
+import { consultarPadron } from "../padron/consultarPadron.js";
 import { hayQuePreocuparse } from "../campana/corridas.js";
 
 /**
@@ -346,4 +348,41 @@ campanaRouter.post("/corridas/:id/frenar", async (req, res) => {
   }
   const paro = await frenarCorrida(db, Number(req.params.id), quien, "frenada a mano");
   res.json({ frenada: paro });
+});
+
+/**
+ * CUÁNTOS ENTRAN EN UN FILTRO — el conteo en vivo de una lista.
+ *
+ * ══ POR QUÉ SE CUENTA CADA VEZ Y NO SE GUARDA ═══════════════════════════════
+ *
+ * Porque una lista es un FILTRO, y su tamaño cambia solo: icarus mete contactos
+ * con cada landing y cada venta. «11.646 mexicanos» es verdad el martes y
+ * mentira el jueves, y un número guardado no se entera — sería exactamente la
+ * foto vieja que este diseño existe para evitar.
+ *
+ * ⚠️ **Si icarus no responde, el conteo es `null` = «no se pudo preguntar»,
+ * NUNCA `0`.** Un cero se lee como «esta lista está vacía» y llevaría a borrar
+ * una lista buena, o peor: a armar una campaña creyendo que no le llega a nadie.
+ */
+campanaRouter.post("/cuantos", async (req, res) => {
+  if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
+    res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
+    return;
+  }
+  const filtros = (req.body as { filtros?: unknown }).filtros ?? {};
+  try {
+    // La paginación viaja DENTRO de `filtros` (así lo arma el padrón). Se pide
+    // una sola fila: lo que interesa es el `total`, no los contactos.
+    const { total } = await consultarPadron(icarus(), {
+      filtros: { ...(filtros as Record<string, unknown>), pagina: 1, porPagina: 1 } as never,
+      habilitados: [],
+      soloEstos: null,
+    });
+    res.json({ cuantos: total });
+  } catch (e) {
+    const sinConfig = e instanceof IcarusNoConfigurado;
+    console.error("[campana] no se pudo contar el filtro:", (e as Error).message);
+    // `null`, no 0. Ver la cabecera: un cero manda a borrar una lista buena.
+    res.json({ cuantos: null, motivo: sinConfig ? "sin_icarus" : "icarus_no_respondio" });
+  }
 });
