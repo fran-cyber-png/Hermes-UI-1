@@ -29,9 +29,21 @@ import { fileURLToPath } from 'node:url';
  * vez de un CDN — con `unpkg` en el camino, adjuntar un video dependería de que
  * un tercero esté vivo, y la app abre contra VPS1, no contra internet.
  *
+ * ── ⚠️ ESTE SCRIPT NO ES EL MECANISMO: es la versión a mano ──────────────
+ * La copia real la hace el plugin `goberna:ffmpeg-core` de `vite.config.ts`,
+ * dentro del build. Esto vivía en `"prebuild"` y **no corrió nunca en
+ * producción**: el pipeline invoca `npx vite build` DIRECTO
+ * (`.github/workflows/ci.yml`, `deploy/vps1/hermes-deploy.sh`), no
+ * `npm run build`, así que npm no dispara el hook. El deploy salió verde con la
+ * compresión rota, y encima invisible: el fallback SPA devuelve `index.html`
+ * con **200** para una ruta que no existe, así que un `curl` al core no lo
+ * delataba.
+ *
+ * Se conserva para poder poblar `public/ffmpeg/` a mano cuando haga falta.
+ *
  * ── Por qué no van commiteados ───────────────────────────────────────────
- * Son 32 MB de binario que se derivan de `package-lock.json`. Se copian en
- * `predev` y `prebuild`, y `public/ffmpeg/` está en `.gitignore`.
+ * Son 32 MB de binario que se derivan de `package-lock.json`, y
+ * `public/ffmpeg/` está en `.gitignore`.
  */
 
 const require = createRequire(import.meta.url);

@@ -6,11 +6,9 @@
   "main": "electron/main.cjs",
   "scripts": {
     "prepare": "git config core.hooksPath .githooks || true",
-    "predev": "node scripts/preparar-ffmpeg.mjs",
     "dev": "vite",
     "dev:app": "concurrently -k -n vite,electron -c cyan,magenta \"vite\" \"wait-on tcp:5173 && electron .\"",
     "electron": "electron .",
-    "prebuild": "node scripts/preparar-ffmpeg.mjs",
     "build": "tsc -b && vite build",
     "empaquetar:mac": "electron-builder --mac dmg",
     "empaquetar:win": "electron-builder --win nsis --x64",

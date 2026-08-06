@@ -238,8 +238,14 @@ transporte (`TransporteWhatsapp.nombre`), no una tabla suelta.
   bitrate ya no alcanza** — el video del reporte perdía 11 % y se salvó **sin bajar de 1080p**.
   Nunca devuelve un plan por debajo del mínimo de su resolución: un 1080p a 200 kbps *entra* y es
   basura. El resultado **se mira antes de mandarlo** (pegar no envía, comprimir tampoco).
-  · 🔴 **El core sale de `public/ffmpeg/`, que `scripts/preparar-ffmpeg.mjs` copia en `predev` y
-    `prebuild`** (gitignored, 32 MB). Tiene que ser el build **ESM**: el worker de
+  · 🔴 **El core lo copia el plugin `goberna:ffmpeg-core` de `vite.config.ts`, dentro del build**
+    (a `public/ffmpeg/`, gitignored, 32 MB). **NO un hook de npm**: estaba en `"prebuild"` y no
+    corrió nunca en producción, porque el pipeline invoca `npx vite build` DIRECTO (`ci.yml`,
+    `hermes-deploy.sh`) y npm no dispara el hook. El deploy salió VERDE con la compresión rota, y
+    encima invisible: **el fallback SPA de Express devuelve `index.html` con 200** para una ruta
+    que no existe, así que un `curl` al core daba 200 (`text/html`, 487 bytes, idéntico a
+    `/no-existe.wasm`). Al verificar un estático en prod, mirá **content-type y tamaño**, nunca el
+    status. `coreEnElBuild.test.ts` falla si la copia vuelve a depender de npm. Tiene que ser el build **ESM**: el worker de
     `@ffmpeg/ffmpeg` es `type: "module"` siempre, así que termina en `import(coreURL)` y pide un
     `export default` que el UMD no tiene. No se puede importar con `?url` — Vite lo pre-bundlea y
     deja de devolver una URL. Y **sin `toBlobURL`**: es para CDNs cross-origin, y con blob el core
