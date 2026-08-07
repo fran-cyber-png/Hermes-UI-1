@@ -10,6 +10,7 @@ import { corridasVivas, frenarCorrida, historial } from "../campana/autorizar.js
 import { esTablaAusente } from "../cola/estadoSql.js";
 import { icarus, IcarusNoConfigurado } from "../padron/conexion.js";
 import { consultarPadron } from "../padron/consultarPadron.js";
+import { filtrosSchema } from "../padron/filtros.js";
 import { hayQuePreocuparse } from "../campana/corridas.js";
 
 /**
@@ -369,12 +370,35 @@ campanaRouter.post("/cuantos", async (req, res) => {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
     return;
   }
-  const filtros = (req.body as { filtros?: unknown }).filtros ?? {};
+  /**
+   * ⚠️ LOS FILTROS SE PARSEAN CON EL MISMO SCHEMA QUE EL PADRÓN.
+   *
+   * Acá pasaban CRUDOS del body, y eso reventaba en produccion con
+   * `op ANY/ALL (array) requires array on right side`: `donde()` hace
+   * `= ANY(sql.array(...))` y da por sentado que lo que recibe ya pasó por
+   * `filtrosSchema` — que es quien normaliza y descarta lo que no conoce.
+   *
+   * Es la lección de #37 al revés: no dupliqué el parseo, me lo SALTEÉ. El
+   * resultado es el mismo — dos caminos hacia el mismo SQL con reglas
+   * distintas — y se ve igual de mal desde la pantalla: «no se pudo contar»
+   * sobre un filtro perfectamente válido.
+   */
+  const parseo = filtrosSchema.safeParse((req.body as { filtros?: unknown }).filtros ?? {});
+  if (!parseo.success) {
+    res.status(400).json({
+      ok: false,
+      motivo: "filtros_invalidos",
+      detalle: parseo.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
+    });
+    return;
+  }
+  const filtros = parseo.data;
   try {
     // La paginación viaja DENTRO de `filtros` (así lo arma el padrón). Se pide
     // una sola fila: lo que interesa es el `total`, no los contactos.
+    // Una sola fila: lo que interesa es el `total`, no los contactos.
     const { total } = await consultarPadron(icarus(), {
-      filtros: { ...(filtros as Record<string, unknown>), pagina: 1, porPagina: 1 } as never,
+      filtros: { ...filtros, pagina: 1, porPagina: 1 },
       habilitados: [],
       soloEstos: null,
     });

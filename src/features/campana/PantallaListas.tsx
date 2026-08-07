@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, Archive, ListChecks, Loader2, Plus, Users2, X } from 'lucide-react';
 import { api } from '../../lib/datos/cliente';
 import { sectionLabel } from '../../lib/styles';
+import { DIMENSIONES, useFacetas, type Dimension } from '../padron/padron';
 import { useArchivarLista, useGuardarLista, useListas, type Lista } from './plantillas';
 
 /**
@@ -22,14 +23,6 @@ import { useArchivarLista, useGuardarLista, useListas, type Lista } from './plan
  * cero. Un cero se lee como «esta lista está vacía» y lleva a borrar una lista
  * buena — o peor, a creer que una campaña no le llega a nadie.
  */
-
-const DIMENSIONES = [
-  { clave: 'pais', rotulo: 'País' },
-  { clave: 'etapa', rotulo: 'Etapa' },
-  { clave: 'nivel', rotulo: 'Nivel' },
-  { clave: 'curso', rotulo: 'Curso' },
-  { clave: 'fuente', rotulo: 'Fuente' },
-] as const;
 
 export function PantallaListas() {
   const { data, isPending, isError, error } = useListas();
@@ -181,6 +174,12 @@ function Formulario({ onCerrar }: { onCerrar: () => void }) {
   const [nota, setNota] = useState('');
   const [filtros, setFiltros] = useState<Record<string, unknown>>({});
   const cuantos = useCuantos(filtros);
+  /**
+   * Las facetas se cuentan SIN el propio filtro de cada dimensión (`donde.ts`
+   * con `omitir`): si se contaran con él, tildar «México» reduciría la lista a
+   * México y no habría forma de AGREGAR Perú.
+   */
+  const facetas = useFacetas(filtros, true);
   const guardar = useGuardarLista();
 
   const listo = nombre.trim().length > 0;
@@ -220,27 +219,30 @@ function Formulario({ onCerrar }: { onCerrar: () => void }) {
         </label>
       </div>
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+      {/*
+        ⚠️ LAS OPCIONES SE DERIVAN DE LOS DATOS, NUNCA SE ESCRIBEN A MANO.
+        Acá había un campo de texto («separá con comas») y era una trampa: los
+        países en icarus son NOMBRES («México»), no códigos. Quien tipeara «MX»
+        habría visto 0 y creído que la lista está vacía. Con las facetas, cada
+        opción llega con su conteo — y ese número ES el total que el filtro
+        después devuelve, que es lo que convierte elegir en decidir.
+      */}
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
         {DIMENSIONES.map((d) => (
-          <label key={d.clave} className="block">
-            <span className={sectionLabel}>{d.rotulo}</span>
-            <input
-              placeholder="separá con comas"
-              onChange={(e) => {
-                const vals = e.target.value
-                  .split(',')
-                  .map((v) => v.trim())
-                  .filter(Boolean);
-                setFiltros((f) => {
-                  const nuevo = { ...f };
-                  if (vals.length) nuevo[d.clave] = vals;
-                  else delete nuevo[d.clave];
-                  return nuevo;
-                });
-              }}
-              className="w-full rounded-lg border border-border bg-muted px-3 py-1.5 text-xs"
-            />
-          </label>
+          <Faceta
+            key={d.id}
+            dim={d}
+            opciones={facetas.data?.facetas?.[d.id] ?? []}
+            elegidos={(filtros[d.id] as string[] | undefined) ?? []}
+            onCambio={(vals) =>
+              setFiltros((f) => {
+                const nuevo = { ...f };
+                if (vals.length) nuevo[d.id] = vals;
+                else delete nuevo[d.id];
+                return nuevo;
+              })
+            }
+          />
         ))}
         <label className="flex items-end gap-2 pb-1.5">
           <input
@@ -295,11 +297,57 @@ function Formulario({ onCerrar }: { onCerrar: () => void }) {
   );
 }
 
+/** Un desplegable de opciones REALES, cada una con su conteo. */
+function Faceta({
+  dim,
+  opciones,
+  elegidos,
+  onCambio,
+}: {
+  dim: { id: Dimension; rotulo: string };
+  opciones: { valor: string; contactos: number }[];
+  elegidos: string[];
+  onCambio: (v: string[]) => void;
+}) {
+  return (
+    <div>
+      <span className={sectionLabel}>{dim.rotulo}</span>
+      <div className="max-h-28 overflow-auto rounded-lg border border-border bg-muted px-2 py-1">
+        {opciones.length === 0 ? (
+          <p className="py-1 text-[11px] text-muted-foreground">sin opciones</p>
+        ) : (
+          opciones.map((o) => (
+            <label key={o.valor} className="flex cursor-pointer items-center gap-1.5 py-0.5 text-xs">
+              <input
+                type="checkbox"
+                className="size-3 accent-navy"
+                checked={elegidos.includes(o.valor)}
+                onChange={(e) =>
+                  onCambio(
+                    e.target.checked
+                      ? [...elegidos, o.valor]
+                      : elegidos.filter((v) => v !== o.valor),
+                  )
+                }
+              />
+              <span className="min-w-0 flex-1 truncate">{o.valor}</span>
+              {/* El conteo ES el total que el filtro devuelve: sin él, un
+                  desplegable de 62 países es una lista de nombres y filtrar
+                  se vuelve tantear. */}
+              <span className="shrink-0 tabular-nums text-muted-foreground">{o.contactos}</span>
+            </label>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** El filtro en criollo. Una lista sin esto es un nombre sin contenido. */
 export function resumirFiltros(f: Record<string, unknown>): string[] {
   const partes: string[] = [];
   for (const d of DIMENSIONES) {
-    const v = f[d.clave];
+    const v = f[d.id];
     if (Array.isArray(v) && v.length) partes.push(`${d.rotulo}: ${v.join(' o ')}`);
   }
   if (f.conVenta === true) partes.push('ya compraron');
