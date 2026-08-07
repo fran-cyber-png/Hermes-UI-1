@@ -63,12 +63,17 @@ espeja, y —si `LAZO_RELOJ` estuviera encendido, que no lo está— se la conta
 
 ### Front (`src/`) — React 19 + Vite 8 + Tailwind 4
 
-**Sin router** (ADR 0002): un espacio con **8 vistas conmutadas por estado** en `App.tsx`
-(Dashboard · Pipeline · Contactos · Mensajes · Correos · Agenda · Entrenar bot · **Libreta**). El
-riel vertical izquierdo navega; ⌘1..⌘8 también. Agregar una vista es tocar `VISTAS` en `App.tsx` y
-nada más: **el rango del atajo se DERIVA de ese array** (`e.key <= String(VISTAS.length)`), así que
-el punto de falla silenciosa que este párrafo describía —un `'6'` escrito a mano que dejaba a ⌘7 sin
-hacer nada mientras la Cabina anunciaba el atajo— ya no existe.
+**Sin router** (ADR 0002): un espacio con **9 vistas conmutadas por estado** en `App.tsx`
+(Dashboard · Pipeline · Contactos · Mensajes · Correos · Agenda · Entrenar bot · **Libreta** ·
+**Navegador**). El riel vertical izquierdo navega; ⌘1..⌘9 también. Agregar una vista es tocar
+`VISTAS` en `App.tsx` y nada más: **el rango del atajo se DERIVA de ese array**
+(`e.key <= String(VISTAS.length)`), así que el punto de falla silenciosa que este párrafo describía
+—un `'6'` escrito a mano que dejaba a ⌘7 sin hacer nada mientras la Cabina anunciaba el atajo— ya no
+existe.
+
+⚠️ Si alguien vuelve a clavar el número, **el candado tiene que apuntar a la ÚLTIMA vista**: con un
+`'8'` a mano andarían las ocho primeras y solo la novena quedaría muerta, así que un test sobre ⌘8
+seguiría verde. Por eso `App.test.tsx` prueba ⌘9, y hay que moverlo al agregar la décima.
 
 Qué entra al riel no es un número sino un criterio (**ADR 0034**, que enmienda 0002 y regulariza las
 tres vistas que entraron sin hacerlo): un **LUGAR** donde se está un rato (ADR 0016), con una
@@ -104,14 +109,23 @@ SSE en `/api/stream`. **Es un bus de señales, no de datos**: el evento dice «a
 traduce eso a invalidaciones de react-query. El payload nunca llega a la UI — por eso el stream no
 necesita auth.
 
-### Cáscara (`src-tauri/`, y `electron/` hasta paridad)
+### Cáscara (`src-tauri/`) — una sola desde ADR 0039
 
 **Tauri v2**, 3 MB. Solo abre `https://hermes-api.goberna.us` — la UI viaja **OTA**: actualizar el
 VPS actualiza a todas al abrir la app, **sin reinstalar**. Fallback a `dist/` local si no hay red.
 Windows se compila en Actions (`tauri-windows.yml`); Tauri no cross-compila.
+`electron/` **se archivó el 7-ago-2026** (ADR 0039): existía solo por el webview de WhatsApp Web, que
+D13 dejó sin uso.
 
 Esa decisión condiciona a las demás: **nada de la UI puede depender de APIs de la cáscara**, porque
 la ataría a un instalador nuevo por cada cambio y la rompería en el navegador (ver ADR 0007).
+
+🔴 **Y el OTA tiene una consecuencia que muerde a cualquiera que agregue un comando nativo**: en
+release la ventana `main` **navega** a la URL de producción, así que la UI corre en un origen
+**REMOTO** y Tauri le exige permiso declarado —también a los comandos propios de la app—. Sin
+declararlo en `src-tauri/permissions/*.toml` y en **las dos** capabilities, el comando anda en
+`dev:app` (origen local) y se rechaza en la máquina de la vendedora. El único que existe hoy es
+`abrir_navegador` (ADR 0040), con sus tests fijando esa ruta.
 
 ### Server (`server/src/`) — Express 4 + Drizzle + Postgres 17
 
@@ -396,7 +410,7 @@ Lo que **sigue abierto, a sabiendas** (detalle en el ADR 0011):
 - **El SDK exige token de vendedora**, pero sus consumidores reales (kos, Ivi, MCP) son máquinas:
   falta una credencial de servicio (#95).
 - **CORS en `*`** — con Bearer obligatorio ya no expone datos; acotarlo es defensa en profundidad
-  pendiente, sin romper Tauri/Electron ni Vite dev (#94).
+  pendiente, sin romper la cáscara Tauri ni Vite dev (#94).
 
 ### 8.2 ✅ El orden de la cola está implementado dos veces — resuelto con paridad verificada (#37)
 

@@ -37,7 +37,7 @@ La tabla `conversiones_wa` de Hermes tiene **0 filas** mientras Cerberus registr
 
 ### 1.1 HERMES — la conversación
 
-**Qué es**: el CRM de la Escuela. App de escritorio (Tauri/Electron, UI servida OTA)
+**Qué es**: el CRM de la Escuela. App de escritorio (Tauri, UI servida OTA)
 donde las vendedoras atienden WhatsApp. Postgres propio en VPS1 (`hermes_db`,
 127.0.0.1:5438), event store append-only + proyecciones.
 

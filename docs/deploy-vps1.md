@@ -216,13 +216,14 @@ No hay forma de evitarlo: el código del server está en memoria.
 
 ```bash
 ssh deploy@161.132.39.165 'cd /srv/hermes && git pull && \
-  ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci && \
+  npm ci && \
   env VITE_API_URL=https://hermes-api.goberna.us npm run build && \
   sudo systemctl restart hermes'
 ```
 
 - `npm ci` **solo si cambiaron dependencias** (`git diff --stat <sha-viejo>..main -- package.json`).
-- `ELECTRON_SKIP_BINARY_DOWNLOAD=1` evita bajar ~100 MB que el VPS nunca usa.
+- Acá iba `ELECTRON_SKIP_BINARY_DOWNLOAD=1`, para no bajar los ~100 MB del binario de Electron.
+  **Ya no hace falta** (ADR 0039): se sacó también de `ci.yml` y de `hermes-deploy.sh`.
 - `cd server && npm run db:migrate` **solo si hay migraciones nuevas** en `server/drizzle/`.
   (Antes era `db:push`; ver ADR 0021.)
 

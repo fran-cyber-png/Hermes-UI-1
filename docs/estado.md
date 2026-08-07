@@ -193,7 +193,8 @@ que escribió cada persona, su antigüedad). Eso se arregla en #166.
   `/srv/hermes/server/.wa-sessions/` · media en `.wa-media/` · **la app abre también en navegador**.
 - **Instaladores** (`/srv/hermes-descargas/` = `https://hermes-api.goberna.us/descargas/`):
   `Hermes-Windows.zip` (Tauri x64 + permiso tel:) · `Hermes_0.2.0_aarch64.dmg`. **Los `.dmg`/`.exe`
-  de Electron que están ahí ya no se pueden reconstruir desde `main` (ADR 0039): hay que bajarlos.**
+  de Electron que están ahí ya no se pueden reconstruir desde `main` (ADR 0039): sacarlos de la
+  carpeta de descargas, o alguien va a instalar una app que nadie puede volver a compilar.**
   Rebuild win: `gh workflow run tauri-windows.yml` (mac: `npm run empaquetar:mac`).
 - **Local:** `docker start meta_escuela_db` · `cd server && npm run dev` (:4100) · `npm run dev`
   (:5173). Tests: server `cd server && npm test`, front `npm test` (vitest). **Ojo cwd**: el shell

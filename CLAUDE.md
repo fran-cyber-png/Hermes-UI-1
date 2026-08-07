@@ -57,7 +57,7 @@ de la casa, los bordes externos y la deuda. Los cuatro documentos y para qué si
 ```bash
 docker compose up -d --wait                       # Postgres (event store), en la raíz del repo
 cd server && npm install && npm run dev            # API en :4100 (necesita server/.env)
-npm install && npm run dev:app                     # Vite :5173 + la app de escritorio (Electron)
+npm install && npm run dev:app                     # la cáscara Tauri (arranca Vite :5173 sola)
 ```
 
 - `npm run dev` (sin `:app`) abre el front en el navegador: la cola y la conversación nativa funcionan;
@@ -107,8 +107,9 @@ npm install && npm run dev:app                     # Vite :5173 + la app de escr
   > `.wa-sessions/`, así que renombrar ese directorio dentro del repo deja 43 MB de credencial a la
   > vista de git. Para desarrollo va `WHATSAPP_TRANSPORTE=falso`; para probar con una línea real
   > está el banco de pruebas (`docs/plan-banco-de-pruebas.md`) con un **número de prueba**.
-- **El webview viejo** (`src/features/whatsapp/PanelWhatsapp.tsx`) está **retirado** por D13. No se usa;
-  archivar con ADR cuando se limpie.
+- **El webview viejo ya no existe**: `PanelWhatsapp.tsx` —retirado por D13— **se borró el 7-ago-2026
+  con ADR 0039**, junto con `cuentas.ts`, `whatsapp/tipos.ts` y los tres preloads de `electron/`.
+  Era el único consumidor del preload, y no lo importaba nadie.
 - **LLAMADAS DE VOZ — habilitadas en la línea del bot, y todavía NO se puede llamar.** Estado
   medido el 3-ago-2026 en `51984429504` (phone number id `1293736303812393`, WABA
   `1545885483579508`): `calling.status = ENABLED` con **`call_icon_visibility = DISABLE_ALL`**.
@@ -1462,7 +1463,7 @@ Ver `server/.env.example` (solo nombres).
 
 1. **Secretos**: por nombre, nunca pegados en prompts/archivos/docs.
 2. **Verificación antes de "listo"**: ningún cambio de UI o deploy se reporta terminado sin screenshot
-   (Playwright/Electron) o `curl` a la URL viva.
+   (Playwright, o la galería de la pieza) o `curl` a la URL viva.
 3. **Toda reescritura documenta qué reemplaza** (ADR en `docs/adr/`) y archiva al predecesor.
 4. **latin1 de Cerberus**: el enemigo son los **emojis**, no los acentos (á/é/ñ pasan; el emoji revienta
    el INSERT en MySQL). Sanitizar en el borde: **`server/src/cerberus/latin1.ts`** (#108). Todo POST a

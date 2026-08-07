@@ -273,6 +273,8 @@ Los cuatro huecos que esta sección declaraba el 2026-07-22 se cerraron el 2026-
   Sembrarla con un dump anonimizado de producción es el próximo paso obvio.
 - **Staging comparte máquina con producción.** Un staging que se coma la RAM o el disco afecta a las
   vendedoras. Deuda consciente (ADR 0022).
-- **La cáscara no entra al pipeline.** Tauri/Electron se siguen empaquetando aparte y a mano.
+- **La cáscara no entra al pipeline.** Tauri se sigue empaquetando aparte y a mano (`empaquetar:mac`
+  local, `tauri-windows.yml` a botón). Y sus tests **tampoco son gate de PR**: `ci.yml` corre entero
+  en el runner de VPS1, que no tiene Rust ni las libs de sistema de Tauri (ADR 0040 §6).
 - **No hay despliegue por tags ni versionado.** Se despliega el HEAD de `main` o un SHA suelto.
 - **CORS sigue en `*`** (issue #94). No es del CD, pero es la deuda de perímetro que queda viva.

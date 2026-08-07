@@ -8,7 +8,7 @@
 
 ## 0. Qué es (una frase)
 
-Una app de escritorio (Electron) donde **una vendedora atiende, desde una sola pantalla, a toda la gente
+Una app de escritorio (Tauri; Electron se archivó en ADR 0039) donde **una vendedora atiende, desde una sola pantalla, a toda la gente
 que levantó la mano** por Facebook, Instagram, Messenger y WhatsApp — con la **ficha del contacto**
 (¿quién es? ¿ya compró?) al lado del chat, y **registrando la venta contra Cerberus** sin salir de ahí.
 

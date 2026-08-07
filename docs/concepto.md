@@ -38,10 +38,13 @@ vivo. La ficha del contacto al lado del chat, no en otra pantalla.
 
 **Dos asimetrías, a propósito:**
 
-1. **Meta entra por API; WhatsApp entra por DOM.** No porque nos guste, sino porque la Cloud API está
-   en trámite. Toda la lectura del DOM vive encerrada en **un solo archivo**
-   (`electron/whatsapp-preload.cjs`). Cuando salga la Cloud API, ese archivo se borra y el resto de
-   Hermes no se entera.
+1. ~~**Meta entra por API; WhatsApp entra por DOM.**~~ **YA NO.** WhatsApp entra por
+   `@whatsmeow-node/whatsmeow-node` detrás de la interfaz `TransporteWhatsapp`
+   (`server/src/whatsapp/transporte.ts`), y la mitad que recibe de la Cloud API también existe
+   (`server/src/webhook/whatsapp.ts`). No queda lectura de DOM en ninguna parte.
+   > La apuesta salió bien y conviene dejarla escrita: la lectura del DOM estaba encerrada en un
+   > solo archivo (`electron/whatsapp-preload.cjs`), y cambiar de canal costó **borrar ese archivo**
+   > sin que el resto de Hermes se enterara. El archivo se fue con **ADR 0039**.
 2. **Hermes es la cara; Cerberus es el núcleo.** Hermes no reimplementa ventas, cuotas ni matrícula.
    Registra contra la API de Cerberus, que sigue siendo dueño de `tb_cliente`/`tb_venta`.
 
@@ -61,6 +64,12 @@ chica hoy y una reescritura fea dentro de seis meses con datos adentro. **Es coo
 Andreecito**: su dedup de la consolidación asume teléfono.
 
 ## 5. Sesiones de WhatsApp
+
+> ⚠️ **Esta sección describe el diseño VIEJO y ya no aplica** (D13 + ADR 0039). Las particiones de
+> Electron por cuenta (`persist:wa:<id>`, `src/features/whatsapp/cuentas.ts`) se borraron con la
+> cáscara. Hoy la sesión vive **server-side, en VPS1**: un `.db` por número en
+> `server/.wa-sessions/`, vinculado con `npm run wa:vincular` — **la app de la vendedora no vincula,
+> solo ve**. Lo que sigue en pie de este párrafo es la última frase.
 
 Una **partición de Electron por cuenta** (`persist:wa:<id>`): almacenamiento aislado donde WhatsApp
 guarda sus llaves. El QR se escanea una vez por cuenta y la sesión sobrevive al cierre de la app.
@@ -93,7 +102,8 @@ en orden de impacto:
 - Bandeja con datos reales, orden por urgencia, y responder público + privado (heredado).
 - Barra de frescura: distingue "estás al día" de "la captura está muerta". Endpoint nuevo
   `/api/interactions/frescura`.
-- Caparazón Electron con panel de WhatsApp Web, particiones por cuenta, selector de cuentas.
+- ~~Caparazón Electron con panel de WhatsApp Web, particiones por cuenta, selector de cuentas.~~
+  **Archivado** (D13 lo dejó sin uso, ADR 0039 lo borró). La cáscara es Tauri.
 - Adaptador de DOM con los selectores verificados del spike + **kill-switch**: si no reconoce la
   interfaz lo dice, nunca inventa un teléfono.
 
