@@ -87,6 +87,15 @@ END)::float8`;
 export const VENTANA_META_DIAS = 7;
 
 /**
+ * Lo que dura la ventana de un CHAT: las 24 h de atención al cliente de Meta,
+ * contadas desde el último entrante. Vive acá y no en `cola/ventana.ts` —donde
+ * está la regla que la usa— por una razón chica y concreta: los dos plazos de
+ * Meta tienen que poder leerse juntos, y el 7 ya estaba acá. Ponerla del otro
+ * lado dejaba un import circular entre la regla pura y su proyección SQL.
+ */
+export const VENTANA_MENSAJE_HORAS = 24;
+
+/**
  * LOS DÍAS QUE QUEDAN de ventana — el dato del que sale la cuenta regresiva (#22).
  *
  * Antes esto viajaba como un SÍ/NO, y encima siempre verdadero: el `WHERE` de la
@@ -128,6 +137,45 @@ export function ventanaDiasSql(occurredAt: string, canal: string): SQL {
  */
 export function ventanaAbiertaSql(ventanaDias: SQL): SQL {
   return sql`COALESCE((${ventanaDias}) > 0, false)`;
+}
+
+/**
+ * ── LA VENTANA DE CONVERSACIÓN, EN SQL ────────────────────────────────────
+ * El espejo de `cola/ventana.ts`, que es donde está escrito el porqué de cada
+ * decisión (por qué desde el último ENTRANTE, por qué en positivo, y por qué es
+ * OTRA pregunta que `ventanaDiasSql` y no la misma con otro plazo). Acá va solo
+ * la proyección; el candado es `ventana.paridad.test.db.ts`.
+ *
+ * Devuelve el INSTANTE del cierre y no un booleano, por el mismo motivo por el
+ * que `ventanaDiasSql` dejó de ser un sí/no: de un booleano no se puede derivar
+ * «te quedan 6 horas», y avisar ANTES del cierre es todo el valor de la señal.
+ *
+ * `NULL` = no aplica (sin entrante, o un comentario de un canal sin ventana).
+ * Distinto de una fecha pasada, que es «se cerró». La pantalla los dice
+ * distinto, así que no se colapsan acá.
+ *
+ * Toma los nombres de columna como parámetros —igual que `ventanaDiasSql` y
+ * `pideInfoSql`— porque los call-sites las califican distinto.
+ */
+export function ventanaCierraSql(ultimoEntranteAt: string, canal: string, tipo: string): SQL {
+  const desde = sql.raw(ultimoEntranteAt);
+  return sql`CASE
+    WHEN ${desde} IS NULL THEN NULL::timestamptz
+    WHEN ${sql.raw(tipo)} = 'mensaje'
+      THEN ${desde} + ${VENTANA_MENSAJE_HORAS} * interval '1 hour'
+    WHEN ${sql.raw(canal)} IN ('facebook','instagram')
+      THEN ${desde} + ${VENTANA_META_DIAS} * interval '1 day'
+    ELSE NULL::timestamptz
+  END`;
+}
+
+/**
+ * ¿SE LE PUEDE HABLAR? — DERIVADA del cierre, nunca calculada aparte (el mismo
+ * criterio que `ventanaAbiertaSql` con los días). `COALESCE(..., false)`: sin
+ * ventana no hay puerta abierta, y quien lo consume lo lee como booleano.
+ */
+export function puedoEscribirleSql(ventanaCierra: SQL): SQL {
+  return sql`COALESCE((${ventanaCierra}) > now(), false)`;
 }
 
 /**

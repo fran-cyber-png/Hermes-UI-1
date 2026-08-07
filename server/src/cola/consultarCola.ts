@@ -6,10 +6,12 @@ import {
   ordenUrgenciaSql,
   pideInfoAgrupadoSql,
   pideInfoSql,
+  puedoEscribirleSql,
   referenciaSql,
   respondidaSql,
   seguimientosPendientesSql,
   ventanaAbiertaSql,
+  ventanaCierraSql,
   ventanaDiasSql,
   vivaSql,
 } from "./urgenciaSql.js";
@@ -120,6 +122,26 @@ import { lineasDeVendedora } from "../numeros/repositorio.js";
  * proyecta chats, y un chat no tiene ventana.
  */
 const VENTANA_ABIERTA = sql`(tipo = 'comentario' AND ${ventanaAbiertaSql(ventanaDiasSql("occurred_at", "canal"))})`;
+
+/**
+ * CUÁNDO SE CIERRA LA PUERTA de esta conversación — la ventana de conversación
+ * (`cola/ventana.ts`, donde está escrito el porqué). Se calcula sobre `todo`, o
+ * sea DESPUÉS del `GROUP BY`, porque las tres columnas que necesita
+ * (`ultimo_entrante_at`, `canal`, `tipo`) ya las emiten los dos CTE.
+ *
+ * Es distinta de `VENTANA_ABIERTA` de acá arriba y las dos tienen que existir:
+ * aquella es la de 7 días de un COMENTARIO y alimenta el nivel 2 (`EXPIRA`) de
+ * la urgencia; ésta cubre también los chats de WhatsApp, donde el plazo es de
+ * 24 h y hasta hoy no se calculaba en ningún lado.
+ */
+const VENTANA_CIERRA = ventanaCierraSql("ultimo_entrante_at", "canal", "tipo");
+
+/**
+ * ¿SE LE PUEDE HABLAR AHORA? El predicado del chip, dicho UNA vez: lo leen la
+ * página, el filtro y el conteo del chip. Si se escribiera dos veces, el chip
+ * podría prometer 47 y la cola devolver otra cosa (#37).
+ */
+const PUEDO_ESCRIBIRLE = puedoEscribirleSql(VENTANA_CIERRA);
 
 /**
  * LA VENTANA DE LA COLA — hasta dónde mira «el trabajo pendiente». 30 días: es el
@@ -367,6 +389,13 @@ export interface ResultadoCola {
     botEscalada: number;
     /** El bot la ve caliente: preguntó precio, cuotas o forma de pago. */
     botCaliente: number;
+    /**
+     * Cuántas tienen la ventana de conversación ABIERTA (`cola/ventana.ts`): se
+     * les puede escribir ahora mismo. El chip lleva su número porque sin él
+     * «Puedo escribirle» es una apuesta — y con la cola de 1.900 filas, tocarlo
+     * y encontrar 3 se lee como que el filtro está roto.
+     */
+    puedoEscribirle: number;
     /**
      * Cuántas de estas te asignó el reparto. Se cuenta SIEMPRE dentro del recorte
      * **sin** aplicar «Míos» — si se contara con el filtro puesto, el chip diría
@@ -616,8 +645,20 @@ async function ejecutarCola(
   // desglose (lección de #37).
   if (intencion === "bot-escalada") condicionesBase.push(botEscaladaSql);
   if (intencion === "bot-caliente") condicionesBase.push(botCalienteSql);
-  // Compat: la cola vieja mandaba `puedo-escribirle`; el front nuevo usa tabs.
-  if (intencion === "puedo-escribirle") condicionesBase.push(sql`(ventana_abierta OR tipo = 'mensaje')`);
+  /**
+   * «PUEDO ESCRIBIRLE» — la ventana de conversación abierta (`cola/ventana.ts`).
+   *
+   * ⚠️ Acá decía `(ventana_abierta OR tipo = 'mensaje')`, y eso **es siempre
+   * verdadero en WhatsApp**: `tipo = 'mensaje'` no mira ningún plazo, así que el
+   * filtro devolvía los 1.900 chats enteros. Era compat de la cola vieja, donde
+   * este valor había sido el tab por defecto — y por eso se lo retiró en #49 sin
+   * que nadie notara que además mentía.
+   *
+   * Ahora usa la ventana de verdad: 24 h desde el último ENTRANTE en un chat, 7
+   * días en un comentario de FB/IG. El predicado se dice una sola vez arriba
+   * (`PUEDO_ESCRIBIRLE`) y lo comparten la página y el conteo del chip.
+   */
+  if (intencion === "puedo-escribirle") condicionesBase.push(PUEDO_ESCRIBIRLE);
 
   // El RECORTE (tab, categoría, etapa, precio) es lo que sigue valiendo cuando se
   // apaga el filtro secundario: por eso va aparte, y por eso los conteos de los
@@ -685,6 +726,11 @@ async function ejecutarCola(
            texto, contexto_texto, ultima_clase, ultima_origen, origen_anuncio, respondida, ya_le_hablamos,
            precio_enviado, ventana_abierta, pide_info, n,
            referencia, ultimo_at, seguimiento_en,
+           -- CUÁNDO SE CIERRA LA PUERTA (cola/ventana.ts). Viaja el INSTANTE del
+           -- cierre, no «6 h»: el texto de la cuenta regresiva es presentación y
+           -- envejece en el caché de IndexedDB (ADR 0007) — un «quedan 6 h»
+           -- serializado ayer hoy es mentira, un timestamp no.
+           (${VENTANA_CIERRA}) AS ventana_cierra,
            etapa_manual,
            iu.curso AS interes_curso,
            lc.curso AS lead_curso,
@@ -747,6 +793,7 @@ async function ejecutarCola(
       ya_compraron: number;
       bot_escalada: number;
       bot_caliente: number;
+      puedo_escribirle: number;
       mios: number;
     }>(sql`
       ${conTodo(filtroCanal, pins, lineas)},
@@ -759,6 +806,9 @@ async function ejecutarCola(
              count(*) FILTER (WHERE ${conMias(yaComproSql)})::int           AS ya_compraron,
              count(*) FILTER (WHERE ${conMias(botEscaladaSql)})::int        AS bot_escalada,
              count(*) FILTER (WHERE ${conMias(botCalienteSql)})::int        AS bot_caliente,
+             -- El MISMO predicado que filtra la página: el chip no puede
+             -- prometer un número y la cola devolver otro.
+             count(*) FILTER (WHERE ${conMias(PUEDO_ESCRIBIRLE)})::int      AS puedo_escribirle,
              -- El de «Míos» es el único que NO se cuenta con el filtro puesto:
              -- responde «¿cuánto me tocó?», y esa pregunta se hace justo cuando
              -- el filtro está apagado. Con él puesto, coincide con el total.
@@ -779,6 +829,7 @@ async function ejecutarCola(
       yaCompraron: r?.ya_compraron ?? 0,
       botEscalada: r?.bot_escalada ?? 0,
       botCaliente: r?.bot_caliente ?? 0,
+      puedoEscribirle: r?.puedo_escribirle ?? 0,
       mios: r?.mios ?? 0,
     };
     desglose = await desglosarEmbudo(

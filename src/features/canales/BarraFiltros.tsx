@@ -63,6 +63,8 @@ export function BarraFiltros({
     yaCompraron?: number;
     botEscalada?: number;
     botCaliente?: number;
+    /** Cuántas tienen la ventana abierta (server: `cola/ventana.ts`). */
+    puedoEscribirle?: number;
   };
   catalogo?: readonly CategoriaEnBarra[];
   categoriaActiva: string | null;
@@ -143,13 +145,15 @@ export function BarraFiltros({
       ? conteos?.pideInfo
       : valor === 'sin-responder'
         ? conteos?.sinResponder
-        : valor === 'ya-compraron'
-          ? conteos?.yaCompraron
-          : valor === 'bot-escalada'
-            ? conteos?.botEscalada
-            : valor === 'bot-caliente'
-              ? conteos?.botCaliente
-              : undefined;
+        : valor === 'puedo-escribirle'
+          ? conteos?.puedoEscribirle
+          : valor === 'ya-compraron'
+            ? conteos?.yaCompraron
+            : valor === 'bot-escalada'
+              ? conteos?.botEscalada
+              : valor === 'bot-caliente'
+                ? conteos?.botCaliente
+                : undefined;
 
   /**
    * Los dos del bot se esconden en cero (regla 4 del docblock). El ACTIVO se

@@ -23,7 +23,14 @@
 export type Tab = 'todo' | 'no-leidos' | 'favoritos';
 
 /** Los filtros secundarios: angostan dentro del tab (#49). */
-export type FiltroSec = '' | 'pide-info' | 'sin-responder' | 'ya-compraron' | 'bot-escalada' | 'bot-caliente';
+export type FiltroSec =
+  | ''
+  | 'pide-info'
+  | 'sin-responder'
+  | 'puedo-escribirle'
+  | 'ya-compraron'
+  | 'bot-escalada'
+  | 'bot-caliente';
 
 export const TABS: { valor: Tab; label: string; vacio: string }[] = [
   { valor: 'todo', label: 'Todo', vacio: 'No entró nada por ningún canal.' },
@@ -58,6 +65,30 @@ export const FILTROS_SEC: { valor: Exclude<FiltroSec, ''>; label: string; ayuda:
     valor: 'sin-responder',
     label: 'Sin responder',
     ayuda: 'Nadie del equipo contestó todavía — la deuda entera, incluidos los que no pidieron nada',
+  },
+  /**
+   * ══ «PUEDO ESCRIBIRLE» — LA VENTANA DE CONVERSACIÓN (server: cola/ventana.ts) ══
+   *
+   * Los otros chips ordenan la DEUDA (quién espera). Éste responde la pregunta de
+   * al lado, que hasta hoy no se podía hacer: **¿a quién todavía se le puede
+   * hablar?** Meta cierra la puerta sola —24 h desde que la persona escribió en
+   * un chat, 7 días desde un comentario de FB/IG— y del otro lado el mensaje deja
+   * de ser una respuesta y pasa a ser una apertura en frío.
+   *
+   * ⚠️ **Está dicho en POSITIVO a propósito, y no puede dejar de estarlo.** El
+   * plazo es duro solo en la línea de la Cloud API (`51984429504`); en las tres
+   * líneas whatsmeow de las vendedoras Meta no rechaza nada. Un chip que dijera
+   * «ya no le podés escribir» sería falso en tres de cuatro líneas, y el precio
+   * de esa mentira es una venta que nadie intenta. Dice a quién SÍ, nunca a quién
+   * no.
+   *
+   * Va acá, entre la deuda y la oportunidad, porque se lee justo en ese orden:
+   * primero a quién le debo, después a quién alcanzo antes de que se cierre.
+   */
+  {
+    valor: 'puedo-escribirle',
+    label: 'Puedo escribirle',
+    ayuda: 'La ventana sigue abierta: 24 h desde que escribió, 7 días desde que comentó',
   },
   /**
    * «Ya compraron» (#133) va PRIMERO de los tres cuando la vendedora elige a

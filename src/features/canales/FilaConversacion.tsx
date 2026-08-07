@@ -19,6 +19,7 @@ import { marcaDeDueno, type TonoDueno } from './dueno';
 import { BadgeCanal } from './BadgeCanal';
 import { Avatar } from './Avatar';
 import { VENTANA_DIAS } from './types';
+import { lecturaDeVentana } from './ventana';
 import type { Conversacion } from './conversaciones';
 import { esPrioritaria, quiereFoto, siguienteConFoto } from './fotoVisible';
 
@@ -160,6 +161,12 @@ export function FilaConversacion({
   const { conFoto, elRef } = useConFotoVisible(indice, c.canal);
   const temp = TEMPERATURE_META[temperatureOf(c.referencia)];
   const restan = VENTANA_DIAS - c.dias;
+  /**
+   * Cuánto le queda de ventana a esta conversación. Se recalcula en cada render
+   * y no se memoiza: el dato ES el paso del tiempo, y un `useMemo` con `[c]` lo
+   * congelaría hasta que la fila cambie por otro motivo.
+   */
+  const ventana = lecturaDeVentana(c.ventana_cierra, new Date());
   const esTelefono = !c.persona_nombre && c.canal === 'whatsapp' && c.persona_id != null;
   const nombre = c.persona_nombre ?? (esTelefono ? formatoTelefono(c.persona_id!) : 'Usuario');
   // Horas reales desde la referencia — `c.dias` son días enteros, así que abajo
@@ -341,12 +348,42 @@ export function FilaConversacion({
             )}
           </span>
           <span className="flex shrink-0 flex-col items-end gap-0.5">
-            {/* El reloj dorado SOLO cuando la ventana de Meta corre: tiempo que se acaba. */}
-            {c.ventana_abierta && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-gold/20 px-1.5 py-0.5 text-xs font-bold text-gold-ink">
+            {/*
+              SE LE PUEDE ESCRIBIR — la ventana de conversación (`ventana.ts`).
+              Cubre los dos plazos con una sola marca: 24 h desde que la persona
+              escribió en un chat, 7 días desde que comentó en FB/IG. Antes acá
+              solo entraban los comentarios, así que en WhatsApp —que es donde
+              Goberna vende— la puerta se cerraba sin que nada lo dijera.
+
+              EL ORO SOLO CUANDO QUEDA POCO. Antes toda ventana abierta salía
+              dorada, y una de 6 días no es tiempo que se acabe: el oro terminaba
+              significando «comentario» en vez de «ahora». Arriba del umbral va
+              en tinta neutra sobre fondo tenue, como las demás señales
+              automáticas de la casa (ADR 0016).
+            */}
+            {ventana ? (
+              <span
+                title={ventana.ayuda}
+                className={
+                  'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-bold ' +
+                  (ventana.urgente ? 'bg-gold/20 text-gold-ink' : 'bg-muted text-muted-foreground')
+                }
+              >
                 <Clock size={10} />
-                {restan <= 1 ? 'último día' : `quedan ${restan} días`}
+                {ventana.texto}
               </span>
+            ) : (
+              /* RESPALDO para un server que todavía no manda `ventana_cierra`:
+                 N4 (front) va solo y N5 (server) es un botón, así que existe una
+                 ventana de deploy con el front nuevo y el server viejo. Sin esto,
+                 en esa franja los comentarios perderían su cuenta regresiva —
+                 una regresión silenciosa que nadie ata al deploy. */
+              c.ventana_abierta && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-gold/20 px-1.5 py-0.5 text-xs font-bold text-gold-ink">
+                  <Clock size={10} />
+                  {restan <= 1 ? 'último día' : `quedan ${restan} días`}
+                </span>
+              )
             )}
             <span className="inline-flex items-center gap-1 font-mono text-[11px] tabular-nums text-muted-foreground">
               {c.respondida && <Check size={11} className="shrink-0 text-success" aria-label="respondida" />}

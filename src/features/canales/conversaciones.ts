@@ -41,6 +41,17 @@ export interface Conversacion {
   /** La última gestión asentada a mano (o null). Informativa; la que manda es la efectiva. */
   etapa_manual?: string | null;
   ventana_abierta: boolean;
+  /**
+   * CUÁNDO SE CIERRA LA PUERTA (server: `cola/ventana.ts`) — 24 h desde que la
+   * persona escribió en un chat, 7 días desde que comentó en FB/IG. Viaja el
+   * INSTANTE y no «6 h»: el texto envejece adentro del caché de IndexedDB
+   * (ADR 0007) y un «quedan 6 h» serializado ayer hoy es mentira.
+   *
+   * `null` = no aplica (sin entrante, o un canal sin plazo). AUSENTE = el server
+   * todavía no lo manda (N4 va solo, N5 es un botón), y ahí no se dibuja nada —
+   * que es como se comportaba antes. La lectura vive en `canales/ventana.ts`.
+   */
+  ventana_cierra?: string | null;
   pide_info: boolean;
   /** Cuántos mensajes agrupa la conversación (1 en comentarios). */
   n: number;
@@ -106,6 +117,8 @@ type Pagina = {
     /** El bot se frenó y espera a una persona. Opcional: un server viejo no lo manda. */
     botEscalada?: number;
     botCaliente?: number;
+    /** Cuántas tienen la ventana abierta (`cola/ventana.ts`). Opcional: server viejo. */
+    puedoEscribirle?: number;
     /** Cuántas te asignó el reparto — SIEMPRE contadas con el filtro apagado, así
      *  el chip puede decir su número antes de que lo toquen. */
     mios?: number;
