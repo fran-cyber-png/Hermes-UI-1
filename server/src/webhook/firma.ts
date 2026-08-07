@@ -64,8 +64,10 @@ declare global {
  * documenta («las mayúsculas esquivaban la guardia»). La igualdad exacta (no
  * `startsWith`) evita además retener el cuerpo de rutas que no lo usan.
  */
+const RUTAS_FIRMADAS = new Set(["/webhook/whatsapp", "/webhook/meta"]);
+
 export function capturarCuerpoCrudo(req: Request, _res: Response, buf: Buffer): void {
-  if (req.path.toLowerCase() === "/webhook/whatsapp") req.cuerpoCrudo = Buffer.from(buf);
+  if (RUTAS_FIRMADAS.has(req.path.toLowerCase())) req.cuerpoCrudo = Buffer.from(buf);
 }
 
 /**
@@ -81,10 +83,11 @@ export function capturarCuerpoCrudo(req: Request, _res: Response, buf: Buffer): 
  * hasta desactivar la suscripción, sin una línea que lo explique. El log dice
  * el MOTIVO; jamás la firma ni el secreto.
  */
-export function exigirFirmaWhatsapp(req: Request, res: Response, next: NextFunction): void {
+export function exigirFirmaMeta(etiqueta: string) {
+  return function exigirFirma(req: Request, res: Response, next: NextFunction): void {
   const firma = req.headers["x-hub-signature-256"];
   const rechazar = (motivo: string): void => {
-    console.warn(`[webhook-whatsapp] POST rechazado (403): ${motivo}`, {
+    console.warn(`[${etiqueta}] POST rechazado (403): ${motivo}`, {
       tieneSecreto: Boolean(process.env.WHATSAPP_APP_SECRET),
       tieneFirma: typeof firma === "string",
       tieneCrudo: req.cuerpoCrudo !== undefined,
@@ -109,4 +112,18 @@ export function exigirFirmaWhatsapp(req: Request, res: Response, next: NextFunct
     return;
   }
   next();
+  };
 }
+
+/**
+ * Las dos puertas, con el MISMO secreto: `WHATSAPP_APP_SECRET` es el App Secret
+ * de la app de Meta (id `1958308695630264`), no algo de WhatsApp — la misma app
+ * firma los eventos de la Cloud API, los de las Páginas y los de Instagram. Un
+ * secreto por objeto sería otro secreto que mantener sin nada que gane, y en el
+ * primer rotado quedaría uno viejo rebotando eventos en silencio.
+ *
+ * Se distinguen solo por la etiqueta del log: sin eso, un 403 no dice cuál de
+ * los dos webhooks se está cayendo.
+ */
+export const exigirFirmaWhatsapp = exigirFirmaMeta("webhook-whatsapp");
+export const exigirFirmaWebhookMeta = exigirFirmaMeta("webhook-meta");

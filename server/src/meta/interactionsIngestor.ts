@@ -1,13 +1,19 @@
 import { db } from "../db/client.js";
-import { events, interactions } from "../db/schema.js";
 import { MetaGraphClient, MetaGraphError } from "./metaClient.js";
+import { guardarInteraccion, type ProyeccionInteraccion } from "./proyectarInteraccion.js";
 
 /**
- * Captura comentarios y mensajes de Facebook e Instagram.
+ * Captura comentarios y mensajes de Facebook e Instagram — POR POLLING.
  *
  * Misma garantía que los leads: el evento crudo primero (fuente de verdad),
  * la proyección después. Idempotente por (source, externalId) — correrlo mil
  * veces nunca duplica ni pierde nada.
+ *
+ * ⚠️ **Desde el 7-ago-2026 este NO es el único camino**: `webhook/meta.ts`
+ * recibe lo mismo en tiempo real. Los dos escriben con `guardarInteraccion`, y
+ * como el `external_id` es el mismo por los dos lados, conviven sin duplicar —
+ * este queda como RED de seguridad (un webhook perdido se recupera corriéndolo)
+ * y como la única forma de traer lo viejo, que ningún webhook va a reenviar.
  */
 
 export interface ResumenCanal {
@@ -18,47 +24,9 @@ export interface ResumenCanal {
   error?: string;
 }
 
-/** Guarda una interacción: evento crudo + proyección. Devuelve si era nueva. */
-async function guardar(
-  source: string,
-  raw: any,
-  proyeccion: {
-    externalId: string;
-    canal: string;
-    tipo: string;
-    /** 'entrante' | 'saliente'. Sin esto no sabemos a quién le respondimos. */
-    direccion?: string;
-    /** 'persona' | 'pagina' | 'bot'. */
-    autor?: string;
-    personaId: string | null;
-    personaNombre: string | null;
-    texto: string | null;
-    pageId: string;
-    contextoId: string | null;
-    contextoTexto: string | null;
-    occurredAt: Date;
-  },
-): Promise<boolean> {
-  const [event] = await db
-    .insert(events)
-    .values({
-      source,
-      externalId: proyeccion.externalId,
-      occurredAt: proyeccion.occurredAt,
-      payload: raw,
-    })
-    .onConflictDoNothing({ target: [events.source, events.externalId] })
-    .returning({ id: events.id });
-
-  if (!event) return false; // ya lo teníamos
-
-  await db
-    .insert(interactions)
-    .values({ eventId: event.id, ...proyeccion })
-    .onConflictDoNothing({ target: interactions.externalId });
-
-  return true;
-}
+/** Atajo local: la firma vieja, sobre la función compartida. */
+const guardar = (source: string, raw: unknown, proyeccion: ProyeccionInteraccion) =>
+  guardarInteraccion({ source, raw, proyeccion }, db);
 
 /** Comentarios en las publicaciones de una Página de Facebook. */
 async function comentariosFacebook(client: MetaGraphClient, pageId: string): Promise<ResumenCanal> {

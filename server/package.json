@@ -21,6 +21,7 @@
     "test": "tsx --test src/**/*.test.ts",
     "test:db": "tsx src/pruebas/montarBase.ts && tsx --test src/**/*.test.db.ts",
     "ingest:interactions": "tsx src/scripts/ingestInteractions.ts",
+    "meta:suscribir": "tsx src/scripts/suscribirMeta.ts",
     "ingest:icarus": "tsx src/scripts/ingestIcarus.ts",
     "clientes:auditar": "tsx src/scripts/auditarClientes.ts",
     "clientes:sincronizar": "tsx src/scripts/sincronizarClientes.ts",

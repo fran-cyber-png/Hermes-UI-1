@@ -8,8 +8,9 @@ import { capiDesdeEnv } from "../lazo/capi.js";
 import { leerEventoCerberus, ventaDeEvento, type EventoCerberus } from "../atribucion/payload.js";
 import { proyectarVenta } from "../atribucion/proyectarVenta.js";
 import { claveDeVenta, extraerVenta, tokenValido } from "./cerberus.js";
-import { exigirFirmaWhatsapp } from "./firma.js";
+import { exigirFirmaWebhookMeta, exigirFirmaWhatsapp } from "./firma.js";
 import { recibirWhatsapp, verificarWhatsapp } from "./whatsapp.js";
+import { recibirMeta, verificarMeta } from "./meta.js";
 
 export const webhookRouter = Router();
 
@@ -19,6 +20,20 @@ webhookRouter.get("/whatsapp", verificarWhatsapp);
 // La firma HMAC va DELANTE del handler (#107): sin `X-Hub-Signature-256` válida
 // no se guarda nada. Falla cerrado — sin WHATSAPP_APP_SECRET todo POST es 403.
 webhookRouter.post("/whatsapp", exigirFirmaWhatsapp, recibirWhatsapp);
+
+/**
+ * META — comentarios de Facebook/Instagram y DMs de Messenger, EN VIVO
+ * (7-ago-2026). Ruta pública: `/webhook/meta`, objetos `page` e `instagram`.
+ *
+ * Hasta hoy esto entraba solo por `npm run ingest:interactions`, un script
+ * manual que **nadie corría**: en producción había cero eventos de FB/IG y las
+ * 12 Páginas tenían `subscribed_apps` vacío, con la UI de la app entera
+ * esperando datos que nadie mandaba. Ver `webhook/meta.ts`.
+ *
+ * Misma firma HMAC que WhatsApp y por el mismo secreto: es la misma app de Meta.
+ */
+webhookRouter.get("/meta", verificarMeta);
+webhookRouter.post("/meta", exigirFirmaWebhookMeta, recibirMeta);
 
 /**
  * El receptor del webhook de Cerberus. Cada venta que se confirma en Cerberus llega acá, y de

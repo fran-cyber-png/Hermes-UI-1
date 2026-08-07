@@ -80,6 +80,8 @@ npm install && npm run dev:app                     # la cáscara Tauri (arranca 
   Ejemplo vivo: `src/pruebas/humo.test.db.ts`. Guardia hard-fail anti-prod (5439, nunca 5438/5434).
 - **Refrescar datos de Meta**: `cd server && npm run ingest:interactions` (polling manual, read-only).
   Captura comentarios FB/IG + DMs de Messenger de **todas las Páginas que el token puede ver** (`me/accounts`).
+  ⚠️ **Desde el 7-ago-2026 NO es el camino principal**: lo es el webhook (§Instagram y Facebook).
+  Este queda como red de seguridad y como lo único que puede traer lo VIEJO.
 
 ## WhatsApp — la costura y la vinculación
 
@@ -245,6 +247,47 @@ Fuera de Tauri cae a `abrirExterno()`, así que la vista anda igual en `npm run 
   fuera de Tauri, `?basura=1` el recorte de `interpretar`). Capturas en `docs/evidencia/navegador-*.png`.
 - ⚠️ Los tests de la cáscara **no son gate de PR**: `ci.yml` corre en el runner de VPS1, que no tiene
   Rust. Viven en `tauri-windows.yml`, que es `workflow_dispatch`.
+## Instagram y Facebook — no se desconectaron, nunca se enchufó el caño (ADR 0042)
+
+Reportado el 7-ago-2026: «teníamos el sistema conectado con IG y Facebook, ¿qué pasó?». Medido capa
+por capa en VPS1, la respuesta es que **del lado de Hermes nunca llegó a estar conectado**.
+
+- **El token está VIVO** y es de *system user*, **no expira** (`expires_at: 0`): ve **12 Páginas** y
+  **9 cuentas de Instagram**. **La UI existe y está cableada** (`App.tsx` → `ConversacionActiva` →
+  `HiloMessenger` + `ResponderPanel` con `QuePuedoHacer`) — no es código muerto. **La cola sabe
+  ordenarlos** (nivel 2 `EXPIRA`). **Y en la base había CERO** eventos `meta_comment_fb`,
+  `meta_comment_ig` y `meta_message_fb`: `interactions` tenía 12.895 filas y **todas de WhatsApp**.
+- **La causa**: la captura era un script manual (`ingest:interactions`) que **nadie corría** —ni cron
+  ni timer en VPS1— y **no había webhook**. Las 12 Páginas tenían **`subscribed_apps` vacío**.
+  🔴 **La lección**: `docs/estado.md` afirmaba «Cola unificada 4 canales · Messenger read-only» y era
+  cierto del CÓDIGO y falso de la REALIDAD. **Antes de afirmar que un canal anda, contá filas en la
+  base — no leas componentes.**
+- **Ahora hay webhook**: `POST /webhook/meta` (objetos `page` e `instagram`), receptor en
+  `server/src/webhook/meta.ts` (cableado) + `metaPayload.ts` (la traducción, **pura**: el handler
+  importa `db`, así que sin separarlos un test de los payloads de Meta exigiría `DATABASE_URL`).
+  Misma firma HMAC y **el mismo `WHATSAPP_APP_SECRET`**: es el App Secret de la MISMA app de Meta
+  (`1958308695630264`), no algo de WhatsApp. Ack primero — Meta desactiva la suscripción si no ve 200.
+- 🔴 **LOS DOS CAMINOS CONVIVEN, y de eso depende poder dejar el polling andando.** Escriben con la
+  MISMA función (`meta/proyectarInteraccion.ts`) y con el MISMO `external_id` — el `mid` del webhook
+  de Messenger es el id de `conversations{messages{id}}`, y el `comment_id` de `feed` es el `id` de
+  `posts{comments{id}}`. Si alguien renombra un `source` de un solo lado, el comentario entra DOS
+  veces y **no hay error ni log**: la clave `(source, external_id)` es distinta. Los candados:
+  `meta/caminos.paridad.test.ts` **lee el archivo del polling** (patrón de `limitesMedia.paridad`) y
+  `meta/caminos.test.db.ts` escribe por los dos caminos, en los dos órdenes, contra una base real.
+- **Los tres casos que mal leídos guardan una fila razonable y mienten en la pantalla**:
+  · **`is_echo` es NUESTRO mensaje** (Meta devuelve lo que la Página manda, incluso desde Business
+    Suite) — como entrante, la cola contaría como deuda lo que ya respondimos.
+  · **`feed` trae TODO el muro** (posts, reacciones, compartidos): sin recorte cada reacción entra
+    como si alguien hablara. `verb: remove`/`hide` no es contenido — guardarlo vacío es el fantasma
+    del fix #70.
+  · **El webhook de comentarios de IG NO manda hora**: con 0 la fila cae en 1970, o sea **fuera de la
+    ventana de 30 días de la cola** — se guarda y no aparece en ninguna pantalla. `momento()` usa la
+    del `entry` y distingue segundos de milisegundos, que Meta mezcla entre campos.
+- ⚠️ **FALTA LA MITAD QUE NO ES CÓDIGO, y en silencio deja todo igual**: declarar el callback
+  `https://hermes-api.goberna.us/webhook/meta` para los objetos `page` e `instagram` en el dashboard
+  de la app, y después `cd server && npm run meta:suscribir` (**dry-run por default**, `-- --aplicar`
+  suscribe). Sin lo primero, el script dice ✅ y no llega nada. **Verificá contando filas en `events`,
+  nunca por un 200.** No hace falta revisión de app: los permisos ya estaban concedidos.
 
 ## Adjuntos: el tope es de la LÍNEA, y un video que no entra se achica acá
 
@@ -604,6 +647,44 @@ catálogo: `server/src/catalogo/` + `routes/catalogo.ts`, **solo lectura**.
   (`src/features/hechos/hechos.ts`), que era la desincronización que ya existía.
 - **Un momento desconocido viaja tal cual, nunca se filtra**: en `hechos`, `momentos: []` significa
   «vale para todos», así que descartar un valor nuevo **ensancharía** la pieza en vez de acotarla.
+
+## «Se le puede hablar» — la ventana de conversación (ADR 0041)
+
+La cola ordena la DEUDA (quién espera). Esta es la otra pregunta: **¿a quién todavía se le puede
+escribir?** Meta cierra la puerta sola y de los dos plazos Hermes modelaba **uno solo**.
+
+- **24 h desde el último ENTRANTE** en un chat (WhatsApp/Messenger) · **7 días** desde un comentario
+  de FB/IG. Lo segundo ya existía (`ventanaDiasSql`, que alimenta el nivel 2 `EXPIRA`); lo primero
+  **no se calculaba en ningún lado** — `ventanaDiasSql` devuelve `NULL` para todo lo que no sea
+  `facebook`/`instagram`, o sea que en WhatsApp, que es donde Goberna vende, no había ventana.
+- **Y había un filtro que decía hacerlo**: la intención `puedo-escribirle` era
+  `(ventana_abierta OR tipo = 'mensaje')`, **siempre verdadera para un chat** — devolvía la cola
+  entera. Era compat de la cola vieja; se retiró su chip en #49 y nadie notó que además mentía.
+- 🔴 **NO es una etapa del embudo, y como etapa habría sido destructivo**: una conversación tiene UNA
+  etapa, así que marcar «abierto» **borraría `cotizado`** y el embudo perdería la cuenta de la venta —
+  y cuando la ventana se cierra sola tres horas después, no hay a dónde volver. Es una **señal
+  derivada** (ADR 0016, como «Cotizado» y «Se enfrió»): no se guarda, se deriva en cada consulta, y
+  sale como chip con su número + marca en la fila. El embudo no se toca.
+- 🔴 **DESDE EL ÚLTIMO ENTRANTE, nunca desde lo último que pasó.** La ventana la abre quien escribe y
+  nuestra respuesta no la extiende. Con `referencia` (que salta al máximo global al contestar),
+  responder a las 23 h se leería como «te quedan 24 h más».
+- 🔴 **LA SEÑAL SE DICE EN POSITIVO Y NO PUEDE DEJAR DE ESTARLO.** El plazo es duro **solo en la línea
+  de la Cloud API** (`51984429504`): ahí Meta rechaza el texto libre y solo entra plantilla aprobada.
+  En las **tres líneas whatsmeow** de las vendedoras Meta **no rechaza nada** (el riesgo ahí es el
+  ban). Un «ya no le podés escribir» sería falso en tres de cuatro líneas, y esa mentira cuesta una
+  venta que nadie intenta. **Una ventana cerrada no dibuja NADA.** Misma forma que `limitesMedia`:
+  el plazo lo impone el transporte, así que Hermes solo afirma lo que vale para todas.
+- La regla vive **una vez**, pura, en `cola/ventana.ts`, con su gemelo SQL `ventanaCierraSql`
+  (`urgenciaSql.ts`) y `ventana.paridad.test.db.ts` de candado — que verifica **el instante** del
+  cierre, no solo el sí/no: un booleano igual puede salir de dos plazos distintos.
+  **`ventanaDiasSql` NO se toca**: es el contrato de `EXPIRA`, vale solo para comentarios y tiene su
+  propio test de paridad. Se comparte la **constante**, no la expresión.
+- **El oro vuelve a significar tiempo que se acaba**: antes toda ventana abierta salía dorada —
+  incluida una de 6 días—, así que el oro terminaba queriendo decir «comentario». Ahora solo abajo de
+  `UMBRAL_ORO_MS` (3 h). El front lee `ventana_cierra` como **opcional** y conserva la marca vieja de
+  respaldo: N4 va solo y N5 es un botón, así que hay una franja con el front nuevo y el server viejo.
+- Ver sin server: `npx vite --port 5199` → `/galeria-ventana.html`. Captura en
+  `docs/evidencia/ventana-de-conversacion.png`.
 
 ## Señales automáticas — «Cotizado» y «Se enfrió»
 
