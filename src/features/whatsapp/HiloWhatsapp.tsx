@@ -494,7 +494,7 @@ export function HiloWhatsapp({
 
   // Al abrir la conversación: marcar leído (una vez por teléfono).
   useEffect(() => {
-    if (telefono) marcarLeido.mutate(telefono);
+    if (telefono) marcarLeido.mutate({ telefono, numeroPropio });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [telefono]);
 

@@ -132,8 +132,32 @@ export function useConversacionWa(telefono: string | null) {
   });
 
   // Marcar leído al abrir (ticks azules — decisión de Estephano). Sin bloquear la vista.
+  /**
+   * Marcar leído al abrir. Hace DOS cosas del otro lado: los ticks azules para el
+   * lead y el cursor de lectura de la vendedora (lo que apaga el punto azul de
+   * la fila).
+   *
+   * ⚠️ **`numeroPropio` no es opcional para el cursor**: `estado_conversacion` se
+   * indexa por la clave completa `conv:whatsapp:<tel>:<linea>`, y sin la línea el
+   * server no puede saber cuál conversación marcar — manda los ticks y no toca el
+   * cursor, que es lo correcto: mejor no apagar la marca que apagar la de otra.
+   *
+   * La cola se revalida al terminar. La conversación **no se mueve de lugar**:
+   * el orden es por urgencia y leer no es atender (decisión del 7-ago-2026).
+   */
   const marcarLeido = useMutation({
-    mutationFn: (tel: string) => api(`/api/whatsapp/leido/${tel}`, { method: 'POST', body: '{}' }),
+    mutationFn: (vars: { telefono: string; numeroPropio?: string | null }) => {
+      const q = vars.numeroPropio ? `?numeroPropio=${encodeURIComponent(vars.numeroPropio)}` : '';
+      return api<{ ok: true; cursor: boolean }>(`/api/whatsapp/leido/${vars.telefono}${q}`, {
+        method: 'POST',
+        body: '{}',
+      });
+    },
+    onSuccess: (r) => {
+      // Solo si el cursor se movió: sin `numeroPropio` no cambió nada y refrescar
+      // la cola entera sería un viaje al pedo.
+      if (r?.cursor) void qc.invalidateQueries({ queryKey: ['conversaciones'] });
+    },
   });
 
   const enviar = useMutation({

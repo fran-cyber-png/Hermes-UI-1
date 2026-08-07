@@ -18,6 +18,7 @@ import { cancelarPorRespuestaHumana, faltaEsquema } from '../autorespuesta/repos
 import { procedenciaDelComposer, type LeerPasoDeSecuencia } from '../procedencia/desdeElComposer.js';
 import { obtenerPlantilla } from '../plantillas/repositorio.js';
 import { listarNumeros } from '../numeros/repositorio.js';
+import { upsertEstado } from '../cola/estado.js';
 import { reaccionesPorMensaje } from '../reacciones/repositorio.js';
 import { estadosPorMensaje } from '../entrega/repositorio.js';
 import { reaccionar } from '../reacciones/enviar.js';
@@ -202,8 +203,27 @@ whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
 });
 
 /**
- * Marcar leído al abrir (ticks azules — decisión de Estephano). Es la única
- * "automatización", y es la que un humano espera al abrir un chat.
+ * Marcar leído al abrir — y son DOS cosas, no una.
+ *
+ * ── Lo que faltaba ───────────────────────────────────────────────────────
+ * Esta ruta mandaba los ticks azules al lead y **nada más**. El cursor de
+ * lectura de la VENDEDORA (`estado_conversacion.leido_hasta`) lo movía otro
+ * endpoint, que solo se disparaba desde el menú `···` de la fila. O sea: abrías
+ * el chat, lo leías, salías, y **el punto azul de «sin leer» seguía puesto sobre
+ * algo que ya habías leído**. El mecanismo estaba entero —columna, SQL, ruta— y
+ * abrir el chat no lo usaba.
+ *
+ * ── 🔴 Lo que NO cambia, y es a propósito ────────────────────────────────
+ * **La conversación no se mueve de lugar.** El orden de la cola es
+ * `fijada → nivel de urgencia → antigüedad`, y `no_leido` no participa. Si el
+ * lead escribió y nadie respondió, sigue siendo deuda y sigue arriba: **leer no
+ * es atender**. Decisión del dueño del 7-ago-2026, y es lo que la cola existe
+ * para garantizar — que mirar algo no lo haga desaparecer de la vista.
+ *
+ * El cursor necesita saber de QUÉ conversación se trata, y eso incluye la línea:
+ * sin `numeroPropio` no se puede construir la clave, así que se mandan los ticks
+ * igual y el cursor no se toca (en vez de avanzar el de una conversación
+ * adivinada).
  */
 whatsappRouter.post('/leido/:telefono', requiereVendedora, async (req, res) => {
   const telefono = req.params.telefono.replace(/\D/g, '');
@@ -227,7 +247,24 @@ whatsappRouter.post('/leido/:telefono', requiereVendedora, async (req, res) => {
   } catch {
     // Marcar leído es cortesía: si falla, no rompe la apertura del chat.
   }
-  res.json({ ok: true });
+
+  // El cursor de lectura de la vendedora — lo que apaga el punto azul.
+  // Va aparte de los ticks a propósito: son dos destinatarios distintos (el
+  // lead y la cola de ella), y que uno falle no puede llevarse al otro.
+  let cursor = false;
+  if (numeroPropio && req.vendedoraId) {
+    try {
+      await upsertEstado(db, req.vendedoraId, {
+        clave: `conv:whatsapp:${telefono}:${normalizarTelefono(numeroPropio) ?? numeroPropio}`,
+        leido: true,
+      });
+      cursor = true;
+    } catch (e) {
+      console.warn('[leido] no se pudo avanzar el cursor de lectura:', (e as Error).message);
+    }
+  }
+
+  res.json({ ok: true, cursor });
 });
 
 /**

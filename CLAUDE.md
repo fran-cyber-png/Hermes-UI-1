@@ -314,6 +314,30 @@ reaccionado aparecía con un mensaje fantasma. Server en `server/src/reacciones/
 - Ver sin server: `npx vite --port 5199` → `/galeria-composer.html`. Capturas en
   `docs/evidencia/reacciones-en-el-hilo.png` y `reaccionar-*.png`.
 
+## Abrir un chat lo marca leído — y NO lo mueve de lugar
+
+Reportado el 7-ago-2026: «veo el chat, salgo, y sigue arriba del todo, no pasa abajo como leído».
+Al investigarlo eran **dos cosas y solo una era un bug**.
+
+- **El bug**: `POST /api/whatsapp/leido/:telefono` mandaba los ticks azules al lead y **no tocaba
+  `estado_conversacion.leido_hasta`** — el cursor de lectura de la vendedora. El mecanismo estaba
+  entero (columna, `noLeidoSql`, ruta `PATCH /api/conversaciones`) y solo se disparaba desde el
+  menú `···` de la fila, así que **abrir el chat no apagaba el punto azul**. Ahora la misma ruta
+  hace las dos cosas — aparte, porque son dos destinatarios distintos (el lead y la cola de ella) y
+  que uno falle no puede llevarse al otro.
+- 🔴 **Lo que NO cambia: la conversación no se mueve.** El orden es
+  `fijada → nivel de urgencia → antigüedad` (`bandaPinOrdenSql, nivel ASC, orden ASC`) y
+  `no_leido` **no participa**. Si el lead escribió y nadie respondió sigue siendo deuda y sigue
+  arriba: **leer no es atender**. Decisión del dueño del 7-ago — mirar algo no puede hacerlo
+  desaparecer de la vista, porque así es como se pierde una venta.
+  `cola/abrirMarcaLeido.test.db.ts` fija las dos mitades; la segunda es la que importa, porque
+  «arreglar» el síntoma metiendo `no_leido` en el `ORDER BY` es fácil y rompería la garantía.
+- ⚠️ **Sin `numeroPropio` el cursor no se toca.** `estado_conversacion` se indexa por la clave
+  completa `conv:whatsapp:<tel>:<linea>`: sin la línea no se puede saber cuál marcar, y apagar la
+  marca de otra conversación es peor que no apagar ninguna.
+- **El cursor es POR VENDEDORA**: la cola es compartida pero que una abra no le apaga el punto a la
+  otra. Con test.
+
 ## Los ✓✓ — «¿le llegó?» vs «¿no me contestó?»
 
 Sin esto la vendedora **no distingue «no me contestó» de «no le llegó»**, y son dos conversaciones
