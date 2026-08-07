@@ -36,4 +36,34 @@ while read -r _local_ref _local_sha remote_ref _remote_sha; do
   done
 done
 
+# ─────────────────────────────────────────────────────────────────────────────
+# EL TYPECHECK, ANTES DE GASTAR UNA CORRIDA DE CI
+#
+# `npm test` (vitest) **NO typechequea**. El 7-ago-2026 se pusheó un test que
+# pasaba en vitest y rompía `tsc`: N2 quedó rojo en `main`, y con eso N3 y N4
+# `skipped` — o sea que el deploy no salió, por un error que `tsc` detecta en
+# treinta segundos.
+#
+# Solo el typecheck: lint y tests tardan minutos y el ciclo del runner es corto.
+# Esto ataja la clase de error más cara (rojo en `main`) al precio más bajo.
+#
+# Se salta con `git push --no-verify`, igual que el bloqueo de arriba.
+# ─────────────────────────────────────────────────────────────────────────────
+if [ -f tsconfig.json ] && command -v npx >/dev/null 2>&1; then
+  printf '  · typecheck (tsc -b)… '
+  if salida="$(npx --no-install tsc -b 2>&1)"; then
+    echo "ok"
+  else
+    echo ""
+    echo ""
+    echo "  ✋ El typecheck falla. CI lo rechazaría igual, pero veinte minutos después."
+    echo ""
+    printf '%s\n' "$salida" | head -20 | sed 's/^/     /'
+    echo ""
+    echo "     Si es a propósito: git push --no-verify"
+    echo ""
+    exit 1
+  fi
+fi
+
 exit 0

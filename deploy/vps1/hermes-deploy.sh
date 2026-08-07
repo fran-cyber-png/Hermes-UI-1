@@ -405,6 +405,14 @@ decir "smoke funcional contra la URL pública"
 como_deploy bash -c "cd '$RAIZ/server' && BASE_URL='$API_PUBLICA' npm run humo" \
   || revertir "el smoke funcional falló"
 
+# Y que el sitio sirva TODOS los archivos que se acaban de construir, no solo el
+# bundle. El 7-ago-2026 la compresión de video salió sin sus 32 MB de wasm y
+# nada lo notó: el fallback SPA devuelve `index.html` con 200 para lo que falta,
+# así que ni el `curl -f` ni el hash del `index-*.js` lo veían.
+decir "los assets del build están servidos"
+bash "$RAIZ/deploy/vps1/verificar-assets.sh" "$API_PUBLICA" "$RAIZ/dist" \
+  || revertir "el sitio no sirve todos los assets del build"
+
 # ── Quedó sano ──────────────────────────────────────────────────────────────────
 echo "$NUEVO" > "$ESTADO/server"
 echo "$NUEVO" > "$ESTADO/front"

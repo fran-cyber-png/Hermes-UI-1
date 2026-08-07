@@ -1294,6 +1294,22 @@ mirando. El trabajo lo hace
 `ssh … 'sudo hermes-deploy --dry-run | --rollback'`. `tauri-windows.yml` sigue aparte: necesita host
 Windows.
 
+**El smoke del deploy verifica los ASSETS, no solo el bundle**
+(`deploy/vps1/verificar-assets.sh`, corre en N4 y N5). Comparar el hash del `index-*.js` prueba que
+el bundle nuevo está y nada más: un asset que falta no lo mueve. El 7-ago-2026 la compresión de
+video salió sin sus 32 MB de wasm y el deploy estuvo verde. 🔴 **Y no alcanza con mirar el código
+HTTP**: el fallback SPA devuelve `index.html` con **200** para cualquier ruta, así que un `curl -f`
+a un archivo inexistente PASA — se compara **content-length contra el disco**, con una ruta
+inventada como control. El script **falla si no verificó ningún asset**: su primera versión usaba
+`find -printf` (que no existe en macOS) con `2>/dev/null` y daba «0 verificados · 0 fallos» en
+verde, o sea el mismo falso verde que viene a atrapar.
+
+⚠️ **N4 termina en `success` TAMBIÉN cuando decide NO desplegar** (porque el cambio toca `server/`).
+Es correcto no desplegar, pero se lee igual que haber desplegado — confundió dos deploys seguidos.
+Desde el 7-ago el Resumen lo distingue: **«⏭️ no aplica (toca server/: va por N5)»**. Consecuencia
+que no es obvia: **un PR que toca `server/` deja el FRONT sin desplegar también**, y hace falta N5
+para las dos mitades.
+
 **El schema va en migraciones versionadas**, no en `db:push` (ADR 0021). Al tocar `src/db/*.ts`:
 `npm run db:generate` → `goberna-journal-set-when` → commitear `server/drizzle/` completo. Cómo y por
 qué: **`docs/migraciones.md`**. Runbook del server: **`docs/deploy-vps1.md`**.
