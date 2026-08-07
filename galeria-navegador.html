@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hermes — el navegador (galería de evidencia)</title>
+    <!--
+      Entry APARTE de la app. `vite build` compila solo `index.html`, así que esto NO entra
+      al bundle que usan las vendedoras: se abre a mano para producir las capturas de
+      `docs/evidencia/`. No necesita server ni base — la vista no pide datos.
+
+          npx vite --port 5199
+          →  http://localhost:5199/galeria-navegador.html            (dentro de la cáscara)
+          →  http://localhost:5199/galeria-navegador.html?sistema=1  (navegador común)
+
+      El `?sistema=1` es el caso degradado; sin él la galería finge la cáscara, porque si
+      no la única evidencia posible sería la del caso que NO se construyó.
+    -->
+  </head>
+  <body>
+    <div id="galeria"></div>
+    <script type="module" src="/src/features/navegador/galeria.tsx"></script>
+  </body>
+</html>

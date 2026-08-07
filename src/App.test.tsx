@@ -114,6 +114,7 @@ describe('la Libreta como octava vista', () => {
       'Agenda',
       'Entrenar bot',
       'Libreta',
+      'Navegador',
     ]);
   });
 
@@ -121,6 +122,10 @@ describe('la Libreta como octava vista', () => {
    * El rango de ⌘1..N se DERIVA de `VISTAS` desde la vista de entrenamiento —
    * antes era un `'6'` escrito a mano que se quedó corto sin que nada lo dijera.
    * Esto lo fija: si alguien vuelve a escribir el número, ⌘8 deja de andar acá.
+   *
+   * Y desde el Navegador (ADR 0040) hay un test gemelo para ⌘9, abajo: la
+   * PENÚLTIMA vista seguiría andando con un `'8'` escrito a mano, así que el
+   * candado real es siempre el de la ÚLTIMA.
    */
   it('⌘8 la abre, y el rango del atajo salió del array', async () => {
     const m = await abrirApp();
@@ -293,5 +298,43 @@ describe('escribir en la libreta no dispara atajos', () => {
     await reposar();
 
     expect(m.contenedor.textContent).not.toContain('La cabina');
+  });
+});
+
+/**
+ * EL NAVEGADOR COMO NOVENA VISTA (ADR 0040).
+ *
+ * El candado que importa es el de ⌘9, y hay que decir por qué: el rango de
+ * `App.tsx` es `e.key <= String(VISTAS.length)`, así que un `'8'` escrito a mano
+ * dejaría andando las ocho primeras y **solo** rompería la última. El test de la
+ * Libreta (⌘8) seguiría verde mientras la vista nueva es inalcanzable por
+ * teclado — que es exactamente la forma que tuvo el defecto la vez anterior,
+ * cuando el número clavado era `'6'`.
+ */
+describe('el Navegador como novena vista', () => {
+  it('⌘9 lo abre: el rango del atajo se sigue derivando de VISTAS', async () => {
+    const m = await abrirApp();
+    expect(vistaActual(m)).toBe('Dashboard');
+
+    teclear('9', { meta: true });
+    await reposar();
+
+    expect(vistaActual(m)).toBe('Navegador');
+  });
+
+  /**
+   * No se carga perezoso (no tiene por qué: son ~4 KB, no los 269 de BlockNote),
+   * así que acá sí alcanza con un turno del event loop. Se verifica que lo que
+   * montó es el componente REAL y no un esqueleto — sin esto, el test de arriba
+   * podría estar leyendo solo el `h1` de la cabecera.
+   */
+  it('monta la vista de verdad, con sus destinos', async () => {
+    const m = await abrirApp();
+
+    teclear('9', { meta: true });
+    await reposar();
+
+    expect(m.contenedor.querySelector('input[aria-label="Dirección"]')).not.toBeNull();
+    expect(m.contenedor.textContent).toContain('Cerberus');
   });
 });

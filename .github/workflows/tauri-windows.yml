@@ -25,6 +25,17 @@ jobs:
       - name: Dependencias
         run: npm ci
 
+      # Los tests de la cáscara (`src-tauri/src/lib.rs`): la guarda de https y
+      # —lo que importa— que la UI servida por OTA alcance `abrir_navegador`
+      # desde su origen REMOTO. Corren acá y no en `ci.yml` porque ci.yml vive
+      # entero en el runner de VPS1, que no tiene Rust ni las libs de sistema de
+      # Tauri.
+      # ⚠️ ESTO NO ES UN GATE DE PR: este workflow es `workflow_dispatch`. Ver
+      # ADR 0040 §«lo que queda debiendo».
+      - name: Tests de la cáscara
+        working-directory: src-tauri
+        run: cargo test
+
       - name: Build Tauri (NSIS x64)
         env:
           VITE_API_URL: https://hermes-api.goberna.us

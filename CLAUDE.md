@@ -24,8 +24,9 @@ de la casa, los bordes externos y la deuda. Los cuatro documentos y para qué si
 
 - **Front** (`src/`): React 19 + Vite 8 (React Compiler), Tailwind 4, TanStack Query, lucide-react.
   **Sin router** — un espacio con vistas conmutadas por estado (ADR 0002): Dashboard · Pipeline ·
-  Contactos · Mensajes · Correos · Agenda · Entrenar bot · Libreta (⌘1..⌘8; el rango **se deriva de
-  `VISTAS`**, agregar una vista es tocar ese array y nada más). Qué entra al riel es un criterio y no
+  Contactos · Mensajes · Correos · Agenda · Entrenar bot · Libreta · **Navegador** (⌘1..⌘9; el rango
+  **se deriva de `VISTAS`**, agregar una vista es tocar ese array y nada más — y el candado que
+  importa es el de la ÚLTIMA: un número clavado dejaría andando a todas menos esa). Qué entra al riel es un criterio y no
   un número (**ADR 0034**, que enmienda 0002): un **LUGAR** con **acción primaria nombrable**; lo que
   se consulta y se cierra —Cabina `?`, Ivi `i`— no entra. La **Libreta** (`n` o ⌘8) es la octava desde
   el 4-ago: la herramienta existía entera desde #47 y `notas` tenía **cero filas** en producción.
@@ -35,7 +36,17 @@ de la casa, los bordes externos y la deuda. Los cuatro documentos y para qué si
   app abre con el último estado conocido en vez de un spinner (ADR 0007, `src/lib/datos/`).
 - **Escritorio** (`src-tauri/`): **Tauri v2** — la cáscara solo abre `https://hermes-api.goberna.us`
   (OTA; fallback al dist local). Windows se compila en Actions (`tauri-windows.yml`), no cross-compila.
-  `electron/` convive hasta paridad verificada y después se archiva (ADR 0003).
+  **Electron se archivó el 7-ago-2026 (ADR 0039)**: la cáscara es una sola. `dev:app` es `tauri dev`
+  (arranca Vite solo por `beforeDevCommand`) y `empaquetar:mac` es `tauri build`.
+  ⚠️ **`base: './'` en `vite.config.ts` NO se saca** aunque su comentario hablara de Electron: el
+  fallback local carga el build sin server detrás, y con rutas absolutas abre en blanco —
+  o sea que el defecto aparecería **solo durante una caída**.
+  🔴 **Un comando propio de Tauri necesita permiso declarado o anda en dev y falla en producción.**
+  La ventana `main` navega a un origen **remoto** (`hermes-api.goberna.us`) y Tauri chequea el ACL
+  para todo pedido no local. Se declara en `src-tauri/permissions/*.toml` y se referencia en las
+  **dos** capabilities (`default.json` y `remote.json`) — declarar uno propio prende el manifiesto
+  ACL de la app y cierra también el camino local. Los tests de `lib.rs` lo fijan invocando por el
+  IPC real con la URL de origen de producción (ADR 0040 §5.3).
 - **Server** (`server/`): Express 4 + Drizzle ORM + Postgres 17 (imagen pgvector, puerto **5434** en
   local) + Zod 4. Event store append-only + proyecciones.
 - **WhatsApp**: `@whatsmeow-node/whatsmeow-node` (cliente de protocolo no oficial, binario Go vía
@@ -210,6 +221,29 @@ npm install && npm run dev:app                     # Vite :5173 + la app de escr
     (lo autorizó una persona). **Lo que sigue prohibido**: generar texto libre, iniciar conversaciones
     y cualquier mecanismo cuyo fin sea que el tráfico no se detecte (ADR 0015 §«Lo que
     deliberadamente no se hizo»).
+
+## El navegador — una VENTANA de Hermes, no un webview embebido (ADR 0040)
+
+La vendedora sale a la web con la **sesión de trabajo**, separada de su Chrome personal:
+`src/features/navegador/` (vista ⌘9) + el comando `abrir_navegador` en `src-tauri/src/lib.rs`.
+Fuera de Tauri cae a `abrirExterno()`, así que la vista anda igual en `npm run dev`.
+
+- **Por qué NO un `<iframe>`** — medido el 7-ago-2026: `app.goberna.us` (Cerberus) manda
+  `X-Frame-Options: DENY`, igual que Meta Business; Mattermost y Google, `SAMEORIGIN`;
+  `web.whatsapp.com`, `frame-ancestors *.whatsapp.com`. De todo lo que se usa, **solo
+  grupogoberna.com carga**. Y **por qué no un webview hijo**: multiwebview es feature `unstable` de
+  Tauri y es una capa del SO **encima** del DOM — taparía compuertas, cabina e Ivi.
+- 🔴 **La guarda es de Rust, no del front**: solo `https:`. El front normaliza para habilitar el
+  botón (conveniencia); la garantía es el rechazo del comando, como `limitesMedia` con su 409.
+- 🔴 **La ventana `navegador` no está en ninguna capability, y no hay que agregarla**: las dos listan
+  `"windows": ["main"]`. Meterla le daría la API nativa a cualquier sitio de terceros que se abra.
+- **UNA sola ventana, reusada**: el segundo destino navega la que ya está. Con test.
+- **No hay barra de direcciones adentro de la ventana**, y es el costo aceptado de no usar
+  multiwebview. Si molesta, la salida es un menú nativo con atrás/adelante, no el webview hijo.
+- Ver la UI sin server: `npx vite --port 5199` → `/galeria-navegador.html` (`?sistema=1` el caso
+  fuera de Tauri, `?basura=1` el recorte de `interpretar`). Capturas en `docs/evidencia/navegador-*.png`.
+- ⚠️ Los tests de la cáscara **no son gate de PR**: `ci.yml` corre en el runner de VPS1, que no tiene
+  Rust. Viven en `tauri-windows.yml`, que es `workflow_dispatch`.
 
 ## Adjuntos: el tope es de la LÍNEA, y un video que no entra se achica acá
 
@@ -1374,7 +1408,9 @@ para las dos mitades.
 qué: **`docs/migraciones.md`**. Runbook del server: **`docs/deploy-vps1.md`**.
 
 **La app de las vendedoras se EMPAQUETA**, no se clona: `env VITE_API_URL=https://hermes-api.goberna.us
-npm run build && npm run empaquetar:mac` (o `:win`) → `release/Hermes-*.dmg|.exe`.
+npm run empaquetar:mac` (que es `tauri build`, y corre el build del front solo por
+`beforeBuildCommand`) → `src-tauri/target/release/bundle/dmg/`. **El `.exe` NO sale de acá**: Tauri
+no cross-compila y lo hace `tauri-windows.yml` en un runner Windows, a mano.
 
 ## Flujo de trabajo
 

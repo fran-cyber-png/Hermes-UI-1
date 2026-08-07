@@ -8,6 +8,7 @@ import {
   AlarmClock,
   BrainCircuit,
   Columns3,
+  Compass,
   LayoutDashboard,
   Mail,
   MessagesSquare,
@@ -35,6 +36,7 @@ import { VistaPersonas } from './features/vistas/VistaPersonas';
 import { VistaAgenda } from './features/agenda/VistaAgenda';
 import { VistaCorreos } from './features/correos/VistaCorreos';
 import { VistaEntrenamiento } from './features/entrenamiento/VistaEntrenamiento';
+import { VistaNavegador } from './features/navegador/VistaNavegador';
 import { pendientesQueApuran, useAgenda } from './features/agenda/agenda';
 import { Login } from './features/auth/Login';
 import { useSesion } from './features/auth/sesion';
@@ -76,7 +78,7 @@ const Libreta = lazy(() => import('./features/notas/Libreta').then((m) => ({ def
  * abre la cabina con el mapa completo · «n» va a la libreta personal (#47).
  */
 
-/** `WebkitAppRegion` no está en los tipos de CSSProperties; Electron sí lo lee. */
+/** `WebkitAppRegion` no está en los tipos de CSSProperties; el webview sí lo lee. */
 const ARRASTRABLE = { WebkitAppRegion: 'drag' } as CSSProperties;
 const NO_ARRASTRABLE = { WebkitAppRegion: 'no-drag' } as CSSProperties;
 
@@ -96,6 +98,11 @@ const VISTAS = [
   // lo consulta, a la libreta se entra. Vivió 12 días detrás de la tecla «n»
   // sin ícono en ningún lado, y `notas` terminó con cero filas.
   { id: 'libreta', label: 'Libreta', icono: Notebook },
+  // La novena (ADR 0040). Entra por el mismo criterio de ADR 0034 —el riel es
+  // para LUGARES— y no por ser útil: se sale a la web con la sesión de trabajo
+  // y se vuelve, como a la Libreta se entra a escribir. La acción primaria se
+  // puede nombrar en dos palabras: «abrir un sitio».
+  { id: 'navegador', label: 'Navegador', icono: Compass },
 ] as const;
 
 type Vista = (typeof VISTAS)[number]['id'];
@@ -620,6 +627,7 @@ export default function App() {
             )}
             {vista === 'personas' && <VistaPersonas telefonoInicial={telefonoPersonas} onEscribir={escribirA} miVendedora={vendedora.id} />}
             {vista === 'entrenamiento' && <VistaEntrenamiento />}
+            {vista === 'navegador' && <VistaNavegador />}
             {/* El fallback dibuja la anatomía de la vista (lista + página) en vez
                 de un texto: lo que se está esperando son 269 KB de editor, y un
                 cartel de «cargando» donde después va a haber una hoja hace

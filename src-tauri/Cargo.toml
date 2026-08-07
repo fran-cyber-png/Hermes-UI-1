@@ -24,3 +24,10 @@ log = "0.4"
 tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-opener = "2"
+
+# El runtime de mentira de Tauri, SOLO para tests. Es lo que permite invocar
+# `abrir_navegador` por el camino real del IPC —con su URL de origen— y así fijar
+# que la UI servida por OTA (origen REMOTO) lo alcanza y un sitio cualquiera no.
+# Sin esto, esa garantía solo se podía comprobar empaquetando contra producción.
+[dev-dependencies]
+tauri = { version = "2.11.3", features = ["test"] }

@@ -1,0 +1,19 @@
+# EL PERMISO DEL NAVEGADOR (ADR 0040).
+#
+# Existe porque en PRODUCCIÓN la UI de Hermes corre en un origen REMOTO: la
+# ventana `main` navega a `hermes-api.goberna.us` (ver `lib.rs`). Y Tauri, en
+# `webview/mod.rs`, chequea el ACL cuando el pedido viene de un origen remoto
+# —textual: «this ensures remote content can never reach custom commands unless
+# an explicit `remote` capability has been configured for them»—. Sin este
+# archivo y sin su línea en `capabilities/remote.json`, `abrir_navegador` se
+# rechaza en release y anda solo en dev: el peor de los defectos posibles,
+# porque el `npm run dev:app` lo daría por bueno.
+#
+# ⚠️ Declarar un permiso propio prende el manifiesto ACL de la app, y desde ahí
+# TODOS los comandos propios quedan cerrados también en local. Por eso el mismo
+# permiso va en las DOS capabilities, no solo en la remota.
+
+[[permission]]
+identifier = "allow-abrir-navegador"
+description = "Abrir la ventana del navegador de Hermes en una dirección https. La guarda de esquema vive en Rust (`validar`), no acá."
+commands.allow = ["abrir_navegador"]

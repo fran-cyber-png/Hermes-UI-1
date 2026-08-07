@@ -7,6 +7,7 @@
   ],
   "permissions": [
     "core:default",
+    "allow-abrir-navegador",
     {
       "identifier": "opener:allow-open-url",
       "allow": [

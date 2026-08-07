@@ -4,20 +4,20 @@
  * En el navegador, `target="_blank"` abre una pestaña. En Tauri no hay
  * pestañas: sin esto, el clic muere en silencio. Este shim intercepta esos
  * clics SOLO cuando la app corre dentro de Tauri y los manda al navegador del
- * sistema vía el plugin opener — el mismo comportamiento que tenía Electron
- * con `shell.openExternal`.
+ * sistema vía el plugin opener.
  *
- * En el navegador común y en Electron no hace nada: `__TAURI_INTERNALS__` no
- * existe y el listener queda inerte.
+ * En el navegador común no hace nada: `__TAURI_INTERNALS__` no existe y el
+ * listener queda inerte.
+ *
+ * OJO: esto es para el navegador DEL SISTEMA. Lo que abre una ventana de
+ * Hermes es otra cosa y vive en `src/features/navegador/` (ADR 0040).
  */
 
-interface ConTauri {
-  __TAURI_INTERNALS__?: { invoke: (cmd: string, args: Record<string, unknown>) => Promise<unknown> };
-}
+import { puenteTauri } from './tauri';
 
 export function conectarEnlacesExternos(): void {
   document.addEventListener('click', (e) => {
-    const tauri = (window as ConTauri).__TAURI_INTERNALS__;
+    const tauri = puenteTauri();
     if (!tauri) return;
 
     const enlace = (e.target as HTMLElement).closest?.('a[target="_blank"]');
@@ -33,7 +33,7 @@ export function conectarEnlacesExternos(): void {
 
 /** Abre una URL con la app del sistema: en Tauri vía opener, en navegador nativo. */
 export function abrirExterno(url: string): void {
-  const tauri = (window as ConTauri).__TAURI_INTERNALS__;
+  const tauri = puenteTauri();
   if (tauri) {
     void tauri.invoke('plugin:opener|open_url', { url, with: null }).catch(() => {});
     return;
