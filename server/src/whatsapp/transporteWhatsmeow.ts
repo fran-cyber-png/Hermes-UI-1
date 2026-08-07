@@ -22,6 +22,8 @@ import { normalizarTelefono, telefonoDeContacto, jidDeTelefono, esJidDeGrupo } f
 import { detectarOrigen } from './origen.js';
 import { tieneContenido } from './contenido.js';
 import { esSoloReaccion, reaccionDeWhatsmeow, type ReaccionEntrante } from '../reacciones/dominio.js';
+import { estadoDeWhatsmeow } from '../entrega/dominio.js';
+import type { RecibosDeEntrega } from '../entrega/dominio.js';
 import { MapaLids } from './lidMap.js';
 import { RUTA_MEDIA, nombreSeguro } from './mediaDir.js';
 
@@ -71,6 +73,7 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
   private sesion: EstadoSesion = { estado: 'conectando' };
   private susMensaje: ((m: MensajeWhatsapp) => void)[] = [];
   private susReaccion: ((r: ReaccionEntrante) => void)[] = [];
+  private susRecibo: ((r: RecibosDeEntrega) => void)[] = [];
   private susEstado: ((e: EstadoSesion) => void)[] = [];
 
   // Público y de solo lectura desde #50: `EnvioControlado` lo compara contra el
@@ -103,6 +106,25 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
       // El estado que NUNCA se esconde. Se muestra y frena; no se reintenta.
       this.cambiarEstado({ estado: 'baneado', codigo: String(code), expira: expire });
     });
+    /**
+     * LOS ✓✓ — un recibo abarca VARIOS mensajes a la vez (`ids[]`): WhatsApp
+     * agrupa, sobre todo el «leído» cuando alguien abre un chat con diez
+     * pendientes. Se pasa la lista entera y el UPDATE los mueve de una.
+     *
+     * 🔴 `type` VACÍO es «entregado», no «desconocido» — ver `entrega/dominio.ts`.
+     * Un `if (!type) return` acá perdería el ✓✓ gris, que es el más frecuente.
+     */
+    this.client.on('message:receipt', ({ type, ids, timestamp }) => {
+      const estado = estadoDeWhatsmeow(type);
+      if (!estado || !ids?.length) return;
+      const recibo: RecibosDeEntrega = {
+        mensajes: ids.map((id) => `wa:${id}`),
+        estado,
+        cuando: new Date(timestamp * 1000),
+      };
+      for (const cb of this.susRecibo) cb(recibo);
+    });
+
     this.client.on('message', ({ info, message }) => {
       // Log crudo: TODO evento de mensaje, antes de convertir. Deja ver si whatsmeow
       // entrega el entrante y con qué forma (chat/sender/tipos del proto).
@@ -307,6 +329,10 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
 
   onReaccion(cb: (r: ReaccionEntrante) => void): void {
     this.susReaccion.push(cb);
+  }
+
+  onRecibo(cb: (r: RecibosDeEntrega) => void): void {
+    this.susRecibo.push(cb);
   }
   onEstado(cb: (e: EstadoSesion) => void): void {
     this.susEstado.push(cb);

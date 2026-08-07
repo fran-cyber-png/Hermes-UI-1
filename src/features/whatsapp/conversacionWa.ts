@@ -20,6 +20,9 @@ export interface MediaHilo {
  * dibuja como siempre; con `[]` habría que distinguir «no tiene reacciones» de
  * «no se pudo saber», y esa diferencia no le sirve a nadie acá.
  */
+/** La escala de los ✓✓. Espeja `entrega/dominio.ts` del server. */
+export type EstadoEntregaWa = 'enviado' | 'entregado' | 'leido' | 'fallido';
+
 export interface ReaccionWa {
   emoji: string;
   /** La puso Goberna por esta línea, no el lead. */
@@ -53,6 +56,14 @@ export interface MensajeHilo {
   aprobada_por?: string | null;
   /** Las reacciones a ESTE mensaje, en el orden en que se pusieron. */
   reacciones?: ReaccionWa[];
+  /**
+   * ¿LE LLEGÓ? ¿LO LEYÓ? Solo en los SALIENTES.
+   *
+   * **Ausente = no se sabe**, y eso NO es lo mismo que «enviado»: los mensajes
+   * anteriores a este frente no tienen estado —sus recibos pasaron cuando no los
+   * escuchábamos— y dibujar un ✓ ahí sería afirmar algo que nadie confirmó.
+   */
+  entrega?: EstadoEntregaWa;
 }
 
 /**

@@ -19,6 +19,7 @@ import { procedenciaDelComposer, type LeerPasoDeSecuencia } from '../procedencia
 import { obtenerPlantilla } from '../plantillas/repositorio.js';
 import { listarNumeros } from '../numeros/repositorio.js';
 import { reaccionesPorMensaje } from '../reacciones/repositorio.js';
+import { estadosPorMensaje } from '../entrega/repositorio.js';
 
 /**
  * LA CONVERSACIÓN NATIVA DE WHATSAPP dentro de Hermes: ver el hilo y responder,
@@ -171,20 +172,32 @@ whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
    * agregando emojis lo volvería ilegible por un dato que casi siempre está
    * vacío. Acá se pega, que es donde se arma la respuesta.
    */
-  const porMensaje = await reaccionesPorMensaje(
-    db,
-    mensajes.map((m) => String((m as { external_id: string }).external_id)),
-    numeroPropio,
-  );
-  const conReacciones = mensajes.map((m) => {
+  const ids = mensajes.map((m) => String((m as { external_id: string }).external_id));
+  const [porMensaje, estados] = await Promise.all([
+    reaccionesPorMensaje(db, ids, numeroPropio),
+    // Los ✓✓ solo de los SALIENTES: preguntar por los entrantes sería pedirle a
+    // `envios_wa` filas que por definición no tiene.
+    estadosPorMensaje(
+      db,
+      mensajes.filter((m) => (m as { direccion?: string }).direccion === 'saliente').map((m) => String((m as { external_id: string }).external_id)),
+    ),
+  ]);
+  const enriquecidos = mensajes.map((m) => {
     const fila = m as Record<string, unknown> & { external_id: string };
     const r = porMensaje.get(fila.external_id);
-    // Ausente y no `[]`: el front distingue «no tiene» de «no se pudo saber»
-    // sin tener que inventarse la diferencia.
-    return r?.length ? { ...fila, reacciones: r } : fila;
+    const e = estados.get(fila.external_id);
+    // Ausentes y no `[]`/`null`: el front distingue «no tiene» de «no se pudo
+    // saber» sin tener que inventarse la diferencia. Un mensaje viejo, anterior
+    // a este frente, no tiene estado — y no dibujar nada es más honesto que
+    // afirmar un ✓ que nadie confirmó.
+    return {
+      ...fila,
+      ...(r?.length ? { reacciones: r } : {}),
+      ...(e ? { entrega: e } : {}),
+    };
   });
 
-  res.json({ telefono, mensajes: conReacciones, origen });
+  res.json({ telefono, mensajes: enriquecidos, origen });
 });
 
 /**

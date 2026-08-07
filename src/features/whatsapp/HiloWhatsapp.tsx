@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Bot, Check, FileText, Loader2, Megaphone, Paperclip, Phone, Play, QrCode, Send, Link2, Trash2, WifiOff, X } from 'lucide-react';
+import { AlertTriangle, Bot, Check, CheckCheck, FileText, Loader2, Megaphone, Paperclip, Phone, Play, QrCode, Send, Link2, Trash2, WifiOff, X } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
 import { useBlobAutenticado } from '../../lib/datos/blobAutenticado';
 import { formatoTelefono, tempClass } from '../../lib/formato';
@@ -27,6 +27,7 @@ import {
   type LimitesMediaWa,
   type MediaHilo,
   type OrigenLead,
+  type EstadoEntregaWa,
   type ReaccionWa,
 } from './conversacionWa';
 
@@ -173,6 +174,44 @@ function ReaccionesEnBurbuja({
         </span>
       ))}
     </div>
+  );
+}
+
+/**
+ * LOS ✓✓ DE UN MENSAJE NUESTRO — enviado, entregado, leído.
+ *
+ * ── Por qué existe ───────────────────────────────────────────────────────
+ * Sin esto la vendedora no distingue **«no me contestó» de «no le llegó»**, y
+ * son dos conversaciones distintas: a una se la persigue, a la otra se la
+ * reintenta por otro lado. WhatsApp nos mandaba el dato por los dos canales y
+ * lo tirábamos.
+ *
+ * ── El dibujo es el que todo el mundo ya sabe leer ───────────────────────
+ * Un tilde, dos tildes, dos tildes azules. No se inventa nada: la vendedora
+ * trae ese vocabulario aprendido de su propio teléfono, y cualquier variación
+ * «mejorada» sería una que hay que explicar.
+ *
+ * `fallido` sí rompe el molde —triángulo rojo— porque es lo único que pide una
+ * acción. Y **ausente no dibuja nada**: los mensajes anteriores a este frente no
+ * tienen estado, y un ✓ inventado es peor que un hueco.
+ */
+function TildesDeEntrega({ estado }: { estado: EstadoEntregaWa }) {
+  if (estado === 'fallido') {
+    return (
+      <span title="No se pudo entregar" className="inline-flex items-center text-destructive">
+        <AlertTriangle size={12} />
+      </span>
+    );
+  }
+  const titulo =
+    estado === 'leido' ? 'Lo leyó' : estado === 'entregado' ? 'Le llegó' : 'Salió de Hermes';
+  return (
+    <span
+      title={titulo}
+      className={'inline-flex items-center ' + (estado === 'leido' ? 'text-primary' : 'text-muted-foreground')}
+    >
+      {estado === 'enviado' ? <Check size={12} /> : <CheckCheck size={12} />}
+    </span>
   );
 }
 
@@ -525,8 +564,9 @@ export function HiloWhatsapp({
                               {m.aprobada_por ? `Aprobado · ${m.aprobada_por}` : 'Automático'}
                             </span>
                           )}
-                          <span>
+                          <span className="inline-flex items-center gap-1">
                             {new Date(m.occurred_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                            {m.entrega && <TildesDeEntrega estado={m.entrega} />}
                           </span>
                         </div>
                       </div>

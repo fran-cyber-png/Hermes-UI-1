@@ -181,7 +181,8 @@ export class FotoNoDisponibleError extends Error {
  * quedaría auditado como una fila sin contenido.
  */
 import type { ReaccionEntrante } from '../reacciones/dominio.js';
-export type { ReaccionEntrante };
+import type { RecibosDeEntrega } from '../entrega/dominio.js';
+export type { ReaccionEntrante, RecibosDeEntrega };
 
 export interface PlantillaSaliente {
   nombre: string;
@@ -233,6 +234,18 @@ export interface TransporteWhatsapp {
    * llaman con `?.` y siguen andando.
    */
   onReaccion?(cb: (r: ReaccionEntrante) => void): void;
+
+  /**
+   * LOS RECIBOS de lo que mandamos: entregado, leído, fallido.
+   *
+   * Un recibo abarca VARIOS mensajes (WhatsApp agrupa, sobre todo el «leído»
+   * cuando alguien abre un chat con diez pendientes), por eso lleva una lista y
+   * no un id.
+   *
+   * **Opcional** como `onReaccion`: el falso no los emite, y el de Cloud API
+   * tampoco — ahí los estados llegan por el webhook, que es otro camino.
+   */
+  onRecibo?(cb: (r: RecibosDeEntrega) => void): void;
   onEstado(cb: (e: EstadoSesion) => void): void;
 
   /**

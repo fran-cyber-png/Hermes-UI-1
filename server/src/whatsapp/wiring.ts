@@ -12,6 +12,7 @@ import { notificarEntrante } from '../bot/ingesta.js';
 import { configDesdeEnv } from '../bot/config.js';
 import { db } from '../db/client.js';
 import { guardarReaccion } from '../reacciones/repositorio.js';
+import { aplicarRecibo } from '../entrega/repositorio.js';
 import type { TransporteWhatsapp } from './transporte.js';
 
 /**
@@ -124,6 +125,26 @@ function montar(numero: string, cual: string): WhatsappArmado {
       .catch((err: unknown) => {
         // eslint-disable-next-line no-console
         console.error('[reacciones] no se pudo guardar:', (err as Error).message);
+      });
+  });
+
+  /**
+   * LOS ✓✓ de whatsmeow. Los de la línea Cloud API NO pasan por acá: llegan
+   * como `statuses[]` al webhook, que es otro camino y ya los aplica.
+   *
+   * Fail-open: un recibo perdido deja el mensaje en su estado anterior, que es
+   * exactamente como se veía antes de este frente.
+   */
+  transporte.onRecibo?.((r) => {
+    void aplicarRecibo(db, r)
+      .then((filas) => {
+        // Solo se avisa si algo cambió de verdad: los recibos repetidos son la
+        // mayoría, y un refresco por cada uno castigaría la pantalla.
+        if (filas > 0) emitirRT({ tipo: 'mensaje', canal: 'whatsapp', telefono: null });
+      })
+      .catch((err: unknown) => {
+        // eslint-disable-next-line no-console
+        console.error('[entrega] no se pudo aplicar el recibo:', (err as Error).message);
       });
   });
 

@@ -269,6 +269,25 @@ export const enviosWa = pgTable(
      * es la que le pone la marca a la burbuja en el hilo.
      */
     automatico: boolean("automatico").notNull().default(false),
+
+    /**
+     * ¿LE LLEGÓ? ¿LO LEYÓ? — el ✓✓ del mensaje.
+     *
+     * `enviado` → `entregado` → `leido`, más `fallido` aparte. La escala es
+     * MONÓTONA y quien la hace avanzar es `entrega/dominio.ts`: los recibos
+     * llegan desordenados (un `delivered` de un segundo dispositivo puede
+     * aparecer después del `read`), así que pisar con «el último que llegó»
+     * mostraría como no leído algo que el lead ya vio.
+     *
+     * **Nullable a propósito**: `null` es «todavía no sabemos», que es distinto
+     * de `enviado`. Las filas viejas —todas las anteriores a este cambio— se
+     * quedan en `null` y la UI no dibuja nada, en vez de afirmar un ✓ que nadie
+     * confirmó. No hay backfill posible: los recibos de esos mensajes pasaron
+     * cuando no los escuchábamos.
+     */
+    estadoEntrega: text("estado_entrega"),
+    /** Cuándo se supo el estado actual. Sirve para «entregado hace 2 h». */
+    estadoEntregaEn: timestamp("estado_entrega_en", { withTimezone: true }),
     /** El id que devolvió el transporte cuando el envío salió (null si falló). */
     idExterno: text("id_externo"),
     /** El motivo cuando falló o quedó bloqueado. */

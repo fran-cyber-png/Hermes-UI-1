@@ -35,12 +35,19 @@ const MENSAJES = [
     external_id: 'e3',
     // Lo que hasta hoy se descartaba: el lead reaccionó y nadie lo veía.
     reacciones: [{ emoji: '👍', nuestra: false }],
+    entrega: 'leido',
   },
   { id: 4, direccion: 'entrante', autor: TELEFONO, texto: '¿Me pasás el precio y las formas de pago?', occurred_at: HACE(9), external_id: 'e4',
     // Una reacción NUESTRA se ve distinta: delineada en navy.
     reacciones: [{ emoji: '❤️', nuestra: true }] },
   { id: 5, direccion: 'entrante', autor: TELEFONO, texto: 'Perfecto, gracias', occurred_at: HACE(6), external_id: 'e5',
     reacciones: [{ emoji: '🙌', nuestra: false }, { emoji: '🙌', nuestra: true }] },
+  // Los cuatro estados, para poder mirarlos juntos.
+  { id: 6, direccion: 'saliente', autor: 'luz', texto: 'Te dejo el link de pago', occurred_at: HACE(4), external_id: 'e6', entrega: 'entregado' },
+  { id: 7, direccion: 'saliente', autor: 'luz', texto: '¿Lo pudiste abrir?', occurred_at: HACE(3), external_id: 'e7', entrega: 'enviado' },
+  { id: 8, direccion: 'saliente', autor: 'luz', texto: 'Te reenvío el comprobante', occurred_at: HACE(2), external_id: 'e8', entrega: 'fallido' },
+  // Un mensaje viejo, de antes de este frente: SIN estado. No dibuja nada.
+  { id: 9, direccion: 'saliente', autor: 'luz', texto: 'Cualquier cosa me escribís', occurred_at: HACE(1), external_id: 'e9' },
 ];
 
 const CONVERSACION = {

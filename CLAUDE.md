@@ -301,6 +301,39 @@ reaccionado aparecía con un mensaje fantasma. Server en `server/src/reacciones/
 - Ver sin server: `npx vite --port 5199` → `/galeria-composer.html`. Captura en
   `docs/evidencia/reacciones-en-el-hilo.png`.
 
+## Los ✓✓ — «¿le llegó?» vs «¿no me contestó?»
+
+Sin esto la vendedora **no distingue «no me contestó» de «no le llegó»**, y son dos conversaciones
+distintas: a una se la persigue, a la otra se la reintenta por otro lado. WhatsApp mandaba el dato
+por los dos canales y lo tirábamos — el webhook solo miraba `messages` y `calls`.
+Server en `server/src/entrega/`, columnas `envios_wa.estado_entrega{,_en}` (migración **0021**,
+expand-only), UI en la línea de la hora de cada saliente.
+
+- **La escala es MONÓTONA**: `enviado → entregado → leido`, más `fallido` aparte (que gana siempre y
+  no se resucita). Los recibos llegan **desordenados** —un `delivered` de un segundo dispositivo
+  puede aparecer después del `read`— así que pisar con «el último que llegó» mostraría como no
+  leído algo que el lead ya vio.
+- 🔴 **El avance se hace EN LA BASE, no leyendo y escribiendo.** `SELECT` + decidir + `UPDATE` desde
+  Node tiene una carrera obvia con dos recibos simultáneos. El `UPDATE` lleva su propio `WHERE` con
+  el orden de la escala, así que la base arbitra. La regla vive igual en `entrega/dominio.ts` (pura,
+  con tests) y **`entrega/paridad.test.ts` cruza las dos** para TODO par de estados — el patrón de
+  `cola/urgencia.ts` + `urgenciaSql.ts` (ADR 0009).
+- 🔴 **En whatsmeow, `ReceiptTypeDelivered` es la CADENA VACÍA** (verificado contra
+  `go.mau.fi/whatsmeow/types`). Tratar `''` como «desconocido» —el reflejo— perdería **todos los
+  entregados**, o sea el ✓✓ gris, que es el estado más frecuente.
+- ⚠️ **`read-self` y `played-self` NO son del destinatario**: son otro dispositivo tuyo marcando lo
+  que vos mandaste. Contarlos pintaría el ✓✓ azul porque la vendedora abrió su propio WhatsApp.
+- **Un recibo abarca VARIOS mensajes** (`ids[]`): WhatsApp agrupa, sobre todo el «leído» cuando
+  alguien abre un chat con diez pendientes. El UPDATE los mueve de una.
+- **Los dos canales por caminos distintos**: whatsmeow por `onRecibo` (evento `message:receipt`),
+  Cloud API por `statuses[]` en el webhook. Misma escala, mismo repositorio.
+- **Ausente ≠ `enviado`**: los mensajes anteriores a este frente no tienen estado y **no se dibuja
+  nada** — sus recibos pasaron cuando no los escuchábamos, y no hay backfill posible. Un ✓ inventado
+  es peor que un hueco.
+- En la UI: ✓ / ✓✓ / ✓✓ **azul**, el vocabulario que la vendedora ya trae de su teléfono — cualquier
+  variación «mejorada» habría que explicarla. `fallido` rompe el molde (triángulo rojo) porque es lo
+  único que pide una acción. Captura en `docs/evidencia/entrega-tildes.png`.
+
 ## Auth
 
 Login de vendedoras **contra Cerberus** (Django, sin API REST): `cerberus/auth.ts` hace el handshake

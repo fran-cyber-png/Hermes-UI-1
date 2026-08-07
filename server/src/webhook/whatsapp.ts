@@ -1,4 +1,6 @@
 import type { Request, Response } from "express";
+import { estadoDeCloudApi } from "../entrega/dominio.js";
+import { aplicarRecibo } from "../entrega/repositorio.js";
 import { db } from "../db/client.js";
 import { events } from "../db/schema.js";
 import { gestorWhatsappSiActivo } from "../whatsapp/wiring.js";
@@ -97,6 +99,29 @@ export async function recibirWhatsapp(req: Request, res: Response): Promise<void
 
         if (change?.field !== "messages") continue;
         const value = change.value ?? {};
+
+        /**
+         * LOS ✓✓ — `statuses[]` viaja en el MISMO campo `messages` que los
+         * mensajes, y hasta hoy se ignoraba entero. Es lo que distingue
+         * «no me contestó» de «no le llegó».
+         *
+         * Va antes de persistir los entrantes a propósito: un `value` puede
+         * traer SOLO estados (es lo más común), y así no depende de que el
+         * bucle de abajo tenga algo que hacer.
+         */
+        for (const st of value.statuses ?? []) {
+          const estado = estadoDeCloudApi(st?.status);
+          if (!estado || !st?.id) continue;
+          await aplicarRecibo(db, {
+            mensajes: [`wa:${st.id}`],
+            estado,
+            cuando: st.timestamp ? new Date(Number(st.timestamp) * 1000) : new Date(),
+          }).catch((err: unknown) => {
+            // Un recibo perdido no puede tumbar el webhook: lo que viene
+            // después son mensajes de verdad, con una persona esperando.
+            console.error("[entrega] no se pudo aplicar el recibo:", (err as Error).message);
+          });
+        }
 
         // Nombre de contacto por wa_id (viene aparte de los mensajes).
         const nombrePorWaId: Record<string, string | null> = {};
