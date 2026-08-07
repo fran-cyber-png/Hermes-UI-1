@@ -75,7 +75,7 @@ contra el schema nuevo — es justamente lo que hace seguro el rollback automát
 | **Contactos** | Búsqueda por teléfono → ficha Cerberus 4 estados |
 | **Correos** | Composer 1-a-1 auditado + enviados del equipo. **Fail-closed**: falta el SMTP (ver pendientes) |
 | **Agenda** | Calendario estilo GCal (mes/semana/día, chips por tipo, crear en día vacío, detalle flotante). Agendar mueve interesado→**contactado** solo. Badge dorado en el riel |
-| **Infra** | API pública HTTPS + SSE + UI servida (OTA) · WhatsApp vinculado EN el VPS (51986394450, fix `@lid` con 14.7k mapeos) · webhook de landings listo (Bravo→Hermes) · cáscara **Tauri** 3-5 MB (mac+win, permiso tel:) · Electron convive hasta paridad (ADR 0003) |
+| **Infra** | API pública HTTPS + SSE + UI servida (OTA) · WhatsApp vinculado EN el VPS (51986394450, fix `@lid` con 14.7k mapeos) · webhook de landings listo (Bravo→Hermes) · cáscara **Tauri** 3-5 MB (mac+win, permiso tel:) · **Electron archivado el 7-ago-2026 (ADR 0039)**: la cáscara es una sola |
 | **Rendimiento** | Track «Rendimiento 2026-07» (spec #29). **En `main`**: techo de scan del radar (#19) y la cola con **ventana de 30 días** — 3,8 s → 30 ms, y de paso saca de la pantalla mensajes de 2016 (#30) |
 
 Suite: **285 tests del server + 18 del front**. Sidebar: Dashboard · Pipeline · Contactos · Mensajes ·
@@ -150,7 +150,8 @@ que escribió cada persona, su antigüedad). Eso se arregla en #166.
    (Los screenshots de vistas logueadas ya **no** están pendientes: se resolvió firmando un token de
    dev local con `firmarSesion` y sembrándolo en `localStorage` desde Playwright — ver
    `docs/rendimiento-2026-07/`. No hace falta la clave de Cerberus para verificar UI.)
-5. Archivar Electron cuando la paridad Tauri esté confirmada en máquinas reales (ADR 0003).
+5. ~~Archivar Electron cuando la paridad Tauri esté confirmada en máquinas reales (ADR 0003).~~
+   **HECHO el 7-ago-2026 (ADR 0039)**: la paridad la afirmó el dueño, no se midió acá.
 6. **Catálogo de cursos para la vendedora** — pedido de Estephano el 22-jul, en grilling, **sin spec
    todavía**. Lo que ya se midió contra la API pública de Cerberus, para no volver a descubrirlo:
    - `GET /productos/api/public/productos-cursos/?estado=1` devuelve **9 campos** y **ninguno es
@@ -191,8 +192,9 @@ que escribió cada persona, su antigüedad). Eso se arregla en #166.
   `hermes-api` (SSE sin buffering, 64 MB adjuntos) · deploy key `github.com-hermes` · sesión WA en
   `/srv/hermes/server/.wa-sessions/` · media en `.wa-media/` · **la app abre también en navegador**.
 - **Instaladores** (`/srv/hermes-descargas/` = `https://hermes-api.goberna.us/descargas/`):
-  `Hermes-Windows.zip` (Tauri x64 + permiso tel:) · `Hermes_0.2.0_aarch64.dmg` · los Electron
-  viejos conviven. Rebuild win: `gh workflow run tauri-windows.yml` (mac: `npx tauri build`).
+  `Hermes-Windows.zip` (Tauri x64 + permiso tel:) · `Hermes_0.2.0_aarch64.dmg`. **Los `.dmg`/`.exe`
+  de Electron que están ahí ya no se pueden reconstruir desde `main` (ADR 0039): hay que bajarlos.**
+  Rebuild win: `gh workflow run tauri-windows.yml` (mac: `npm run empaquetar:mac`).
 - **Local:** `docker start meta_escuela_db` · `cd server && npm run dev` (:4100) · `npm run dev`
   (:5173). Tests: server `cd server && npm test`, front `npm test` (vitest). **Ojo cwd**: el shell
   persiste el directorio entre comandos.

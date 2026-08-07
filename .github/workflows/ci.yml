@@ -39,11 +39,6 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
-env:
-  # El binario de Electron son ~100 MB que CI nunca usa: la app de las vendedoras se
-  # empaqueta aparte.
-  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
-
 jobs:
   # ══ NIVEL 1 ══════════════════════════════════════════════════════════════════
   # Las guardias que no necesitan instalar NADA van primero de todo: son segundos y

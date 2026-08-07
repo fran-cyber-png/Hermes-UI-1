@@ -10,8 +10,8 @@ import { fetchFile } from '@ffmpeg/util';
  * forma de pedirle esa URL al bundler — Vite pre-bundlea el paquete y `?url`
  * deja de devolver una URL.
  *
- * `document.baseURI` y no una ruta absoluta: la cáscara vieja de Electron abre
- * el build por `file://` (de ahí el `base: './'` de `vite.config.ts`), y `/ffmpeg/…`
+ * `document.baseURI` y no una ruta absoluta: el fallback local de la cáscara abre
+ * el build sin servidor (de ahí el `base: './'` de `vite.config.ts`), y `/ffmpeg/…`
  * apuntaría a la raíz del disco.
  */
 function urlDelCore(archivo: string): string {

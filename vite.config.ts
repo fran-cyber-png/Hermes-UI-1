@@ -69,9 +69,11 @@ function ffmpegCore() {
 
 // https://vite.dev/config/
 export default defineConfig({
-  // Rutas relativas: en producción Electron carga el build por `file://`, y las
-  // rutas absolutas que Vite genera por defecto (`/assets/…`) apuntarían a la
-  // raíz del disco. Sin esto la app empaquetada abre en blanco.
+  // Rutas relativas, y NO se saca aunque Electron ya no esté (ADR 0039): el
+  // fallback local de la cáscara Tauri también carga el build sin servidor
+  // detrás, y las rutas absolutas que Vite genera por defecto (`/assets/…`)
+  // apuntarían a la raíz. Sin esto la app empaquetada abre en blanco cuando
+  // el server no responde — que es justamente cuando el fallback existe.
   base: './',
   plugins: [
     react(),

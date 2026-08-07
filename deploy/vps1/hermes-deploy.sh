@@ -322,7 +322,7 @@ if [ -n "$CAMBIO_DEPS_SERVER" ] || [ "$ROLLBACK" -eq 1 ]; then
 fi
 if [ -n "$CAMBIO_DEPS_RAIZ" ] || [ "$ROLLBACK" -eq 1 ]; then
   decir "dependencias del front"
-  como_deploy env ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm --prefix "$RAIZ" ci --no-audit --no-fund \
+  como_deploy npm --prefix "$RAIZ" ci --no-audit --no-fund \
     || desandar_checkout "falló el npm ci del front"
 fi
 

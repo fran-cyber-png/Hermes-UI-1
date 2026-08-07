@@ -169,7 +169,7 @@ if (process.env.NODE_ENV !== "production") {
 // si el build del front existe (dist/ en la raíz del repo), el server lo sirve.
 // La app de escritorio empaquetada CARGA esta URL — actualizar Hermes para
 // todas las vendedoras es `git pull + build + restart` en el server, sin
-// reinstalar nada en ninguna máquina. La cáscara de Electron casi no cambia.
+// reinstalar nada en ninguna máquina. La cáscara Tauri casi no cambia.
 const DIST = fileURLToPath(new URL("../../dist/", import.meta.url));
 if (existsSync(join(DIST, "index.html"))) {
   app.use(express.static(DIST));

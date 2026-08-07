@@ -3,41 +3,15 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "main": "electron/main.cjs",
   "scripts": {
     "prepare": "git config core.hooksPath .githooks || true",
     "dev": "vite",
-    "dev:app": "concurrently -k -n vite,electron -c cyan,magenta \"vite\" \"wait-on tcp:5173 && electron .\"",
-    "electron": "electron .",
+    "dev:app": "tauri dev",
     "build": "tsc -b && vite build",
-    "empaquetar:mac": "electron-builder --mac dmg",
-    "empaquetar:win": "electron-builder --win nsis --x64",
+    "empaquetar:mac": "tauri build --bundles dmg",
     "lint": "oxlint",
     "test": "vitest run",
     "preview": "vite preview"
-  },
-  "build": {
-    "appId": "us.goberna.hermes",
-    "productName": "Hermes",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**",
-      "electron/**",
-      "package.json"
-    ],
-    "mac": {
-      "target": "dmg",
-      "category": "public.app-category.business"
-    },
-    "win": {
-      "target": "nsis"
-    },
-    "nsis": {
-      "oneClick": true,
-      "artifactName": "Hermes-Setup-${version}.${ext}"
-    }
   },
   "dependencies": {
     "@blocknote/core": "^0.52.1",
@@ -68,16 +42,12 @@
     "@vitejs/plugin-react": "^6.0.3",
     "autoprefixer": "^10.5.2",
     "babel-plugin-react-compiler": "^1.0.0",
-    "concurrently": "^9.1.2",
-    "electron": "^34.0.0",
-    "electron-builder": "^26.15.3",
     "jsdom": "^30.0.0",
     "oxlint": "^1.71.0",
     "postcss": "^8.5.16",
     "tailwindcss": "^4.3.2",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
-    "vitest": "^4.1.10",
-    "wait-on": "^8.0.2"
+    "vitest": "^4.1.10"
   }
 }

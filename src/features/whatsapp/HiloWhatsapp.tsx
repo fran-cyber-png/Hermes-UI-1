@@ -298,9 +298,9 @@ function AdjuntoRoto() {
 /**
  * Imagen y sticker: eager — son livianas y SON el mensaje. El caché evita
  * re-bajarlas. «Ver completa» es un VISOR EN EL MISMO WEBVIEW, no un
- * `target="_blank"`: en las cáscaras un blob en pestaña nueva muere — Electron
- * lo manda a `shell.openExternal` (que no sabe abrir `blob:`) y el shim de
- * Tauri (`enlacesExternos.ts`) lo manda al opener del sistema, mismo final.
+ * `target="_blank"`: en la cáscara un blob en pestaña nueva muere — el shim de
+ * Tauri (`enlacesExternos.ts`) lo manda al opener del sistema, que no sabe
+ * abrir `blob:`.
  */
 function ImagenEnBurbuja({ media }: { media: MediaHilo }) {
   const { url: src, fallo } = useBlobAutenticado(urlMedia(media.archivo));
@@ -391,8 +391,8 @@ function ReproducirBajoDemanda({ media }: { media: MediaHilo }) {
  * la tarjeta queda como link de descarga al blob.
  *
  * SIN `target="_blank"` a propósito: con blobs eso muere en las cáscaras (ver
- * ImagenEnBurbuja). `download` a secas descarga en navegador, en Electron
- * (will-download default) y en Tauri Windows/WebView2; el Tauri de macOS
+ * ImagenEnBurbuja). `download` a secas descarga en navegador y en
+ * Tauri Windows/WebView2; el Tauri de macOS
  * (WKWebView) necesita cablear `on_download` en la cáscara — señalado en el
  * PR #78, no bloquea: la app empaquetada de las vendedoras es Windows.
  */

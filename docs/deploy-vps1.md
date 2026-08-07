@@ -147,13 +147,17 @@ En Cloudflare: registro `hermes-api` → IP de VPS1. Confirmá `curl https://her
 
 ## 8. La app de las vendedoras — HECHO
 
-Se empaqueta con electron-builder (config en `package.json`, salida gitignoreada en `release/`):
+Se empaqueta con **Tauri** (config en `src-tauri/tauri.conf.json`) — electron-builder se archivó en
+**ADR 0039**:
 
 ```bash
-env VITE_API_URL=https://hermes-api.goberna.us npm run build   # el build queda apuntando a prod
-npm run empaquetar:mac    # → release/Hermes-<v>-arm64.dmg (firmado con la identidad de desarrollo)
-npm run empaquetar:win    # → release/Hermes-Setup-<v>.exe (NSIS un-clic)
+# `tauri build` corre el build del front solo (beforeBuildCommand), así que basta con esto:
+env VITE_API_URL=https://hermes-api.goberna.us npm run empaquetar:mac
+#   → src-tauri/target/release/bundle/dmg/Hermes_<v>_aarch64.dmg
 ```
+
+⚠️ **El `.exe` no sale de una Mac**: Tauri no cross-compila. Se dispara a mano el workflow
+`tauri-windows.yml` (`workflow_dispatch`), que además corre los tests de la cáscara.
 
 Ese archivo es lo que se reparte: doble clic, login con **su usuario de Cerberus**, y la vendedora
 está en su mesa. No vincula nada, no clona nada. (En Macs ajenas, al no estar notarizado, la primera

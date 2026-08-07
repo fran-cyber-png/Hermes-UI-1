@@ -11,7 +11,7 @@ import type { NextFunction, Request, Response } from 'express';
  *
  * Es un Bearer token (va en `Authorization`, no en cookie httpOnly): la app de
  * escritorio habla con su propio backend, y un header evita todo el enredo de
- * cookies cross-origin entre el renderer de Electron y el server.
+ * cookies cross-origin entre el webview de la cáscara y el server.
  */
 
 const SECRET = process.env.HERMES_SESSION_SECRET ?? 'dev-inseguro-cambiar-en-produccion';

@@ -14,8 +14,8 @@ cd server && npm install && npm run dev    # API en :4100
 npm install && npm run dev:app            # Vite :5173 + la app de escritorio
 ```
 
-`npm run dev` solo (sin `:app`) abre el front en el navegador: la bandeja funciona, WhatsApp no
-(necesita Electron).
+`npm run dev` solo (sin `:app`) abre el front en el navegador: la bandeja funciona. `dev:app`
+levanta la cáscara Tauri encima (`tauri dev` arranca Vite solo).
 
 ## Refrescar los datos
 
