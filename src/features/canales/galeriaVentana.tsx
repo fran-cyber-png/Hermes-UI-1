@@ -52,6 +52,14 @@ function fila(over: Partial<Conversacion>): Conversacion {
   };
 }
 
+/** Las cuatro líneas vivas de producción — es el caso que rompía la barra de una pista. */
+const LINEAS = [
+  { numero: '51986394450', etiqueta: 'Ventas Perú', estado: 'conectado', mias: true },
+  { numero: '51941654039', etiqueta: 'Walter Ventas', estado: 'conectado' },
+  { numero: '51944531711', etiqueta: 'Venta Perú', estado: 'conectado' },
+  { numero: '51984429504', etiqueta: 'Ventas Meta', estado: 'conectado', mias: true },
+];
+
 const CASOS: { titulo: string; nota: string; filas: Conversacion[] }[] = [
   {
     titulo: 'WhatsApp — la ventana de 24 h, que hasta hoy no se veía en ningún lado',
@@ -181,8 +189,14 @@ function Galeria() {
 
         <section className="space-y-2">
           <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-            La barra, con el chip nuevo y su número
+            La barra: dos pistas, con el chip nuevo y su número
           </h2>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Arriba se elige <strong>qué cola</strong>, abajo se recorta <strong>dentro</strong>. Con
+            las cuatro líneas vivas en una sola pista, el segmentado se comía los 336 px y «Sin
+            responder» —que es la red que devuelve la deuda entera cuando lo leído baja— quedaba
+            detrás de un scroll invisible. Un chip más lo empeoraba.
+          </p>
           <div className="rounded-xl border border-border bg-card p-3">
             <BarraFiltros
               filtroSec=""
@@ -193,6 +207,9 @@ function Galeria() {
                 puedoEscribirle: 47,
                 yaCompraron: 78,
               }}
+              lineas={LINEAS}
+              lineaActiva=""
+              onLinea={() => {}}
               categoriaActiva={null}
               onCategoria={() => {}}
               onListas={() => {}}
@@ -208,6 +225,10 @@ function Galeria() {
                 puedoEscribirle: 47,
                 yaCompraron: 9,
               }}
+              lineas={LINEAS}
+              lineaActiva="mias"
+              onLinea={() => {}}
+              hayMias
               categoriaActiva={null}
               onCategoria={() => {}}
               onListas={() => {}}

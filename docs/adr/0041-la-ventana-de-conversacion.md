@@ -122,6 +122,32 @@ tenue, como las demás señales automáticas.
   cosas a propósito: las dos piden lo mismo (hablar ahora), y distinguirlas obligaría a explicar el
   transporte de cada línea en una píldora de 40 px.
 
+## La barra pasa a tener dos pistas, y no es un extra
+
+Un chip más en una barra que ya se desbordaba es una regresión, no una función. Medido en el PR
+#304 (6-ago) con la captura del dueño: con las **cuatro líneas vivas**, el segmentado se comía los
+336 px enteros — «Piden info» cortado contra el borde y **«Sin responder» sin verse**. Había que
+descubrir a mano que la barra scrolleaba.
+
+Y eso dejó de ser tolerable cuando la cola empezó a bajar lo leído (7-ago): desde ahí **«Sin
+responder» es la red de seguridad** que devuelve la deuda entera, y *una red detrás de un scroll
+invisible no es una red*. Agregar «Puedo escribirle» sin tocar la barra habría empujado esa red un
+lugar más lejos.
+
+Se **rescata la solución de #304** —dos pistas: arriba se elige *qué cola*, abajo se recorta
+*dentro*— y **nada más de ese PR**. Su idea central («lo visto se va abajo») ya había entrado por
+#310 con otra implementación, y su cursor-al-salir contradice el cursor-al-abrir que #310 dejó en
+`main`; mergear las dos habría dejado dos mecanismos de orden superpuestos. #304 se cierra con esa
+explicación.
+
+Lo que viene con la barra rescatada, y vale la pena conservar: cada pista tiene **su propio** estado
+de sombra y su propia navegación por teclado (con un `ref` compartido, el degradado de una fila
+mentiría sobre la otra), y **lo encendido se trae a la vista** tocando solo `scrollLeft` — con
+`scrollIntoView({block:'nearest'})` los chips activos arrastraban **la página entera** y la cola
+aparecía empezada por la mitad.
+
+Cuesta ~26 px de alto.
+
 ## Evidencia
 
 `docs/evidencia/ventana-de-conversacion.png` — los cuatro casos: WhatsApp con el oro solo abajo de

@@ -683,6 +683,14 @@ escribir?** Meta cierra la puerta sola y de los dos plazos Hermes modelaba **uno
   incluida una de 6 días—, así que el oro terminaba queriendo decir «comentario». Ahora solo abajo de
   `UMBRAL_ORO_MS` (3 h). El front lee `ventana_cierra` como **opcional** y conserva la marca vieja de
   respaldo: N4 va solo y N5 es un botón, así que hay una franja con el front nuevo y el server viejo.
+- **La barra de filtros pasa a DOS PISTAS** (rescatado del PR #304, que se cerró): arriba se elige
+  **qué cola** (la línea), abajo se recorta **dentro**. Con las cuatro líneas vivas en una sola
+  pista el segmentado se comía los 336 px y **«Sin responder» quedaba detrás de un scroll
+  invisible** — y desde que lo leído baja, ese chip **es la red** que devuelve la deuda entera. Un
+  chip más lo empeoraba. Cada pista lleva **su propio** estado de sombra y su navegación por teclado
+  (con un `ref` compartido, el degradado de una mentiría sobre la otra), y **lo encendido se trae a
+  la vista tocando solo `scrollLeft`**: con `scrollIntoView({block:'nearest'})` los chips activos
+  arrastraban **la página entera** y la cola aparecía empezada por la mitad.
 - Ver sin server: `npx vite --port 5199` → `/galeria-ventana.html`. Captura en
   `docs/evidencia/ventana-de-conversacion.png`.
 
