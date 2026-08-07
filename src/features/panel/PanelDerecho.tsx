@@ -65,7 +65,18 @@ export function PanelDerecho({
     cargando: ficha.isPending && esWa,
     error: ficha.isError,
     ficha: ficha.data,
-    enfriada: senales?.senales[conversacion.clave]?.enfriamiento.enfriada ?? false,
+    /**
+     * ⚠️ `?.` DESPUÉS DE `senales`, TAMBIÉN.
+     *
+     * `senales?.senales[clave]` sólo protege que la RESPUESTA sea undefined; si
+     * el cuerpo llega sin la clave `senales` —un cuerpo de error, una forma que
+     * cambió— entonces `undefined[clave]` **tumba el panel entero**, y no hay
+     * ErrorBoundary en `src/`: se lleva puesta la app.
+     *
+     * Se encontró abriendo la ficha desde el Dashboard, pero el defecto era de
+     * `PanelDerecho` y valía igual en Pipeline y en el padrón.
+     */
+    enfriada: senales?.senales?.[conversacion.clave]?.enfriamiento?.enfriada ?? false,
     padron: padron?.nivel ?? null,
   });
 
@@ -80,7 +91,7 @@ export function PanelDerecho({
   const timeline = ensamblarTimeline({
     ficha: ficha.data,
     intereses: intereses?.lista,
-    senales: senales?.senales[conversacion.clave],
+    senales: senales?.senales?.[conversacion.clave],
     leadForm: lead.data?.lead ? { campana: lead.data.lead.campana ?? undefined, fecha: lead.data.lead.fecha } : undefined,
     conversacion: { persona_nombre: conversacion.persona_nombre ?? undefined, lead_nombre: conversacion.lead_nombre ?? undefined },
     eventos,

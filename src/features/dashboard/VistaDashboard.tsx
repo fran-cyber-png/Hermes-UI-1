@@ -13,6 +13,7 @@ import { Columnas } from '../../components/graficos/Columnas';
 import { BarraSegmentada } from '../../components/graficos/BarraSegmentada';
 import { Chispa } from '../../components/graficos/Chispa';
 import { BadgeCanal, nombreCanal } from '../canales/BadgeCanal';
+import { HojaContacto } from '../panel/HojaContacto';
 import type { Conversacion } from '../canales/conversaciones';
 import { conversacionDeRecordatorio, useAgenda, type Recordatorio } from '../agenda/agenda';
 import {
@@ -169,6 +170,16 @@ export function VistaDashboard({
   /** Puente a Correos (§2.9): prellena el Para. Opcional hasta que App lo cablee (Fase 3). */
   onMandarCorreo?: (para: string) => void;
 }) {
+  /**
+   * LA FICHA AL COSTADO, TAMBIÉN ACÁ (ADR 0037, PR #292).
+   *
+   * El radar contesta «¿a quién atiendo?», y la pregunta que sigue —«¿quién es
+   * esta persona?»— se contestaba yéndose a Mensajes: se perdía el radar y había
+   * que volver. Es el mismo problema que la hoja ya cerró en Pipeline y en el
+   * padrón, y no había motivo para que el Dashboard fuera la excepción.
+   */
+  const [ficha, setFicha] = useState<Conversacion | null>(null);
+
   // Renombrados como en la cola (`conversaciones.ts`): el vocabulario de
   // react-query no cruza hacia las vistas.
   const { data, isPending, dataUpdatedAt: traidoEn, isFetching: actualizando } = useDashboard();
@@ -608,7 +619,22 @@ export function VistaDashboard({
                   // donde no hay ventana y siempre se puede escribir.
                   const puedeEscribirPrivado = !esChat || fila.chat.ventana_dias == null || fila.chat.ventana_dias > 0;
                   const clickeable = esChat || Boolean(fila.form.telefono);
-                  const abrir = () => (esChat ? onAbrir(conversacionDeChat(fila.chat)) : onBuscarPersona(fila.form.telefono!));
+                  /**
+                   * EL CLIC ABRE LA FICHA AL COSTADO, no conmuta de vista.
+                   *
+                   * Antes saltaba a Mensajes, y eso costaba el radar entero para
+                   * responder «¿quién es?». Ahora es el mismo gesto que en
+                   * Pipeline: la hoja se superpone, se puede tocar otra fila y
+                   * cambia de persona sin cerrarse — que es lo que se hace
+                   * mientras se elige a quién atender.
+                   *
+                   * El salto a Mensajes NO se pierde: vive en el botón de
+                   * escribir de la fila, que es donde corresponde una acción
+                   * que te saca de acá. Un formulario sin chat no tiene ficha
+                   * que mostrar, así que sigue yendo al buscador.
+                   */
+                  const abrir = () =>
+                    esChat ? setFicha(conversacionDeChat(fila.chat)) : onBuscarPersona(fila.form.telefono!);
                   const esNueva = nuevas.has(clave);
 
                   return (
@@ -725,7 +751,26 @@ export function VistaDashboard({
                               <BotonLlamar telefono={(esChat ? fila.chat.telefono : fila.form.telefono)!} compacto />
                             )}
                             {esChat ? (
-                              puedeEscribirPrivado ? <MessageSquareText size={13} /> : null
+                              /* ⚠️ ESTE ÍCONO ERA DECORATIVO Y AHORA HACE ALGO.
+                                 Mientras el clic de la fila saltaba a Mensajes,
+                                 alcanzaba con insinuar «acá se puede escribir».
+                                 Ahora la fila abre la ficha al costado, así que
+                                 el salto necesita su propia puerta — y esta es
+                                 la que ya prometía serlo. `stopPropagation`
+                                 porque la fila entera es clicable. */
+                              puedeEscribirPrivado ? (
+                                <button
+                                  type="button"
+                                  title="Escribirle — abre la conversación en Mensajes"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onAbrir(conversacionDeChat(fila.chat));
+                                  }}
+                                  className="rounded p-0.5 transition-colors hover:text-navy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                                >
+                                  <MessageSquareText size={13} />
+                                </button>
+                              ) : null
                             ) : fila.form.telefono ? (
                               <button
                                 type="button"
@@ -1001,6 +1046,18 @@ export function VistaDashboard({
           </section>
         </aside>
       </div>
+
+      {/* LA FICHA AL COSTADO — el mismo molde que Pipeline y el padrón.
+          Se superpone sin scrim a propósito: tapar el radar del que se está
+          eligiendo haría falsa la pregunta que el radar contesta. Se puede
+          tocar otra fila y la hoja cambia de persona sin cerrarse. */}
+      {ficha && (
+        <HojaContacto
+          conversacion={ficha}
+          onCerrar={() => setFicha(null)}
+          miVendedora={miVendedora}
+        />
+      )}
     </div>
   );
 }
