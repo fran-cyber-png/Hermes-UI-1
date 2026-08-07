@@ -153,9 +153,53 @@ export function useConversacionWa(telefono: string | null) {
         body: '{}',
       });
     },
+    /**
+     * OPTIMISTA: el punto azul se apaga en el instante del clic.
+     *
+     * ── Por qué hacía falta ─────────────────────────────────────────────
+     * El síntoma reportado fue «tengo que quedarme unos 3 segundos en el chat
+     * para que lo tome como leído». No era eso: el marcado TARDABA tres
+     * segundos —el server esperaba a que WhatsApp acusara los tildes antes de
+     * tocar el cursor— y quien volvía antes no lo veía. Eso ya se arregló del
+     * lado del server; esto es la otra mitad, para que ni siquiera se note el
+     * viaje de ida y vuelta.
+     *
+     * Se tocan TODAS las variantes de la cola (`setQueriesData` con el prefijo)
+     * porque la queryKey lleva los filtros: con `setQueryData` de una sola,
+     * cambiar de filtro mostraría el punto encendido otra vez.
+     *
+     * ⚠️ **Solo se apaga el punto; NO se reordena acá.** El orden de la cola es
+     * del server (`bandaPinOrdenSql`) y reimplementarlo en el navegador sería
+     * tener la misma regla en dos lados — la lección de #37. La fila baja cuando
+     * llega el refetch, que ahora tarda milisegundos.
+     */
+    onMutate: (vars) => {
+      const previas = qc.getQueriesData({ queryKey: ['conversaciones'] });
+      qc.setQueriesData(
+        { queryKey: ['conversaciones'] },
+        (viejo: { pages?: { conversaciones: { persona_id: string; no_leido?: boolean }[] }[] } | undefined) => {
+          if (!viejo?.pages) return viejo;
+          return {
+            ...viejo,
+            pages: viejo.pages.map((p) => ({
+              ...p,
+              conversaciones: p.conversaciones.map((c) =>
+                c.persona_id === vars.telefono ? { ...c, no_leido: false } : c,
+              ),
+            })),
+          };
+        },
+      );
+      return { previas };
+    },
+    onError: (_e, _v, ctx) => {
+      // Se deshace: un punto apagado sobre algo que el server no marcó es una
+      // conversación que se pierde de vista sin que nadie la haya leído.
+      for (const [clave, dato] of ctx?.previas ?? []) qc.setQueryData(clave, dato);
+    },
     onSuccess: (r) => {
-      // Solo si el cursor se movió: sin `numeroPropio` no cambió nada y refrescar
-      // la cola entera sería un viaje al pedo.
+      // El refetch trae el ORDEN nuevo (la fila baja). El punto ya está apagado
+      // desde `onMutate`, así que esto no se nota como un salto.
       if (r?.cursor) void qc.invalidateQueries({ queryKey: ['conversaciones'] });
     },
   });

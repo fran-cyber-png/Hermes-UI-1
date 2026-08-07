@@ -228,29 +228,12 @@ whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
 whatsappRouter.post('/leido/:telefono', requiereVendedora, async (req, res) => {
   const telefono = req.params.telefono.replace(/\D/g, '');
   const numeroPropio = typeof req.query.numeroPropio === 'string' ? req.query.numeroPropio : undefined;
-  // Sin JOIN: desde #185 `numero_propio` es columna de `interactions`, así que
-  // filtrar por línea no obliga a traerse el crudo del evento.
-  const filas = await db.execute<{ external_id: string }>(sql`
-    SELECT i.external_id FROM interactions i
-    WHERE i.canal = 'whatsapp' AND i.persona_id = ${telefono} AND i.direccion = 'entrante'
-      ${mismaLinea(numeroPropio)}
-    ORDER BY i.occurred_at DESC LIMIT 50
-  `);
-  // El external_id se guarda prefijado 'wa:'; el transporte quiere el id crudo.
-  const ids = filas.map((f) => f.external_id.replace(/^wa:/, ''));
-  try {
-    // Los tildes azules tienen que salir POR LA LÍNEA a la que la persona
-    // escribió: mandarlos por otra es, para ella, que un número desconocido le
-    // leyó el mensaje. Sin `numeroPropio` se usa la primera, como siempre.
-    const linea = numeroPropio ? gestorWhatsapp().de(numeroPropio) : whatsapp();
-    await linea?.transporte.marcarLeido(telefono, ids);
-  } catch {
-    // Marcar leído es cortesía: si falla, no rompe la apertura del chat.
-  }
 
-  // El cursor de lectura de la vendedora — lo que apaga el punto azul.
-  // Va aparte de los ticks a propósito: son dos destinatarios distintos (el
-  // lead y la cola de ella), y que uno falle no puede llevarse al otro.
+  // ── 1 · EL CURSOR PRIMERO. Es lo único que la vendedora está esperando. ──
+  // Antes iba después de los ticks, y los ticks son una llamada de RED (whatsmeow
+  // es un subprocess Go; la Cloud API es HTTP a Meta). O sea que apagar el punto
+  // azul de SU cola esperaba a que WhatsApp le acusara los tildes al LEAD — dos
+  // destinatarios que no tienen nada que ver, uno bloqueando al otro.
   let cursor = false;
   if (numeroPropio && req.vendedoraId) {
     try {
@@ -264,7 +247,33 @@ whatsappRouter.post('/leido/:telefono', requiereVendedora, async (req, res) => {
     }
   }
 
+  // ── 2 · Se responde YA. Los tildes salen después, sin nadie esperándolos. ──
   res.json({ ok: true, cursor });
+
+  // ── 3 · Los tildes azules, fuera del camino crítico ──
+  // Fire-and-forget a propósito: son cortesía hacia el lead y nadie del lado de
+  // la vendedora depende de que salgan. Si tardan tres segundos o fallan, ella ya
+  // vio su cola actualizada. Lo que NO se hace es saltearlos.
+  void (async () => {
+    try {
+      const filas = await db.execute<{ external_id: string }>(sql`
+        SELECT i.external_id FROM interactions i
+        WHERE i.canal = 'whatsapp' AND i.persona_id = ${telefono} AND i.direccion = 'entrante'
+          ${mismaLinea(numeroPropio)}
+        ORDER BY i.occurred_at DESC LIMIT 50
+      `);
+      // El external_id se guarda prefijado 'wa:'; el transporte quiere el id crudo.
+      const ids = filas.map((f) => f.external_id.replace(/^wa:/, ''));
+      // Los tildes tienen que salir POR LA LÍNEA a la que la persona escribió:
+      // mandarlos por otra es, para ella, que un número desconocido le leyó el
+      // mensaje. Sin `numeroPropio` se usa la primera, como siempre.
+      const linea = numeroPropio ? gestorWhatsapp().de(numeroPropio) : whatsapp();
+      await linea?.transporte.marcarLeido(telefono, ids);
+    } catch {
+      // Marcar leído es cortesía: si falla, no rompe nada. Y acá ya ni siquiera
+      // hay una respuesta que arruinar.
+    }
+  })();
 });
 
 /**

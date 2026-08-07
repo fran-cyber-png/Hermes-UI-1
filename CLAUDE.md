@@ -340,6 +340,20 @@ Al investigarlo eran **dos cosas y solo una era un bug**.
   saca este orden, la escala sigue diciendo la verdad sobre quién está esperando. Meter «leído»
   adentro de la regla la habría contaminado — es la misma que comparte con el radar del Dashboard,
   con su test de paridad.
+- 🔴 **EL CURSOR VA PRIMERO Y LOS TILDES DESPUÉS** (7-ago-2026). Al revés tardaba **3 segundos**:
+  el endpoint hacía `await transporte.marcarLeido()` —una llamada de RED al subprocess de
+  whatsmeow— **antes** de tocar el cursor, así que apagar el punto de la cola de la vendedora
+  esperaba a que WhatsApp le acusara los tildes al LEAD. Reportado como «tengo que quedarme unos
+  3 segundos en el chat para que lo tome como leído»; no era eso, era que el marcado tardaba
+  3 segundos y quien volvía antes no lo veía. Ahora: cursor → `res.json()` → tildes
+  fire-and-forget. **Dos destinatarios distintos, ninguno bloquea al otro.**
+- **Y el front es OPTIMISTA**: el punto se apaga en el caché al instante (`onMutate` con
+  `setQueriesData` sobre TODAS las variantes de la cola — la queryKey lleva los filtros, y con una
+  sola, cambiar de filtro lo mostraría encendido otra vez). Si el server falla, **se vuelve a
+  encender**: un punto apagado sobre algo que nadie marcó es una conversación que se pierde de
+  vista sin haberse leído. ⚠️ **No se reordena en el navegador**: el orden es del server
+  (`bandaPinOrdenSql`) y reimplementarlo acá sería la misma regla en dos lados (#37) — la fila baja
+  con el refetch, que ahora tarda milisegundos.
 - ⚠️ **Sin `numeroPropio` el cursor no se toca.** `estado_conversacion` se indexa por la clave
   completa `conv:whatsapp:<tel>:<linea>`: sin la línea no se puede saber cuál marcar, y apagar la
   marca de otra conversación es peor que no apagar ninguna.
