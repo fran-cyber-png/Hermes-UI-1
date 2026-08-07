@@ -190,3 +190,60 @@ describe("el filtro «puedo-escribirle» recorta de verdad", () => {
     );
   });
 });
+
+describe("el recorte del Pipeline (`?ventana=1`)", () => {
+  /**
+   * EL CANDADO QUE IMPORTA EN EL TABLERO: el chip dice «En ventana 47» a partir
+   * del DESGLOSE, y al tocarlo la columna se pide con `?ventana=1`. Son dos
+   * caminos distintos hacia el mismo predicado — y si divergieran, el Pipeline
+   * ofrecería un número y devolvería otra lista, sin un solo error.
+   */
+  test("el número del desglose es exactamente lo que devuelve el recorte", async (t) => {
+    const db = await baseDePrueba(t);
+    // Dos en ventana y dos fuera, todas contactadas (les hablamos y no volvieron).
+    for (const [persona, horas] of [
+      ["adentro-1", 2],
+      ["adentro-2", 10],
+      ["afuera-1", 40],
+      ["afuera-2", 100],
+    ] as const) {
+      await sembrarMensaje(db, { personaId: persona, occurredAt: hace(horas) });
+      await sembrarMensaje(db, {
+        personaId: persona,
+        direccion: "saliente",
+        occurredAt: hace(horas - 1),
+      });
+    }
+
+    const sinRecorte = await consultarCola(db, { etapa: "contactado" });
+    const enVentana = (sinRecorte.desglose ?? [])
+      .filter((f) => f.etapa === "contactado" && (f as { ventana?: boolean }).ventana)
+      .reduce((n, f) => n + f.n, 0);
+
+    const conRecorte = await consultarCola(db, { etapa: "contactado", ventana: true });
+
+    assert.equal(
+      enVentana,
+      conRecorte.conversaciones.length,
+      "el chip promete un número y el recorte tiene que devolver esa misma lista",
+    );
+    assert.equal(enVentana, 2, "solo las dos que escribieron hace menos de 24 h");
+  });
+
+  test("`ventana` es una dimensión propia del desglose, no se deriva de `precio`", async (t) => {
+    const db = await baseDePrueba(t);
+    await sembrarMensaje(db, { personaId: "en-ventana", occurredAt: hace(3) });
+    await sembrarMensaje(db, { personaId: "en-ventana", direccion: "saliente", occurredAt: hace(2) });
+
+    const r = await consultarCola(db, { etapa: "contactado" });
+    const filas = (r.desglose ?? []) as { etapa: string; ventana?: boolean; n: number }[];
+    assert.ok(
+      filas.some((f) => f.ventana === true),
+      "el desglose tiene que traer la dimensión `ventana`",
+    );
+    assert.ok(
+      filas.every((f) => typeof f.ventana === "boolean"),
+      "`ventana` nunca viaja indefinida: el chip la lee como booleano",
+    );
+  });
+});

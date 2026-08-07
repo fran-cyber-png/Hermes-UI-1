@@ -68,6 +68,13 @@ function tarjetas(etapa: string, cuantas: number) {
       interes_curso: etapa === 'cotizado' ? curso : null,
       lead_curso: curso,
       ventana_abierta: false,
+      // La VENTANA (ADR 0041): las primeras de cada columna todavía la tienen
+      // abierta, y una entra en las últimas 3 h para que se vea el oro. El resto
+      // sin ventana, que es como se ve la mayoría de una columna de seguimiento.
+      ventana_cierra:
+        i % 4 === 0
+          ? new Date(Date.now() + (i === 0 ? 40 * 60_000 : (3 + i) * 3_600_000)).toISOString()
+          : null,
       pide_info: i % 3 === 0,
       n: 4 + i,
       referencia: cuando,
@@ -82,9 +89,11 @@ function tarjetas(etapa: string, cuantas: number) {
 const DESGLOSE = [
   { etapa: 'interesado', yaLeHablamos: false, precio: false, viva: true, n: 218 },
   { etapa: 'interesado', yaLeHablamos: true, precio: false, viva: false, n: 258 },
-  { etapa: 'contactado', yaLeHablamos: true, precio: true, viva: false, n: 611 },
-  { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, n: 778 },
-  { etapa: 'cotizado', yaLeHablamos: true, precio: true, viva: false, n: 611 },
+  { etapa: 'contactado', yaLeHablamos: true, precio: true, viva: false, ventana: true, n: 12 },
+  { etapa: 'contactado', yaLeHablamos: true, precio: true, viva: false, ventana: false, n: 599 },
+  { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, ventana: true, n: 35 },
+  { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, ventana: false, n: 743 },
+  { etapa: 'cotizado', yaLeHablamos: true, precio: true, viva: false, ventana: false, n: 611 },
   { etapa: 'cierre', yaLeHablamos: true, precio: true, viva: false, n: 12 },
   { etapa: 'perdido', yaLeHablamos: true, precio: false, viva: false, n: 47 },
 ];

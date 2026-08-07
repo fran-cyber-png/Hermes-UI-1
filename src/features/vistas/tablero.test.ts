@@ -131,21 +131,57 @@ describe('resumirBandeja — la bandeja deja de ser un número gris', () => {
 
 describe('resumirColumna — el tamaño real de la columna y el de su recorte', () => {
   const desglose: FilaDesglose[] = [
-    { etapa: 'contactado', yaLeHablamos: true, precio: true, viva: false, n: 611 },
-    { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, n: 778 },
-    { etapa: 'cotizado', yaLeHablamos: true, precio: true, viva: false, n: 3 },
+    { etapa: 'contactado', yaLeHablamos: true, precio: true, viva: false, ventana: true, n: 12 },
+    { etapa: 'contactado', yaLeHablamos: true, precio: true, viva: false, ventana: false, n: 599 },
+    { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, ventana: true, n: 35 },
+    { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, ventana: false, n: 743 },
+    { etapa: 'cotizado', yaLeHablamos: true, precio: true, viva: false, ventana: false, n: 3 },
   ];
 
   test('el total y cuántas ya tienen precio encima', () => {
-    expect(resumirColumna(desglose, 'contactado')).toEqual({ total: 1389, conPrecio: 611 });
+    expect(resumirColumna(desglose, 'contactado')).toEqual({
+      total: 1389,
+      conPrecio: 611,
+      enVentana: 47,
+    });
+  });
+
+  /**
+   * LOS DOS RECORTES SE CRUZAN, y por eso se cuentan por separado: de las 611
+   * con precio, solo 12 están en ventana. Si `enVentana` se derivara de
+   * `conPrecio` —o al revés— el chip prometería una lista que no es.
+   */
+  test('precio y ventana son dimensiones independientes: se cuentan aparte', () => {
+    const r = resumirColumna(desglose, 'contactado');
+    expect(r.conPrecio).toBe(611);
+    expect(r.enVentana).toBe(47); // 12 con precio + 35 sin precio
+    expect(r.enVentana).not.toBe(12);
+  });
+
+  /**
+   * Un server viejo no manda `ventana` en el desglose. Ahí el chip tiene que dar
+   * CERO y esconderse, no ofrecer un recorte que el server no sabe aplicar —
+   * tocarlo devolvería la columna entera y se leería como que el filtro no anda.
+   */
+  test('sin el campo `ventana` (server viejo) el recorte cuenta cero y no se ofrece', () => {
+    const viejo: FilaDesglose[] = [
+      { etapa: 'contactado', yaLeHablamos: true, precio: true, viva: false, n: 611 },
+      { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, n: 778 },
+    ];
+    expect(resumirColumna(viejo, 'contactado')).toEqual({
+      total: 1389,
+      conPrecio: 611,
+      enVentana: 0,
+    });
   });
 
   test('una columna sin filas cuenta cero, no undefined', () => {
-    expect(resumirColumna(desglose, 'cierre')).toEqual({ total: 0, conPrecio: 0 });
+    expect(resumirColumna(desglose, 'cierre')).toEqual({ total: 0, conPrecio: 0, enVentana: 0 });
   });
 
   test('sin desglose (server viejo) el total sale de los conteos y el recorte no se ofrece', () => {
     expect(resumirColumna(undefined, 'contactado', { contactado: 1389 })).toEqual({
+      enVentana: 0,
       total: 1389,
       conPrecio: 0,
     });

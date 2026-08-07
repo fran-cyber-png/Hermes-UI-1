@@ -1,5 +1,6 @@
 import { abrirExterno } from '../../lib/enlacesExternos';
 import { puenteTauri } from '../../lib/tauri';
+import { esCascaraSinElComando } from './cascara';
 
 /**
  * ABRIR EL NAVEGADOR — la costura con la cáscara.
@@ -32,6 +33,29 @@ export async function abrirNavegador(url: string): Promise<Apertura> {
     await tauri.invoke('abrir_navegador', { url });
     return { ok: true, donde: 'hermes' };
   } catch (e) {
+    /**
+     * 🔴 UNA CÁSCARA VIEJA NO ES UN ERROR: ES UN CAMINO MÁS LARGO.
+     *
+     * La UI se despliega por OTA y llega a las cuatro máquinas en el acto; la
+     * cáscara es un `.dmg`/`.exe` que se reinstala a mano. Al desplegar esta
+     * vista (7-ago-2026) NINGUNA cáscara instalada tenía el comando, y el
+     * `invoke` rebotaba con «Command abrir_navegador not allowed by ACL» — un
+     * botón muerto con un mensaje en inglés.
+     *
+     * Se cae al navegador del sistema, exactamente igual que fuera de Tauri: se
+     * pierde la sesión separada —que es la ventaja del frente— pero la vendedora
+     * llega a Cerberus, que es lo que fue a hacer. Y la pantalla lo DICE
+     * (`donde: 'sistema'`), porque anunciar la sesión de trabajo cuando en
+     * realidad se abrió Chrome sería vender lo que no pasó.
+     *
+     * Lo que NO se toca: si el rechazo vino de `validar()` —Rust frenó la URL—
+     * se muestra su mensaje y no se abre nada. Abrir igual sería saltarse la
+     * única guarda del frente.
+     */
+    if (esCascaraSinElComando(e)) {
+      abrirExterno(url);
+      return { ok: true, donde: 'sistema' };
+    }
     // El rechazo de Rust ES el mensaje: `validar()` explica en criollo por qué
     // no («solo se abren direcciones https — esta es «file»»). Reescribirlo acá
     // dejaría dos redacciones para el mismo motivo.

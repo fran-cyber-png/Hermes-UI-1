@@ -294,6 +294,12 @@ export interface EstadoCola {
   /** Solo las que ya tienen un precio encima — el recorte del Pipeline. */
   precio?: boolean;
   /**
+   * Solo las que tienen la VENTANA de conversación abierta (ADR 0041): se les
+   * puede escribir texto libre ahora, sin pagar una plantilla. El otro recorte
+   * del Pipeline, hermano de `precio`.
+   */
+  ventana?: boolean;
+  /**
    * Recorta a UNA línea de WhatsApp: el número propio de Goberna por el que
    * entró la conversación (#50). Vacío/ausente = todas, que es lo que había
    * cuando había una sola línea. `LINEA_MIAS` = las que `numero_vendedora` le
@@ -328,6 +334,7 @@ export function parametrosDeCola(e: EstadoCola): Record<string, string> {
   if (e.canal) p.canal = e.canal;
   if (e.etapa) p.etapa = e.etapa;
   if (e.precio) p.precio = '1';
+  if (e.ventana) p.ventana = '1';
   // ⚠️ `mias` (LÍNEAS) y `mios` (CONVERSACIONES asignadas) son DOS recortes, se
   // escriben con una vocal de diferencia y salen los dos de acá. Confundirlos no
   // rompe nada visible: devuelve otra cola. Van juntos y comentados a propósito.

@@ -247,6 +247,18 @@ Fuera de Tauri cae a `abrirExterno()`, así que la vista anda igual en `npm run 
   fuera de Tauri, `?basura=1` el recorte de `interpretar`). Capturas en `docs/evidencia/navegador-*.png`.
 - ⚠️ Los tests de la cáscara **no son gate de PR**: `ci.yml` corre en el runner de VPS1, que no tiene
   Rust. Viven en `tauri-windows.yml`, que es `workflow_dispatch`.
+- 🔴 **LA CÁSCARA Y LA UI SE DESPLIEGAN POR CAMINOS DISTINTOS, y eso rompió el frente el día 1.**
+  Reportado al desplegar: «Command abrir_navegador not allowed by ACL». **No era la config** —los 9
+  tests de Rust pasan, incluido el que invoca por el IPC real con la URL de producción—: la UI viaja
+  por **OTA** y llega a las cuatro máquinas en el acto, pero el `.dmg`/`.exe` se compila aparte y se
+  **reinstala a mano**, así que ninguna cáscara instalada tenía el comando. §5.3 protege contra
+  «me olvidé de declarar el permiso»; esto es el de al lado: **el permiso está, en una versión que
+  nadie tiene**. Ahora un rechazo de «no tengo ese comando» **cae al navegador del sistema**
+  (`navegador/cascara.ts`, puro y con tests) y la pantalla dice que se abrió ahí. ⚠️ Un rechazo de
+  `validar()` NO cae al fallback —abrir igual sería saltarse la única guarda—, y lo que separa los
+  dos casos es que **nuestros mensajes están en castellano y los de Tauri en inglés**; hay un test
+  que lo fija. **El frente sigue incompleto hasta que se compile y reparta una cáscara nueva**: hasta
+  entonces abre en el Chrome personal, justo lo que el ADR quería evitar.
 ## Instagram y Facebook — no se desconectaron, nunca se enchufó el caño (ADR 0042)
 
 Reportado el 7-ago-2026: «teníamos el sistema conectado con IG y Facebook, ¿qué pasó?». Medido capa
@@ -691,8 +703,17 @@ escribir?** Meta cierra la puerta sola y de los dos plazos Hermes modelaba **uno
   (con un `ref` compartido, el degradado de una mentiría sobre la otra), y **lo encendido se trae a
   la vista tocando solo `scrollLeft`**: con `scrollIntoView({block:'nearest'})` los chips activos
   arrastraban **la página entera** y la cola aparecía empezada por la mitad.
-- Ver sin server: `npx vite --port 5199` → `/galeria-ventana.html`. Captura en
-  `docs/evidencia/ventana-de-conversacion.png`.
+- **Y EN EL PIPELINE** (pedido del dueño: «los que están en la ventana de poder hablarles **sin
+  costo**»): un tercer chip de recorte en Contactados —`Todas · Con precio N · **En ventana N**`, un
+  solo eje con tres posiciones— y **la píldora en la tarjeta, en TODAS las columnas**. Las dos cosas
+  hacen falta: el chip solo existe en Contactados, y el caso más valioso del tablero es un
+  **Cotizado con la ventana abierta** (sabe el precio Y se le puede escribir gratis), que vive en una
+  columna sin recorte. El número sale de una dimensión nueva del desglose (`FilaDesglose.ventana`) y
+  `ventana.paridad.test.db.ts` fija que sea **exactamente** lo que devuelve `?ventana=1`.
+  ⚠️ `precio` y `ventana` **no se derivan una de la otra**: de las 611 con precio, 12 están en
+  ventana. Capturas en `docs/evidencia/ventana-en-el-pipeline.png`.
+- Ver sin server: `npx vite --port 5199` → `/galeria-ventana.html` y `/galeria-embudo.html`. Capturas
+  en `docs/evidencia/ventana-de-conversacion.png` y `ventana-en-el-pipeline.png`.
 
 ## Señales automáticas — «Cotizado» y «Se enfrió»
 

@@ -91,6 +91,9 @@ conversacionesRouter.get("/", async (req, res) => {
       tab: typeof req.query.tab === "string" ? req.query.tab : "",
       categoria: typeof req.query.categoria === "string" ? req.query.categoria : "",
       precio: req.query.precio === "1",
+      // `?ventana=1`: el recorte del Pipeline por ventana de conversación abierta
+      // (ADR 0041) — a quién se le puede escribir ahora sin pagar una plantilla.
+      ventana: req.query.ventana === "1",
       linea,
       misLineas,
       misAsignadas,

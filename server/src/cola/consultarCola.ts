@@ -307,6 +307,8 @@ export interface OpcionesCola {
   etapa?: string;
   /** Solo las que YA tienen precio enviado (cola/precio.ts). El recorte del negocio. */
   precio?: boolean;
+  /** Solo las que tienen la ventana de conversación abierta (`cola/ventana.ts`). */
+  ventana?: boolean;
   /** El tab de la cola potenciada (#49): `todo` (default) · `no-leidos` · `favoritos`. */
   tab?: string;
   /** Filtra por una categoría asignada (modo Listas de #49). Se compara en minúsculas. */
@@ -446,6 +448,15 @@ export type FilaDesglose = {
   precio: boolean;
   /** Nivel 0 de la urgencia: entrante sin responder de menos de 24 h. Alguien está hablando. */
   viva: boolean;
+  /**
+   * La ventana de conversación sigue abierta (`cola/ventana.ts`): se le puede
+   * escribir texto libre AHORA. Distinto de `viva`, y la diferencia es la que
+   * importa: `viva` es «nos está esperando» (entrante sin responder de menos de
+   * 24 h) y esto es «la puerta está abierta» — una conversación ya respondida no
+   * es viva y sigue teniendo la ventana corriendo, que es justo el caso que el
+   * Pipeline no podía ver.
+   */
+  ventana: boolean;
   n: number;
 };
 
@@ -668,6 +679,17 @@ async function ejecutarCola(
   // El recorte «Con precio» del Pipeline: es una columna más del tablero, no un
   // filtro secundario — el total tiene que decir el tamaño de LO RECORTADO.
   if (opciones.precio) condicionesRecorte.push(sql`precio_enviado`);
+  /**
+   * El recorte «En ventana» del Pipeline — a quién se le puede escribir AHORA
+   * sin pagar una plantilla (`cola/ventana.ts`). Va como RECORTE y no como
+   * intención, igual que `precio`, porque en el tablero define el universo de la
+   * columna: con él puesto, «3.451 Contactados» tiene que decir cuántos de esos
+   * están en ventana, no cuántos hay en total.
+   *
+   * MISMO predicado que el chip de la cola. Con dos, el Pipeline ofrecería un
+   * número y Mensajes otro para la misma pregunta (#37).
+   */
+  if (opciones.ventana) condicionesRecorte.push(PUEDO_ESCRIBIRLE);
   // Los tabs personales (#49) solo con la tabla presente; la categoría vive en
   // `etiquetas`, así que filtra igual aunque el estado personal no exista.
   if (conEstado && tab === "no-leidos") condicionesRecorte.push(sql`(${noLeidoSql})`);
@@ -891,6 +913,7 @@ async function desglosarEmbudo(
            ya_le_hablamos               AS "yaLeHablamos",
            precio_enviado               AS precio,
            (${vivaSql})                 AS viva,
+           (${PUEDO_ESCRIBIRLE})        AS ventana,
            count(*)::int                AS n
     FROM todo
     LEFT JOIN ultimas_gestiones USING (clave)
@@ -898,13 +921,14 @@ async function desglosarEmbudo(
     ${botJoinSql(conBot)}
     ${asignadaJoinSql(conAsignacion)}
     ${donde}
-    GROUP BY 1, 2, 3, 4
+    GROUP BY 1, 2, 3, 4, 5
   `);
   return filas.map((f) => ({
     etapa: f.etapa,
     yaLeHablamos: f.yaLeHablamos,
     precio: f.precio,
     viva: f.viva,
+    ventana: f.ventana,
     n: f.n,
   }));
 }

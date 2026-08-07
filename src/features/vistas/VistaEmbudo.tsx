@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, BadgeDollarSign, Check, X } from 'lucide-react';
+import { AlertTriangle, BadgeDollarSign, Check, Clock, X } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { useConversaciones, type Conversacion } from '../canales/conversaciones';
 import type { Etapa } from '../../lib/etapas';
@@ -72,8 +72,16 @@ export function VistaEmbudo({
   miVendedora?: string | null;
 }) {
   const qc = useQueryClient();
-  /** El recorte de Contactados: solo las que ya tienen un precio encima. */
-  const [soloConPrecio, setSoloConPrecio] = useState(false);
+  /**
+   * EL RECORTE DE CONTACTADOS — un solo eje con tres posiciones, no dos toggles.
+   *
+   * `precio` y `ventana` responden preguntas distintas («¿ya sabe cuánto sale?»
+   * y «¿le puedo escribir gratis ahora?») pero se usan igual: para achicar 3.451
+   * a la lista que se trabaja. Cruzarlas daría cuatro estados y dos de ellos
+   * —«sin precio y fuera de ventana»— no son una lista que nadie pida.
+   */
+  const [recorte, setRecorte] = useState<'todas' | 'precio' | 'ventana'>('todas');
+  const soloConPrecio = recorte === 'precio';
 
   // Cada columna carga LO SUYO (#89). El nombre real y el curso del formulario
   // no se piden: la cola los sirve siempre, en la misma pasada (#72).
@@ -83,6 +91,7 @@ export function VistaEmbudo({
     categoria: null,
     etapa: 'contactado',
     precio: soloConPrecio,
+    ventana: recorte === 'ventana',
   });
   const cotizados = useConversaciones({ tab: 'todo', filtroSec: '', categoria: null, etapa: 'cotizado' });
   const cierres = useConversaciones({ tab: 'todo', filtroSec: '', categoria: null, etapa: 'cierre' });
@@ -459,38 +468,62 @@ export function VistaEmbudo({
                   )}
 
                   {/* EL RECORTE que convierte 1.389 en la lista que importa. */}
-                  {esContactados && resumenContactados.conPrecio > 0 && (
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setSoloConPrecio(false)}
-                        aria-pressed={!soloConPrecio}
-                        className={
-                          'rounded-full border px-2 py-px text-[11px] font-semibold transition-colors ' +
-                          (soloConPrecio
-                            ? 'border-border text-muted-foreground hover:text-foreground'
-                            : 'border-navy bg-navy text-white')
-                        }
-                      >
-                        Todas
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSoloConPrecio(true)}
-                        aria-pressed={soloConPrecio}
-                        title="Ya les mandaste el precio o la forma de pagar: están cotizadas de hecho"
-                        className={
-                          'inline-flex items-center gap-1 rounded-full border px-2 py-px text-[11px] font-semibold transition-colors ' +
-                          (soloConPrecio
-                            ? 'border-navy bg-navy text-white'
-                            : 'border-border text-muted-foreground hover:text-foreground')
-                        }
-                      >
-                        <BadgeDollarSign size={10} />
-                        Con precio {resumenContactados.conPrecio.toLocaleString('es-PE')}
-                      </button>
-                    </div>
-                  )}
+                  {esContactados &&
+                    (resumenContactados.conPrecio > 0 || resumenContactados.enVentana > 0) && (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                        {(
+                          [
+                            { id: 'todas', label: 'Todas', n: null, icono: null, ayuda: undefined },
+                            {
+                              id: 'precio',
+                              label: 'Con precio',
+                              n: resumenContactados.conPrecio,
+                              icono: BadgeDollarSign,
+                              ayuda:
+                                'Ya les mandaste el precio o la forma de pagar: están cotizadas de hecho',
+                            },
+                            {
+                              id: 'ventana',
+                              label: 'En ventana',
+                              n: resumenContactados.enVentana,
+                              icono: Clock,
+                              /* Lo que hace valioso al recorte es el «sin pagar»: en la
+                                 línea de la Cloud API, fuera de la ventana solo entra una
+                                 plantilla aprobada, y esa se cobra. */
+                              ayuda:
+                                'Se les puede escribir AHORA sin pagar una plantilla: escribieron hace menos de 24 h (o comentaron hace menos de 7 días)',
+                            },
+                          ] as const
+                        )
+                          /* Un recorte que daría cero no se ofrece — salvo el activo, o
+                             la vendedora se queda sin el chip que lo apaga. Es la misma
+                             regla de los chips del bot en la barra de la cola. */
+                          .filter((r) => r.id === 'todas' || recorte === r.id || (r.n ?? 0) > 0)
+                          .map((r) => {
+                            const activo = recorte === r.id;
+                            const Icono = r.icono;
+                            return (
+                              <button
+                                key={r.id}
+                                type="button"
+                                onClick={() => setRecorte(r.id)}
+                                aria-pressed={activo}
+                                title={r.ayuda}
+                                className={
+                                  'inline-flex items-center gap-1 rounded-full border px-2 py-px text-[11px] font-semibold transition-colors ' +
+                                  (activo
+                                    ? 'border-navy bg-navy text-white'
+                                    : 'border-border text-muted-foreground hover:text-foreground')
+                                }
+                              >
+                                {Icono && <Icono size={10} />}
+                                {r.label}
+                                {r.n != null && ` ${r.n.toLocaleString('es-PE')}`}
+                              </button>
+                            );
+                          })}
+                      </div>
+                    )}
                 </header>
 
                 <div data-scroll-columna className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-0.5">

@@ -148,7 +148,33 @@ aparecía empezada por la mitad.
 
 Cuesta ~26 px de alto.
 
+## Y en el Pipeline (7-ago-2026, pedido del dueño al ver la vista)
+
+*«Falta que el pipeline también: los que están en la ventana de poder hablarles sin costo, los de
+IG, Facebook y WhatsApp.»* El «sin costo» es lo que hace valioso al recorte: en la línea de la Cloud
+API, fuera de la ventana solo entra una **plantilla aprobada**, y esa se cobra.
+
+Entra por dos lados, y hacen falta los dos:
+
+- **Un tercer chip de recorte en Contactados**: `Todas · Con precio N · En ventana N`. Un solo eje con
+  tres posiciones, no dos toggles cruzados — de las cuatro combinaciones, «sin precio y fuera de
+  ventana» no es una lista que nadie pida. El número sale de una **dimensión nueva del desglose**
+  (`FilaDesglose.ventana`), y `ventana.paridad.test.db.ts` fija que el número del chip sea
+  exactamente lo que devuelve `?ventana=1`: son dos caminos hacia el mismo predicado y, si
+  divergieran, el tablero ofrecería una cifra y devolvería otra lista sin un solo error.
+- **La píldora en la tarjeta, en TODAS las columnas.** El chip solo existe en Contactados, y el caso
+  más valioso del tablero es un **Cotizado con la ventana abierta**: sabe el precio *y* se le puede
+  escribir gratis ahora. Esa columna no tiene recorte, así que sin la píldora ese caso seguía
+  invisible. Misma lectura que la fila de la cola (`canales/ventana.ts`), así que «6 h» significa lo
+  mismo en las dos pantallas.
+
+⚠️ **`precio` y `ventana` no se derivan una de la otra**, y el test lo fija: de las 611 con precio,
+solo 12 están en ventana. Derivar una de la otra haría que el chip prometiera una lista que no es.
+
 ## Evidencia
+
+`docs/evidencia/ventana-en-el-pipeline.png` — el tablero con los tres chips de recorte y la píldora
+en las cuatro columnas. Se regenera con `/galeria-embudo.html`.
 
 `docs/evidencia/ventana-de-conversacion.png` — los cuatro casos: WhatsApp con el oro solo abajo de
 3 h, la ventana cerrada sin dibujar nada, los comentarios de FB/IG en la misma marca, y el respaldo

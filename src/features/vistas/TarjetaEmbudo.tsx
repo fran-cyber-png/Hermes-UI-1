@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   BadgeDollarSign,
   Check,
+  Clock,
   ClipboardList,
   GraduationCap,
   Loader2,
@@ -16,6 +17,7 @@ import { BadgeCanal } from '../canales/BadgeCanal';
 import { detalleDeCurso } from '../canales/curso';
 import { esPrioritaria, quiereFoto, siguienteConFoto } from '../canales/fotoVisible';
 import { hace } from '../../lib/datos/frescura';
+import { lecturaDeVentana } from '../canales/ventana';
 import { etiquetaDeMedia } from '../../lib/etiquetaMedia';
 import { tempBorde, tempClass } from '../../lib/formato';
 import { cotizarEnUnClic, cursoDeTarjeta, haceCorto, nombreDeTarjeta, turnoDeTarjeta } from './tarjeta';
@@ -76,13 +78,17 @@ function Chip({
   icono?: React.ReactNode;
   children: React.ReactNode;
   titulo?: string;
-  tono?: 'neutro' | 'marca';
+  tono?: 'neutro' | 'marca' | 'oro';
   /** Quién cede el ancho cuando no alcanza. Solo el curso encoge; los rótulos cortos, nunca. */
   encoge?: boolean;
 }) {
   const tonos = {
     neutro: 'border-border text-muted-foreground',
     marca: 'border-navy/20 bg-secondary text-secondary-foreground',
+    /* El ORO significa tiempo que se acaba y NADA más (`src/index.css`). Acá lo
+       lleva solo la ventana a punto de cerrarse; si algún chip más lo tomara,
+       dejaría de querer decir «ahora». */
+    oro: 'border-gold/40 bg-gold/20 text-gold-ink',
   };
   return (
     <span
@@ -153,7 +159,14 @@ export function TarjetaEmbudo({
       ? c.texto || etiquetaDeMedia(c.ultima_clase) || (c.ultima_origen?.fuente === 'anuncio' ? '📣 Vino del anuncio' : '')
       : '';
 
-  const haySegundoRenglon = Boolean(curso || c.precio_enviado || preview || onCotizar);
+  /**
+   * Cuánto le queda de ventana. Se recalcula en cada render y no se memoiza: el
+   * dato ES el paso del tiempo, y un `useMemo` con `[c]` lo congelaría hasta que
+   * la tarjeta cambie por otro motivo. Mismo criterio que `FilaConversacion`.
+   */
+  const ventana = lecturaDeVentana(c.ventana_cierra, new Date());
+
+  const haySegundoRenglon = Boolean(curso || c.precio_enviado || ventana || preview || onCotizar);
 
   return (
     <div
@@ -310,6 +323,26 @@ export function TarjetaEmbudo({
               titulo="Ya le mandaste el precio o la forma de pagar"
             >
               Precio
+            </Chip>
+          )}
+          {/*
+            LA VENTANA, EN TODAS LAS COLUMNAS (ADR 0041). No alcanza con el chip
+            de recorte de Contactados: el caso que más vale del tablero es un
+            COTIZADO con la ventana abierta —sabe el precio Y se le puede
+            escribir gratis ahora—, y esa columna no tiene recorte. La píldora lo
+            dice sin filtrar nada.
+
+            Misma lectura que la fila de la cola (`canales/ventana.ts`), así que
+            «6 h» significa lo mismo en las dos pantallas. Y el oro sigue
+            queriendo decir una sola cosa: queda menos de 3 h.
+          */}
+          {ventana && (
+            <Chip
+              icono={<Clock size={10} className="shrink-0" />}
+              titulo={`${ventana.ayuda} — sin pagar una plantilla`}
+              tono={ventana.urgente ? 'oro' : 'neutro'}
+            >
+              {ventana.texto}
             </Chip>
           )}
           {!curso && !c.precio_enviado && preview && (

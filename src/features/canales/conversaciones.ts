@@ -131,7 +131,7 @@ type Pagina = {
   sinAsignacion?: boolean;
   /** Quien pregunta está en una rueda: esta cola YA es solo lo suyo. */
   enElReparto?: boolean;
-  /** La misma foto abierta por «ya le hablamos» × precio × viva. Solo primera página. */
+  /** La misma foto abierta por «ya le hablamos» × precio × viva × ventana. Solo primera página. */
   desglose?: FilaDesglose[];
 };
 

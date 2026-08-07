@@ -103,3 +103,57 @@ no tiene Rust ni las libs de sistema de Tauri; se agregaron a `tauri-windows.yml
 - **No manda nada.** Lo que sale hacia un lead sale del composer (ADR 0015).
 - **No es una lista blanca de sitios**: el navegador es libre por decisión del dueño. Los cuatro
   destinos fijos son atajos a dónde se va todos los días, no una frontera.
+
+
+---
+
+## Enmienda del 7-ago-2026 — la cáscara y la UI se despliegan por caminos distintos
+
+Apenas desplegado, el dueño reportó al tocar un destino:
+
+```
+Command abrir_navegador not allowed by ACL
+```
+
+**No era la configuración.** Los 9 tests de `src-tauri/src/lib.rs` pasan, incluido
+`la_ui_servida_por_ota_alcanza_el_comando`, que invoca por el IPC real con la URL de producción. El
+permiso está declarado en `permissions/abrir-navegador.toml` y referenciado en las **dos**
+capabilities, exactamente como manda §5.3.
+
+### Lo que faltaba pensar
+
+Hermes sirve su UI por **OTA**: el deploy la puso en las cuatro máquinas en el acto, con la vista
+Navegador y su botón. La **cáscara** no viaja por ahí — es un `.dmg`/`.exe` que se compila aparte
+(`tauri-windows.yml` es `workflow_dispatch`) y que hay que **reinstalar a mano en cada máquina**.
+
+Así que el día del deploy **ninguna cáscara instalada tenía el comando**, y todas rebotaban por ACL.
+§5.3 protege contra «me olvidé de declarar el permiso»; esto es el problema de al lado: **el permiso
+está, pero en una versión de la cáscara que nadie tiene todavía**.
+
+Es la misma forma que el front ya maneja con el server —`ventana_cierra` se lee opcional porque N4
+va solo y N5 es un botón— pero acá la distancia es mayor: allá el desfase dura lo que tarda un click
+en Actions; con la cáscara dura hasta que alguien reinstala la app.
+
+### La decisión
+
+**Una cáscara vieja no es un error: es un camino más largo.** `abrir.ts` decidía el fallback con
+`puenteTauri()` —adentro de la cáscara asumía que el comando estaba—, y la pregunta correcta no es
+dónde corre sino **si el comando respondió**. Ahora un rechazo de «no tengo ese comando» cae al
+navegador del sistema, igual que fuera de Tauri: se pierde la sesión separada, que es la ventaja del
+frente, pero la vendedora llega a Cerberus, que es lo que fue a hacer. Y la pantalla lo **dice**
+(`donde: 'sistema'`), porque anunciar la sesión de trabajo cuando en realidad se abrió Chrome sería
+vender lo que no pasó.
+
+🔴 **Lo que NO se toca**: si el rechazo vino de `validar()` —Rust frenó la URL— se muestra su mensaje
+y no se abre nada. Abrir igual sería saltarse la única guarda del frente. La distinción vive pura y
+con tests en `src/features/navegador/cascara.ts`, y descansa en que **nuestros rechazos están en
+castellano** y los de Tauri en inglés; hay un test que lo fija, porque si `validar()` contestara en
+inglés un URL inválido se leería como cáscara vieja y **se abriría en Chrome lo que Rust quiso
+frenar**.
+
+### Lo que sigue faltando
+
+El fallback hace que la vista sirva, no que el frente exista: **la sesión de trabajo separada
+necesita una cáscara nueva instalada**. Hasta entonces el navegador de Hermes abre en el Chrome
+personal de cada vendedora, que es exactamente lo que este ADR quería evitar. Compilar y repartir el
+`.dmg`/`.exe` es la tarea pendiente, y no la resuelve ningún deploy.

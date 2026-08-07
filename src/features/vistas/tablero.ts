@@ -121,6 +121,13 @@ export interface FilaDesglose {
   yaLeHablamos: boolean;
   precio: boolean;
   viva: boolean;
+  /**
+   * La ventana de conversación sigue abierta (server: `cola/ventana.ts`): se le
+   * puede escribir texto libre AHORA, sin pagar una plantilla. Opcional porque
+   * un server viejo no manda el campo — y ahí el chip no se dibuja, que es como
+   * se comportaba antes.
+   */
+  ventana?: boolean;
   n: number;
 }
 
@@ -170,13 +177,16 @@ export function resumirColumna(
   etapa: string,
   /** El conteo de siempre, para el rato en que el front va adelante del server. */
   conteos?: Record<string, number>,
-): { total: number; conPrecio: number } {
-  if (!desglose) return { total: conteos?.[etapa] ?? 0, conPrecio: 0 };
-  const r = { total: 0, conPrecio: 0 };
+): { total: number; conPrecio: number; enVentana: number } {
+  if (!desglose) return { total: conteos?.[etapa] ?? 0, conPrecio: 0, enVentana: 0 };
+  const r = { total: 0, conPrecio: 0, enVentana: 0 };
   for (const fila of desglose) {
     if (fila.etapa !== etapa) continue;
     r.total += fila.n;
     if (fila.precio) r.conPrecio += fila.n;
+    // `ventana` ausente (server viejo) NO suma: el chip se esconde en cero, que
+    // es preferible a ofrecer un recorte que el server no sabe aplicar.
+    if (fila.ventana) r.enVentana += fila.n;
   }
   return r;
 }
