@@ -325,13 +325,21 @@ Al investigarlo eran **dos cosas y solo una era un bug**.
   menú `···` de la fila, así que **abrir el chat no apagaba el punto azul**. Ahora la misma ruta
   hace las dos cosas — aparte, porque son dos destinatarios distintos (el lead y la cola de ella) y
   que uno falle no puede llevarse al otro.
-- 🔴 **Lo que NO cambia: la conversación no se mueve.** El orden es
-  `fijada → nivel de urgencia → antigüedad` (`bandaPinOrdenSql, nivel ASC, orden ASC`) y
-  `no_leido` **no participa**. Si el lead escribió y nadie respondió sigue siendo deuda y sigue
-  arriba: **leer no es atender**. Decisión del dueño del 7-ago — mirar algo no puede hacerlo
-  desaparecer de la vista, porque así es como se pierde una venta.
-  `cola/abrirMarcaLeido.test.db.ts` fija las dos mitades; la segunda es la que importa, porque
-  «arreglar» el síntoma metiendo `no_leido` en el `ORDER BY` es fácil y rompería la garantía.
+- **Y BAJA.** El orden es `fijada → fijada_at → **no_leido DESC** → nivel → antigüedad`
+  (`bandaPinOrdenSql`): lo leído queda debajo de todo lo que no se leyó. Decisión del dueño del
+  7-ago. El argumento contrario —«leer no es atender», el lead que espera sigue esperando— sigue
+  siendo cierto, y perdió por el costo diario: abrir un chat para ver qué decía lo dejaba clavado
+  arriba y había que saltearlo a mano una y otra vez.
+  ⚠️ **Lo que cuesta**: un chat leído y urgente queda debajo de uno sin leer que no lo es.
+- 🔴 **La red que hace aceptable eso ya existía: el chip «Sin responder»**, que filtra por
+  `NOT respondida` —sin mirar el cursor de lectura— y lleva su número. Todo lo leído y no
+  contestado sigue ahí, a un clic. **Sin ese chip la decisión escondería deuda**; con él, solo la
+  ordena distinto. `cola/abrirMarcaLeido.test.db.ts` lo verifica explícitamente: es la condición
+  que hace aceptable a la otra mitad.
+- **Leer cambia el ORDEN, no la URGENCIA.** El nivel de `urgencia.ts` no se toca: si mañana se
+  saca este orden, la escala sigue diciendo la verdad sobre quién está esperando. Meter «leído»
+  adentro de la regla la habría contaminado — es la misma que comparte con el radar del Dashboard,
+  con su test de paridad.
 - ⚠️ **Sin `numeroPropio` el cursor no se toca.** `estado_conversacion` se indexa por la clave
   completa `conv:whatsapp:<tel>:<linea>`: sin la línea no se puede saber cuál marcar, y apagar la
   marca de otra conversación es peor que no apagar ninguna.

@@ -17,15 +17,19 @@ import { sembrarMensaje } from '../pruebas/sembrar.js';
  *   la vendedora. El mecanismo estaba entero (columna, SQL, ruta) y abrir el
  *   chat no lo usaba, así que el punto de «sin leer» quedaba puesto sobre algo
  *   ya leído.
- * · **No es bug**: que la conversación siga arriba. El orden es
- *   `fijada → nivel de urgencia → antigüedad` y `no_leido` NO participa. Si el
- *   lead escribió y nadie respondió, sigue siendo deuda. **Leer no es atender**,
- *   y esa es la decisión del dueño: mirar algo no puede hacerlo desaparecer de
- *   la cola, porque así es como se pierde una venta.
+ * · **Y lo segundo también se arregló, por decisión del dueño**: leer BAJA la
+ *   conversación. La primera versión de este archivo fijaba lo contrario —«leer
+ *   no es atender», el lead que espera sigue esperando— y ese argumento sigue
+ *   siendo cierto; lo que lo perdió fue el costo diario: abrir un chat para ver
+ *   qué decía lo dejaba clavado arriba, y había que saltearlo a mano una y otra
+ *   vez.
  *
- * Este test fija las dos mitades. La segunda es la que importa a futuro: es fácil
- * «arreglar» el síntoma metiendo `no_leido` en el ORDER BY, y eso rompería la
- * garantía por la que existe la cola.
+ * ⚠️ **Lo que la decisión cuesta**: un chat leído y urgente queda debajo de uno
+ * sin leer que no lo es. **La red es el chip «Sin responder»**, que filtra por
+ * `NOT respondida` —sin mirar el cursor de lectura— y lleva su número: lo leído
+ * y no contestado sigue estando ahí, a un clic. Sin ese chip esta decisión
+ * escondería deuda; con él, solo la ordena distinto. Por eso el último test de
+ * este archivo lo verifica: **es la condición que hace aceptable a la primera.**
  */
 
 const TEL = '51987654321';
@@ -33,7 +37,7 @@ const LINEA = '51984429504';
 const CLAVE = `conv:whatsapp:${TEL}:${LINEA}`;
 const VENDEDORA = 'ventas10@grupogoberna.com';
 
-test('abrir un chat apaga «sin leer» y NO le cambia el lugar en la cola', async (t) => {
+test('abrir un chat apaga «sin leer» y lo baja debajo de lo no leído', async (t) => {
   const db = await baseDePrueba(t);
 
   const hace = (min: number) => new Date(Date.now() - min * 60_000);
@@ -67,18 +71,39 @@ test('abrir un chat apaga «sin leer» y NO le cambia el lugar en la cola', asyn
   // 1 · El punto azul se apaga.
   assert.equal(conversacionDespues?.no_leido, false, 'después de abrir NO puede seguir «sin leer»');
 
-  // 2 · 🔴 Y NO se movió. Esta es la mitad que hay que defender: «arreglar» el
-  // síntoma metiendo `no_leido` en el ORDER BY haría que un lead leído y no
-  // respondido se vaya de la vista.
-  assert.deepEqual(despues, antes, 'leer no puede cambiar el orden de la cola');
+  // 2 · Y BAJA: queda debajo de todo lo que no se leyó.
+  assert.notDeepEqual(despues, antes, 'después de leerla, el orden tiene que cambiar');
+  assert.equal(despues[despues.length - 1], TEL, 'la leída va debajo de las que no se leyeron');
+
+  // 3 · 🔴 Pero su URGENCIA no se toca. Lo que cambia es dónde se la muestra, no
+  // cuánto se le debe: si mañana se saca este orden, la escala sigue diciendo la
+  // verdad sobre quién está esperando. Meter «leído» adentro de `urgencia.ts`
+  // habría contaminado la regla que comparte con el radar del Dashboard.
   assert.equal(
     conversacionDespues?.nivel,
     conversacionAntes?.nivel,
-    'leer no puede bajarle la urgencia: sigue esperando respuesta',
+    'leer cambia el ORDEN, no la urgencia: el lead sigue esperando lo mismo',
   );
 });
 
-test('marcar «no leído» a mano vuelve a encender el punto, y tampoco mueve nada', async (t) => {
+test('🔴 lo leído sin responder SIGUE en el chip «Sin responder» — la red de la decisión', async (t) => {
+  const db = await baseDePrueba(t);
+
+  await sembrarMensaje(db, { personaId: TEL, numeroPropio: LINEA, occurredAt: new Date() });
+  await upsertEstado(db, VENDEDORA, { clave: CLAVE, leido: true });
+
+  // Es la condición que hace aceptable bajar lo leído: si el chip no lo
+  // atrapara, leer un chat sin contestarlo lo haría desaparecer de la vista —
+  // que es exactamente como se pierde una venta.
+  const r = await consultarCola(db, { vendedoraId: VENDEDORA, intencion: 'sin-responder' });
+  const filas = r.conversaciones as unknown as { persona_id: string; no_leido?: boolean }[];
+  const suya = filas.find((c) => c.persona_id === TEL);
+
+  assert.ok(suya, 'una conversación leída y NO respondida tiene que seguir en «Sin responder»');
+  assert.equal(suya?.no_leido, false, 'y estar marcada como leída: son dos cosas distintas');
+});
+
+test('marcar «no leído» a mano lo vuelve a subir', async (t) => {
   const db = await baseDePrueba(t);
 
   await sembrarMensaje(db, { personaId: TEL, numeroPropio: LINEA, occurredAt: new Date() });
@@ -98,6 +123,8 @@ test('marcar «no leído» a mano vuelve a encender el punto, y tampoco mueve na
   await upsertEstado(db, VENDEDORA, { clave: CLAVE, leido: false });
   const vuelta = await leerla();
   assert.equal(vuelta?.no_leido, true, 'marcar «no leído» tiene que volver a encender el punto');
+  // Y con eso vuelve a la banda de arriba: es la salida para «esta la miré pero
+  // la tengo que contestar sí o sí».
 });
 
 test('🔴 el cursor es POR VENDEDORA: que una abra no apaga el punto de la otra', async (t) => {

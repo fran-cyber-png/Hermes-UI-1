@@ -95,7 +95,26 @@ export const favoritaSql: SQL = sql`COALESCE(ec.favorita, false)`;
  * SUMA encima, no reemplaza el orden canónico (dentro de la banda sigue la
  * urgencia). En SQL: `fijada DESC` (true antes que false), `fijada_at ASC`.
  */
-export const bandaPinOrdenSql: SQL = sql`fijada DESC, fijada_at ASC`;
+/**
+ * EL ORDEN DE ARRIBA: primero los pines, después lo que no se leyó.
+ *
+ * ── Por qué «leído» baja, aunque no esté respondido ─────────────────────
+ * Decisión del dueño (7-ago-2026). El comportamiento anterior era el contrario y
+ * también tenía su razón —«leer no es atender», un lead que espera sigue
+ * esperando— pero el costo diario era peor: abrir un chat para ver qué decía lo
+ * dejaba clavado arriba, y la cola se llenaba de cosas ya miradas que había que
+ * saltear a mano una y otra vez.
+ *
+ * ⚠️ **Lo que esto cuesta, dicho claro**: un chat LEÍDO y urgente queda debajo de
+ * uno SIN LEER que no lo es. Dentro de cada grupo la urgencia sigue mandando,
+ * pero entre grupos gana la lectura.
+ *
+ * **La red que lo hace aceptable ya existía**: el chip «Sin responder» filtra por
+ * `NOT respondida`, que no mira el cursor de lectura — así que todo lo que se
+ * leyó y no se contestó sigue estando ahí, a un clic y con su número. Sin ese
+ * chip, esta decisión escondería deuda; con él, solo la ordena distinto.
+ */
+export const bandaPinOrdenSql: SQL = sql`fijada DESC, fijada_at ASC, no_leido DESC`;
 
 /**
  * Las categorías (etiquetas) de cada conversación, agregadas por clave. Sirve
