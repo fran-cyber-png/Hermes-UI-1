@@ -194,5 +194,47 @@ export function useConversacionWa(telefono: string | null) {
     },
   });
 
-  return { hilo, enviar, enviarMedia, marcarLeido };
+  /**
+   * REACCIONAR a un mensaje del lead. Emoji vacío quita la reacción.
+   *
+   * Optimista a propósito: la píldora aparece al instante y se corrige sola si
+   * el server dice que no. Reaccionar es el gesto más liviano del chat — que
+   * tarde medio segundo en aparecer lo hace sentir roto.
+   */
+  const reaccionar = useMutation({
+    mutationFn: (vars: { numeroPropio: string; telefono: string; mensajeId: string; emoji: string }) =>
+      api<{ ok: true; quitada: boolean }>('/api/whatsapp/reaccionar', {
+        method: 'POST',
+        body: JSON.stringify(vars),
+      }),
+    onMutate: async (vars) => {
+      const clave = ['wa', 'conversacion', telefono];
+      await qc.cancelQueries({ queryKey: clave });
+      const antes = qc.getQueryData(clave);
+      qc.setQueryData(clave, (viejo: { mensajes: MensajeHilo[] } | undefined) => {
+        if (!viejo) return viejo;
+        return {
+          ...viejo,
+          mensajes: viejo.mensajes.map((m) => {
+            if (m.external_id !== `wa:${vars.mensajeId}` && m.external_id !== vars.mensajeId) return m;
+            // Las de OTROS quedan como están: solo se toca la nuestra, que es
+            // la única que este gesto puede cambiar.
+            const ajenas = (m.reacciones ?? []).filter((r) => !r.nuestra);
+            const nuestras = vars.emoji ? [{ emoji: vars.emoji, nuestra: true }] : [];
+            const todas = [...ajenas, ...nuestras];
+            return { ...m, reacciones: todas.length ? todas : undefined };
+          }),
+        };
+      });
+      return { antes, clave };
+    },
+    onError: (_e, _v, ctx) => {
+      // Se deshace: dejar la píldora puesta sobre algo que no salió es peor que
+      // no haberla mostrado.
+      if (ctx?.antes) qc.setQueryData(ctx.clave, ctx.antes);
+    },
+    onSettled: () => void qc.invalidateQueries({ queryKey: ['wa', 'conversacion', telefono] }),
+  });
+
+  return { hilo, enviar, enviarMedia, marcarLeido, reaccionar };
 }

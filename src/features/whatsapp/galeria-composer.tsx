@@ -73,7 +73,8 @@ const MB = 1024 * 1024;
 const whatsmeow = new URLSearchParams(location.search).has('whatsmeow');
 
 /** Todo endpoint contesta lo mínimo; el envío responde OK pero no persiste nada. */
-window.fetch = (async (entrada: RequestInfo | URL) => {
+window.fetch = (async (entrada: RequestInfo | URL, init?: RequestInit) => {
+  if (String(entrada).includes('/reaccionar')) console.info('[galeria] reaccionar →', String(init?.body ?? ''));
   const url = String(typeof entrada === 'string' ? entrada : entrada instanceof URL ? entrada.href : entrada.url);
   const json = (cuerpo: unknown, status = 200) =>
     new Response(JSON.stringify(cuerpo), { status, headers: { 'content-type': 'application/json' } });
@@ -91,6 +92,12 @@ window.fetch = (async (entrada: RequestInfo | URL) => {
     });
   if (url.includes('/api/whatsapp/conversacion/'))
     return json({ telefono: TELEFONO, mensajes: MENSAJES, origen: { fuente: 'anuncio', anuncio: 'Diploma Gestión Pública — julio', campana: 'GP-2026' } });
+  if (url.includes('/api/whatsapp/reaccionar')) {
+    // Se loguea para poder verificar desde afuera que la reacción SALE: la
+    // galería pisa `window.fetch`, así que no hay request de red que espiar.
+    console.info('[galeria] POST /reaccionar', typeof entrada === 'object' && 'body' in entrada ? '' : '');
+    return json({ ok: true, quitada: false });
+  }
   if (url.includes('/api/whatsapp/enviar')) return json({ ok: true, idExterno: 'wa:galeria' });
   return json({}, 404);
 }) as typeof fetch;

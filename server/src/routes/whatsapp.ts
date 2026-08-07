@@ -20,6 +20,7 @@ import { obtenerPlantilla } from '../plantillas/repositorio.js';
 import { listarNumeros } from '../numeros/repositorio.js';
 import { reaccionesPorMensaje } from '../reacciones/repositorio.js';
 import { estadosPorMensaje } from '../entrega/repositorio.js';
+import { reaccionar } from '../reacciones/enviar.js';
 
 /**
  * LA CONVERSACIÓN NATIVA DE WHATSAPP dentro de Hermes: ver el hilo y responder,
@@ -356,6 +357,35 @@ whatsappRouter.get('/foto/:telefono', requiereVendedora, async (req, res) => {
   res.setHeader('content-type', foto.mime);
   res.setHeader('cache-control', 'private, max-age=3600');
   res.send(foto.bytes);
+});
+
+/**
+ * REACCIONAR a un mensaje del lead. Emoji vacío = quitar.
+ *
+ * No pasa por `EnvioControlado` a propósito y el porqué está en
+ * `reacciones/enviar.ts`: una reacción no es un mensaje, no tiene pieza que
+ * estampar, y contarla contra el ritmo le robaría cupo a los envíos de verdad.
+ * Lo que sí conserva es la guarda de sesión: con la línea caída o baneada, no
+ * sale.
+ */
+whatsappRouter.post('/reaccionar', requiereVendedora, express.json(), async (req, res) => {
+  const { telefono, numeroPropio, mensajeId, emoji } = (req.body ?? {}) as Record<string, string>;
+  const linea = gestorWhatsapp().de(String(numeroPropio ?? ''));
+  if (!linea) {
+    res.status(409).json({ ok: false, message: 'esa línea no está corriendo' });
+    return;
+  }
+  const r = await reaccionar(db, linea.transporte, {
+    numeroPropio: String(numeroPropio ?? ''),
+    telefono: String(telefono ?? '').replace(/\D/g, ''),
+    mensajeId: String(mensajeId ?? '').replace(/^wa:/, ''),
+    emoji: String(emoji ?? ''),
+  });
+  if (!r.ok) {
+    res.status(409).json({ ok: false, message: r.motivo });
+    return;
+  }
+  res.json({ ok: true, quitada: r.quitada });
 });
 
 /**

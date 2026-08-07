@@ -334,6 +334,18 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
   onRecibo(cb: (r: RecibosDeEntrega) => void): void {
     this.susRecibo.push(cb);
   }
+
+  /**
+   * `sendReaction(chat, sender, id, emoji)`. El `sender` es de quién era el
+   * mensaje al que se reacciona — o sea el lead, no nosotros: reaccionamos a lo
+   * que él dijo. Con el nuestro ahí, WhatsApp la aplicaría al mensaje
+   * equivocado.
+   */
+  async enviarReaccion(telefono: string, mensajeId: string, emoji: string): Promise<void> {
+    const jid = jidDeTelefono(telefono);
+    if (!jid) throw new Error(`Teléfono inválido: "${telefono}"`);
+    await this.client.sendReaction(jid, jid, mensajeId, emoji);
+  }
   onEstado(cb: (e: EstadoSesion) => void): void {
     this.susEstado.push(cb);
   }

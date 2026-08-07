@@ -129,6 +129,17 @@ export class TransporteCloudApi implements TransporteWhatsapp {
   onReaccion(cb: (r: ReaccionEntrante) => void): void {
     this.susReaccion.push(cb);
   }
+
+  /** `type: 'reaction'` con `message_id` y `emoji`; vacío quita. */
+  async enviarReaccion(telefono: string, mensajeId: string, emoji: string): Promise<void> {
+    const numero = normalizarTelefono(telefono);
+    if (!numero) throw new Error(`Teléfono inválido: "${telefono}"`);
+    await this.post({
+      to: numero,
+      type: 'reaction',
+      reaction: { message_id: mensajeId, emoji },
+    });
+  }
   onEstado(cb: (e: EstadoSesion) => void): void {
     this.susEstado.push(cb);
   }

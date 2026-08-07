@@ -246,6 +246,16 @@ export interface TransporteWhatsapp {
    * tampoco — ahí los estados llegan por el webhook, que es otro camino.
    */
   onRecibo?(cb: (r: RecibosDeEntrega) => void): void;
+
+  /**
+   * REACCIONAR a un mensaje del lead — un 👍 al «perfecto, lo compro».
+   *
+   * `emoji` vacío QUITA la reacción, que es como funciona WhatsApp. No pasa por
+   * `EnvioControlado` y el porqué está escrito en `reacciones/enviar.ts`: una
+   * reacción no es un mensaje, no tiene pieza que estampar, y si contara contra
+   * el ritmo le robaría cupo a los envíos de verdad.
+   */
+  enviarReaccion?(telefono: string, mensajeId: string, emoji: string): Promise<void>;
   onEstado(cb: (e: EstadoSesion) => void): void;
 
   /**

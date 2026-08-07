@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Bot, Check, CheckCheck, FileText, Loader2, Megaphone, Paperclip, Phone, Play, QrCode, Send, Link2, Trash2, WifiOff, X } from 'lucide-react';
+import { AlertTriangle, Bot, Check, CheckCheck, FileText, SmilePlus, Loader2, Megaphone, Paperclip, Phone, Play, QrCode, Send, Link2, Trash2, WifiOff, X } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
 import { useBlobAutenticado } from '../../lib/datos/blobAutenticado';
 import { formatoTelefono, tempClass } from '../../lib/formato';
@@ -215,6 +215,78 @@ function TildesDeEntrega({ estado }: { estado: EstadoEntregaWa }) {
   );
 }
 
+/**
+ * REACCIONAR A UN MENSAJE — el gesto que la vendedora ya trae de su teléfono.
+ *
+ * Aparece al pasar por encima de la burbuja del lead, no siempre: un chat con
+ * cuarenta mensajes tendría cuarenta botones compitiendo con el texto. Y solo
+ * en los ENTRANTES — reaccionar a lo que uno mismo escribió no significa nada
+ * para el lead.
+ *
+ * Los seis emojis son los de WhatsApp, en su orden. No se inventa un set
+ * propio: el objetivo es que no haya nada que aprender.
+ */
+const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'] as const;
+
+function BotonReaccionar({
+  mia,
+  onElegir,
+}: {
+  /** El emoji que ya pusimos, si hay. Tocarlo de nuevo lo quita. */
+  mia: string | null;
+  onElegir: (emoji: string) => void;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  usePopover(abierto, () => setAbierto(false));
+
+  return (
+    <div className="relative flex items-center">
+      <button
+        type="button"
+        onClick={() => setAbierto((v) => !v)}
+        title={mia ? 'Cambiar o quitar tu reacción' : 'Reaccionar'}
+        className={
+          'flex size-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-[0_1px_3px_rgba(14,42,82,0.12)] transition-opacity hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ' +
+          // Invisible hasta el hover del grupo, pero SIEMPRE en el DOM: montarlo
+          // al pasar por encima haría que el primer clic caiga en la nada.
+          (abierto ? 'opacity-100' : 'opacity-0 group-hover/burbuja:opacity-100 focus-visible:opacity-100')
+        }
+      >
+        <SmilePlus size={13} />
+      </button>
+
+      {abierto && (
+        <div
+          role="menu"
+          aria-label="Elegí una reacción"
+          className="absolute bottom-full left-0 z-20 mb-1 flex gap-0.5 rounded-full border border-border bg-card p-1 shadow-panel"
+        >
+          {EMOJIS.map((e) => (
+            <button
+              key={e}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                // Tocar el que ya está puesto lo QUITA — así funciona WhatsApp,
+                // y sin eso no habría forma de sacarla.
+                onElegir(mia === e ? '' : e);
+                setAbierto(false);
+              }}
+              title={mia === e ? 'Quitar' : e}
+              className={
+                'flex size-7 items-center justify-center rounded-full text-base transition-transform hover:scale-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ' +
+                (mia === e ? 'bg-navy/10' : '')
+              }
+            >
+              {e}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdjuntoRoto() {
   return (
     <p className="rounded-lg border border-border bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
@@ -410,7 +482,7 @@ export function HiloWhatsapp({
   const telefono = conversacion.persona_id ?? '';
   const numeroPropio = conversacion.numero_propio ?? '';
   const { data: sesion } = useSesionWa(numeroPropio || undefined);
-  const { hilo, enviar, enviarMedia, marcarLeido } = useConversacionWa(telefono);
+  const { hilo, enviar, enviarMedia, marcarLeido, reaccionar } = useConversacionWa(telefono);
   const finRef = useRef<HTMLDivElement>(null);
   // Solo lo NUEVO se anima: ids ya vistos por hilo (se resetea al cambiar de teléfono).
   const vistosRef = useRef<Set<number>>(new Set());
@@ -506,6 +578,9 @@ export function HiloWhatsapp({
                         // con el espaciado normal, queda a mitad de camino entre
                         // dos mensajes — se lee como si fuera del de abajo.
                         (m.reacciones?.length ? 'pb-2 ' : '') +
+                        // `group/burbuja`: el botón de reaccionar aparece al pasar
+                        // por encima de ESTA fila, no de todo el hilo.
+                        'group/burbuja items-end gap-1 ' +
                         (m.direccion === 'saliente' ? 'justify-end' : 'justify-start')
                       }
                     >
@@ -577,6 +652,22 @@ export function HiloWhatsapp({
                         />
                       )}
                       </div>
+                      {/* Solo en los ENTRANTES: reaccionar a lo que uno mismo
+                          escribió no significa nada para el lead. Y solo con la
+                          sesión viva — si no, el clic no haría nada. */}
+                      {m.direccion === 'entrante' && conectado && (
+                        <BotonReaccionar
+                          mia={m.reacciones?.find((r) => r.nuestra)?.emoji ?? null}
+                          onElegir={(emoji) =>
+                            reaccionar.mutate({
+                              numeroPropio,
+                              telefono,
+                              mensajeId: m.external_id,
+                              emoji,
+                            })
+                          }
+                        />
+                      )}
                     </div>
                   );
                 })}

@@ -298,8 +298,21 @@ reaccionado aparecía con un mensaje fantasma. Server en `server/src/reacciones/
   **nuestra delineada en navy** — el color que ya significa «tuyo» en la cola. **Sin oro.** La
   burbuja con reacción lleva `pb-2`: con el `space-y-2` normal la píldora queda a mitad de camino y
   se lee como del mensaje de abajo.
-- Ver sin server: `npx vite --port 5199` → `/galeria-composer.html`. Captura en
-  `docs/evidencia/reacciones-en-el-hilo.png`.
+- **Y se puede reaccionar NOSOTROS** (`reacciones/enviar.ts`, `POST /api/whatsapp/reaccionar`):
+  hover sobre la burbuja del lead → los seis emojis de WhatsApp en su orden. Tocar el que ya está
+  puesto lo QUITA (así funciona WhatsApp, y sin eso no habría cómo sacarla). Solo en los
+  **entrantes** —reaccionar a lo propio no le dice nada al lead— y solo con la sesión viva.
+  · 🔴 **NO pasa por `EnvioControlado`, y no es un descuido**: `envios_wa` es el registro de
+    MENSAJES con su pieza y su versión (ADR 0022), y una reacción no tiene ninguna de las dos —
+    llenaría de filas vacías la tabla que mide qué contenido funciona. Peor: **contaría contra el
+    ritmo** (20/hora, 60/día), o sea que reaccionar le robaría cupo a los envíos de verdad. Lo que
+    sí conserva es la guarda de línea equivocada y el freno por sesión caída o `temporary_ban`.
+  · El botón está **siempre en el DOM**, invisible hasta el hover: montarlo al pasar por encima
+    haría que el primer clic caiga en la nada.
+  · La mutación es **optimista** — reaccionar es el gesto más liviano del chat y medio segundo de
+    espera lo hace sentir roto. Si el server rechaza, se deshace.
+- Ver sin server: `npx vite --port 5199` → `/galeria-composer.html`. Capturas en
+  `docs/evidencia/reacciones-en-el-hilo.png` y `reaccionar-*.png`.
 
 ## Los ✓✓ — «¿le llegó?» vs «¿no me contestó?»
 
