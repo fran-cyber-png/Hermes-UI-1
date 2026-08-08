@@ -300,6 +300,13 @@ export interface EstadoCola {
    */
   ventana?: boolean;
   /**
+   * «Para seguir» (server: `cola/tiempoEnEtapa.ts`): silencio nuestro y entre 3 y
+   * 14 días en la etapa. El tercer recorte del Pipeline, y el único que recorta
+   * de verdad la columna grande — medido el 8-ago-2026, «en ventana» dejaba 1 de
+   * 3.051 Cotizados y «sin respuesta» dejaba 2.928.
+   */
+  seguir?: boolean;
+  /**
    * Recorta a UNA línea de WhatsApp: el número propio de Goberna por el que
    * entró la conversación (#50). Vacío/ausente = todas, que es lo que había
    * cuando había una sola línea. `LINEA_MIAS` = las que `numero_vendedora` le
@@ -335,6 +342,7 @@ export function parametrosDeCola(e: EstadoCola): Record<string, string> {
   if (e.etapa) p.etapa = e.etapa;
   if (e.precio) p.precio = '1';
   if (e.ventana) p.ventana = '1';
+  if (e.seguir) p.seguir = '1';
   // ⚠️ `mias` (LÍNEAS) y `mios` (CONVERSACIONES asignadas) son DOS recortes, se
   // escriben con una vocal de diferencia y salen los dos de acá. Confundirlos no
   // rompe nada visible: devuelve otra cola. Van juntos y comentados a propósito.

@@ -143,6 +143,7 @@ describe('resumirColumna — el tamaño real de la columna y el de su recorte', 
       total: 1389,
       conPrecio: 611,
       enVentana: 47,
+      paraSeguir: 0,
     });
   });
 
@@ -172,11 +173,17 @@ describe('resumirColumna — el tamaño real de la columna y el de su recorte', 
       total: 1389,
       conPrecio: 611,
       enVentana: 0,
+      paraSeguir: 0,
     });
   });
 
   test('una columna sin filas cuenta cero, no undefined', () => {
-    expect(resumirColumna(desglose, 'cierre')).toEqual({ total: 0, conPrecio: 0, enVentana: 0 });
+    expect(resumirColumna(desglose, 'cierre')).toEqual({
+      total: 0,
+      conPrecio: 0,
+      enVentana: 0,
+      paraSeguir: 0,
+    });
   });
 
   test('sin desglose (server viejo) el total sale de los conteos y el recorte no se ofrece', () => {
@@ -184,6 +191,7 @@ describe('resumirColumna — el tamaño real de la columna y el de su recorte', 
       enVentana: 0,
       total: 1389,
       conPrecio: 0,
+      paraSeguir: 0,
     });
   });
 });

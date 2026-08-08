@@ -1,6 +1,14 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, BadgeDollarSign, Check, Clock, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  BadgeDollarSign,
+  Check,
+  Clock,
+  History,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { useConversaciones, type Conversacion } from '../canales/conversaciones';
 import type { Etapa } from '../../lib/etapas';
@@ -11,12 +19,16 @@ import { HojaContacto } from '../panel/HojaContacto';
 import { TarjetaEmbudo } from './TarjetaEmbudo';
 import { cotizarEnUnClic } from './tarjeta';
 import {
+  cifrasDeColumna,
   COLUMNAS_TRABAJO,
   etapaDeTarjeta,
   quedanPorTraer,
+  recortesDeColumna,
   repartirColumnas,
   resumirColumna,
+  vacioDeColumna,
   type EtapaTrabajo,
+  type Recorte,
 } from './tablero';
 
 /**
@@ -57,6 +69,19 @@ import {
 const GRID =
   'grid min-h-0 flex-1 grid-cols-[minmax(320px,1.45fr)_minmax(235px,1.05fr)_minmax(235px,1.05fr)_minmax(180px,0.72fr)] gap-2.5 overflow-x-auto';
 
+/**
+ * El ícono de cada recorte. Vive acá y no en `tablero.ts` porque un componente de
+ * lucide no es política: `recortesDeColumna` decide QUÉ se ofrece y con qué
+ * número, esto solo lo dibuja. Así el módulo puro se puede testear en `node` sin
+ * arrastrar React.
+ */
+const ICONO_RECORTE: Record<Recorte, LucideIcon | null> = {
+  todas: null,
+  precio: BadgeDollarSign,
+  ventana: Clock,
+  seguir: History,
+};
+
 export function VistaEmbudo({
   onAbrir,
   onAgendarBienvenida,
@@ -73,29 +98,45 @@ export function VistaEmbudo({
 }) {
   const qc = useQueryClient();
   /**
-   * EL RECORTE DE CONTACTADOS — un solo eje con tres posiciones, no dos toggles.
+   * EL RECORTE ES POR COLUMNA — y ése es el cambio (§3.1 del plan).
    *
-   * `precio` y `ventana` responden preguntas distintas («¿ya sabe cuánto sale?»
-   * y «¿le puedo escribir gratis ahora?») pero se usan igual: para achicar 3.451
-   * a la lista que se trabaja. Cruzarlas daría cuatro estados y dos de ellos
-   * —«sin precio y fuera de ventana»— no son una lista que nadie pida.
+   * Hasta acá había **un solo recorte, global a la vista**, y solo se dibujaba
+   * arriba de Contactados. Alcanzaba mientras Contactados era la única columna
+   * con tarjetas; desde que el embudo se DERIVA (8-ago-2026) la pila se mudó a
+   * Cotizados —3.064 tarjetas— y la única columna con recorte quedó con 534. Una
+   * columna de 3.064 no es una lista de trabajo: es la misma pila con otro
+   * rótulo.
+   *
+   * Cada eje sigue siendo UNO con varias posiciones y no varios toggles: cruzar
+   * «con precio» × «en ventana» × «para seguir» daría ocho estados, y la mitad
+   * no son listas que nadie pida. Qué chips se ofrecen lo decide
+   * `recortesDeColumna` (puro, con tests), no este componente.
    */
-  const [recorte, setRecorte] = useState<'todas' | 'precio' | 'ventana'>('todas');
-  const soloConPrecio = recorte === 'precio';
+  const [recortes, setRecortes] = useState<Partial<Record<EtapaTrabajo, Recorte>>>({});
+  const recorteDe = (etapa: EtapaTrabajo): Recorte => recortes[etapa] ?? 'todas';
+  const ponerRecorte = (etapa: EtapaTrabajo, r: Recorte) =>
+    setRecortes((v) => ({ ...v, [etapa]: r }));
 
-  // Cada columna carga LO SUYO (#89). El nombre real y el curso del formulario
-  // no se piden: la cola los sirve siempre, en la misma pasada (#72).
-  const contactados = useConversaciones({
-    tab: 'todo',
-    filtroSec: '',
-    categoria: null,
-    etapa: 'contactado',
-    precio: soloConPrecio,
-    ventana: recorte === 'ventana',
-  });
-  const cotizados = useConversaciones({ tab: 'todo', filtroSec: '', categoria: null, etapa: 'cotizado' });
-  const cierres = useConversaciones({ tab: 'todo', filtroSec: '', categoria: null, etapa: 'cierre' });
-  const perdidos = useConversaciones({ tab: 'todo', filtroSec: '', categoria: null, etapa: 'perdido' });
+  /** Los tres recortes traducidos a lo que la cola entiende, para una columna. */
+  const opcionesDe = (etapa: EtapaTrabajo) => {
+    const r = recorteDe(etapa);
+    return {
+      tab: 'todo' as const,
+      filtroSec: '' as const,
+      categoria: null,
+      etapa,
+      precio: r === 'precio',
+      ventana: r === 'ventana',
+      seguir: r === 'seguir',
+    };
+  };
+
+  // Cada columna carga LO SUYO (#89) y ahora también SU recorte. El nombre real y
+  // el curso del formulario no se piden: la cola los sirve siempre (#72).
+  const contactados = useConversaciones(opcionesDe('contactado'));
+  const cotizados = useConversaciones(opcionesDe('cotizado'));
+  const cierres = useConversaciones(opcionesDe('cierre'));
+  const perdidos = useConversaciones(opcionesDe('perdido'));
   const porColumna: Record<EtapaTrabajo, ReturnType<typeof useConversaciones>> = {
     contactado: contactados,
     cotizado: cotizados,
@@ -327,7 +368,6 @@ export function VistaEmbudo({
   }
 
   const etapaArrastrada = arrastrada ? etapaDeTarjeta(arrastrada, overrides) : null;
-  const resumenContactados = resumirColumna(desglose, 'contactado', conteos);
   const tableroVacio =
     !cargando &&
     (desglose != null || conteos != null) &&
@@ -408,10 +448,13 @@ export function VistaEmbudo({
             const enEtapa = repartidas.get(col.id) ?? [];
             const columna = porColumna[col.id];
             const resumen = resumirColumna(desglose, col.id, conteos);
-            // Con el recorte puesto, el «Ver más» cuenta lo recortado — no el total.
-            const total =
-              col.id === 'contactado' && soloConPrecio ? columna.total : resumen.total || columna.total;
-            const faltan = quedanPorTraer(total, columna.items.length);
+            const recorte = recorteDe(col.id);
+            const opciones = recortesDeColumna(col.id, resumen, recorte);
+            // Las DOS cifras: la del recorte manda, el total acompaña («47 · de
+            // 3.064»). La regla vive en `tablero.ts`, no acá.
+            const cifras = cifrasDeColumna(resumen, recorte, columna.total, enEtapa.length);
+            // El «Ver más» cuenta siempre sobre lo que la columna está pidiendo.
+            const faltan = quedanPorTraer(cifras.principal, columna.items.length);
             const esDestino = sobre === col.id && arrastrada != null;
             const esPerdidos = col.id === 'perdido';
             const esCierre = col.id === 'cierre';
@@ -445,8 +488,18 @@ export function VistaEmbudo({
                         (esPerdidos ? 'text-muted-foreground' : 'text-foreground')
                       }
                     >
-                      {(total ?? enEtapa.length).toLocaleString('es-PE')}
+                      {cifras.principal.toLocaleString('es-PE')}
                     </span>
+                    {/* El tamaño real del montón, cuando el recorte lo achica. Sin
+                        esto, «47» se leería como si la columna entera fueran 47. */}
+                    {cifras.de != null && (
+                      <span
+                        className="font-mono text-[11px] tabular-nums text-muted-foreground"
+                        title={`${cifras.principal.toLocaleString('es-PE')} de ${cifras.de.toLocaleString('es-PE')} en total`}
+                      >
+                        de {cifras.de.toLocaleString('es-PE')}
+                      </span>
+                    )}
                     <h3
                       className={
                         'font-heading text-[13px] font-bold ' +
@@ -467,63 +520,42 @@ export function VistaEmbudo({
                     <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">{col.pista}</p>
                   )}
 
-                  {/* EL RECORTE que convierte 1.389 en la lista que importa. */}
-                  {esContactados &&
-                    (resumenContactados.conPrecio > 0 || resumenContactados.enVentana > 0) && (
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                        {(
-                          [
-                            { id: 'todas', label: 'Todas', n: null, icono: null, ayuda: undefined },
-                            {
-                              id: 'precio',
-                              label: 'Con precio',
-                              n: resumenContactados.conPrecio,
-                              icono: BadgeDollarSign,
-                              ayuda:
-                                'Ya les mandaste el precio o la forma de pagar: están cotizadas de hecho',
-                            },
-                            {
-                              id: 'ventana',
-                              label: 'En ventana',
-                              n: resumenContactados.enVentana,
-                              icono: Clock,
-                              /* Lo que hace valioso al recorte es el «sin pagar»: en la
-                                 línea de la Cloud API, fuera de la ventana solo entra una
-                                 plantilla aprobada, y esa se cobra. */
-                              ayuda:
-                                'Se les puede escribir AHORA sin pagar una plantilla: escribieron hace menos de 24 h (o comentaron hace menos de 7 días)',
-                            },
-                          ] as const
-                        )
-                          /* Un recorte que daría cero no se ofrece — salvo el activo, o
-                             la vendedora se queda sin el chip que lo apaga. Es la misma
-                             regla de los chips del bot en la barra de la cola. */
-                          .filter((r) => r.id === 'todas' || recorte === r.id || (r.n ?? 0) > 0)
-                          .map((r) => {
-                            const activo = recorte === r.id;
-                            const Icono = r.icono;
-                            return (
-                              <button
-                                key={r.id}
-                                type="button"
-                                onClick={() => setRecorte(r.id)}
-                                aria-pressed={activo}
-                                title={r.ayuda}
-                                className={
-                                  'inline-flex items-center gap-1 rounded-full border px-2 py-px text-[11px] font-semibold transition-colors ' +
-                                  (activo
-                                    ? 'border-navy bg-navy text-white'
-                                    : 'border-border text-muted-foreground hover:text-foreground')
-                                }
-                              >
-                                {Icono && <Icono size={10} />}
-                                {r.label}
-                                {r.n != null && ` ${r.n.toLocaleString('es-PE')}`}
-                              </button>
-                            );
-                          })}
-                      </div>
-                    )}
+                  {/*
+                    EL RECORTE — ahora en CADA columna de trabajo, con su propio
+                    estado. Qué chips aparecen lo decide `recortesDeColumna`
+                    (puro): la regla del cero, y que Cierre y Perdidos no lleven
+                    ninguno, viven ahí con su porqué.
+
+                    Se dibuja solo si hay algo más que «Todas»: un eje solitario
+                    que no recorta nada es un botón que no hace nada.
+                  */}
+                  {opciones.length > 1 && (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                      {opciones.map((r) => {
+                        const activo = recorte === r.id;
+                        const Icono = ICONO_RECORTE[r.id];
+                        return (
+                          <button
+                            key={r.id}
+                            type="button"
+                            onClick={() => ponerRecorte(col.id, r.id)}
+                            aria-pressed={activo}
+                            title={r.ayuda}
+                            className={
+                              'inline-flex items-center gap-1 rounded-full border px-2 py-px text-[11px] font-semibold transition-colors ' +
+                              (activo
+                                ? 'border-navy bg-navy text-white'
+                                : 'border-border text-muted-foreground hover:text-foreground')
+                            }
+                          >
+                            {Icono && <Icono size={10} />}
+                            {r.label}
+                            {r.n != null && ` ${r.n.toLocaleString('es-PE')}`}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </header>
 
                 <div data-scroll-columna className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-0.5">
@@ -547,15 +579,14 @@ export function VistaEmbudo({
                           : undefined
                       }
                       cotizando={mover.isPending && mover.variables?.c.clave === c.clave}
+                      columna={col.titulo}
                     />
                   ))}
 
                   {enEtapa.length === 0 && !esDestino && (
                     <div className="flex flex-1 items-center justify-center px-3 pb-10">
                       <p className="max-w-[24ch] text-center text-[11px] leading-relaxed text-muted-foreground">
-                        {soloConPrecio && esContactados
-                          ? 'Ninguna con precio enviado en esta ventana.'
-                          : col.vacio}
+                        {vacioDeColumna(recorte, col.vacio)}
                       </p>
                     </div>
                   )}

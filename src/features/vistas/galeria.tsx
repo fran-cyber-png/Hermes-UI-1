@@ -23,7 +23,17 @@ import { VistaEmbudo } from './VistaEmbudo';
 const PARAMS = new URLSearchParams(location.search);
 
 /** Las columnas, con la forma real de producción: casi todo vive en Contactados. */
-const POR_ETAPA: Record<string, number> = { contactado: 1389, cotizado: 611, cierre: 12, perdido: 47 };
+const POR_ETAPA: Record<string, number> = { contactado: 544, cotizado: 3051, cierre: 12, perdido: 47 };
+
+/**
+ * CUÁNTAS DEJA CADA RECORTE — medido en producción el 8-ago-2026, y es lo que
+ * hace que esta galería sirva de evidencia y no de dibujo: el punto del frente es
+ * que «Para seguir 82» sea drásticamente más chico que «3.051».
+ */
+const POR_RECORTE: Record<string, Record<string, number>> = {
+  contactado: { ventana: 0, seguir: 24, precio: 0 },
+  cotizado: { ventana: 2, seguir: 82, precio: 3051 },
+};
 
 const NOMBRES = [
   ['Javier Peralta Ríos', 'Diplomado en Gestión Pública', true],
@@ -81,6 +91,15 @@ function tarjetas(etapa: string, cuantas: number) {
       referencia: cuando,
       ultimo_at: cuando,
       dias: Math.floor(horas / 24),
+      // DESDE CUÁNDO ESTÁ EN LA ETAPA (ADR: `cola/tiempoEnEtapa.ts`). Se escalona
+      // a propósito para que la evidencia muestre las tres cosas que la marca
+      // tiene que hacer: callarse cuando entró hoy (i=0), callarse cuando repite
+      // lo que ya dice el reloj de arriba, y hablar cuando difieren — que es el
+      // caso que justifica el frente («recibió el precio hace tres semanas»).
+      etapa_desde:
+        i === 0
+          ? new Date(Date.now() - 4 * 3_600_000).toISOString()
+          : new Date(Date.now() - (2 + i * 4) * 86_400_000).toISOString(),
       nivel: i % 2 === 0 ? 4 : 0,
     };
   });
@@ -94,12 +113,16 @@ const DESGLOSE = [
   // `precio_enviado` deriva `cotizado` (`cola/etapaEfectivaSql.ts`), así que esa
   // combinación ya no existe. Por eso el chip «Con precio» desaparece de
   // Contactados solo — la regla «un recorte que daría cero no se ofrece».
-  { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, ventana: true, n: 35 },
-  { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, ventana: false, n: 499 },
-  { etapa: 'cotizado', yaLeHablamos: true, precio: true, viva: false, ventana: true, n: 214 },
-  { etapa: 'cotizado', yaLeHablamos: true, precio: true, viva: false, ventana: false, n: 2850 },
-  { etapa: 'cierre', yaLeHablamos: true, precio: true, viva: false, n: 12 },
-  { etapa: 'perdido', yaLeHablamos: true, precio: false, viva: false, n: 47 },
+  // Los números son los MEDIDOS en producción el 8-ago-2026 (ver `POR_RECORTE`):
+  // «en ventana» deja 0 de 544 y 2 de 3.051 —por eso ese chip casi no aparece— y
+  // «para seguir» es el único que recorta de verdad.
+  { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, ventana: false, paraSeguir: true, n: 24 },
+  { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, ventana: false, paraSeguir: false, n: 520 },
+  { etapa: 'cotizado', yaLeHablamos: true, precio: true, viva: false, ventana: true, paraSeguir: false, n: 2 },
+  { etapa: 'cotizado', yaLeHablamos: true, precio: true, viva: false, ventana: false, paraSeguir: true, n: 82 },
+  { etapa: 'cotizado', yaLeHablamos: true, precio: true, viva: false, ventana: false, paraSeguir: false, n: 2967 },
+  { etapa: 'cierre', yaLeHablamos: true, precio: true, viva: false, paraSeguir: false, n: 12 },
+  { etapa: 'perdido', yaLeHablamos: true, precio: false, viva: false, paraSeguir: false, n: 47 },
 ];
 
 /** Lo que la hoja de la ficha le pregunta a Cerberus. */
@@ -133,12 +156,21 @@ window.fetch = (async (entrada: RequestInfo | URL) => {
   }
 
   if (url.includes('/api/conversaciones')) {
-    const etapa = new URL(url, location.origin).searchParams.get('etapa') ?? 'contactado';
-    const total = POR_ETAPA[etapa] ?? 0;
+    const q = new URL(url, location.origin).searchParams;
+    const etapa = q.get('etapa') ?? 'contactado';
+    /**
+     * ⚠️ EL STUB TIENE QUE RESPETAR EL RECORTE. Si devolviera siempre el total de
+     * la etapa, la cabecera diría «82 · de 3.051» sobre una columna que sigue
+     * pintando las mismas tarjetas — o sea, la captura probaría lo contrario de
+     * lo que el frente hace. Es el mismo cuidado que la clave única por columna.
+     */
+    const recorte = ['ventana', 'seguir', 'precio'].find((r) => q.get(r) === '1');
+    const total = recorte ? (POR_RECORTE[etapa]?.[recorte] ?? 0) : (POR_ETAPA[etapa] ?? 0);
+    const cuantas = Math.min(total, etapa === 'contactado' ? 8 : 4);
     return respuesta({
-      conversaciones: tarjetas(etapa, Math.min(total, etapa === 'contactado' ? 8 : 4)),
+      conversaciones: tarjetas(etapa, cuantas),
       total,
-      hayMas: total > 8,
+      hayMas: total > cuantas,
       conteos: POR_ETAPA,
       desglose: DESGLOSE,
     });
@@ -177,6 +209,22 @@ function respuesta(cuerpo: unknown) {
  * Es la evidencia de lo que la vista vino a resolver: hasta hoy, saber quién era
  * esa persona costaba **irse a Mensajes** y perder el tablero.
  */
+/**
+ * `?seguir=1` toca el chip «Para seguir» de Cotizados — la evidencia del frente:
+ * la columna pasa de 3.051 tarjetas a 82, con el total todavía a la vista.
+ */
+if (PARAMS.has('seguir')) {
+  setTimeout(() => {
+    const chips = document.querySelectorAll<HTMLElement>('button[aria-pressed]');
+    for (const chip of chips) {
+      if (chip.textContent?.startsWith('Para seguir 82')) {
+        chip.click();
+        break;
+      }
+    }
+  }, 400);
+}
+
 if (PARAMS.has('ficha')) {
   setTimeout(() => {
     document.querySelector<HTMLElement>('[role="button"][aria-label^="Ver la ficha"]')?.click();

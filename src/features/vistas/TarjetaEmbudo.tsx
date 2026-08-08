@@ -7,6 +7,7 @@ import {
   Clock,
   ClipboardList,
   GraduationCap,
+  History,
   Loader2,
   Megaphone,
   MessageSquareText,
@@ -18,6 +19,7 @@ import { detalleDeCurso } from '../canales/curso';
 import { esPrioritaria, quiereFoto, siguienteConFoto } from '../canales/fotoVisible';
 import { hace } from '../../lib/datos/frescura';
 import { lecturaDeVentana } from '../canales/ventana';
+import { lecturaDeAntiguedad } from '../canales/antiguedad';
 import { etiquetaDeMedia } from '../../lib/etiquetaMedia';
 import { tempBorde, tempClass } from '../../lib/formato';
 import { cotizarEnUnClic, cursoDeTarjeta, haceCorto, nombreDeTarjeta, turnoDeTarjeta } from './tarjeta';
@@ -117,6 +119,7 @@ export function TarjetaEmbudo({
   rebotada,
   onCotizar,
   cotizando,
+  columna,
 }: {
   c: Conversacion;
   indice: number;
@@ -132,6 +135,8 @@ export function TarjetaEmbudo({
   /** El camino corto a Cotizados. `null` = esta columna no lo ofrece. */
   onCotizar?: (c: Conversacion) => void;
   cotizando: boolean;
+  /** El título de la columna, solo para el `title` de la antigüedad («lleva 3 d en Cotizados»). */
+  columna?: string;
 }) {
   const { conFoto, elRef } = useConFotoVisible(indice, c.canal);
   /**
@@ -166,7 +171,23 @@ export function TarjetaEmbudo({
    */
   const ventana = lecturaDeVentana(c.ventana_cierra, new Date());
 
-  const haySegundoRenglon = Boolean(curso || c.precio_enviado || ventana || preview || onCotizar);
+  /**
+   * CUÁNTO LLEVA EN SU COLUMNA (`canales/antiguedad.ts`). Es el dato que separa a
+   * dos tarjetas que la etapa iguala: la que recibió el precio hace 40 minutos y
+   * la que lo recibió hace tres semanas y no contestó nunca.
+   *
+   * `yaVisible` es lo que ya dice el reloj de arriba: cuando los dos números
+   * coinciden —el caso más común— la tarjeta se calla en vez de repetirse.
+   * También sin memoizar: el dato ES el paso del tiempo.
+   */
+  const antiguedad = lecturaDeAntiguedad(c.etapa_desde, new Date(), {
+    columna,
+    yaVisible: haceCorto(horas),
+  });
+
+  const haySegundoRenglon = Boolean(
+    curso || c.precio_enviado || ventana || antiguedad || preview || onCotizar,
+  );
 
   return (
     <div
@@ -343,6 +364,18 @@ export function TarjetaEmbudo({
               tono={ventana.urgente ? 'oro' : 'neutro'}
             >
               {ventana.texto}
+            </Chip>
+          )}
+          {/*
+            CUÁNTO LLEVA EN LA COLUMNA. Sin oro a propósito (`canales/antiguedad.ts`):
+            el oro significa «tiempo que se acaba» y acá no hay ningún plazo
+            corriendo — una conversación vieja no vence, se enfría. Va en tinta
+            neutra, con el reloj de historial que la distingue del reloj de la
+            ventana, que está justo al lado y sí es una cuenta regresiva.
+          */}
+          {antiguedad && (
+            <Chip icono={<History size={10} className="shrink-0" />} titulo={antiguedad.ayuda}>
+              {antiguedad.texto}
             </Chip>
           )}
           {!curso && !c.precio_enviado && preview && (

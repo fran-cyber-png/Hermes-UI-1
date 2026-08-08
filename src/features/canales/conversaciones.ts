@@ -57,6 +57,18 @@ export interface Conversacion {
   n: number;
   referencia: string;
   ultimo_at: string;
+  /**
+   * DESDE CUÁNDO ESTÁ EN SU ETAPA (server: `cola/tiempoEnEtapa.ts`) — el dato que
+   * separa a dos tarjetas que la etapa iguala: una recibió el precio hace 40
+   * minutos y la otra hace tres semanas.
+   *
+   * Viaja el INSTANTE, no «hace 12 d»: el texto envejece adentro del caché de
+   * IndexedDB (ADR 0007), el timestamp no. Opcional y **nulable, que no es lo
+   * mismo**: ausente = server viejo; `null` = no se pudo determinar (un
+   * comentario respondido no guarda cuándo). Los dos casos se dibujan igual —no
+   * se dibuja nada—, y por eso la lectura vive en `canales/antiguedad.ts`.
+   */
+  etapa_desde?: string | null;
   dias: number;
   /** La escala canónica de urgencia: 0 vivo · 1 vencido · 2 expira · 3 espera ·
    *  4 silencio · 5 resto — la misma que el radar del Dashboard. */
