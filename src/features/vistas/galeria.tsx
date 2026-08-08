@@ -42,7 +42,7 @@ const DESDE: Record<string, number> = { contactado: 0, cotizado: 100, cierre: 20
 /** Una tarjeta con la forma que sirve la cola (`/api/conversaciones`). */
 function tarjetas(etapa: string, cuantas: number) {
   return Array.from({ length: cuantas }, (_, i) => {
-    const [nombre, curso, conPrecio] = NOMBRES[i % NOMBRES.length];
+    const [nombre, curso] = NOMBRES[i % NOMBRES.length];
     const horas = 2 + i * 5;
     const cuando = new Date(Date.now() - horas * 3_600_000).toISOString();
     // ⚠️ La clave tiene que ser ÚNICA ENTRE COLUMNAS. `repartirColumnas` pinta
@@ -63,7 +63,8 @@ function tarjetas(etapa: string, cuantas: number) {
       contexto_texto: null,
       respondida: i % 2 === 0,
       ya_le_hablamos: true,
-      precio_enviado: etapa === 'cotizado' || conPrecio,
+      // El precio DERIVA la etapa: si la tarjeta tiene precio, está en Cotizados.
+      precio_enviado: etapa === 'cotizado',
       etapa_efectiva: etapa,
       interes_curso: etapa === 'cotizado' ? curso : null,
       lead_curso: curso,
@@ -89,11 +90,14 @@ function tarjetas(etapa: string, cuantas: number) {
 const DESGLOSE = [
   { etapa: 'interesado', yaLeHablamos: false, precio: false, viva: true, n: 218 },
   { etapa: 'interesado', yaLeHablamos: true, precio: false, viva: false, n: 258 },
-  { etapa: 'contactado', yaLeHablamos: true, precio: true, viva: false, ventana: true, n: 12 },
-  { etapa: 'contactado', yaLeHablamos: true, precio: true, viva: false, ventana: false, n: 599 },
+  // ⚠️ Desde el 8-ago-2026 NINGUNA fila de `contactado` puede tener `precio`:
+  // `precio_enviado` deriva `cotizado` (`cola/etapaEfectivaSql.ts`), así que esa
+  // combinación ya no existe. Por eso el chip «Con precio» desaparece de
+  // Contactados solo — la regla «un recorte que daría cero no se ofrece».
   { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, ventana: true, n: 35 },
-  { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, ventana: false, n: 743 },
-  { etapa: 'cotizado', yaLeHablamos: true, precio: true, viva: false, ventana: false, n: 611 },
+  { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, ventana: false, n: 499 },
+  { etapa: 'cotizado', yaLeHablamos: true, precio: true, viva: false, ventana: true, n: 214 },
+  { etapa: 'cotizado', yaLeHablamos: true, precio: true, viva: false, ventana: false, n: 2850 },
   { etapa: 'cierre', yaLeHablamos: true, precio: true, viva: false, n: 12 },
   { etapa: 'perdido', yaLeHablamos: true, precio: false, viva: false, n: 47 },
 ];

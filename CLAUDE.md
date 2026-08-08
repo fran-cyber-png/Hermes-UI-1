@@ -715,6 +715,39 @@ escribir?** Meta cierra la puerta sola y de los dos plazos Hermes modelaba **uno
 - Ver sin server: `npx vite --port 5199` → `/galeria-ventana.html` y `/galeria-embudo.html`. Capturas
   en `docs/evidencia/ventana-de-conversacion.png` y `ventana-en-el-pipeline.png`.
 
+## El embudo se DERIVA, no se declara (8-ago-2026)
+
+Medido en producción: `gestiones` tiene **39 filas en toda la base**, y de ahí salían los «22
+Cotizados» del Pipeline — 22 gestiones, de 2 personas, todas del mismo día. **El embudo no medía el
+negocio: medía cuánto se acordó alguien de tocar un botón.** Y la contradicción estaba dibujada en la
+propia pantalla: al lado de «22 Cotizados», el chip decía **«Con precio 2.906»**.
+
+- 🔴 **`etapaEfectivaSql` deriva ahora DOS peldaños**: `precio_enviado → cotizado` por encima de
+  `respondida → contactado`. Sobre los mismos datos el embudo pasa de `3.450 · 22 · 0 · 0` a
+  **Interesados 375 · Contactados 534 · Cotizados 3.064**. Mueve la pila de columna, sí — pero
+  «Contactados 534» pasa a ser una lista de trabajo («les hablamos y NUNCA les pasamos el precio»).
+- **Sigue siendo un PISO**: solo empuja hacia arriba. Lo declarado más avanzado gana, `perdido` es
+  terminal humano y el precio **no resucita** una conversación descartada (con test). La compuerta
+  del arrastre no se toca: acá no se declara nada, se lee un hecho — y el hecho es más fuerte que el
+  clic, porque la persona REALMENTE recibió un precio.
+- ⚠️ **CONTRATO**: quien consuma `etapaEfectivaSql` tiene que emitir `precio_enviado`. El Dashboard lo
+  llamaba `precio_mencionado` **y lo calculaba con un regex PROPIO más pobre** (sin pasarelas ni
+  instrucciones de pago): la misma conversación contaba como cotizada en Mensajes y no en el
+  Dashboard. Se unificó contra `cola/precio.ts` — con dos criterios, cada pantalla arma un embudo
+  distinto (#37).
+- ⚠️ **El «subregistro» del Dashboard cuenta lo ASENTADO A MANO**, no la etapa efectiva. Con la
+  derivación, leer la efectiva haría que el hueco diera **0 siempre** — la clase de número que miente
+  y que este frente vino a sacar.
+- **El chip «Con precio» desaparece solo de Contactados**: esas conversaciones ahora viven en
+  Cotizados, así que el conteo da 0 y la regla «un recorte que daría cero no se ofrece» lo esconde.
+  Queda `Todas · En ventana N`, que es el recorte accionable. Captura en
+  `docs/evidencia/embudo-derivado.png`.
+- 🔴 **Y «Cierre» sigue dependiendo de que Hermes SEPA de la venta.** Medido: **417 ventas reales en
+  30 días, 0 webhooks recibidos**. El puente `ventas:sincronizar` —que no depende de Cerberus—
+  rechazaba el **99,6 %** de los payloads porque el esquema pedía `telefonos: string[]` y Cerberus
+  manda objetos. Arreglado: de **0 a 1.565 ventas atribuidas** sobre los mismos 8.032 eventos. Ver
+  `atribucion/payload.ts`.
+
 ## Señales automáticas — «Cotizado» y «Se enfrió»
 
 `server/src/senales/` calcula, sobre el hilo, dos cosas que hoy nadie ve: si a esa persona ya le
