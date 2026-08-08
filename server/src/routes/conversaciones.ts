@@ -94,6 +94,9 @@ conversacionesRouter.get("/", async (req, res) => {
       // `?ventana=1`: el recorte del Pipeline por ventana de conversación abierta
       // (ADR 0041) — a quién se le puede escribir ahora sin pagar una plantilla.
       ventana: req.query.ventana === "1",
+      // `?seguir=1`: el recorte «Para seguir» del Pipeline (cola/tiempoEnEtapa.ts)
+      // — silencio nuestro y entre 3 y 14 días en la etapa.
+      seguir: req.query.seguir === "1",
       linea,
       misLineas,
       misAsignadas,

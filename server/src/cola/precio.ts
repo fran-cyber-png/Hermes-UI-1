@@ -98,3 +98,21 @@ export const precioEnviadoSql: SQL = sql`COALESCE(
   bool_or(direccion = 'saliente' AND texto ~* ${sql.raw(PRECIO_REGEX_SQL)}),
   false
 )`;
+
+/**
+ * CUÁNDO le pasamos el precio por PRIMERA vez — el mismo predicado que
+ * `precioEnviadoSql`, preguntado por el instante en vez de por el sí/no.
+ *
+ * Vive acá, pegado a su regex, y no en `tiempoEnEtapa.ts` (que es quien lo
+ * consume): el día que el criterio de precio cambie, el «si» y el «cuándo»
+ * tienen que moverse en el mismo renglón. Separados, una definición nueva de
+ * precio dejaría la fecha de ingreso a Cotizados midiendo la vieja — y eso no
+ * da error, da un número plausible (#37).
+ *
+ * Es el instante en que la conversación entró a `cotizado` por derivación
+ * (`cola/tiempoEnEtapa.ts`). El PRIMERO y no el último: la etapa la abre la
+ * primera cotización; mandar el precio otra vez no la vuelve más nueva.
+ */
+export const primerPrecioAtSql: SQL = sql`min(occurred_at) FILTER (
+  WHERE direccion = 'saliente' AND texto ~* ${sql.raw(PRECIO_REGEX_SQL)}
+)`;

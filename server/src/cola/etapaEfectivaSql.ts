@@ -53,6 +53,19 @@ import { ETAPAS, normalizarEtapa, type EtapaGestion } from "../gestiones/registr
 export const ESCALA_ETAPAS: readonly EtapaGestion[] = ETAPAS.filter((e) => e !== "perdido");
 
 /**
+ * EL PISO DERIVADO, solo — el peldaño que sale de los HECHOS, sin mirar ninguna
+ * gestión asentada. Sale aparte de `etapaEfectiva` porque hay un segundo lector:
+ * `tiempoEnEtapa.ts` necesita saber **si la etapa efectiva la puso la derivación
+ * o el clic**, y para eso tiene que poder comparar contra la derivada sola. Con
+ * el CASE repetido allá, agregar un peldaño acá dejaría el otro lado calculando
+ * la etapa vieja — y el síntoma sería una fecha de ingreso equivocada, que es de
+ * las que no se ven (#37).
+ */
+export function etapaDerivada(respondida: boolean, precioEnviado: boolean): EtapaGestion {
+  return precioEnviado ? "cotizado" : respondida ? "contactado" : "interesado";
+}
+
+/**
  * LA FUNCIÓN PURA — la definición canónica de la regla. La comparten los tests
  * de paridad y cualquier lector de TypeScript que necesite la etapa efectiva.
  * Devuelve `EtapaGestion`, no `string`: quien la consuma no tiene que volver a
@@ -63,11 +76,7 @@ export function etapaEfectiva(
   respondida: boolean,
   precioEnviado = false,
 ): EtapaGestion {
-  const derivada: EtapaGestion = precioEnviado
-    ? "cotizado"
-    : respondida
-      ? "contactado"
-      : "interesado";
+  const derivada = etapaDerivada(respondida, precioEnviado);
   if (etapaManual == null) return derivada;
   const manual = normalizarEtapa(etapaManual);
   if (manual === "perdido") return "perdido";
@@ -115,18 +124,20 @@ const rango = (etapa: SQL): SQL =>
  * PROPIO más pobre; se unificó contra `cola/precio.ts` en el mismo commit —
  * con dos criterios, cada pantalla armaría un embudo distinto.
  */
-const DERIVADA = sql`(CASE
+export const derivadaSql = sql`(CASE
   WHEN precio_enviado THEN 'cotizado'
   WHEN respondida THEN 'contactado'
   ELSE 'interesado'
 END)`;
+const DERIVADA = derivadaSql;
 
 /**
  * `etapa_manual` normalizada al leer — espejo SQL de `normalizarEtapa`
  * (`gestiones/registrarGestion.ts`): los valores viejos siguen siendo válidos.
  * La paridad con la función de TS la fija el test con base.
  */
-const MANUAL = sql`(CASE etapa_manual WHEN 'nuevo' THEN 'interesado' WHEN 'venta' THEN 'cierre' ELSE etapa_manual END)`;
+export const manualNormalizadaSql = sql`(CASE etapa_manual WHEN 'nuevo' THEN 'interesado' WHEN 'venta' THEN 'cierre' ELSE etapa_manual END)`;
+const MANUAL = manualNormalizadaSql;
 
 /** La etapa efectiva — espejo verificado de `etapaEfectiva(...)`. */
 export const etapaEfectivaSql: SQL = sql`CASE
@@ -151,9 +162,15 @@ END`;
  *
  * Este fragmento es EL DISTINCT ON canónico: quien necesite «la última gestión
  * por clave» lo consume de acá, no lo re-escribe — la lección de #37.
+ *
+ * `gestion_at` viaja al lado de la etapa porque es el CUÁNDO de esa misma fila:
+ * es lo que `tiempoEnEtapa.ts` usa como instante de ingreso cuando la etapa
+ * efectiva la puso el clic y no la derivación. Sacarlo de otra consulta habría
+ * dejado abierta la posibilidad de que la fecha fuera de una gestión distinta de
+ * la que decidió la etapa — el `DISTINCT ON` las mantiene atadas.
  */
 export const ultimasGestionesSql: SQL = sql`
-  SELECT DISTINCT ON (clave) clave, etapa AS etapa_manual
+  SELECT DISTINCT ON (clave) clave, etapa AS etapa_manual, creado_at AS gestion_at
   FROM gestiones
   ORDER BY clave, creado_at DESC, id DESC
 `;

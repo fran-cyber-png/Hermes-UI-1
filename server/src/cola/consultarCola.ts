@@ -16,7 +16,8 @@ import {
   vivaSql,
 } from "./urgenciaSql.js";
 import { etapaEfectivaSql, ultimasGestionesSql } from "./etapaEfectivaSql.js";
-import { precioEnviadoSql } from "./precio.js";
+import { precioEnviadoSql, primerPrecioAtSql } from "./precio.js";
+import { etapaDesdeSql, paraSeguirSql, respuestaAtSql } from "./tiempoEnEtapa.js";
 import {
   bandaPinOrdenSql,
   categoriasCteSql,
@@ -170,6 +171,14 @@ const comentariosCte = (filtroCanal: SQL, incluirPins: boolean) => sql`
     NULL::jsonb                                 AS ultima_origen,
     NULL::jsonb                                 AS origen_anuncio,
     false                                       AS precio_enviado,
+    -- Los hechos del TIEMPO EN ETAPA (cola/tiempoEnEtapa.ts). Un comentario no
+    -- tiene mensajes salientes que fechar: nunca cotiza, y su respuesta (que
+    -- status <> 'nuevo' sí conoce) no guarda CUÁNDO ocurrió. Van en NULL, que
+    -- ahí significa «no se pudo determinar» — y la pantalla no dibuja nada, en
+    -- vez de inventar una antigüedad. primer_at sí existe: es el comentario.
+    NULL::timestamptz                           AS primer_precio_at,
+    NULL::timestamptz                           AS respuesta_at,
+    occurred_at                                 AS primer_at,
     occurred_at                                 AS referencia,
     occurred_at                                 AS ultimo_at,
     occurred_at                                 AS ultimo_entrante_at,
@@ -253,6 +262,13 @@ const conversacionesCte = sql`
     -- embudo no veía — 611 conversaciones con precio enviado y 1 interés
     -- registrado en toda la base. Es derivado de lo escrito, no un estado.
     (${precioEnviadoSql})                                           AS precio_enviado,
+    -- LOS HECHOS DEL TIEMPO EN ETAPA (cola/tiempoEnEtapa.ts): el «cuándo» de
+    -- cada peldaño, en el MISMO GROUP BY que ya calcula el «si». La etapa se
+    -- deriva de estos hechos, así que la fecha de ingreso no puede salir de otra
+    -- pasada sin arriesgar que fechen conversaciones distintas.
+    (${primerPrecioAtSql})                                          AS primer_precio_at,
+    ${respuestaAtSql}                                               AS respuesta_at,
+    min(occurred_at)                                                AS primer_at,
     (${referenciaSql})                                              AS referencia,
     max(occurred_at)                                                AS ultimo_at,
     max(occurred_at) FILTER (WHERE direccion = 'entrante')          AS ultimo_entrante_at,
@@ -309,6 +325,12 @@ export interface OpcionesCola {
   precio?: boolean;
   /** Solo las que tienen la ventana de conversación abierta (`cola/ventana.ts`). */
   ventana?: boolean;
+  /**
+   * «Para seguir» (`cola/tiempoEnEtapa.ts`): silencio nuestro + 3 a 14 días en la
+   * etapa. Es un RECORTE de columna, como `precio` y `ventana` — define el
+   * universo del que la columna informa el total, no un filtro secundario.
+   */
+  seguir?: boolean;
   /** El tab de la cola potenciada (#49): `todo` (default) · `no-leidos` · `favoritos`. */
   tab?: string;
   /** Filtra por una categoría asignada (modo Listas de #49). Se compara en minúsculas. */
@@ -457,6 +479,13 @@ export type FilaDesglose = {
    * Pipeline no podía ver.
    */
   ventana: boolean;
+  /**
+   * «Para seguir» (`cola/tiempoEnEtapa.ts`): silencio nuestro + entre 3 y 14 días
+   * en la etapa. Es el recorte que hace navegable una columna de 3.051 tarjetas —
+   * medido, es el único de los tres ejes que recorta de verdad («sin respuesta»
+   * es el 96 % de Cotizados y «en ventana» daba 1).
+   */
+  paraSeguir: boolean;
   n: number;
 };
 
@@ -690,6 +719,13 @@ async function ejecutarCola(
    * número y Mensajes otro para la misma pregunta (#37).
    */
   if (opciones.ventana) condicionesRecorte.push(PUEDO_ESCRIBIRLE);
+  /**
+   * El recorte «Para seguir» — el que convierte 3.051 Cotizados en una lista de
+   * trabajo (`cola/tiempoEnEtapa.ts`, donde está el porqué medido). Recorte y no
+   * intención, por lo mismo que los otros dos: con él puesto, el total de la
+   * columna tiene que decir el tamaño de LO RECORTADO.
+   */
+  if (opciones.seguir) condicionesRecorte.push(paraSeguirSql);
   // Los tabs personales (#49) solo con la tabla presente; la categoría vive en
   // `etiquetas`, así que filtra igual aunque el estado personal no exista.
   if (conEstado && tab === "no-leidos") condicionesRecorte.push(sql`(${noLeidoSql})`);
@@ -770,6 +806,11 @@ async function ejecutarCola(
            -- front (canales/dueno.ts), igual que la marca de ex-cliente y el bot.
            (${duenoSql})        AS asignada_a,
            (${etapaEfectivaSql}) AS etapa_efectiva,
+           -- DESDE CUÁNDO ESTÁ EN ESA ETAPA (cola/tiempoEnEtapa.ts). Viaja el
+           -- INSTANTE y no «hace 12 d», por lo mismo que ventana_cierra: el
+           -- texto envejece adentro del caché de IndexedDB (ADR 0007) y un
+           -- «hace 12 d» serializado la semana pasada hoy es falso.
+           (${etapaDesdeSql}) AS etapa_desde,
            extract(day from now() - referencia)::int AS dias,
            (${nivelUrgenciaSql}) AS nivel,
            (${ordenUrgenciaSql}) AS orden,
@@ -914,6 +955,11 @@ async function desglosarEmbudo(
            precio_enviado               AS precio,
            (${vivaSql})                 AS viva,
            (${PUEDO_ESCRIBIRLE})        AS ventana,
+           -- «Para seguir» entra como UNA dimensión booleana y no como buckets de
+           -- antigüedad: el desglose es un GROUP BY sobre todo el universo, y
+           -- cuatro tramos por etapa lo multiplicarían para responder una sola
+           -- pregunta. El instante exacto ya viaja en la fila (etapa_desde).
+           (${paraSeguirSql})           AS "paraSeguir",
            count(*)::int                AS n
     FROM todo
     LEFT JOIN ultimas_gestiones USING (clave)
@@ -921,7 +967,7 @@ async function desglosarEmbudo(
     ${botJoinSql(conBot)}
     ${asignadaJoinSql(conAsignacion)}
     ${donde}
-    GROUP BY 1, 2, 3, 4, 5
+    GROUP BY 1, 2, 3, 4, 5, 6
   `);
   return filas.map((f) => ({
     etapa: f.etapa,
@@ -929,6 +975,7 @@ async function desglosarEmbudo(
     precio: f.precio,
     viva: f.viva,
     ventana: f.ventana,
+    paraSeguir: f.paraSeguir,
     n: f.n,
   }));
 }
