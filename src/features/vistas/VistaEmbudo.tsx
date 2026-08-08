@@ -62,12 +62,23 @@ import {
  */
 
 /**
- * La grilla: el ancho es una declaración de dónde está el trabajo. Contactados
- * casi el doble que las de tránsito; Perdidos, un cajón. Aguanta 1280 sin
- * reflow (es una app de escritorio, no una página).
+ * La grilla: el ancho es una declaración de dónde está el trabajo. Aguanta 1280
+ * sin reflow (es una app de escritorio, no una página) y sin scroll horizontal,
+ * que en esta app no existe.
+ *
+ * ⚠️ **Con la quinta columna la cuenta se volvió ajustada y hay que hacerla.** A
+ * 1280 el contenido son ~1.256 px (menos el padding de 12 de cada lado) y los
+ * gaps de 8 px se comen 32. Los mínimos suman **1.020**, así que entra con ~200
+ * de aire — y el gap bajó de 2.5 a 2 justamente para comprarlo. Si se agrega una
+ * columna más, esta cuenta se rehace: no alcanza con sumar otro `minmax`.
+ *
+ * El reparto sigue diciendo dónde está el trabajo: las dos columnas donde se
+ * vende (Contactados, Cotizados) se llevan el ancho; «Sin respuesta» es grande
+ * en cantidad pero sus tarjetas son pobres (no hay curso ni precio que mostrar);
+ * Perdidos sigue siendo un cajón.
  */
 const GRID =
-  'grid min-h-0 flex-1 grid-cols-[minmax(320px,1.45fr)_minmax(235px,1.05fr)_minmax(235px,1.05fr)_minmax(180px,0.72fr)] gap-2.5 overflow-x-auto';
+  'grid min-h-0 flex-1 grid-cols-[minmax(205px,0.95fr)_minmax(250px,1.2fr)_minmax(250px,1.2fr)_minmax(185px,0.8fr)_minmax(150px,0.6fr)] gap-2 overflow-x-auto';
 
 /**
  * El ícono de cada recorte. Vive acá y no en `tablero.ts` porque un componente de
@@ -133,11 +144,13 @@ export function VistaEmbudo({
 
   // Cada columna carga LO SUYO (#89) y ahora también SU recorte. El nombre real y
   // el curso del formulario no se piden: la cola los sirve siempre (#72).
+  const sinRespuesta = useConversaciones(opcionesDe('sin_respuesta'));
   const contactados = useConversaciones(opcionesDe('contactado'));
   const cotizados = useConversaciones(opcionesDe('cotizado'));
   const cierres = useConversaciones(opcionesDe('cierre'));
   const perdidos = useConversaciones(opcionesDe('perdido'));
   const porColumna: Record<EtapaTrabajo, ReturnType<typeof useConversaciones>> = {
+    sin_respuesta: sinRespuesta,
     contactado: contactados,
     cotizado: cotizados,
     cierre: cierres,
@@ -147,10 +160,19 @@ export function VistaEmbudo({
   // El desglose (conteos reales por etapa × turno × precio) viene en la primera
   // página de cualquier columna: es la MISMA foto, contada una vez.
   const desglose =
-    contactados.desglose ?? cotizados.desglose ?? cierres.desglose ?? perdidos.desglose;
+    sinRespuesta.desglose ??
+    contactados.desglose ??
+    cotizados.desglose ??
+    cierres.desglose ??
+    perdidos.desglose;
   // El respaldo mientras el server desplegado no sirva el desglose: el front sale
   // a producción sin reinicio (N4) y el server recién en el botón (N5).
-  const conteos = contactados.conteos ?? cotizados.conteos ?? cierres.conteos ?? perdidos.conteos;
+  const conteos =
+    sinRespuesta.conteos ??
+    contactados.conteos ??
+    cotizados.conteos ??
+    cierres.conteos ??
+    perdidos.conteos;
 
   const [arrastrada, setArrastrada] = useState<Conversacion | null>(null);
   const [sobre, setSobre] = useState<EtapaTrabajo | null>(null);

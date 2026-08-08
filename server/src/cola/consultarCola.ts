@@ -177,6 +177,7 @@ const comentariosCte = (filtroCanal: SQL, incluirPins: boolean) => sql`
     -- ahí significa «no se pudo determinar» — y la pantalla no dibuja nada, en
     -- vez de inventar una antigüedad. primer_at sí existe: es el comentario.
     NULL::timestamptz                           AS primer_precio_at,
+    NULL::timestamptz                           AS primer_saliente_at,
     NULL::timestamptz                           AS respuesta_at,
     occurred_at                                 AS primer_at,
     occurred_at                                 AS referencia,
@@ -184,6 +185,9 @@ const comentariosCte = (filtroCanal: SQL, incluirPins: boolean) => sql`
     occurred_at                                 AS ultimo_entrante_at,
     (status <> 'nuevo')                         AS respondida,
     (status <> 'nuevo')                         AS ya_le_hablamos,
+    -- Un comentario ES la persona hablando: por definición hubo un entrante, así
+    -- que un comentario nunca cae en «sin respuesta» (cola/etapaEfectivaSql.ts).
+    true                                        AS hablo,
     (${VENTANA_ABIERTA})                        AS ventana_abierta,
     (${pideInfoSql("texto")})                    AS pide_info,
     1                                           AS n
@@ -267,6 +271,7 @@ const conversacionesCte = sql`
     -- deriva de estos hechos, así que la fecha de ingreso no puede salir de otra
     -- pasada sin arriesgar que fechen conversaciones distintas.
     (${primerPrecioAtSql})                                          AS primer_precio_at,
+    min(occurred_at) FILTER (WHERE direccion = 'saliente')           AS primer_saliente_at,
     ${respuestaAtSql}                                               AS respuesta_at,
     min(occurred_at)                                                AS primer_at,
     (${referenciaSql})                                              AS referencia,
@@ -278,6 +283,12 @@ const conversacionesCte = sql`
     -- vuelve a ser deuda, pero no es una desconocida. La bandeja necesita
     -- separarlas — hoy les dice a las dos «nadie te respondió».
     COALESCE(bool_or(direccion = 'saliente'), false)                 AS ya_le_hablamos,
+    -- ¿LA PERSONA HABLÓ ALGUNA VEZ? El hecho que separa una conversación de una
+    -- difusión. Sin él, una conversación de puro outbound da respondida = true
+    -- (el último saliente le gana a un '-infinity') y subía a contactado/cotizado
+    -- sin que del otro lado hubiera nadie: 2.252 de los 3.050 Cotizados medidos
+    -- el 8-ago-2026 nunca dijeron una palabra. Ver cola/etapaEfectivaSql.ts.
+    COALESCE(bool_or(direccion = 'entrante'), false)                 AS hablo,
     false                                                          AS ventana_abierta,
     -- «Pide info» del ÚLTIMO entrante con texto, no un bool_or histórico (#49):
     -- mismo fragmento que el radar — una sola semántica (ADR 0014).

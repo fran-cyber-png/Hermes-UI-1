@@ -65,7 +65,13 @@ describe('recortesDeColumna — qué chips se ofrecen', () => {
   test('Cierre y Perdidos no llevan recorte: uno es archivo, el otro es otro frente', () => {
     expect(recortesDeColumna('perdido', RESUMEN, 'todas')).toEqual([]);
     expect(recortesDeColumna('cierre', RESUMEN, 'todas')).toEqual([]);
-    expect(COLUMNAS_CON_RECORTE).toEqual(['contactado', 'cotizado']);
+    expect(COLUMNAS_CON_RECORTE).toEqual(['sin_respuesta', 'contactado', 'cotizado']);
+  });
+
+  test('«Sin respuesta» sí lleva recorte: con 2.580 tarjetas es la que más lo necesita', () => {
+    const r = recortesDeColumna('sin_respuesta', { ...RESUMEN, total: 2580, paraSeguir: 310 }, 'todas');
+    expect(r.map((o) => o.id)).toContain('seguir');
+    expect(r.find((o) => o.id === 'seguir')?.n).toBe(310);
   });
 
   test('todos los chips ofrecidos, salvo «Todas», explican qué recortan', () => {

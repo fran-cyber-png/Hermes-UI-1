@@ -23,7 +23,13 @@ import { VistaEmbudo } from './VistaEmbudo';
 const PARAMS = new URLSearchParams(location.search);
 
 /** Las columnas, con la forma real de producción: casi todo vive en Contactados. */
-const POR_ETAPA: Record<string, number> = { contactado: 544, cotizado: 3051, cierre: 12, perdido: 47 };
+const POR_ETAPA: Record<string, number> = {
+  sin_respuesta: 2580,
+  contactado: 217,
+  cotizado: 798,
+  cierre: 12,
+  perdido: 47,
+};
 
 /**
  * CUÁNTAS DEJA CADA RECORTE — medido en producción el 8-ago-2026, y es lo que
@@ -31,8 +37,9 @@ const POR_ETAPA: Record<string, number> = { contactado: 544, cotizado: 3051, cie
  * que «Para seguir 82» sea drásticamente más chico que «3.051».
  */
 const POR_RECORTE: Record<string, Record<string, number>> = {
+  sin_respuesta: { ventana: 0, seguir: 310, precio: 0 },
   contactado: { ventana: 0, seguir: 24, precio: 0 },
-  cotizado: { ventana: 2, seguir: 82, precio: 3051 },
+  cotizado: { ventana: 2, seguir: 82, precio: 798 },
 };
 
 const NOMBRES = [
@@ -47,7 +54,13 @@ const NOMBRES = [
 ] as const;
 
 /** Cada columna arranca en otro bloque de números: ver abajo por qué importa. */
-const DESDE: Record<string, number> = { contactado: 0, cotizado: 100, cierre: 200, perdido: 300 };
+const DESDE: Record<string, number> = {
+  sin_respuesta: 400,
+  contactado: 0,
+  cotizado: 100,
+  cierre: 200,
+  perdido: 300,
+};
 
 /** Una tarjeta con la forma que sirve la cola (`/api/conversaciones`). */
 function tarjetas(etapa: string, cuantas: number) {
@@ -71,7 +84,9 @@ function tarjetas(etapa: string, cuantas: number) {
       numero_propio: '51986394450',
       texto: i % 3 === 0 ? '¿me puede pasar más información del diplomado?' : null,
       contexto_texto: null,
-      respondida: i % 2 === 0,
+      // En «sin respuesta» la persona NUNCA escribió: `respondida` es true (el
+      // último saliente le gana a un '-infinity') y el turno no es de nadie.
+      respondida: etapa === 'sin_respuesta' ? true : i % 2 === 0,
       ya_le_hablamos: true,
       // El precio DERIVA la etapa: si la tarjeta tiene precio, está en Cotizados.
       precio_enviado: etapa === 'cotizado',
@@ -116,11 +131,13 @@ const DESGLOSE = [
   // Los números son los MEDIDOS en producción el 8-ago-2026 (ver `POR_RECORTE`):
   // «en ventana» deja 0 de 544 y 2 de 3.051 —por eso ese chip casi no aparece— y
   // «para seguir» es el único que recorta de verdad.
+  { etapa: 'sin_respuesta', yaLeHablamos: true, precio: true, viva: false, ventana: false, paraSeguir: true, n: 310 },
+  { etapa: 'sin_respuesta', yaLeHablamos: true, precio: true, viva: false, ventana: false, paraSeguir: false, n: 2270 },
   { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, ventana: false, paraSeguir: true, n: 24 },
-  { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, ventana: false, paraSeguir: false, n: 520 },
+  { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, ventana: false, paraSeguir: false, n: 193 },
   { etapa: 'cotizado', yaLeHablamos: true, precio: true, viva: false, ventana: true, paraSeguir: false, n: 2 },
   { etapa: 'cotizado', yaLeHablamos: true, precio: true, viva: false, ventana: false, paraSeguir: true, n: 82 },
-  { etapa: 'cotizado', yaLeHablamos: true, precio: true, viva: false, ventana: false, paraSeguir: false, n: 2967 },
+  { etapa: 'cotizado', yaLeHablamos: true, precio: true, viva: false, ventana: false, paraSeguir: false, n: 714 },
   { etapa: 'cierre', yaLeHablamos: true, precio: true, viva: false, paraSeguir: false, n: 12 },
   { etapa: 'perdido', yaLeHablamos: true, precio: false, viva: false, paraSeguir: false, n: 47 },
 ];
@@ -166,7 +183,7 @@ window.fetch = (async (entrada: RequestInfo | URL) => {
      */
     const recorte = ['ventana', 'seguir', 'precio'].find((r) => q.get(r) === '1');
     const total = recorte ? (POR_RECORTE[etapa]?.[recorte] ?? 0) : (POR_ETAPA[etapa] ?? 0);
-    const cuantas = Math.min(total, etapa === 'contactado' ? 8 : 4);
+    const cuantas = Math.min(total, etapa === 'contactado' || etapa === 'sin_respuesta' ? 8 : 4);
     return respuesta({
       conversaciones: tarjetas(etapa, cuantas),
       total,

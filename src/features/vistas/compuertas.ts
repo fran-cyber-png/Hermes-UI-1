@@ -1,4 +1,4 @@
-import type { Etapa } from '../../lib/etapas';
+import { SIN_RESPUESTA, type Etapa } from '../../lib/etapas';
 
 /**
  * LAS COMPUERTAS DEL PIPELINE, DEL LADO DE LA UI (#60).
@@ -42,6 +42,14 @@ export function decidirDrop(v: {
 }): AccionDrop {
   if (v.modalAbierto) return { accion: 'nada' };
   if (v.actual === v.destino) return { accion: 'nada' };
+  /**
+   * 🔴 A «Sin respuesta» NO SE ARRASTRA, y no es una restricción arbitraria: esa
+   * etapa dice «esta persona nunca nos escribió», que es un hecho verificable, no
+   * una opinión. Declararla sería afirmar algo falso sobre alguien que sí habló —
+   * y encima duraría un segundo, porque la derivación la corrige en el próximo
+   * refetch. Se rechaza en silencio (`nada`), como cualquier destino imposible.
+   */
+  if (v.destino === SIN_RESPUESTA) return { accion: 'nada' };
   if (v.destino === 'cierre') {
     return v.canal === 'whatsapp' ? { accion: 'modal-venta' } : { accion: 'abrir' };
   }

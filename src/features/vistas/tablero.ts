@@ -18,6 +18,27 @@ import type { Etapa } from '../../lib/etapas';
  * se llena es la mitad del problema de esta pantalla.
  */
 export const COLUMNAS_TRABAJO = [
+  /**
+   * ══ SIN RESPUESTA — la columna más grande, y la que no existía ═══════════
+   *
+   * Medido el 8-ago-2026: **2.580 de 3.973 conversaciones (65 %)** son «le
+   * escribimos y nunca contestó». Estaban repartidas adentro de Contactados y
+   * Cotizados, inflando las dos: **2.252 de los 3.050 Cotizados nunca dijeron
+   * una palabra**, porque un envío masivo con precio los promovía a todos.
+   *
+   * Es un trabajo REAL y distinto del de las otras columnas: acá no se insiste
+   * con el precio, se cambia el mensaje o el canal. Va primera porque es donde
+   * empieza el embudo cuando la conversación la abrimos nosotros.
+   *
+   * ⚠️ **No se puede arrastrar acá** (`compuertas.ts`): se deriva de un hecho —no
+   * hay ningún entrante— y deja de ser cierto sola en cuanto la persona escribe.
+   */
+  {
+    id: 'sin_respuesta',
+    titulo: 'Sin respuesta',
+    pista: 'Les escribiste y nunca contestaron.',
+    vacio: 'Acá caen las conversaciones que abrimos nosotros y nadie respondió.',
+  },
   {
     id: 'contactado',
     titulo: 'Contactados',
@@ -243,8 +264,17 @@ export interface ResumenColumna {
  */
 export type Recorte = 'todas' | 'precio' | 'ventana' | 'seguir';
 
-/** Las columnas donde recortar tiene sentido. Ver el porqué de las otras dos arriba. */
-export const COLUMNAS_CON_RECORTE: readonly EtapaTrabajo[] = ['contactado', 'cotizado'];
+/**
+ * Las columnas donde recortar tiene sentido. Ver el porqué de Cierre y Perdidos
+ * arriba. **«Sin respuesta» sí lleva**: con 2.580 tarjetas es la que más lo
+ * necesita — y ahí «Para seguir» significa «hace entre 3 y 14 días que le
+ * escribimos y sigue mudo», que es exactamente a quién reintentarle hoy.
+ */
+export const COLUMNAS_CON_RECORTE: readonly EtapaTrabajo[] = [
+  'sin_respuesta',
+  'contactado',
+  'cotizado',
+];
 
 export interface OpcionRecorte {
   id: Recorte;

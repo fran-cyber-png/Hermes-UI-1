@@ -39,18 +39,48 @@ import { ETAPAS, normalizarEtapa, type EtapaGestion } from "../gestiones/registr
  *
  * CONTRATO DE COLUMNAS (como `urgenciaSql.ts`): el fragmento nombra las
  * columnas tal como las alias la consulta que lo consume —
- *   respondida (bool) · precio_enviado (bool) · etapa_manual (text, NULL si no
- *   hay gestión asentada).
+ *   respondida (bool) · precio_enviado (bool) · hablo (bool) ·
+ *   ya_le_hablamos (bool) · etapa_manual (text, NULL si no hay gestión asentada).
  * `etapa_manual` sale de `ultimasGestionesSql` (LEFT JOIN por clave).
  */
 
 /**
- * La escala que sube: interesado(0) < contactado(1) < cotizado(2) < cierre(3).
- * Sale de ETAPAS (la lista canónica de `gestiones/registrarGestion.ts`) para no
- * duplicar el orden; `perdido` queda afuera a propósito — no es un peldaño, es
- * la salida terminal.
+ * ══ «SIN RESPUESTA» — LE ESCRIBIMOS Y NUNCA CONTESTÓ ═══════════════════════
+ *
+ * El peldaño más bajo, y el más grande: **medido el 8-ago-2026, son 2.580 de las
+ * 3.973 conversaciones (65 %)**. Hasta acá no existía, y eso tenía dos efectos
+ * que se pagaban juntos:
+ *
+ *   · **Inflaba las dos columnas de trabajo.** Sin `hablo`, una conversación sin
+ *     un solo entrante da `respondida = true` (el último saliente le gana a un
+ *     `-infinity`), así que caía en `contactado` — y si el envío llevaba precio,
+ *     en `cotizado`. **2.252 de los 3.050 Cotizados (74 %) nunca dijeron una
+ *     palabra**: el 5-ago salieron 1.139 mensajes contra 49 entrantes y ese
+ *     envío promovió a todos de una.
+ *   · **Escondía la lista más grande del negocio.** «Le escribimos y no
+ *     contesta» es un trabajo real y distinto —cambiar el mensaje o el canal, no
+ *     insistir con el precio— y no tenía dónde mirarse.
+ *
+ * 🔴 **NO ES DECLARABLE, y por eso no entra a `ETAPAS`.** Nadie va a tocar un
+ * botón que diga «sin respuesta»: se deriva de un hecho (no hay ningún entrante)
+ * y deja de ser cierto solo, en cuanto la persona escribe. Entra únicamente a la
+ * ESCALA, que es lo que necesita `max(manual, derivada)` para poder comparar —
+ * y al estar en el fondo, **cualquier gestión asentada le gana**, que es lo
+ * correcto: si una vendedora dice «contactado», sabe algo que el hecho no dice.
  */
-export const ESCALA_ETAPAS: readonly EtapaGestion[] = ETAPAS.filter((e) => e !== "perdido");
+export const SIN_RESPUESTA = "sin_respuesta";
+
+/**
+ * La escala que sube: sin_respuesta(0) < interesado(1) < contactado(2) <
+ * cotizado(3) < cierre(4). Los cuatro de arriba salen de ETAPAS (la lista
+ * canónica de `gestiones/registrarGestion.ts`) para no duplicar el orden;
+ * `perdido` queda afuera a propósito —no es un peldaño, es la salida terminal— y
+ * `sin_respuesta` se antepone porque se deriva pero no se declara.
+ */
+export const ESCALA_ETAPAS: readonly string[] = [
+  SIN_RESPUESTA,
+  ...ETAPAS.filter((e) => e !== "perdido"),
+];
 
 /**
  * EL PISO DERIVADO, solo — el peldaño que sale de los HECHOS, sin mirar ninguna
@@ -61,7 +91,20 @@ export const ESCALA_ETAPAS: readonly EtapaGestion[] = ETAPAS.filter((e) => e !==
  * la etapa vieja — y el síntoma sería una fecha de ingreso equivocada, que es de
  * las que no se ven (#37).
  */
-export function etapaDerivada(respondida: boolean, precioEnviado: boolean): EtapaGestion {
+export function etapaDerivada(
+  respondida: boolean,
+  precioEnviado: boolean,
+  /**
+   * ¿La persona escribió alguna vez? Sin esto, una conversación de puro outbound
+   * da `respondida = true` y sube a `contactado`/`cotizado` sin que del otro lado
+   * haya habido nadie. Opcional en `true` a propósito: los llamadores viejos —y
+   * los tests que no modelan el caso— siguen comportándose igual.
+   */
+  hablo = true,
+  /** ¿Salió alguna vez un mensaje nuestro? Sin ninguno de los dos no hay conversación. */
+  yaLeHablamos = false,
+): string {
+  if (!hablo && yaLeHablamos) return SIN_RESPUESTA;
   return precioEnviado ? "cotizado" : respondida ? "contactado" : "interesado";
 }
 
@@ -75,13 +118,15 @@ export function etapaEfectiva(
   etapaManual: string | null,
   respondida: boolean,
   precioEnviado = false,
-): EtapaGestion {
-  const derivada = etapaDerivada(respondida, precioEnviado);
+  hablo = true,
+  yaLeHablamos = false,
+): string {
+  const derivada = etapaDerivada(respondida, precioEnviado, hablo, yaLeHablamos);
   if (etapaManual == null) return derivada;
   const manual = normalizarEtapa(etapaManual);
   if (manual === "perdido") return "perdido";
   // Una manual fuera de la escala (dato viejo o basura) rankea -1: manda el piso.
-  const rangoManual = ESCALA_ETAPAS.indexOf(manual as EtapaGestion);
+  const rangoManual = ESCALA_ETAPAS.indexOf(manual);
   return rangoManual >= ESCALA_ETAPAS.indexOf(derivada) ? ESCALA_ETAPAS[rangoManual] : derivada;
 }
 
@@ -125,6 +170,7 @@ const rango = (etapa: SQL): SQL =>
  * con dos criterios, cada pantalla armaría un embudo distinto.
  */
 export const derivadaSql = sql`(CASE
+  WHEN NOT hablo AND ya_le_hablamos THEN ${SIN_RESPUESTA}
   WHEN precio_enviado THEN 'cotizado'
   WHEN respondida THEN 'contactado'
   ELSE 'interesado'

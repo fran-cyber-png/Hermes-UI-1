@@ -762,10 +762,24 @@ Cotizados» del Pipeline — 22 gestiones, de 2 personas, todas del mismo día. 
 negocio: medía cuánto se acordó alguien de tocar un botón.** Y la contradicción estaba dibujada en la
 propia pantalla: al lado de «22 Cotizados», el chip decía **«Con precio 2.906»**.
 
-- 🔴 **`etapaEfectivaSql` deriva ahora DOS peldaños**: `precio_enviado → cotizado` por encima de
-  `respondida → contactado`. Sobre los mismos datos el embudo pasa de `3.450 · 22 · 0 · 0` a
-  **Interesados 375 · Contactados 534 · Cotizados 3.064**. Mueve la pila de columna, sí — pero
-  «Contactados 534» pasa a ser una lista de trabajo («les hablamos y NUNCA les pasamos el precio»).
+- 🔴 **`etapaEfectivaSql` deriva ahora TRES peldaños**: `sin_respuesta` (le escribimos y nunca
+  contestó) debajo de todo, y `precio_enviado → cotizado` por encima de `respondida → contactado`.
+  Sobre los mismos datos el embudo pasa de `3.450 · 22 · 0 · 0` a **Sin respuesta 2.580 ·
+  Interesados 378 · Contactados 217 · Cotizados 798**.
+- 🔴 **`sin_respuesta` existe porque `precio_enviado` promovía a gente que nunca dijo una palabra.**
+  Sin ningún entrante, `respondida` da **true** (el último saliente le gana a un `-infinity`), así
+  que una difusión caía en `contactado` — y si llevaba precio, en `cotizado`. Medido el 8-ago-2026:
+  **2.252 de los 3.050 Cotizados (74 %) nunca habían escrito**; el 5-ago salieron 1.139 mensajes
+  contra 49 entrantes y ese blast los promovió a todos. La derivación ahora pide `hablo` (hay algún
+  entrante), y quien no lo tiene cae en su propia columna, que es **la más grande del tablero: 2.580
+  de 3.973 conversaciones (65 %)**.
+  · **Se deriva y NO se declara**: no está en `ETAPAS` (ni server ni front), no se puede arrastrar
+    ahí (`compuertas.ts`) y **deja de ser cierta sola** en cuanto la persona escribe. Está en el
+    fondo de `ESCALA_ETAPAS`, así que cualquier gestión asentada le gana.
+  · ⚠️ **Contrato**: quien consuma `etapaEfectivaSql` ahora tiene que emitir **`hablo`** y
+    **`ya_le_hablamos`** además de `respondida`/`precio_enviado`. El Dashboard las emite calculadas
+    aunque su `HAVING` exija un primer entrante (o sea que ahí `hablo` es siempre true): el día que
+    ese HAVING cambie, el embudo no empieza a mentir en silencio.
 - **Sigue siendo un PISO**: solo empuja hacia arriba. Lo declarado más avanzado gana, `perdido` es
   terminal humano y el precio **no resucita** una conversación descartada (con test). La compuerta
   del arrastre no se toca: acá no se declara nada, se lee un hecho — y el hecho es más fuerte que el
@@ -780,8 +794,27 @@ propia pantalla: al lado de «22 Cotizados», el chip decía **«Con precio 2.90
   y que este frente vino a sacar.
 - **El chip «Con precio» desaparece solo de Contactados**: esas conversaciones ahora viven en
   Cotizados, así que el conteo da 0 y la regla «un recorte que daría cero no se ofrece» lo esconde.
-  Queda `Todas · En ventana N`, que es el recorte accionable. Captura en
-  `docs/evidencia/embudo-derivado.png`.
+  Captura en `docs/evidencia/embudo-derivado.png`.
+- **EL RECORTE ES POR COLUMNA, y cada una lleva el suyo** (`tablero.ts`, `recortesDeColumna` puro).
+  El eje nuevo es **«Para seguir»** (silencio nuestro + entre 3 y 14 días en la etapa,
+  `cola/tiempoEnEtapa.ts`): medido, es el ÚNICO de los tres que recorta de verdad — sobre 3.051
+  Cotizados, «en ventana» dejaba **1** y «sin respuesta» **2.928**, y éste deja **82**. La cabecera
+  muestra **las dos cifras** («82 · de 3.051»): con una sola, o se esconde el montón o el número no
+  describe lo que hay abajo.
+  · **La regla del cero tiene DOS mitades**: un recorte que daría cero no se ofrece **y uno que
+    daría el total, tampoco** — «Con precio 3.051» sobre una columna de 3.051 es un botón que no
+    cambia nada. La excepción, para las dos: **el chip activo se ofrece siempre**, o no hay cómo
+    apagarlo. Lo encontró la captura de evidencia, no un test.
+  · Cierre y Perdidos no llevan recorte: Perdidos es archivo, y el que Cierre merece —vendido y
+    todavía sin registrar— depende del lazo de ventas, que es otro frente.
+- **Y cada tarjeta dice cuánto lleva en su columna** (`canales/antiguedad.ts`, `etapa_desde` del
+  server). **Sin oro**: el oro es tiempo que se ACABA y acá no corre ningún plazo. Se calla abajo de
+  un día, y también cuando repetiría lo que el reloj de arriba ya dice — que es el caso más común.
+  Capturas en `docs/evidencia/pipeline-recorte-por-columna.png`, `pipeline-para-seguir.png` y
+  `pipeline-sin-respuesta.png`.
+- ⚠️ **La quinta columna dejó el GRID ajustado**: a 1280 los mínimos suman 1.020 sobre ~1.256 px de
+  contenido, con el gap bajado a 8 px. Agregar otra columna **obliga a rehacer esa cuenta**, no a
+  sumar un `minmax`.
 - 🔴 **Y «Cierre» sigue dependiendo de que Hermes SEPA de la venta.** Medido: **417 ventas reales en
   30 días, 0 webhooks recibidos**. El puente `ventas:sincronizar` —que no depende de Cerberus—
   rechazaba el **99,6 %** de los payloads porque el esquema pedía `telefonos: string[]` y Cerberus

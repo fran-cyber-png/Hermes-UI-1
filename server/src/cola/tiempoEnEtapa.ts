@@ -5,6 +5,7 @@ import {
   etapaEfectiva,
   etapaEfectivaSql,
   manualNormalizadaSql,
+  SIN_RESPUESTA,
 } from "./etapaEfectivaSql.js";
 import { normalizarEtapa } from "../gestiones/registrarGestion.js";
 
@@ -34,9 +35,11 @@ import { normalizarEtapa } from "../gestiones/registrarGestion.js";
  *     esta etapa (`etapaEfectivaSql.ts` la resuelve; acá solo se la compara).
  *   · el DERIVADO — el instante del hecho que la puso ahí, si la derivación
  *     coincide con la etapa efectiva:
- *       `cotizado`   → el PRIMER saliente que mandó un precio (`cola/precio.ts`)
- *       `contactado` → el PRIMER saliente posterior al último entrante
- *       `interesado` → el último entrante (o el primer mensaje, si nunca escribió)
+ *       `sin_respuesta` → el PRIMER saliente: el silencio corre desde que
+ *                         empezamos a escribirle, e insistir no lo reinicia
+ *       `cotizado`      → el PRIMER saliente con precio (`cola/precio.ts`)
+ *       `contactado`    → el PRIMER saliente posterior al último entrante
+ *       `interesado`    → el último entrante (o el primer mensaje)
  *
  * Con precedencia en vez de `LEAST`, el caso «el precio salió el día 1 y alguien
  * tocó Cotizado el día 3» reportaría 3 días menos de antigüedad — justo en la
@@ -66,7 +69,8 @@ import { normalizarEtapa } from "../gestiones/registrarGestion.js";
  *
  * CONTRATO DE COLUMNAS (como `urgenciaSql.ts` y `etapaEfectivaSql.ts`): quien
  * consuma estos fragmentos tiene que exponer `respondida` · `precio_enviado` ·
- * `etapa_manual` · `gestion_at` · `primer_precio_at` · `respuesta_at` ·
+ * `hablo` · `ya_le_hablamos` · `etapa_manual` · `gestion_at` ·
+ * `primer_precio_at` · `primer_saliente_at` · `respuesta_at` ·
  * `ultimo_entrante_at` · `primer_at`.
  */
 
@@ -78,8 +82,14 @@ export interface HechosDeEtapa {
   gestionAt: Date | null;
   respondida: boolean;
   precioEnviado: boolean;
+  /** ¿La persona escribió alguna vez? Lo que separa una conversación de una difusión. */
+  hablo: boolean;
+  /** ¿Salió alguna vez un mensaje nuestro? */
+  yaLeHablamos: boolean;
   /** El PRIMER saliente que mandó un precio (`cola/precio.ts`). */
   primerPrecioAt: Date | null;
+  /** El PRIMER saliente de todos — cuándo empezamos a escribirle sin respuesta. */
+  primerSalienteAt: Date | null;
   /** El PRIMER saliente posterior o igual al último entrante. */
   respuestaAt: Date | null;
   ultimoEntranteAt: Date | null;
@@ -95,7 +105,7 @@ export interface HechosDeEtapa {
  * fechara el ingreso a una etapa distinta de la que la fila muestra.
  */
 export function etapaDesde(h: HechosDeEtapa): Date | null {
-  const etapa = etapaEfectiva(h.etapaManual, h.respondida, h.precioEnviado);
+  const etapa = etapaEfectiva(h.etapaManual, h.respondida, h.precioEnviado, h.hablo, h.yaLeHablamos);
 
   const candidatos: Date[] = [];
 
@@ -104,13 +114,18 @@ export function etapaDesde(h: HechosDeEtapa): Date | null {
   if (manual === etapa && h.gestionAt != null) candidatos.push(h.gestionAt);
 
   // El DERIVADO: el hecho que la puso acá, si el piso coincide con la efectiva.
-  if (etapaDerivada(h.respondida, h.precioEnviado) === etapa) {
+  if (etapaDerivada(h.respondida, h.precioEnviado, h.hablo, h.yaLeHablamos) === etapa) {
     const hecho =
-      etapa === "cotizado"
-        ? h.primerPrecioAt
-        : etapa === "contactado"
-          ? h.respuestaAt
-          : (h.ultimoEntranteAt ?? h.primerAt);
+      etapa === SIN_RESPUESTA
+        ? // Desde que EMPEZAMOS a escribirle: es el primer saliente, porque el
+          // silencio del otro lado corre desde ahí. Y es el primero y no el
+          // último a propósito — insistir no reinicia la espera, la alarga.
+          h.primerSalienteAt
+        : etapa === "cotizado"
+          ? h.primerPrecioAt
+          : etapa === "contactado"
+            ? h.respuestaAt
+            : (h.ultimoEntranteAt ?? h.primerAt);
     if (hecho != null) candidatos.push(hecho);
   }
 
@@ -169,8 +184,9 @@ export function paraSeguir(h: HechosDeEtapa, ahora: Date): boolean {
  * tiene que llegar acá o la fecha queda de la etapa vieja, sin error ni log.
  */
 const HECHO_DERIVADO = sql`(CASE ${derivadaSql}
-  WHEN 'cotizado'   THEN primer_precio_at
-  WHEN 'contactado' THEN respuesta_at
+  WHEN ${SIN_RESPUESTA} THEN primer_saliente_at
+  WHEN 'cotizado'       THEN primer_precio_at
+  WHEN 'contactado'     THEN respuesta_at
   ELSE COALESCE(ultimo_entrante_at, primer_at)
 END)`;
 

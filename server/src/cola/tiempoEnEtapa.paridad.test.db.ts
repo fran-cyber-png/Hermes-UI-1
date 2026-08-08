@@ -47,7 +47,10 @@ describe("paridad SQL ≡ TS del tiempo en etapa", () => {
       gestionAt: null,
       respondida: false,
       precioEnviado: false,
+      hablo: true,
+      yaLeHablamos: true,
       primerPrecioAt: null,
+      primerSalienteAt: null,
       respuestaAt: null,
       ultimoEntranteAt: null,
       primerAt: null,
@@ -186,7 +189,10 @@ describe("paridad SQL ≡ TS del tiempo en etapa", () => {
         gestionAt: null,
         respondida: true,
         precioEnviado: false,
+        hablo: true,
+        yaLeHablamos: true,
         primerPrecioAt: null,
+        primerSalienteAt: null,
         respuestaAt: null,
         ultimoEntranteAt: hace(3),
         primerAt: hace(3),
@@ -203,6 +209,85 @@ describe("paridad SQL ≡ TS del tiempo en etapa", () => {
     assert.equal(fila.etapa_efectiva, "interesado");
     assert.ok(fila.etapa_desde);
     assert.ok(Math.abs(new Date(fila.etapa_desde).getTime() - hace(2).getTime()) < 1000);
+  });
+});
+
+describe("«sin respuesta» contra una base de verdad", () => {
+  /**
+   * EL CASO QUE MOTIVÓ LA ETAPA, medido en producción el 8-ago-2026: el 5-ago
+   * salieron **1.139 mensajes contra 49 entrantes** —un envío masivo— y como las
+   * plantillas de Goberna llevan precio, ese blast promovió **2.252 de los 3.050
+   * Cotizados** a una columna donde nadie del otro lado había dicho una palabra.
+   */
+  test("🔴 un envío con precio a alguien que nunca escribió NO es un cotizado", async (t) => {
+    const db = await baseDePrueba(t);
+    await sembrarMensaje(db, {
+      personaId: "blast",
+      direccion: "saliente",
+      texto: CON_PRECIO,
+      occurredAt: hace(9),
+    });
+    // Control: la misma plantilla a alguien que sí habló SÍ cotiza.
+    await sembrarMensaje(db, { personaId: "hablo", occurredAt: hace(10) });
+    await sembrarMensaje(db, {
+      personaId: "hablo",
+      direccion: "saliente",
+      texto: CON_PRECIO,
+      occurredAt: hace(9),
+    });
+
+    const filas = (await consultarCola(db, {})).conversaciones as Fila[];
+    const porPersona = new Map(filas.map((f) => [f.persona_id, f]));
+
+    assert.equal(porPersona.get("blast")?.etapa_efectiva, "sin_respuesta");
+    assert.equal(porPersona.get("hablo")?.etapa_efectiva, "cotizado");
+
+    // Y se fecha con el primer saliente: el silencio corre desde que le escribimos.
+    const desde = porPersona.get("blast")?.etapa_desde;
+    assert.ok(desde);
+    assert.ok(Math.abs(new Date(desde).getTime() - hace(9).getTime()) < 1000);
+  });
+
+  test("en cuanto contesta sale sola de la columna, sin que nadie declare nada", async (t) => {
+    const db = await baseDePrueba(t);
+    await sembrarMensaje(db, {
+      personaId: "contesto-tarde",
+      direccion: "saliente",
+      texto: CON_PRECIO,
+      occurredAt: hace(9),
+    });
+    let filas = (await consultarCola(db, {})).conversaciones as Fila[];
+    assert.equal(filas[0]?.etapa_efectiva, "sin_respuesta");
+
+    await sembrarMensaje(db, { personaId: "contesto-tarde", occurredAt: hace(1) });
+    filas = (await consultarCola(db, {})).conversaciones as Fila[];
+    assert.equal(filas[0]?.etapa_efectiva, "cotizado");
+  });
+
+  test("una gestión asentada le gana: la etapa está en el fondo de la escala", async (t) => {
+    const db = await baseDePrueba(t);
+    await sembrarMensaje(db, {
+      personaId: "declarada",
+      direccion: "saliente",
+      texto: CON_PRECIO,
+      occurredAt: hace(9),
+    });
+    await sembrarGestion(db, { clave: claveDe("declarada"), etapa: "contactado", creadoAt: hace(2) });
+
+    const filas = (await consultarCola(db, {})).conversaciones as Fila[];
+    assert.equal(filas[0]?.etapa_efectiva, "contactado", "lo que afirma una persona gana al hecho");
+  });
+
+  test("`?etapa=sin_respuesta` recorta, y el desglose promete ese mismo número", async (t) => {
+    const db = await baseDePrueba(t);
+    for (const p of ["a", "b", "c"]) {
+      await sembrarMensaje(db, { personaId: p, direccion: "saliente", occurredAt: hace(5) });
+    }
+    await sembrarMensaje(db, { personaId: "habla", occurredAt: hace(5) });
+
+    const r = await consultarCola(db, { etapa: "sin_respuesta" });
+    assert.equal(r.conversaciones.length, 3);
+    assert.equal(r.conteos?.sin_respuesta, 3, "el conteo de la columna sale del MISMO desglose");
   });
 });
 
@@ -274,7 +359,10 @@ describe("el recorte «Para seguir» (`?seguir=1`)", () => {
           gestionAt: null,
           respondida: false,
           precioEnviado: true,
+          hablo: true,
+          yaLeHablamos: true,
           primerPrecioAt: hace(7),
+          primerSalienteAt: hace(7),
           respuestaAt: null,
           ultimoEntranteAt: hace(1),
           primerAt: hace(8),

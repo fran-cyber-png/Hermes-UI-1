@@ -1,5 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
+import { etapaEfectiva } from "./etapaEfectivaSql.js";
 import {
   etapaDesde,
   paraSeguir,
@@ -21,13 +22,21 @@ const DIA = 86_400_000;
 const AHORA = new Date("2026-08-08T12:00:00Z");
 const hace = (dias: number) => new Date(AHORA.getTime() - dias * DIA);
 
-/** Una conversación sin ningún hecho: el punto de partida de cada caso. */
+/**
+ * Una conversación sin ningún hecho fechado, pero donde LOS DOS hablaron — que es
+ * la forma normal. `hablo: true` es deliberado: con `false` cada caso de acá
+ * abajo caería en `sin_respuesta` y estaría probando otra cosa. Los casos del
+ * estado nuevo lo bajan explícitamente.
+ */
 const NADA: HechosDeEtapa = {
   etapaManual: null,
   gestionAt: null,
   respondida: false,
   precioEnviado: false,
+  hablo: true,
+  yaLeHablamos: true,
   primerPrecioAt: null,
+  primerSalienteAt: null,
   respuestaAt: null,
   ultimoEntranteAt: null,
   primerAt: null,
@@ -150,6 +159,58 @@ describe("etapaDesde — de qué hecho sale la fecha", () => {
 
   test("una gestión sin fecha no fabrica una: `null`", () => {
     assert.equal(etapaDesde({ ...NADA, etapaManual: "perdido", gestionAt: null }), null);
+  });
+});
+
+describe("«sin respuesta» — le escribimos y nunca contestó", () => {
+  /** Difusión pura: salió un mensaje nuestro y del otro lado nunca hubo nadie. */
+  const difusion: HechosDeEtapa = {
+    ...NADA,
+    hablo: false,
+    yaLeHablamos: true,
+    // ⚠️ `respondida` es TRUE acá, y no es un error del fixture: sin ningún
+    // entrante, el último saliente le gana a un '-infinity'. Es exactamente el
+    // motivo por el que esta etapa tuvo que existir.
+    respondida: true,
+    primerSalienteAt: hace(9),
+  };
+
+  test("se fecha con el PRIMER saliente: el silencio corre desde que le escribimos", () => {
+    assert.deepEqual(etapaDesde(difusion), hace(9));
+  });
+
+  test("🔴 y le gana al precio: un blast con precio no vuelve cotizado a nadie", () => {
+    // El caso medido: el 5-ago salieron 1.139 mensajes contra 49 entrantes, y ese
+    // envío promovió 2.252 conversaciones a Cotizados de una sola vez.
+    const conPrecio = { ...difusion, precioEnviado: true, primerPrecioAt: hace(9) };
+    assert.deepEqual(etapaDesde(conPrecio), hace(9));
+    assert.equal(etapaEfectiva(null, true, true, false, true), "sin_respuesta");
+  });
+
+  test("insistir NO reinicia la espera: manda el primer saliente, no el último", () => {
+    assert.deepEqual(etapaDesde({ ...difusion, primerSalienteAt: hace(20) }), hace(20));
+  });
+
+  test("en cuanto la persona escribe, deja de estar acá — sola", () => {
+    assert.equal(etapaEfectiva(null, true, true, true, true), "cotizado");
+  });
+
+  test("una gestión asentada le gana: está en el FONDO de la escala", () => {
+    assert.equal(etapaEfectiva("contactado", true, false, false, true), "contactado");
+    // Y entonces la fecha es la de la gestión, no la del primer saliente.
+    assert.deepEqual(
+      etapaDesde({ ...difusion, etapaManual: "contactado", gestionAt: hace(2) }),
+      hace(2),
+    );
+  });
+
+  test("sin ningún mensaje nuestro NO es «sin respuesta»: no hay silencio que contar", () => {
+    assert.equal(etapaEfectiva(null, false, false, false, false), "interesado");
+  });
+
+  test("🔴 no es declarable: `perdido` y `cierre` siguen ganando siempre", () => {
+    assert.equal(etapaEfectiva("perdido", true, true, false, true), "perdido");
+    assert.equal(etapaEfectiva("cierre", true, true, false, true), "cierre");
   });
 });
 

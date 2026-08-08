@@ -21,8 +21,25 @@ import {
 const tarjeta = (clave: string, etapa?: string) => ({ clave, etapa_efectiva: etapa });
 
 describe('las columnas de trabajo', () => {
-  test('cada columna pide SU etapa efectiva: contactado, cotizado, cierre y perdido — interesado no es columna', () => {
-    expect(COLUMNAS_TRABAJO.map((c) => c.id)).toEqual(['contactado', 'cotizado', 'cierre', 'perdido']);
+  test('cada columna pide SU etapa efectiva — interesado sigue sin ser columna (es la bandeja)', () => {
+    expect(COLUMNAS_TRABAJO.map((c) => c.id)).toEqual([
+      // «Sin respuesta» va PRIMERA desde el 8-ago-2026: es donde empieza el
+      // embudo cuando la conversación la abrimos nosotros, y es la más grande
+      // (2.580 de 3.973 medidas en producción).
+      'sin_respuesta',
+      'contactado',
+      'cotizado',
+      'cierre',
+      'perdido',
+    ]);
+  });
+
+  test('🔴 «sin respuesta» NO está en la lista de etapas declarables', async () => {
+    // Se deriva de un hecho y deja de ser cierta sola. Si entrara a ETAPAS,
+    // el embudo del Dashboard y el recibo de venta la enumerarían como un
+    // peldaño más — y ahí sería un segmento clavado en cero.
+    const { ETAPAS } = await import('../../lib/etapas');
+    expect(ETAPAS).not.toContain('sin_respuesta');
   });
 });
 

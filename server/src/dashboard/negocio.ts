@@ -214,7 +214,16 @@ function conversacionesDelPeriodo(o: OpcionesNegocio): SQL {
         -- sabe (y el que no cambia si la conversación sigue).
         (array_agg(origen ORDER BY occurred_at)
            FILTER (WHERE origen IS NOT NULL))[1]                      AS origen,
-        bool_or(direccion = 'saliente' AND texto ~* ${sql.raw(PRECIO_REGEX_SQL)}) AS precio_enviado
+        bool_or(direccion = 'saliente' AND texto ~* ${sql.raw(PRECIO_REGEX_SQL)}) AS precio_enviado,
+        -- Las dos columnas que etapaEfectivaSql pide desde que existe
+        -- sin_respuesta (le escribimos y nunca contestó). Acá hablo es
+        -- SIEMPRE true por construcción: el HAVING de abajo exige un primer
+        -- entrante dentro del período, así que este panel nunca ve difusión —
+        -- mide leads que LLEGARON. Se emiten igual, calculadas de verdad, para
+        -- que el día que ese HAVING cambie el embudo no empiece a mentir en
+        -- silencio.
+        COALESCE(bool_or(direccion = 'entrante'), false)              AS hablo,
+        COALESCE(bool_or(direccion = 'saliente'), false)              AS ya_le_hablamos
       FROM msgs
       GROUP BY canal, persona_id, numero_propio
       -- «Llegaron» = el PRIMER entrante cae en el período. Una conversación de
