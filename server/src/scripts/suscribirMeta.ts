@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { aplicar, camposEsperados, leerEstado } from "../meta/suscribir.js";
+import { aplicar, camposEsperados, CAMPOS_INSTAGRAM, leerEstado } from "../meta/suscribir.js";
 
 /**
  * `npm run meta:suscribir [-- --aplicar]`
@@ -44,7 +44,16 @@ for (const e of estados) {
   }
   if (e.faltan.length === 0) {
     const marca = e.resultado === "suscrita" ? "✅" : "  ";
-    console.log(`  ${marca}  ${nombre}${ig}  ${e.suscritaA.join(", ") || "(sin campos)"}`);
+    // Instagram es OTRA suscripción (a la cuenta de IG, no a la Página): se
+    // reporta aparte o un ✅ de Página taparía un fallo de IG.
+    const enIg = !e.instagramId
+      ? ""
+      : e.errorIg
+        ? `  ⚠️ IG: ${e.errorIg.slice(0, 60)}`
+        : e.resultadoIg === "suscrita"
+          ? "  ✅ IG"
+          : "";
+    console.log(`  ${marca}  ${nombre}${ig}  ${e.suscritaA.join(", ") || "(sin campos)"}${enIg}`);
     continue;
   }
   pendientes += 1;
@@ -59,7 +68,8 @@ console.log(
   `\n${estados.length} Páginas · ${conIg} con Instagram · ` +
     `${pendientes} sin suscribir${conError ? ` · ${conError} con error` : ""}`,
 );
-console.log(`Campos: ${camposEsperados("con-ig").join(", ")} (los de IG solo donde hay cuenta)`);
+console.log(`Campos de Página: ${camposEsperados(null).join(", ")}`);
+console.log(`Campos de Instagram (a la CUENTA de IG, no a la Página): ${CAMPOS_INSTAGRAM.join(", ")}`);
 
 /**
  * ⚠️ LA MITAD QUE ESTE SCRIPT NO PUEDE HACER, y que en silencio deja todo igual.

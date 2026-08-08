@@ -38,9 +38,25 @@ import { MetaGraphClient, MetaGraphError } from "./metaClient.js";
 export const CAMPOS_PAGINA = ["feed", "messages", "messaging_postbacks"] as const;
 
 /**
- * Instagram va por la MISMA Página (su `subscribed_apps`), no por la cuenta de
- * IG: es el error que cuesta media hora descubrir, porque el endpoint de la
- * cuenta de IG existe y devuelve otra cosa. Los campos sí son propios.
+ * 🔴 LOS CAMPOS DE INSTAGRAM VAN A LA CUENTA DE IG, NO A LA PÁGINA — y acá este
+ * archivo afirmaba lo contrario (8-ago-2026).
+ *
+ * Decía «Instagram va por la MISMA Página (su `subscribed_apps`)». **Es falso**,
+ * y Meta lo rechaza con un mensaje que no deja lugar a dudas: al mandar
+ * `comments` en el `subscribed_fields` de una Página contesta
+ * `(#100) Param subscribed_fields[0] must be one of {feed, mention, name, ...}`
+ * — una lista de ~90 campos donde `comments` no está.
+ *
+ * Consecuencia medida: al aplicar por primera vez, las **3 Páginas sin
+ * Instagram se suscribieron bien y las 9 con Instagram fallaron ENTERAS** —
+ * ni siquiera quedaron con sus campos de Página, porque el POST se rechaza
+ * completo. Un campo de más no degrada: tumba la llamada.
+ *
+ * Lo correcto son DOS llamadas por Página con IG:
+ *   · `POST /{page-id}/subscribed_apps` con los campos de PÁGINA;
+ *   · `POST /{ig-user-id}/subscribed_apps` con los de INSTAGRAM.
+ * Las dos con el token de la Página. Y el ruteo de los eventos lo define la
+ * suscripción a nivel APP (`object=instagram`), que es otra cosa y va aparte.
  */
 export const CAMPOS_INSTAGRAM = ["comments", "messages"] as const;
 
@@ -53,16 +69,22 @@ export interface EstadoPagina {
   suscritaA: string[];
   /** Lo que falta suscribir. Vacío = no hay nada que hacer. */
   faltan: string[];
-  /** Solo con `--aplicar`: qué respondió Meta. */
+  /** Solo con `--aplicar`: qué respondió Meta para la PÁGINA. */
   resultado?: "suscrita" | "sin_cambios" | string;
   error?: string;
+  /** Y qué respondió para la cuenta de INSTAGRAM, que es otra llamada. */
+  resultadoIg?: "suscrita" | string;
+  errorIg?: string;
 }
 
-/** Los campos que esta Página debería tener, según tenga o no Instagram. */
-export function camposEsperados(instagramId: string | null): string[] {
-  const campos = new Set<string>(CAMPOS_PAGINA);
-  if (instagramId) for (const c of CAMPOS_INSTAGRAM) campos.add(c);
-  return [...campos];
+/**
+ * Los campos que van al `subscribed_apps` de la PÁGINA. Son siempre los mismos:
+ * tener una cuenta de Instagram vinculada NO agrega campos acá (ver
+ * `CAMPOS_INSTAGRAM`). Se conserva el parámetro para no romper a los llamadores
+ * y para que la firma siga diciendo que la pregunta se hizo.
+ */
+export function camposEsperados(_instagramId: string | null): string[] {
+  return [...CAMPOS_PAGINA];
 }
 
 /**
@@ -166,6 +188,23 @@ export async function aplicar(token: string, estados: EstadoPagina[]): Promise<E
       estado.suscritaA = completo;
       estado.faltan = [];
       estado.resultado = "suscrita";
+
+      /**
+       * LA SEGUNDA LLAMADA — la cuenta de Instagram, con el token de la PÁGINA.
+       *
+       * Va en su propio `try` a propósito: si Instagram falla, la Página ya
+       * quedó suscrita y no se pierde. Al revés fue el defecto que se pagó — un
+       * solo POST con los campos mezclados rechazaba TODO, y las 9 Páginas con
+       * Instagram quedaron sin ninguna suscripción.
+       */
+      if (estado.instagramId) {
+        try {
+          await suscribirPagina(pageToken, estado.instagramId, [...CAMPOS_INSTAGRAM]);
+          estado.resultadoIg = "suscrita";
+        } catch (err) {
+          estado.errorIg = err instanceof MetaGraphError ? err.message : (err as Error).message;
+        }
+      }
     } catch (err) {
       estado.error = err instanceof MetaGraphError ? err.message : (err as Error).message;
     }
