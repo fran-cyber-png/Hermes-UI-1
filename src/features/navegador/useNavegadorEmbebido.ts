@@ -48,6 +48,15 @@ import { esCascaraSinElComando } from './cascara';
 /** Lo que se le manda a Rust. Píxeles de CSS: el factor de escala lo aplica él. */
 type Recuadro = { x: number; y: number; ancho: number; alto: number };
 
+/**
+ * Qué pasó al intentar abrir.
+ *
+ * `sin_embebido` es el peldaño, no un error: la cáscara instalada no tiene los
+ * comandos y hay que seguir por la ventana aparte. `sin_recuadro` es el caso
+ * mudo de siempre (la vista todavía no midió), y no merece cartel.
+ */
+export type ResultadoIr = 'ok' | 'sin_embebido' | 'error' | 'sin_recuadro';
+
 export type Navegador = {
   /** `null` mientras no se probó. `false` = esta cáscara no sabe (peldaño 2 o 3). */
   soportado: boolean | null;
@@ -58,7 +67,12 @@ export type Navegador = {
   error: string | null;
   /** El hueco que el webview va a ocupar. Va en un `div` sin contenido. */
   hueco: React.RefObject<HTMLDivElement | null>;
-  ir: (url: string) => Promise<void>;
+  /**
+   * Abre `url` en el viewport embebido. **Devuelve qué pasó**, y eso no es
+   * decoración: `sin_embebido` es la señal de que hay que seguir por el peldaño
+   * de abajo, EN EL MISMO CLIC. Ver el comentario de la implementación.
+   */
+  ir: (url: string) => Promise<ResultadoIr>;
   atras: () => void;
   adelante: () => void;
   recargar: () => void;
@@ -121,24 +135,34 @@ export function useNavegadorEmbebido({ tapado }: { tapado: boolean }): Navegador
    * muestra su mensaje y NO se apaga nada, porque la cáscara está perfecta y
    * lo que estaba mal era la dirección. Colapsar los dos casos degradaría la
    * app entera por una URL mal tecleada.
+   *
+   * 🔴 **Y DEVUELVE `sin_embebido` EN VEZ DE TRAGARSE EL CLIC.** Acá esto se
+   * limitaba a apagar el embebido y volver, así que el primer clic no abría
+   * NADA: cambiaba el cartel y listo, y había que tocar Cerberus dos veces. El
+   * detalle es que ese es el estado de TODAS las máquinas el día del deploy —la
+   * UI viaja por OTA y la cáscara se reinstala a mano—, o sea que el defecto no
+   * era un caso raro: era el estreno. Quien llama sigue por el peldaño de abajo
+   * con el mismo clic.
    */
   const ir = useCallback(
-    async (url: string) => {
+    async (url: string): Promise<ResultadoIr> => {
       const recuadro = medir();
-      if (!recuadro) return;
+      if (!recuadro) return 'sin_recuadro';
       setError(null);
       try {
         await invocar('navegador_montar', { url, recuadro });
         setSoportado(true);
         setMontado(true);
         setDonde(url);
+        return 'ok';
       } catch (e) {
         const motivo = typeof e === 'string' ? e : (e as Error)?.message ?? 'no se pudo abrir';
         if (esCascaraSinElComando(motivo) || motivo === 'sin cáscara') {
           setSoportado(false);
-          return;
+          return 'sin_embebido';
         }
         setError(motivo);
+        return 'error';
       }
     },
     [invocar, medir],

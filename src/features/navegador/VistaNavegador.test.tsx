@@ -131,6 +131,31 @@ test('una cáscara sin los comandos cae al camino viejo y lo explica', async () 
 });
 
 /**
+ * 🔴 UN CLIC TIENE QUE ABRIR ALGO, aunque el peldaño cambie en el medio.
+ *
+ * Este test existe porque el defecto estaba y los otros no lo veían: `ir()`
+ * apagaba el embebido y volvía **sin abrir nada**, así que el primer toque solo
+ * cambiaba el cartel. Y ese no es un caso raro — es el estado de las CUATRO
+ * máquinas el día del deploy, porque la UI viaja por OTA y la cáscara se
+ * reinstala a mano. El estreno del frente habría sido «toco Cerberus y no pasa
+ * nada».
+ */
+test('con una cáscara vieja, el MISMO clic sigue por la ventana aparte', async () => {
+  rechazarCon = 'Command navegador_montar not allowed by ACL';
+  const { contenedor, desmontar } = montar(<VistaNavegador tapado={false} />);
+
+  tocar(botonPorTexto(contenedor, 'Cerberus'));
+  await reposar();
+
+  expect(llamadas.map((l) => l.cmd)).toContain('abrir_navegador');
+  expect(llamadas.find((l) => l.cmd === 'abrir_navegador')?.args).toMatchObject({
+    url: 'https://app.goberna.us',
+  });
+
+  desmontar();
+});
+
+/**
  * ⚠️ Y el rechazo de la GUARDA es lo contrario: la cáscara está perfecta, lo que
  * estaba mal era la dirección. Ahí se muestra el motivo y NO se apaga nada —
  * colapsar los dos casos degradaría la app entera por una URL mal tecleada. Los

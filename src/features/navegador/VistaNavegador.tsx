@@ -85,6 +85,20 @@ export function VistaNavegador({
     }
   }
 
+  /**
+   * 🔴 UN CLIC, UN RESULTADO — aunque el peldaño cambie en el medio.
+   *
+   * Si la cáscara instalada no tiene los comandos, `ir()` devuelve
+   * `sin_embebido` y acá se sigue **con el mismo clic** por la ventana aparte.
+   * Sin esto, el primer toque solo cambiaba el cartel y había que tocar dos
+   * veces — y ese es el estado de TODAS las máquinas el día del deploy, porque
+   * la UI viaja por OTA y la cáscara se reinstala a mano.
+   */
+  async function abrir(url: string, rotulo: string) {
+    if (!embebido) return abrirClasico(url, rotulo);
+    if ((await nav.ir(url)) === 'sin_embebido') await abrirClasico(url, rotulo);
+  }
+
   function enviar(e: FormEvent) {
     e.preventDefault();
     // La MISMA función que decide si el botón va habilitado. Separadas, el
@@ -92,13 +106,11 @@ export function VistaNavegador({
     // salir de acá — la trampa de `motivoParaNoPreguntar` en Ivi (ADR 0024).
     if (!destino.ok) return;
     caja.current?.blur();
-    if (embebido) void nav.ir(destino.url);
-    else void abrirClasico(destino.url, destino.url);
+    void abrir(destino.url, destino.url);
   }
 
   function tocarDestino(url: string, nombre: string) {
-    if (embebido) void nav.ir(url);
-    else void abrirClasico(url, nombre);
+    void abrir(url, nombre);
   }
 
   return (
