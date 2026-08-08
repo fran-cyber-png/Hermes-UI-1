@@ -225,26 +225,59 @@ npm install && npm run dev:app                     # la cáscara Tauri (arranca 
     y cualquier mecanismo cuyo fin sea que el tráfico no se detecte (ADR 0015 §«Lo que
     deliberadamente no se hizo»).
 
-## El navegador — una VENTANA de Hermes, no un webview embebido (ADR 0040)
+## El navegador vive ADENTRO de la mesa — webview hijo (ADR 0043, enmienda 0040)
 
-La vendedora sale a la web con la **sesión de trabajo**, separada de su Chrome personal:
-`src/features/navegador/` (vista ⌘9) + el comando `abrir_navegador` en `src-tauri/src/lib.rs`.
-Fuera de Tauri cae a `abrirExterno()`, así que la vista anda igual en `npm run dev`.
+La vendedora sale a la web con la **sesión de trabajo**, separada de su Chrome personal, y desde el
+8-ago-2026 **sin salir de Hermes**: `src/features/navegador/` (vista ⌘9) + los comandos
+`navegador_*` en `src-tauri/src/navegador.rs`. Pedido del dueño: «que pueda enlazar tu cuenta de
+Google, por ejemplo entrar al ChatGPT».
 
-- **Por qué NO un `<iframe>`** — medido el 7-ago-2026: `app.goberna.us` (Cerberus) manda
-  `X-Frame-Options: DENY`, igual que Meta Business; Mattermost y Google, `SAMEORIGIN`;
-  `web.whatsapp.com`, `frame-ancestors *.whatsapp.com`. De todo lo que se usa, **solo
-  grupogoberna.com carga**. Y **por qué no un webview hijo**: multiwebview es feature `unstable` de
-  Tauri y es una capa del SO **encima** del DOM — taparía compuertas, cabina e Ivi.
-- 🔴 **La guarda es de Rust, no del front**: solo `https:`. El front normaliza para habilitar el
-  botón (conveniencia); la garantía es el rechazo del comando, como `limitesMedia` con su 409.
-- 🔴 **La ventana `navegador` no está en ninguna capability, y no hay que agregarla**: las dos listan
-  `"windows": ["main"]`. Meterla le daría la API nativa a cualquier sitio de terceros que se abra.
-- **UNA sola ventana, reusada**: el segundo destino navega la que ya está. Con test.
-- **No hay barra de direcciones adentro de la ventana**, y es el costo aceptado de no usar
-  multiwebview. Si molesta, la salida es un menú nativo con atrás/adelante, no el webview hijo.
+- **Por qué NO un `<iframe>`** — medido el 7-ago-2026 y confirmado el 8: `app.goberna.us` (Cerberus)
+  manda `X-Frame-Options: DENY`, igual que Meta Business; Mattermost y Google, `SAMEORIGIN`;
+  `web.whatsapp.com`, `frame-ancestors *.whatsapp.com`. Y los **dos destinos que motivaron el
+  frente** tampoco: `chatgpt.com` manda `SAMEORIGIN` y `accounts.google.com`, `DENY`.
+- 🔴 **MEDIDO ANTES DE CONSTRUIR, y era la precondición del frente**: Google **no bloquea** el
+  webview embebido — `accounts.google.com` muestra el formulario real, sin el
+  «este navegador puede no ser seguro» (`disallowed_useragent`). Si rebotaba, «enlazar tu cuenta»
+  era imposible. ⚠️ **Medido en macOS/WKWebView; Windows/WebView2 sigue SIN verificar**, y las
+  vendedoras usan Windows. Tampoco se probó el login completo ni que la sesión sobreviva al reinicio.
+- 🔴 **UN WEBVIEW HIJO ES UNA CAPA DEL SO ENCIMA DEL DOM**, y ese era el motivo por el que ADR 0040
+  lo descartó. Sigue siendo cierto: tapa lo que caiga en su rectángulo. Ahora se paga con código —
+  la vista lo **esconde** cuando hay algo encima (`tapado = cabina || ivi` en `App.tsx`) y al
+  desmontarse. La costura vive en UN lugar (`useNavegadorEmbebido.ts`), con test de DOM. **Una capa
+  nueva sobre la mesa hay que sumarla a `tapado`**; el síntoma de olvidarse es que aparece detrás.
+- 🔴 **LAS CAPABILITIES ACOTAN POR `webviews`, NO POR `windows` — y esto es seguridad, no estilo.**
+  El ACL resuelve con un **O** (`ipc/authority.rs:459`): con `"windows": ["main"]`, el webview hijo
+  matchea por su VENTANA, o sea que `chatgpt.com` corriendo adentro de la mesa quedaba a **un solo
+  candado** (el origen) de la API nativa. Con `"webviews": ["main"]` quedan los dos candados
+  independientes: label y origen. `el_navegador_embebido_no_alcanza_ningun_comando` lo fija con el
+  caso paranoico (el hijo pidiendo con NUESTRO origen) y **se verificó que se pone rojo** al
+  devolverle `"windows"`.
+- 🔴 **DOS GUARDAS CON DOS SUJETOS DISTINTOS, y no se colapsan.** `validar()` juzga **lo que la
+  vendedora pide**: solo `https`. `navegacion_permitida()` juzga **a dónde el sitio se lleva al
+  webview solo**, y es lista NEGRA (`file:`, `javascript:`, `tauri:`, `data:`). Endurecer la segunda
+  copiando la primera **rompe el login de Google** —salta por `about:blank`— y media web que
+  redirige de `http` a `https`. Hay test de las dos mitades.
+- **La ventana aparte de ADR 0040 NO se archiva**: es el peldaño del medio de una escalera de tres
+  (embebido → ventana aparte → navegador del sistema). Ver el punto de la cáscara, más abajo.
+- **Atrás/adelante van por `history` y están siempre habilitados**: Tauri no expone el historial del
+  webview (solo `reload`), así que no se puede saber si hay a dónde volver. Que a veces no hagan
+  nada es el costo honesto de no inventar un dato.
+- **La barra de direcciones SONDEA** `navegador_donde` 1×/s en vez de escuchar un evento: el front no
+  tiene `@tauri-apps/api` a propósito (la UI se sirve por OTA y anda en un navegador común), así que
+  el puente expone `invoke` y nada más. Y hay que preguntar: media navegación de un login la hace el
+  sitio solo.
+- **Sin almacén propio para el hijo**, a propósito: `data_store_identifier` es macOS ≥ 14 y
+  `data_directory` abre un segundo entorno de WebView2 en Windows. La promesa —«separada de tu Chrome
+  personal»— ya la da correr en otro motor; lo que hace falta es que persista entre reinicios, y el
+  almacén por default persiste.
 - Ver la UI sin server: `npx vite --port 5199` → `/galeria-navegador.html` (`?sistema=1` el caso
-  fuera de Tauri, `?basura=1` el recorte de `interpretar`). Capturas en `docs/evidencia/navegador-*.png`.
+  fuera de Tauri, `?basura=1` el recorte de `interpretar`). ⚠️ **El webview embebido NO se puede
+  fotografiar desde un navegador común** —es una capa del SO—: hay que apuntar el `devUrl` de
+  `tauri dev` a esa galería con `?ir=<sitio>`. Para eso existe `HERMES_DEV_EVIDENCIA=1`, que planta
+  la ventana en 40,40 y la deja arriba; sin eso `screencapture` fotografía la app INSTALADA, porque
+  las dos son el proceso `app` (en dev el título dice «Hermes — dev» justamente por esto).
+  Capturas en `docs/evidencia/navegador-embebido-*.png` y `navegador-*.png`.
 - ⚠️ Los tests de la cáscara **no son gate de PR**: `ci.yml` corre en el runner de VPS1, que no tiene
   Rust. Viven en `tauri-windows.yml`, que es `workflow_dispatch`.
 - 🔴 **LA CÁSCARA Y LA UI SE DESPLIEGAN POR CAMINOS DISTINTOS, y eso rompió el frente el día 1.**
@@ -253,12 +286,19 @@ Fuera de Tauri cae a `abrirExterno()`, así que la vista anda igual en `npm run 
   por **OTA** y llega a las cuatro máquinas en el acto, pero el `.dmg`/`.exe` se compila aparte y se
   **reinstala a mano**, así que ninguna cáscara instalada tenía el comando. §5.3 protege contra
   «me olvidé de declarar el permiso»; esto es el de al lado: **el permiso está, en una versión que
-  nadie tiene**. Ahora un rechazo de «no tengo ese comando» **cae al navegador del sistema**
-  (`navegador/cascara.ts`, puro y con tests) y la pantalla dice que se abrió ahí. ⚠️ Un rechazo de
+  nadie tiene**. Ahora un rechazo de «no tengo ese comando» **cae al peldaño de abajo**
+  (`navegador/cascara.ts`, puro y con tests) y la pantalla lo dice. ⚠️ Un rechazo de
   `validar()` NO cae al fallback —abrir igual sería saltarse la única guarda—, y lo que separa los
   dos casos es que **nuestros mensajes están en castellano y los de Tauri en inglés**; hay un test
   que lo fija. **El frente sigue incompleto hasta que se compile y reparta una cáscara nueva**: hasta
   entonces abre en el Chrome personal, justo lo que el ADR quería evitar.
+  🔴 **Con ADR 0043 esto vale DOBLE y la escalera pasa a tener TRES peldaños**: (1) cáscara con el
+  embebido → el viewport de adentro; (2) cáscara vieja, con `abrir_navegador` → la ventana aparte de
+  0040; (3) fuera de Tauri o más vieja → el navegador del sistema. **El peldaño se decide con el
+  PRIMER INTENTO REAL, nunca preguntando si estamos en Tauri** —adentro de una cáscara vieja el
+  puente existe y el comando no—; la única excepción es no tener puente, que se sabe en el primer
+  render, y ahí la pantalla no puede prometer «se abre acá adentro». **Hasta que se reparta una
+  cáscara nueva, las cuatro máquinas ven exactamente ADR 0040.**
 ## Instagram y Facebook — no se desconectaron, nunca se enchufó el caño (ADR 0042)
 
 Reportado el 7-ago-2026: «teníamos el sistema conectado con IG y Facebook, ¿qué pasó?». Medido capa
