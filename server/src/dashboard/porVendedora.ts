@@ -51,26 +51,28 @@ export async function consultarPorVendedora(base: typeof db, ahora: Date): Promi
     WITH envios AS (
       -- Ya agregada por vendedora: UNA fila por vendedora_id, no una por envío.
       SELECT
-        vendedora_id,
+        lower(btrim(vendedora_id)) AS clave,
+        max(vendedora_id)          AS vendedora_id,
         count(DISTINCT telefono) FILTER (WHERE ${diaLimaSql("creado_at")} = ${hoy}::date)::int AS conversaciones_hoy,
         count(*) FILTER (WHERE ${diaLimaSql("creado_at")} = ${hoy}::date)::int                 AS mensajes_hoy,
         count(DISTINCT telefono) FILTER (WHERE creado_at > ${corte7d}::timestamptz)::int AS conversaciones_7d,
         count(*) FILTER (WHERE creado_at > ${corte7d}::timestamptz)::int                 AS mensajes_7d
       FROM envios_wa
       WHERE estado = 'enviado'
-      GROUP BY vendedora_id
+      GROUP BY 1
     ),
     ventas AS (
       -- Ídem: UNA fila por vendedora_id.
       SELECT
-        vendedora_id,
+        lower(btrim(vendedora_id)) AS clave,
+        max(vendedora_id)          AS vendedora_id,
         count(*) FILTER (WHERE ${diaLimaSql("iniciada_at")} = ${hoy}::date)::int AS ventas_hoy,
         count(*) FILTER (WHERE iniciada_at > ${corte7d}::timestamptz)::int        AS ventas_7d
       FROM conversiones_wa
-      GROUP BY vendedora_id
+      GROUP BY 1
     )
     SELECT
-      v.vendedora_id                        AS vendedora,
+      COALESCE(e.vendedora_id, vt.vendedora_id) AS vendedora,
       COALESCE(e.conversaciones_hoy, 0)     AS conversaciones_hoy,
       COALESCE(e.mensajes_hoy, 0)           AS mensajes_hoy,
       COALESCE(vt.ventas_hoy, 0)            AS ventas_hoy,
@@ -92,15 +94,15 @@ export async function consultarPorVendedora(base: typeof db, ahora: Date): Promi
     -- vendedoras— y volvio por otra puerta: la de los DATOS, no la del codigo.
     -- Por eso el corte va en la consulta y no en una lista de nombres a excluir,
     -- que envejece sola.
-    FROM (SELECT DISTINCT vendedora_id FROM envios_wa
+    FROM (SELECT DISTINCT lower(btrim(vendedora_id)) AS clave FROM envios_wa
           WHERE estado = 'enviado' AND creado_at > ${corte7d}::timestamptz
-          UNION SELECT DISTINCT vendedora_id FROM conversiones_wa
+          UNION SELECT DISTINCT lower(btrim(vendedora_id)) FROM conversiones_wa
           WHERE iniciada_at > ${corte7d}::timestamptz) v
     -- 1-a-1: cada CTE ya trae una sola fila por vendedora_id, así que este JOIN
     -- no puede multiplicar nada (el bug del cartesiano era estructural, no un
     -- descuido puntual del FILTER).
-    LEFT JOIN envios e ON e.vendedora_id = v.vendedora_id
-    LEFT JOIN ventas vt ON vt.vendedora_id = v.vendedora_id
+    LEFT JOIN envios e ON e.clave = v.clave
+    LEFT JOIN ventas vt ON vt.clave = v.clave
     ORDER BY mensajes_7d DESC
   `);
 }

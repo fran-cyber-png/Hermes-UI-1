@@ -148,3 +148,60 @@ test("una venta de ESTA semana sí entra, aunque no haya mandado mensajes", asyn
   assert.equal(filas[0]?.ventas_7d, 1);
   assert.equal(filas[0]?.mensajes_7d, 0, "cerrar sin mandar por Hermes es posible y se muestra");
 });
+
+/**
+ * ══ `Luz` Y `luz` SON LA MISMA HUMANA — y el cuadro las mostraba aparte ══
+ *
+ * Medido en producción el 8-ago-2026, después del backfill de ventas:
+ *
+ *     luz    62 envíos ·  0 ventas
+ *     Luz     0 envíos ·  3 ventas   ← la misma persona, otra fila
+ *
+ * Cerberus empuja «Luz» (así lo escribe el ERP) y ella entra a Hermes tipeando
+ * «luz», que es de donde sale el `vendedora_id` del token. Sus ventas caían en
+ * una fila y sus envíos en otra: **el cuadro de rendimiento partía a la persona
+ * en dos y ninguna de las dos mitades decía la verdad.**
+ *
+ * Es la misma trampa que `cola/asignadaSql.ts`, `reparto/destino.ts` y
+ * `canales/dueno.ts` ya resuelven normalizando de LOS DOS LADOS. Acá se agrupa
+ * por `lower(btrim(...))` y se muestra una grafía; lo que NO se hace es
+ * reescribir el dato guardado — eso rompería el cruce con `gestiones` y
+ * `estado_conversacion`.
+ */
+test("Luz y luz son UNA fila: las ventas del ERP cuentan para quien las hizo", async (t) => {
+  const db = await baseDePrueba(t);
+
+  // Como llega de Hermes: ella tipeó «luz» al entrar.
+  await sembrarEnvioWa(db, {
+    vendedoraId: "luz",
+    telefono: "51900000001",
+    creadoAt: new Date("2026-07-23T15:00:00Z"),
+  });
+  // Como llega de Cerberus: el ERP escribe «Luz».
+  await sembrarConversionWa(db, {
+    vendedoraId: "Luz",
+    iniciadaAt: new Date("2026-07-23T16:00:00Z"),
+  });
+
+  const filas = await consultarPorVendedora(db, AHORA);
+  assert.equal(filas.length, 1, "una persona, una fila — no una por grafía");
+  assert.equal(filas[0]?.mensajes_7d, 1);
+  assert.equal(filas[0]?.ventas_7d, 1, "la venta que vino con otra grafía cuenta igual");
+});
+
+test("los espacios de más tampoco parten a nadie en dos", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarEnvioWa(db, {
+    vendedoraId: "  Sindy ",
+    telefono: "51900000002",
+    creadoAt: new Date("2026-07-23T15:00:00Z"),
+  });
+  await sembrarConversionWa(db, {
+    vendedoraId: "sindy",
+    iniciadaAt: new Date("2026-07-23T16:00:00Z"),
+  });
+
+  const filas = await consultarPorVendedora(db, AHORA);
+  assert.equal(filas.length, 1);
+  assert.equal(filas[0]?.ventas_7d, 1);
+});
