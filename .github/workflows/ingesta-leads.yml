@@ -1,0 +1,83 @@
+name: Ingesta de leads de landing (icarus)
+
+# EL CAÑO QUE NADIE DESTAPABA (8-ago-2026).
+#
+# Los leads de las landings llegan a icarus en vivo —25 en los últimos 7 días, el
+# último de hoy— y a Hermes los traía `npm run ingest:icarus`, un script MANUAL.
+# Nadie lo corría desde el **24-jul**: había 86 submissions esperando, o sea 15
+# días de gente que levantó la mano y Hermes no sabía que existía.
+#
+# Es la tercera vez el mismo día que aparece esta forma: un receptor escrito y
+# probado, esperando a alguien que se acuerde de llamarlo (los comentarios de
+# FB/IG, el webhook de Bravo, esto). La conclusión operativa es una sola:
+# **si la captura de un canal depende de que un humano corra un comando, ese
+# canal está apagado y nadie se entera.**
+#
+# ── Por qué un workflow y no un crontab en VPS1 ─────────────────────────────
+# Regla dura #6 de la casa: preferir el pipeline del repo sobre pasos manuales
+# por SSH. Acá vive versionado, se revisa en un PR, y cuando falla queda a la
+# vista en Actions en vez de en un log que nadie abre. El crontab de VPS1 ya
+# tiene 20 entradas de otros proyectos y ninguna de Hermes — justamente porque
+# nadie las mira.
+#
+# ── Por qué cada 2 horas y no cada 5 minutos ────────────────────────────────
+# El caudal medido es de ~5 submissions por día (152 en 30 días). El runner de
+# VPS1 es UNO SOLO y serializa: los jobs de CI y los deploys hacen cola detrás de
+# esto. Cada 2 horas deja el dato con menos de dos horas de atraso —irrelevante
+# frente a los 79 días de mediana que tarda un lead de landing en comprar— y no
+# le come el turno a un deploy.
+#
+# ⚠️ **Esto pone los leads en la BASE, no en la pantalla.** El 88 % de los leads
+# de landing no tiene conversación en Hermes, y la cola y el Pipeline se
+# alimentan de `interactions`: sin conversación no hay fila. Que estén al día es
+# la condición para poder mostrarlos, no el hecho de mostrarlos.
+
+on:
+  schedule:
+    # Cada 2 horas. UTC, como todo `cron` de Actions.
+    - cron: '17 */2 * * *'
+  workflow_dispatch:
+
+# Nunca dos ingestas a la vez. Es idempotente por `(source, external_id)`, así
+# que solaparse no duplicaría nada — pero sí desperdiciaría el runner único.
+concurrency:
+  group: ingesta-leads
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ingerir:
+    name: Traer las submissions nuevas
+    runs-on: [self-hosted, vps1-hermes]
+    timeout-minutes: 10
+    steps:
+      - name: Ingerir desde icarus
+        # Corre contra el checkout DESPLEGADO (`/srv/hermes`), no contra uno
+        # nuevo: es el que tiene el `.env` con `ICARUS_DATABASE_URL` y
+        # `DATABASE_URL`. Read-only contra icarus (la conexión fuerza
+        # `default_transaction_read_only`), aditivo e idempotente contra Hermes.
+        run: |
+          set -euo pipefail
+          cd /srv/hermes/server
+          npm run ingest:icarus 2>&1 | tee /tmp/ingesta-leads.log
+
+      - name: Resumen
+        if: always()
+        run: |
+          {
+            echo "## Ingesta de leads de landing"
+            echo
+            if [ -f /tmp/ingesta-leads.log ]; then
+              # Las últimas líneas son el bloque «=== INGESTA ICARUS ===».
+              echo '```'
+              tail -8 /tmp/ingesta-leads.log
+              echo '```'
+            else
+              echo "La ingesta no llegó a escribir su resumen."
+            fi
+            echo
+            echo "> Esto deja los leads AL DÍA en la base. Que se VEAN es otro frente:"
+            echo "> el 88 % no tiene conversación, y la cola se alimenta de \`interactions\`."
+          } >> "$GITHUB_STEP_SUMMARY"
