@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { etiquetaFuente, nombreDistinto } from './leadForm';
+import { etiquetaFuente, nombreDistinto, origenDeLead } from './leadForm';
 
 /**
  * La lógica pura del bloque «lead-form» (#113): qué etiqueta lleva según el
@@ -30,5 +30,21 @@ describe('nombreDistinto', () => {
     expect(nombreDistinto('Ana', null)).toBeNull();
     expect(nombreDistinto('Ana', '')).toBeNull();
     expect(nombreDistinto('Ana', '   ')).toBeNull();
+  });
+});
+
+describe('origenDeLead — la MISMA palabra en la fila y en la ficha', () => {
+  it('🔴 un lead de landing se lee «Landing» en los dos lugares', () => {
+    // El 8-ago-2026 la fila del radar decía «Landing» y la ficha que se abre al
+    // tocarla decía «Web», sobre el mismo hecho. Había tres copias del ternario.
+    expect(origenDeLead('web')).toBe('Landing');
+  });
+
+  it('un Lead Ad de Meta se lee «Meta Ads»', () => {
+    expect(origenDeLead('meta')).toBe('Meta Ads');
+  });
+
+  it('nunca dice «Web»: esa palabra es la que causaba la contradicción', () => {
+    expect(origenDeLead('web')).not.toBe('Web');
   });
 });

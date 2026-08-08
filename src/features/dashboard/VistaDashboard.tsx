@@ -16,6 +16,8 @@ import { BadgeCanal, nombreCanal } from '../canales/BadgeCanal';
 import { HojaContacto } from '../panel/HojaContacto';
 import type { Conversacion } from '../canales/conversaciones';
 import { conversacionDeRecordatorio, useAgenda, type Recordatorio } from '../agenda/agenda';
+import { conversacionDeTelefono } from '../canales/conversacionNueva';
+import { useSesionWa } from '../whatsapp/conversacionWa';
 import {
   conversacionDeChat,
   paisDe,
@@ -189,6 +191,13 @@ export function VistaDashboard({
   const deAntes = useSelloDeViejo(traidoEn);
   const { agenda } = useAgenda();
   const [fuente, setFuente] = useState<(typeof FUENTES)[number]['id']>('');
+  /**
+   * La línea propia para la clave de una ficha SIN hilo (un lead de formulario).
+   * Sin WhatsApp conectado queda `null` y la ficha se abre igual — el porqué
+   * está escrito en `conversacionDeTelefono`. Mismo uso que en el padrón.
+   */
+  const { data: sesionWa } = useSesionWa();
+  const miLinea = sesionWa?.estado === 'conectado' ? sesionWa.telefono : null;
   const [etapaFiltro, setEtapaFiltro] = useState<string | null>(null);
   const [soloCalientes, setSoloCalientes] = useState(false);
   const [periodo, setPeriodo] = useState<'hoy' | '7d'>('hoy');
@@ -630,11 +639,33 @@ export function VistaDashboard({
                    *
                    * El salto a Mensajes NO se pierde: vive en el botón de
                    * escribir de la fila, que es donde corresponde una acción
-                   * que te saca de acá. Un formulario sin chat no tiene ficha
-                   * que mostrar, así que sigue yendo al buscador.
+                   * que te saca de acá.
+                   *
+                   * 🔴 **Y UN FORMULARIO TAMBIÉN ABRE LA FICHA** (8-ago-2026).
+                   * Acá decía «un formulario sin chat no tiene ficha que
+                   * mostrar, así que sigue yendo al buscador», y era falso: la
+                   * ficha de un lead es justo lo que hace falta —quién es, de
+                   * qué landing vino, cuándo llenó, si ya compró— y la mitad
+                   * que responde eso se busca por TELÉFONO, no por hilo. Es
+                   * exactamente el caso que `conversacionDeTelefono` existe
+                   * para cubrir (ADR 0035, el padrón: 72.923 personas que
+                   * nunca escribieron y sí tienen ficha).
+                   *
+                   * Lo que se ve es la verdad: timeline, señales e intereses
+                   * vacíos —porque no hay hilo— y la ficha de Cerberus + el
+                   * lead-form completos. Mandar al buscador costaba el radar
+                   * entero para responder «¿quién es este?».
                    */
                   const abrir = () =>
-                    esChat ? setFicha(conversacionDeChat(fila.chat)) : onBuscarPersona(fila.form.telefono!);
+                    esChat
+                      ? setFicha(conversacionDeChat(fila.chat))
+                      : setFicha(
+                          conversacionDeTelefono({
+                            telefono: fila.form.telefono!,
+                            numeroPropio: miLinea,
+                            nombre: fila.form.persona_nombre,
+                          }),
+                        );
                   const esNueva = nuevas.has(clave);
 
                   return (

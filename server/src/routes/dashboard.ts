@@ -6,6 +6,7 @@ import { ordenarRadar } from '../cola/radar.js';
 import { consultarRadar } from '../cola/consultarRadar.js';
 import { contarPorEtapaEfectiva } from '../cola/consultarCola.js';
 import { consultarSeriesDashboard } from '../dashboard/series.js';
+import { fuenteLeadSql, productoLeadSql } from '../dashboard/fuenteLead.js';
 import { consultarPorVendedora } from '../dashboard/porVendedora.js';
 import { separarEquipo } from '../dashboard/equipo.js';
 import { consultarNegocio, DIMENSIONES, type Dimension } from '../dashboard/negocio.js';
@@ -127,13 +128,22 @@ dashboardRouter.get('/', async (req, res) => {
   const formularios: FilaFormulario[] = soloAsignadasA !== null ? [] : await db.execute<FilaFormulario>(sql`
     SELECT
       'lead:' || lead_id AS clave,
-      CASE WHEN platform = 'landing' THEN 'landing' ELSE 'lead-ad' END AS fuente,
+      -- De dónde vino y de qué: las dos reglas viven en dashboard/fuenteLead.ts
+      -- con su test. Acá decía platform = 'landing', que NO MATCHEA NINGUNA
+      -- FILA (icarus escribe 'web'), así que los 25.511 leads de landing se
+      -- mostraban como «Lead Ad» y el chip «Landings» quedaba en cero para
+      -- siempre — el panel decía que el canal muerto traía gente y el vivo no.
+      (${fuenteLeadSql}) AS fuente,
       COALESCE(platform, 'fb') AS canal,
       full_name AS persona_nombre,
       phone AS telefono,
       email AS correo,
       country AS pais_dato,
-      COALESCE(form_name, campaign_name) AS producto,
+      -- ⚠️ Acá decía COALESCE(form_name, campaign_name), que elegía EL PEOR de
+      -- los dos: form_name siempre existe para icarus (icarus:landing, un
+      -- placeholder con namespace) y tapaba a campaign_name, que es donde vive
+      -- el nombre del diploma. La fila mostraba un id interno.
+      (${productoLeadSql}) AS producto,
       campaign_name AS campana,
       ad_name AS flyer,
       is_organic AS es_organico,

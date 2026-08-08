@@ -17,6 +17,7 @@ import { PieAccionTimeline } from './PieAccionTimeline';
 import { ZonaPendientes } from './ZonaPendientes';
 import { FichaContacto } from '../cerberus/FichaContacto';
 import { VentaDesdeElPanel } from '../venta/VentaDesdeElPanel';
+import { origenDeLead } from '../cerberus/leadForm';
 
 function fichaDeCliente(f: Ficha | undefined): Extract<Ficha, { estado: 'cliente' }> | null {
   return f?.estado === 'cliente' ? f : null;
@@ -125,7 +126,9 @@ export function PanelDerecho({
         meta={
           lead.data?.lead
             ? {
-                origen: lead.data.lead.fuente === 'meta' ? 'Meta Ads' : 'Web',
+                // La MISMA palabra que la fila del radar (`origenDeLead`): acá
+                // decía «Web» y la fila «Landing», sobre el mismo hecho.
+                origen: origenDeLead(lead.data.lead.fuente),
                 campana: lead.data.lead.campana ?? lead.data.lead.anuncio ?? '',
                 primerContacto: lead.data.lead.fecha,
                 asignadoA: '',

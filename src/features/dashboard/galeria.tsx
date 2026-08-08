@@ -70,22 +70,31 @@ function chats(cuantos: number) {
 
 /** Los leads de formulario: SOLO los ve el supervisor (no tienen dueño posible). */
 function formularios() {
+  /**
+   * Los valores REALES de producción (8-ago-2026): los de landing entran con
+   * `platform='web'` y su curso vive en `campaign_name` — «Diploma Internacional
+   * del Consultor Político» son 49 de los 87 leads de los últimos 14 días.
+   * Hasta hoy esta galería mostraba el caso ideal y por eso nunca reflejó el
+   * defecto: la fila decía «icarus:landing» y se etiquetaba «Lead Ad».
+   */
   return [
-    ['Miguel Ángel Ramírez', '57984430463', 'Colombia', 'Diplomado en Gestión Pública'],
-    ['Sandra Milena Ocampo', '51984430600', 'Perú', 'Foro de Estado'],
+    ['Edward Rodríguez Acevedo', '18294430463', 'República Dominicana', 'Diploma Internacional del Consultor Político'],
+    ['GROVER ZAPANA ZARATE', '59171234567', 'Bolivia', 'Diploma Internacional de Inteligencia y Contrainteligencia'],
   ].map(([nombre, telefono, pais, producto], i) => {
     const cuando = new Date(Date.now() - (3 + i * 9) * 3_600_000).toISOString();
     return {
       clave: `lead:${900 + i}`,
-      fuente: i === 0 ? 'lead-ad' : 'landing',
-      canal: i === 0 ? 'fb' : 'landing',
+      // Los dos son de LANDING: es lo que dice `platform='web'` una vez que
+      // `dashboard/fuenteLead.ts` lo traduce bien.
+      fuente: 'landing',
+      canal: 'web',
       persona_nombre: nombre,
       telefono,
       correo: `${nombre.split(' ')[0].toLowerCase()}@correo.com`,
       pais_dato: pais,
       producto,
-      campana: 'Gestión Pública · agosto',
-      flyer: 'Adquiérelo ahora',
+      campana: producto,
+      flyer: null,
       es_organico: false,
       estado_lead: 'nuevo',
       cayo_at: cuando,
@@ -118,6 +127,39 @@ window.fetch = (async (entrada: RequestInfo | URL) => {
   // («sin foto → iniciales, nunca un roto») en vez de dibujar un blob que no es
   // una imagen.
   if (url.includes('/api/whatsapp/foto/')) return new Response(null, { status: 404 });
+
+  /**
+   * LO QUE LA FICHA DE UN LEAD DE FORMULARIO PREGUNTA. Desde el 8-ago-2026 un
+   * clic en una fila de landing abre la hoja al costado en vez de mandar al
+   * buscador, así que la galería tiene que responder estos dos o la evidencia
+   * mostraría una ficha vacía y no se vería lo que el frente vino a resolver:
+   * **de dónde vino y cuándo llenó**.
+   *
+   * El `campana` es el que sale del arreglo de `dashboard/fuenteLead.ts` — el
+   * nombre del diploma, no el `icarus:landing` que se veía antes.
+   */
+  if (url.includes('/api/contactos/lead')) {
+    return respuesta({
+      lead: {
+        nombre: 'Edward Rodríguez Acevedo',
+        // ⚠️ `web` es el valor REAL del contrato (`gente/emparejar.ts`), no
+        // `landing`: el vocabulario interno y la palabra que se lee son dos
+        // cosas, y `origenDeLead` es quien traduce. Poner acá un valor que el
+        // server no manda hacía que la ficha dijera «Meta Ads» sobre un lead de
+        // landing — o sea, la galería probaba un caso que no existe.
+        fuente: 'web',
+        campana: 'Diploma Internacional del Consultor Político',
+        anuncio: null,
+        fecha: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+      },
+    });
+  }
+  // Un lead de formulario que todavía no compró: Cerberus no lo conoce, y eso
+  // es un estado normal —no un error— que la ficha tiene que saber dibujar.
+  if (url.includes('/api/contactos/ficha')) return respuesta({ estado: 'no_encontrado' });
+  if (url.includes('/api/senales')) return respuesta({ senales: {}, umbralDias: 3 });
+  if (url.includes('/api/gestiones/intereses')) return respuesta({ lista: [], derivados: [] });
+  if (url.includes('/api/eventos')) return respuesta({ eventos: [] });
 
   const cuerpo = url.includes('/api/agenda')
     ? { recordatorios: [] }
@@ -177,11 +219,15 @@ window.fetch = (async (entrada: RequestInfo | URL) => {
         ...(SUPERVISOR ? {} : { soloMisAsignadas: true }),
       };
 
+  return respuesta(cuerpo);
+}) as typeof fetch;
+
+function respuesta(cuerpo: unknown) {
   return new Response(JSON.stringify(cuerpo), {
     status: 200,
     headers: { 'content-type': 'application/json' },
   });
-}) as typeof fetch;
+}
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
