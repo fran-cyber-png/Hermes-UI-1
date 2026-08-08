@@ -627,7 +627,16 @@ export default function App() {
             )}
             {vista === 'personas' && <VistaPersonas telefonoInicial={telefonoPersonas} onEscribir={escribirA} miVendedora={vendedora.id} />}
             {vista === 'entrenamiento' && <VistaEntrenamiento />}
-            {vista === 'navegador' && <VistaNavegador />}
+            {/* 🔴 `tapado` NO es cosmética: el navegador es un webview hijo, o
+                sea una capa del SISTEMA OPERATIVO encima del DOM (ADR 0043), y
+                mientras está a la vista tapa cualquier cosa de Hermes que caiga
+                en su rectángulo. La cabina e Ivi son las dos capas que se
+                pueden abrir estando en esta vista, así que son las dos que lo
+                esconden. **Una capa nueva sobre la mesa se suma acá**; el
+                síntoma de olvidarse es inconfundible (aparece detrás del
+                navegador), y por eso no hay un registro global que pueda
+                desincronizarse en silencio. */}
+            {vista === 'navegador' && <VistaNavegador tapado={cabina || ivi} />}
             {/* El fallback dibuja la anatomía de la vista (lista + página) en vez
                 de un texto: lo que se está esperando son 269 KB de editor, y un
                 cartel de «cargando» donde después va a haber una hoja hace
