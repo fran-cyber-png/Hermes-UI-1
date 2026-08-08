@@ -94,3 +94,57 @@ test("envíos Y ventas de la MISMA vendedora no se multiplican entre sí (produc
   // `ventas_hoy` arriba: es el mismo `GROUP BY vendedora_id`, el mismo JOIN
   // 1-a-1, solo cambia el FILTER.
 });
+
+/**
+ * ══ EL CUADRO LISTA A QUIEN TRABAJÓ ESTA SEMANA, NO A TODO EL QUE EXISTIÓ ══
+ *
+ * El 8-ago-2026 el puente de ventas proyectó DOS AÑOS de historia de Cerberus a
+ * `conversiones_wa` (de 1 fila a 1.464). El cuadro Equipo pasó de 5 filas a 22:
+ * el `UNION` que arma la lista de vendedoras no estaba acotado, así que entraron
+ * personas que ya no están —última venta en septiembre de 2025— y nombres que ni
+ * siquiera son personas («Organico», «goberna-admin»).
+ *
+ * Un cuadro de rendimiento con 14 filas en cero no informa: esconde a las que sí
+ * trabajaron. Y el corte va en la CONSULTA, no en una lista de nombres a
+ * excluir: ya se arregló una vez así y volvió por la puerta de los datos.
+ */
+test("quien vendió hace un año NO entra al cuadro de esta semana", async (t) => {
+  const db = await baseDePrueba(t);
+
+  // Trabajó esta semana: tiene que estar.
+  await sembrarEnvioWa(db, {
+    vendedoraId: "activa",
+    telefono: "51900000001",
+    creadoAt: new Date("2026-07-23T15:00:00Z"),
+  });
+  // Vendió hace un año y nunca más: NO tiene que estar.
+  await sembrarConversionWa(db, {
+    vendedoraId: "se-fue-en-2025",
+    iniciadaAt: new Date("2025-09-11T15:00:00Z"),
+  });
+  // Un proceso, no una persona — y encima viejo.
+  await sembrarConversionWa(db, {
+    vendedoraId: "goberna-admin",
+    iniciadaAt: new Date("2026-03-02T15:00:00Z"),
+  });
+
+  const filas = await consultarPorVendedora(db, AHORA);
+  assert.deepEqual(
+    filas.map((f) => f.vendedora).sort(),
+    ["activa"],
+    "el cuadro muestra la ventana que dice mostrar: hoy y 7 días",
+  );
+});
+
+test("una venta de ESTA semana sí entra, aunque no haya mandado mensajes", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarConversionWa(db, {
+    vendedoraId: "vendio-sin-enviar",
+    iniciadaAt: new Date("2026-07-22T15:00:00Z"),
+  });
+
+  const filas = await consultarPorVendedora(db, AHORA);
+  assert.deepEqual(filas.map((f) => f.vendedora), ["vendio-sin-enviar"]);
+  assert.equal(filas[0]?.ventas_7d, 1);
+  assert.equal(filas[0]?.mensajes_7d, 0, "cerrar sin mandar por Hermes es posible y se muestra");
+});

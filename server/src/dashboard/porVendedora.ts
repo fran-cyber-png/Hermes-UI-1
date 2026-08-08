@@ -77,8 +77,25 @@ export async function consultarPorVendedora(base: typeof db, ahora: Date): Promi
       COALESCE(e.conversaciones_7d, 0)      AS conversaciones_7d,
       COALESCE(e.mensajes_7d, 0)            AS mensajes_7d,
       COALESCE(vt.ventas_7d, 0)             AS ventas_7d
+    -- QUIEN ENTRA AL CUADRO: solo quien TRABAJO EN LA VENTANA que el cuadro
+    -- muestra (hoy y 7 dias). Las dos mitades del UNION van acotadas por la
+    -- MISMA fecha que las columnas.
+    --
+    -- Sin el corte, el 8-ago-2026 el cuadro paso de 5 filas a 22: el puente de
+    -- ventas proyecto DOS ANOS de historia de Cerberus a conversiones_wa, y ahi
+    -- aparecen vendedoras que ya no estan (ultima venta en septiembre de 2025) y
+    -- nombres que ni siquiera son personas (Organico, goberna-admin). Un cuadro
+    -- de rendimiento con 14 filas en cero no informa: esconde a las 8 que si
+    -- trabajaron esta semana.
+    --
+    -- Es el mismo defecto que ya se arreglo una vez aca —procesos listados como
+    -- vendedoras— y volvio por otra puerta: la de los DATOS, no la del codigo.
+    -- Por eso el corte va en la consulta y no en una lista de nombres a excluir,
+    -- que envejece sola.
     FROM (SELECT DISTINCT vendedora_id FROM envios_wa
-          UNION SELECT DISTINCT vendedora_id FROM conversiones_wa) v
+          WHERE estado = 'enviado' AND creado_at > ${corte7d}::timestamptz
+          UNION SELECT DISTINCT vendedora_id FROM conversiones_wa
+          WHERE iniciada_at > ${corte7d}::timestamptz) v
     -- 1-a-1: cada CTE ya trae una sola fila por vendedora_id, así que este JOIN
     -- no puede multiplicar nada (el bug del cartesiano era estructural, no un
     -- descuido puntual del FILTER).
