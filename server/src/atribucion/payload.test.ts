@@ -158,3 +158,73 @@ test("los teléfonos no se repiten aunque Cerberus los repita", () => {
   const venta = ventaDeEvento((r as { ok: true; evento: never }).evento, "webhook")!;
   assert.deepEqual(venta.cliente.telefonos, ["51987654321"]);
 });
+
+/**
+ * ══ LA FORMA REAL DE `cliente.telefonos` ══
+ *
+ * Medido el 8-ago-2026 sobre `icarus.cerberus_events`: **7.997 de 8.032 eventos
+ * se rechazaban** con `cliente.telefonos.0: Invalid input`, porque el esquema
+ * pedía strings y Cerberus manda objetos. Fue así desde el primer evento (8-jul).
+ *
+ * Los fixtures de abajo son COPIA LITERAL de un payload de producción. El test
+ * de arriba, que usa strings, se deja tal cual: el emisor documenta esa forma y
+ * cerrarla convertiría el próximo cambio en otro rechazo del 99 %.
+ */
+test("acepta la forma REAL de Cerberus: telefonos como objetos", () => {
+  const r = leerEventoCerberus({
+    ...EVENTO,
+    cliente: {
+      ...EVENTO.cliente,
+      telefonos: [
+        { id: "850", tipo: "Personal", numero: "6671808510", prefijo: "+52", telefono: "+52 6671808510" },
+      ],
+    },
+  });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.ok && r.evento.cliente?.telefonos, ["+52 6671808510"]);
+});
+
+test("sin `telefono` compuesto, arma el número con prefijo + numero", () => {
+  const r = leerEventoCerberus({
+    ...EVENTO,
+    cliente: {
+      ...EVENTO.cliente,
+      telefonos: [{ id: "1", tipo: "Personal", prefijo: "+51", numero: "987654321" }],
+    },
+  });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.ok && r.evento.cliente?.telefonos, ["+51 987654321"]);
+});
+
+/**
+ * EL CASO QUE HIZO INVISIBLE AL DEFECTO: los ÚNICOS payloads que pasaban la
+ * validación eran los que traen el array vacío. O sea que lo único que validaba
+ * era lo que NO tenía el dato, y el puente reportaba «25 sin teléfono» como si
+ * fuera un problema de datos de Cerberus.
+ */
+test("el array vacío sigue siendo válido — y sigue significando «sin teléfono»", () => {
+  const r = leerEventoCerberus({ ...EVENTO, cliente: { ...EVENTO.cliente, telefonos: [] } });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.ok && r.evento.cliente?.telefonos, []);
+});
+
+test("las dos formas conviven en el mismo array", () => {
+  const r = leerEventoCerberus({
+    ...EVENTO,
+    cliente: {
+      ...EVENTO.cliente,
+      telefonos: ["51987654321", { prefijo: "+52", numero: "6671808510" }],
+    },
+  });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.ok && r.evento.cliente?.telefonos, ["51987654321", "+52 6671808510"]);
+});
+
+test("un objeto sin ningún número no ensucia la lista", () => {
+  const r = leerEventoCerberus({
+    ...EVENTO,
+    cliente: { ...EVENTO.cliente, telefonos: [{ id: "9", tipo: "Personal" }] },
+  });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.ok && r.evento.cliente?.telefonos, []);
+});

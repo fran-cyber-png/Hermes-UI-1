@@ -10,6 +10,13 @@ import type { FuenteDeVenta, VentaAtribuible } from "./venta.js";
  * (`icarus.cerberus_events`, medido el 2026-07-27): 7.560 traen `venta.vendedor`, 7.538 traen
  * `cliente.telefonos[]`, 7.565 traen `idempotency_key`.
  *
+ * 🔴 **ESA VERIFICACIÓN CONTÓ PRESENCIA, NO FORMA — y costó el 99,6 % del puente.**
+ * «7.538 traen `cliente.telefonos[]`» es cierto y no dice nada de si adentro hay
+ * strings u objetos. Eran objetos, desde el primer día, y el esquema pedía
+ * strings: **7.997 de 8.032 eventos se rechazaban** (medido el 8-ago-2026). Ver
+ * `listaDeTelefonos` acá abajo. Al validar un contrato ajeno contra datos
+ * reales, **mirá el tipo de los elementos, no que la clave exista**.
+ *
  * ── Por qué Zod y no `any` ──
  * Lo que entraba antes era `payload: any` y se leía a mano con `Number(v.monto_total)`. Un
  * `monto_total` ausente daba `NaN` y seguía viaje: una venta de NaN dólares, guardada sin que
@@ -53,8 +60,55 @@ const entero = z
     return Number.isInteger(n) ? n : null;
   });
 
-const listaDeTextos = z
-  .array(z.union([z.string(), z.number()]))
+/**
+ * ══ LOS TELÉFONOS DE CERBERUS VIENEN COMO OBJETOS, Y ESO TIRÓ EL PUENTE ENTERO ══
+ *
+ * Medido el 8-ago-2026 sobre `icarus.cerberus_events`: de 8.032 eventos, **7.997
+ * (99,6 %) se rechazaban** con `cliente.telefonos.0: Invalid input`. El esquema
+ * pedía una lista de STRINGS y Cerberus manda una lista de objetos:
+ *
+ *     "telefonos": [{ "id": "850", "tipo": "Personal", "numero": "6671808510",
+ *                     "prefijo": "+52", "telefono": "+52 6671808510" }]
+ *
+ * **Fue así desde el día uno** (los 7.997 van del 8-jul al 7-ago, sin una sola
+ * fila con strings). El docblock de este archivo dice «verificado contra 7.566
+ * eventos reales: 7.538 traen `cliente.telefonos[]`» — y ahí está la lección:
+ * se verificó que el campo ESTUVIERA, nunca de qué FORMA era.
+ *
+ * 🔴 Y el detalle que lo volvía invisible: los únicos 25 payloads que pasaban la
+ * validación eran los que traen `telefonos: []` **vacío**. O sea que **lo único
+ * que validaba era lo que no tenía el dato** — el puente reportaba «25 ventas
+ * evaluadas, 0 atribuidas, 25 sin teléfono» y parecía un problema de datos de
+ * Cerberus, no un contrato roto del lado nuestro.
+ *
+ * Se aceptan LAS DOS FORMAS a propósito: el string suelto sigue siendo válido
+ * (es lo que fijan los tests del contrato y lo que documenta el emisor), y el
+ * objeto se aplana al número. Cerrar una de las dos convertiría el próximo
+ * cambio de forma en otro rechazo del 99 %.
+ */
+const telefonoDeCerberus = z.union([
+  z.string(),
+  z.number(),
+  z
+    .object({
+      // `telefono` ya viene compuesto («+52 6671808510»); `prefijo` + `numero`
+      // es el respaldo cuando falta. El orden importa: el compuesto trae el
+      // código de país, y sin él un número mexicano y uno peruano se confunden
+      // por sufijo (#119).
+      telefono: z.union([z.string(), z.number()]).nullish(),
+      prefijo: z.union([z.string(), z.number()]).nullish(),
+      numero: z.union([z.string(), z.number()]).nullish(),
+    })
+    .transform((o) => {
+      if (o.telefono != null && String(o.telefono).trim() !== "") return String(o.telefono);
+      const prefijo = o.prefijo == null ? "" : String(o.prefijo).trim();
+      const numero = o.numero == null ? "" : String(o.numero).trim();
+      return `${prefijo}${prefijo && numero ? " " : ""}${numero}`;
+    }),
+]);
+
+const listaDeTelefonos = z
+  .array(telefonoDeCerberus)
   .nullish()
   .transform((v) => (v ?? []).map((x) => String(x).trim()).filter((x) => x !== ""));
 
@@ -67,7 +121,7 @@ const clienteSchema = z.object({
   correo: texto,
   pais: texto,
   telefono: texto,
-  telefonos: listaDeTextos,
+  telefonos: listaDeTelefonos,
 });
 
 const ventaSchema = z.object({
