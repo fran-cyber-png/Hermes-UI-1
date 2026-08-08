@@ -13,8 +13,11 @@ import { ETAPAS, normalizarEtapa, type EtapaGestion } from "../gestiones/registr
  *
  * La regla del dueño (2026-07-24, épica #87), con su precedencia:
  *
- *   · DERIVADA  = respondida ? 'contactado' : 'interesado'. Es un PISO: si ya
- *     le respondimos, esa persona está contactada — nadie tiene que arrastrarla.
+ *   · DERIVADA  = precio_enviado ? 'cotizado'
+ *                 : respondida ? 'contactado' : 'interesado'. Es un PISO: si ya
+ *     le respondimos, esa persona está contactada; si además le mandamos el
+ *     precio, está cotizada — nadie tiene que arrastrarla. El peldaño de
+ *     `cotizado` entró el 8-ago-2026; el porqué está en `DERIVADA`, abajo.
  *   · MANUAL    = la etapa de la ÚLTIMA gestión asentada por clave (o ninguna).
  *   · EFECTIVA  = sin manual → derivada;
  *                 manual = perdido → PERDIDO (terminal humano: la clasificación
@@ -36,7 +39,8 @@ import { ETAPAS, normalizarEtapa, type EtapaGestion } from "../gestiones/registr
  *
  * CONTRATO DE COLUMNAS (como `urgenciaSql.ts`): el fragmento nombra las
  * columnas tal como las alias la consulta que lo consume —
- *   respondida (bool) · etapa_manual (text, NULL si no hay gestión asentada).
+ *   respondida (bool) · precio_enviado (bool) · etapa_manual (text, NULL si no
+ *   hay gestión asentada).
  * `etapa_manual` sale de `ultimasGestionesSql` (LEFT JOIN por clave).
  */
 
@@ -54,8 +58,16 @@ export const ESCALA_ETAPAS: readonly EtapaGestion[] = ETAPAS.filter((e) => e !==
  * Devuelve `EtapaGestion`, no `string`: quien la consuma no tiene que volver a
  * validar contra ETAPAS lo que esta función ya garantiza.
  */
-export function etapaEfectiva(etapaManual: string | null, respondida: boolean): EtapaGestion {
-  const derivada: EtapaGestion = respondida ? "contactado" : "interesado";
+export function etapaEfectiva(
+  etapaManual: string | null,
+  respondida: boolean,
+  precioEnviado = false,
+): EtapaGestion {
+  const derivada: EtapaGestion = precioEnviado
+    ? "cotizado"
+    : respondida
+      ? "contactado"
+      : "interesado";
   if (etapaManual == null) return derivada;
   const manual = normalizarEtapa(etapaManual);
   if (manual === "perdido") return "perdido";
@@ -73,8 +85,41 @@ const rango = (etapa: SQL): SQL =>
     sql` `,
   )} ELSE -1 END)`;
 
-/** El piso derivado: le respondimos → contactado; si no → interesado. */
-const DERIVADA = sql`(CASE WHEN respondida THEN 'contactado' ELSE 'interesado' END)`;
+/**
+ * ══ EL PISO DERIVADO — y por qué `precio_enviado` entró (8-ago-2026) ══
+ *
+ * Hasta acá derivaba UN solo peldaño (`respondida → contactado`) y las otras dos
+ * etapas dependían enteramente de que alguien hiciera clic. Medido en
+ * producción: `gestiones` tiene **39 filas en total**, y de ahí «22 Cotizados»
+ * eran 22 gestiones de 2 personas, TODAS del mismo día. El embudo no medía el
+ * negocio: medía cuánto se acordó alguien de tocar un botón.
+ *
+ * Y la contradicción estaba dibujada en la propia pantalla: al lado de «22
+ * Cotizados», el chip decía **«Con precio 2.906»**. El dato ya estaba calculado,
+ * servido y a la vista — solo no entraba en la derivación.
+ *
+ * Con el peldaño nuevo, sobre los mismos datos: interesados 375 · contactados
+ * **534** · cotizados **3.064**. Mueve la pila de columna, sí — pero
+ * «Contactados 534» pasa a ser una lista de trabajo de verdad («les hablamos y
+ * NUNCA les pasamos el precio») y «Cotizados» deja de mentir.
+ *
+ * 🔴 **Sigue siendo un PISO, no un reemplazo**: solo empuja hacia ARRIBA. Una
+ * gestión manual más avanzada gana, `perdido` sigue siendo terminal humano, y
+ * una manual más atrás que el piso no baja la conversación. La compuerta del
+ * arrastre (el front exige interés para soltar en Cotizado) no se toca: acá no
+ * se declara nada, se lee un hecho que ya pasó — y el hecho es más fuerte que
+ * el clic, porque la persona REALMENTE recibió un precio.
+ *
+ * ⚠️ CONTRATO: quien consuma este fragmento tiene que emitir `precio_enviado`.
+ * El Dashboard lo llamaba `precio_mencionado` y lo calculaba con un regex
+ * PROPIO más pobre; se unificó contra `cola/precio.ts` en el mismo commit —
+ * con dos criterios, cada pantalla armaría un embudo distinto.
+ */
+const DERIVADA = sql`(CASE
+  WHEN precio_enviado THEN 'cotizado'
+  WHEN respondida THEN 'contactado'
+  ELSE 'interesado'
+END)`;
 
 /**
  * `etapa_manual` normalizada al leer — espejo SQL de `normalizarEtapa`

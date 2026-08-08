@@ -24,6 +24,8 @@ type Fila = {
   clave: string;
   persona_id: string | null;
   respondida: boolean;
+  /** El piso de `cotizado` desde el 8-ago-2026 (`cola/precio.ts`). */
+  precio_enviado: boolean;
   etapa_manual: string | null;
   etapa_efectiva: string;
 };
@@ -175,9 +177,76 @@ describe("paridad SQL ≡ TS de la etapa efectiva (ADR 0013)", () => {
     for (const fila of filas) {
       assert.equal(
         fila.etapa_efectiva,
-        etapaEfectiva(fila.etapa_manual, fila.respondida),
+        etapaEfectiva(fila.etapa_manual, fila.respondida, fila.precio_enviado),
         `la fila ${fila.clave} salió con «${fila.etapa_efectiva}» del SQL pero la función pura dice otra cosa`,
       );
     }
+  });
+});
+
+describe("el peldaño de `cotizado` derivado del precio (8-ago-2026)", () => {
+  /**
+   * EL DEFECTO QUE ESTO CIERRA: `gestiones` tiene 39 filas en toda la base, y de
+   * ahí salían «22 Cotizados» — 2 personas, un solo día. Mientras tanto el chip
+   * de la misma pantalla decía «Con precio 2.906». El embudo medía cuánto se
+   * acordó alguien de tocar un botón, no el negocio.
+   */
+  test("mandarle el precio la sube a cotizado SIN que nadie arrastre nada", async (t) => {
+    const db = await baseDePrueba(t);
+    await sembrarMensaje(db, { personaId: "con-precio", occurredAt: hace(5) });
+    await sembrarMensaje(db, {
+      personaId: "con-precio",
+      direccion: "saliente",
+      occurredAt: hace(4),
+      texto: "La inversión es de S/ 490 y se puede en 2 cuotas",
+    });
+    await sembrarMensaje(db, { personaId: "sin-precio", occurredAt: hace(5) });
+    await sembrarMensaje(db, {
+      personaId: "sin-precio",
+      direccion: "saliente",
+      occurredAt: hace(4),
+      texto: "Hola! Ya te paso la info",
+    });
+
+    const filas = (await consultarCola(db, {})).conversaciones as Fila[];
+    const etapaDe = (p: string) =>
+      filas.find((f) => f.clave.includes(p))?.etapa_efectiva;
+
+    assert.equal(etapaDe("con-precio"), "cotizado");
+    assert.equal(etapaDe("sin-precio"), "contactado");
+  });
+
+  /**
+   * 🔴 SIGUE SIENDO UN PISO. Lo que la vendedora declaró más arriba gana, y
+   * `perdido` es terminal humano: si el precio empujara por encima de eso, una
+   * conversación descartada volvería sola al tablero.
+   */
+  test("una gestión manual más avanzada le gana al piso, y `perdido` no se resucita", async (t) => {
+    const db = await baseDePrueba(t);
+    for (const persona of ["a-cierre", "a-perdido"]) {
+      await sembrarMensaje(db, { personaId: persona, occurredAt: hace(5) });
+      await sembrarMensaje(db, {
+        personaId: persona,
+        direccion: "saliente",
+        occurredAt: hace(4),
+        texto: "La inversión es de S/ 490",
+      });
+    }
+    await sembrarGestion(db, {
+      clave: `conv:whatsapp:a-cierre:${NUMERO}`,
+      etapa: "cierre",
+      creadoAt: hace(1),
+    });
+    await sembrarGestion(db, {
+      clave: `conv:whatsapp:a-perdido:${NUMERO}`,
+      etapa: "perdido",
+      creadoAt: hace(1),
+    });
+
+    const filas = (await consultarCola(db, {})).conversaciones as Fila[];
+    const etapaDe = (p: string) => filas.find((f) => f.clave.includes(p))?.etapa_efectiva;
+
+    assert.equal(etapaDe("a-cierre"), "cierre", "el piso no puede bajar lo declarado más arriba");
+    assert.equal(etapaDe("a-perdido"), "perdido", "el precio no resucita una conversación descartada");
   });
 });

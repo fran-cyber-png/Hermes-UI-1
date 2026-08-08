@@ -32,7 +32,10 @@ type Fila = { persona_id: string | null; ya_le_hablamos: boolean };
  * una a la que nadie le habló nunca.
  */
 async function sembrarColumna(db: Parameters<typeof consultarCola>[0]) {
-  // Silencio + precio enviado: la que debería estar en Cotizados y no está.
+  // Silencio + precio enviado. El comentario de este fixture decía «la que
+  // DEBERÍA estar en Cotizados y no está» — desde el 8-ago-2026 sí está: el piso
+  // derivado de `etapaEfectivaSql` la sube sola (`precio_enviado` → cotizado).
+  // Los asserts de abajo dejaron de fijar el defecto.
   await sembrarMensaje(db, { personaId: "silencio-precio", texto: "info?", occurredAt: hace(20) });
   await sembrarMensaje(db, {
     personaId: "silencio-precio",
@@ -75,9 +78,18 @@ describe("?precio= recorta las que ya tienen precio enviado", () => {
     const db = await baseDePrueba(t);
     await sembrarColumna(db);
 
-    const r = await consultarCola(db, { etapa: "contactado", precio: true });
+    // La que tiene precio ahora vive en COTIZADOS por derivación. El recorte
+    // `?precio=` sigue valiendo —es el mismo predicado— pero sobre la columna
+    // donde ahora caen.
+    const r = await consultarCola(db, { etapa: "cotizado", precio: true });
     assert.deepEqual((r.conversaciones as Fila[]).map((f) => f.persona_id), ["silencio-precio"]);
     assert.equal(r.total, 1, "el «Ver más» de la columna filtrada cuenta lo filtrado");
+
+    // Y en Contactados ya no queda ninguna con precio: POR CONSTRUCCIÓN. Es la
+    // consecuencia que vacía el chip «Con precio» de esa columna — existía para
+    // compensar que el embudo mentía.
+    const enContactados = await consultarCola(db, { etapa: "contactado", precio: true });
+    assert.deepEqual((enContactados.conversaciones as Fila[]).map((f) => f.persona_id), []);
   });
 });
 
@@ -87,14 +99,18 @@ describe("el desglose: las bandas contadas de una pasada", () => {
     await sembrarColumna(db);
 
     const { desglose, conteos } = await consultarCola(db, {});
-    assert.deepEqual(conteos, { contactado: 2, interesado: 2 }, "el contrato de #89 no se toca");
+    assert.deepEqual(
+      conteos,
+      { contactado: 1, cotizado: 1, interesado: 2 },
+      "desde el 8-ago la que tiene precio cuenta en Cotizados, no en Contactados",
+    );
 
     const clave = (d: { etapa: string; yaLeHablamos: boolean; precio: boolean; viva: boolean }) =>
       `${d.etapa}/${d.yaLeHablamos ? "hablada" : "virgen"}/${d.precio ? "precio" : "-"}/${d.viva ? "viva" : "-"}`;
     const mapa = Object.fromEntries((desglose ?? []).map((d) => [clave(d), d.n]));
     assert.deepEqual(mapa, {
-      "contactado/hablada/precio/-": 1, // silencio-precio
-      "contactado/hablada/-/-": 1, // silencio-pelado
+      "cotizado/hablada/precio/-": 1, // silencio-precio: el piso la subió sola
+      "contactado/hablada/-/-": 1, // silencio-pelado: le hablamos, nunca le pasamos el precio
       "interesado/hablada/-/viva": 1, // volvió a escribir hace 2 h
       "interesado/virgen/-/-": 1, // nadie le contestó, y ya es vieja
     });
@@ -104,12 +120,11 @@ describe("el desglose: las bandas contadas de una pasada", () => {
     const db = await baseDePrueba(t);
     await sembrarColumna(db);
 
-    const r = await consultarCola(db, { etapa: "contactado", precio: true });
-    const contactado = (r.desglose ?? []).filter((d) => d.etapa === "contactado");
+    const r = await consultarCola(db, { etapa: "cotizado", precio: true });
     assert.equal(
-      contactado.reduce((n, d) => n + d.n, 0),
-      2,
-      "las bandas siguen mostrando su tamaño real aunque la columna esté filtrada",
+      (r.desglose ?? []).reduce((n, d) => n + d.n, 0),
+      4,
+      "las bandas siguen mostrando la foto ENTERA aunque la columna esté filtrada",
     );
   });
 

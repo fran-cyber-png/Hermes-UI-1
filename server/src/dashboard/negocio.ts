@@ -1,6 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { db } from "../db/client.js";
 import { respondidaSql } from "../cola/urgenciaSql.js";
+import { PRECIO_REGEX_FUENTE } from "../cola/precio.js";
 import { etapaEfectivaSql, ultimasGestionesSql } from "../cola/etapaEfectivaSql.js";
 import {
   adIdDeCursoSql,
@@ -73,8 +74,30 @@ import { HORA_APERTURA, HORA_CIERRE, horasDelDia } from "./horarioAtencion.js";
  * un «te paso el precio» sin monto también cae acá, y una imagen con la lista de
  * precios no cae. Sirve para medir el HUECO de registro, no para reemplazarlo.
  */
-const PRECIO_REGEX_SQL = `'(s/\\.?\\s*[0-9]|us\\$|usd|\\$\\s*[0-9]|precio|costo|inversi[óo]n|matr[íi]cula)'`;
+/**
+ * 🔴 ESTE REGEX ERA PROPIO Y HABÍA DIVERGIDO DEL CANÓNICO (arreglado 8-ago-2026).
+ *
+ * `cola/precio.ts` define `PRECIO_REGEX_FUENTE` —montos, pasarelas de pago e
+ * instrucciones de pago— y es lo que usa la cola para el chip «Con precio» y
+ * para `precio_enviado`. Acá vivía una copia más pobre, escrita a mano, sin las
+ * pasarelas (`izipay`, `yape`…) ni las instrucciones («número de cuenta»,
+ * «forma de pago»).
+ *
+ * Consecuencia: la MISMA conversación contaba como cotizada en Mensajes y no en
+ * el Dashboard. Es la lección de #37 otra vez, y pesa más desde que
+ * `precio_enviado` alimenta la etapa efectiva: con dos criterios, cada pantalla
+ * armaría un embudo distinto.
+ */
+const PRECIO_REGEX_SQL = `'${PRECIO_REGEX_FUENTE}'`;
 
+
+/**
+ * `etapa_manual` normalizada — los valores viejos ('venta') siguen valiendo. Es
+ * el mismo mapeo que `etapaEfectivaSql.ts` hace al leer; acá se repite el CASE
+ * en vez de importarlo porque aquel es privado del módulo y exportarlo para un
+ * solo consumidor ataría los dos archivos por un detalle de forma.
+ */
+const MANUAL_NORMALIZADA = sql`(CASE etapa_manual WHEN 'venta' THEN 'cierre' WHEN 'nuevo' THEN 'interesado' ELSE etapa_manual END)`;
 
 // ── El contrato ──────────────────────────────────────────────────────────────
 
@@ -191,7 +214,7 @@ function conversacionesDelPeriodo(o: OpcionesNegocio): SQL {
         -- sabe (y el que no cambia si la conversación sigue).
         (array_agg(origen ORDER BY occurred_at)
            FILTER (WHERE origen IS NOT NULL))[1]                      AS origen,
-        bool_or(direccion = 'saliente' AND texto ~* ${sql.raw(PRECIO_REGEX_SQL)}) AS precio_mencionado
+        bool_or(direccion = 'saliente' AND texto ~* ${sql.raw(PRECIO_REGEX_SQL)}) AS precio_enviado
       FROM msgs
       GROUP BY canal, persona_id, numero_propio
       -- «Llegaron» = el PRIMER entrante cae en el período. Una conversación de
@@ -290,7 +313,7 @@ const METRICAS_DE_FILA: SQL = sql`
   round((percentile_cont(0.5) WITHIN GROUP (ORDER BY b.demora_min))::numeric, 1)::float8 AS demora_mediana_min,
   count(*) FILTER (WHERE b.etapa_efectiva = 'cotizado')::int            AS cotizados,
   count(*) FILTER (WHERE b.etapa_efectiva = 'cierre')::int              AS cerrados,
-  count(*) FILTER (WHERE b.precio_mencionado)::int                      AS precio_mencionado
+  count(*) FILTER (WHERE b.precio_enviado)::int                      AS precio_enviado
 `;
 
 /**
@@ -381,7 +404,7 @@ export async function consultarNegocio(base: typeof db, o: OpcionesNegocio): Pro
     demora_fuera: number | null;
     llegaron_fuera: number;
     cotizados: number;
-    precio_mencionado: number;
+    precio_enviado: number;
   }>(sql`
     ${conBase}
     SELECT
@@ -393,8 +416,15 @@ export async function consultarNegocio(base: typeof db, o: OpcionesNegocio): Pro
       ${medianaSql(EN_HORARIO)}                                           AS demora_en_horario,
       ${medianaSql(sql`NOT ${EN_HORARIO}`)}                               AS demora_fuera,
       count(*) FILTER (WHERE NOT ${EN_HORARIO})::int                      AS llegaron_fuera,
-      count(*) FILTER (WHERE etapa_efectiva = 'cotizado')::int            AS cotizados,
-      count(*) FILTER (WHERE precio_mencionado)::int                      AS precio_mencionado
+      -- EL SUBREGISTRO CUENTA LO ASENTADO A MANO, NO LA ETAPA EFECTIVA
+      -- (8-ago-2026). La pregunta siempre fue: de los que recibieron el precio,
+      -- cuantos quedaron REGISTRADOS. Desde que precio_enviado deriva cotizado
+      -- (cola/etapaEfectivaSql.ts) la etapa efectiva los incluye a todos por
+      -- construccion, asi que leerla aca haria que el hueco diera 0 SIEMPRE:
+      -- exactamente la clase de numero que miente y que este frente vino a
+      -- sacar. Se lee la gestion declarada, que es lo que se quiso medir.
+      count(*) FILTER (WHERE ${MANUAL_NORMALIZADA} IN ('cotizado','cierre'))::int AS cotizados,
+      count(*) FILTER (WHERE precio_enviado)::int                      AS precio_enviado
     FROM base
   `);
 
@@ -481,7 +511,9 @@ export async function consultarNegocio(base: typeof db, o: OpcionesNegocio): Pro
     sin_atribuir: sinAtribuir,
     subregistro: {
       cotizados: atencion?.cotizados ?? 0,
-      precio_mencionado: atencion?.precio_mencionado ?? 0,
+      // El contrato público conserva el nombre `precio_mencionado`: lo consume
+              // el front y renombrarlo sería romperlo por una cuestión interna.
+              precio_mencionado: atencion?.precio_enviado ?? 0,
     },
   };
 }
