@@ -18,8 +18,14 @@ import {
  * encendido y a la vendedora sin el botón que lo apaga.
  */
 
-const RESUMEN: ResumenColumna = { total: 3051, conPrecio: 3051, enVentana: 1, paraSeguir: 82 };
-const VACIO: ResumenColumna = { total: 0, conPrecio: 0, enVentana: 0, paraSeguir: 0 };
+const RESUMEN: ResumenColumna = {
+  total: 3051,
+  conPrecio: 3051,
+  enVentana: 1,
+  paraSeguir: 82,
+  seCallo: 540,
+};
+const VACIO: ResumenColumna = { total: 0, conPrecio: 0, enVentana: 0, paraSeguir: 0, seCallo: 0 };
 
 describe('recortesDeColumna — qué chips se ofrecen', () => {
   test('«Todas» está siempre, y es el primero', () => {
@@ -54,7 +60,7 @@ describe('recortesDeColumna — qué chips se ofrecen', () => {
     // vacía la columna, y encima partía los chips en dos renglones.
     expect(recortesDeColumna('cotizado', RESUMEN, 'todas').map((o) => o.id)).not.toContain('precio');
     // Y en Contactados, donde SÍ recorta, sigue apareciendo.
-    const parcial = { total: 1389, conPrecio: 611, enVentana: 47, paraSeguir: 20 };
+    const parcial = { total: 1389, conPrecio: 611, enVentana: 47, paraSeguir: 20, seCallo: 0 };
     expect(recortesDeColumna('contactado', parcial, 'todas').map((o) => o.id)).toContain('precio');
   });
 
@@ -69,7 +75,7 @@ describe('recortesDeColumna — qué chips se ofrecen', () => {
   });
 
   test('«Sin respuesta» sí lleva recorte: con 2.580 tarjetas es la que más lo necesita', () => {
-    const r = recortesDeColumna('sin_respuesta', { ...RESUMEN, total: 2580, paraSeguir: 310 }, 'todas');
+    const r = recortesDeColumna('sin_respuesta', { ...RESUMEN, total: 2580, paraSeguir: 310, seCallo: 0 }, 'todas');
     expect(r.map((o) => o.id)).toContain('seguir');
     expect(r.find((o) => o.id === 'seguir')?.n).toBe(310);
   });
@@ -157,6 +163,26 @@ describe('resumirColumna — la dimensión nueva del desglose', () => {
 
   test('sin desglose cae a los conteos de siempre y no inventa recortes', () => {
     const r = resumirColumna(undefined, 'cotizado', { cotizado: 3051 });
-    expect(r).toEqual({ total: 3051, conPrecio: 0, enVentana: 0, paraSeguir: 0 });
+    expect(r).toEqual({ total: 3051, conPrecio: 0, enVentana: 0, paraSeguir: 0, seCallo: 0 });
+  });
+});
+
+describe('«Se callaron» — el recorte que el estándar de pipeline pedía', () => {
+  test('lleva su número y se ofrece en Cotizados', () => {
+    const r = recortesDeColumna('cotizado', RESUMEN, 'todas');
+    expect(r.find((o) => o.id === 'seCallo')?.n).toBe(540);
+  });
+
+  test('🔴 no se ofrece en «Sin respuesta»: ahí nadie habló nunca', () => {
+    // El server ya lo garantiza (`seCalloConElPrecio` exige `hablo`), así que el
+    // conteo da 0 y la regla del cero lo esconde. El test fija que la relación
+    // entre las dos reglas se mantenga.
+    const r = recortesDeColumna('sin_respuesta', { ...VACIO, total: 2580 }, 'todas');
+    expect(r.map((o) => o.id)).not.toContain('seCallo');
+  });
+
+  test('el vacío nombra el recorte y señala la salida', () => {
+    expect(vacioDeColumna('seCallo', 'otro texto')).toContain('Todas');
+    expect(vacioDeColumna('seCallo', 'otro texto')).not.toBe('otro texto');
   });
 });

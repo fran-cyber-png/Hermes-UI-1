@@ -211,6 +211,64 @@ export const paraSeguirSql: SQL = sql`(
   AND (${etapaDesdeSql}) >  now() - make_interval(days => ${SEGUIR_HASTA_DIAS})
 )`;
 
+/**
+ * ══ «SE CALLÓ CON EL PRECIO» — la objeción que nadie dijo en voz alta ═══════
+ *
+ * ── Por qué existe: lo que el estándar de pipeline nos critica ────────────
+ * La regla profesional para mover una etapa es que la condición de salida sea
+ * una **acción del COMPRADOR**, no una actividad del vendedor: *mandar una
+ * propuesta es algo que hacemos nosotros y ocurre exista o no interés*. Nuestro
+ * `cotizado` se deriva de `precio_enviado`, que es exactamente eso.
+ *
+ * ── Medido en producción el 8-ago-2026, sobre los 3.050 con precio ───────
+ *   · **798** habló alguna vez  → la columna Cotizados de hoy
+ *   · **258** respondió DESPUÉS del precio  → la cotización viva de verdad
+ *   · **540** había hablado ANTES y **se calló al ver el precio**
+ *   · 2.792 (91,5 %) silencio total tras el precio
+ *
+ * ── Y por qué NO es una columna nueva ────────────────────────────────────
+ * Porque la ETAPA describe dónde está la venta —a esta persona le pusimos
+ * precio, la cotización existe— y esto describe **qué hacer hoy**, que es el eje
+ * del recorte. Partir Cotizados en dos columnas obligaría a una sexta en un GRID
+ * que a 1280 ya está ajustado, y dejaría «Cotizados» significando algo distinto
+ * de lo que significa en cualquier otro CRM.
+ *
+ * ── Lo que esta lista vale ───────────────────────────────────────────────
+ * Son **540 personas que conversaban y dejaron de hacerlo en el momento exacto
+ * en que vieron el número**. Es la objeción #1 del negocio, sin declarar. Y es
+ * el público exacto de las frases que `hechos/catalogo.ts` mide como más
+ * desaprovechadas: «se puede pagar en 2 cuotas», dicha **2 veces en 1.876
+ * conversaciones**.
+ *
+ * ⚠️ **No dice que el precio los espantó.** Dice que se callaron después de
+ * recibirlo, que es un hecho. El nombre no promete causa — la misma regla que
+ * `resultados/medicion.ts` («LOS NOMBRES NO PROMETEN CAUSA»).
+ */
+export interface HechosDeReaccion {
+  precioEnviado: boolean;
+  hablo: boolean;
+  primerPrecioAt: Date | null;
+  ultimoEntranteAt: Date | null;
+}
+
+export function seCalloConElPrecio(h: HechosDeReaccion): boolean {
+  // Sin precio no hay reacción al precio que medir; sin haber hablado nunca,
+  // el silencio no empezó con el precio — ésa es `sin_respuesta`, otra cosa.
+  if (!h.precioEnviado || !h.hablo) return false;
+  if (h.primerPrecioAt == null) return false;
+  // Habló, pero su último mensaje es ANTERIOR (o igual) al precio: no volvió a
+  // escribir después. `<=` y no `<`: el mismo instante no es una respuesta.
+  return h.ultimoEntranteAt == null || h.ultimoEntranteAt.getTime() <= h.primerPrecioAt.getTime();
+}
+
+/** «Se calló con el precio» — espejo verificado de `seCalloConElPrecio(...)`. */
+export const seCalloConElPrecioSql: SQL = sql`(
+  precio_enviado
+  AND hablo
+  AND primer_precio_at IS NOT NULL
+  AND (ultimo_entrante_at IS NULL OR ultimo_entrante_at <= primer_precio_at)
+)`;
+
 // ── Los hechos que estos fragmentos necesitan, dichos donde se agrupan ───────
 
 /**

@@ -156,6 +156,12 @@ export interface FilaDesglose {
    * el server no sabe aplicar.
    */
   paraSeguir?: boolean;
+  /**
+   * «Se calló con el precio» (server: `cola/tiempoEnEtapa.ts`): había hablado y no
+   * volvió a escribir después de recibirlo. Opcional, como los otros dos: sin el
+   * campo el chip no se dibuja.
+   */
+  seCallo?: boolean;
   n: number;
 }
 
@@ -206,8 +212,9 @@ export function resumirColumna(
   /** El conteo de siempre, para el rato en que el front va adelante del server. */
   conteos?: Record<string, number>,
 ): ResumenColumna {
-  if (!desglose) return { total: conteos?.[etapa] ?? 0, conPrecio: 0, enVentana: 0, paraSeguir: 0 };
-  const r = { total: 0, conPrecio: 0, enVentana: 0, paraSeguir: 0 };
+  if (!desglose)
+    return { total: conteos?.[etapa] ?? 0, conPrecio: 0, enVentana: 0, paraSeguir: 0, seCallo: 0 };
+  const r = { total: 0, conPrecio: 0, enVentana: 0, paraSeguir: 0, seCallo: 0 };
   for (const fila of desglose) {
     if (fila.etapa !== etapa) continue;
     r.total += fila.n;
@@ -216,6 +223,7 @@ export function resumirColumna(
     // es preferible a ofrecer un recorte que el server no sabe aplicar.
     if (fila.ventana) r.enVentana += fila.n;
     if (fila.paraSeguir) r.paraSeguir += fila.n;
+    if (fila.seCallo) r.seCallo += fila.n;
   }
   return r;
 }
@@ -225,6 +233,7 @@ export interface ResumenColumna {
   conPrecio: number;
   enVentana: number;
   paraSeguir: number;
+  seCallo: number;
 }
 
 /**
@@ -262,7 +271,7 @@ export interface ResumenColumna {
  * que se ve**. Y los dos tienen la misma excepción: el chip ACTIVO se ofrece
  * siempre, o la vendedora se queda sin el botón que lo apaga.
  */
-export type Recorte = 'todas' | 'precio' | 'ventana' | 'seguir';
+export type Recorte = 'todas' | 'precio' | 'ventana' | 'seguir' | 'seCallo';
 
 /**
  * Las columnas donde recortar tiene sentido. Ver el porqué de Cierre y Perdidos
@@ -315,6 +324,16 @@ export function recortesDeColumna(
         'Les hablaste y no contestaron, y hace entre 3 y 14 días que están en esta columna: es a quienes toca insistirles hoy',
     },
     {
+      id: 'seCallo',
+      label: 'Se callaron',
+      n: resumen.seCallo,
+      /* La objeción #1 del negocio, sin declarar: conversaban y dejaron de
+         hacerlo en el momento exacto en que vieron el número. Es el público de
+         «se puede pagar en 2 cuotas», dicha 2 veces en 1.876 conversaciones. */
+      ayuda:
+        'Venían conversando y no volvieron a escribir después de que les pasaras el precio — a estos les toca ofrecerles cuotas o preguntarles qué pasó',
+    },
+    {
       id: 'precio',
       label: 'Con precio',
       n: resumen.conPrecio,
@@ -356,6 +375,8 @@ export function vacioDeColumna(recorte: Recorte, vacioDeEtapa: string): string {
       return 'A ninguna se le puede escribir gratis ahora mismo. Tocá «Todas» para ver la columna entera.';
     case 'seguir':
       return 'Nada que seguir hoy: ninguna lleva entre 3 y 14 días esperando respuesta. Tocá «Todas» para ver la columna entera.';
+    case 'seCallo':
+      return 'Ninguna se quedó callada tras el precio. Tocá «Todas» para ver la columna entera.';
     default:
       return vacioDeEtapa;
   }

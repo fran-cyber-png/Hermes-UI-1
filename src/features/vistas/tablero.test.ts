@@ -161,6 +161,7 @@ describe('resumirColumna — el tamaño real de la columna y el de su recorte', 
       conPrecio: 611,
       enVentana: 47,
       paraSeguir: 0,
+      seCallo: 0,
     });
   });
 
@@ -191,6 +192,7 @@ describe('resumirColumna — el tamaño real de la columna y el de su recorte', 
       conPrecio: 611,
       enVentana: 0,
       paraSeguir: 0,
+      seCallo: 0,
     });
   });
 
@@ -200,6 +202,7 @@ describe('resumirColumna — el tamaño real de la columna y el de su recorte', 
       conPrecio: 0,
       enVentana: 0,
       paraSeguir: 0,
+      seCallo: 0,
     });
   });
 
@@ -209,6 +212,7 @@ describe('resumirColumna — el tamaño real de la columna y el de su recorte', 
       total: 1389,
       conPrecio: 0,
       paraSeguir: 0,
+      seCallo: 0,
     });
   });
 });

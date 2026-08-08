@@ -6,6 +6,7 @@ import {
   Check,
   Clock,
   History,
+  MessageSquareOff,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -91,6 +92,7 @@ const ICONO_RECORTE: Record<Recorte, LucideIcon | null> = {
   precio: BadgeDollarSign,
   ventana: Clock,
   seguir: History,
+  seCallo: MessageSquareOff,
 };
 
 export function VistaEmbudo({
@@ -139,6 +141,7 @@ export function VistaEmbudo({
       precio: r === 'precio',
       ventana: r === 'ventana',
       seguir: r === 'seguir',
+      seCallo: r === 'seCallo',
     };
   };
 

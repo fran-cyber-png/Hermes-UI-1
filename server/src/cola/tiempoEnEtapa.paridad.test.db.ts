@@ -1,4 +1,5 @@
 import { test, describe } from "node:test";
+import { sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { baseDePrueba } from "../pruebas/base.js";
 import { sembrarComentario, sembrarGestion, sembrarMensaje } from "../pruebas/sembrar.js";
@@ -288,6 +289,104 @@ describe("«sin respuesta» contra una base de verdad", () => {
     const r = await consultarCola(db, { etapa: "sin_respuesta" });
     assert.equal(r.conversaciones.length, 3);
     assert.equal(r.conteos?.sin_respuesta, 3, "el conteo de la columna sale del MISMO desglose");
+  });
+});
+
+describe("«Cierre» derivado de una venta POSTERIOR", () => {
+  /** Una venta atribuida a una conversación, como la escribe `proyectarVenta`. */
+  async function sembrarVenta(db: Awaited<ReturnType<typeof baseDePrueba>>, v: {
+    clave: string;
+    telefono: string;
+    ocurridaAt: Date;
+  }) {
+    await db.execute(
+      sql`INSERT INTO conversiones_wa (vendedora_id, telefono, clave, ocurrida_at, atribucion, fuente_venta)
+          VALUES ('vendedora-prueba', ${v.telefono}, ${v.clave}, ${v.ocurridaAt.toISOString()}, 'llave', 'cerberus')`,
+    );
+  }
+
+  test("una venta posterior al primer mensaje cierra la conversación", async (t) => {
+    const db = await baseDePrueba(t);
+    await sembrarMensaje(db, { personaId: "compro", occurredAt: hace(10) });
+    await sembrarMensaje(db, { personaId: "compro", direccion: "saliente", occurredAt: hace(9) });
+    await sembrarVenta(db, { clave: claveDe("compro"), telefono: "compro", ocurridaAt: hace(3) });
+
+    const filas = (await consultarCola(db, {})).conversaciones as Fila[];
+    assert.equal(filas[0]?.etapa_efectiva, "cierre");
+  });
+
+  /**
+   * 🔴 EL FILTRO QUE HACE VERDADERA A LA COLUMNA. Medido el 8-ago-2026: de las
+   * 948 conversaciones «con venta» del tipo difusión, **947 ya eran clientes
+   * ANTES del primer mensaje**. Sin este `>=`, «Cierre» se llenaría de gente que
+   * compró en 2024 y a la que este mes le mandamos un flyer.
+   */
+  test("🔴 una venta ANTERIOR no cierra nada: ya era cliente, no le vendimos ahora", async (t) => {
+    const db = await baseDePrueba(t);
+    await sembrarMensaje(db, { personaId: "ya-era", occurredAt: hace(5) });
+    await sembrarMensaje(db, { personaId: "ya-era", direccion: "saliente", occurredAt: hace(4) });
+    await sembrarVenta(db, { clave: claveDe("ya-era"), telefono: "ya-era", ocurridaAt: hace(60) });
+
+    const filas = (await consultarCola(db, {})).conversaciones as Fila[];
+    assert.notEqual(filas[0]?.etapa_efectiva, "cierre");
+  });
+
+  test("`perdido` le gana: la clasificación humana es terminal", async (t) => {
+    const db = await baseDePrueba(t);
+    await sembrarMensaje(db, { personaId: "descartada", occurredAt: hace(10) });
+    await sembrarVenta(db, { clave: claveDe("descartada"), telefono: "descartada", ocurridaAt: hace(2) });
+    await sembrarGestion(db, { clave: claveDe("descartada"), etapa: "perdido", creadoAt: hace(5) });
+
+    const filas = (await consultarCola(db, {})).conversaciones as Fila[];
+    assert.equal(filas[0]?.etapa_efectiva, "perdido");
+  });
+
+  test("sin ninguna venta, la columna sigue en cero y nada se rompe", async (t) => {
+    const db = await baseDePrueba(t);
+    await sembrarMensaje(db, { personaId: "sin-venta", occurredAt: hace(3) });
+    const r = await consultarCola(db, { etapa: "cierre" });
+    assert.equal(r.conversaciones.length, 0);
+  });
+});
+
+describe("el recorte «Se calló con el precio» (`?seCallo=1`)", () => {
+  test("el número del desglose es EXACTAMENTE lo que devuelve el recorte", async (t) => {
+    const db = await baseDePrueba(t);
+    // Habló y NO volvió tras el precio → entra.
+    await sembrarMensaje(db, { personaId: "callado", occurredAt: hace(8) });
+    await sembrarMensaje(db, {
+      personaId: "callado",
+      direccion: "saliente",
+      texto: CON_PRECIO,
+      occurredAt: hace(7),
+    });
+    // Habló DESPUÉS del precio → cotización viva, no entra.
+    await sembrarMensaje(db, { personaId: "vivo", occurredAt: hace(8) });
+    await sembrarMensaje(db, {
+      personaId: "vivo",
+      direccion: "saliente",
+      texto: CON_PRECIO,
+      occurredAt: hace(7),
+    });
+    await sembrarMensaje(db, { personaId: "vivo", occurredAt: hace(6) });
+    // Difusión pura → es `sin_respuesta`, tampoco entra.
+    await sembrarMensaje(db, {
+      personaId: "blast",
+      direccion: "saliente",
+      texto: CON_PRECIO,
+      occurredAt: hace(7),
+    });
+
+    const sinRecorte = await consultarCola(db, { etapa: "cotizado" });
+    const delDesglose = (sinRecorte.desglose ?? [])
+      .filter((f) => f.etapa === "cotizado" && f.seCallo)
+      .reduce((n, f) => n + f.n, 0);
+
+    const conRecorte = await consultarCola(db, { etapa: "cotizado", seCallo: true });
+
+    assert.equal(delDesglose, conRecorte.conversaciones.length);
+    assert.equal(delDesglose, 1, "solo el que habló y se calló al ver el precio");
+    assert.deepEqual((conRecorte.conversaciones as Fila[]).map((f) => f.persona_id), ["callado"]);
   });
 });
 

@@ -4,6 +4,7 @@ import { etapaEfectiva } from "./etapaEfectivaSql.js";
 import {
   etapaDesde,
   paraSeguir,
+  seCalloConElPrecio,
   SEGUIR_DESDE_DIAS,
   SEGUIR_HASTA_DIAS,
   type HechosDeEtapa,
@@ -260,5 +261,97 @@ describe("paraSeguir — el recorte que convierte la pila en lista", () => {
     const h = cotizadaHace(5);
     assert.equal(paraSeguir(h, AHORA), true);
     assert.equal(paraSeguir(h, new Date(AHORA.getTime() + 30 * DIA)), false);
+  });
+});
+
+describe("«se calló con el precio» — la objeción que nadie declaró", () => {
+  const DIA_MS = 86_400_000;
+  const cuando = (dias: number) => new Date(AHORA.getTime() - dias * DIA_MS);
+
+  test("habló, le mandamos el precio, y no volvió a escribir → sí", () => {
+    assert.equal(
+      seCalloConElPrecio({
+        precioEnviado: true,
+        hablo: true,
+        primerPrecioAt: cuando(5),
+        ultimoEntranteAt: cuando(6),
+      }),
+      true,
+    );
+  });
+
+  test("respondió DESPUÉS del precio → no: eso es una cotización viva", () => {
+    assert.equal(
+      seCalloConElPrecio({
+        precioEnviado: true,
+        hablo: true,
+        primerPrecioAt: cuando(5),
+        ultimoEntranteAt: cuando(4),
+      }),
+      false,
+    );
+  });
+
+  test("🔴 el que NUNCA habló no cuenta: su silencio no empezó con el precio", () => {
+    // Ése es `sin_respuesta`, que es otra cosa y otra acción. Sin esta guarda,
+    // el recorte se comería las 2.252 conversaciones de difusión.
+    assert.equal(
+      seCalloConElPrecio({
+        precioEnviado: true,
+        hablo: false,
+        primerPrecioAt: cuando(5),
+        ultimoEntranteAt: null,
+      }),
+      false,
+    );
+  });
+
+  test("sin precio no hay reacción al precio que medir", () => {
+    assert.equal(
+      seCalloConElPrecio({
+        precioEnviado: false,
+        hablo: true,
+        primerPrecioAt: null,
+        ultimoEntranteAt: cuando(2),
+      }),
+      false,
+    );
+  });
+
+  test("el mismo instante NO es una respuesta", () => {
+    const t = cuando(5);
+    assert.equal(
+      seCalloConElPrecio({ precioEnviado: true, hablo: true, primerPrecioAt: t, ultimoEntranteAt: t }),
+      true,
+    );
+  });
+
+  test("con precio pero sin fecha del precio no se afirma nada", () => {
+    assert.equal(
+      seCalloConElPrecio({
+        precioEnviado: true,
+        hablo: true,
+        primerPrecioAt: null,
+        ultimoEntranteAt: cuando(9),
+      }),
+      false,
+    );
+  });
+});
+
+describe("«cierre» derivado de una venta posterior", () => {
+  test("una venta posterior gana sobre todo lo demás", () => {
+    assert.equal(etapaEfectiva(null, true, true, true, true, true), "cierre");
+    assert.equal(etapaEfectiva(null, false, false, false, true, true), "cierre");
+  });
+
+  test("sin venta posterior, nada cambia", () => {
+    assert.equal(etapaEfectiva(null, true, true, true, true, false), "cotizado");
+  });
+
+  test("🔴 `perdido` le sigue ganando: es terminal HUMANO", () => {
+    // Alguien la descartó a mano. Que después aparezca una venta por teléfono no
+    // puede resucitarla sola — es la misma regla que ya tenía el precio.
+    assert.equal(etapaEfectiva("perdido", true, true, true, true, true), "perdido");
   });
 });

@@ -15,9 +15,14 @@ import {
   ventanaDiasSql,
   vivaSql,
 } from "./urgenciaSql.js";
-import { etapaEfectivaSql, ultimasGestionesSql } from "./etapaEfectivaSql.js";
+import { etapaEfectivaSql, ultimasGestionesSql, ventaPosteriorCteSql } from "./etapaEfectivaSql.js";
 import { precioEnviadoSql, primerPrecioAtSql } from "./precio.js";
-import { etapaDesdeSql, paraSeguirSql, respuestaAtSql } from "./tiempoEnEtapa.js";
+import {
+  etapaDesdeSql,
+  paraSeguirSql,
+  respuestaAtSql,
+  seCalloConElPrecioSql,
+} from "./tiempoEnEtapa.js";
 import {
   bandaPinOrdenSql,
   categoriasCteSql,
@@ -143,6 +148,16 @@ const VENTANA_CIERRA = ventanaCierraSql("ultimo_entrante_at", "canal", "tipo");
  * podría prometer 47 y la cola devolver otra cosa (#37).
  */
 const PUEDO_ESCRIBIRLE = puedoEscribirleSql(VENTANA_CIERRA);
+
+/**
+ * EL JOIN DE LA VENTA — y la POSTERIORIDAD va en el `ON`, no en un `WHERE`
+ * suelto (`etapaEfectivaSql.ts`). Puesta acá, es imposible que un consumidor se
+ * la olvide: `v.venta_at` o es una venta posterior a esta conversación, o es
+ * NULL. Sin ese `>=`, «Cierre» se llenaría con los 947 clientes que compraron
+ * ANTES de que les escribiéramos — que es la lección más cara del análisis de
+ * canales.
+ */
+const VENTA_JOIN = sql`LEFT JOIN ventas v ON v.clave = todo.clave AND v.venta_at >= todo.primer_at`;
 
 /**
  * LA VENTANA DE LA COLA — hasta dónde mira «el trabajo pendiente». 30 días: es el
@@ -342,6 +357,12 @@ export interface OpcionesCola {
    * universo del que la columna informa el total, no un filtro secundario.
    */
   seguir?: boolean;
+  /**
+   * «Se calló con el precio» (`cola/tiempoEnEtapa.ts`): había hablado y no volvió
+   * a escribir después de recibirlo. El recorte que separa la cotización viva
+   * (258) de la que se frenó en el número (540).
+   */
+  seCallo?: boolean;
   /** El tab de la cola potenciada (#49): `todo` (default) · `no-leidos` · `favoritos`. */
   tab?: string;
   /** Filtra por una categoría asignada (modo Listas de #49). Se compara en minúsculas. */
@@ -497,6 +518,12 @@ export type FilaDesglose = {
    * es el 96 % de Cotizados y «en ventana» daba 1).
    */
   paraSeguir: boolean;
+  /**
+   * «Se calló con el precio» (`cola/tiempoEnEtapa.ts`): había hablado y su último
+   * mensaje es anterior al precio. Medido: **540 de los 798 Cotizados**. Es la
+   * objeción #1 del negocio, y nadie la declaró nunca.
+   */
+  seCallo: boolean;
   n: number;
 };
 
@@ -737,6 +764,12 @@ async function ejecutarCola(
    * columna tiene que decir el tamaño de LO RECORTADO.
    */
   if (opciones.seguir) condicionesRecorte.push(paraSeguirSql);
+  /**
+   * El recorte «Se calló con el precio»: los 540 que conversaban y dejaron de
+   * hacerlo justo al ver el número. Recorte y no intención, por lo mismo que los
+   * otros tres — define el universo del que la columna informa el total.
+   */
+  if (opciones.seCallo) condicionesRecorte.push(seCalloConElPrecioSql);
   // Los tabs personales (#49) solo con la tabla presente; la categoría vive en
   // `etiquetas`, así que filtra igual aunque el estado personal no exista.
   if (conEstado && tab === "no-leidos") condicionesRecorte.push(sql`(${noLeidoSql})`);
@@ -775,6 +808,9 @@ async function ejecutarCola(
     ),
     ultimas_gestiones AS (
       ${ultimasGestionesSql}
+    ),
+    ventas AS (
+      ${ventaPosteriorCteSql}
     ),
     cats AS (
       ${categoriasCteSql}
@@ -833,6 +869,7 @@ async function ejecutarCola(
     FROM todo
     LEFT JOIN seguimientos USING (clave)
     LEFT JOIN ultimas_gestiones USING (clave)
+    ${VENTA_JOIN}
     ${estadoJoinSql(vendedoraId, conEstado)}
     LEFT JOIN cats ON cats.clave = todo.clave
     LEFT JOIN interes_ultimo iu ON iu.clave = todo.clave
@@ -872,6 +909,7 @@ async function ejecutarCola(
     }>(sql`
       ${conTodo(filtroCanal, pins, lineas)},
       ultimas_gestiones AS (${ultimasGestionesSql}),
+      ventas AS (${ventaPosteriorCteSql}),
       cats AS (${categoriasCteSql}),
       padron AS (${padronCteSql(conPadron)})
       SELECT count(*) FILTER (WHERE ${yTodas([...condicionesBase, ...soloMias])})::int AS n,
@@ -889,6 +927,7 @@ async function ejecutarCola(
              count(*) FILTER (WHERE ${esMia ?? sql`false`})::int            AS mios
       FROM todo
       LEFT JOIN ultimas_gestiones USING (clave)
+      ${VENTA_JOIN}
       ${estadoJoinSql(vendedoraId, conEstado)}
       LEFT JOIN cats ON cats.clave = todo.clave
       ${padronJoinSql(conPadron)}
@@ -960,6 +999,7 @@ async function desglosarEmbudo(
   const filas = await base.execute<FilaDesglose>(sql`
     ${conTodo(filtroCanal, null, lineas)},
     ultimas_gestiones AS (${ultimasGestionesSql}),
+    ventas AS (${ventaPosteriorCteSql}),
     padron AS (${padronCteSql(conPadron)})
     SELECT (${etapaEfectivaSql})        AS etapa,
            ya_le_hablamos               AS "yaLeHablamos",
@@ -971,14 +1011,16 @@ async function desglosarEmbudo(
            -- cuatro tramos por etapa lo multiplicarían para responder una sola
            -- pregunta. El instante exacto ya viaja en la fila (etapa_desde).
            (${paraSeguirSql})           AS "paraSeguir",
+           (${seCalloConElPrecioSql})   AS "seCallo",
            count(*)::int                AS n
     FROM todo
     LEFT JOIN ultimas_gestiones USING (clave)
+    ${VENTA_JOIN}
     ${padronJoinSql(conPadron)}
     ${botJoinSql(conBot)}
     ${asignadaJoinSql(conAsignacion)}
     ${donde}
-    GROUP BY 1, 2, 3, 4, 5, 6
+    GROUP BY 1, 2, 3, 4, 5, 6, 7
   `);
   return filas.map((f) => ({
     etapa: f.etapa,
@@ -987,6 +1029,7 @@ async function desglosarEmbudo(
     viva: f.viva,
     ventana: f.ventana,
     paraSeguir: f.paraSeguir,
+    seCallo: f.seCallo,
     n: f.n,
   }));
 }

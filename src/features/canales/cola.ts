@@ -307,6 +307,12 @@ export interface EstadoCola {
    */
   seguir?: boolean;
   /**
+   * «Se calló con el precio» (server: `cola/tiempoEnEtapa.ts`): venía conversando
+   * y no volvió a escribir después de recibirlo. Medido: **540 de los 798
+   * Cotizados**, contra 258 que sí respondieron.
+   */
+  seCallo?: boolean;
+  /**
    * Recorta a UNA línea de WhatsApp: el número propio de Goberna por el que
    * entró la conversación (#50). Vacío/ausente = todas, que es lo que había
    * cuando había una sola línea. `LINEA_MIAS` = las que `numero_vendedora` le
@@ -343,6 +349,7 @@ export function parametrosDeCola(e: EstadoCola): Record<string, string> {
   if (e.precio) p.precio = '1';
   if (e.ventana) p.ventana = '1';
   if (e.seguir) p.seguir = '1';
+  if (e.seCallo) p.seCallo = '1';
   // ⚠️ `mias` (LÍNEAS) y `mios` (CONVERSACIONES asignadas) son DOS recortes, se
   // escriben con una vocal de diferencia y salen los dos de acá. Confundirlos no
   // rompe nada visible: devuelve otra cola. Van juntos y comentados a propósito.

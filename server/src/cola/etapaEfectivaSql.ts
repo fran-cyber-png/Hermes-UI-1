@@ -42,6 +42,13 @@ import { ETAPAS, normalizarEtapa, type EtapaGestion } from "../gestiones/registr
  *   respondida (bool) · precio_enviado (bool) · hablo (bool) ·
  *   ya_le_hablamos (bool) · etapa_manual (text, NULL si no hay gestión asentada).
  * `etapa_manual` sale de `ultimasGestionesSql` (LEFT JOIN por clave).
+ *
+ * Y un ALIAS DE JOIN, como ya hacen `ec.` (estado), `bq.` (bot) y `ca.`
+ * (reparto): **`v`**, de `ventaPosteriorCteSql`. `v.venta_at IS NOT NULL`
+ * significa «hay una venta posterior a esta conversación» — 🔴 la
+ * POSTERIORIDAD va en el `ON` del join, no acá, y no es negociable: sin ella
+ * entrarían las 947 conversaciones de clientes que compraron ANTES de que les
+ * escribiéramos. Quien no tenga ventas que joinear usa `ventaJoinVacioSql`.
  */
 
 /**
@@ -83,6 +90,21 @@ export const ESCALA_ETAPAS: readonly string[] = [
 ];
 
 /**
+ * 🔴 LO QUE `?etapa=` PUEDE PEDIR — que NO es lo mismo que lo que se puede
+ * declarar, y confundirlos ya costó un bug.
+ *
+ * La ruta validaba contra `ETAPAS` (las declarables) y por eso
+ * `?etapa=sin_respuesta` respondía **400**: la columna existía en el tablero, el
+ * SQL la calculaba bien, y la pantalla no podía pedirla. No lo vio ningún test
+ * con base porque todos llaman al seam `consultarCola` directo, salteándose la
+ * validación de la ruta — el defecto vivía justo en la costura.
+ *
+ * Son dos listas y tienen que seguir siendo dos: se DECLARA lo que una persona
+ * afirma, se CONSULTA todo lo que el embudo puede mostrar.
+ */
+export const ETAPAS_CONSULTABLES: readonly string[] = [...ESCALA_ETAPAS, "perdido"];
+
+/**
  * EL PISO DERIVADO, solo — el peldaño que sale de los HECHOS, sin mirar ninguna
  * gestión asentada. Sale aparte de `etapaEfectiva` porque hay un segundo lector:
  * `tiempoEnEtapa.ts` necesita saber **si la etapa efectiva la puso la derivación
@@ -103,7 +125,16 @@ export function etapaDerivada(
   hablo = true,
   /** ¿Salió alguna vez un mensaje nuestro? Sin ninguno de los dos no hay conversación. */
   yaLeHablamos = false,
+  /**
+   * ¿Hay una venta POSTERIOR al primer mensaje de esta conversación? Es el
+   * peldaño más alto, y el filtro «posterior» no es opcional: sin él entrarían
+   * las 947 conversaciones de gente que ya era cliente antes de que le
+   * escribiéramos. Opcional en `false`: un llamador que no lo sabe no inventa
+   * un cierre.
+   */
+  ventaPosterior = false,
 ): string {
+  if (ventaPosterior) return "cierre";
   if (!hablo && yaLeHablamos) return SIN_RESPUESTA;
   return precioEnviado ? "cotizado" : respondida ? "contactado" : "interesado";
 }
@@ -120,8 +151,9 @@ export function etapaEfectiva(
   precioEnviado = false,
   hablo = true,
   yaLeHablamos = false,
+  ventaPosterior = false,
 ): string {
-  const derivada = etapaDerivada(respondida, precioEnviado, hablo, yaLeHablamos);
+  const derivada = etapaDerivada(respondida, precioEnviado, hablo, yaLeHablamos, ventaPosterior);
   if (etapaManual == null) return derivada;
   const manual = normalizarEtapa(etapaManual);
   if (manual === "perdido") return "perdido";
@@ -170,6 +202,7 @@ const rango = (etapa: SQL): SQL =>
  * con dos criterios, cada pantalla armaría un embudo distinto.
  */
 export const derivadaSql = sql`(CASE
+  WHEN v.venta_at IS NOT NULL THEN 'cierre'
   WHEN NOT hablo AND ya_le_hablamos THEN ${SIN_RESPUESTA}
   WHEN precio_enviado THEN 'cotizado'
   WHEN respondida THEN 'contactado'
@@ -220,3 +253,60 @@ export const ultimasGestionesSql: SQL = sql`
   FROM gestiones
   ORDER BY clave, creado_at DESC, id DESC
 `;
+
+/**
+ * ══ «CIERRE» DEJA DE SER CERO PERMANENTE ═══════════════════════════════════
+ *
+ * Hasta acá `cierre` sólo se ganaba **registrando la venta a mano desde la
+ * ficha**, y el resultado medido el 8-ago-2026 es una columna en **0** sobre
+ * 3.973 conversaciones. Un embudo sin salida no es un embudo: si nada sale, todo
+ * se apila, y por eso Cotizados llegó a 3.051.
+ *
+ * Y el 0 no es que no haya ventas: es que Hermes no se enteraba. Con el puente
+ * de atribución arreglado (`atribucion/payload.ts`), `conversiones_wa` tiene
+ * **1.464 filas, 1.463 con `clave` en formato `conv:%`** — o sea que el join con
+ * la conversación cierra.
+ *
+ * 🔴 **PERO LA VENTA TIENE QUE SER POSTERIOR A LA CONVERSACIÓN.** Es la lección
+ * más cara del análisis de canales: de las 948 conversaciones «con venta» del
+ * tipo difusión, **947 ya eran clientes ANTES del primer mensaje**. Sin ese
+ * filtro, «Cierre» se llenaría de gente que compró en 2024 y a la que este mes
+ * le mandamos un flyer — el mismo error que hace que `conversiones_wa` no pueda
+ * llamarse atribución. Con el filtro son **15**, y 15 es la verdad.
+ *
+ * Se sirve como un peldaño derivado más (el piso de ADR 0013): sólo empuja hacia
+ * ARRIBA, `perdido` le sigue ganando, y una gestión manual de `cierre` sigue
+ * valiendo igual. La compuerta del front no se toca — acá no se declara nada, se
+ * lee un hecho que ya ocurrió, y ese hecho es una VENTA.
+ *
+ * ── CÓMO SE CRUZA ────────────────────────────────────────────────────────
+ * Por `clave`, y **NO por teléfono**: el sufijo de 9 dígitos es un match débil
+ * (#119) y acá un falso positivo pinta una venta que no existe. `ocurrida_at IS
+ * NOT NULL` porque una venta sin fecha no se puede ordenar respecto de nada: se
+ * ignora en vez de suponerla reciente.
+ *
+ * El «posterior» lo aplica la consulta que consume esto, comparando `venta_at`
+ * contra `primer_at` — el primer mensaje de la conversación, que ya se emite
+ * para `tiempoEnEtapa`.
+ */
+export const ventaPosteriorCteSql: SQL = sql`
+  SELECT clave, min(ocurrida_at) AS venta_at
+  FROM conversiones_wa
+  WHERE clave IS NOT NULL AND ocurrida_at IS NOT NULL
+  GROUP BY clave
+`;
+
+/**
+ * EL JOIN VACÍO — para los consumidores de `etapaEfectivaSql` que no tienen (ni
+ * quieren) las ventas. Mismo recurso que `estadoJoinSql` en modo degradado: un
+ * `LEFT JOIN` contra una fila tipada que nunca matchea, así `v.venta_at` existe
+ * (siempre NULL) sin nombrar `conversiones_wa` ni cambiar un solo conteo.
+ *
+ * Lo usa el **Dashboard**: su embudo mide a los que LLEGARON en un período y
+ * cuenta el cierre por otro camino (`subregistro`). Meterle la derivación por
+ * venta ahí es un frente propio — y hacerlo de callado le cambiaría los números
+ * a un panel que alguien mira todas las mañanas.
+ */
+export const ventaJoinVacioSql: SQL = sql`LEFT JOIN (
+  SELECT NULL::text AS clave, NULL::timestamptz AS venta_at WHERE false
+) v ON false`;

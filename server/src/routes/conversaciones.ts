@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "../db/client.js";
 import { consultarCola } from "../cola/consultarCola.js";
 import { PinLleno, upsertEstado } from "../cola/estado.js";
-import { ETAPAS } from "../gestiones/registrarGestion.js";
+import { ETAPAS_CONSULTABLES } from "../cola/etapaEfectivaSql.js";
 import { normalizarTelefono } from "../whatsapp/identidadWa.js";
 
 /**
@@ -57,8 +57,12 @@ export const conversacionesRouter = Router();
 
 conversacionesRouter.get("/", async (req, res) => {
   const etapa = typeof req.query.etapa === "string" ? req.query.etapa : "";
-  if (etapa && !(ETAPAS as readonly string[]).includes(etapa)) {
-    res.status(400).json({ ok: false, message: `etapa inválida (${ETAPAS.join(" | ")})` });
+  // ⚠️ Se valida contra las CONSULTABLES, no contra las declarables: `sin_respuesta`
+  // se deriva y no se declara, pero el tablero tiene que poder pedir su columna.
+  if (etapa && !ETAPAS_CONSULTABLES.includes(etapa)) {
+    res
+      .status(400)
+      .json({ ok: false, message: `etapa inválida (${ETAPAS_CONSULTABLES.join(" | ")})` });
     return;
   }
 
@@ -97,6 +101,8 @@ conversacionesRouter.get("/", async (req, res) => {
       // `?seguir=1`: el recorte «Para seguir» del Pipeline (cola/tiempoEnEtapa.ts)
       // — silencio nuestro y entre 3 y 14 días en la etapa.
       seguir: req.query.seguir === "1",
+      // `?seCallo=1`: los que conversaban y se callaron al recibir el precio.
+      seCallo: req.query.seCallo === "1",
       linea,
       misLineas,
       misAsignadas,

@@ -2,7 +2,11 @@ import { sql, type SQL } from "drizzle-orm";
 import type { db } from "../db/client.js";
 import { respondidaSql } from "../cola/urgenciaSql.js";
 import { PRECIO_REGEX_FUENTE } from "../cola/precio.js";
-import { etapaEfectivaSql, ultimasGestionesSql } from "../cola/etapaEfectivaSql.js";
+import {
+  etapaEfectivaSql,
+  ultimasGestionesSql,
+  ventaJoinVacioSql,
+} from "../cola/etapaEfectivaSql.js";
 import {
   adIdDeCursoSql,
   cursoCrudoSql,
@@ -250,6 +254,7 @@ function conversacionesDelPeriodo(o: OpcionesNegocio): SQL {
       FROM conv c
       LEFT JOIN primera_respuesta pr USING (clave)
       LEFT JOIN (${ultimasGestionesSql}) g USING (clave)
+      ${ventaJoinVacioSql}
     )
   `;
 }
