@@ -21,7 +21,13 @@ tauri-build = { version = "2.6.3", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.11.3", features = [] }
+# 🔴 `unstable` es lo que habilita MULTIWEBVIEW: `Window::add_child`, o sea el
+# navegador embebido de ADR 0043. Es la única razón por la que está prendida, y
+# conviene saber qué se compró: la API puede cambiar entre menores de Tauri, así
+# que subir de versión pide releer `navegador.rs` antes que confiar en el
+# `cargo build`. La superficie es chica a propósito (add_child, set_position,
+# set_size, hide/show, navigate, reload) y toda pasa por ese módulo.
+tauri = { version = "2.11.3", features = ["unstable"] }
 tauri-plugin-log = "2"
 tauri-plugin-opener = "2"
 
@@ -30,4 +36,4 @@ tauri-plugin-opener = "2"
 # que la UI servida por OTA (origen REMOTO) lo alcanza y un sitio cualquiera no.
 # Sin esto, esa garantía solo se podía comprobar empaquetando contra producción.
 [dev-dependencies]
-tauri = { version = "2.11.3", features = ["test"] }
+tauri = { version = "2.11.3", features = ["test", "unstable"] }

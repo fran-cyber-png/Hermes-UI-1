@@ -1,0 +1,32 @@
+# EL PERMISO DEL NAVEGADOR EMBEBIDO (ADR 0043).
+#
+# Mismo motivo que `abrir-navegador.toml`: en producción la UI de Hermes corre
+# en un origen REMOTO (la ventana `main` navega a `hermes-api.goberna.us`), y
+# Tauri chequea el ACL para todo pedido que no venga de local. Sin este archivo
+# y sin su línea en las DOS capabilities, estos comandos andan en `dev:app` y se
+# rechazan en la máquina de la vendedora.
+#
+# 🔴 UN SOLO PERMISO PARA LOS DIEZ, y no diez permisos. No es pereza: son las
+# operaciones de UNA superficie y no hay ningún reparto imaginable donde tenga
+# sentido dar «mover» sin «montar». Diez permisos serían diez líneas que hay que
+# acordarse de agregar en dos capabilities cada vez que se toca la vista — o sea
+# la forma exacta del defecto que ADR 0040 §5.3 vino a cerrar.
+#
+# ⚠️ Lo que ESTE archivo no puede garantizar es que el webview hijo no se cuele:
+# eso se decide en las capabilities, que desde ADR 0043 acotan por `webviews` y
+# no por `windows`. El porqué está en `src/navegador.rs`.
+
+[[permission]]
+identifier = "allow-navegador-embebido"
+description = "Montar, mover, esconder y navegar el navegador embebido de Hermes. Las guardas de esquema viven en Rust (`validar` y `navegacion_permitida`), no acá."
+commands.allow = [
+  "navegador_montar",
+  "navegador_recuadro",
+  "navegador_ocultar",
+  "navegador_ir",
+  "navegador_atras",
+  "navegador_adelante",
+  "navegador_recargar",
+  "navegador_donde",
+  "navegador_cerrar",
+]

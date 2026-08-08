@@ -11,6 +11,12 @@
  */
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
+/// El navegador EMBEBIDO — el webview hijo que vive adentro de la vista
+/// (ADR 0043). La ventana aparte de acá abajo no se archiva: pasa a ser el
+/// peldaño del medio de la escalera de respaldo, porque la cáscara se
+/// reinstala a mano y la UI viaja por OTA.
+mod navegador;
+
 // Solo se usa en release (en dev la ventana carga el Vite local), así que en un
 // build de debug es dead code y el warning tapaba a los de verdad.
 #[cfg_attr(debug_assertions, allow(dead_code))]
@@ -75,7 +81,7 @@ fn abrir_navegador<R: tauri::Runtime>(app: tauri::AppHandle<R>, url: String) -> 
  * contexto de la ventana que se abra, `file:` le da lectura del disco a una
  * URL que vino del webview, y `tauri:` es el protocolo de la propia API nativa.
  */
-fn validar(url: &str) -> Result<tauri::Url, String> {
+pub(crate) fn validar(url: &str) -> Result<tauri::Url, String> {
   let parseada = tauri::Url::parse(url.trim()).map_err(|_| format!("no es una URL: {url}"))?;
 
   if parseada.scheme() != "https" {
@@ -115,7 +121,18 @@ pub fn run() {
     // navegador del sistema. El shim web (enlacesExternos.ts) invoca esto.
     // Lo que abre una ventana DE HERMES es `abrir_navegador`, acá arriba.
     .plugin(tauri_plugin_opener::init())
-    .invoke_handler(tauri::generate_handler![abrir_navegador])
+    .invoke_handler(tauri::generate_handler![
+      abrir_navegador,
+      navegador::navegador_montar,
+      navegador::navegador_recuadro,
+      navegador::navegador_ocultar,
+      navegador::navegador_ir,
+      navegador::navegador_atras,
+      navegador::navegador_adelante,
+      navegador::navegador_recargar,
+      navegador::navegador_donde,
+      navegador::navegador_cerrar,
+    ])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -123,6 +140,35 @@ pub fn run() {
             .level(log::LevelFilter::Info)
             .build(),
         )?;
+
+        // La ventana de dev se llama distinto que la instalada. No es un
+        // adorno: las dos son el proceso `app` con el mismo título, y mientras
+        // se sacaba la evidencia de ADR 0043 eso hizo fotografiar DOS VECES la
+        // app de producción creyendo que era la de desarrollo. Un dev que corre
+        // `dev:app` con Hermes abierto tiene el mismo problema todos los días.
+        if let Some(v) = app.get_webview_window("main") {
+          let _ = v.set_title("Hermes — dev");
+
+          // 🔴 EL MODO EVIDENCIA, y existe por una pérdida de tiempo concreta.
+          //
+          // El navegador embebido es una capa del SISTEMA OPERATIVO: no se
+          // puede fotografiar desde una galería en un navegador común ni
+          // dibujar de mentira — la única evidencia posible es una captura de
+          // ESTA ventana. Y sacarla a mano es sorprendentemente difícil:
+          // Hermes instalado y `tauri dev` son los dos el proceso `app` con el
+          // mismo título, y `every process whose name is "app"` de AppleScript
+          // devuelve dos elementos que resuelven al MISMO proceso, así que
+          // `screencapture` terminaba fotografiando producción una y otra vez.
+          //
+          // Con `HERMES_DEV_EVIDENCIA=1` la ventana se planta en un lugar
+          // conocido y se queda arriba, y capturar es un `screencapture -R` sin
+          // adivinar nada. Detrás de una variable porque `always_on_top` todo
+          // el día le arruina el escritorio a quien programa.
+          if std::env::var("HERMES_DEV_EVIDENCIA").is_ok() {
+            let _ = v.set_position(tauri::LogicalPosition::new(40.0, 40.0));
+            let _ = v.set_always_on_top(true);
+          }
+        }
       }
 
       #[cfg(not(debug_assertions))]
@@ -151,7 +197,11 @@ mod pruebas {
   /// instalador.
   fn app() -> tauri::App<tauri::test::MockRuntime> {
     mock_builder()
-      .invoke_handler(tauri::generate_handler![abrir_navegador])
+      .invoke_handler(tauri::generate_handler![
+        abrir_navegador,
+        crate::navegador::navegador_montar,
+        crate::navegador::navegador_ocultar,
+      ])
       .build(contexto())
       .expect("la app de prueba se arma con la config de verdad")
   }
@@ -161,14 +211,40 @@ mod pruebas {
     url_origen: &str,
     destino: &str,
   ) -> Result<(), String> {
+    invocar(
+      webview.as_ref(),
+      "abrir_navegador",
+      url_origen,
+      serde_json::json!({ "url": destino }),
+    )
+  }
+
+  /// `get_ipc_response` pide un `AsRef<Webview>` y **`Webview` no lo implementa
+  /// para sí mismo** (sí `WebviewWindow`). Este envoltorio de tres líneas es lo
+  /// único que separa a los tests de poder hablarle a un webview HIJO — que es
+  /// el caso que ADR 0043 tiene que fijar, y que no es una ventana.
+  struct Puerta(tauri::Webview<tauri::test::MockRuntime>);
+
+  impl AsRef<tauri::Webview<tauri::test::MockRuntime>> for Puerta {
+    fn as_ref(&self) -> &tauri::Webview<tauri::test::MockRuntime> {
+      &self.0
+    }
+  }
+
+  fn invocar(
+    webview: &tauri::Webview<tauri::test::MockRuntime>,
+    cmd: &str,
+    url_origen: &str,
+    cuerpo: serde_json::Value,
+  ) -> Result<(), String> {
     get_ipc_response(
-      webview,
+      &Puerta(webview.clone()),
       InvokeRequest {
-        cmd: "abrir_navegador".into(),
+        cmd: cmd.into(),
         callback: tauri::ipc::CallbackFn(0),
         error: tauri::ipc::CallbackFn(1),
         url: url_origen.parse().expect("origen válido"),
-        body: serde_json::json!({ "url": destino }).into(),
+        body: cuerpo.into(),
         headers: Default::default(),
         invoke_key: INVOKE_KEY.to_string(),
       },
@@ -206,6 +282,107 @@ mod pruebas {
       .unwrap();
 
     assert!(pedir(&w, "https://cualquier-cosa.example", "https://app.goberna.us").is_err());
+  }
+
+  /**
+   * 🔴🔴 EL CANDADO DE ADR 0043, Y ES EL QUE MÁS CARO SALDRÍA PERDER.
+   *
+   * Desde que el navegador es un webview HIJO de la ventana `main`, adentro de
+   * esa ventana corre `chatgpt.com`. Y el ACL de Tauri resuelve así
+   * (`ipc/authority.rs:459`): `origin.matches(&cmd.context) && (cmd.webviews
+   * matchea el label del webview || cmd.windows matchea el de su ventana)`.
+   *
+   * Es un **O**. Con las capabilities diciendo `"windows": ["main"]` —como
+   * decían hasta ADR 0043— el hijo matcheaba por su VENTANA, y lo único que lo
+   * separaba de la API nativa era el candado del origen. Por eso las dos
+   * capabilities acotan ahora por `"webviews": ["main"]`.
+   *
+   * El test es a propósito PARANOICO: el hijo pide con NUESTRO origen
+   * (`hermes-api.goberna.us`), o sea con el candado del origen ya vencido. Si
+   * alguien vuelve a poner `"windows"` en cualquiera de las dos capabilities,
+   * esto se pone verde... y por eso se afirma lo contrario acá.
+   */
+  #[test]
+  fn el_navegador_embebido_no_alcanza_ningun_comando() {
+    let app = app();
+    let main = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+      .build()
+      .unwrap();
+
+    let ventana = app.get_window("main").expect("la ventana de la mesa");
+    let hijo = ventana
+      .add_child(
+        tauri::webview::WebviewBuilder::new(
+          crate::navegador::WEBVIEW_NAVEGADOR,
+          tauri::WebviewUrl::External("https://chatgpt.com".parse().unwrap()),
+        ),
+        tauri::LogicalPosition::new(0.0, 0.0),
+        tauri::LogicalSize::new(800.0, 600.0),
+      )
+      .expect("el webview hijo se monta");
+
+    // El origen de Hermes NO le alcanza: lo que lo frena es el label.
+    for cmd in ["abrir_navegador", "navegador_ocultar"] {
+      assert!(
+        invocar(&hijo, cmd, "https://hermes-api.goberna.us", serde_json::json!({ "url": "https://app.goberna.us" })).is_err(),
+        "el webview hijo NO puede alcanzar {cmd}"
+      );
+    }
+
+    // Y la contracara: la mesa sí, o el frente no andaría.
+    assert!(invocar(
+      main.as_ref(),
+      "navegador_ocultar",
+      "https://hermes-api.goberna.us",
+      serde_json::json!({}),
+    )
+    .is_ok());
+  }
+
+  /// El otro lado del mismo cambio: mover las capabilities de `windows` a
+  /// `webviews` no puede haberle sacado los comandos a la mesa. El webview
+  /// principal se llama igual que su ventana (`WebviewWindowBuilder` usa un
+  /// solo label para las dos cosas) y por eso el cambio es inocuo — pero eso es
+  /// una propiedad de Tauri, no nuestra, así que se fija acá.
+  #[test]
+  fn la_mesa_alcanza_los_comandos_del_navegador_embebido() {
+    let app = app();
+    let w = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+      .build()
+      .unwrap();
+
+    assert!(invocar(
+      w.as_ref(),
+      "navegador_montar",
+      "https://hermes-api.goberna.us",
+      serde_json::json!({
+        "url": "https://app.goberna.us",
+        "recuadro": { "x": 64.0, "y": 96.0, "ancho": 900.0, "alto": 700.0 },
+      }),
+    )
+    .is_ok());
+  }
+
+  /// La guarda de esquema es LA MISMA para los dos caminos: el comando del
+  /// embebido reusa `validar()`. Sin este test, «endurecer» uno dejaría el otro
+  /// abierto y nadie se enteraría.
+  #[test]
+  fn el_navegador_embebido_rechaza_lo_que_no_es_https() {
+    let app = app();
+    let w = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+      .build()
+      .unwrap();
+
+    assert!(invocar(
+      w.as_ref(),
+      "navegador_montar",
+      "https://hermes-api.goberna.us",
+      serde_json::json!({
+        "url": "file:///etc/passwd",
+        "recuadro": { "x": 0.0, "y": 0.0, "ancho": 900.0, "alto": 700.0 },
+      }),
+    )
+    .is_err());
   }
 
   /// UNA sola ventana. Dos pedidos no dejan dos ventanas: la segunda navega la
