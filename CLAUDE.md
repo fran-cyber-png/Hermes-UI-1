@@ -765,17 +765,27 @@ escribir?** Meta cierra la puerta sola y de los dos plazos Hermes modelaba **uno
 - Ver sin server: `npx vite --port 5199` → `/galeria-ventana.html` y `/galeria-embudo.html`. Capturas
   en `docs/evidencia/ventana-de-conversacion.png` y `ventana-en-el-pipeline.png`.
 
-## El embudo se DERIVA, no se declara (8-ago-2026)
+## El embudo se DERIVA de lo que hizo el COMPRADOR (8/9-ago-2026, **ADR 0044**)
 
 Medido en producción: `gestiones` tiene **39 filas en toda la base**, y de ahí salían los «22
 Cotizados» del Pipeline — 22 gestiones, de 2 personas, todas del mismo día. **El embudo no medía el
 negocio: medía cuánto se acordó alguien de tocar un botón.** Y la contradicción estaba dibujada en la
 propia pantalla: al lado de «22 Cotizados», el chip decía **«Con precio 2.906»**.
 
-- 🔴 **`etapaEfectivaSql` deriva ahora TRES peldaños**: `sin_respuesta` (le escribimos y nunca
-  contestó) debajo de todo, y `precio_enviado → cotizado` por encima de `respondida → contactado`.
-  Sobre los mismos datos el embudo pasa de `3.450 · 22 · 0 · 0` a **Sin respuesta 2.580 ·
-  Interesados 378 · Contactados 217 · Cotizados 798**.
+> ✅ **VIVO EN PRODUCCIÓN desde el 9-ago-2026** (`043544f`, N5 a las 14:57 Lima). Verificado
+> **midiendo, no por el status del workflow**: `sin_respuesta 2.576 · cotizado 790 · interesado 377
+> · contactado 217 · cierre 13`.
+
+**La regla que ordena todo esto** (el estándar de pipeline de CRM, contrastado antes de decidir):
+*las condiciones de salida de una etapa se definen por **acciones del COMPRADOR**, no por
+actividades del vendedor — mandar una propuesta ocurre exista o no interés*. Por eso cada peldaño
+arriba de `sin_respuesta` exige que la persona **haya escrito**, y `cierre` exige que **haya
+comprado**.
+
+- 🔴 **`etapaEfectivaSql` deriva ahora CUATRO peldaños**: `cierre` (venta posterior) arriba de todo,
+  `sin_respuesta` (le escribimos y nunca contestó) debajo, y `precio_enviado → cotizado` por encima
+  de `respondida → contactado`. Sobre los mismos datos el embudo pasa de `3.450 · 22 · 0 · 0` a
+  **Sin respuesta 2.576 · Interesados 377 · Contactados 217 · Cotizados 790 · Cierre 13**.
 - 🔴 **`sin_respuesta` existe porque `precio_enviado` promovía a gente que nunca dijo una palabra.**
   Sin ningún entrante, `respondida` da **true** (el último saliente le gana a un `-infinity`), así
   que una difusión caía en `contactado` — y si llevaba precio, en `cotizado`. Medido el 8-ago-2026:
@@ -817,6 +827,15 @@ propia pantalla: al lado de «22 Cotizados», el chip decía **«Con precio 2.90
     apagarlo. Lo encontró la captura de evidencia, no un test.
   · Cierre y Perdidos no llevan recorte: Perdidos es archivo, y el que Cierre merece —vendido y
     todavía sin registrar— depende del lazo de ventas, que es otro frente.
+  · 🔴 **«SE CALLARON CON EL PRECIO» es el recorte que el estándar pedía** — y la objeción #1 del
+    negocio, que nunca se declaró. De los 798 Cotizados, **258 respondieron después del precio** y
+    **540 venían conversando y dejaron de hacerlo en el momento exacto en que vieron el número**
+    (2.792 de 3.050, el 91,5 %, son silencio total tras el precio). Son el público de «se puede
+    pagar en 2 cuotas», dicha **2 veces en 1.876 conversaciones**. Va como RECORTE y no como sexta
+    columna: la etapa dice dónde está la venta, esto dice qué hacer hoy — y el `GRID` a 1280 ya está
+    ajustado con cinco. ⚠️ **El nombre no promete causa**: dice que se callaron *después* de
+    recibirlo, que es un hecho (la regla de `resultados/medicion.ts`). Exige `hablo`, así que las
+    2.252 de difusión no se cuelan.
 - **Y cada tarjeta dice cuánto lleva en su columna** (`canales/antiguedad.ts`, `etapa_desde` del
   server). **Sin oro**: el oro es tiempo que se ACABA y acá no corre ningún plazo. Se calla abajo de
   un día, y también cuando repetiría lo que el reloj de arriba ya dice — que es el caso más común.
@@ -830,6 +849,75 @@ propia pantalla: al lado de «22 Cotizados», el chip decía **«Con precio 2.90
   rechazaba el **99,6 %** de los payloads porque el esquema pedía `telefonos: string[]` y Cerberus
   manda objetos. Arreglado: de **0 a 1.565 ventas atribuidas** sobre los mismos 8.032 eventos. Ver
   `atribucion/payload.ts`.
+- 🔴 **«Cierre» ya no es cero permanente: se DERIVA de una venta posterior** (`ventaPosteriorCteSql`).
+  Un embudo sin salida no es un embudo — si nada sale, todo se apila, y por eso Cotizados llegó a
+  3.051. **La POSTERIORIDAD va en el `ON` del join**, no en un `WHERE` suelto: puesta ahí es
+  imposible que un consumidor se la olvide, y sin ese `>=` la columna se llenaría con los **947
+  clientes que compraron ANTES de que les escribiéramos** (de 948 «con venta», 947 ya eran
+  clientes). Con el filtro son **13**, y 13 es la verdad.
+  · ⚠️ **Y eso dice algo incómodo sobre `conversiones_wa`**: 1.448 de sus 1.464 filas son match por
+    `telefono_e164`, con ventas desde **marzo-2024** contra un `interactions` que cubre 18 días.
+    Dice «esta persona compró alguna vez», **no «esta conversación vendió»**. No autoriza a concluir
+    que conversar no vende: autoriza a decir que Hermes **todavía no puede medirlo**.
+  · El **Dashboard NO deriva cierre**: usa `ventaJoinVacioSql` (el recurso de `estadoJoinSql`
+    degradado). Su embudo mide a los que LLEGARON en un período y cuenta el cierre por otro camino
+    (`subregistro`); hacerlo de callado le cambiaría los números a un panel que alguien mira todas
+    las mañanas.
+- 🔴 **DOS LISTAS DE ETAPAS, y confundirlas ya costó un bug**: se **declara** lo que una persona
+  afirma (`ETAPAS`) y se **consulta** todo lo que el embudo puede devolver (`ETAPAS_CONSULTABLES`).
+  `GET /api/conversaciones?etapa=` validaba contra la primera, así que **`?etapa=sin_respuesta`
+  respondía 400**: la columna se dibujaba y al pedir sus tarjetas, error. **No lo vio ningún test
+  con base** —todos llaman al seam `consultarCola` directo, salteándose la ruta—: el defecto vivía
+  justo en la costura. El candado es `routes/conversaciones.etapa.test.ts`, y lo que fija es la
+  RELACIÓN: *toda etapa que el embudo puede DEVOLVER se tiene que poder pedir*.
+
+## Los leads de formulario en el radar — decían «icarus:landing» y se etiquetaban «Lead Ad»
+
+Reportado sobre la pantalla el 8-ago-2026: *«viene de lead landing pero no dice de qué landing
+viene, qué campaña es»*. Eran **tres defectos**, y dos salían de la misma línea de
+`routes/dashboard.ts`. Las dos reglas viven ahora en **`server/src/dashboard/fuenteLead.ts`**, puras
+y con test.
+
+- 🔴 **`platform = 'landing'` NO MATCHEA NINGUNA FILA de `leads`.** Lo escribe `webhook/landing.ts`
+  (el webhook de Bravo, que nunca recibió nada); lo que escribe todos los días es
+  `icarus/mapeo.ts`, con **`platform: "web"`**. Medido:
+
+  | platform | filas | qué es |
+  |---|---|---|
+  | **`web`** | **25.511** (todos `form_name` = `icarus:*`) | los de LANDING, con datos de HOY |
+  | `ig` / `fb` | 651 | los Lead Ads reales, muertos desde el **19-may-2026** |
+  | `landing` | **0** | lo que el `CASE` buscaba |
+
+  Consecuencia: el chip «Landings» del Dashboard estaba en **cero permanente** y los 25.511 leads de
+  landing se contaban como Lead Ads — **el panel decía que el canal muerto traía gente y el vivo no
+  traía nada**. `esDeLanding()` contempla los DOS escritores; el valor **no se reescribe en la base**
+  (son 25.511 filas históricas, y cambiar el hecho para no cambiar la consulta es al revés).
+- 🔴 **`COALESCE(form_name, campaign_name)` elegía EL PEOR de los dos.** `form_name` siempre existe
+  para icarus (`icarus:landing`, un placeholder con namespace) y tapaba a `campaign_name`, que es
+  donde vive el nombre del diploma. Con el fix, las 87 filas de 14 días pasan de «icarus:landing» a
+  su curso — 49 «Diploma Internacional del Consultor Político», 18 «…de Inteligencia y
+  Contrainteligencia»— y **0 quedan sin rótulo**. `productoDeLead()` reconoce el **prefijo**, no la
+  cadena exacta.
+  · ⚠️ **`gente/leadDeTelefono.ts` YA hacía lo correcto** (campaña primero, sin el namespace): eran
+    **dos lecturas del mismo dato y sólo una estaba bien** — #37 otra vez.
+- **Un lead de formulario ABRE LA FICHA al costado**, como un chat. Acá el código decía «un
+  formulario sin chat no tiene ficha que mostrar, así que sigue yendo al buscador», y era falso: la
+  ficha de un lead es justo lo que hace falta —quién es, de qué vino, cuándo llenó, si ya compró— y
+  la mitad que responde eso se busca **por TELÉFONO**, no por hilo. Es el caso que
+  `canales/conversacionNueva.ts` existe para cubrir (ADR 0035). Mandar al buscador costaba el radar
+  entero para responder «¿quién es este?».
+- 🔴 **UNA sola palabra para el origen** (`origenDeLead`, `features/cerberus/leadForm.ts`): la fila
+  decía «Landing» y la ficha que se abre al tocarla, «Web», sobre el mismo hecho — había **tres**
+  copias del ternario. Es un `switch` exhaustivo: con dos valores da igual, pero el día que se
+  agregue una fuente el compilador obliga a decidir su palabra en vez de meterla de callado en el
+  `else`, que es cómo un lead de landing terminaría rotulado «Meta Ads». ⚠️ El **valor** del
+  contrato sigue siendo `web`: es interno, no lo lee nadie, y cambiarlo obligaría a versionar
+  `/api/contactos/lead` por una palabra.
+- ⚠️ **La galería mostraba el CASO IDEAL y por eso nunca reflejó ninguno de los tres defectos.** Ahora
+  sirve los valores reales de producción (`platform` `web`, `form_name` `icarus:landing`, `fuente`
+  `web` en el contrato) — y fue al hacerlo que apareció la contradicción de la etiqueta. **Una
+  galería que no sirve los valores reales no es evidencia.** Captura:
+  `docs/evidencia/radar-lead-landing-ficha.png`.
 
 ## Señales automáticas — «Cotizado» y «Se enfrió»
 

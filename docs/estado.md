@@ -12,9 +12,39 @@ FB/IG, Messenger), gestiona el embudo, agenda, llama, manda correos y registra l
 Cerberus — desde UNA app (Tauri/web) cuya UI vive en el server (**OTA**: actualizar = actualizar
 el VPS, nadie reinstala).
 
-## ✅ Producción al día (verificado 2026-08-09)
+## ✅ Producción al día (verificado 2026-08-09, tras el frente del embudo)
 
-VPS1 corre **`fab8b3f`** con el servicio `active`. Verificado **midiendo, no por el status**: el
+VPS1 corre **`043544f`** con el servicio `active` (N5 del 9-ago 14:57 Lima). Antes de este frente
+corría `fab8b3f`.
+
+### El EMBUDO cambió de forma, y es lo primero que se nota al abrir el Pipeline (**ADR 0044**)
+
+Verificado **midiendo contra la base**, no por el status del workflow:
+
+| etapa | antes | ahora |
+|---|---|---|
+| **Sin respuesta** (nueva) | — | **2.576** |
+| Interesados | 378 | 377 |
+| Contactados | 545 | **217** |
+| Cotizados | **3.051** | **790** |
+| **Cierre** | **0** | **13** |
+
+El motivo: sin ningún entrante `respondida` da `true`, así que **2.252 de los 3.050 Cotizados nunca
+habían dicho una palabra** (un envío masivo con precio los promovía a todos). Ahora cada peldaño
+exige una acción del comprador. Nada se perdió: bajaron a una columna con su propia acción.
+
+Además: **el recorte es por columna** (chips «Para seguir», «Se callaron con el precio», «En
+ventana», cada uno con su número), **cada tarjeta dice cuánto lleva en su columna**, y **los leads de
+formulario del radar** dejaron de decir «icarus:landing»/«Lead Ad» y ahora abren su ficha al costado.
+
+⚠️ **Y lo que este frente NO resolvió, dicho con el número**: el Pipeline **ordena el 2,6 % del
+embudo**. `interactions` es 100 % WhatsApp; los **25.510 leads de formulario** (con datos de hoy) no
+llegan a ninguna columna, y de sus 25.226 con teléfono sólo **650** llegaron alguna vez a hablar.
+El plan está en `docs/plan-pipeline-por-canal.md` (punto #4, el único que toca la ingesta).
+
+---
+
+**Del frente anterior (el navegador), sin cambios:** Verificado **midiendo, no por el status**: el
 bundle servido es `assets/index-CtTZg27M.js` con `content-type: application/javascript` y 954 KB —
 que es la única forma de saberlo, porque **el fallback SPA de Express devuelve `index.html` con 200
 para cualquier ruta**, así que un `curl -f` a un archivo inexistente PASA. Además se verificó que
@@ -160,6 +190,24 @@ que escribió cada persona, su antigüedad). Eso se arregla en #166.
 
 ## PENDIENTES
 
+### 🚨 Lo que pesa más que cualquier pantalla (medido el 8/9-ago-2026)
+
+Está primero a propósito: **ninguna de las tres se arregla desde el código**, y las tres valen más
+que cualquier rediseño del tablero.
+
+1. **Las líneas de WhatsApp no reciben.** La principal (`51986394450`, 8.704 mensajes) sin un
+   entrante desde el **28-jul**; el 8-ago **no entró un solo mensaje por ninguna línea**. Un tablero
+   mejor ordena lo que entra — con el caño cerrado no hay nada que ordenar.
+2. **Los leads de landing cayeron 98,8 % desde enero**: 2.937 (ene) → 1.570 (mar) → 1.166 (may) →
+   361 (jun) → 143 (jul) → **36 (ago)**. Es marketing, no CRM.
+3. **El 97,4 % de los leads que sí llegaron nunca recibió un mensaje**: de 25.226 con teléfono,
+   sólo **650** llegaron a hablar por WhatsApp. En 30 días: 143 leads → 22 hablaron (15,4 %).
+
+Y una de operación que ya tiene mecanismo: **223 personas muestran un chip de curso que no nombra
+ningún curso** («¿Estás listo para ganar esta elección?» 148, «Chatea con nosotros» 26, «Adquiérelo
+ahora» 25…). Se mapean por `adId` con `cd server && npm run cursos:gaps` (ADR 0019) — no hace falta
+tocar código.
+
 ### Del operador (minutos, destraban features ya construidas)
 1. **SMTP para Correos**: cargar `SMTP_HOST/PORT/USER/PASS/FROM` en `server/.env` del VPS (la
    cuenta sale de mail.goberna.us / VPS2) + `systemctl restart hermes`. La UI se enciende sola.
@@ -170,6 +218,12 @@ que escribió cada persona, su antigüedad). Eso se arregla en #166.
 4. **Certificado de code signing Windows** (OV ~US$100-300/año) para matar el aviso de SmartScreen.
 
 ### De código (en orden sugerido)
+0. 🔴 **Traer los leads de landing al Pipeline** — el estado «Sin contactar» (24.576 históricos, 121
+   en 30 días). Es el punto **#4** de `docs/plan-pipeline-por-canal.md`, el **único que toca la
+   ingesta** y el único que mueve la aguja del negocio: hoy el Pipeline ordena el **2,6 %** del
+   embudo. Los datos ya están en `events` (`source='icarus_landing'`, 25.510 filas con dato de hoy);
+   falta el proyector hacia la cola. ⚠️ **No mezclar con el padrón** (ADR 0035): son otro universo y
+   ya tienen su vista.
 1. ~~**Fase 2 del oficio taste**~~ — **EJECUTADA (2026-07-22)** como rediseño «Cierre de edición»:
    auditoría multi-agente (185 hallazgos) → dirección editorial → implementación completa de las 8
    pantallas + teclado global + puente entre vistas + capa de gráficas (series de 14 días en

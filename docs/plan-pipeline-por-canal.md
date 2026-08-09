@@ -1,6 +1,8 @@
 # Plan — replantear la ESTRUCTURA del Pipeline a partir de los canales
 
-**Fecha**: 8-ago-2026 · **Estado**: propuesta, sin implementar
+**Fecha**: 8-ago-2026 · **Estado**: ✅ **§3.1, §3.2 y §3.4 IMPLEMENTADOS** y en producción
+(9-ago, `043544f` — ver **ADR 0044**). 🔴 **Queda el #4 del orden: traer los leads de landing**, que
+es el único que toca la ingesta y el único que mueve la aguja del negocio.
 **Pedido del dueño**: *«si analizamos bien la data de los diferentes canales en donde nos llegan los
 datos podemos agarrar ese pipeline y mejorar la estructura, agregar estados y así, para que sea
 fácil dar seguimiento a todo»*
@@ -155,12 +157,19 @@ no tiene forma de mirar solo uno de los dos.
 
 ## 4. El orden propuesto, y qué cuesta cada cosa
 
-| # | qué | dónde | cuesta |
-|---|---|---|---|
-| 1 | **Cotizado exige un entrante** | `cola/etapaEfectivaSql.ts` + paridad | un renglón y su test |
-| 2 | **«Sin respuesta» como columna** | derivado de 0 entrantes, sin schema | chico |
-| 3 | **Origen como recorte** | reusa el mecanismo de recorte por columna de hoy | medio |
-| 4 | **«Sin contactar»: traer los leads de landing** | proyector nuevo `icarus_landing` → cola | **el grande** |
+| # | qué | dónde | cuesta | estado |
+|---|---|---|---|---|
+| 1 | **Cotizado exige un entrante** | `cola/etapaEfectivaSql.ts` + paridad | un renglón y su test | ✅ **hecho** (9-ago) |
+| 2 | **«Sin respuesta» como columna** | derivado de 0 entrantes, sin schema | chico | ✅ **hecho** — 2.576 en prod |
+| 3 | **Origen como recorte** | reusa el mecanismo de recorte por columna | medio | ⏸️ no hecho — en su lugar entró **«Se callaron con el precio»** (540), que los datos mostraron más urgente |
+| 4 | **«Sin contactar»: traer los leads de landing** | proyector nuevo `icarus_landing` → cola | **el grande** | 🔴 **PENDIENTE** |
+
+### Lo que además salió de acá, y no estaba en el plan
+
+- **«Cierre» derivado de una venta posterior**: de 0 a **13**. Un embudo sin salida no es un embudo.
+- **El radar de leads de formulario**: decía «icarus:landing» y los etiquetaba «Lead Ad» — tres
+  defectos, dos en la misma línea. Ver el CLAUDE.md, §«Los leads de formulario en el radar».
+- **`etapa_desde`** y el **recorte por columna** (del plan anterior, §3.1/§3.2).
 
 Los tres primeros son derivación pura sobre datos que ya están. El cuarto es el que mueve la aguja
 del negocio y el único que toca la ingesta.

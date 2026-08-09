@@ -1,6 +1,8 @@
 # Plan — que el Pipeline sirva para MONITOREAR y PLANIFICAR
 
-**Fecha**: 8-ago-2026 · **Estado**: propuesta, sin implementar
+**Fecha**: 8-ago-2026 · **Estado**: ✅ **§3.1 y §3.2 IMPLEMENTADOS y en producción** (9-ago,
+`043544f`). §3.3 (la plata en Cierre) sigue pendiente. La continuación —replantear la estructura a
+partir de los canales— está en `docs/plan-pipeline-por-canal.md`, y la decisión en **ADR 0044**.
 **Pedido del dueño**: *«el pipeline lo podríamos mejorar mucho, replantear para poder hacer que
 Hermes haga fácil monitorear y planificar estos datos»*
 
