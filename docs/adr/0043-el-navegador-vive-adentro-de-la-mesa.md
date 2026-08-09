@@ -112,7 +112,63 @@ en el primer render — y ahí la pantalla no puede prometer «se abre acá aden
 **El frente está incompleto hasta que se compile y reparta una cáscara nueva.** Hasta entonces, en las
 máquinas de las vendedoras esto se ve exactamente como ADR 0040.
 
-## 7 · Lo que deliberadamente no se hizo
+## 7 · Lo que pasó al desplegar (8/9-ago-2026)
+
+**Está en producción**: `main` desplegado por N5, verificado midiendo y no por el status —
+el bundle servido pasó a `index-CtTZg27M.js` (`application/javascript`, 954 KB, o sea que no es el
+`index.html` que el fallback SPA devuelve con 200 para cualquier ruta) y **contiene
+`navegador_montar`**. `git merge-base --is-ancestor` confirma que los commits están adentro del SHA
+desplegado, y el servicio quedó `active`.
+
+Tres cosas que aparecieron recién al desplegar, y que valen más que el código:
+
+- 🔴 **El primer clic no abría nada.** `ir()` veía el rechazo del ACL, apagaba el embebido y volvía
+  **sin abrir**: había que tocar Cerberus dos veces. Y no era un caso raro — es el estado de las
+  CUATRO máquinas el día del deploy, porque la UI viaja por OTA y la cáscara se reinstala a mano. O
+  sea que el estreno del frente iba a ser «toco y no pasa nada». Ahora `ir()` devuelve
+  `sin_embebido` y la vista sigue por la ventana aparte **con el mismo clic**. Los otros tres tests
+  no lo veían porque miraban el cartel, no si se había abierto algo.
+- 🔴 **`/srv/hermes` tenía DRIFT y eso bloqueaba todo deploy, en silencio.** Dos archivos
+  rastreados borrados del working tree (`server/src/meta/suscribir.ts`,
+  `server/src/scripts/suscribirMeta.ts`) hacían fallar N4 por la regla dura #6 y ponían **roja la
+  corrida entera de CI en `main`**. Ya había hecho fallar el deploy anterior —el del frente de
+  pipeline— y nadie lo vio, porque **N4 solo corre en push a `main` y el PR se ve verde igual**. Se
+  resolvió con `git checkout -- <rutas>` **después** de verificar que los dos archivos existen en
+  `main` desde `58b297f` y que ningún commit los borró.
+- **La cáscara pasa a `0.3.0`.** Con las dos en `0.2.0` no había forma de contestar la única
+  pregunta operativa que importa —¿esta máquina ya tiene la nueva?—, y el síntoma de tener la vieja
+  es exactamente el comportamiento correcto de ADR 0040, así que tampoco se distingue mirando.
+
+### 🔴 El instalador de Windows NO se pudo generar
+
+`tauri-windows.yml` falló en el paso **«Tests de la cáscara»**: el binario de test compila (6 m 28 s)
+y después **no arranca** — `STATUS_ENTRYPOINT_NOT_FOUND` (`0xc0000139`), o sea que falta el
+entrypoint de una DLL. No es un test que falla: revienta antes del primer caso, y por eso el paso de
+build ni corrió. **No hay `.exe` nuevo, y las máquinas Windows siguen viendo ADR 0040.**
+
+**No es de este frente, y se midió en vez de suponerlo.** Se disparó el MISMO workflow sobre
+`6803145` —`main` **sin** este frente y **con** ADR 0040— y falla **idéntico**: mismo paso, mismo
+`0xc0000139`, mismo binario que no arranca (run `31331160961` vs `31330758904`).
+
+| corrida | commit | qué incluye | resultado |
+|---|---|---|---|
+| 30928358250 (4-ago) | `53ecfd95` | antes de ADR 0040 | ✅ verde |
+| 31331160961 (9-ago) | `6803145` | **con** ADR 0040, **sin** 0043 | ❌ `0xc0000139` |
+| 31330758904 (9-ago) | `fab8b3f` | con 0043 | ❌ `0xc0000139` |
+
+O sea: **la rotura entró con ADR 0040**, que agregó los `cargo test` de la cáscara y la
+dev-dependency `tauri = { features = ["test"] }`, y **nunca se corrió este workflow después**. La
+pista para quien lo arregle: `STATUS_ENTRYPOINT_NOT_FOUND` en un binario de test de Tauri en Windows
+suele ser el runtime de WebView2 / `WebView2Loader.dll` que el `.exe` de test necesita al cargar y
+no tiene al lado — el binario de la app empaquetada sí lo tiene, el de test no.
+
+⚠️ 🔴 **La lección, y es la de este ADR entero: un workflow que no es gate acumula roturas
+invisibles.** Entre el 4-ago y el 9-ago entraron **dos** frentes que tocan la cáscara, y ninguno de
+los dos ejecutó sus propios tests en la plataforma donde importan. El `CLAUDE.md` ya avisaba que
+«los tests de la cáscara no son gate de PR»; lo que faltaba decir es la consecuencia: **el frente que
+los agrega tiene que dispararlo a mano en el PR, o los está escribiendo a ciegas.**
+
+## 8 · Lo que deliberadamente no se hizo
 
 - **Pestañas.** Una sola página, como la ventana única.
 - **Un registro global de «capas abiertas».** `tapado` se arma en `App.tsx` con `cabina || ivi`. Una

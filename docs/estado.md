@@ -12,18 +12,32 @@ FB/IG, Messenger), gestiona el embudo, agenda, llama, manda correos y registra l
 Cerberus — desde UNA app (Tauri/web) cuya UI vive en el server (**OTA**: actualizar = actualizar
 el VPS, nadie reinstala).
 
-## ✅ Producción al día (verificado 2026-07-27, madrugada)
+## ✅ Producción al día (verificado 2026-08-09)
 
-VPS1 corre **`db4aa00`**, con front y server construidos del mismo commit y **el schema aplicado**
-(`clientes_padron`, `alias_curso.ad_id`, plantillas, auto-respuesta — el detalle en los Gotchas del
-`CLAUDE.md`). Verificado por tres vías: `git rev-parse HEAD` en `/srv/hermes`, el chequeo HTTP
-(front 200, `/api/*` 401 sin token) y capturas con Playwright contra la app viva.
+VPS1 corre **`fab8b3f`** con el servicio `active`. Verificado **midiendo, no por el status**: el
+bundle servido es `assets/index-CtTZg27M.js` con `content-type: application/javascript` y 954 KB —
+que es la única forma de saberlo, porque **el fallback SPA de Express devuelve `index.html` con 200
+para cualquier ruta**, así que un `curl -f` a un archivo inexistente PASA. Además se verificó que
+ese bundle **contiene el código nuevo** (`grep navegador_montar`) y que los commits del último
+frente son ancestros del SHA desplegado.
 
-**Esto envejece rápido: no hay CD.** Antes de leer el código de `main` como «lo que corre»:
+> ⚠️ Acá decía «**no hay CD**» y hace rato que es falso: hay **cinco niveles** (N1…N5) en
+> `ci.yml` + `desplegar-server.yml`. Ver `docs/despliegue-continuo.md` y el cuadro del `CLAUDE.md`.
+
+Antes de leer el código de `main` como «lo que corre»:
 
 ```bash
 ssh deploy@161.132.39.165 'cd /srv/hermes && git log --oneline -1 && systemctl is-active hermes'
 ```
+
+> 🔴 **Y si el CI de `main` está rojo con SOLO N4 rojo, no es un bug: es DRIFT.** N4 implementa la
+> regla dura #6 y se niega a tocar `/srv/hermes` si tiene cambios locales sin commitear. Pasó el
+> 8-ago-2026 y **bloqueó dos merges seguidos sin que nadie lo notara**, porque N4 solo corre en push
+> a `main` y **el PR se ve verde igual**. Se mira con
+> `ssh deploy@161.132.39.165 'cd /srv/hermes && git status --porcelain -uno'`; se arregla con
+> `git checkout -- <rutas>` **después** de verificar que esos archivos existen en `main` y que
+> ningún commit los borró. Nunca `reset --hard` a ciegas: eso pisaría una edición hecha a mano, que
+> es justo lo que la regla #6 protege.
 
 ### Cómo se despliega hoy
 
@@ -54,9 +68,14 @@ ssh deploy@161.132.39.165 'sudo hermes-deploy --rollback'  # vuelve al último s
 **Solo front, sin restart**: se despliega **automático** al mergear a `main` (N4 de `ci.yml`), pero
 solo si el rango sin desplegar no toca `server/`. Cero downtime.
 
-**Reiniciar tiene costo**: `sesionStore` vive en memoria, así que el restart tira las sesiones de
-Cerberus y las vendedoras vuelven a loguearse. Por eso el server es un botón y el front es
-automático. Va fuera del horario de atención y batcheado.
+**Reiniciar ya NO desloguea a nadie** (ADR 0027): la sesión de Cerberus se persiste en
+`sesiones_cerberus`, con el `Map` como caché del proceso. Acá decía que el restart las tiraba y
+dejó de ser cierto. Sigue siendo un **botón** por prudencia —un restart en horario de venta merece
+un humano mirando— pero el costo que justificaba esperar a la noche ya no existe.
+
+⚠️ **Y el front no siempre puede ir solo**: N4 despliega front sin restart **solo si el rango sin
+desplegar no toca `server/`**. Si alguien mergeó server desde el último N5, el front queda esperando
+también — o sea que **un cambio 100 % de front puede necesitar N5 igual**.
 
 **Rollback**: `sudo hermes-deploy --rollback` (el script sabe a dónde volver: `ultimo-sano`). Solo
 el front, más rápido todavía: `cd /srv/hermes && mv dist dist.roto && mv dist.anterior dist`.
@@ -76,6 +95,22 @@ contra el schema nuevo — es justamente lo que hace seguro el rollback automát
 | **Correos** | Composer 1-a-1 auditado + enviados del equipo. **Fail-closed**: falta el SMTP (ver pendientes) |
 | **Agenda** | Calendario estilo GCal (mes/semana/día, chips por tipo, crear en día vacío, detalle flotante). Agendar mueve interesado→**contactado** solo. Badge dorado en el riel |
 | **Infra** | API pública HTTPS + SSE + UI servida (OTA) · WhatsApp vinculado EN el VPS (51986394450, fix `@lid` con 14.7k mapeos) · webhook de landings listo (Bravo→Hermes) · cáscara **Tauri** 3-5 MB (mac+win, permiso tel:) · **Electron archivado el 7-ago-2026 (ADR 0039)**: la cáscara es una sola |
+| **Navegador** (⌘9) | Vive **adentro de la mesa** como webview hijo (**ADR 0043**, enmienda 0040): barra con atrás/adelante/recargar y dirección, y la sesión de trabajo separada del Chrome personal. Medido el 8-ago: **ChatGPT carga y Google NO bloquea el login** en el webview embebido (macOS/WKWebView). Se esconde cuando se abre Ivi o la cabina — es una capa del SO encima del DOM |
+
+### 🔴 La cáscara va por otro camino que la UI, y hoy están desparejas
+
+La UI viaja por **OTA** y ya está en las cuatro máquinas. La **cáscara** es un `.dmg`/`.exe` que se
+reinstala **a mano**, así que hasta que se reparta, el navegador embebido **no se ve**: la escalera
+de respaldo cae a la ventana aparte de ADR 0040, que es exactamente lo que la vendedora sigue viendo.
+
+| | estado (9-ago-2026) |
+|---|---|
+| **macOS** | ✅ `Hermes_0.3.0_aarch64.dmg` compilado. Verificado que el binario lleva `navegador_montar` y `allow-navegador-embebido`. ⚠️ Es **aarch64**: no corre en Mac Intel |
+| **Windows** | ❌ **NO hay `.exe`**. `tauri-windows.yml` falla en «Tests de la cáscara» con `STATUS_ENTRYPOINT_NOT_FOUND` (`0xc0000139`): el binario de test compila y no arranca, así que el build ni corre. **Es de ADR 0040, no de 0043** — verificado disparando el workflow sobre `6803145`, que falla idéntico |
+
+**La versión es cómo se sabe cuál está instalada**: la cáscara nueva es **0.3.0**, la vieja 0.2.0.
+Sin eso no había forma de contestarlo, porque el síntoma de tener la vieja —el navegador abre en
+ventana aparte— es el comportamiento *correcto* de ADR 0040.
 | **Rendimiento** | Track «Rendimiento 2026-07» (spec #29). **En `main`**: techo de scan del radar (#19) y la cola con **ventana de 30 días** — 3,8 s → 30 ms, y de paso saca de la pantalla mensajes de 2016 (#30) |
 
 Suite: **285 tests del server + 18 del front**. Sidebar: Dashboard · Pipeline · Contactos · Mensajes ·

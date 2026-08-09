@@ -1,7 +1,18 @@
 # ADR 0040 — El navegador de Hermes es una VENTANA aparte, no un webview embebido
 
+> ⚠️ **ENMENDADA POR [ADR 0043](0043-el-navegador-vive-adentro-de-la-mesa.md) (8-ago-2026)**: el
+> navegador pasó a ser un **webview hijo adentro de la mesa**. Lo de §2 sobre el `<iframe>` sigue
+> intacto; lo que se dio vuelta es el descarte del webview hijo. **Esta decisión NO se archiva**: la
+> ventana aparte quedó como peldaño del medio de la escalera de respaldo, y es lo que se ve en toda
+> cáscara que no se haya reinstalado. Antes de reusar algo de acá, leé 0043.
+>
+> 🔴 **Y lo que este ADR dejó roto sin que se notara**: agregó los `cargo test` de la cáscara y la
+> dev-dependency `tauri = { features = ["test"] }`, y **desde el 4-ago-2026 no hay `.exe` de
+> Windows** — `tauri-windows.yml` revienta con `STATUS_ENTRYPOINT_NOT_FOUND` antes del primer test.
+> Como ese workflow no es gate de PR, la rotura estuvo invisible cinco días. Ver 0043 §7.
+
 - **Fecha**: 2026-08-07
-- **Estado**: aceptada
+- **Estado**: aceptada, **enmendada por ADR 0043**
 - **Decide**: Estephano (destinos libres · forma «ventana Tauri aparte»)
 - **Enmienda**: el docblock de `src-tauri/src/lib.rs`, que decía «la mesa no se convierte en un
   navegador sin barra de direcciones»

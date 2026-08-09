@@ -278,8 +278,18 @@ Google, por ejemplo entrar al ChatGPT».
   la ventana en 40,40 y la deja arriba; sin eso `screencapture` fotografía la app INSTALADA, porque
   las dos son el proceso `app` (en dev el título dice «Hermes — dev» justamente por esto).
   Capturas en `docs/evidencia/navegador-embebido-*.png` y `navegador-*.png`.
-- ⚠️ Los tests de la cáscara **no son gate de PR**: `ci.yml` corre en el runner de VPS1, que no tiene
-  Rust. Viven en `tauri-windows.yml`, que es `workflow_dispatch`.
+- 🔴 **LOS TESTS DE LA CÁSCARA NO SON GATE DE PR, Y ESO YA COSTÓ UNA ROTURA INVISIBLE.** `ci.yml`
+  corre entero en el runner de VPS1, que no tiene Rust; los de la cáscara viven en
+  `tauri-windows.yml`, que es `workflow_dispatch`. Medido el 9-ago-2026: **el último build verde de
+  Windows es del 4-ago**, o sea anterior a ADR 0040 — y desde entonces entraron **dos** frentes que
+  tocan la cáscara sin que nadie lo corriera. Hoy falla en «Tests de la cáscara» con
+  `STATUS_ENTRYPOINT_NOT_FOUND` (`0xc0000139`): el binario de test **compila y no arranca**, así que
+  el paso de build ni se ejecuta y **no hay `.exe`**. Se verificó que es de **ADR 0040** y no de
+  0043, disparando el mismo workflow sobre `6803145` (falla idéntico). La pista: en Windows un
+  binario de test de Tauri suele necesitar `WebView2Loader.dll` al lado, que el bundle de la app
+  tiene y el `.exe` de test no.
+  ⚠️ **Consecuencia práctica: el frente que agrega o toca `cargo test` de `src-tauri/` tiene que
+  disparar `tauri-windows.yml` a mano en su PR** — si no, los está escribiendo a ciegas.
 - 🔴 **LA CÁSCARA Y LA UI SE DESPLIEGAN POR CAMINOS DISTINTOS, y eso rompió el frente el día 1.**
   Reportado al desplegar: «Command abrir_navegador not allowed by ACL». **No era la config** —los 9
   tests de Rust pasan, incluido el que invoca por el IPC real con la URL de producción—: la UI viaja
@@ -1603,6 +1613,20 @@ mirando. El trabajo lo hace
 **`deploy/vps1/hermes-deploy.sh`** —versionado, no YAML— y es la misma pieza que corre por SSH:
 `ssh … 'sudo hermes-deploy --dry-run | --rollback'`. `tauri-windows.yml` sigue aparte: necesita host
 Windows.
+
+🔴 **EL CI DE `main` ROJO CON *SOLO* N4 ROJO NO ES UN BUG: ES DRIFT EN `/srv/hermes`.** N4 aplica la
+regla dura #6 y se niega a tocar producción si el checkout tiene cambios locales sin commitear
+(`::error::/srv/hermes tiene cambios locales sin commitear. No toco nada.`), y por el gate del job
+«Resumen» eso pone **roja la corrida entera**. Medido el 8-ago-2026: dos archivos **rastreados**
+borrados del working tree bloquearon **dos merges seguidos** y **nadie lo vio, porque N4 solo corre
+en push a `main` y el PR se ve verde igual**.
+· Mirarlo: `ssh deploy@161.132.39.165 'cd /srv/hermes && git status --porcelain -uno'`.
+· Arreglarlo: `git checkout -- <rutas>` **después** de verificar que esos archivos existen en `main`
+  y que ningún commit los borró — restaurar rastreados no descarta nada. ⚠️ **Nunca `reset --hard`
+  ni `checkout .` a ciegas**: eso pisaría una edición hecha a mano, que es justo lo que la regla #6
+  protege.
+· Y el runner de VPS1 es **uno solo y serializa**: N5 puede quedar 15+ min encolado. Encolado ≠
+  colgado.
 
 **El smoke del deploy verifica los ASSETS, no solo el bundle**
 (`deploy/vps1/verificar-assets.sh`, corre en N4 y N5). Comparar el hash del `index-*.js` prueba que
