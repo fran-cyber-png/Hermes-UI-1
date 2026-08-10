@@ -357,6 +357,50 @@ expand-only), UI en la línea de la hora de cada saliente.
 - UI: ✓ / ✓✓ / ✓✓ **azul**, el vocabulario que la vendedora ya trae del teléfono. `fallido` rompe el molde
   (triángulo rojo) porque es lo único que pide una acción. `docs/evidencia/entrega-tildes.png`.
 
+## La Libreta se comparte — espacios de trabajo (ADR 0046, revierte 0012 y 0034 §7)
+
+Una página vive en **mi libreta privada** o en un **espacio con miembros elegidos**. Server en
+`server/src/espacios/`, front en `src/features/notas/`, migración **0022**.
+
+- **La regla vive UNA vez y pura** (`espacios/visibilidad.ts`), con su gemelo `visibleParaSql` y el
+  test de paridad que los cruza contra base en **todas** las combinaciones:
+  `se ve ⟺ (espacio_id IS NULL ∧ autora = yo) ∨ (espacio_id = E ∧ soy miembro de E)`.
+- 🔴 **`espacio_id IS NULL` es «mi libreta privada», no «sin clasificar»** — y por eso **sin la
+  migración esto degrada EXACTAMENTE a la Libreta de antes** (`espaciosDe` devuelve `[]` y la regla
+  colapsa a `vendedora_id = yo`). Degrada hacia MENOS, nunca hacia más. Sembrar un espacio privado por
+  persona costaba un backfill y una escritura adentro de un GET. «Privado» en plural sigue existiendo:
+  un espacio puede tener **un solo miembro**.
+- 🔴 **ES UNA FRONTERA Y ES LA TERCERA DEL REPO** (con el padrón y el Dashboard), no un filtro: una
+  página de un espacio ajeno **no se sirve ni pidiéndola por id**, y por eso el recorte vive en el
+  `WHERE` y nunca en un `if` del navegador. **También del lado de la ESCRITURA** (`puedeEscribirEn`):
+  el POST lleva `espacioId` en el body, así que sin esa guarda cualquiera **planta** una página en el
+  espacio de otro equipo mandando un número — y ahí se ve como una página más y de nadie.
+- 🔴 **`editarNota`/`archivar`/`desarchivar` YA NO son «solo la autora»**: son «miembro del espacio»,
+  y la regla vive en `noPuedeTocar`, una vez. Sobre una nota privada da **lo mismo** que antes, así que
+  nadie pierde el candado que tenía. Editar una página ajena **no reescribe su autoría**.
+- **A quién se puede invitar NO se inventa**: rueda ∪ `numero_vendedora` (9 personas), reusando
+  `destinosPosibles`. Un destino desconocido es **409 enumerando a quién sí se puede** — un
+  `vendedora_id` tipeado a mano escribe una fila válida y esa persona no ve el espacio nunca.
+- 🔴 **A la creadora NO se la puede sacar, ni ella misma**: agregar exige ser la creadora y verlo exige
+  ser miembro, así que el espacio quedaría imposible de arreglar desde la app. Para irse, se archiva —
+  y archivar el espacio **no toca las páginas**.
+- 🔴 **Todo compara normalizando los DOS lados** (`mismaVendedora` server, `mismoUsuario` front): con
+  `Luz` vs `luz`, la agregan a un espacio y **no lo ve nunca**, sin un solo síntoma. El índice
+  `espacio_miembro_vendedora_idx` va sobre `lower(vendedora_id)` **por eso**, no por rendimiento.
+- ⚠️ **La bienvenida es SOLO de la libreta privada.** Se lleva la pantalla entera, selector incluido:
+  en un espacio recién creado (vacío por definición) dejaba a la vendedora **encerrada**, sin forma de
+  volver. Y su texto —«es tuya, nadie más la ve»— sería falso ahí. Fijado en
+  `Libreta.espacios.test.tsx`, junto con que **cambiar de espacio cierra la página abierta** (si no,
+  el editor sigue autoguardando una página del espacio anterior a los 800 ms).
+- ⚠️ **El `espacioId` va en la `queryKey`** (`['notas', clave, espacioId]`): sin él las dos listas
+  comparten caché y al saltar se ven las páginas del anterior bajo el nombre del nuevo.
+- **`buscarNotas` ya no está clavada a `clave='general'`**: busca en todo lo visible. El GIN no se
+  reindexa — `to_tsvector('spanish', texto)` nunca tuvo `clave` adentro.
+- **Sigue sin haber botón de mandar** y **sin oro**. Las notas históricas de `gestiones` **no entran a
+  un espacio**: son de otra tabla, de solo lectura y por autora.
+- Capturas: `docs/evidencia/libreta-espacios-*.png`. Sin server:
+  `node scratchpad/api-espacios.mjs` + `VITE_API_URL=http://localhost:4199 npx vite --port 5199`.
+
 ## Auth
 
 Login de vendedoras **contra Cerberus** (Django, sin API REST): `cerberus/auth.ts` hace el handshake CSRF
@@ -840,9 +884,10 @@ se DECIDE.**
    > declara y ningún componente la renderiza; `PanelNotas.tsx` quedó huérfano en `79b239b`. Consecuencia:
    > durante meses **no hubo ninguna forma en la app de anotar sobre una conversación**, y por eso
    > `notas_filas = 0` y `clave_general = 0` son **un solo hecho, no dos**. Decidir si se reconecta o se
-   > archiva va **antes** de tocar `buscarNotas`, clavado a `'general'` (`server/src/notas/notas.ts:191`).
-   > Ver `docs/plan-libreta-que-deberia-tener.md` (hipótesis C). ⚠️ Desde ADR 0037 el caso que más dolía ya
-   > tiene puerta (los **eventos**), pero **no lo reemplaza**: un evento es un hecho tipado y compartido.
+   > archiva va **antes** de reconectarla. Ver `docs/plan-libreta-que-deberia-tener.md` (hipótesis C).
+   > ⚠️ Desde ADR 0037 el caso que más dolía ya tiene puerta (los **eventos**), pero **no lo reemplaza**:
+   > un evento es un hecho tipado y compartido. ⚠️ **`buscarNotas` ya NO está clavado a `'general'`** —
+   > ADR 0046 lo cambió por el filtro de visibilidad, así que esa mitad de la deuda está pagada.
 5. **Qué hago** — `panel/AccionesContacto`, al pie y **siempre visible**, con **una sola acción primaria**.
    Antes vivía dentro de la pestaña Ficha y abrir «Notas» hacía desaparecer el botón que cierra la venta.
 

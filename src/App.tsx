@@ -654,7 +654,11 @@ export default function App() {
                   </div>
                 }
               >
-                <Libreta />
+                {/* `vendedoraId` viaja como prop por lo mismo que `miVendedora`
+                    en el panel: `useSesion()` hace su propio fetch al montar.
+                    Lo necesita el selector de espacios para saber cuáles podés
+                    administrar (ADR 0046). */}
+                <Libreta vendedoraId={vendedora.id} />
               </Suspense>
             )}
 

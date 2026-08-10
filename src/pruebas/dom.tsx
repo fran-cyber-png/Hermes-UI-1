@@ -70,6 +70,25 @@ function remendarJsdom() {
       disconnect() {}
     };
   }
+  // `matchMedia`: jsdom no lo trae y Mantine lo llama al montar, para resolver el
+  // esquema de color del sistema. Es lo que envuelve al editor de la Libreta, así
+  // que sin esto CUALQUIER test que monte una página se cae con «is not a
+  // function» — un fallo del entorno disfrazado de fallo del componente.
+  // El stub responde «no matchea» y no escucha nada: jsdom no tiene media queries
+  // de verdad, así que simular una sería inventar un dato.
+  const w = globalThis as { matchMedia?: unknown };
+  if (!w.matchMedia) {
+    w.matchMedia = (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener() {},
+      removeEventListener() {},
+      addListener() {},
+      removeListener() {},
+      dispatchEvent: () => false,
+    });
+  }
   const g = globalThis as { localStorage?: Storage };
   if (!g.localStorage) {
     const caja = new Map<string, string>();

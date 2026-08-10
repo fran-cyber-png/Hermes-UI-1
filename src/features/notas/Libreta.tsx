@@ -4,6 +4,8 @@ import { useCreateBlockNote } from '@blocknote/react';
 import { AlertTriangle, ChevronLeft, Notebook, Pin, PinOff, Plus, Search, Trash2, Undo2 } from 'lucide-react';
 import '@blocknote/mantine/style.css';
 import { DICCIONARIO_LIBRETA, ESQUEMA_LIBRETA, soloBloquesConocidos } from './editor';
+import { mismoUsuario, nombreCorto, type DondeEstoy } from './espacios';
+import { SelectorDeEspacio } from './SelectorDeEspacio';
 import { renglonDeEstado } from './guardado';
 import { useAutoguardado } from './useAutoguardado';
 import {
@@ -104,12 +106,22 @@ function EditorDePagina({
 function FilaPagina({
   nota,
   activa,
+  autora,
   onAbrir,
   onFijar,
   onArchivar,
 }: {
   nota: Nota;
   activa: boolean;
+  /**
+   * A quién mostrar como autora, o `null` para no mostrar a nadie.
+   *
+   * ⚠️ **En la libreta privada NO se dibuja**, y no es por ahorrar píxeles: todas
+   * las páginas son tuyas, así que tu propio nombre repetido en cada renglón es
+   * ruido puro. En un espacio compartido es al revés — es la mitad de la
+   * información, porque decide a quién preguntarle por ese precio.
+   */
+  autora: string | null;
   onAbrir: () => void;
   onFijar: () => void;
   onArchivar: () => void;
@@ -131,6 +143,10 @@ function FilaPagina({
         </div>
         {resumen && <p className="mt-0.5 truncate text-xs text-muted-foreground">{resumen}</p>}
         <p className="mt-1 flex items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
+          {/* QUIÉN LA ESCRIBIÓ va PRIMERO, antes de la fecha: en un espacio del
+              equipo, «de quién es esto» se pregunta antes que «de cuándo es».
+              Sin oro — acá no se acaba ningún tiempo. */}
+          {autora && <span className="font-medium text-foreground/70">{autora}</span>}
           <span>{new Date(nota.creadoAt).toLocaleDateString('es-PE', { day: 'numeric', month: 'short' })}</span>
           {nota.editadoAt && <span>· editada</span>}
           {historica && (
@@ -165,16 +181,21 @@ function FilaPagina({
   );
 }
 
-export function Libreta() {
+export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
   const [busqueda, setBusqueda] = useState('');
   const [seleccion, setSeleccion] = useState<Seleccion>(null);
   /** Lo recién archivado, para poder deshacerlo. Se limpia solo. */
   const [archivada, setArchivada] = useState<{ id: number; titulo: string } | null>(null);
+  /**
+   * DÓNDE ESTOY ESCRIBIENDO (ADR 0046). `null` = mi libreta privada, y es el
+   * arranque: quien no tenga ni un espacio ve exactamente la Libreta de antes.
+   */
+  const [donde, setDonde] = useState<DondeEstoy>(null);
 
   const termino = busqueda.trim();
-  const lista = useNotas(CLAVE_LIBRETA);
+  const lista = useNotas(CLAVE_LIBRETA, donde);
   const encontradas = useBuscarNotas(termino);
-  const { crear, editar, archivar, desarchivar, autoguardar } = useMutacionesNotas(CLAVE_LIBRETA);
+  const { crear, editar, archivar, desarchivar, autoguardar } = useMutacionesNotas(CLAVE_LIBRETA, donde);
 
   const notas = termino ? (encontradas.data ?? []) : (lista.data ?? []);
   const paginaAbierta =
@@ -217,6 +238,18 @@ export function Libreta() {
    */
   const recienEmpieza = !termino && !cargando && !fallo && notas.length === 0;
   /**
+   * 🔴 LA BIENVENIDA ES SOLO DE LA LIBRETA PRIVADA — y esto no es estética.
+   *
+   * Se lleva la pantalla ENTERA, selector incluido. En un espacio compartido
+   * recién creado (que está vacío por definición, siempre) eso escondía la única
+   * forma de volver a «Mi libreta»: la vendedora quedaba encerrada adentro de un
+   * lugar vacío, y el único camino de vuelta era recargar la app.
+   *
+   * Además el texto miente ahí: dice «es tuya, nadie más la ve» sobre un espacio
+   * que ve todo el equipo.
+   */
+  const enSuLibretaPrivada = donde === null;
+  /**
    * LA BIENVENIDA SE LLEVA LA PANTALLA ENTERA — lista y buscador incluidos.
    *
    * Con la lista al lado quedaban dos avisos de vacío mirándose («Tu libreta
@@ -228,7 +261,7 @@ export function Libreta() {
    * Si dependiera solo de `notas.length`, volverían solos a los 800 ms, cuando
    * el autoguardado crea la fila — o sea, un salto de layout mientras escribe.
    */
-  const enBienvenida = recienEmpieza && seleccion === null;
+  const enBienvenida = recienEmpieza && seleccion === null && enSuLibretaPrivada;
 
   return (
     // Una VISTA, no una hoja: sin `fixed`, sin `z-50` y sin `role="dialog"` —
@@ -288,6 +321,25 @@ export function Libreta() {
             (enBienvenida ? 'hidden' : seleccion === null ? 'flex md:flex' : 'hidden md:flex')
           }
         >
+          {/* DÓNDE ESTOY ESCRIBIENDO. Va ARRIBA del botón de página nueva, y en
+              ese orden: la pregunta «¿esto lo ve alguien más?» se contesta antes
+              de escribir, no después. */}
+          <SelectorDeEspacio
+            donde={donde}
+            vendedoraId={vendedoraId}
+            onIr={(destino) => {
+              setDonde(destino);
+              // 🔴 CAMBIAR DE LUGAR CIERRA LA PÁGINA ABIERTA. El id de una página
+              // es de la tabla entera, así que sin esto la selección sobrevive al
+              // salto y el editor sigue mostrando —y AUTOGUARDANDO— una página del
+              // espacio anterior, con el nombre del nuevo en el selector.
+              setSeleccion(null);
+              // Y el «Deshacer» tampoco cruza: apunta a una página que ya no está
+              // en la lista que se ve.
+              setArchivada(null);
+            }}
+          />
+
           <div className="p-3">
             <button
               type="button"
@@ -311,7 +363,13 @@ export function Libreta() {
             {fallo && <p className="px-2 py-3 text-sm text-destructive">No se pudieron traer tus páginas.</p>}
             {!cargando && !fallo && notas.length === 0 && (
               <p className="px-2 py-3 text-sm text-muted-foreground">
-                {termino ? 'Nada con ese término.' : 'Todavía no escribiste nada acá.'}
+                {termino
+                  ? 'Nada con ese término.'
+                  : enSuLibretaPrivada
+                    ? 'Todavía no escribiste nada acá.'
+                    : // En un espacio, «no escribiste» sería falso: puede haber
+                      // escrito cualquiera de los miembros, y no lo hizo nadie.
+                      'Nadie escribió nada acá todavía.'}
               </p>
             )}
 
@@ -319,6 +377,12 @@ export function Libreta() {
               <FilaPagina
                 key={`${n.origen}-${n.id}`}
                 nota={n}
+                // En un espacio, quién la escribió — salvo si sos vos: «Vos» en
+                // cada renglón propio sería el mismo ruido que en la libreta.
+                // Es la misma regla que `canales/dueno.ts` en la fila de la cola.
+                autora={
+                  enSuLibretaPrivada || mismoUsuario(n.vendedoraId, vendedoraId) ? null : nombreCorto(n.vendedoraId)
+                }
                 activa={mismaSeleccion(seleccion, { tipo: 'nota', id: n.id, origen: n.origen })}
                 onAbrir={() => setSeleccion({ tipo: 'nota', id: n.id, origen: n.origen })}
                 onFijar={() => editar.mutate({ id: n.id, fijada: !n.fijada })}
@@ -425,8 +489,15 @@ export function Libreta() {
             <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
               <Notebook className="size-8 text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">Elegí una página, o creá una nueva.</p>
+              {/* ⚠️ «Es tuya, nadie más la ve» es VERDAD solo en la libreta
+                  privada. Dicho adentro de un espacio del equipo sería la peor
+                  mentira posible de este frente: la que hace escribir un precio
+                  mal puesto creyendo que no lo lee nadie. Lo único que se dice
+                  siempre es lo que vale en los dos lados (ADR 0012). */}
               <p className="max-w-xs text-xs text-muted-foreground/80">
-                Es tuya: nadie más del equipo la ve. De acá no sale ningún mensaje.
+                {enSuLibretaPrivada
+                  ? 'Es tuya: nadie más del equipo la ve. De acá no sale ningún mensaje.'
+                  : 'Lo de acá lo ve todo el espacio. De acá no sale ningún mensaje.'}
               </p>
             </div>
           )}

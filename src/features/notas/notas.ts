@@ -41,6 +41,13 @@ export interface Nota {
    * `id` de una histórica es el id de esa fila de `gestiones`, no de `notas`.
    */
   origen: 'nota' | 'gestion';
+  /**
+   * DÓNDE VIVE (ADR 0046). `null` = la libreta privada de su autora.
+   *
+   * ⚠️ Se lee como **opcional**: un server viejo no lo manda, y la ausencia
+   * significa lo mismo que `null` (la libreta de siempre). Nunca al revés.
+   */
+  espacioId?: number | null;
 }
 
 /**
@@ -65,10 +72,22 @@ export function esAtajoLibreta(e: { key: string; metaKey?: boolean; ctrlKey?: bo
   return e.key.toLowerCase() === 'n' && !e.metaKey && !e.ctrlKey && !e.altKey;
 }
 
-export function useNotas(clave: string, activo = true) {
+/**
+ * Las páginas de un lugar: mi libreta privada (`espacioId === null`) o un espacio.
+ *
+ * 🔴 **EL `espacioId` VA EN LA `queryKey`, Y NO ES OPCIONAL.** Sin él, las dos
+ * listas comparten entrada de caché: cambiás de espacio y ves durante un
+ * instante —o hasta que resuelva el refetch— las páginas del anterior, bajo el
+ * nombre del nuevo. No es un parpadeo cosmético: en un frente cuyo punto entero
+ * es quién ve qué, se lee como que el espacio tiene contenido que no tiene.
+ */
+export function useNotas(clave: string, espacioId: number | null = null, activo = true) {
   return useQuery({
-    queryKey: ['notas', clave],
-    queryFn: () => api<{ notas: Nota[] }>(`/api/notas?clave=${encodeURIComponent(clave)}`),
+    queryKey: ['notas', clave, espacioId],
+    queryFn: () =>
+      api<{ notas: Nota[] }>(
+        `/api/notas?clave=${encodeURIComponent(clave)}${espacioId === null ? '' : `&espacio=${espacioId}`}`,
+      ),
     select: (d) => ordenarNotas(d.notas),
     enabled: activo && Boolean(clave),
   });
@@ -93,14 +112,20 @@ export function useBuscarNotas(q: string) {
  * caché) podían pisarse. `PanelNotas` además deshabilita el botón mientras la
  * promesa está en vuelo.
  */
-export function useMutacionesNotas(clave: string) {
+export function useMutacionesNotas(clave: string, espacioId: number | null = null) {
   const qc = useQueryClient();
-  const invalidar = () => qc.invalidateQueries({ queryKey: ['notas', clave] });
+  const invalidar = () => qc.invalidateQueries({ queryKey: ['notas', clave, espacioId] });
 
   const crear = useMutation({
     mutationFn: (v: string | { texto?: string; doc?: unknown }) => {
       const cuerpo = typeof v === 'string' ? { texto: v } : v;
-      return api<{ ok: true; nota: Nota }>('/api/notas', { method: 'POST', body: JSON.stringify({ clave, ...cuerpo }) });
+      // `espacioId` viaja SIEMPRE: una página nueva nace donde la vendedora está
+      // parada. Sin esto, escribir adentro de un espacio creaba la página en la
+      // libreta privada — y desaparecía de la lista apenas refrescaba.
+      return api<{ ok: true; nota: Nota }>('/api/notas', {
+        method: 'POST',
+        body: JSON.stringify({ clave, espacioId, ...cuerpo }),
+      });
     },
     onSuccess: invalidar,
   });
@@ -126,7 +151,7 @@ export function useMutacionesNotas(clave: string) {
     mutationFn: (v: { id: number; doc: unknown }) =>
       api<{ ok: true; nota: Nota }>(`/api/notas/${v.id}`, { method: 'PATCH', body: JSON.stringify({ doc: v.doc }) }),
     onSuccess: (r) => {
-      qc.setQueryData<{ notas: Nota[] }>(['notas', clave], (prev) =>
+      qc.setQueryData<{ notas: Nota[] }>(['notas', clave, espacioId], (prev) =>
         prev ? { notas: prev.notas.map((n) => (n.id === r.nota.id && n.origen === 'nota' ? { ...n, ...r.nota } : n)) } : prev,
       );
     },
