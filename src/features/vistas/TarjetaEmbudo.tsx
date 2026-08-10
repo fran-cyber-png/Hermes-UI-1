@@ -186,7 +186,10 @@ export function TarjetaEmbudo({
   });
 
   const haySegundoRenglon = Boolean(
-    curso || c.precio_enviado || ventana || antiguedad || preview || onCotizar,
+    // `landing` entra a la lista porque su píldora VIVE en ese renglón: un lead
+    // sin curso ni preview no dibujaría el renglón, y entonces la marca que lo
+    // distingue de un chat desaparecería justo en la tarjeta más pobre.
+    curso || c.precio_enviado || ventana || antiguedad || preview || onCotizar || c.canal === 'landing',
   );
 
   return (
@@ -316,6 +319,28 @@ export function TarjetaEmbudo({
       {/* ── DE QUÉ, Y QUÉ FALTA PARA COBRARLO ── */}
       {haySegundoRenglon && (
         <div className="mt-1 flex items-center gap-1.5 pl-9">
+          {/*
+            🔴 SIN CONVERSACIÓN — la marca que separa dos trabajos OPUESTOS que
+            comparten columna. A quien te escribió le contestás y es gratis; a
+            éste hay que ABRIRLE el chat en frío, que en las líneas whatsmeow es
+            el camino corto al ban (regla dura #7). Sin esto las dos tarjetas se
+            ven iguales y la vendedora no puede saber cuál es cuál.
+
+            ⚠️ Va en el SEGUNDO renglón y no al lado del nombre: ahí la píldora
+            se comía el nombre («A…», «L…») en una columna de 225 px, y el nombre
+            es lo que identifica a la persona. Lo mostró la captura.
+
+            Se decide por `canal` y no por el prefijo de la clave: el canal es el
+            dato, la clave es plomería.
+          */}
+          {c.canal === 'landing' && (
+            <Chip
+              tono="neutro"
+              titulo="Llenó el formulario y todavía no existe conversación: hay que abrirla"
+            >
+              Formulario
+            </Chip>
+          )}
           {curso && (
             <Chip
               tono="marca"

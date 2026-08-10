@@ -12,7 +12,14 @@ import type { FilaDesglose } from '../vistas/tablero';
 export interface Conversacion {
   /** Clave estable: `int:<id>` para comentarios, `conv:<canal>:<persona>:<num>` para chats. */
   clave: string;
-  canal: 'facebook' | 'instagram' | 'whatsapp';
+  /**
+   * ⚠️ `landing` NO es un canal de chat: es un lead de formulario que todavía no
+   * tiene conversación (ADR 0051). Entra a la cola por el tercer brazo del UNION
+   * (`cola/leadsCte.ts`) y cae en «Te esperan» porque la pelota es nuestra.
+   * Quien ramifique por canal tiene que contemplarlo — no hay hilo que abrir ni
+   * línea por la que haya entrado.
+   */
+  canal: 'facebook' | 'instagram' | 'whatsapp' | 'landing';
   tipo: 'comentario' | 'mensaje';
   persona_id: string | null;
   persona_nombre: string | null;

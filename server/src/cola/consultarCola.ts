@@ -17,6 +17,7 @@ import {
 } from "./urgenciaSql.js";
 import { etapaEfectivaSql, ultimasGestionesSql, ventaPosteriorCteSql } from "./etapaEfectivaSql.js";
 import { precioEnviadoSql, primerPrecioAtSql } from "./precio.js";
+import { leadsCte, sufijosConConversacionCte } from "./leadsCte.js";
 import {
   etapaDesdeSql,
   paraSeguirSql,
@@ -330,17 +331,37 @@ const conversacionesCte = sql`
  * tampoco entra: el recorte por línea se aplica en `msg`, o sea ANTES de que el
  * `OR` de pins pueda saltarse la ventana.
  */
-const conTodo = (filtroCanal: SQL, pins: SQL | null, lineas: readonly string[] = []) => sql`
+const conTodo = (
+  filtroCanal: SQL,
+  pins: SQL | null,
+  lineas: readonly string[] = [],
+  canal?: string,
+) => {
+  /**
+   * ⚠️ LOS LEADS DE FORMULARIO SE CAEN POR LO MISMO QUE LOS COMENTARIOS, Y ADEMÁS
+   * POR CANAL. Con recorte de línea no entran porque nunca llegaron por un número
+   * nuestro (`numero_propio` NULL). Y con un canal pedido que no sea `landing`
+   * tampoco: su brazo del UNION lee `leads`, que **no tiene columna `canal`**, así
+   * que el `filtroCanal` de los otros dos (`AND canal = …`) ni siquiera compila
+   * contra esa tabla. Se decide acá, con el canal crudo, en vez de meterle un
+   * predicado que no puede evaluar.
+   */
+  const conLeads = !lineas.length && (!canal || canal === "landing");
+  return sql`
   WITH ${pins ? sql`pins AS (${pins}),
+  ` : sql``}${conLeads ? sql`sufijos_con_conversacion AS (${sufijosConConversacionCte}),
   ` : sql``}msg AS (
     ${msgCte(filtroCanal, pins != null, lineas)}
   ),
   todo AS (
     ${lineas.length ? sql`` : sql`${comentariosCte(filtroCanal, pins != null)}
     UNION ALL
-    `}${conversacionesCte}
+    `}${conversacionesCte}${conLeads ? sql`
+    UNION ALL
+    ${leadsCte(ventanaCola)}` : sql``}
   )
 `;
+};
 
 export interface OpcionesCola {
   canal?: string;
@@ -802,7 +823,7 @@ async function ejecutarCola(
   // el nivel 0–5. `etapa_manual` llega de la última gestión (etapaEfectivaSql.ts);
   // el estado personal, del LEFT JOIN a `estado_conversacion`.
   const filas = await base.execute(sql`
-    ${conTodo(filtroCanal, pins, lineas)},
+    ${conTodo(filtroCanal, pins, lineas, canal)},
     seguimientos AS (
       ${seguimientosPendientesSql}
     ),
@@ -907,7 +928,7 @@ async function ejecutarCola(
       puedo_escribirle: number;
       mios: number;
     }>(sql`
-      ${conTodo(filtroCanal, pins, lineas)},
+      ${conTodo(filtroCanal, pins, lineas, canal)},
       ultimas_gestiones AS (${ultimasGestionesSql}),
       ventas AS (${ventaPosteriorCteSql}),
       cats AS (${categoriasCteSql}),
@@ -956,6 +977,7 @@ async function ejecutarCola(
       conBot,
       conAsignacion,
       lineas,
+      canal,
     );
     conteos = plegarConteos(desglose);
   }
@@ -994,10 +1016,14 @@ async function desglosarEmbudo(
   // la foto, no un recorte de columna. Sin esto, con la cola filtrada a Walter la
   // banda de desglose seguiría contando las conversaciones de la otra línea.
   lineas: readonly string[],
+  // El canal entra por lo mismo que las líneas: define el UNIVERSO de la foto.
+  // Sin él, el brazo de los leads de formulario se sumaría al desglose aunque la
+  // cola esté recortada a WhatsApp, y los conteos dirían otra cosa que la lista.
+  canal?: string,
 ): Promise<FilaDesglose[]> {
   const donde = condiciones.length ? sql`WHERE ${sql.join(condiciones, sql` AND `)}` : sql``;
   const filas = await base.execute<FilaDesglose>(sql`
-    ${conTodo(filtroCanal, null, lineas)},
+    ${conTodo(filtroCanal, null, lineas, canal)},
     ultimas_gestiones AS (${ultimasGestionesSql}),
     ventas AS (${ventaPosteriorCteSql}),
     padron AS (${padronCteSql(conPadron)})

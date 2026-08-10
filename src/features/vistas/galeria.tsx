@@ -84,6 +84,43 @@ function tarjetas(etapa: string, cuantas: number) {
     // últimas salían vacías — con su total en la cabecera diciendo 611. La
     // galería habría mostrado el Pipeline roto sin que el Pipeline lo esté.
     const telefono = `5198765${String(4321 + DESDE[etapa] + i)}`;
+    /**
+     * LOS LEADS DE FORMULARIO comparten columna con quien te escribió: «Te
+     * esperan» es «la pelota es nuestra», no «te escribieron por WhatsApp».
+     * Se siembran uno de cada tres para que la captura muestre las DOS formas
+     * juntas — que es el caso que hay que poder mirar: la tarjeta de un lead no
+     * tiene hilo, ni línea, ni reloj de respuesta.
+     */
+    const esLead = etapa === 'interesado' && i % 3 === 1;
+    if (esLead)
+      return {
+        clave: `lead:${900 + i}`,
+        canal: 'landing',
+        tipo: 'lead',
+        persona_id: telefono,
+        persona_nombre: nombre,
+        lead_nombre: nombre,
+        numero_propio: null,
+        // Lo que pidió en el formulario. Es todo lo que sabemos de esta persona.
+        texto: curso ?? 'Diplomado en Gestión Pública',
+        contexto_texto: null,
+        respondida: false,
+        ya_le_hablamos: false,
+        precio_enviado: false,
+        etapa_efectiva: 'interesado',
+        interes_curso: null,
+        lead_curso: curso,
+        ventana_abierta: false,
+        // Sin conversación no hay ventana que abrir: hay que ABRIRLE el chat.
+        ventana_cierra: null,
+        pide_info: false,
+        n: 1,
+        referencia: cuando,
+        ultimo_at: cuando,
+        dias: Math.floor(horas / 24),
+        etapa_desde: null,
+        nivel: 0,
+      };
     return {
       clave: `conv:whatsapp:${telefono}:51986394450`,
       canal: 'whatsapp',
