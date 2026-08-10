@@ -56,6 +56,26 @@ meses. 🔴 **El rename lo iba a destapar**: al cambiar el título de la columna
 seguido diciendo «Cotizado» sobre la misma conversación que el Pipeline llama «Saben el precio».
 Dos nombres para el mismo hecho es peor que un nombre feo. Es #37, otra vez.
 
+### Y eran cuatro, no uno — lo encontró la captura
+
+El grep encontró **uno**. Sacar la evidencia encontró los otros **tres**, todos con la misma firma
+(`capitalize` de CSS sobre un identificador):
+
+| dónde | qué se veía |
+|---|---|
+| chip del radar | `Interesado` |
+| **leyenda del riel del embudo** | **`476 interesado · 611 cotizado`**, en minúscula |
+| píldora de la fila de la cola | `Cotizado` |
+| `aria-label` de la barra segmentada | `cotizado: 611` |
+
+Y la tabla del panel de negocio decía `Cotizados`/`Cerrados` sobre columnas que son exactamente
+`etapa_efectiva IN ('cotizado','cierre')`.
+
+> ⚠️ **Ningún test de DOM lo hubiera visto**, y por eso importa cómo se cerró: cada componente
+> renderizaba exactamente lo que su código decía. Lo que estaba mal era **la relación entre el chip
+> de color y el texto de al lado** — la misma forma de defecto que ADR 0024 (el cableado del
+> teclado) y que #37 (la regla en dos lados).
+
 ---
 
 ## La decisión
@@ -102,7 +122,19 @@ llama «Interesados»; cualquier rename ingenuo lo destapaba.
 `etapas.test.ts` prohíbe que dos etapas compartan rótulo, en los dos números. Con «Te esperan» ya ni
 empiezan con la misma palabra.
 
-### 4. Degrada, no tumba
+### 4. El candado fija la CLASE de defecto, no el defecto
+
+`etapas.test.ts` lee el árbol del front (`import.meta.glob`, la vía de Vite — `node:fs` pasa en
+vitest pero **no** en `tsc -p tsconfig.app.json`, que no lleva los tipos de node) y exige dos cosas:
+**quien use `ETAPA_CHIP` tiene que sacar el texto del rótulo canónico**, y **nadie puede dejar un
+`capitalize` sobre un id de etapa** — esa clase es la *firma* del defecto, porque solo se pone
+cuando lo que se muestra viene en minúscula de la base.
+
+⚠️ Lleva una guarda de que la lista de consumidores **no esté vacía**: un glob que dejara de
+matchear pondría los dos tests verdes por vacío — el mismo falso verde que `verificar-assets.sh`
+vino a atrapar en el deploy. Y se verificó que **se pone rojo**: nombra el archivo culpable.
+
+### 5. Degrada, no tumba
 
 `rotuloEtapa` devuelve el id tal cual si la etapa no está en el mapa. N4 y N5 se despliegan por
 separado: el server puede devolver un peldaño nuevo antes de que el front lo conozca, y ahí mostrar
@@ -133,5 +165,10 @@ paginadas de a 30 son 846 clics). Ver `docs/plan-pipeline-por-canal.md` §3.1 y 
 
 ## Evidencia
 
-`docs/evidencia/embudo-rotulos-claros.png` — el tablero a 1280, servido por
-`npx vite --port 5199` → `/galeria-embudo.html`.
+Servidas con `npx vite --port 5199`, a 1280:
+
+- `docs/evidencia/embudo-rotulos-claros.png` — el tablero (`/galeria-embudo.html`).
+- `docs/evidencia/embudo-rotulos-dashboard.png` — el Dashboard
+  (`/galeria-dashboard.html?supervisor=1`), que es donde aparecieron tres de los cuatro
+  identificadores crudos. **La captura encontró más que el grep**, y eso es lo que la hace evidencia
+  y no trámite.

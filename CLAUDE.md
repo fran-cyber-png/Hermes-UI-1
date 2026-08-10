@@ -675,9 +675,15 @@ para derivar. `Te esperan → Nunca contestaron → Contestaron → Saben el pre
 
 - 🔴 **EL RÓTULO VIVE UNA VEZ: `ETAPA_ROTULO` en `src/lib/etapas.ts`.** Vivía en **cinco** lugares
   —`vistas/tablero.ts`, `gestion/BarraGestion.tsx`, **dos `ETAPA_LABEL` privados e idénticos** en
-  `FormularioVenta.tsx` y `RegistrarGestion.tsx`— y el Dashboard no tenía ninguno: pintaba **el
-  identificador crudo** con un `capitalize` de CSS. Con ids de una palabra eso se veía bien **de
-  casualidad**, y por eso nadie lo vio. Si agregás una pantalla que nombre etapas, leé de ahí.
+  `FormularioVenta.tsx` y `RegistrarGestion.tsx`— y **cuatro componentes pintaban el IDENTIFICADOR
+  crudo** con un `capitalize` de CSS (chip del radar, **leyenda del riel** —«611 cotizado»—, fila de
+  la cola y el `aria-label` de la barra). Con ids de una palabra eso se veía bien **de casualidad**.
+  Si agregás una pantalla que nombre etapas, leé de ahí.
+  · ⚠️ **El grep encontró uno; la CAPTURA encontró los otros tres.** Ningún test de DOM los veía:
+    cada componente renderizaba lo que su código decía, y lo que estaba mal era **la relación entre
+    el chip de color y el texto de al lado**. El candado (`etapas.test.ts`) fija esa relación
+    leyendo el árbol con `import.meta.glob` — ⚠️ **no `node:fs`**: pasa en vitest y **falla** en
+    `tsc -p tsconfig.app.json`, que no lleva los tipos de node.
 - 🔴 **LOS IDENTIFICADORES NO SE TOCAN.** `sin_respuesta`, `cotizado` y compañía viven en
   `gestiones`, en el SQL, en `?etapa=` y en el caché de IndexedDB (ADR 0007). Se cambia **lo que se
   lee**, nunca lo que se guarda — por eso esto es front puro y sale por **N4**.
