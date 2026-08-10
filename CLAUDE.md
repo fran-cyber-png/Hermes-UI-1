@@ -667,6 +667,35 @@ definen por **acciones del COMPRADOR**, no por actividades del vendedor*.
   RELACIÓN: *toda etapa que el embudo puede DEVOLVER se tiene que poder pedir*.
 - Capturas: `docs/evidencia/embudo-derivado.png`, `pipeline-*.png`.
 
+### Cómo se LLAMA cada etapa (ADR 0049)
+
+El nombre dice **el hecho, en pasado y del lado del comprador** — la misma regla que ADR 0044 usa
+para derivar. `Te esperan → Nunca contestaron → Contestaron → Saben el precio → Compraron`, y
+`Dijeron que no` al costado.
+
+- 🔴 **EL RÓTULO VIVE UNA VEZ: `ETAPA_ROTULO` en `src/lib/etapas.ts`.** Vivía en **cinco** lugares
+  —`vistas/tablero.ts`, `gestion/BarraGestion.tsx`, **dos `ETAPA_LABEL` privados e idénticos** en
+  `FormularioVenta.tsx` y `RegistrarGestion.tsx`— y el Dashboard no tenía ninguno: pintaba **el
+  identificador crudo** con un `capitalize` de CSS. Con ids de una palabra eso se veía bien **de
+  casualidad**, y por eso nadie lo vio. Si agregás una pantalla que nombre etapas, leé de ahí.
+- 🔴 **LOS IDENTIFICADORES NO SE TOCAN.** `sin_respuesta`, `cotizado` y compañía viven en
+  `gestiones`, en el SQL, en `?etapa=` y en el caché de IndexedDB (ADR 0007). Se cambia **lo que se
+  lee**, nunca lo que se guarda — por eso esto es front puro y sale por **N4**.
+- 🔴 **DOS ETAPAS NO PUEDEN COMPARTIR RÓTULO**, y el candado es `src/lib/etapas.test.ts`. «Sin
+  respuesta» (deuda del LEAD) y «Sin contestar» (deuda NUESTRA) son **opuestas** y sonaban igual; la
+  segunda es la urgente. Por eso `interesado` es **«Te esperan»** — el nombre que `BandejaDeuda` ya
+  usaba, no uno nuevo.
+- ⚠️ **El valor es un par `{uno, varios}`**, no un string: una columna es un montón y una ficha es
+  una persona. Con un solo string cada consumidor volvía a conjugar — que es cómo nacieron las cinco
+  copias. `rotuloEtapa(etapa, 'uno'|'varios')` **degrada al id**, nunca tira (N4 va antes que N5).
+- 🔴 **FALTA LA PRIMERA COLUMNA Y ES LA MÁS GRANDE**: `leads` tiene **26.175** filas y **25.386
+  (97,5 %) nunca tuvieron una conversación**, así que el Pipeline ordena el **2,5 %** del negocio.
+  **No es «Te esperan»** (ahí hay hilo abierto y contestar es gratis): un lead de landing exige
+  **abrir en frío**, y eso es un problema de canal antes que de código. Va primera y se llama
+  «Llenaron el formulario». ⚠️ Obliga a **rehacer la cuenta del grid** y arrastra la virtualización.
+  Medido el 10-ago-2026; el último lead entró **ese mismo día** con el caño de WhatsApp cerrado.
+- Captura: `docs/evidencia/embudo-rotulos-claros.png`.
+
 ## Los leads de formulario en el radar (8-ago-2026)
 
 Las dos reglas viven en **`server/src/dashboard/fuenteLead.ts`**, puras y con test.
