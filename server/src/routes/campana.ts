@@ -15,6 +15,7 @@ import { filtrosSchema } from "../padron/filtros.js";
 import { hayQuePreocuparse } from "../campana/corridas.js";
 import { ruta } from "../lib/ruta.js";
 import { porQueFallo } from "../lib/porQueFallo.js";
+import { consultarEnviosDePlantillas } from "../campana/enviosDePlantilla.js";
 
 /**
  * LAS PLANTILLAS DE WHATSAPP — solo lectura, y solo para el supervisor.
@@ -114,6 +115,54 @@ campanaRouter.get("/plantillas", ruta(async (req, res) => {
     seRindio(res, e);
   }
 }));
+
+/**
+ * CUÁNTO SE MANDÓ CON CADA PLANTILLA — y qué pasó después.
+ *
+ * ══ POR QUÉ ES UNA RUTA APARTE Y NO UN CAMPO DE `/plantillas` ═══════════════
+ *
+ * Porque las dos mitades fallan por motivos distintos y ninguna puede llevarse
+ * a la otra: el catálogo sale de **Meta** (y es fail-closed: si Meta no
+ * contesta, no se manda nada) y esto sale de **nuestra base**. Metido adentro,
+ * una consulta lenta dejaría a la vendedora sin poder ver qué plantillas tiene
+ * aprobadas, que es lo único que esa pantalla no puede dejar de hacer.
+ *
+ * ⚠️ **Un fallo acá NO es «0 envíos».** Es el mismo cuidado de la ruta de
+ * arriba: «se mandó 0 veces» y «no se pudo contar» se ven igual en pantalla y
+ * llevan a decisiones opuestas —una invita a mandar la campaña de nuevo—. Por
+ * eso esto contesta 502 con su motivo, y la pantalla no dibuja nada.
+ */
+campanaRouter.get("/plantillas/envios", async (req, res) => {
+  if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
+    res.status(403).json({
+      ok: false,
+      motivo: "no_es_supervisor",
+      sinSupervisores: supervisoresConfigurados(process.env).length === 0,
+      message: "las campañas las arma un supervisor",
+    });
+    return;
+  }
+
+  // La ventana por defecto es de 90 días y no de 30 como el reporte de piezas:
+  // una campaña se manda una vez y se la mira durante semanas, así que a 30 días
+  // la tarjeta de una plantilla de hace dos meses diría «0 envíos» — el mismo
+  // cero engañoso del que se defiende toda esta ruta.
+  const pedidos = Number(req.query.dias);
+  const dias = Number.isFinite(pedidos) && pedidos > 0 ? Math.min(pedidos, 365) : 90;
+  const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000);
+
+  try {
+    const envios = await consultarEnviosDePlantillas(db, { desde });
+    res.json({ dias, ...envios });
+  } catch (e) {
+    console.error("[campana] no se pudieron contar los envíos por plantilla", e);
+    res.status(502).json({
+      ok: false,
+      motivo: "no_se_pudo_contar",
+      message: "No se pudieron contar los envíos de las plantillas.",
+    });
+  }
+});
 
 /**
  * CÓMO VAN LAS CAMPAÑAS — lo que la pantalla dibuja.
