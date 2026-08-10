@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sql } from "drizzle-orm";
 import { baseDePrueba } from "../pruebas/base.js";
+import { sembrarLead, sembrarMensaje } from "../pruebas/sembrar.js";
 import { consultarCola } from "./consultarCola.js";
 
 /**
@@ -15,43 +15,33 @@ import { consultarCola } from "./consultarCola.js";
  * `UNION ALL`, y lo que falla en un UNION —una columna de menos, un tipo que no
  * casa, un CTE que no existe— falla en Postgres, no en TypeScript. El typecheck
  * pasa igual con el SQL roto.
+ *
+ * ⚠️ Se siembra con `sembrarLead` y NO con un INSERT a mano: `leads.event_id` es
+ * NOT NULL y referencia a `events`, así que un INSERT directo revienta por la FK.
+ * La primera versión de este archivo lo hacía a mano y lo cazó N2b — que es
+ * exactamente para lo que está.
  */
 
-/** Un lead de formulario, con lo mínimo que la cola necesita. */
-async function sembrarLead(
-  db: Awaited<ReturnType<typeof baseDePrueba>>,
-  campos: { id: number; phone: string; nombre?: string; curso?: string; haceDias?: number },
-) {
-  await db.execute(sql`
-    INSERT INTO leads (id, lead_id, platform, form_name, campaign_name, full_name, phone, created_time)
-    VALUES (
-      ${campos.id}, ${"L" + campos.id}, 'web', 'icarus:landing',
-      ${campos.curso ?? "Diplomado en Gestión Pública"},
-      ${campos.nombre ?? "Persona de Prueba"}, ${campos.phone},
-      now() - (${campos.haceDias ?? 1} || ' days')::interval
-    )
-  `);
-}
+/** Un lead de landing: es la fuente que el tercer brazo mira (`fuenteLeadSql`). */
+const deLanding = { platform: "web", formName: "icarus:landing" } as const;
 
-/** Un mensaje de WhatsApp, para probar que ese lead YA no cuenta como sin contactar. */
-async function sembrarMensaje(
-  db: Awaited<ReturnType<typeof baseDePrueba>>,
-  telefono: string,
-) {
-  await db.execute(sql`
-    INSERT INTO interactions (external_id, canal, tipo, persona_id, numero_propio, texto, direccion, occurred_at, status)
-    VALUES (${"wa:" + telefono}, 'whatsapp', 'mensaje', ${telefono}, '51986394450', 'hola', 'entrante', now() - interval '1 day', 'nuevo')
-  `);
+/** La fila de la cola que corresponde a un teléfono, sea lead o conversación. */
+function filaDe(r: { conversaciones: unknown[] }, telefono: string) {
+  return (r.conversaciones as Array<Record<string, unknown>>).find(
+    (c) => String(c.persona_id ?? "").replace(/\D/g, "") === telefono.replace(/\D/g, ""),
+  );
 }
 
 test("un lead de formulario sin conversación cae en «te esperan» (interesado)", async (t) => {
   const db = await baseDePrueba(t);
-  await sembrarLead(db, { id: 1, phone: "+51987654321", nombre: "Rosa Quispe" });
+  await sembrarLead(db, {
+    ...deLanding,
+    phone: "+51987654321",
+    fullName: "Rosa Quispe",
+    campaignName: "Diplomado en Gestión Pública",
+  });
 
-  const r = await consultarCola(db, {});
-  const fila = (r.conversaciones as Array<Record<string, unknown>>).find(
-    (c) => c.clave === "lead:1",
-  );
+  const fila = filaDe(await consultarCola(db, {}), "51987654321");
 
   assert.ok(fila, "el lead tiene que aparecer en la cola");
   // 🔴 La integración entera es esta línea: sin un solo mensaje, `hablo` y
@@ -59,16 +49,16 @@ test("un lead de formulario sin conversación cae en «te esperan» (interesado)
   assert.equal(fila.etapa_efectiva, "interesado");
   assert.equal(fila.canal, "landing");
   assert.equal(fila.persona_nombre, "Rosa Quispe");
+  // Lo que pidió: es todo lo que sabemos de esta persona, y es lo que la tarjeta
+  // muestra en vez de un preview de chat que no existe.
+  assert.equal(fila.texto, "Diplomado en Gestión Pública");
 });
 
 test("🔴 NO cae en «sin respuesta»: esa exige que le hayamos escrito", async (t) => {
   const db = await baseDePrueba(t);
-  await sembrarLead(db, { id: 2, phone: "+51987654322" });
+  await sembrarLead(db, { ...deLanding, phone: "+51987654322" });
 
-  const r = await consultarCola(db, {});
-  const fila = (r.conversaciones as Array<Record<string, unknown>>).find(
-    (c) => c.clave === "lead:2",
-  );
+  const fila = filaDe(await consultarCola(db, {}), "51987654322");
   // Si alguien emitiera `ya_le_hablamos: true` por descuido, el lead caería en
   // `sin_respuesta` — que desde ADR 0050 NO es columna, así que desaparecería de
   // la pantalla sin ningún error. Es el modo de falla silencioso de este frente.
@@ -77,43 +67,46 @@ test("🔴 NO cae en «sin respuesta»: esa exige que le hayamos escrito", async
 
 test("🔴 un lead que YA tiene conversación no se duplica", async (t) => {
   const db = await baseDePrueba(t);
-  await sembrarLead(db, { id: 3, phone: "+51987654323" });
-  await sembrarMensaje(db, "51987654323");
+  await sembrarLead(db, { ...deLanding, phone: "+51987654323" });
+  await sembrarMensaje(db, { personaId: "51987654323", direccion: "entrante", texto: "hola" });
 
   const r = await consultarCola(db, {});
-  const claves = (r.conversaciones as Array<Record<string, unknown>>).map((c) => c.clave);
-  assert.ok(
-    !claves.includes("lead:3"),
-    "con conversación viva, el lead no puede aparecer además como fila propia",
+  const filas = (r.conversaciones as Array<Record<string, unknown>>).filter(
+    (c) => String(c.persona_id ?? "").replace(/\D/g, "") === "51987654323",
   );
-  assert.ok(claves.some((k) => String(k).startsWith("conv:whatsapp:51987654323")));
+  assert.equal(filas.length, 1, "la misma persona no puede salir dos veces");
+  assert.equal(filas[0].canal, "whatsapp", "gana la conversación viva, no el lead");
 });
 
 test("fuera de la ventana de 30 días no entra: «te espera» es de esta semana", async (t) => {
   const db = await baseDePrueba(t);
-  await sembrarLead(db, { id: 4, phone: "+51987654324", haceDias: 90 });
+  const hace90dias = new Date(Date.now() - 90 * 86_400_000);
+  await sembrarLead(db, { ...deLanding, phone: "+51987654324", createdTime: hace90dias });
 
-  const r = await consultarCola(db, {});
-  const claves = (r.conversaciones as Array<Record<string, unknown>>).map((c) => c.clave);
-  assert.ok(!claves.includes("lead:4"));
+  assert.equal(filaDe(await consultarCola(db, {}), "51987654324"), undefined);
+});
+
+test("un lead-ad de Meta NO entra: la fila se rotula «landing» y sería falso", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarLead(db, { platform: "fb", phone: "+51987654328" });
+
+  assert.equal(filaDe(await consultarCola(db, {}), "51987654328"), undefined);
 });
 
 test("con la cola recortada a un canal de chat, los leads se caen", async (t) => {
   const db = await baseDePrueba(t);
-  await sembrarLead(db, { id: 5, phone: "+51987654325" });
+  await sembrarLead(db, { ...deLanding, phone: "+51987654325" });
 
   // ⚠️ El brazo de los leads lee `leads`, que NO tiene columna `canal`: si se
   // dejara adentro con `?canal=whatsapp`, la consulta ni compilaría. Este test
   // fija que la decisión se tome antes de armar el SQL, no dentro del WHERE.
-  const r = await consultarCola(db, { canal: "whatsapp" });
-  const claves = (r.conversaciones as Array<Record<string, unknown>>).map((c) => c.clave);
-  assert.ok(!claves.includes("lead:5"));
+  assert.equal(filaDe(await consultarCola(db, { canal: "whatsapp" }), "51987654325"), undefined);
 });
 
 test("el desglose los cuenta en interesado, así la cabecera y la lista coinciden", async (t) => {
   const db = await baseDePrueba(t);
-  await sembrarLead(db, { id: 6, phone: "+51987654326" });
-  await sembrarLead(db, { id: 7, phone: "+51987654327" });
+  await sembrarLead(db, { ...deLanding, phone: "+51987654326" });
+  await sembrarLead(db, { ...deLanding, phone: "+51987654327" });
 
   const r = await consultarCola(db, {});
   const enInteresado = (r.desglose ?? [])
@@ -122,5 +115,5 @@ test("el desglose los cuenta en interesado, así la cabecera y la lista coincide
   // Si el desglose y la lista no salieran del mismo universo, la columna diría
   // un número y mostraría otro — el defecto que `plegarConteos` existe para que
   // sea imposible (#37).
-  assert.ok(enInteresado >= 2, `esperaba al menos los 2 leads, hubo ${enInteresado}`);
+  assert.equal(enInteresado, 2);
 });

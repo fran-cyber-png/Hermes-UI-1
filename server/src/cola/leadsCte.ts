@@ -1,6 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { sufijoTelefonoSql } from "../gente/leadDeTelefono.js";
-import { productoLeadSql } from "../dashboard/fuenteLead.js";
+import { fuenteLeadSql, productoLeadSql } from "../dashboard/fuenteLead.js";
 
 /**
  * ══ LOS QUE LEVANTARON LA MANO Y NADIE CONTACTÓ ════════════════════════════
@@ -116,6 +116,12 @@ export const leadsCte = (ventana: (columna: SQL) => SQL): SQL => sql`
   FROM leads
   WHERE phone IS NOT NULL
     AND btrim(phone) <> ''
+    -- Solo los de LANDING, y no es un recorte de comodidad: la fila se emite con
+    -- canal 'landing', así que meter acá un lead-ad de Facebook sería un rótulo
+    -- falso. La traducción platform -> fuente vive en fuenteLead.ts y no se
+    -- reescribe: 'web' es lo que escribe icarus todos los días y 'landing' lo que
+    -- escribe el webhook de Bravo (los dos son formulario; 'fb'/'ig' no).
+    AND (${fuenteLeadSql}) = 'landing'
     AND (${ventana(sql`created_time`)})
     AND ${sufijoTelefonoSql("phone")} NOT IN (SELECT sufijo FROM sufijos_con_conversacion)
 `;
