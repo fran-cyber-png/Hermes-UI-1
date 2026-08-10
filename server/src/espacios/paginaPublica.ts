@@ -71,6 +71,44 @@ export function paginaHtml(titulo: string, texto: string): string {
 </html>`;
 }
 
+/**
+ * LA PÁGINA PUENTE de un link `goberna` — y lo que NO tiene es el punto.
+ *
+ * 🔴 **No lleva una sola letra del contenido.** Una navegación del navegador no
+ * manda el token de Hermes (la sesión vive en `localStorage`, no en una cookie),
+ * así que acá el server **no sabe quién sos** — y servir contenido «porque el
+ * link dice que es interno» sería confiar en el link, no en la identidad.
+ *
+ * Consecuencia, que es la garantía del frente: **el contenido de un link interno
+ * nunca sale por la ruta anónima.** Sale por `/api/notas/por-link/:token`, que
+ * está detrás del perímetro.
+ *
+ * Tampoco dice el título, ni de qué espacio es: quien no tenga sesión no aprende
+ * nada más que «existe algo y es del equipo».
+ */
+export function paginaPuente(urlApp: string): string {
+  return `<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow"><title>Abrir en Hermes</title>
+<style>
+ body{margin:0;display:grid;place-items:center;min-height:100vh;background:#f7f8fa;
+ font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#1a1f2b;padding:1.5rem}
+ .c{max-width:24rem;text-align:center}
+ h1{font-size:1.1rem;margin:0 0 .4rem;font-weight:600}
+ p{margin:0 0 1.25rem;color:#6b7280;font-size:.95rem}
+ a{display:inline-block;background:#1b3a6b;color:#fff;text-decoration:none;
+ padding:.6rem 1.1rem;border-radius:8px;font-weight:600;font-size:.95rem}
+ @media (prefers-color-scheme:dark){body{background:#0f1420;color:#e6e9ef}p{color:#8a93a5}
+ a{background:#4d7fd4}}
+</style></head>
+<body><div class="c">
+<h1>Esta página es del equipo</h1>
+<p>Entrá a Hermes para verla.</p>
+<a href="${escapar(urlApp)}">Abrir en Hermes</a>
+</div></body></html>`;
+}
+
 export const NO_EXISTE = `<!doctype html>
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

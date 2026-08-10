@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
 import { CABECERAS_PUBLICAS } from '../espacios/link.js';
-import { NO_EXISTE, paginaHtml } from '../espacios/paginaPublica.js';
+import { NO_EXISTE, paginaHtml, paginaPuente } from '../espacios/paginaPublica.js';
 import { leerPorToken } from '../espacios/linkRepositorio.js';
 
 /**
@@ -39,5 +39,16 @@ publicoRouter.get('/:token', async (req, res) => {
     res.status(404).send(NO_EXISTE);
     return;
   }
+
+  // 🔴 UN LINK `goberna` NO SIRVE CONTENIDO ACÁ. Una navegación del navegador no
+  // trae el token de Hermes (la sesión vive en `localStorage`), así que este
+  // handler no sabe quién está del otro lado — y servir la página «porque el link
+  // dice que es interno» sería confiar en el link en vez de en la identidad.
+  // Se manda a la app, que sí tiene el Bearer y pregunta por `/api`.
+  if (pagina.alcance === 'goberna') {
+    res.send(paginaPuente(`/#n=${encodeURIComponent(req.params.token)}`));
+    return;
+  }
+
   res.send(paginaHtml(pagina.titulo, pagina.texto));
 });

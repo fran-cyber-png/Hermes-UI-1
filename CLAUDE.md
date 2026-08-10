@@ -427,6 +427,35 @@ Una página vive en **mi libreta privada** o en un **espacio con miembros elegid
 - **La lista marca con 🔗 lo que está afuera**: sin eso compartir es una acción sin inventario.
 - Mapa de todo el frente: `docs/mapa-libreta.md`. Capturas: `docs/evidencia/libreta-link-*.png`.
 
+### El link tiene ALCANCE y PERMISO (ADR 0048)
+
+- **Dos ejes**: `alcance` (`publico` · `goberna`) y `permiso` (`ver` · `editar`).
+  🔴 **`editar` exige `goberna`, y lo garantiza el TIPO** (`ConfiguracionDeLink` es una unión que hace
+  imposible construir «público + editar»), no un `if`: **sin identidad no hay autoría**. Un permiso
+  `editar` sobre alcance público es **400, no se degrada a `ver`** — degradar daría un link que hace
+  menos de lo que la pantalla dijo.
+- 🔴 **UN LINK `goberna` NO SIRVE CONTENIDO POR `/n/`.** Una navegación del navegador **no lleva el
+  token** (la sesión vive en `localStorage`, no en cookie), así que ahí el server no sabe quién sos:
+  se manda una **página puente sin una letra del contenido** → `/#n=<token>` → la app pregunta por
+  `/api/notas/por-link/:token`, detrás del perímetro. **El contenido interno nunca sale por la ruta
+  anónima.**
+- ⚠️ **Leer el hash NO es un router** (ADR 0002): se lee **una vez** en el primer render y **se limpia
+  enseguida** — el token es una credencial y en la barra se copia, queda en el historial y sale en
+  cualquier captura.
+- 🔴 **SACAR A ALGUIEN DEL ESPACIO LE CORTA LOS LINKS QUE ABRIÓ**, en la MISMA transacción que la baja.
+  Sin esto, ADR 0046 prometía sacarle las páginas y le dejaba abierta la puerta al mundo. El corte es
+  **quirúrgico**: no toca los de los demás ni los de su libreta privada. **Archivar el espacio corta
+  todos los suyos** — es el único caso donde archivar destruye algo, y destruye la puerta, no el
+  contenido. Las dos funciones **devuelven cuántos cortaron**.
+- **Vencimiento opcional**: `null` = no vence (default). Una fecha que no se entiende **se rechaza**,
+  no se ignora. **Vencido se ve igual que inexistente.**
+- **«Se abrió por última vez»**: un timestamp, **sin quién ni cuántas veces**. `null` = nunca lo abrió
+  nadie. Se anota **sin await**: si falla se pierde higiene, no la página.
+- **Reconfigurar CONSERVA el token**: cambiar de público a interno surte efecto sobre el link ya
+  repartido. Uno nuevo dejaría el viejo vivo con las reglas viejas.
+- ⚠️ **`/n/` sigue SIN rate limit** — verificado: ni nginx ni Express. Con 128 bits no es fuga, es
+  disponibilidad. Es un cambio a mano en VPS1 y va aparte.
+
 ## Auth
 
 Login de vendedoras **contra Cerberus** (Django, sin API REST): `cerberus/auth.ts` hace el handshake CSRF

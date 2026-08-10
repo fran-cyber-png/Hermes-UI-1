@@ -25,6 +25,11 @@ import { api } from '../../lib/datos/cliente';
  */
 export const LIMITE_TEXTO = 20_000;
 
+/** Quién puede abrir un link (ADR 0048). Copia del server; ver `linkModelo.ts`. */
+export type Alcance = 'publico' | 'goberna';
+/** Qué puede hacer quien lo abre. `editar` NUNCA se combina con `publico`. */
+export type Permiso = 'ver' | 'editar';
+
 export interface Nota {
   id: number;
   clave: string;
@@ -69,6 +74,14 @@ export interface Nota {
    * duda) sería alarmar sobre algo que no pasó.
    */
   token?: string | null;
+  /** Quién puede abrir el link, si tiene (ADR 0048). Ausente = no tiene. */
+  alcance?: Alcance | null;
+  /** Qué puede hacer quien lo abre. */
+  permiso?: Permiso | null;
+  /** `null` = no vence. */
+  venceAt?: string | null;
+  /** `null` = nunca lo abrió nadie — la respuesta más útil. */
+  ultimoAccesoAt?: string | null;
 }
 
 /**
@@ -210,9 +223,20 @@ export function useMutacionesNotas(clave: string, espacioId: number | null = nul
       ]),
   });
 
-  /** Abrir el link público. Idempotente en el server: dos clics no dan dos URLs. */
+  /**
+   * Abrir —o RECONFIGURAR— el link (ADR 0048). Idempotente en el server: dos
+   * clics no dan dos URLs, y cambiar el alcance surte efecto sobre el token que
+   * ya se repartió.
+   *
+   * ⚠️ `permiso: 'editar'` con `alcance: 'publico'` lo rechaza el server con 400:
+   * sin identidad no hay autoría. La pantalla no ofrece esa combinación.
+   */
   const abrirLink = useMutation({
-    mutationFn: (id: number) => api<{ ok: true; token: string }>(`/api/notas/${id}/link`, { method: 'POST' }),
+    mutationFn: (v: { id: number; alcance: Alcance; permiso: Permiso; venceAt?: string | null }) =>
+      api<{ ok: true; token: string }>(`/api/notas/${v.id}/link`, {
+        method: 'POST',
+        body: JSON.stringify({ alcance: v.alcance, permiso: v.permiso, venceAt: v.venceAt ?? null }),
+      }),
     onSuccess: invalidar,
   });
 

@@ -1,7 +1,10 @@
 import { Router } from 'express';
+import { eq } from 'drizzle-orm';
 import { db } from '../db/client.js';
+import { notas } from '../db/schema.js';
 import { requiereVendedora } from '../auth/sesion.js';
-import { abrirLink, cortarLink } from '../espacios/linkRepositorio.js';
+import { abrirLink, cortarLink, leerPorToken } from '../espacios/linkRepositorio.js';
+import { configuracionDeLink, puedeEditarPorLink } from '../espacios/linkModelo.js';
 import { espaciosDe } from '../espacios/repositorio.js';
 import { puedeEscribirEn, type QuienPregunta } from '../espacios/visibilidad.js';
 import type { NotaFila } from '../notas/notas.js';
@@ -258,7 +261,14 @@ notasRouter.post('/:id/link', async (req, res) => {
     res.status(400).json({ ok: false, message: 'id inválido' });
     return;
   }
-  const r = await abrirLink(db, { notaId: id, quien: await quienPregunta(req.vendedoraId!) });
+  // El alcance y el permiso vienen del body; `configuracionDeLink` es lo único
+  // que puede construirlos, y hace IMPOSIBLE representar «público + editar».
+  const config = configuracionDeLink(req.body ?? {});
+  if (!config.ok) {
+    res.status(400).json({ ok: false, message: config.motivo });
+    return;
+  }
+  const r = await abrirLink(db, { notaId: id, quien: await quienPregunta(req.vendedoraId!), config: config.config });
   if (!r.ok && r.motivo === 'no-encontrada') {
     res.status(404).json({ ok: false, message: 'la nota no existe (o está archivada)' });
     return;
@@ -286,6 +296,42 @@ notasRouter.delete('/:id/link', async (req, res) => {
     return;
   }
   res.json({ ok: true, token: null });
+});
+
+/**
+ * ABRIR UNA PÁGINA POR SU LINK, DESDE ADENTRO DE LA APP (ADR 0048).
+ *
+ * 🔴 **Esta ruta existe porque una navegación del navegador NO lleva el token de
+ * Hermes**: la sesión vive en `localStorage`, no en una cookie. Así que un link
+ * de alcance `goberna` **no puede servir contenido desde `/n/`** —ahí el server
+ * no sabe quién sos— y en vez de eso manda a la app, que sí tiene el Bearer y
+ * pregunta acá.
+ *
+ * La consecuencia es la que hace seguro el frente: **el contenido de un link
+ * interno nunca sale por la ruta anónima.**
+ *
+ * ⚠️ Un link `publico` también se puede abrir por acá, y da lo mismo: quien tiene
+ * sesión ya podía verlo por `/n/`. Lo que NO da lo mismo es `puedeEditar`, que
+ * exige las dos cosas (permiso del link Y sesión).
+ */
+notasRouter.get('/por-link/:token', async (req, res) => {
+  const link = await leerPorToken(db, req.params.token);
+  if (!link) {
+    res.status(404).json({ ok: false, message: 'ese link no existe o ya no sirve' });
+    return;
+  }
+  const [nota] = await db.select().from(notas).where(eq(notas.id, link.notaId));
+  if (!nota) {
+    res.status(404).json({ ok: false, message: 'ese link no existe o ya no sirve' });
+    return;
+  }
+  res.json({
+    ok: true,
+    nota: conOrigenNota(nota),
+    // `true` solo si el link lo permite Y hay sesión — y acá siempre la hay,
+    // porque el router entero está detrás de `requiereVendedora`.
+    puedeEditar: puedeEditarPorLink(link, true),
+  });
 });
 
 notasRouter.patch('/:id/archivar', async (req, res) => {

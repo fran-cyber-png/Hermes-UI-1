@@ -71,6 +71,15 @@ export interface LinkPublico {
   texto: string;
   /** El documento rico, o `null` en una nota vieja: se pinta desde `texto`. */
   doc: unknown;
+  /**
+   * ⚠️ Los tres de abajo son para que el SERVER decida qué hacer, y **no se
+   * serializan hacia afuera en el alcance público**: `notaId` es lo único que la
+   * app necesita para abrir la página de verdad, y decírselo a un desconocido no
+   * aporta nada y numera el contenido.
+   */
+  notaId: number;
+  alcance: import("./linkModelo.js").Alcance;
+  permiso: import("./linkModelo.js").Permiso;
 }
 
 /**

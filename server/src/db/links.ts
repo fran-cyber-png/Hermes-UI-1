@@ -34,6 +34,34 @@ export const notaLink = pgTable(
      */
     creadoPor: text("creado_por").notNull(),
     creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * QUIÉN LO PUEDE ABRIR (ADR 0048): `publico` · `goberna`.
+     *
+     * ⚠️ Default `publico` **porque es lo que ya existe en las filas viejas**, no
+     * porque sea lo más seguro: cuando se agregó esta columna, todos los links
+     * que había eran públicos y decir otra cosa los habría reetiquetado en
+     * silencio. Para un link NUEVO el default lo pone `configuracionDeLink`.
+     */
+    alcance: text("alcance").notNull().default("publico"),
+    /**
+     * QUÉ PUEDE HACER quien lo abre: `ver` · `editar`.
+     *
+     * 🔴 `editar` **solo es válido con `alcance = 'goberna'`**, y eso lo garantiza
+     * el TIPO (`ConfiguracionDeLink`), no un check de base: sin identidad no hay
+     * autoría, así que una página del equipo editable por un anónimo no se puede
+     * auditar. La base guarda lo que el tipo ya hizo imposible construir mal.
+     */
+    permiso: text("permiso").notNull().default("ver"),
+    /** `null` = no vence, y es el default: el link de un lead no se apaga solo. */
+    venceAt: timestamp("vence_at", { withTimezone: true }),
+    /**
+     * CUÁNDO SE ABRIÓ POR ÚLTIMA VEZ. Un solo timestamp, **sin quién ni cuántas
+     * veces**: contar visitas sería analítica sobre gente que no dio su
+     * consentimiento, y para decidir «¿esto se usó?» y «¿lo corto?» alcanza con
+     * la última. `null` = nunca lo abrió nadie, que es la respuesta más útil de
+     * todas.
+     */
+    ultimoAccesoAt: timestamp("ultimo_acceso_at", { withTimezone: true }),
   },
   (t) => [
     // UNIQUE, no un índice normal: acá la garantía ES el punto. Con dos links a

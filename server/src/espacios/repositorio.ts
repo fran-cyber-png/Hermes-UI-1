@@ -1,6 +1,6 @@
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type { db as DbSingleton } from "../db/client.js";
-import { espacioMiembro, espacios, numeroVendedora, repartoRueda } from "../db/schema.js";
+import { espacioMiembro, espacios, notaLink, numeroVendedora, repartoRueda } from "../db/schema.js";
 import { destinosPosibles } from "../reparto/destino.js";
 
 /**
@@ -164,22 +164,62 @@ export async function agregarMiembro(
 export async function sacarMiembro(
   base: typeof DbSingleton,
   datos: { espacioId: number; vendedoraId: string },
-): Promise<void> {
+): Promise<number> {
   const quien = datos.vendedoraId.trim().toLowerCase();
-  if (!quien) return;
-  await base
-    .delete(espacioMiembro)
-    .where(
-      and(
-        eq(espacioMiembro.espacioId, datos.espacioId),
-        sql`lower(btrim(${espacioMiembro.vendedoraId})) = ${quien}`,
-      ),
-    );
+  if (!quien) return 0;
+
+  // 🔴 SACAR A ALGUIEN LE CORTA TAMBIÉN LOS LINKS QUE ABRIÓ, y esto NO es un
+  // extra: sin esto, ADR 0046 promete que sacar a alguien le saca las páginas —
+  // y le sacaba las de adentro dejándole abierta la puerta que había dejado al
+  // mundo. El link seguía sirviendo la página del equipo, no aparecía en ninguna
+  // alerta, y solo lo cortaba un miembro actual que se acordara de ir a mirar.
+  //
+  // Va PRIMERO y en la misma transacción que la baja: si se hiciera después y
+  // fallara, la persona quedaría afuera con su link vivo — exactamente el estado
+  // que esto viene a impedir.
+  const cortados = await base.transaction(async (tx) => {
+    const borrados = await tx
+      .delete(notaLink)
+      .where(
+        sql`lower(btrim(${notaLink.creadoPor})) = ${quien}
+            AND ${notaLink.notaId} IN (SELECT id FROM notas WHERE espacio_id = ${datos.espacioId})`,
+      )
+      .returning({ token: notaLink.token });
+
+    await tx
+      .delete(espacioMiembro)
+      .where(
+        and(
+          eq(espacioMiembro.espacioId, datos.espacioId),
+          sql`lower(btrim(${espacioMiembro.vendedoraId})) = ${quien}`,
+        ),
+      );
+
+    return borrados.length;
+  });
+
+  return cortados;
 }
 
-/** Archivar el espacio. Las páginas NO se tocan: se archiva el lugar, no lo escrito. */
-export async function archivarEspacio(base: typeof DbSingleton, id: number, ahora: Date): Promise<void> {
-  await base.update(espacios).set({ archivadoAt: ahora }).where(eq(espacios.id, id));
+/**
+ * Archivar el espacio. Las páginas NO se tocan: se archiva el lugar, no lo escrito.
+ *
+ * 🔴 **Pero los links SÍ se cortan**, por el mismo motivo que al sacar a un
+ * miembro: archivar un espacio saca sus páginas de la vista de todos, y un link
+ * vivo dejaría una puerta abierta al mundo hacia algo que el equipo ya dio por
+ * cerrado. Es el único caso donde archivar destruye algo — y destruye la puerta,
+ * no el contenido.
+ */
+export async function archivarEspacio(base: typeof DbSingleton, id: number, ahora: Date): Promise<number> {
+  return base.transaction(async (tx) => {
+    const cortados = await tx
+      .delete(notaLink)
+      .where(sql`${notaLink.notaId} IN (SELECT id FROM notas WHERE espacio_id = ${id})`)
+      .returning({ token: notaLink.token });
+
+    await tx.update(espacios).set({ archivadoAt: ahora }).where(eq(espacios.id, id));
+    return cortados.length;
+  });
 }
 
 /**

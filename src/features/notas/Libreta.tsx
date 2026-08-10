@@ -7,6 +7,7 @@ import { DICCIONARIO_LIBRETA, ESQUEMA_LIBRETA, soloBloquesConocidos } from './ed
 import { AccionesDePagina } from './AccionesDePagina';
 import { mismoUsuario, nombreCorto, useEspacios, type DondeEstoy } from './espacios';
 import { SelectorDeEspacio } from './SelectorDeEspacio';
+import { tokenDeLaUrl, usePaginaPorLink } from './porLink';
 import { renglonDeEstado } from './guardado';
 import { useAutoguardado } from './useAutoguardado';
 import {
@@ -198,6 +199,15 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
    * arranque: quien no tenga ni un espacio ve exactamente la Libreta de antes.
    */
   const [donde, setDonde] = useState<DondeEstoy>(null);
+  /**
+   * SI LLEGAMOS POR UN LINK INTERNO, la página que ese link señala.
+   *
+   * `useState(tokenDeLaUrl)` y no una llamada suelta: se lee **una vez, en el
+   * primer render**, y el hash se limpia ahí mismo. Con una llamada en el cuerpo
+   * del componente, cada re-render volvería a mirar una URL que ya se vació.
+   */
+  const [tokenEntrante] = useState(tokenDeLaUrl);
+  const porLink = usePaginaPorLink(tokenEntrante);
 
   const termino = busqueda.trim();
   const lista = useNotas(CLAVE_LIBRETA, donde);
@@ -241,6 +251,16 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
     },
     alCrear: (id) => setSeleccion({ tipo: 'nota', id, origen: 'nota' }),
   });
+
+  /**
+   * La página que vino por link se abre SOLA y por encima de la lista: quien
+   * hizo clic en un link quería ESA página, no la Libreta.
+   *
+   * ⚠️ No se toca `donde` ni `seleccion`: la página puede vivir en un espacio del
+   * que no sos miembro —el link es lo que te da acceso, no la membresía—, y
+   * mover el selector ahí mostraría una lista que el server va a negar con 403.
+   */
+  const deLink = porLink.data?.nota ?? null;
 
   const cargando = termino ? encontradas.isPending : lista.isPending;
   const fallo = termino ? encontradas.isError : lista.isError;
@@ -365,7 +385,7 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
           </div>
 
           <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
-            {seleccion?.tipo === 'nueva' && (
+            {!deLink && seleccion?.tipo === 'nueva' && (
               <div className="rounded-lg border border-primary bg-secondary px-3 py-2">
                 <span className="text-sm font-medium text-foreground">Página nueva</span>
                 <p className="mt-0.5 text-xs text-muted-foreground">Se guarda sola al escribir</p>
@@ -465,7 +485,32 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
             no escribe (la regla de toda la casa), no puede resucitar después de
             archivarla, y desaparece sola en cuanto hay una página de verdad.
           */}
-          {enBienvenida && (
+          {deLink && (
+            <div className="mx-auto max-w-3xl px-6 py-8">
+              <div className="mb-4 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+                Llegaste por un link.{' '}
+                {porLink.data?.puedeEditar
+                  ? 'Podés editarla, y queda registrado que fuiste vos.'
+                  : 'Se lee, no se edita.'}
+              </div>
+              <EditorDePagina
+                key={`link-${deLink.id}`}
+                contenidoInicial={docParaEditor(deLink)}
+                soloLectura={!porLink.data?.puedeEditar}
+                onCambio={alCambiar}
+              />
+            </div>
+          )}
+
+          {porLink.isError && (
+            <div className="mx-auto max-w-3xl px-6 py-8">
+              <p className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
+                Ese link ya no sirve. Pedile a quien te lo pasó que lo comparta de nuevo.
+              </p>
+            </div>
+          )}
+
+          {!deLink && !porLink.isError && enBienvenida && (
             <div className="mx-auto flex h-full max-w-sm flex-col items-center justify-center gap-3 px-6">
               <Notebook className="size-8 text-muted-foreground/40" />
               <p className="text-center text-sm font-medium text-foreground">Tu libreta está en blanco</p>
@@ -498,7 +543,7 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
             </div>
           )}
 
-          {seleccion === null && !enBienvenida && (
+          {!deLink && !porLink.isError && seleccion === null && !enBienvenida && (
             <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
               <Notebook className="size-8 text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">Elegí una página, o creá una nueva.</p>
@@ -515,13 +560,13 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
             </div>
           )}
 
-          {seleccion?.tipo === 'nueva' && (
+          {!deLink && seleccion?.tipo === 'nueva' && (
             <div className="mx-auto max-w-3xl px-6 py-8">
               <EditorDePagina key="nueva" contenidoInicial={undefined} soloLectura={false} onCambio={alCambiar} />
             </div>
           )}
 
-          {paginaAbierta && (
+          {!deLink && paginaAbierta && (
             <div className="mx-auto max-w-3xl px-6 py-8">
               {/* Mover y compartir van sobre una página GUARDADA y editable: una
                   histórica de `gestiones` no se puede mover (vive en otra tabla)
@@ -538,7 +583,7 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
                     // autoguardaría— algo que ya no está acá.
                     setSeleccion(null);
                   }}
-                  onAbrirLink={() => abrirLink.mutate(paginaAbierta.id)}
+                  onAbrirLink={(v) => abrirLink.mutate({ id: paginaAbierta.id, ...v })}
                   onCortarLink={() => cortarLink.mutate(paginaAbierta.id)}
                 />
               )}

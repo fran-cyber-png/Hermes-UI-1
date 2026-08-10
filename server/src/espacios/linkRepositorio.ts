@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import type { db as DbSingleton } from "../db/client.js";
 import { notaLink, notas } from "../db/schema.js";
 import { type LinkPublico, nuevoToken, pareceToken } from "./link.js";
+import { type Alcance, type ConfiguracionDeLink, estaVigente, type Permiso } from "./linkModelo.js";
 import { puedeEditar, type QuienPregunta } from "./visibilidad.js";
 
 /**
@@ -30,19 +31,50 @@ import { puedeEditar, type QuienPregunta } from "./visibilidad.js";
  * el link sobreviviera, archivar dejaría de significar eso justo para el público
  * más amplio que la página tuvo.
  */
-export async function leerPorToken(base: typeof DbSingleton, token: string): Promise<LinkPublico | null> {
+export async function leerPorToken(
+  base: typeof DbSingleton,
+  token: string,
+  ahora: Date = new Date(),
+): Promise<LinkPublico | null> {
   if (!pareceToken(token)) return null;
 
   const [fila] = await base
-    .select({ texto: notas.texto, doc: notas.doc, archivadoAt: notas.archivadoAt })
+    .select({
+      notaId: notas.id,
+      texto: notas.texto,
+      doc: notas.doc,
+      archivadoAt: notas.archivadoAt,
+      alcance: notaLink.alcance,
+      permiso: notaLink.permiso,
+      venceAt: notaLink.venceAt,
+    })
     .from(notaLink)
     .innerJoin(notas, eq(notas.id, notaLink.notaId))
     .where(eq(notaLink.token, token));
 
   if (!fila || fila.archivadoAt) return null;
+  // ⚠️ Vencido se ve igual que inexistente desde afuera: decir «esto venció» le
+  // confirma a un desconocido que el token existió alguna vez.
+  if (!estaVigente({ venceAt: fila.venceAt }, ahora)) return null;
+
+  // «Se abrió» se anota SIN esperar: la respuesta no puede depender de que este
+  // UPDATE termine, y si falla, lo que se pierde es un dato de higiene — no la
+  // página. Un `catch` vacío acá es correcto y por eso se dice.
+  void base
+    .update(notaLink)
+    .set({ ultimoAccesoAt: ahora })
+    .where(eq(notaLink.token, token))
+    .catch(() => {});
 
   const titulo = fila.texto.split("\n").find((l) => l.trim() !== "")?.trim() ?? "";
-  return { titulo, texto: fila.texto, doc: fila.doc };
+  return {
+    titulo,
+    texto: fila.texto,
+    doc: fila.doc,
+    notaId: fila.notaId,
+    alcance: fila.alcance as Alcance,
+    permiso: fila.permiso as Permiso,
+  };
 }
 
 export type ResultadoLink =
@@ -69,7 +101,7 @@ export async function linkDe(base: typeof DbSingleton, notaId: number): Promise<
  */
 export async function abrirLink(
   base: typeof DbSingleton,
-  opciones: { notaId: number; quien: QuienPregunta },
+  opciones: { notaId: number; quien: QuienPregunta; config: ConfiguracionDeLink },
 ): Promise<ResultadoLink> {
   const [pagina] = await base
     .select({ vendedoraId: notas.vendedoraId, espacioId: notas.espacioId, archivadoAt: notas.archivadoAt })
@@ -79,11 +111,33 @@ export async function abrirLink(
   if (!pagina || pagina.archivadoAt) return { ok: false, motivo: "no-encontrada" };
   if (!puedeEditar(pagina, opciones.quien)) return { ok: false, motivo: "prohibido" };
 
+  // ⚠️ Si ya tiene link, se RECONFIGURA el que hay en vez de crear otro: el token
+  // repartido sigue sirviendo y cambiar de «público» a «solo Goberna» surte
+  // efecto sobre el link que la gente ya tiene. Crear uno nuevo dejaría el viejo
+  // vivo con las reglas viejas — que es justo lo que alguien intenta arreglar
+  // cuando toca esto.
   const yaTiene = await linkDe(base, opciones.notaId);
-  if (yaTiene) return { ok: true, token: yaTiene };
+  if (yaTiene) {
+    await base
+      .update(notaLink)
+      .set({
+        alcance: opciones.config.alcance,
+        permiso: opciones.config.permiso,
+        venceAt: opciones.config.venceAt ?? null,
+      })
+      .where(eq(notaLink.token, yaTiene));
+    return { ok: true, token: yaTiene };
+  }
 
   const token = nuevoToken();
-  await base.insert(notaLink).values({ token, notaId: opciones.notaId, creadoPor: opciones.quien.vendedoraId });
+  await base.insert(notaLink).values({
+    token,
+    notaId: opciones.notaId,
+    creadoPor: opciones.quien.vendedoraId,
+    alcance: opciones.config.alcance,
+    permiso: opciones.config.permiso,
+    venceAt: opciones.config.venceAt ?? null,
+  });
   return { ok: true, token };
 }
 

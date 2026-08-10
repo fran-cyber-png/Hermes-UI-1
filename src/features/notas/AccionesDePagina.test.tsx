@@ -163,7 +163,7 @@ test('🔴 el panel del link DICE que se abre sin entrar a Hermes', async () => 
   expect(campo?.value).toBe(`${window.location.origin}/n/${'a'.repeat(32)}`);
 });
 
-test('una página SIN link avisa qué va a pasar antes de crearlo', async () => {
+test('una página SIN link muestra las opciones ANTES de crearlo', async () => {
   montado = montar(
     <AccionesDePagina
       nota={PAGINA}
@@ -180,6 +180,58 @@ test('una página SIN link avisa qué va a pasar antes de crearlo', async () => 
   botonQueDice('Compartir con link')?.click();
   await reposar();
 
-  expect(document.body.textContent).toContain('sin pedir contraseña');
+  // Quién lo abre se elige ANTES de que exista el link: si se creara primero y
+  // se configurara después, habría una ventana en la que el link ya se repartió
+  // con reglas que no son las que la vendedora quería.
+  expect(document.body.textContent).toContain('Quién lo abre');
+  expect(botonQueDice('Cualquiera con el link')).toBeTruthy();
+  expect(botonQueDice('Solo gente de Goberna')).toBeTruthy();
   expect(botonQueDice('Crear el link')).toBeTruthy();
+});
+
+test('🔴 elegir «cualquiera con el link» APAGA el permiso de editar', async () => {
+  // Sin identidad no hay autoría: esa combinación no existe y el server la
+  // rechaza con 400. Dejarla marcada mostraría un estado imposible.
+  montado = montar(
+    <AccionesDePagina
+      nota={{ ...PAGINA, token: 'b'.repeat(32), alcance: 'goberna', permiso: 'editar' }}
+      donde={7}
+      espacios={[ESPACIO]}
+      vendedoraId="luz"
+      onMover={() => {}}
+      onAbrirLink={() => {}}
+      onCortarLink={() => {}}
+    />,
+  );
+  await reposar();
+
+  botonQueDice('Compartida con link')?.click();
+  await reposar();
+  expect(botonQueDice('Ver y editar')?.getAttribute('aria-pressed')).toBe('true');
+
+  botonQueDice('Cualquiera con el link')?.click();
+  await reposar();
+
+  // El selector de permiso ya no está: con público no hay nada que elegir.
+  expect(botonQueDice('Ver y editar')).toBeFalsy();
+  expect(document.body.textContent).toContain('Se lee, no se edita');
+});
+
+test('«Todavía no lo abrió nadie» es la respuesta cuando el link no se usó', async () => {
+  montado = montar(
+    <AccionesDePagina
+      nota={{ ...PAGINA, token: 'c'.repeat(32) }}
+      donde={7}
+      espacios={[ESPACIO]}
+      vendedoraId="luz"
+      onMover={() => {}}
+      onAbrirLink={() => {}}
+      onCortarLink={() => {}}
+    />,
+  );
+  await reposar();
+  botonQueDice('Compartida con link')?.click();
+  await reposar();
+
+  expect(document.body.textContent).toContain('Todavía no lo abrió nadie');
 });

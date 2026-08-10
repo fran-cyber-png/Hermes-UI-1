@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Check, Copy, Link2, Link2Off, Lock, MoveRight, Users } from 'lucide-react';
 import type { DondeEstoy, Espacio } from './espacios';
-import type { Nota } from './notas';
+import type { Alcance, Nota, Permiso } from './notas';
 
 /**
  * QUÉ SE PUEDE HACER CON UNA PÁGINA — mover de lugar y compartirla con un link
@@ -70,12 +70,23 @@ export function AccionesDePagina({
   espacios: Espacio[];
   vendedoraId?: string | null;
   onMover: (destino: DondeEstoy) => void;
-  onAbrirLink: () => void;
+  onAbrirLink: (v: { alcance: Alcance; permiso: Permiso; venceAt: string | null }) => void;
   onCortarLink: () => void;
 }) {
   const [abierto, setAbierto] = useState<'mover' | 'link' | null>(null);
   const [confirmar, setConfirmar] = useState<DondeEstoy | 'no'>('no');
   const [copiado, setCopiado] = useState(false);
+  // Arrancan en lo que el link YA es; si no tiene, en lo más cerrado que sirve
+  // para el caso más común (mandárselo a un lead).
+  const [alcance, setAlcance] = useState<Alcance>(nota.alcance ?? 'publico');
+  const [permiso, setPermiso] = useState<Permiso>(nota.permiso ?? 'ver');
+  const [vence, setVence] = useState(nota.venceAt ? nota.venceAt.slice(0, 10) : '');
+
+  const hayCambios =
+    Boolean(nota.token) &&
+    (alcance !== (nota.alcance ?? 'publico') ||
+      permiso !== (nota.permiso ?? 'ver') ||
+      vence !== (nota.venceAt ? nota.venceAt.slice(0, 10) : ''));
 
   const espacioActual = espacios.find((e) => e.id === donde) ?? null;
   const token = nota.token ?? null;
@@ -185,7 +196,92 @@ export function AccionesDePagina({
       )}
 
       {abierto === 'link' && (
-        <div className="w-full rounded-lg border border-border bg-card p-2.5">
+        <div className="w-full space-y-2.5 rounded-lg border border-border bg-card p-2.5">
+          {/* QUIÉN LO ABRE. Es la primera pregunta porque cambia todo lo demás:
+              con «cualquiera» no se puede editar, y punto. */}
+          <div>
+            <p className="mb-1 text-[0.6875rem] font-medium uppercase tracking-wide text-muted-foreground">
+              Quién lo abre
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {(
+                [
+                  { v: 'goberna' as const, t: 'Solo gente de Goberna', d: 'entra con su cuenta' },
+                  { v: 'publico' as const, t: 'Cualquiera con el link', d: 'sin cuenta, solo lectura' },
+                ]
+              ).map((o) => (
+                <button
+                  key={o.v}
+                  type="button"
+                  aria-pressed={alcance === o.v}
+                  onClick={() => {
+                    setAlcance(o.v);
+                    // 🔴 Pasar a público APAGA el permiso de editar, y no es una
+                    // cortesía: sin identidad no hay autoría, así que esa
+                    // combinación no existe. Dejarla marcada mostraría un estado
+                    // que el server va a rechazar.
+                    if (o.v === 'publico') setPermiso('ver');
+                  }}
+                  className={`rounded-lg border px-2 py-1 text-left text-xs transition ${
+                    alcance === o.v
+                      ? 'border-primary bg-secondary text-foreground'
+                      : 'border-border text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  <span className="block font-medium">{o.t}</span>
+                  <span className="block text-[0.6875rem] text-muted-foreground">{o.d}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* QUÉ PUEDE HACER. Solo aparece con «solo Goberna»: con público no hay
+              nada que elegir, y un control deshabilitado invita a preguntarse por
+              qué. */}
+          {alcance === 'goberna' && (
+            <div>
+              <p className="mb-1 text-[0.6875rem] font-medium uppercase tracking-wide text-muted-foreground">
+                Qué puede hacer
+              </p>
+              <div className="flex gap-1">
+                {(
+                  [
+                    { v: 'ver' as const, t: 'Solo ver' },
+                    { v: 'editar' as const, t: 'Ver y editar' },
+                  ]
+                ).map((o) => (
+                  <button
+                    key={o.v}
+                    type="button"
+                    aria-pressed={permiso === o.v}
+                    onClick={() => setPermiso(o.v)}
+                    className={`rounded-lg border px-2.5 py-1 text-xs transition ${
+                      permiso === o.v
+                        ? 'border-primary bg-secondary text-foreground'
+                        : 'border-border text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {o.t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* VENCIMIENTO opcional. Vacío = no vence, que es el default y lo que
+              corresponde al link de un lead. */}
+          <div>
+            <label className="mb-1 block text-[0.6875rem] font-medium uppercase tracking-wide text-muted-foreground">
+              Vence (opcional)
+            </label>
+            <input
+              type="date"
+              value={vence}
+              onChange={(e) => setVence(e.target.value)}
+              className="h-7 rounded border border-input bg-card px-2 text-xs outline-none focus:border-ring"
+            />
+          </div>
+
           {url ? (
             <>
               <div className="flex items-center gap-1.5">
@@ -208,37 +304,54 @@ export function AccionesDePagina({
                   {copiado ? 'Copiado' : 'Copiar'}
                 </button>
               </div>
+
               {/* Lo que la pantalla TIENE que decir antes de que alguien lo pegue
-                  en un chat: no hay login del otro lado. */}
-              <p className="mt-1.5 text-[0.6875rem] text-muted-foreground">
-                Lo abre cualquiera que tenga el link, sin entrar a Hermes. Se lee, no se edita.
+                  en un chat. Cambia con el alcance, porque el riesgo es otro. */}
+              <p className="text-[0.6875rem] text-muted-foreground">
+                {alcance === 'publico'
+                  ? 'Lo abre cualquiera que tenga el link, sin entrar a Hermes. Se lee, no se edita.'
+                  : permiso === 'editar'
+                    ? 'Solo gente de Goberna con su cuenta. Quien lo abra puede editar, y queda registrado quién fue.'
+                    : 'Solo gente de Goberna con su cuenta. Se lee, no se edita.'}
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  onCortarLink();
-                  setCopiado(false);
-                }}
-                className="mt-1.5 flex items-center gap-1 text-xs font-medium text-destructive hover:underline"
-              >
-                <Link2Off className="size-3.5" />
-                Cortar el link
-              </button>
+
+              <p className="text-[0.6875rem] text-muted-foreground">
+                {nota.ultimoAccesoAt
+                  ? `Se abrió por última vez el ${new Date(nota.ultimoAccesoAt).toLocaleDateString('es-PE', { day: 'numeric', month: 'short' })}.`
+                  : 'Todavía no lo abrió nadie.'}
+              </p>
+
+              <div className="flex gap-2">
+                {hayCambios && (
+                  <button
+                    type="button"
+                    onClick={() => onAbrirLink({ alcance, permiso, venceAt: vence || null })}
+                    className="rounded-lg bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary-hover"
+                  >
+                    Guardar cambios
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    onCortarLink();
+                    setCopiado(false);
+                  }}
+                  className="flex items-center gap-1 text-xs font-medium text-destructive hover:underline"
+                >
+                  <Link2Off className="size-3.5" />
+                  Cortar el link
+                </button>
+              </div>
             </>
           ) : (
-            <>
-              <p className="text-xs text-muted-foreground">
-                Se crea un link que abre esta página <strong className="text-foreground">sin pedir contraseña</strong>. Lo
-                podés cortar cuando quieras.
-              </p>
-              <button
-                type="button"
-                onClick={onAbrirLink}
-                className="mt-1.5 rounded-lg bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary-hover"
-              >
-                Crear el link
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => onAbrirLink({ alcance, permiso, venceAt: vence || null })}
+              className="rounded-lg bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary-hover"
+            >
+              Crear el link
+            </button>
           )}
         </div>
       )}
