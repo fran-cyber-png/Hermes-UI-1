@@ -5,11 +5,13 @@ import {
   CATEGORIAS,
   useCrearPlantilla,
   usePlantillas,
+  usePlantillasEnvios,
   useRevisarPlantilla,
   type BorradorPlantilla,
   type PlantillaConEstado,
   type Reparo,
 } from './plantillas';
+import { avisarMuestraChica, comparacion, queDibujar, respuestas, resumen, salvedad } from './envios';
 
 /**
  * LAS PLANTILLAS: el catálogo con su salud, y el formulario de creación.
@@ -152,7 +154,74 @@ function Fila({ p }: { p: PlantillaConEstado }) {
           {p.cuerpo}
         </pre>
       )}
+
+      <Envios nombre={p.nombre} />
     </li>
+  );
+}
+
+/**
+ * CUÁNTO SE MANDÓ CON ESTA PLANTILLA.
+ *
+ * ══ POR QUÉ ACÁ Y NO EN «QUIÉN MANDÓ QUÉ» ═══════════════════════════════════
+ *
+ * Porque esa pantalla lee `corridas_campana`, o sea **quién autorizó**, y la
+ * campaña del foro salió por script: no tiene firma y no puede tenerla —
+ * inventarle una fila sería falsificar la auditoría—. El hecho de los 1.004
+ * envíos vive en `envios_wa`, y la pregunta «¿cuánto se mandó esto?» se hace
+ * mirando la plantilla, que es donde está parada la vendedora cuando se la hace.
+ *
+ * ══ LOS TRES ESTADOS SE DIBUJAN DISTINTO, Y ESO ES EL PUNTO ═════════════════
+ *
+ *   · **no se pudo contar** → no se dibuja NADA. Un «0 envíos» ahí invitaría a
+ *     mandar de nuevo una campaña que ya salió.
+ *   · **no se mandó nunca** → se dice con todas las letras. Es un cero de
+ *     verdad, y distinguirlo del anterior es toda la diferencia.
+ *   · **se mandó** → cuántos, cuándo, qué no salió, y cuántos contestaron
+ *     contra la línea de base.
+ */
+function Envios({ nombre }: { nombre: string }) {
+  const { data } = usePlantillasEnvios();
+  const que = queDibujar(data, nombre);
+
+  // Sin respuesta —cargando, 502, 403— no se afirma nada sobre esta plantilla.
+  if (que.tipo === 'nada') return null;
+
+  if (que.tipo === 'nunca') {
+    return (
+      <p className="mt-2 border-t border-border/60 pt-2 text-[11px] text-muted-foreground">
+        Todavía no se mandó ninguna vez.
+      </p>
+    );
+  }
+
+  const e = que.e;
+  const base = comparacion(data?.lineaDeBase ?? null);
+
+  return (
+    <div className="mt-2 space-y-0.5 border-t border-border/60 pt-2 text-[11px] text-muted-foreground">
+      <p>
+        <strong className="text-foreground">{resumen(e)}</strong>
+        {e.versiones > 1 && (
+          <span
+            className="ml-1.5"
+            title="Se mandó con más de un texto bajo el mismo nombre. El porcentaje de acá los mezcla; el reporte por pieza los separa."
+          >
+            · con {e.versiones} textos distintos
+          </span>
+        )}
+      </p>
+      <p>
+        {respuestas(e)}
+        {avisarMuestraChica(e) && (
+          <span className="ml-1 opacity-75" title="Con esta muestra el porcentaje existe pero no decide nada.">
+            — muestra chica
+          </span>
+        )}
+      </p>
+      {salvedad(e) && <p className="opacity-75">{salvedad(e)}</p>}
+      {base && e.medibles > 0 && <p className="opacity-75">{base}</p>}
+    </div>
   );
 }
 

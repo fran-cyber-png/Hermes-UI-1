@@ -38,8 +38,20 @@ const SECCIONES: { id: Seccion; rotulo: string; icono: typeof Megaphone }[] = [
   { id: 'historial', rotulo: 'Quién mandó qué', icono: ShieldCheck },
 ];
 
-export function PantallaCampanas() {
-  const [seccion, setSeccion] = useState<Seccion>('corridas');
+/**
+ * `seccionInicial` existe SOLO para la galería (`?seccion=plantillas`), como el
+ * `?ficha=1` del embudo: la evidencia de una sección no se puede sacar si la
+ * pantalla siempre abre en la primera. En la app nadie la pasa y abre en
+ * Corridas, que es a lo que se entra todos los días.
+ *
+ * Se recibe como `string` y se valida acá, contra la MISMA lista que dibuja las
+ * solapas: exportar el validador obligaría a la galería a conocer los ids por su
+ * cuenta, que es la segunda lista de siempre.
+ */
+export function PantallaCampanas({ seccionInicial }: { seccionInicial?: string } = {}) {
+  const [seccion, setSeccion] = useState<Seccion>(
+    SECCIONES.find((s) => s.id === seccionInicial)?.id ?? 'corridas',
+  );
   const [armando, setArmando] = useState(false);
 
   return (

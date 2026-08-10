@@ -15,13 +15,17 @@ import '../../index.css';
  *   node scratchpad/stub-campanas.mjs
  *   VITE_API_URL=http://localhost:4199 npx vite --port 5199
  *   → http://localhost:5199/galeria-campanas.html
+ *   → …?seccion=plantillas   (cuánto se mandó con cada plantilla)
  */
+// La sección la valida la pantalla, contra la misma lista que dibuja las solapas.
+const seccion = new URLSearchParams(location.search).get('seccion') ?? undefined;
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <div className="h-screen bg-background">
         <div className="flex h-full min-h-0 flex-col">
-          <PantallaCampanas />
+          <PantallaCampanas seccionInicial={seccion} />
         </div>
       </div>
     </QueryClientProvider>

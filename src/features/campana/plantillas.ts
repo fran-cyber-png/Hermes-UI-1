@@ -85,6 +85,72 @@ export function useCrearPlantilla() {
   });
 }
 
+// ── Cuánto se mandó con cada plantilla ──────────────────────────────────────
+
+/**
+ * Una proporción con TODO lo que hace falta para leerla. La calcula el server
+ * (`resultados/medicion.ts`) y viaja hecha: acá no se recalcula ni el intervalo
+ * ni el umbral de muestra (#37).
+ */
+export interface Medicion {
+  base: string;
+  exitos: number;
+  /** EL TAMAÑO DE LA MUESTRA. Sin esto un 3 % no significa nada. */
+  n: number;
+  /** `null` = no hay dato. **No es 0 %.** */
+  tasa: number | null;
+  intervalo: { bajo: number; alto: number } | null;
+  muestraSuficiente: boolean;
+}
+
+export interface EnviosDeUnaPlantilla {
+  plantilla: string;
+  /** Cuántos SALIERON de verdad. Todos, se puedan medir o no. */
+  salieron: number;
+  /** Cuántos no salieron. Se dice aparte y no se suma a `salieron`. */
+  noSalieron: number;
+  /**
+   * De los que salieron, de cuántos se puede saber si contestaron — o sea el
+   * denominador de `respondieron`. ⚠️ **Puede ser menor que `salieron`**: los 89
+   * envíos de `promo_3x1_cursos` salieron con una referencia que no es una clave
+   * de conversación, así que el lazo de resultados no los ve.
+   */
+  medibles: number;
+  primerUso: string;
+  ultimoUso: string;
+  /** Cuántos textos distintos salieron bajo este nombre (ADR 0022). */
+  versiones: number;
+  respondieron: Medicion;
+  medianaMinutosHastaLaRespuesta: number | null;
+}
+
+export interface EnviosPorPlantilla {
+  dias: number;
+  /** `null` = no hubo ni un envío a mano con qué comparar. No es «0 %». */
+  lineaDeBase: { envios: number; respondieron: Medicion } | null;
+  plantillas: EnviosDeUnaPlantilla[];
+}
+
+/**
+ * CUÁNTO SE MANDÓ, en su propia consulta.
+ *
+ * Aparte de `usePlantillas` a propósito: el catálogo sale de Meta y esto de
+ * nuestra base, así que se caen por motivos distintos. Si el conteo falla, la
+ * lista de plantillas tiene que seguir viéndose — es lo único que esta pantalla
+ * no puede dejar de hacer.
+ *
+ * ⚠️ `retry: false` y el error **no se dibuja**: «no se pudo contar» y «se
+ * mandó 0 veces» se ven igual en pantalla y llevan a decisiones opuestas.
+ */
+export function usePlantillasEnvios() {
+  return useQuery({
+    queryKey: ['campana-plantillas-envios'],
+    queryFn: () => api<EnviosPorPlantilla>('/api/campana/plantillas/envios'),
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
 // ── Listas ──────────────────────────────────────────────────────────────────
 
 export interface Lista {
