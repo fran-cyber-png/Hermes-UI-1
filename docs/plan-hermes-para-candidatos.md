@@ -20,6 +20,14 @@
 pantalla, a la gente que levantó la mano por WhatsApp / Instagram / Facebook — con la ficha del
 vecino al lado del chat, y registrando **el compromiso** en vez de la venta.
 
+> ✅ **Decidido por el dueño (10-ago-2026)**: *«cada candidato tiene su Hermes activo en su Centurión
+> **como página**, y todo vinculado y conectado»*. Eso fija dos cosas y abre la tercera:
+> **(a)** la superficie es **una página más del launcher `/app`**, activada por entitlement como
+> cualquier otro subservicio — sin app aparte, sin segundo login, sin subdominio propio;
+> **(b)** el candidato no «entra a Hermes»: entra a **su** Centurión y ahí está;
+> **(c)** «vinculado y conectado» es el frente entero de §3.5 — y su precondición es la
+> **resolución de identidad**, que es la disciplina de nivel 0 de `dos-planos.md` §9.
+
 **No es**:
 
 - ❌ **No es Hermes con otro logo.** El 100 % de lo que Hermes sabe hacer *bien* está atado a que
@@ -255,6 +263,59 @@ Consecuencia dura: **whatsmeow no se despliega en el plano B, nunca** (política
 tope de adjuntos es **del transporte** (`limitesMedia.ts`), en Cloud API rigen los de Meta —imagen
 5 MB, video 16 MB— con el 409 `adjunto_muy_pesado` y la compresión de ADR 0038 haciendo su trabajo.
 
+### 3.5 «Vinculado y conectado» — el CRM es donde converge la red de sensores
+
+Ésta es la parte que **no existe en la Escuela** y que hace al producto del candidato mejor que
+Hermes, no una copia peor. Centurión ya tiene sensores desplegados —brigadistas caminando, QRs
+impresos, formularios contestados, metas por distrito— y **ninguno de esos hilos termina en una
+conversación con la persona**. El CRM es el nudo.
+
+#### Lo que ENTRA a la ficha del vecino
+
+| De dónde | Qué aporta | Estado hoy |
+|---|---|---|
+| `captacion` — el `[CODIGO]` del primer mensaje | **De qué punto del territorio vino**: mercado, mitin, brigada. Es el equivalente del `adId` de la Escuela y es atribución sin ninguna API de Meta | 🔴 schema sin aplicar |
+| `territorio.contacto` — la libreta del brigadista | Nombre real, dirección, lat/lng, notas y foto de la visita. **La ficha se arma de las dos mitades**: lo que dijo por chat y lo que el brigadista vio en la puerta | 🟡 tabla viva, **0 filas** |
+| `territorio.visita` · `agentes_campo.ingreso_visita` | Si ya lo visitaron y qué pasó. Entra al timeline como **evento tipado**, con el molde de ADR 0037 (tipo + dato estructurado + quién), nunca como prosa | 🟡 1 fila · 7 tablas |
+| `formularios.respuesta` | **Qué contestó**: intención de voto, tema prioritario. Es el `interés` del vecino, y tiene que ser **la única fuente de verdad** de «qué le importa» (la lección de ADR 0037: dos lugares diciendo qué quiere el lead = el chip que rebota) | 🟢 **696 respuestas** |
+| `path_to_victory.unidad_meta` | La meta por distrito/sector: convierte el embudo en **«me faltan 400 en San Juan»** en vez de un total sin destino | 🟢 4 tablas, 14 activas |
+| `geografia_politica` | El subsector del vecino. Motor cartográfico compartido, **read-only** | 🟢 el único puente vivo |
+| `fase_1.candidatura` | La jurisdicción. **Multi-jurisdicción por diseño: cero código por cliente** | 🟢 69 filas |
+
+#### Lo que VUELVE a los otros módulos (y hoy no vuelve nada)
+
+- **A `captacion`**: qué QR trae gente que **contesta**, no solo que escanea. Hoy la métrica muere en
+  el escaneo — que es como medir una campaña por impresiones.
+- **A `path_to_victory`**: comprometidos por unidad territorial → **el avance real contra la meta**,
+  medido en personas y no en actividades.
+- **A `territorio`**: **a quién hay que ir a visitar** — el que contestó, pidió algo y quedó esperando.
+  Ése es el lazo que hoy no existe en ninguna parte del plano B: el campo alimenta al digital y el
+  digital **no le devuelve una lista de puertas**.
+
+#### 🔴 La precondición: CUATRO sistemas ya dicen quién es esta persona
+
+`dos-planos.md` §10 advierte que *«cada producto define su propio modelo de entidad»* ya está pasando
+—`clientes_padron` vs. Cerberus vs. `contacts` de icarus—. En el plano B el mismo error está **a punto
+de ocurrir con cuatro**: `territorio.contacto`, la conversación del CRM, `formularios.respuesta` y
+`captacion.escaneo`. Sin resolución, «vinculado» es un JOIN optimista que va a mentir en silencio.
+
+**La buena noticia: la maquinaria ya está construida en Hermes y va en el kernel.**
+
+- `identidad/` (ADR 0017): el puente clave↔persona como **estrella** — simetría, idempotencia y «sin
+  ciclos» salen de la forma del grafo, no de código defensivo. **Deshacer revoca, no borra.** La
+  persona se crea perezosamente al enlazar, y **leer una ficha jamás escribe en el grafo**.
+- `telefono/paises.ts`: `partirE164`, `variantesLocales`, `mismoTelefono`. Es la pieza que en la
+  Escuela costó tres bugs que en pantalla se ven iguales (#119, #196), y acá evita el mismo error con
+  vecinos de un mismo distrito.
+- La regla que se hereda entera: **comparar normalizando los DOS lados**. En la Escuela `Luz` vs `luz`
+  hacía invisible una conversación **sin un solo síntoma**; acá haría invisible a un vecino.
+
+⚠️ **Y una frontera que el entusiasmo va a querer cruzar**: el satélite **escribe solo su schema**;
+`territorio.*`, `formularios.*` y `captacion.*` los lee, no los toca (`MICROSERVICE-CONTRACT.md` §6).
+El enlace vive en **una tabla del CRM** que apunta hacia afuera, nunca en una columna agregada al
+módulo ajeno. Si hace falta un dato que no existe, **se pide al dueño del módulo** — que es
+exactamente lo que dice el contrato para el core.
+
 ---
 
 ## 4. EL DICCIONARIO — qué se traduce y qué no tiene traducción
@@ -348,6 +409,11 @@ Es la que impide que el tablero se vea lleno mientras el caño está cerrado.
 
 ## 6. EL PLAN — peldaños con gate, no fases
 
+> 🔴 **El orden de ejecución vive en [`plan-de-ataque-hermes-candidatos.md`](plan-de-ataque-hermes-candidatos.md),
+> y lo manda un reloj medido: 67 de las 69 candidaturas son de ERM2026 y votan el **4 de octubre de
+> 2026** — 55 días. Ahí los peldaños se reparten en tres carriles que no comparten riesgo. Esta
+> sección es el CONTENIDO de cada peldaño; aquélla es cuándo y en qué orden.
+
 Cada peldaño **termina en un hecho medible**. Ninguno empieza sin que el anterior haya dado su número.
 
 ### Peldaño 0 — Prender lo que ya está (días, cero código nuevo)
@@ -381,6 +447,16 @@ Cola + hilo + ficha del vecino, con la ventana de 24 h y los ✓✓. Envío **1 
 `EnvioControlado`**, con su ritmo y sus frenos. Nada de plantillas todavía.
 **GATE**: un operador real atiende un día entero sin volver a WhatsApp Web.
 
+### Peldaño 3b — El nudo: vinculado y conectado (§3.5)
+
+1. **La resolución de identidad primero** (`identidad/` + `telefono/paises.ts` del kernel): un vecino,
+   N identidades débiles. Sin esto, «vinculado» es un JOIN que miente.
+2. Lecturas read-only a `territorio.contacto`, `formularios.respuesta`, `captacion.escaneo` y
+   `path_to_victory.unidad_meta` → la ficha del vecino con las dos mitades.
+3. La vuelta: **la lista de puertas** para el brigadista y el avance por unidad territorial.
+4. **GATE**: un vecino cuya ficha muestre, a la vez, **de qué QR vino, qué contestó en el formulario y
+   qué dijo por chat**. Uno solo alcanza para probar que el nudo ata; cero significa que no ata.
+
 ### Peldaño 4 — El embudo del vecino y el compromiso
 
 Las cinco columnas de §4.3 derivadas, `Sin respuesta` incluida. `procedencia` + `resultados` con el
@@ -403,14 +479,21 @@ del dueño. **Un LLM contestando en nombre de un candidato en campaña es una de
 
 ## 7. LO QUE HAY QUE DECIDIR — dueño, no arquitecto
 
+> ⚠️ **«En su Centurión» decidió la PANTALLA, no la BASE — y confundirlos sería el error caro.**
+> El launcher `/app` es del monolito compartido, así que la **página** vive ahí para todos: eso está
+> decidido y es lo correcto (una identidad, una activación, una UI). **Dónde viven las conversaciones
+> y los tokens de Meta es otra pregunta, y sigue abierta en D1.** Leer «su Centurión» como «la base de
+> siempre» pondría los chats de dos campañas rivales en el mismo motor, detrás de un `WHERE`.
+
 | # | Decisión | Por qué bloquea |
 |---|---|---|
-| **D1** | **¿Instancia por candidatura, o una sola con base por tenant?** (§3.2) | Define costo operativo, precio y postura de seguridad. **Ninguna otra decisión se puede tomar antes.** Es la #1 de `dos-planos.md` §11, aterrizada |
+| **D1** | **¿Instancia por candidatura, o una sola con base por tenant?** (§3.2) | Define costo operativo, precio y postura de seguridad. **Ninguna otra decisión se puede tomar antes.** Es la #1 de `dos-planos.md` §11, aterrizada. ⚠️ **No la resuelve «como página»** (ver el aviso de arriba) |
+| **D1b** | **¿De quién es el vecino: del CRM, de territorio, o de una identidad canónica?** (§3.5) | Cuatro sistemas ya dicen quién es esa persona. Si no se elige un custodio, el nudo de §3.5 nace con cuatro verdades |
 | **D2** | **¿Goberna trabaja para dos candidatos de la misma elección?** | Si es «sí», el aislamiento duro deja de ser opcional **y hay que poder demostrarlo, no afirmarlo** |
 | **D3** | **La ranura vendida dice «Alcance masivo» y el producto no manda masivo** (§2.5) | Nueve candidaturas ya pagan. O se renombra la ranura, o se entrega otra cosa, o se define qué significa «masivo» dentro de lo que Meta permite (plantillas aprobadas, opt-in) |
 | **D4** | **¿De quién es el dato del vecino** que carga un brigadista, y qué pasa el día después de la elección? | Sin export + borrado verificable escritos, es materia de protección de datos y de normativa electoral peruana |
 | **D5** | **¿Quién paga el WABA y quién es el dueño de la cuenta de Meta?** | Si es de Goberna, un bloqueo cruza campañas. Si es del candidato, el onboarding es más lento y más seguro |
-| **D6** | **El nombre.** «Hermes» es de la Escuela | PROPUESTA: `codigo = 'mensajeria'` (le da software a la fila que ya existe en `fase_3`); nombre de producto a elección — **Heraldo** es hermano semántico de Hermes |
+| **D6** | **El nombre**, que ahora es urgente: es **el rótulo que el candidato lee en su launcher** | «Hermes» es de la Escuela y no dice nada acá. PROPUESTA: `codigo = 'mensajeria'` (le da software a la fila que **ya existe y ya se cobra** en `fase_3`); nombre visible a elección — **Heraldo** es hermano semántico de Hermes |
 
 ---
 
@@ -421,6 +504,10 @@ del dueño. **Un LLM contestando en nombre de un candidato en campaña es una de
 - **Si el compromiso no se puede observar.** Si en una campaña piloto ninguno de los seis hechos de
   §4.2 se registra con volumen, `resultados/` no tiene qué medir y el activo diferencial de Hermes no
   se transfiere. *Prueba: cuántos compromisos por vecino contactado en 60 días.*
+- **Si el nudo no ata.** Si en el peldaño 3b ningún vecino se puede mostrar con sus tres hilos juntos
+  —de qué QR vino, qué contestó, qué dijo por chat—, entonces los sensores de Centurión no describen
+  a la misma gente y «vinculado y conectado» es una promesa de pantalla. *Prueba: cuántos vecinos con
+  ≥2 fuentes resueltas sobre el total de contactados.*
 - **Si la doctrina no generaliza.** Si del candidato 1 al 2 hay que reescribir el 80 % de las piezas,
   no hay activo transversal: hay consultoría con buen tooling. *Prueba: % de piezas reusadas sin código
   nuevo (el gate de generalización de `dos-planos.md` §11.5).*
