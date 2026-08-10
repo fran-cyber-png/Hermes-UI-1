@@ -71,13 +71,18 @@ describe('recortesDeColumna — qué chips se ofrecen', () => {
   test('Cierre y Perdidos no llevan recorte: uno es archivo, el otro es otro frente', () => {
     expect(recortesDeColumna('perdido', RESUMEN, 'todas')).toEqual([]);
     expect(recortesDeColumna('cierre', RESUMEN, 'todas')).toEqual([]);
-    expect(COLUMNAS_CON_RECORTE).toEqual(['sin_respuesta', 'contactado', 'cotizado']);
+    expect(COLUMNAS_CON_RECORTE).toEqual(['interesado', 'contactado', 'cotizado']);
   });
 
-  test('«Sin respuesta» sí lleva recorte: con 2.580 tarjetas es la que más lo necesita', () => {
-    const r = recortesDeColumna('sin_respuesta', { ...RESUMEN, total: 2580, paraSeguir: 310, seCallo: 0 }, 'todas');
+  /**
+   * «Te esperan» heredó el lugar de «Nunca contestaron» cuando esa dejó de ser
+   * columna (decisión del dueño del 10-ago): es la única donde la pelota es
+   * nuestra, así que es donde más vale poder recortar.
+   */
+  test('«Te esperan» lleva recorte: es donde la pelota es nuestra', () => {
+    const r = recortesDeColumna('interesado', { ...RESUMEN, total: 377, paraSeguir: 88, seCallo: 0 }, 'todas');
     expect(r.map((o) => o.id)).toContain('seguir');
-    expect(r.find((o) => o.id === 'seguir')?.n).toBe(310);
+    expect(r.find((o) => o.id === 'seguir')?.n).toBe(88);
   });
 
   test('todos los chips ofrecidos, salvo «Todas», explican qué recortan', () => {
@@ -173,11 +178,11 @@ describe('«Se callaron» — el recorte que el estándar de pipeline pedía', (
     expect(r.find((o) => o.id === 'seCallo')?.n).toBe(540);
   });
 
-  test('🔴 no se ofrece en «Sin respuesta»: ahí nadie habló nunca', () => {
-    // El server ya lo garantiza (`seCalloConElPrecio` exige `hablo`), así que el
-    // conteo da 0 y la regla del cero lo esconde. El test fija que la relación
-    // entre las dos reglas se mantenga.
-    const r = recortesDeColumna('sin_respuesta', { ...VACIO, total: 2580 }, 'todas');
+  test('🔴 no se ofrece donde el conteo da cero, aunque la columna sea enorme', () => {
+    // El server ya lo garantiza (`seCalloConElPrecio` exige `hablo` y un precio),
+    // así que el conteo da 0 y la regla del cero lo esconde. El test fija que la
+    // relación entre las dos reglas se mantenga.
+    const r = recortesDeColumna('interesado', { ...VACIO, total: 2580 }, 'todas');
     expect(r.map((o) => o.id)).not.toContain('seCallo');
   });
 

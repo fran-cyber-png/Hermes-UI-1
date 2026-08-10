@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
+  ArrowRight,
   BadgeDollarSign,
   Check,
   Clock,
@@ -15,7 +16,6 @@ import { useConversaciones, type Conversacion } from '../canales/conversaciones'
 import { ETAPA_ROTULO, type Etapa } from '../../lib/etapas';
 import { decidirDrop, decidirRebote, reintentoTrasInteres } from './compuertas';
 import { ModalInteresCotizado, ModalVentaCierre } from './ModalesCompuerta';
-import { BandejaDeuda } from './BandejaDeuda';
 import { HojaContacto } from '../panel/HojaContacto';
 import { TarjetaEmbudo } from './TarjetaEmbudo';
 import { cotizarEnUnClic } from './tarjeta';
@@ -26,6 +26,7 @@ import {
   quedanPorTraer,
   recortesDeColumna,
   repartirColumnas,
+  resumirBandeja,
   resumirColumna,
   vacioDeColumna,
   type EtapaTrabajo,
@@ -67,19 +68,21 @@ import {
  * sin reflow (es una app de escritorio, no una página) y sin scroll horizontal,
  * que en esta app no existe.
  *
- * ⚠️ **Con la quinta columna la cuenta se volvió ajustada y hay que hacerla.** A
- * 1280 el contenido son ~1.256 px (menos el padding de 12 de cada lado) y los
- * gaps de 8 px se comen 32. Los mínimos suman **1.020**, así que entra con ~200
- * de aire — y el gap bajó de 2.5 a 2 justamente para comprarlo. Si se agrega una
- * columna más, esta cuenta se rehace: no alcanza con sumar otro `minmax`.
+ * ⚠️ **LA CUENTA SE REHIZO EL 10-ago-2026** y sigue dando cinco columnas, pero
+ * son OTRAS cinco: entró «Te esperan» y salió «Nunca contestaron».
+ *
+ * A 1280 el contenido son ~1.256 px (menos el padding de 12 de cada lado) y los
+ * cuatro gaps de 8 px se comen 32. Los mínimos suman **1.060**, así que entra con
+ * ~164 de aire. **Si se agrega una sexta, esta cuenta se rehace**: no alcanza con
+ * sumar otro `minmax`, y es lo que va a pasar con «Llenaron el formulario».
  *
  * El reparto sigue diciendo dónde está el trabajo: las dos columnas donde se
- * vende (Contactados, Cotizados) se llevan el ancho; «Sin respuesta» es grande
- * en cantidad pero sus tarjetas son pobres (no hay curso ni precio que mostrar);
- * Perdidos sigue siendo un cajón.
+ * vende («Contestaron», «Saben el precio») se llevan el ancho, y «Te esperan» va
+ * cerca porque sus tarjetas son las más ricas de la mesa —traen el mensaje que la
+ * persona acaba de mandar—. «Dijeron que no» sigue siendo un cajón.
  */
 const GRID =
-  'grid min-h-0 flex-1 grid-cols-[minmax(205px,0.95fr)_minmax(250px,1.2fr)_minmax(250px,1.2fr)_minmax(185px,0.8fr)_minmax(150px,0.6fr)] gap-2 overflow-x-auto';
+  'grid min-h-0 flex-1 grid-cols-[minmax(225px,1.05fr)_minmax(250px,1.2fr)_minmax(250px,1.2fr)_minmax(185px,0.8fr)_minmax(150px,0.6fr)] gap-2 overflow-x-auto';
 
 /**
  * El ícono de cada recorte. Vive acá y no en `tablero.ts` porque un componente de
@@ -147,13 +150,16 @@ export function VistaEmbudo({
 
   // Cada columna carga LO SUYO (#89) y ahora también SU recorte. El nombre real y
   // el curso del formulario no se piden: la cola los sirve siempre (#72).
-  const sinRespuesta = useConversaciones(opcionesDe('sin_respuesta'));
+  // «Te esperan» es una columna más desde el 10-ago: el server ya la sabía servir
+  // (`interesado` está en ETAPAS_CONSULTABLES), así que no hizo falta tocar nada
+  // del lado de allá — lo que había era una pantalla que no la pedía.
+  const teEsperan = useConversaciones(opcionesDe('interesado'));
   const contactados = useConversaciones(opcionesDe('contactado'));
   const cotizados = useConversaciones(opcionesDe('cotizado'));
   const cierres = useConversaciones(opcionesDe('cierre'));
   const perdidos = useConversaciones(opcionesDe('perdido'));
   const porColumna: Record<EtapaTrabajo, ReturnType<typeof useConversaciones>> = {
-    sin_respuesta: sinRespuesta,
+    interesado: teEsperan,
     contactado: contactados,
     cotizado: cotizados,
     cierre: cierres,
@@ -163,7 +169,7 @@ export function VistaEmbudo({
   // El desglose (conteos reales por etapa × turno × precio) viene en la primera
   // página de cualquier columna: es la MISMA foto, contada una vez.
   const desglose =
-    sinRespuesta.desglose ??
+    teEsperan.desglose ??
     contactados.desglose ??
     cotizados.desglose ??
     cierres.desglose ??
@@ -171,11 +177,18 @@ export function VistaEmbudo({
   // El respaldo mientras el server desplegado no sirva el desglose: el front sale
   // a producción sin reinicio (N4) y el server recién en el botón (N5).
   const conteos =
-    sinRespuesta.conteos ??
+    teEsperan.conteos ??
     contactados.conteos ??
     cotizados.conteos ??
     cierres.conteos ??
     perdidos.conteos;
+
+  /**
+   * El desglose de «Te esperan» — los dos trabajos que la tira mostraba y que
+   * ahora viven en la cabecera de su columna. `resumirBandeja` no se tocó: sigue
+   * siendo la misma función pura, con los mismos tests.
+   */
+  const bandeja = resumirBandeja(desglose, conteos);
 
   const [arrastrada, setArrastrada] = useState<Conversacion | null>(null);
   const [sobre, setSobre] = useState<EtapaTrabajo | null>(null);
@@ -403,13 +416,6 @@ export function VistaEmbudo({
     // right-3`), no al viewport — así respeta el padding del tablero y no se
     // mete abajo de la barra de la cabecera.
     <div className="relative flex min-h-0 flex-1 flex-col p-3">
-      <BandejaDeuda
-        desglose={desglose}
-        conteos={conteos}
-        cargando={cargando}
-        onIrAMensajes={onIrAMensajes}
-      />
-
       <div className="mb-2 flex min-h-4 shrink-0 items-center gap-3 px-1">
         {arrastrada != null && (
           <p className="text-xs text-muted-foreground">
@@ -483,6 +489,7 @@ export function VistaEmbudo({
             const esDestino = sobre === col.id && arrastrada != null;
             const esPerdidos = col.id === 'perdido';
             const esCierre = col.id === 'cierre';
+            const esTeEsperan = col.id === 'interesado';
             const esContactados = col.id === 'contactado';
             const fondo = esDestino ? 'bg-secondary' : esPerdidos ? 'bg-transparent' : 'bg-secondary/50';
             return (
@@ -543,6 +550,50 @@ export function VistaEmbudo({
                     </p>
                   ) : (
                     <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">{col.pista}</p>
+                  )}
+
+                  {/*
+                    LO QUE SE BAJÓ DE LA TIRA. «Te esperan» son DOS trabajos, no
+                    uno: `sin abrir` se abre y `volvieron a escribir` se sigue —
+                    es el porqué con el que nació `BandejaDeuda`, y perderlo al
+                    volverla columna habría sido cambiar un rótulo por un dato.
+                    Va como texto y no como chips a propósito: recortar por esto
+                    pide parámetros nuevos en la cola, y esto es front puro.
+                    ⚠️ `hayDetalle` es false mientras el server no manda desglose
+                    (entre N4 y N5): ahí calla en vez de decir dos ceros.
+                  */}
+                  {esTeEsperan && bandeja.hayDetalle && bandeja.total > 0 && (
+                    <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5 font-mono text-[11px] tabular-nums leading-tight text-muted-foreground">
+                      {bandeja.vivas > 0 && (
+                        <span className="font-semibold text-temp-fresco" title="Escribieron hace menos de 24 h">
+                          {bandeja.vivas.toLocaleString('es-PE')} ahora
+                        </span>
+                      )}
+                      <span title="Nadie les contestó nunca">
+                        {bandeja.nuevas.toLocaleString('es-PE')} sin abrir
+                      </span>
+                      <span aria-hidden className="text-muted-foreground/40">·</span>
+                      <span title="Ya les hablaste y volvieron a escribir">
+                        {bandeja.retomadas.toLocaleString('es-PE')} volvieron
+                      </span>
+                    </p>
+                  )}
+
+                  {/* El botón que vivía en la tira. El trabajo de esta columna NO
+                      se hace arrastrando —se hace respondiendo—, así que la
+                      acción primaria lleva a Mensajes, no al tablero. */}
+                  {esTeEsperan && onIrAMensajes && enEtapa.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={onIrAMensajes}
+                      className="group mt-1.5 inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-1 text-[11px] font-bold text-primary-foreground transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 active:scale-[0.98]"
+                    >
+                      Responder en Mensajes
+                      <ArrowRight
+                        size={11}
+                        className="transition-transform duration-200 ease-house group-hover:translate-x-0.5"
+                      />
+                    </button>
                   )}
 
                   {/*

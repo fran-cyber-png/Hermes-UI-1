@@ -12,32 +12,63 @@ import { ETAPA_ROTULO, type Etapa } from '../../lib/etapas';
  */
 
 /**
- * Las columnas del tablero, en el orden del embudo. Interesado NO está: es
- * bandeja. Cada una lleva su `pista` (qué significa estar acá) y su `vacio` (qué
- * hacer para que deje de estar vacía) — una columna en cero que no explica cómo
- * se llena es la mitad del problema de esta pantalla.
+ * Las columnas del tablero, en el orden del embudo. Cada una lleva su `pista`
+ * (qué significa estar acá) y su `vacio` (qué hacer para que deje de estar
+ * vacía) — una columna en cero que no explica cómo se llena es la mitad del
+ * problema de esta pantalla.
+ *
+ * ⚠️ **El ORDEN de acá no es la ESCALA de `etapaEfectivaSql`** y no tiene por
+ * qué serlo: la escala existe para `max(manual, derivada)` —ahí
+ * `sin_respuesta(0) < interesado(1)`— y esto es presentación. «Te esperan» va
+ * primera porque es donde se empieza el día, no porque sea el peldaño más bajo.
+ *
+ * ══ 🔴 «NUNCA CONTESTARON» NO ES UNA COLUMNA, Y ESO ES DELIBERADO ══════════
+ *
+ * Decisión del dueño del 10-ago-2026: *«para el pipeline es por las puras»*.
+ * Eran **2.575 de 3.971 tarjetas — el 65 % del tablero** — de gente a la que le
+ * escribimos y nunca dijo una palabra. Ocupaban una columna entera de una
+ * pantalla que sirve para decidir a quién atender, y nadie las atendía.
+ *
+ * ⚠️ **La etapa NO se retiró: se retiró la COLUMNA.** `sin_respuesta` se sigue
+ * derivando en el server (ADR 0044), se sigue pudiendo pedir por `?etapa=`,
+ * sigue teniendo su rótulo y se sigue viendo en Mensajes. Lo que hace
+ * `repartirColumnas` con esas tarjetas es no pintarlas — exactamente lo que
+ * hacía con `interesado` antes de hoy. **Sacarla de acá no borra un dato, saca
+ * un montón muerto de la mesa de trabajo.**
+ *
+ * 🔴 **Y no reabre el defecto de ADR 0044**, que es la pregunta obvia: esas
+ * conversaciones no vuelven a inflar Contactados ni Saben el precio, porque su
+ * etapa efectiva sigue siendo `sin_respuesta` en el server. La derivación es la
+ * que las mantiene afuera; esta lista solo decide qué se dibuja.
  */
 export const COLUMNAS_TRABAJO = [
   /**
-   * ══ SIN RESPUESTA — la columna más grande, y la que no existía ═══════════
+   * ══ TE ESPERAN — VUELVE A SER COLUMNA, Y VA PRIMERA ═══════════════════════
    *
-   * Medido el 8-ago-2026: **2.580 de 3.973 conversaciones (65 %)** son «le
-   * escribimos y nunca contestó». Estaban repartidas adentro de Contactados y
-   * Cotizados, inflando las dos: **2.252 de los 3.050 Cotizados nunca dijeron
-   * una palabra**, porque un envío masivo con precio los promovía a todos.
+   * Decisión del dueño del 10-ago-2026, que **revierte #87**: ahí `Interesados`
+   * había dejado de ser columna porque «una pila que nunca se trabaja es ruido»,
+   * y pasó a ser la tira de arriba con su botón a Mensajes.
    *
-   * Es un trabajo REAL y distinto del de las otras columnas: acá no se insiste
-   * con el precio, se cambia el mensaje o el canal. Va primera porque es donde
-   * empieza el embudo cuando la conversación la abrimos nosotros.
+   * Lo que cambió desde entonces es que la pila **dejó de ser indistinta**: hoy
+   * el tablero sabe separar «nunca contestaron» de «te contestaron», así que
+   * esta columna ya no es el cajón de todo lo que no encajaba — es exactamente
+   * *escribieron y la pelota es nuestra*. Y siendo eso, es lo más valioso del
+   * tablero: va **primera**, a la izquierda de «Nunca contestaron».
    *
-   * ⚠️ **No se puede arrastrar acá** (`compuertas.ts`): se deriva de un hecho —no
-   * hay ningún entrante— y deja de ser cierto sola en cuanto la persona escribe.
+   * ⚠️ **La tira de arriba se fue con esto** (`BandejaDeuda` se borró). Lo que
+   * ella mostraba no se pierde: el desglose «sin abrir · volvieron a escribir»
+   * baja a la `pista` de esta columna —`resumirBandeja` sigue calculándolo— y el
+   * botón «Responder en Mensajes» vive ahora en su cabecera.
+   *
+   * ⚠️ **No se puede arrastrar acá**, por lo mismo que a «Nunca contestaron»
+   * (`compuertas.ts`): se deriva de un hecho —escribieron y no les contestamos—
+   * y deja de ser cierto solo, en cuanto la vendedora responde.
    */
   {
-    id: 'sin_respuesta',
-    titulo: ETAPA_ROTULO.sin_respuesta.varios,
-    pista: 'Les escribiste y nunca contestaron.',
-    vacio: 'Acá caen las conversaciones que abrimos nosotros y nadie respondió.',
+    id: 'interesado',
+    titulo: ETAPA_ROTULO.interesado.varios,
+    pista: 'Escribieron y nadie les contestó todavía. La pelota es tuya.',
+    vacio: 'Nadie esperando respuesta. Cuando alguien escriba, aparece acá.',
   },
   {
     id: 'contactado',
@@ -275,12 +306,18 @@ export type Recorte = 'todas' | 'precio' | 'ventana' | 'seguir' | 'seCallo';
 
 /**
  * Las columnas donde recortar tiene sentido. Ver el porqué de Cierre y Perdidos
- * arriba. **«Sin respuesta» sí lleva**: con 2.580 tarjetas es la que más lo
- * necesita — y ahí «Para seguir» significa «hace entre 3 y 14 días que le
- * escribimos y sigue mudo», que es exactamente a quién reintentarle hoy.
+ * arriba. **«Te esperan» hereda el lugar de «Nunca contestaron»** desde que esa
+ * dejó de ser columna: con 377 tarjetas es la segunda más grande y la única
+ * donde la vendedora tiene la pelota, así que es donde más vale poder recortar.
+ *
+ * ⚠️ No se eligió a mano qué ejes se le ofrecen: los cuatro se le pasan y decide
+ * `recortesDeColumna` con la regla del cero. Ahí está el detalle que importa —
+ * casi todos los que te escribieron están **en ventana** (te escribieron recién),
+ * así que ese chip va a dar el TOTAL y **la regla lo esconde sola**, sin que nadie
+ * tenga que acordarse de excluirlo.
  */
 export const COLUMNAS_CON_RECORTE: readonly EtapaTrabajo[] = [
-  'sin_respuesta',
+  'interesado',
   'contactado',
   'cotizado',
 ];

@@ -21,17 +21,37 @@ import {
 const tarjeta = (clave: string, etapa?: string) => ({ clave, etapa_efectiva: etapa });
 
 describe('las columnas de trabajo', () => {
-  test('cada columna pide SU etapa efectiva — interesado sigue sin ser columna (es la bandeja)', () => {
+  test('cada columna pide SU etapa efectiva, y son las cinco que se trabajan', () => {
     expect(COLUMNAS_TRABAJO.map((c) => c.id)).toEqual([
-      // «Sin respuesta» va PRIMERA desde el 8-ago-2026: es donde empieza el
-      // embudo cuando la conversación la abrimos nosotros, y es la más grande
-      // (2.580 de 3.973 medidas en producción).
-      'sin_respuesta',
+      // «Te esperan» va PRIMERA desde el 10-ago-2026 (decisión del dueño, que
+      // revierte #87): es la única columna donde la pelota es NUESTRA, así que
+      // es donde se empieza el día.
+      'interesado',
       'contactado',
       'cotizado',
       'cierre',
       'perdido',
     ]);
+  });
+
+  /**
+   * 🔴 El mismo día, y por la misma decisión: *«para el pipeline es por las
+   * puras»*. Eran 2.575 de 3.971 tarjetas —el 65 % de la mesa— de gente que
+   * nunca dijo una palabra, en una pantalla que sirve para decidir a quién
+   * atender.
+   *
+   * ⚠️ Lo que se retiró es la COLUMNA, no la etapa: el server la sigue
+   * derivando (ADR 0044) y por eso esas conversaciones **no vuelven a inflar**
+   * «Contestaron» ni «Saben el precio». Si alguien la reagrega acá sin querer,
+   * este test se lo dice.
+   */
+  test('🔴 «nunca contestaron» NO es columna: es un montón muerto, no una lista de trabajo', () => {
+    expect(COLUMNAS_TRABAJO.map((c) => c.id)).not.toContain('sin_respuesta');
+  });
+
+  test('una tarjeta «sin respuesta» no se pinta en ninguna columna', () => {
+    const repartidas = repartirColumnas([['contactado', [tarjeta('a', 'sin_respuesta')]]], {});
+    expect([...repartidas.values()].flat()).toEqual([]);
   });
 
   test('🔴 «sin respuesta» NO está en la lista de etapas declarables', async () => {

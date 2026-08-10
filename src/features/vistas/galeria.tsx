@@ -22,9 +22,16 @@ import { VistaEmbudo } from './VistaEmbudo';
 
 const PARAMS = new URLSearchParams(location.search);
 
-/** Las columnas, con la forma real de producción: casi todo vive en Contactados. */
+/**
+ * Las columnas, con la forma real de producción (medida el 10-ago-2026).
+ *
+ * ⚠️ **`sin_respuesta` ya no está**: desde el 10-ago dejó de ser columna
+ * (decisión del dueño — era el 65 % de la mesa y nadie la trabajaba). Sigue
+ * derivándose en el server, así que si alguien la vuelve a poner acá la galería
+ * mentiría sobre lo que la pantalla dibuja.
+ */
 const POR_ETAPA: Record<string, number> = {
-  sin_respuesta: 2580,
+  interesado: 377,
   contactado: 217,
   cotizado: 798,
   cierre: 12,
@@ -37,7 +44,10 @@ const POR_ETAPA: Record<string, number> = {
  * que «Para seguir 82» sea drásticamente más chico que «3.051».
  */
 const POR_RECORTE: Record<string, Record<string, number>> = {
-  sin_respuesta: { ventana: 0, seguir: 310, precio: 0 },
+  // ⚠️ En «Te esperan» el chip «En ventana» daría CASI EL TOTAL —te escribieron
+  // recién, por definición—, y ahí la otra mitad de la regla del cero lo esconde
+  // sola. Está puesto en el TOTAL a propósito: es el caso que hay que poder ver.
+  interesado: { ventana: 377, seguir: 88, precio: 0 },
   contactado: { ventana: 0, seguir: 24, precio: 0 },
   cotizado: { ventana: 2, seguir: 82, precio: 798 },
 };
@@ -55,7 +65,7 @@ const NOMBRES = [
 
 /** Cada columna arranca en otro bloque de números: ver abajo por qué importa. */
 const DESDE: Record<string, number> = {
-  sin_respuesta: 400,
+  interesado: 400,
   contactado: 0,
   cotizado: 100,
   cierre: 200,
@@ -84,9 +94,9 @@ function tarjetas(etapa: string, cuantas: number) {
       numero_propio: '51986394450',
       texto: i % 3 === 0 ? '¿me puede pasar más información del diplomado?' : null,
       contexto_texto: null,
-      // En «sin respuesta» la persona NUNCA escribió: `respondida` es true (el
-      // último saliente le gana a un '-infinity') y el turno no es de nadie.
-      respondida: etapa === 'sin_respuesta' ? true : i % 2 === 0,
+      // En «Te esperan» la pelota es NUESTRA: la persona escribió y nadie le
+      // contestó, así que `respondida` es false — es lo que deriva esa etapa.
+      respondida: etapa === 'interesado' ? false : i % 2 === 0,
       ya_le_hablamos: true,
       // El precio DERIVA la etapa: si la tarjeta tiene precio, está en Cotizados.
       precio_enviado: etapa === 'cotizado',
@@ -122,8 +132,19 @@ function tarjetas(etapa: string, cuantas: number) {
 
 /** El desglose que alimenta la bandeja y los conteos por columna. */
 const DESGLOSE = [
-  { etapa: 'interesado', yaLeHablamos: false, precio: false, viva: true, n: 218 },
-  { etapa: 'interesado', yaLeHablamos: true, precio: false, viva: false, n: 258 },
+  // «Te esperan» es columna desde el 10-ago, así que estas dos filas ya no
+  // alimentan una tira: alimentan su cabecera («sin abrir» vs «volvieron») y su
+  // conteo. `ventana: true` en las dos es lo real —te acaban de escribir— y es
+  // lo que hace que el chip «En ventana» dé el total y la regla lo esconda.
+  // Las «sin abrir» son 238 y solo una parte está escribiendo AHORA (<24 h). Van
+  // en dos filas para que los tres números de la cabecera sean distintos: con
+  // `viva` en las 238, decía «238 ahora · 238 sin abrir» y se leía como un bug.
+  // ⚠️ En producción hoy `vivas` es 0 —hace días que no escribe nadie—, así que
+  // ese segmento no se dibuja; acá se siembra para poder verlo.
+  { etapa: 'interesado', yaLeHablamos: false, precio: false, viva: true, ventana: true, paraSeguir: false, n: 12 },
+  { etapa: 'interesado', yaLeHablamos: false, precio: false, viva: false, ventana: true, paraSeguir: false, n: 226 },
+  { etapa: 'interesado', yaLeHablamos: true, precio: false, viva: false, ventana: true, paraSeguir: true, n: 88 },
+  { etapa: 'interesado', yaLeHablamos: true, precio: false, viva: false, ventana: true, paraSeguir: false, n: 51 },
   // ⚠️ Desde el 8-ago-2026 NINGUNA fila de `contactado` puede tener `precio`:
   // `precio_enviado` deriva `cotizado` (`cola/etapaEfectivaSql.ts`), así que esa
   // combinación ya no existe. Por eso el chip «Con precio» desaparece de
@@ -131,8 +152,6 @@ const DESGLOSE = [
   // Los números son los MEDIDOS en producción el 8-ago-2026 (ver `POR_RECORTE`):
   // «en ventana» deja 0 de 544 y 2 de 3.051 —por eso ese chip casi no aparece— y
   // «para seguir» es el único que recorta de verdad.
-  { etapa: 'sin_respuesta', yaLeHablamos: true, precio: true, viva: false, ventana: false, paraSeguir: true, n: 310 },
-  { etapa: 'sin_respuesta', yaLeHablamos: true, precio: true, viva: false, ventana: false, paraSeguir: false, n: 2270 },
   { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, ventana: false, paraSeguir: true, n: 24 },
   { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, ventana: false, paraSeguir: false, n: 193 },
   { etapa: 'cotizado', yaLeHablamos: true, precio: true, viva: false, ventana: true, paraSeguir: false, n: 2 },
@@ -183,7 +202,7 @@ window.fetch = (async (entrada: RequestInfo | URL) => {
      */
     const recorte = ['ventana', 'seguir', 'precio'].find((r) => q.get(r) === '1');
     const total = recorte ? (POR_RECORTE[etapa]?.[recorte] ?? 0) : (POR_ETAPA[etapa] ?? 0);
-    const cuantas = Math.min(total, etapa === 'contactado' || etapa === 'sin_respuesta' ? 8 : 4);
+    const cuantas = Math.min(total, etapa === 'contactado' || etapa === 'interesado' ? 8 : 4);
     return respuesta({
       conversaciones: tarjetas(etapa, cuantas),
       total,
@@ -254,7 +273,10 @@ createRoot(document.getElementById('galeria')!).render(
   <StrictMode>
     <QueryClientProvider client={qc}>
       <div className="flex h-dvh flex-col bg-background text-foreground">
-        <VistaEmbudo onAbrir={() => {}} />
+        {/* `onIrAMensajes` va aunque no haga nada: sin él, «Te esperan» no dibuja
+            su botón y la captura no probaría que el atajo de la tira sobrevivió
+            al volverse columna. */}
+        <VistaEmbudo onAbrir={() => {}} onIrAMensajes={() => {}} />
       </div>
     </QueryClientProvider>
   </StrictMode>,
