@@ -1,6 +1,8 @@
 import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { db as DbSingleton } from '../db/client.js';
 import { gestiones, notas } from '../db/schema.js';
+import { puedeEditar, type QuienPregunta } from '../espacios/visibilidad.js';
+import { visibleParaSql } from '../espacios/visibilidadSql.js';
 import { aTextoPlano } from './textoPlano.js';
 
 /**
@@ -8,11 +10,24 @@ import { aTextoPlano } from './textoPlano.js';
  * de verdad (harness #33), como `cola/consultarCola.ts`: recibe `db` INYECTADO —
  * el router le pasa el singleton, el test su base de prueba.
  *
- * V1 es POR AUTORA: una nota no se comparte con otra vendedora, ni siquiera las
- * ancladas a una conversación (a diferencia de `etiquetas`, que sí son del
- * equipo). Por eso `listarNotas` y `buscarNotas` filtran SIEMPRE por
- * `vendedoraId` — promover a «del equipo» es otro frente (issue #47, fuera de
- * alcance).
+ * ══ YA NO ES «POR AUTORA» — ES POR ESPACIO (ADR 0046) ═══════════════════════
+ *
+ * Acá decía que v1 es **por autora** y que promoverlo a «del equipo» era otro
+ * frente. Ese frente es éste. Ahora quién ve una página lo decide su
+ * `espacio_id`, y la regla vive entera en `espacios/visibilidad.ts` (pura) con su
+ * gemelo `visibleParaSql`:
+ *
+ *     se ve  ⟺  (espacio_id IS NULL ∧ autora = yo)   ← la libreta privada
+ *            ∨  (espacio_id = E     ∧ soy miembro)   ← un espacio
+ *
+ * ⚠️ **Sobre una página privada la regla nueva da exactamente lo mismo que la
+ * vieja**, así que nadie pierde el candado que tenía: `espacio_id IS NULL` exige
+ * ser la autora. Lo que cambia es que en un espacio compartido la autoría deja de
+ * ser el candado — si lo siguiera siendo, un espacio del equipo sería una carpeta
+ * de solo lectura para todos menos uno.
+ *
+ * `vendedoraId` sigue siendo **quién la escribió**: es lo que la pantalla muestra
+ * («la tocó Sindy») y contra lo que se cuenta el uso. Ya no es quién la ve.
  */
 
 export const LIMITE_TEXTO = 2000;
@@ -114,6 +129,12 @@ export interface NotaListada {
   editadoAt: Date | null;
   archivadoAt: Date | null;
   origen: 'nota' | 'gestion';
+  /**
+   * DÓNDE VIVE (ADR 0046). `null` = la libreta privada de su autora. En una
+   * histórica de `gestiones` es SIEMPRE null y no puede ser otra cosa: esas
+   * filas no tienen columna donde ponerlo.
+   */
+  espacioId: number | null;
 }
 
 /**
@@ -143,24 +164,54 @@ async function listarNotasHistoricas(
       editadoAt: null,
       archivadoAt: null,
       origen: 'gestion' as const,
+      espacioId: null,
     }));
 }
 
 /**
- * Vivas de una conversación (o de la libreta 'general'), de ESTA vendedora —
- * fijada primero, luego más nueva primero. Mezcla las notas nuevas (editables)
- * con las históricas de `gestiones` (solo lectura) — ver `NotaListada`.
+ * Vivas de una conversación (o de la libreta 'general') — fijada primero, luego
+ * más nueva primero. Mezcla las notas nuevas (editables) con las históricas de
+ * `gestiones` (solo lectura) — ver `NotaListada`.
+ *
+ * ══ QUÉ DECIDE `espacioId` ══════════════════════════════════════════════════
+ *
+ *   · **ausente o `null`** → la libreta PRIVADA de quien pregunta
+ *     (`espacio_id IS NULL AND vendedora_id = yo`). Es, carácter por carácter, lo
+ *     que esta función hacía antes de ADR 0046: un front viejo que no manda el
+ *     parámetro sigue viendo exactamente lo suyo.
+ *   · **un número** → las páginas de ESE espacio, sin importar quién las escribió.
+ *
+ * ⚠️ **La membresía se verifica ARRIBA, en la ruta**, y esta función confía. No es
+ * descuido: acá no hay a quién preguntarle sin volver a la base, y duplicar el
+ * chequeo daría dos lugares decidiendo lo mismo (#37). Lo que sí es
+ * responsabilidad de acá es no inventar un tercer camino — por eso solo hay dos
+ * ramas y ninguna acepta «todas».
+ *
+ * ⚠️ **Las históricas de `gestiones` NO entran a un espacio.** Viven en otra tabla,
+ * son de solo lectura y siguen siendo por autora: se mezclan solo cuando se pide
+ * la libreta privada. En un espacio compartido, mostrarlas sería servir las notas
+ * de gestión de una vendedora a todo el equipo por la puerta de atrás.
  */
 export async function listarNotas(
   base: typeof DbSingleton,
-  opciones: { clave: string; vendedoraId: string },
+  opciones: { clave: string; vendedoraId: string; espacioId?: number | null },
 ): Promise<NotaListada[]> {
+  const espacioId = opciones.espacioId ?? null;
+
   const [nuevas, historicas] = await Promise.all([
     base
       .select()
       .from(notas)
-      .where(and(eq(notas.clave, opciones.clave), eq(notas.vendedoraId, opciones.vendedoraId), isNull(notas.archivadoAt))),
-    listarNotasHistoricas(base, opciones),
+      .where(
+        and(
+          eq(notas.clave, opciones.clave),
+          isNull(notas.archivadoAt),
+          espacioId === null
+            ? and(isNull(notas.espacioId), eq(notas.vendedoraId, opciones.vendedoraId))
+            : eq(notas.espacioId, espacioId),
+        ),
+      ),
+    espacioId === null ? listarNotasHistoricas(base, opciones) : Promise.resolve([]),
   ]);
 
   const combinadas: NotaListada[] = [...nuevas.map((n) => ({ ...n, origen: 'nota' as const })), ...historicas];
@@ -174,12 +225,31 @@ export async function listarNotas(
 }
 
 /**
- * Búsqueda GIN sobre la libreta ('general') de ESTA vendedora. La expresión
- * `to_tsvector('spanish', texto)` es la misma que indexa el GIN manual (ver
- * `docs/deploy-vps1.md`): sin el índice, Postgres igual contesta bien — degrada
- * a seq scan, no revienta.
+ * Búsqueda GIN sobre TODO lo que esta persona puede ver: su libreta privada y
+ * las páginas de sus espacios.
+ *
+ * ══ SE SACÓ EL `clave = 'general'`, Y ERA DEUDA ANOTADA ═════════════════════
+ *
+ * Estaba clavado acá (`eq(notas.clave, 'general')`) y lo dejaba afuera todo lo
+ * anotado dentro de una conversación — el punto 11 de
+ * `plan-libreta-que-deberia-tener.md`, que decía que el conjunto oculto tenía
+ * tamaño cero y que con espacios pasaría a ser real. Pasó a ser real: buscar en
+ * la libreta y no encontrar la página del equipo sería la peor forma de
+ * compartir, porque no se ve que falta nada.
+ *
+ * ⚠️ **El GIN no hay que reindexarlo**: es `to_tsvector('spanish', texto)` y no
+ * lleva `clave` ni `espacio_id` adentro, así que la expresión indexada no cambió.
+ * Sin el índice Postgres igual contesta bien — degrada a seq scan, no revienta.
+ *
+ * 🔴 **El filtro de visibilidad NO se puede olvidar acá.** Es la puerta más fácil
+ * de la fuga: sin él, escribir «precio» en el buscador devuelve la libreta
+ * privada de las cinco vendedoras. Por eso el `WHERE` lo arma `visibleParaSql`,
+ * la misma regla que el listado, y no un predicado escrito a mano.
  */
-export async function buscarNotas(base: typeof DbSingleton, opciones: { vendedoraId: string; q: string }): Promise<NotaFila[]> {
+export async function buscarNotas(
+  base: typeof DbSingleton,
+  opciones: { quien: QuienPregunta; q: string },
+): Promise<NotaFila[]> {
   const termino = opciones.q.trim();
   if (!termino) return [];
   return base
@@ -187,8 +257,7 @@ export async function buscarNotas(base: typeof DbSingleton, opciones: { vendedor
     .from(notas)
     .where(
       and(
-        eq(notas.vendedoraId, opciones.vendedoraId),
-        eq(notas.clave, 'general'),
+        visibleParaSql(opciones.quien),
         isNull(notas.archivadoAt),
         sql`to_tsvector('spanish', ${notas.texto}) @@ plainto_tsquery('spanish', ${termino})`,
       ),
@@ -203,13 +272,17 @@ export async function buscarNotas(base: typeof DbSingleton, opciones: { vendedor
  */
 export async function crearNota(
   base: typeof DbSingleton,
-  datos: { clave: string; vendedoraId: string; texto: string; doc?: unknown },
+  datos: { clave: string; vendedoraId: string; texto: string; doc?: unknown; espacioId?: number | null },
 ): Promise<NotaFila> {
   const { clave, vendedoraId } = datos;
+  // `espacioId` va SIEMPRE, y `null` es un valor con significado («mi libreta»),
+  // no la ausencia de uno. Por eso no se omite como `doc`: omitirlo lo dejaría al
+  // default de la columna, que hoy es null y mañana podría no serlo.
+  const espacioId = datos.espacioId ?? null;
   const valores =
     datos.doc === undefined
-      ? { clave, vendedoraId, texto: datos.texto }
-      : { clave, vendedoraId, texto: aTextoPlano(datos.doc), doc: datos.doc };
+      ? { clave, vendedoraId, texto: datos.texto, espacioId }
+      : { clave, vendedoraId, texto: aTextoPlano(datos.doc), doc: datos.doc, espacioId };
 
   const [fila] = await base.insert(notas).values(valores).returning();
   return fila;
@@ -217,14 +290,31 @@ export async function crearNota(
 
 export type ResultadoMutacion = { ok: true; nota: NotaFila } | { ok: false; motivo: 'no-encontrada' | 'prohibido' };
 
-/** Solo la autora edita — si no, 403 (`prohibido`). Una nota archivada ya no se toca. */
+/**
+ * ¿PUEDE TOCAR ESTA PÁGINA? — la guarda que comparten las tres mutaciones.
+ *
+ * Antes de ADR 0046 esto era `existente.vendedoraId !== opciones.vendedoraId` en
+ * los tres cuerpos, escrito tres veces. Ahora la regla vive una vez y pura
+ * (`espacios/visibilidad.ts`): con tres copias, la próxima mutación que se agregue
+ * va a copiar la que esté más cerca, y basta que una quede con la regla vieja
+ * para que un espacio compartido sea de solo lectura en esa operación.
+ */
+function noPuedeTocar(existente: { vendedoraId: string; espacioId: number | null }, quien: QuienPregunta): boolean {
+  return !puedeEditar({ vendedoraId: existente.vendedoraId, espacioId: existente.espacioId }, quien);
+}
+
+/**
+ * Edita — **cualquier miembro del espacio**, no solo la autora (ADR 0046). Sobre
+ * una página privada la regla es idéntica a la vieja. Una nota archivada no se
+ * toca.
+ */
 export async function editarNota(
   base: typeof DbSingleton,
-  opciones: { id: number; vendedoraId: string; cambios: CambiosEdicion },
+  opciones: { id: number; quien: QuienPregunta; cambios: CambiosEdicion },
 ): Promise<ResultadoMutacion> {
   const [existente] = await base.select().from(notas).where(eq(notas.id, opciones.id));
   if (!existente || existente.archivadoAt) return { ok: false, motivo: 'no-encontrada' };
-  if (existente.vendedoraId !== opciones.vendedoraId) return { ok: false, motivo: 'prohibido' };
+  if (noPuedeTocar(existente, opciones.quien)) return { ok: false, motivo: 'prohibido' };
 
   const [fila] = await base.update(notas).set(opciones.cambios).where(eq(notas.id, opciones.id)).returning();
   return { ok: true, nota: fila };
@@ -233,11 +323,11 @@ export async function editarNota(
 /** Setea `archivado_at`. No hay DELETE físico — la fila sigue en la base. */
 export async function archivarNota(
   base: typeof DbSingleton,
-  opciones: { id: number; vendedoraId: string; ahora: Date },
+  opciones: { id: number; quien: QuienPregunta; ahora: Date },
 ): Promise<ResultadoMutacion> {
   const [existente] = await base.select().from(notas).where(eq(notas.id, opciones.id));
   if (!existente || existente.archivadoAt) return { ok: false, motivo: 'no-encontrada' };
-  if (existente.vendedoraId !== opciones.vendedoraId) return { ok: false, motivo: 'prohibido' };
+  if (noPuedeTocar(existente, opciones.quien)) return { ok: false, motivo: 'prohibido' };
 
   const [fila] = await base.update(notas).set({ archivadoAt: opciones.ahora }).where(eq(notas.id, opciones.id)).returning();
   return { ok: true, nota: fila };
@@ -250,11 +340,11 @@ export async function archivarNota(
  */
 export async function desarchivarNota(
   base: typeof DbSingleton,
-  opciones: { id: number; vendedoraId: string },
+  opciones: { id: number; quien: QuienPregunta },
 ): Promise<ResultadoMutacion> {
   const [existente] = await base.select().from(notas).where(eq(notas.id, opciones.id));
   if (!existente || !existente.archivadoAt) return { ok: false, motivo: 'no-encontrada' };
-  if (existente.vendedoraId !== opciones.vendedoraId) return { ok: false, motivo: 'prohibido' };
+  if (noPuedeTocar(existente, opciones.quien)) return { ok: false, motivo: 'prohibido' };
 
   const [fila] = await base.update(notas).set({ archivadoAt: null }).where(eq(notas.id, opciones.id)).returning();
   return { ok: true, nota: fila };

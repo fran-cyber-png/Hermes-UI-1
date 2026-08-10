@@ -11,6 +11,12 @@ Continúa `docs/plan-pipeline-funcional.md`, que trataba la PANTALLA. Éste trat
 estados existen y por qué. Todo lo que sigue está medido en producción el 8-ago-2026; donde hay un
 número hay una consulta detrás, y donde no lo hay está dicho que es una opinión.
 
+> **Sigue en `docs/plan-visualizacion-de-leads.md`** (9-ago), que trata **la DATA y el DIBUJO**: la
+> auditoría de las 26.165 filas de `leads` —el canal del #4 de acá, medido dimensión por dimensión—,
+> la arquitectura visual del front y con qué piezas se muestra. Ahí está el dato que reordena la
+> discusión: **el Pipeline dice «13 Cierre» y la data de leads tiene 348 ventas posteriores al
+> formulario.**
+
 ---
 
 ## 1. Por dónde llegan los datos, de verdad

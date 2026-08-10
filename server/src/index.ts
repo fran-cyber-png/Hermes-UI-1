@@ -32,6 +32,7 @@ import { capturarCuerpoCrudo } from "./webhook/firma.js";
 import { landingRouter } from "./webhook/landing.js";
 import { correosRouter } from "./routes/correos.js";
 import { notasRouter } from "./routes/notas.js";
+import { espaciosRouter } from "./routes/espacios.js";
 import { ventaRouter } from "./routes/venta.js";
 import { leadsRouter } from "./routes/leads.js";
 import { metaAssetsRouter } from "./routes/metaAssets.js";
@@ -107,7 +108,8 @@ app.use("/api/hechos", hechosRouter); // los datos recomendados: la munición de
 app.use("/api/dashboard", dashboardRouter); // el radar: leads cayendo + números por vendedora
 app.use("/webhook/landing", landingRouter); // los leads de las landings, reenviados por Bravo
 app.use("/api/correos", correosRouter); // email 1-a-1, auditado — sin listas, sin campañas
-app.use("/api/notas", notasRouter); // el «Notion» a una tecla — editable, por autora, no deriva nada
+app.use("/api/notas", notasRouter); // el «Notion» a una tecla — editable, no deriva nada
+app.use("/api/espacios", espaciosRouter); // dónde vive cada página: mi libreta o un espacio del equipo (ADR 0046)
 app.use("/api/venta", ventaRouter); // el formulario de venta dentro de Hermes
 app.use("/api/interactions", interactionsRouter);
 app.use("/api/conversaciones", conversacionesRouter); // la cola unificada: una fila por conversación

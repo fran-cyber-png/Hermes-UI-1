@@ -1,4 +1,7 @@
 import { sql } from "drizzle-orm";
+// Los espacios viven en su propio archivo (como `reparto.ts` y `padron.ts`), pero
+// acá se IMPORTAN además de re-exportarse: `notas.espacio_id` los referencia.
+import { espacios } from "./espacios.js";
 import {
   bigint,
   bigserial,
@@ -872,8 +875,9 @@ export const categorias = pgTable(
  *
  * `clave` ancla la nota a una conversación (`conv:…` / `int:…` / `lead:…`) o vale
  * `'general'` para la libreta personal de la vendedora (atajo «n», sin `clave`).
- * `vendedoraId` es la autora: v1 es por autora, no se comparte con el equipo
- * (a diferencia de `etiquetas`) — promoverlo a «del equipo» es otro frente.
+ * `vendedoraId` es **la autora**, y desde ADR 0046 ya no es quién la ve: eso lo
+ * decide `espacioId` (ver abajo). Sigue siendo quién la escribió, que es lo que
+ * la pantalla muestra y contra lo que se cuenta el uso.
  */
 export const notas = pgTable(
   "notas",
@@ -881,6 +885,26 @@ export const notas = pgTable(
     id: bigserial({ mode: "number" }).primaryKey(),
     clave: text("clave").notNull(),
     vendedoraId: text("vendedora_id").notNull(),
+    /**
+     * DÓNDE VIVE LA PÁGINA, y por lo tanto QUIÉN LA VE (ADR 0046).
+     *
+     * 🔴 **`null` significa «mi libreta privada», no «sin clasificar».** La regla
+     * entera es:
+     *
+     *     se ve  ⟺  (espacio_id IS NULL ∧ vendedora_id = yo)
+     *            ∨  (espacio_id = E     ∧ soy miembro de E)
+     *
+     * Es nullable a propósito y no por transición: sembrar un espacio privado por
+     * persona habría costado un backfill sobre filas que ya significan lo
+     * correcto, una escritura adentro de un GET (leer no escribe), y la propiedad
+     * de que **sin la migración esto degrada exactamente a la libreta de hoy**.
+     *
+     * ⚠️ Es un EJE DISTINTO de `clave`, y no se colapsan: `clave` dice a QUÉ está
+     * anclada la nota (una conversación, o la libreta), `espacioId` dice quién la
+     * ve. Una nota anclada a una conversación puede vivir en un espacio del
+     * equipo, y la libreta personal sigue siendo `clave = 'general'`.
+     */
+    espacioId: bigint("espacio_id", { mode: "number" }).references(() => espacios.id),
     /**
      * EL TEXTO PLANO, y desde la Libreta es una columna DERIVADA: cuando hay
      * `doc`, esto es `aTextoPlano(doc)` (`notas/textoPlano.ts`) escrito en el
@@ -911,6 +935,12 @@ export const notas = pgTable(
   (t) => [
     index("notas_clave_idx").on(t.clave, t.creadoAt),
     index("notas_vendedora_idx").on(t.vendedoraId, t.creadoAt),
+    // «Las páginas de este espacio», la consulta de la vista compartida. PARCIAL
+    // porque la otra mitad de la tabla (la libreta privada, `espacio_id IS NULL`)
+    // ya entra por `notas_vendedora_idx` y no tiene nada que hacer acá.
+    index("notas_espacio_idx")
+      .on(t.espacioId, t.creadoAt)
+      .where(sql`${t.espacioId} is not null`),
     // La búsqueda de la libreta es GIN sobre to_tsvector('spanish', texto). drizzle-kit
     // sigue sin emitirlo (no hay expression index para tsvector en el pg-core de
     // drizzle-orm 0.45), pero ya NO se crea a mano: vive escrito en la migración
@@ -1469,3 +1499,8 @@ export { repartoRueda, conversacionAsignada } from "./reparto.js";
 // nunca). A diferencia del de arriba, acá el recorte SÍ es una frontera: la
 // vendedora ve lo habilitado y nada más — ver `db/padron.ts` y `padron/supervisor.ts`.
 export { contactoHabilitado } from "./padron.js";
+
+// Los espacios de trabajo de la Libreta (ADR 0046): lo que hace que una página
+// se pueda compartir. `notas.espacio_id IS NULL` es «mi libreta privada».
+// Es la TERCERA frontera del repo, no un filtro — ver `db/espacios.ts`.
+export { espacios, espacioMiembro } from "./espacios.js";

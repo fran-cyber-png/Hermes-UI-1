@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
 import { requiereVendedora } from '../auth/sesion.js';
+import { espaciosDe } from '../espacios/repositorio.js';
+import { puedeEscribirEn, type QuienPregunta } from '../espacios/visibilidad.js';
 import type { NotaFila } from '../notas/notas.js';
 import {
   archivarNota,
@@ -21,6 +23,36 @@ import {
  */
 function conOrigenNota(fila: NotaFila) {
   return { ...fila, origen: 'nota' as const };
+}
+
+/**
+ * QUIÉN PREGUNTA — el token más los espacios de los que es miembro (ADR 0046).
+ *
+ * Se resuelve en CADA request y no se cachea en el proceso: sacar a alguien de un
+ * espacio tiene que dejar de servirle las páginas en el request siguiente, no
+ * cuando venza un TTL. Es una consulta por un índice sobre `lower(vendedora_id)`.
+ *
+ * ⚠️ Si la tabla no existe (falta la migración `0022`), `espaciosDe` devuelve `[]`
+ * y la regla colapsa a «solo mi libreta privada»: la Libreta de antes de este
+ * frente. Degrada hacia MENOS, nunca hacia más.
+ */
+async function quienPregunta(vendedoraId: string): Promise<QuienPregunta> {
+  return { vendedoraId, espacios: await espaciosDe(db, vendedoraId) };
+}
+
+/**
+ * El `?espacio=` de la query. `null` = mi libreta privada (y es el default, así
+ * que un front viejo sigue viendo exactamente lo suyo).
+ *
+ * Un valor que no es un entero **no cae en silencio a la libreta privada**:
+ * responde `'invalido'`. Sin eso, `?espacio=abc` mostraría las páginas propias
+ * con el título del espacio compartido arriba — la peor forma de fallar, porque
+ * se ve bien.
+ */
+function espacioPedido(valor: unknown): number | null | 'invalido' {
+  if (valor === undefined || valor === '') return null;
+  const n = Number(valor);
+  return Number.isInteger(n) && n > 0 ? n : 'invalido';
 }
 
 /**
@@ -56,15 +88,17 @@ export const notasRouter = Router();
 notasRouter.use(requiereVendedora);
 
 /**
- * GET /api/notas?clave=<clave>  → notas vivas de esa conversación (o 'general'),
- * DE ESTA VENDEDORA (v1 es por autora — no se comparte ni siquiera en una
- * conversación que atendieron dos personas: ver `notas/notas.ts`).
- * GET /api/notas?q=<texto>      → búsqueda GIN sobre SU libreta ('general').
+ * GET /api/notas?clave=<clave>              → mi libreta privada de esa ancla.
+ * GET /api/notas?clave=<clave>&espacio=<id> → las páginas de ESE espacio.
+ * GET /api/notas?q=<texto>                  → búsqueda sobre TODO lo visible
+ *                                             (mi libreta + mis espacios).
  */
 notasRouter.get('/', async (req, res) => {
+  const quien = await quienPregunta(req.vendedoraId!);
+
   const q = typeof req.query.q === 'string' ? req.query.q : '';
   if (q.trim()) {
-    const filas = await buscarNotas(db, { vendedoraId: req.vendedoraId!, q });
+    const filas = await buscarNotas(db, { quien, q });
     res.json({ notas: filas.map(conOrigenNota) });
     return;
   }
@@ -74,8 +108,24 @@ notasRouter.get('/', async (req, res) => {
     res.status(400).json({ ok: false, message: 'falta clave (o q para buscar)' });
     return;
   }
+
+  const espacioId = espacioPedido(req.query.espacio);
+  if (espacioId === 'invalido') {
+    res.status(400).json({ ok: false, message: 'espacio inválido' });
+    return;
+  }
+  // 🔴 LA MEMBRESÍA SE VERIFICA ACÁ, ANTES DE CONSULTAR. `listarNotas` confía en
+  // este chequeo a propósito (con dos, habría dos lugares decidiendo lo mismo),
+  // así que si esta guarda se cae, un `?espacio=7` a mano sirve las páginas de un
+  // equipo del que no sos parte. Es 403 y no una lista vacía: «no sos miembro» y
+  // «el espacio está vacío» son cosas distintas y se leen distinto.
+  if (espacioId !== null && !quien.espacios.includes(espacioId)) {
+    res.status(403).json({ ok: false, message: 'no sos miembro de ese espacio' });
+    return;
+  }
+
   // Ya viene con `origen` — listarNotas mezcla lo editable con lo histórico de gestiones.
-  const notas = await listarNotas(db, { clave, vendedoraId: req.vendedoraId! });
+  const notas = await listarNotas(db, { clave, vendedoraId: req.vendedoraId!, espacioId });
   res.json({ notas });
 });
 
@@ -97,10 +147,27 @@ notasRouter.post('/', async (req, res) => {
     res.status(400).json({ ok: false, message: v.motivo });
     return;
   }
+
+  const espacioId = espacioPedido(req.body?.espacioId);
+  if (espacioId === 'invalido') {
+    res.status(400).json({ ok: false, message: 'espacio inválido' });
+    return;
+  }
+  // 🔴 LA FRONTERA TAMBIÉN VA DEL LADO DE LA ESCRITURA. Sin esto, cualquiera
+  // PLANTA una página adentro del espacio de otro equipo mandando un número en el
+  // body — un agujero que no se ve mirando solo la lectura, porque la lista de
+  // ese equipo la mostraría como una página más y de nadie.
+  const quien = await quienPregunta(req.vendedoraId!);
+  if (!puedeEscribirEn(espacioId, quien)) {
+    res.status(403).json({ ok: false, message: 'no sos miembro de ese espacio' });
+    return;
+  }
+
   const nota = await crearNota(db, {
     clave,
     vendedoraId: req.vendedoraId!,
     texto: v.texto,
+    espacioId,
     ...(req.body?.doc !== undefined ? { doc: req.body.doc } : {}),
   });
   res.json({ ok: true, nota: conOrigenNota(nota) });
@@ -117,7 +184,7 @@ notasRouter.patch('/:id', async (req, res) => {
     res.status(400).json({ ok: false, message: preparado.motivo });
     return;
   }
-  const r = await editarNota(db, { id, vendedoraId: req.vendedoraId!, cambios: preparado.cambios });
+  const r = await editarNota(db, { id, quien: await quienPregunta(req.vendedoraId!), cambios: preparado.cambios });
   if (!r.ok && r.motivo === 'no-encontrada') {
     res.status(404).json({ ok: false, message: 'la nota no existe (o ya está archivada)' });
     return;
@@ -135,7 +202,7 @@ notasRouter.patch('/:id/archivar', async (req, res) => {
     res.status(400).json({ ok: false, message: 'id inválido' });
     return;
   }
-  const r = await archivarNota(db, { id, vendedoraId: req.vendedoraId!, ahora: new Date() });
+  const r = await archivarNota(db, { id, quien: await quienPregunta(req.vendedoraId!), ahora: new Date() });
   if (!r.ok && r.motivo === 'no-encontrada') {
     res.status(404).json({ ok: false, message: 'la nota no existe (o ya estaba archivada)' });
     return;
@@ -158,7 +225,7 @@ notasRouter.patch('/:id/desarchivar', async (req, res) => {
     res.status(400).json({ ok: false, message: 'id inválido' });
     return;
   }
-  const r = await desarchivarNota(db, { id, vendedoraId: req.vendedoraId! });
+  const r = await desarchivarNota(db, { id, quien: await quienPregunta(req.vendedoraId!) });
   if (!r.ok && r.motivo === 'no-encontrada') {
     res.status(404).json({ ok: false, message: 'la nota no existe (o no estaba archivada)' });
     return;

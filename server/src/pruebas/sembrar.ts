@@ -3,6 +3,8 @@ import {
   conversionesWa,
   enviosWa,
   estadoConversacion,
+  espacioMiembro,
+  espacios,
   etiquetas,
   events,
   gestiones,
@@ -333,9 +335,11 @@ export interface NotaSembrada {
   texto?: string;
   fijada?: boolean;
   archivadoAt?: Date | null;
+  /** Dónde vive (ADR 0046). Ausente o `null` = la libreta PRIVADA de su autora. */
+  espacioId?: number | null;
 }
 
-/** Siembra una nota (#47). Por defecto viva, sin fijar, en la libreta 'general'. */
+/** Siembra una nota (#47). Por defecto viva, sin fijar, en la libreta privada 'general'. */
 export async function sembrarNota(db: DbDePrueba, n: NotaSembrada = {}): Promise<number> {
   const [fila] = await db
     .insert(notas)
@@ -345,8 +349,38 @@ export async function sembrarNota(db: DbDePrueba, n: NotaSembrada = {}): Promise
       texto: n.texto ?? "nota de prueba",
       fijada: n.fijada ?? false,
       archivadoAt: n.archivadoAt ?? null,
+      espacioId: n.espacioId ?? null,
     })
     .returning({ id: notas.id });
+
+  return fila.id;
+}
+
+export interface EspacioSembrado {
+  nombre?: string;
+  creadaPor?: string;
+  /** Los miembros. La creadora entra sola, como en `crearEspacio`. */
+  miembros?: readonly string[];
+}
+
+/**
+ * Siembra un espacio con sus miembros (ADR 0046). Devuelve el id.
+ *
+ * La creadora se agrega sola por lo mismo que en producción: un espacio del que
+ * su creadora no es miembro es invisible para ella e imposible de administrar.
+ */
+export async function sembrarEspacio(db: DbDePrueba, e: EspacioSembrado = {}): Promise<number> {
+  const creadaPor = e.creadaPor ?? "vendedora-prueba";
+  const [fila] = await db
+    .insert(espacios)
+    .values({ nombre: e.nombre ?? "espacio de prueba", creadaPor })
+    .returning({ id: espacios.id });
+
+  const todos = [...new Set([creadaPor, ...(e.miembros ?? [])].map((m) => m.trim()).filter(Boolean))];
+  await db
+    .insert(espacioMiembro)
+    .values(todos.map((vendedoraId) => ({ espacioId: fila.id, vendedoraId, agregadoPor: creadaPor })))
+    .onConflictDoNothing();
 
   return fila.id;
 }

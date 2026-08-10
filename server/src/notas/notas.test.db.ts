@@ -7,11 +7,24 @@ import { archivarNota, buscarNotas, crearNota, desarchivarNota, editarNota, list
 /**
  * Tests con base (#33) de la lógica de notas (#47): crear → editar (setea
  * `editadoAt`) → archivar (sigue en la base) → desarchivar (el camino de
- * vuelta); guarda de autora; búsqueda por término sobre la libreta de CADA
- * vendedora; y la mezcla con las notas históricas de `gestiones` (ADR 0012 —
- * retirar el textarea de `RegistrarGestion` no puede volver invisible lo que
- * ya estaba guardado ahí).
+ * vuelta); guarda de autora; búsqueda por término; y la mezcla con las notas
+ * históricas de `gestiones` (ADR 0012 — retirar el textarea de
+ * `RegistrarGestion` no puede volver invisible lo que ya estaba guardado ahí).
+ *
+ * Los de ESPACIOS (ADR 0046) viven aparte, en `espacios/visibilidad.paridad.test.db.ts`:
+ * lo que este archivo fija es que **la libreta privada siguió funcionando igual**
+ * después de que la regla cambiara de «solo la autora» a «miembro del espacio».
  */
+
+/**
+ * QUIEN NO ESTÁ EN NINGÚN ESPACIO — que es el caso de toda la libreta de siempre.
+ *
+ * Existe para que estos tests digan literalmente lo que protegen: **sin espacios,
+ * la regla nueva tiene que dar exactamente lo mismo que la vieja**. Si alguno de
+ * estos se pusiera rojo, el frente de espacios le rompió algo a la libreta
+ * privada, que es lo único que hoy tiene filas en producción.
+ */
+const sola = (vendedoraId: string) => ({ vendedoraId, espacios: [] as number[] });
 
 test('crearNota nace sin editar, viva, y aparece en listarNotas de su autora', async (t) => {
   const db = await baseDePrueba(t);
@@ -32,7 +45,7 @@ test('editarNota setea editadoAt y cambia el texto', async (t) => {
   const id = await sembrarNota(db, { vendedoraId: 'ana', texto: 'typo: pgaa el viernes' });
 
   const ahora = new Date('2026-07-23T12:00:00Z');
-  const r = await editarNota(db, { id, vendedoraId: 'ana', cambios: { texto: 'paga el viernes', editadoAt: ahora } });
+  const r = await editarNota(db, { id, quien: sola('ana'), cambios: { texto: 'paga el viernes', editadoAt: ahora } });
 
   assert.equal(r.ok, true);
   assert.equal(r.ok && r.nota.texto, 'paga el viernes');
@@ -43,7 +56,7 @@ test('editarNota con otra vendedora_id devuelve prohibido — no toca la fila', 
   const db = await baseDePrueba(t);
   const id = await sembrarNota(db, { vendedoraId: 'ana', texto: 'original' });
 
-  const r = await editarNota(db, { id, vendedoraId: 'beto', cambios: { texto: 'hackeado', editadoAt: new Date() } });
+  const r = await editarNota(db, { id, quien: sola('beto'), cambios: { texto: 'hackeado', editadoAt: new Date() } });
   assert.equal(r.ok, false);
   assert.equal(!r.ok && r.motivo, 'prohibido');
 
@@ -56,7 +69,7 @@ test('archivarNota setea archivado_at y la nota SIGUE en la base (no hay DELETE 
   const id = await sembrarNota(db, { vendedoraId: 'ana', clave: 'general' });
 
   const ahora = new Date('2026-07-23T13:00:00Z');
-  const r = await archivarNota(db, { id, vendedoraId: 'ana', ahora });
+  const r = await archivarNota(db, { id, quien: sola('ana'), ahora });
   assert.equal(r.ok, true);
   assert.equal(r.ok && r.nota.archivadoAt?.toISOString(), ahora.toISOString());
 
@@ -73,7 +86,7 @@ test('archivarNota con otra vendedora_id devuelve prohibido', async (t) => {
   const db = await baseDePrueba(t);
   const id = await sembrarNota(db, { vendedoraId: 'ana' });
 
-  const r = await archivarNota(db, { id, vendedoraId: 'beto', ahora: new Date() });
+  const r = await archivarNota(db, { id, quien: sola('beto'), ahora: new Date() });
   assert.equal(r.ok, false);
   assert.equal(!r.ok && r.motivo, 'prohibido');
 });
@@ -90,35 +103,49 @@ test('listarNotas: fijada primero, luego creado_at desc', async (t) => {
   assert.equal(lista[2].texto, 'vieja, no fijada');
 });
 
-test('buscarNotas devuelve por término, solo de la libreta general de esa vendedora', async (t) => {
+test('buscarNotas devuelve por término, y NUNCA lo de otra vendedora', async (t) => {
   const db = await baseDePrueba(t);
   await sembrarNota(db, { vendedoraId: 'ana', clave: 'general', texto: 'pagó con Yape el jueves' });
   await sembrarNota(db, { vendedoraId: 'ana', clave: 'general', texto: 'no tiene nada que ver' });
-  // Misma palabra, pero de OTRA vendedora — no debe salir en la búsqueda de ana.
+  // 🔴 Misma palabra, pero de OTRA vendedora. Es la fuga que este test cuida: sin
+  // el filtro de visibilidad, escribir «yape» en el buscador devuelve la libreta
+  // privada de las cinco.
   await sembrarNota(db, { vendedoraId: 'beto', clave: 'general', texto: 'pagó con Yape también' });
-  // Misma palabra, pero anclada a una conversación (no a la libreta) — tampoco debe salir.
-  await sembrarNota(db, { vendedoraId: 'ana', clave: 'conv:whatsapp:519:519', texto: 'pagó con Yape acá' });
 
-  const encontradas = await buscarNotas(db, { vendedoraId: 'ana', q: 'yape' });
+  const encontradas = await buscarNotas(db, { quien: sola('ana'), q: 'yape' });
   assert.equal(encontradas.length, 1);
   assert.equal(encontradas[0].texto, 'pagó con Yape el jueves');
+});
+
+test('buscarNotas YA NO está clavada a clave=general: encuentra lo anotado en una conversación', async (t) => {
+  // Cambio deliberado de ADR 0046 (era el punto 11 de `plan-libreta-que-deberia-tener.md`).
+  // El `eq(notas.clave, 'general')` dejaba afuera todo lo anotado dentro de un
+  // chat: buscar y no encontrarlo es la peor forma de fallar, porque no se ve
+  // que falta nada. El GIN no se reindexa — es `to_tsvector('spanish', texto)` y
+  // nunca tuvo `clave` adentro.
+  const db = await baseDePrueba(t);
+  await sembrarNota(db, { vendedoraId: 'ana', clave: 'conv:whatsapp:519:519', texto: 'pagó con Yape acá' });
+
+  const encontradas = await buscarNotas(db, { quien: sola('ana'), q: 'yape' });
+  assert.equal(encontradas.length, 1, 'lo anotado en la conversación ahora se encuentra');
+  assert.equal(encontradas[0].clave, 'conv:whatsapp:519:519');
 });
 
 test('buscarNotas no revienta sin GIN (el harness no lo crea a mano — igual contesta bien, solo más lento)', async (t) => {
   const db = await baseDePrueba(t);
   await sembrarNota(db, { vendedoraId: 'ana', clave: 'general', texto: 'reunión el lunes' });
 
-  const encontradas = await buscarNotas(db, { vendedoraId: 'ana', q: 'reunión' });
+  const encontradas = await buscarNotas(db, { quien: sola('ana'), q: 'reunión' });
   assert.equal(encontradas.length, 1);
 });
 
 test('desarchivarNota deshace un archivado — la nota vuelve a listarNotas', async (t) => {
   const db = await baseDePrueba(t);
   const id = await sembrarNota(db, { vendedoraId: 'ana', clave: 'general', texto: 'no era para archivar' });
-  await archivarNota(db, { id, vendedoraId: 'ana', ahora: new Date() });
+  await archivarNota(db, { id, quien: sola('ana'), ahora: new Date() });
   assert.equal((await listarNotas(db, { clave: 'general', vendedoraId: 'ana' })).length, 0, 'archivada: no sale');
 
-  const r = await desarchivarNota(db, { id, vendedoraId: 'ana' });
+  const r = await desarchivarNota(db, { id, quien: sola('ana') });
   assert.equal(r.ok, true);
   assert.equal(r.ok && r.nota.archivadoAt, null);
 
@@ -130,9 +157,9 @@ test('desarchivarNota deshace un archivado — la nota vuelve a listarNotas', as
 test('desarchivarNota con otra vendedora_id devuelve prohibido — no la revive', async (t) => {
   const db = await baseDePrueba(t);
   const id = await sembrarNota(db, { vendedoraId: 'ana', clave: 'general' });
-  await archivarNota(db, { id, vendedoraId: 'ana', ahora: new Date() });
+  await archivarNota(db, { id, quien: sola('ana'), ahora: new Date() });
 
-  const r = await desarchivarNota(db, { id, vendedoraId: 'beto' });
+  const r = await desarchivarNota(db, { id, quien: sola('beto') });
   assert.equal(r.ok, false);
   assert.equal(!r.ok && r.motivo, 'prohibido');
   assert.equal((await listarNotas(db, { clave: 'general', vendedoraId: 'ana' })).length, 0, 'sigue archivada');
@@ -142,7 +169,7 @@ test('desarchivarNota sobre una nota que NO está archivada devuelve no-encontra
   const db = await baseDePrueba(t);
   const id = await sembrarNota(db, { vendedoraId: 'ana', clave: 'general' });
 
-  const r = await desarchivarNota(db, { id, vendedoraId: 'ana' });
+  const r = await desarchivarNota(db, { id, quien: sola('ana') });
   assert.equal(r.ok, false);
   assert.equal(!r.ok && r.motivo, 'no-encontrada');
 });
