@@ -1866,6 +1866,39 @@ Frente 2 en **ADR 0025** (modelo aprobado, sin schema); el 3 no está.
   catálogo). ⚠️ Las primeras semanas el corpus va a ser casi 100 % línea de base. **La primera pregunta que
   esto responde no es «¿cuál funciona?» sino «¿alguien las está usando?».**
 
+### Cuánto se mandó con una plantilla — en la plantilla (ADR 0052)
+
+La campaña del foro dejó **1.004 filas** en `envios_wa` y **ninguna pantalla las mostraba**. Ahora el conteo
+vive en la tarjeta de la plantilla (Contactos → Campañas → Plantillas): `campana/enviosDePlantilla.ts` +
+`GET /api/campana/plantillas/envios`, front puro en `campana/envios.ts`.
+
+- 🔴 **«CUÁNTOS SALIERON» Y «DE CUÁNTOS SE PUEDE MEDIR» SON DOS NÚMEROS**, y confundirlos ya mintió una vez.
+  `foro_estado_5_ago` guarda `referencia = conv:whatsapp:…` (medible) y **`promo_3x1_cursos` guarda
+  `campana:promo_3x1_cursos:<tel>`**, que `consultarEnvios` no ve porque filtra `conv:%` — con razón: sin
+  conversación no hay dónde mirar la respuesta. Contando desde ahí, la tarjeta decía «todavía no se mandó
+  ninguna vez» sobre **88 envíos reales**. Por eso `contarIntentos` mira `envios_wa` **entero** y `medibles`
+  viaja al lado de `salieron`. ⚠️ Son **290 de 1.778** los envíos sin clave `conv:` (89 `campana:` + 201
+  `bot-auto-conv:`). Candado con base: `enviosDePlantilla.test.db.ts`.
+- 🔴 **NO se backfillea `corridas_campana`**: esa tabla responde «quién AUTORIZÓ», y esa campaña salió por
+  script. Escribirle una fila sería falsificar la firma que existe para auditar. «Quién mandó qué» sigue
+  vacía **y sigue diciendo la verdad**.
+- 🔴 **Los tres estados se dibujan distinto** (`queDibujar`, puro y con test): **no se pudo contar → NADA**
+  (un «0 envíos» invita a remandar una campaña que ya salió a mil personas) · no está en la respuesta →
+  «todavía no se mandó» (cero de verdad) · está → los números. La ruta contesta **502**, jamás lista vacía.
+- ⚠️ **Agrupa por plantilla y NO por versión** —el rollup que `resultados/agregar.ts` declara posible como
+  decisión explícita—, así que `versiones` viaja para poder decir «con 2 textos distintos». Un
+  `version: null` **no cuenta como texto**. `loQuePaso` y `medir` se reusan: el test de paridad cruza la suma
+  contra `agregar()`.
+- ⚠️ **La pantalla NO dice cuál gana**: pone la plantilla y la línea de base al lado. Afirmarlo pide
+  `leGanaClaramente` (intervalos que no se tocan) y el navegador no tiene con qué. Hay test que prohíbe
+  «mejor», «peor», «gana» y «supera», como `medicion.test.ts` prohíbe las palabras causales.
+- **Medido el 10-ago-2026**: foro **3 % (26/1.000)** contra **16 % (76/471)** de lo escrito a mano, 0 etapas
+  avanzadas y 0 ventas. Y de los 1.004 **no se sabe cuántos llegaron**: `estado_entrega` es `null` en las
+  1.778 filas porque los ✓✓ entraron el 7-ago (`6199fda`) y la campaña es del 5–6. **No hay backfill.**
+- Ver sin server: `node scratchpad/stub-campanas.mjs` + `VITE_API_URL=http://localhost:4199 npx vite --port
+  5199` → `/galeria-campanas.html?seccion=plantillas` (sirve los valores REALES de prod).
+  Captura: `docs/evidencia/campana-envios-de-la-plantilla.png`.
+
 ## Interés derivado del anuncio — el lead ya llegó diciendo qué quiere
 
 `server/src/cursos/` traduce el texto con el que llegó la persona a una **familia de curso** y lo propone en
