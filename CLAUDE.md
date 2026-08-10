@@ -214,8 +214,12 @@ Hermes: `src/features/navegador/` (vista ⌘9) + comandos `navegador_*` en `src-
 - 🔴 **La escalera tiene TRES peldaños**: (1) cáscara con el embebido → el viewport de adentro;
   (2) cáscara vieja con `abrir_navegador` → la ventana aparte de ADR 0040; (3) fuera de Tauri → el
   navegador del sistema. **El peldaño se decide con el PRIMER INTENTO REAL, nunca preguntando si estamos
-  en Tauri** (adentro de una cáscara vieja el puente existe y el comando no). **Hasta que se reparta una
-  cáscara nueva, las cuatro máquinas ven exactamente ADR 0040.**
+  en Tauri** (adentro de una cáscara vieja el puente existe y el comando no).
+  ⚠️ **Y las máquinas están repartidas en DOS peldaños distintos** (10-ago-2026): el Mac de Estephano
+  corre la cáscara **0.3.0** y ve el peldaño 1 — verificado comparando binarios, los diez comandos
+  `navegador_*` están en el instalado y **ninguno** estaba en el 0.2.0 del 7-ago. **Las tres máquinas de
+  las vendedoras siguen en ADR 0040 y no pueden salir de ahí**: son Windows, y el `.exe` no compila desde
+  el 4-ago. O sea que el peldaño 2 no es transitorio — es lo que ve el equipo que vende.
 
 ## Instagram y Facebook — nunca se enchufó el caño (ADR 0042)
 
