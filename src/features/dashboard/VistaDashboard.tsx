@@ -8,7 +8,7 @@ import { useSelloDeViejo } from '../../lib/datos/useSelloDeViejo';
 import { SelloDeAntes } from '../../components/SelloDeAntes';
 import { tempBorde, tempClass } from '../../lib/formato';
 import { kicker, sectionLabel } from '../../lib/styles';
-import { ETAPAS, ETAPA_CHIP, colorSegmento } from '../../lib/etapas';
+import { ETAPAS, ETAPA_CHIP, colorSegmento, rotuloEtapa } from '../../lib/etapas';
 import { Columnas } from '../../components/graficos/Columnas';
 import { BarraSegmentada } from '../../components/graficos/BarraSegmentada';
 import { Chispa } from '../../components/graficos/Chispa';
@@ -525,9 +525,9 @@ export function VistaDashboard({
               <button
                 type="button"
                 onClick={() => setEtapaFiltro(null)}
-                className="flex items-center gap-1 rounded-full bg-navy px-2.5 py-0.5 text-[11px] font-semibold capitalize text-white"
+                className="flex items-center gap-1 rounded-full bg-navy px-2.5 py-0.5 text-[11px] font-semibold text-white"
               >
-                {etapaFiltro} <X size={10} />
+                {rotuloEtapa(etapaFiltro, 'varios')} <X size={10} />
               </button>
             )}
 
@@ -751,8 +751,12 @@ export function VistaDashboard({
                           >
                             {hace(horas)}
                           </span>
-                          <span className={'rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ' + (ETAPA_CHIP[etapa] ?? ETAPA_CHIP.interesado)}>
-                            {etapa}
+                          {/* El chip de UNA conversación: singular, y por el rótulo
+                              canónico — antes pintaba el IDENTIFICADOR crudo con un
+                              `capitalize` de CSS, que con ids de una palabra se veía
+                              bien de casualidad. */}
+                          <span className={'rounded-full px-2 py-0.5 text-[11px] font-semibold ' + (ETAPA_CHIP[etapa] ?? ETAPA_CHIP.interesado)}>
+                            {rotuloEtapa(etapa)}
                           </span>
                         </span>
                       </div>
@@ -877,7 +881,13 @@ export function VistaDashboard({
               <>
                 <BarraSegmentada
                   className="mt-2.5"
-                  segmentos={ETAPAS.map((e, i) => ({ id: e, n: data?.embudo[e] ?? 0, color: colorSegmento(e, i) }))}
+                  segmentos={ETAPAS.map((e, i) => ({
+                    id: e,
+                    n: data?.embudo[e] ?? 0,
+                    color: colorSegmento(e, i),
+                    // Sin esto el `title` y el `aria-label` de la barra dicen el id.
+                    label: rotuloEtapa(e, 'varios'),
+                  }))}
                   activo={etapaFiltro}
                   onSegmento={(id) => setEtapaFiltro(etapaFiltro === id ? null : id)}
                 />

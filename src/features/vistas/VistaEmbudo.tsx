@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { useConversaciones, type Conversacion } from '../canales/conversaciones';
-import type { Etapa } from '../../lib/etapas';
+import { ETAPA_ROTULO, type Etapa } from '../../lib/etapas';
 import { decidirDrop, decidirRebote, reintentoTrasInteres } from './compuertas';
 import { ModalInteresCotizado, ModalVentaCierre } from './ModalesCompuerta';
 import { BandejaDeuda } from './BandejaDeuda';
@@ -413,9 +413,9 @@ export function VistaEmbudo({
       <div className="mb-2 flex min-h-4 shrink-0 items-center gap-3 px-1">
         {arrastrada != null && (
           <p className="text-xs text-muted-foreground">
-            A <span className="font-semibold">Cotizados</span> con curso de interés; a{' '}
-            <span className="font-semibold">Cierre</span>, registrando la venta. Si falta algo, se
-            pide al soltar.
+            A <span className="font-semibold">{ETAPA_ROTULO.cotizado.varios}</span> con curso de
+            interés; a <span className="font-semibold">{ETAPA_ROTULO.cierre.varios}</span>,
+            registrando la venta. Si falta algo, se pide al soltar.
           </p>
         )}
       </div>
@@ -464,7 +464,7 @@ export function VistaEmbudo({
           <p className="text-sm font-semibold text-foreground">El embudo está vacío.</p>
           <p className="max-w-sm text-xs text-muted-foreground">
             Cuando alguien escriba por WhatsApp, Facebook o Instagram, cae solo en la bandeja — y al
-            responderle, pasa solo a Contactados.
+            responderle, pasa solo a «{ETAPA_ROTULO.contactado.varios}».
           </p>
         </div>
       ) : (

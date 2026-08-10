@@ -106,7 +106,7 @@ export function ModalInteresCotizado({
     >
       <div className="space-y-3 p-5">
         <p className="text-sm text-foreground">
-          Para pasar a <b>{nombre.texto}</b> a Cotizados hay que registrar qué curso le interesa — no
+          Para que <b>{nombre.texto}</b> sepa el precio hay que registrar qué curso le interesa — no
           se cotiza lo que no se sabe qué es.
         </p>
 
@@ -138,8 +138,8 @@ export function ModalInteresCotizado({
             cuál de los dos casos le tocó, así que el texto cubre los dos. */}
         <p className="text-xs text-muted-foreground">
           {sugerido?.hayQueRegistrar
-            ? 'O buscá otro curso: al guardarlo, la tarjeta pasa sola a Cotizados.'
-            : 'Confirmá el curso con el que llegó, o buscalo y agregalo: al guardarlo, la tarjeta pasa sola a Cotizados.'}
+            ? 'O buscá otro curso: al guardarlo, la tarjeta pasa sola a «Saben el precio».'
+            : 'Confirmá el curso con el que llegó, o buscalo y agregalo: al guardarlo, la tarjeta pasa sola a «Saben el precio».'}
         </p>
         <Intereses clave={c.clave} senalAbrir={1} onAgregado={onGuardado} />
       </div>

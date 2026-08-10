@@ -391,15 +391,17 @@ export function TarjetaEmbudo({
               }}
               title={
                 unClic
-                  ? `Marcar cotizado por «${unClic.etiqueta}»`
-                  : 'Marcar cotizado — te va a pedir el curso'
+                  ? `Marcar que ya sabe el precio de «${unClic.etiqueta}»`
+                  : 'Marcar que ya sabe el precio — te va a pedir el curso'
               }
               // Quieta por defecto: son 611 tarjetas con este botón y 611 CTAs
               // gritando son ruido. Se enciende al pasar por encima.
               className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-px text-[11px] font-bold text-primary/70 transition-[background-color,color,transform] duration-200 ease-house group-hover:bg-primary/10 group-hover:text-primary focus-visible:bg-primary/10 focus-visible:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.97] disabled:opacity-50"
             >
               {cotizando ? <Loader2 size={10} className="animate-spin" /> : <GraduationCap size={10} />}
-              Cotizado
+              {/* El botón es un ATAJO a la columna, así que dice el nombre de la
+                  columna en singular — no un verbo que no está en ningún lado. */}
+              Sabe el precio
             </button>
           )}
         </div>

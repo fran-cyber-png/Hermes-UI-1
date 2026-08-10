@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlarmClock, Check, Loader2, Plus, Tag, X } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { usePopover } from '../../lib/teclado/usePopover';
+import { rotuloEtapa } from '../../lib/etapas';
 import type { Conversacion } from '../canales/conversaciones';
 import { opcionesRapidas, useAgenda } from '../agenda/agenda';
 import { PasarConversacion } from '../reparto/PasarConversacion';
@@ -33,11 +34,20 @@ import {
  * la toalla.
  */
 
+/**
+ * Los cuatro peldaños que una persona puede DECLARAR, en singular: acá se habla
+ * de UNA conversación. `perdido` sigue afuera a propósito — vive fuera del
+ * segmented porque pide confirmación (ver abajo).
+ *
+ * Los rótulos salen de `lib/etapas` y no de acá: eran una de las cinco copias
+ * que se unificaron, y con dos listas el Pipeline decía «Saben el precio»
+ * mientras esta barra decía «Cotizado» sobre la misma conversación.
+ */
 const ETAPAS_BARRA = [
-  { id: 'interesado', label: 'Interesado' },
-  { id: 'contactado', label: 'Contactado' },
-  { id: 'cotizado', label: 'Cotizado' },
-  { id: 'cierre', label: 'Cierre' },
+  { id: 'interesado', label: rotuloEtapa('interesado') },
+  { id: 'contactado', label: rotuloEtapa('contactado') },
+  { id: 'cotizado', label: rotuloEtapa('cotizado') },
+  { id: 'cierre', label: rotuloEtapa('cierre') },
 ] as const;
 
 /**
@@ -407,10 +417,12 @@ export function BarraGestion({
           {/* Perdido, fuera del segmented: no es una etapa más — pide confirmación. */}
           <span className="ml-1 flex items-center border-l border-border pl-1">
             {etapaActual === 'perdido' ? (
-              <span className="rounded-full bg-destructive px-2 py-0.5 text-[11px] font-semibold text-white">Perdido</span>
+              <span className="rounded-full bg-destructive px-2 py-0.5 text-[11px] font-semibold text-white">
+                {rotuloEtapa('perdido')}
+              </span>
             ) : confirmaPerdido ? (
               <span className="flex items-center gap-1 px-1 text-[11px] font-semibold">
-                <span className="text-muted-foreground">¿Perdido?</span>
+                <span className="text-muted-foreground">¿{rotuloEtapa('perdido')}?</span>
                 <button
                   type="button"
                   disabled={mover.isPending}
@@ -437,7 +449,7 @@ export function BarraGestion({
                 onClick={() => setConfirmaPerdido(true)}
                 className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-destructive"
               >
-                Perdido
+                {rotuloEtapa('perdido')}
               </button>
             )}
           </span>

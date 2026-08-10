@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { arrastrar, montar, reposar, tocar, type Montado } from '../../pruebas/dom';
 import type { Conversacion } from '../canales/conversaciones';
 import { TarjetaEmbudo } from './TarjetaEmbudo';
+import { ETAPA_ROTULO } from '../../lib/etapas';
 
 /**
  * LA TARJETA CLICKEABLE, ADENTRO DE UNA TARJETA ARRASTRABLE.
@@ -104,15 +105,17 @@ describe('TarjetaEmbudo — el clic que abre la ficha', () => {
     expect(onFicha).not.toHaveBeenCalled();
   });
 
-  it('el botón «Cotizado» asienta el interés y NO abre además la ficha', () => {
+  it('el botón del atajo asienta el interés y NO abre además la ficha', () => {
     const onCotizar = vi.fn();
     const { contenedor, onFicha } = pintar({
       c: { ...BASE, precio_enviado: true, interes_curso: 'Inteligencia y Contrainteligencia' },
       onCotizar,
     });
 
+    // Por el rótulo canónico y no por una copia literal: este test se rompió al
+    // unificar los nombres, que es justo lo que no tiene que volver a pasar.
     const boton = [...contenedor.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('Cotizado'),
+      b.textContent?.includes(ETAPA_ROTULO.cotizado.uno),
     );
     expect(boton).toBeDefined();
     tocar(boton!);

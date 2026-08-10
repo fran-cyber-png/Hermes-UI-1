@@ -6,6 +6,7 @@ import { sectionLabel } from '../../lib/styles';
 import type { Conversacion } from '../canales/conversaciones';
 import { opcionesRapidas } from '../agenda/agenda';
 import { useNotas } from '../notas/notas';
+import { rotuloEtapa } from '../../lib/etapas';
 
 /**
  * PRÓXIMA ACCIÓN — la bitácora comercial en el panel derecho.
@@ -20,14 +21,6 @@ import { useNotas } from '../notas/notas';
  * embudo. El preview de «última nota» del cintillo de abajo ahora lee de ahí,
  * no de `gestiones.notas` (ver ADR 0012).
  */
-
-const ETAPA_LABEL: Record<string, string> = {
-  interesado: 'Interesado',
-  contactado: 'Contactado',
-  cotizado: 'Cotizado',
-  cierre: 'Cierre',
-  perdido: 'Perdido',
-};
 
 const ACCIONES = [
   { id: 'wsp', label: 'Wsp seguimiento' },
@@ -132,7 +125,8 @@ export function RegistrarGestion({
 
   const etapaChip = (
     <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-[11px] font-semibold text-secondary-foreground">
-      {etapaActual ? (ETAPA_LABEL[etapaActual] ?? etapaActual) : 'Sin gestión'}
+      {/* Una conversación, no un montón: singular. `rotuloEtapa` ya degrada al id. */}
+      {etapaActual ? rotuloEtapa(etapaActual) : 'Sin gestión'}
     </span>
   );
   const disparador = (

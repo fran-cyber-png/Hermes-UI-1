@@ -4,7 +4,7 @@ import { AlertTriangle, CalendarPlus, Check, Copy, Loader2, Megaphone, Plus, Sea
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { sectionLabel } from '../../lib/styles';
 import { useEscape } from '../../lib/teclado/useEscape';
-import { ETAPAS, colorSegmento } from '../../lib/etapas';
+import { ETAPAS, colorSegmento, rotuloEtapa } from '../../lib/etapas';
 import { BarraSegmentada } from '../../components/graficos/BarraSegmentada';
 import { useDashboard } from '../dashboard/dashboard';
 import { useCrearVenta, useFormularioVenta, useProductos, type ProductoCurso } from './useVenta';
@@ -15,14 +15,6 @@ const ORIGEN_POR_CANAL: Record<string, { id: string; nombre: string }> = {
   whatsapp: { id: 'whatsapp', nombre: 'WhatsApp' },
   facebook: { id: 'facebook', nombre: 'Facebook' },
   instagram: { id: 'instagram', nombre: 'Instagram' },
-};
-
-const ETAPA_LABEL: Record<string, string> = {
-  interesado: 'Interesado',
-  contactado: 'Contactado',
-  cotizado: 'Cotizado',
-  cierre: 'Cierre',
-  perdido: 'Perdido',
 };
 
 /**
@@ -186,7 +178,8 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
           id: e,
           n: (saved.embudo?.[e] ?? 0) + (e === 'cierre' ? 1 : 0),
           color: colorSegmento(e, i),
-          label: ETAPA_LABEL[e],
+          // El mini-embudo cuenta montones, no personas: «Compraron», no «Compró».
+          label: rotuloEtapa(e, 'varios'),
         }))
       : null;
 

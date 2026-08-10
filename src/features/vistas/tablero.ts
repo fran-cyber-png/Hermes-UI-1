@@ -1,4 +1,4 @@
-import type { Etapa } from '../../lib/etapas';
+import { ETAPA_ROTULO, type Etapa } from '../../lib/etapas';
 
 /**
  * EL TABLERO HONESTO (#90) — la lógica pura del Pipeline, sin DOM.
@@ -35,33 +35,33 @@ export const COLUMNAS_TRABAJO = [
    */
   {
     id: 'sin_respuesta',
-    titulo: 'Sin respuesta',
+    titulo: ETAPA_ROTULO.sin_respuesta.varios,
     pista: 'Les escribiste y nunca contestaron.',
     vacio: 'Acá caen las conversaciones que abrimos nosotros y nadie respondió.',
   },
   {
     id: 'contactado',
-    titulo: 'Contactados',
-    pista: 'Les hablaste y no volvieron. Se llena solo.',
-    vacio: 'Cuando le respondas a alguien, aparece acá.',
+    titulo: ETAPA_ROTULO.contactado.varios,
+    pista: 'Te contestaron y todavía no les pasaste el precio. Se llena solo.',
+    vacio: 'Cuando alguien te conteste, aparece acá.',
   },
   {
     id: 'cotizado',
-    titulo: 'Cotizados',
-    pista: 'Saben el precio y el curso.',
-    vacio: 'Marcá «Cotizado» en una tarjeta con precio enviado, o arrastrala acá.',
+    titulo: ETAPA_ROTULO.cotizado.varios,
+    pista: 'Hablaron y ya les llegó el precio.',
+    vacio: 'Mandá el precio en una conversación con curso registrado, o arrastrala acá.',
   },
   {
     id: 'cierre',
-    titulo: 'Cierre',
+    titulo: ETAPA_ROTULO.cierre.varios,
     pista: 'No se declara: se gana con la venta.',
     vacio: 'Registrá la venta desde la ficha y la tarjeta llega sola.',
   },
   {
     id: 'perdido',
-    titulo: 'Perdidos',
+    titulo: ETAPA_ROTULO.perdido.varios,
     pista: 'Lo dijiste vos. No vuelve solo.',
-    vacio: 'Nada descartado.',
+    vacio: 'Nadie dijo que no.',
   },
 ] as const;
 

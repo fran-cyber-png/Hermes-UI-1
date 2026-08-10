@@ -1,5 +1,6 @@
 import { ArrowRight, Inbox } from 'lucide-react';
 import { resumirBandeja, type FilaDesglose } from './tablero';
+import { ETAPA_ROTULO } from '../../lib/etapas';
 
 /**
  * LA BANDEJA — la deuda de la mesa, dicha como es.
@@ -37,7 +38,7 @@ export function BandejaDeuda({
 
   return (
     <section
-      aria-label="Te esperan"
+      aria-label={ETAPA_ROTULO.interesado.varios}
       className="mb-2.5 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5 rounded-2xl bg-card px-4 py-2.5 shadow-panel"
     >
       <Inbox size={16} className="shrink-0 text-navy" aria-hidden />
@@ -48,7 +49,9 @@ export function BandejaDeuda({
             {listo ? r.total.toLocaleString('es-PE') : '—'}
           </span>
           <h3 className="font-heading text-[13px] font-bold text-foreground">
-            {vacia ? 'Nadie esperando' : 'Te esperan'}
+            {/* La bandeja ES la etapa `interesado`, dicha en plural. Sale del mapa
+                canónico para que el chip de la ficha diga lo mismo. */}
+            {vacia ? 'Nadie esperando' : ETAPA_ROTULO.interesado.varios}
           </h3>
           {!vacia && r.total > 0 && !r.hayDetalle && (
             <span className="text-[11px] text-muted-foreground">
