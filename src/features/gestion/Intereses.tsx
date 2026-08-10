@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronRight, Megaphone, Plus, X } from 'lucide-react';
 import { api } from '../../lib/datos/cliente';
+import { ETAPA_ROTULO } from '../../lib/etapas';
 import {
   agruparInteresesPorDia,
   normalizarIntereses,
@@ -220,7 +221,9 @@ export function Intereses({
         </p>
       )}
       {(agregar.isError || quitar.isError) && (
-        <p className="mt-1 text-[11px] text-destructive">No se guardó el interés — sin esto, Cotizado no abre.</p>
+        <p className="mt-1 text-[11px] text-destructive">
+          No se guardó el interés — sin esto, «{ETAPA_ROTULO.cotizado.varios}» no abre.
+        </p>
       )}
 
       {abierto && (

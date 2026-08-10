@@ -3,6 +3,7 @@ import { AlertTriangle, ChevronDown } from 'lucide-react';
 import { BarraSegmentada } from '../../components/graficos/BarraSegmentada';
 import { LineasHora } from '../../components/graficos/LineasHora';
 import { sectionLabel } from '../../lib/styles';
+import { ETAPA_ROTULO } from '../../lib/etapas';
 import {
   CLAVES_PERIODO,
   HORA_APERTURA,
@@ -350,10 +351,11 @@ export function PanelNegocio({
                 <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-warning-foreground">
                   <AlertTriangle size={12} className="mt-0.5 shrink-0 text-warning" />
                   <span>
-                    <span className="font-mono tabular-nums">{datos.subregistro.cotizados}</span> cotizados asentados contra{' '}
+                    <span className="font-mono tabular-nums">{datos.subregistro.cotizados}</span> asentadas a mano contra{' '}
                     <span className="font-mono tabular-nums">{datos.subregistro.precio_mencionado}</span> conversaciones donde
-                    se mencionó un precio: la compuerta de Cotizado pide tipear el interés a mano, así que esta columna está{' '}
-                    <b>subregistrada</b>. Lo de la derecha es una estimación por el texto, no una cotización asentada.
+                    se mencionó un precio: la compuerta de «{ETAPA_ROTULO.cotizado.varios}» pide tipear el interés a mano, así
+                    que esta columna está <b>subregistrada</b>. Lo de la derecha es una estimación por el texto, no una
+                    cotización asentada.
                   </span>
                 </p>
               )}
@@ -398,10 +400,28 @@ export function PanelNegocio({
                   <th scope="col" className="w-24 px-2 py-1.5 text-right font-medium" title="Estimado por el texto del chat">
                     Precio dicho
                   </th>
-                  <th scope="col" className="w-20 px-2 py-1.5 text-right font-medium">
-                    Cotizados
+                  {/* Las dos últimas SON las etapas del embudo (`etapa_efectiva`
+                      'cotizado' y 'cierre'), así que van por el rótulo canónico:
+                      con un nombre propio acá, la misma conversación se llamaba
+                      de dos formas según la pantalla (ADR 0049).
+                      ⚠️ «Precio dicho» NO es lo mismo y por eso conviven: cuenta
+                      a todos los que recibieron un precio, incluidos los envíos
+                      masivos; ésta pide además que la persona haya hablado. La
+                      diferencia entre las dos columnas ES el hallazgo de ADR 0044. */}
+                  <th
+                    scope="col"
+                    className="w-28 px-2 py-1.5 text-right font-medium"
+                    title="Recibieron el precio Y además hablaron — «Precio dicho» no exige lo segundo"
+                  >
+                    {ETAPA_ROTULO.cotizado.varios}
                   </th>
-                  <Encabezado col="cerrados" label="Cerrados" orden={orden} onOrden={setOrden} ancho="w-20" />
+                  <Encabezado
+                    col="cerrados"
+                    label={ETAPA_ROTULO.cierre.varios}
+                    orden={orden}
+                    onOrden={setOrden}
+                    ancho="w-24"
+                  />
                 </tr>
               </thead>
               <tbody>

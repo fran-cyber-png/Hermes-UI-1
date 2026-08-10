@@ -902,7 +902,10 @@ export function VistaDashboard({
                         (etapaFiltro === e ? 'font-bold text-navy' : 'text-muted-foreground hover:text-foreground')
                       }
                     >
-                      {data?.embudo[e] ?? 0} {e}
+                      {/* La leyenda del riel: contaba montones y decía el IDENTIFICADOR
+                          en minúscula («611 cotizado»). Es el mismo defecto que el chip
+                          de la fila, en el mismo panel — lo destapó la captura, no un test. */}
+                      {data?.embudo[e] ?? 0} {rotuloEtapa(e, 'varios')}
                     </button>
                   ))}
                 </div>

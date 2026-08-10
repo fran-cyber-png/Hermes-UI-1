@@ -4,7 +4,7 @@ import { temperatureOf, TEMPERATURE_META } from '../leads/temperature';
 import { hace } from '../../lib/datos/frescura';
 import { formatoTelefono } from '../../lib/formato';
 import { textoDePreview } from '../../lib/preview';
-import { ETAPA_CHIP } from '../../lib/etapas';
+import { ETAPA_CHIP, rotuloEtapa } from '../../lib/etapas';
 import {
   CLASE_BORDE,
   CLASE_FONDO_SUAVE,
@@ -341,9 +341,12 @@ export function FilaConversacion({
             )}
             {/* Favorita: estrella navy (el oro es SOLO tiempo que se acaba). */}
             {c.favorita && <Star size={12} fill="currentColor" className="shrink-0 text-navy" aria-label="Favorita" />}
+            {/* UNA conversación, así que singular — y por el rótulo canónico:
+                esta píldora pintaba el IDENTIFICADOR crudo con un `capitalize`
+                de CSS, que con ids de una palabra se veía bien de casualidad. */}
             {etapa && (
-              <span className={'shrink-0 rounded px-1 py-px text-[11px] font-semibold capitalize ' + chipEtapa}>
-                {etapa}
+              <span className={'shrink-0 rounded px-1 py-px text-[11px] font-semibold ' + chipEtapa}>
+                {rotuloEtapa(etapa)}
               </span>
             )}
           </span>
