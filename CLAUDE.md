@@ -667,6 +667,28 @@ definen por **acciones del COMPRADOR**, no por actividades del vendedor*.
   RELACIÓN: *toda etapa que el embudo puede DEVOLVER se tiene que poder pedir*.
 - Capturas: `docs/evidencia/embudo-derivado.png`, `pipeline-*.png`.
 
+### Qué columnas tiene el tablero (ADR 0050)
+
+`Te esperan → Contestaron → Saben el precio → Compraron`, y `Dijeron que no` al costado. **Cinco.**
+
+- 🔴 **«Nunca contestaron» NO es columna, y la etapa SÍ existe.** Se retiró de `COLUMNAS_TRABAJO`
+  (qué se DIBUJA), no de `etapaEfectivaSql` (qué es CIERTO) — eran 2.575 de 3.971 tarjetas, el 65 %
+  de la mesa, que nadie trabajaba. **Por eso esto NO reabre ADR 0044**: esas conversaciones no
+  vuelven a inflar «Contestaron» ni «Saben el precio», siguen derivando `sin_respuesta` y se siguen
+  viendo en Mensajes. Candado en `tablero.test.ts`.
+- 🔴 **«Ventana» NO puede ser columna** (se propuso y se midió: **1 tarjeta** en todo el tablero).
+  Es una **señal que cruza a todas las etapas**, no un peldaño: una conversación tiene UNA etapa, así
+  que soltarla ahí le **borraría** «Saben el precio» — y ese cruce es el caso más valioso que hay.
+  Como chip se pregunta; como columna, no (ADR 0041).
+- ⚠️ **«Te esperan» volvió a ser columna** (revierte #87) y **no hizo falta tocar el server**:
+  `interesado` ya estaba en `ETAPAS_CONSULTABLES`. No se puede arrastrar ahí, como a `sin_respuesta`.
+- ⚠️ **`BandejaDeuda` se borró**: su desglose («sin abrir · volvieron») y su botón «Responder en
+  Mensajes» viven en la cabecera de «Te esperan». `resumirBandeja` no se tocó.
+- ⚠️ **El GRID se rehizo**: mínimos **1.060** sobre ~1.256 px a 1280, ~164 de aire. Una sexta columna
+  obliga a rehacer la cuenta, no a sumar un `minmax`.
+- Captura: `docs/evidencia/embudo-cinco-columnas.png`. ⚠️ Ahí **«En ventana» no se dibuja en «Te
+  esperan»** a propósito: daría el total y la regla del cero lo esconde sola.
+
 ### Cómo se LLAMA cada etapa (ADR 0049)
 
 El nombre dice **el hecho, en pasado y del lado del comprador** — la misma regla que ADR 0044 usa
