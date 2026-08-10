@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { BlockNoteView } from '@blocknote/mantine';
 import { useCreateBlockNote } from '@blocknote/react';
-import { AlertTriangle, ChevronLeft, Notebook, Pin, PinOff, Plus, Search, Trash2, Undo2 } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, Link2, Notebook, Pin, PinOff, Plus, Search, Trash2, Undo2 } from 'lucide-react';
 import '@blocknote/mantine/style.css';
 import { DICCIONARIO_LIBRETA, ESQUEMA_LIBRETA, soloBloquesConocidos } from './editor';
-import { mismoUsuario, nombreCorto, type DondeEstoy } from './espacios';
+import { AccionesDePagina } from './AccionesDePagina';
+import { mismoUsuario, nombreCorto, useEspacios, type DondeEstoy } from './espacios';
 import { SelectorDeEspacio } from './SelectorDeEspacio';
 import { renglonDeEstado } from './guardado';
 import { useAutoguardado } from './useAutoguardado';
@@ -140,6 +141,12 @@ function FilaPagina({
         <div className="flex items-center gap-1.5">
           {nota.fijada && <Pin className="size-3 shrink-0 text-muted-foreground" aria-label="fijada" />}
           <span className="truncate text-sm font-medium text-foreground">{titulo || 'Sin título'}</span>
+          {/* 🔴 QUE ESTÁ AFUERA SE DICE EN LA LISTA, no solo al abrirla. Es la
+              única forma de contestar «¿qué tengo publicado?» de un vistazo — sin
+              esto, compartir sería una acción sin inventario. */}
+          {nota.token && (
+            <Link2 className="size-3 shrink-0 text-muted-foreground" aria-label="tiene link público" />
+          )}
         </div>
         {resumen && <p className="mt-0.5 truncate text-xs text-muted-foreground">{resumen}</p>}
         <p className="mt-1 flex items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
@@ -195,7 +202,13 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
   const termino = busqueda.trim();
   const lista = useNotas(CLAVE_LIBRETA, donde);
   const encontradas = useBuscarNotas(termino);
-  const { crear, editar, archivar, desarchivar, autoguardar } = useMutacionesNotas(CLAVE_LIBRETA, donde);
+  const { crear, editar, archivar, desarchivar, autoguardar, mover, abrirLink, cortarLink } = useMutacionesNotas(
+    CLAVE_LIBRETA,
+    donde,
+  );
+  // Los espacios ya vienen cacheados por el selector: es la MISMA queryKey, así
+  // que esto no dispara un request nuevo — solo lee lo que ya está.
+  const espacios = useEspacios();
 
   const notas = termino ? (encontradas.data ?? []) : (lista.data ?? []);
   const paginaAbierta =
@@ -510,6 +523,25 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
 
           {paginaAbierta && (
             <div className="mx-auto max-w-3xl px-6 py-8">
+              {/* Mover y compartir van sobre una página GUARDADA y editable: una
+                  histórica de `gestiones` no se puede mover (vive en otra tabla)
+                  ni compartir, y una página en blanco todavía no tiene id. */}
+              {paginaAbierta.origen === 'nota' && (
+                <AccionesDePagina
+                  nota={paginaAbierta}
+                  donde={donde}
+                  espacios={espacios.data ?? []}
+                  vendedoraId={vendedoraId}
+                  onMover={(destino) => {
+                    mover.mutate({ id: paginaAbierta.id, destino });
+                    // La página se fue de esta lista: dejarla abierta mostraría —y
+                    // autoguardaría— algo que ya no está acá.
+                    setSeleccion(null);
+                  }}
+                  onAbrirLink={() => abrirLink.mutate(paginaAbierta.id)}
+                  onCortarLink={() => cortarLink.mutate(paginaAbierta.id)}
+                />
+              )}
               {paginaAbierta.origen === 'gestion' && (
                 <p className="mb-4 rounded-lg border border-dashed border-border bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
                   Esta quedó de una gestión vieja. Se lee, no se edita — la etapa de esa conversación se apoya en ella.

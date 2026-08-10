@@ -13,9 +13,9 @@ const ESPACIOS = [
 
 const PADRON = ['Luz', 'Sindy', 'Tracy', 'Walter', 'ventas10@grupogoberna.com', 'ventas11@grupogoberna.com', 'ventas12@grupogoberna.com'];
 
-const pagina = (id, texto, vendedoraId, espacioId, creadoAt, editadoAt = null, fijada = false) => ({
+const pagina = (id, texto, vendedoraId, espacioId, creadoAt, editadoAt = null, fijada = false, token = null) => ({
   id, clave: 'general', vendedoraId, texto, doc: null, fijada,
-  creadoAt, editadoAt, archivadoAt: null, origen: 'nota', espacioId,
+  creadoAt, editadoAt, archivadoAt: null, origen: 'nota', espacioId, token,
 });
 
 const PAGINAS = {
@@ -24,7 +24,7 @@ const PAGINAS = {
     pagina(5, 'Mis pendientes de mañana\nLlamar a los 3 de Gestión Pública', 'luz', null, '2026-08-07T23:12:33Z'),
   ],
   7: [
-    pagina(11, 'Precios México 2026\nDiplomado: MXN 4,900 · cuotas: 2 de 2,450', 'Sindy', 7, '2026-08-06T15:00:00Z', '2026-08-09T11:02:00Z', true),
+    pagina(11, 'Precios México 2026\nDiplomado: MXN 4,900 · cuotas: 2 de 2,450', 'Sindy', 7, '2026-08-06T15:00:00Z', '2026-08-09T11:02:00Z', true, '7f3a9c2e8b1d40561122334455667788'),
     pagina(12, 'Objeción: «lo voy a pensar»\nLo que mejor funcionó: preguntar cuándo arranca su gestión', 'luz', 7, '2026-08-07T09:30:00Z'),
     pagina(13, 'Dónde pagar por país\nPerú: Yape / BCP · Ecuador: Banco Pichincha', 'ventas10@grupogoberna.com', 7, '2026-08-08T18:45:00Z', '2026-08-10T08:15:00Z'),
   ],
@@ -43,6 +43,8 @@ http
     if (url.pathname === '/api/auth/yo') return enviar({ vendedora: { id: 'luz', nombre: 'Luz' } });
     if (url.pathname === '/api/espacios/padron') return enviar({ personas: PADRON });
     if (url.pathname === '/api/espacios') return enviar({ espacios: ESPACIOS });
+    if (/^\/api\/notas\/\d+\/link$/.test(url.pathname)) return enviar({ ok: true, token: '7f3a9c2e8b1d40561122334455667788' });
+    if (/^\/api\/notas\/\d+\/mover$/.test(url.pathname)) return enviar({ ok: true });
     if (url.pathname === '/api/notas') {
       if (url.searchParams.get('q')) return enviar({ notas: [] });
       return enviar({ notas: PAGINAS[url.searchParams.get('espacio') ?? 'privada'] ?? [] });

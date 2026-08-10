@@ -183,6 +183,21 @@ export async function archivarEspacio(base: typeof DbSingleton, id: number, ahor
 }
 
 /**
+ * RENOMBRAR un espacio.
+ *
+ * Existe porque sin esto **un nombre mal puesto no tenía arreglo desde la app**:
+ * el primer espacio que alguien creara con un typo se quedaba así para siempre, y
+ * la única salida era archivarlo y rehacerlo — perdiendo las páginas de lugar.
+ *
+ * ⚠️ El nombre **no es la identidad**: la identidad es el `id`, así que renombrar
+ * no rompe ningún link, ninguna membresía ni ninguna página. Es la misma regla que
+ * `hechos`, donde la clave es el slug y el rótulo se edita libre.
+ */
+export async function renombrarEspacio(base: typeof DbSingleton, id: number, nombre: string): Promise<void> {
+  await base.update(espacios).set({ nombre }).where(eq(espacios.id, id));
+}
+
+/**
  * EL PADRÓN DE PERSONAS A LAS QUE SE PUEDE INVITAR.
  *
  * 🔴 **Hermes no tiene tabla de usuarios**: el login es un handshake contra Django

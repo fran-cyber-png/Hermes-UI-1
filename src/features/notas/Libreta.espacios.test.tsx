@@ -162,17 +162,17 @@ test('el vacío de un espacio NO dice «nadie más del equipo la ve»', async ()
   expect(document.body.textContent).not.toContain('nadie más del equipo la ve');
 });
 
-test('«Quiénes ven…» aparece solo sobre un espacio propio', async () => {
+test('«Administrar…» aparece solo sobre un espacio propio', async () => {
   // `puedoAdministrar` está testeada pura; lo que se fija acá es que la pantalla
   // la CONSULTE — con la comparación exacta, Luz (que entra como `luz`) no vería
   // el botón de su propio espacio.
   montado = montar(<Libreta vendedoraId="Luz" />);
   await esperarA(() => Boolean(botonQueDice('Equipo de ventas')), 'llegaron los espacios');
 
-  expect(botonQueDice('Quiénes ven')).toBeFalsy();
+  expect(botonQueDice('Administrar')).toBeFalsy();
 
   botonQueDice('Equipo de ventas')?.click();
   await esperarA(cargoElEspacio(7), 'cargaron las páginas del espacio 7');
 
-  expect(botonQueDice('Quiénes ven')).toBeTruthy();
+  expect(botonQueDice('Administrar')).toBeTruthy();
 });

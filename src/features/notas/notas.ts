@@ -11,7 +11,19 @@ import { api } from '../../lib/datos/cliente';
  * spinner. El queryKey `['notas', clave]` queda fuera de la lista blanca.
  */
 
-export const LIMITE_TEXTO = 2000;
+/**
+ * EL TOPE DE UNA PÁGINA — **copia del server**, no la fuente de verdad.
+ *
+ * Acá solo se usa para redactar el fallo cuando el server no explicó por qué
+ * rechazó (`guardado.ts`). La garantía es el 400 de `validarTexto`.
+ *
+ * ⚠️ **Y por eso hay un test de paridad que lee el archivo del server**
+ * (`limiteTexto.paridad.test.ts`): con el número en dos lados, el día que uno
+ * cambie el otro sigue diciendo el viejo y la pantalla afirma «pasa de los 2.000»
+ * sobre un server que acepta 20.000. Es #37 en su forma más barata de introducir
+ * y más difícil de notar, porque el mensaje **suena** correcto.
+ */
+export const LIMITE_TEXTO = 20_000;
 
 export interface Nota {
   id: number;
@@ -48,6 +60,15 @@ export interface Nota {
    * significa lo mismo que `null` (la libreta de siempre). Nunca al revés.
    */
   espacioId?: number | null;
+  /**
+   * El token del link público, o `null`/ausente si NO está compartida (ADR 0047).
+   *
+   * ⚠️ **Opcional, y la ausencia se lee como «no compartida»** — nunca como «no
+   * se sabe». Con un server viejo eso es exactamente correcto: si el server no
+   * conoce los links, no hay ninguno. Al revés (dibujar «compartida» ante la
+   * duda) sería alarmar sobre algo que no pasó.
+   */
+  token?: string | null;
 }
 
 /**
@@ -168,7 +189,40 @@ export function useMutacionesNotas(clave: string, espacioId: number | null = nul
     onSuccess: invalidar,
   });
 
-  return { crear, editar, archivar, desarchivar, autoguardar };
+  /**
+   * MOVER una página de lugar (ADR 0047). `destino: null` = mi libreta privada.
+   *
+   * ⚠️ **Invalida las DOS listas**, la de origen y la de destino: la página
+   * desaparece de una y aparece en la otra, y refrescar solo la actual dejaría la
+   * otra con un fantasma hasta el próximo refetch — que en la lista de un espacio
+   * compartido se lee como que la página sigue ahí para todos.
+   */
+  const mover = useMutation({
+    mutationFn: (v: { id: number; destino: number | null }) =>
+      api<{ ok: true }>(`/api/notas/${v.id}/mover`, {
+        method: 'PATCH',
+        body: JSON.stringify({ espacioId: v.destino }),
+      }),
+    onSuccess: (_r, v) =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ['notas', clave, espacioId] }),
+        qc.invalidateQueries({ queryKey: ['notas', clave, v.destino] }),
+      ]),
+  });
+
+  /** Abrir el link público. Idempotente en el server: dos clics no dan dos URLs. */
+  const abrirLink = useMutation({
+    mutationFn: (id: number) => api<{ ok: true; token: string }>(`/api/notas/${id}/link`, { method: 'POST' }),
+    onSuccess: invalidar,
+  });
+
+  /** Cortarlo. El corte es inmediato: el server borra la fila. */
+  const cortarLink = useMutation({
+    mutationFn: (id: number) => api<{ ok: true; token: null }>(`/api/notas/${id}/link`, { method: 'DELETE' }),
+    onSuccess: invalidar,
+  });
+
+  return { crear, editar, archivar, desarchivar, autoguardar, mover, abrirLink, cortarLink };
 }
 
 /** La primera línea con texto — el título que la Libreta muestra en la lista. */

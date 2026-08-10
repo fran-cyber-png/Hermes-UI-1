@@ -113,11 +113,26 @@ export function useMutacionesEspacios() {
     onSuccess: invalidar,
   });
 
+  /**
+   * RENOMBRAR. Sin esto, un nombre mal puesto no tenía arreglo desde la app: la
+   * única salida era archivar el espacio y rehacerlo, moviendo las páginas a mano.
+   * El nombre no es la identidad (esa es el `id`), así que renombrar no rompe
+   * ningún link ni ninguna membresía.
+   */
+  const renombrar = useMutation({
+    mutationFn: (v: { espacioId: number; nombre: string }) =>
+      api<{ ok: true; espacio: Espacio }>(`/api/espacios/${v.espacioId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ nombre: v.nombre }),
+      }),
+    onSuccess: invalidar,
+  });
+
   const archivar = useMutation({
     mutationFn: (espacioId: number) =>
       api<{ ok: true }>(`/api/espacios/${espacioId}/archivar`, { method: 'PATCH' }),
     onSuccess: invalidar,
   });
 
-  return { crear, agregarMiembro, sacarMiembro, archivar };
+  return { crear, renombrar, agregarMiembro, sacarMiembro, archivar };
 }

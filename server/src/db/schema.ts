@@ -1504,3 +1504,7 @@ export { contactoHabilitado } from "./padron.js";
 // se pueda compartir. `notas.espacio_id IS NULL` es «mi libreta privada».
 // Es la TERCERA frontera del repo, no un filtro — ver `db/espacios.ts`.
 export { espacios, espacioMiembro } from "./espacios.js";
+
+// El link público de una página (ADR 0047): la PRIMERA puerta anónima del repo.
+// Cortar es BORRAR la fila, y hay un solo link por página — ver `db/links.ts`.
+export { notaLink } from "./links.js";

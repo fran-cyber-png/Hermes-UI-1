@@ -10,6 +10,7 @@ import {
   leerEspacio,
   listarEspaciosDe,
   padronDePersonas,
+  renombrarEspacio,
   sacarMiembro,
 } from '../espacios/repositorio.js';
 
@@ -157,6 +158,25 @@ espaciosRouter.delete('/:id/miembros/:vendedoraId', async (req, res) => {
   }
 
   await sacarMiembro(db, { espacioId: permiso.espacio!.id, vendedoraId: saliente });
+  res.json({ ok: true, espacio: await leerEspacio(db, permiso.espacio!.id) });
+});
+
+/**
+ * RENOMBRAR. Sin esto, un nombre mal puesto no tenía arreglo desde la app: había
+ * que archivar el espacio y rehacerlo, moviendo las páginas a mano.
+ */
+espaciosRouter.patch('/:id', async (req, res) => {
+  const permiso = await conPermisoDeAdmin(Number(req.params.id), req.vendedoraId!);
+  if (!permiso.ok) {
+    res.status(permiso.estado).json({ ok: false, message: permiso.motivo });
+    return;
+  }
+  const v = nombreValido(req.body?.nombre);
+  if (!v.ok) {
+    res.status(400).json({ ok: false, message: v.motivo });
+    return;
+  }
+  await renombrarEspacio(db, permiso.espacio!.id, v.nombre);
   res.json({ ok: true, espacio: await leerEspacio(db, permiso.espacio!.id) });
 });
 

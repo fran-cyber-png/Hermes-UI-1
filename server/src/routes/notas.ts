@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
 import { requiereVendedora } from '../auth/sesion.js';
+import { abrirLink, cortarLink } from '../espacios/linkRepositorio.js';
 import { espaciosDe } from '../espacios/repositorio.js';
 import { puedeEscribirEn, type QuienPregunta } from '../espacios/visibilidad.js';
 import type { NotaFila } from '../notas/notas.js';
@@ -11,6 +12,7 @@ import {
   desarchivarNota,
   editarNota,
   listarNotas,
+  moverNota,
   prepararContenido,
   prepararEdicion,
 } from '../notas/notas.js';
@@ -194,6 +196,96 @@ notasRouter.patch('/:id', async (req, res) => {
     return;
   }
   res.json({ ok: true, nota: conOrigenNota(r.nota) });
+});
+
+/**
+ * MOVER UNA PÁGINA DE LUGAR. `espacioId: null` = traerla a mi libreta privada.
+ *
+ * ⚠️ **`null` y «ausente» significan cosas distintas acá, al revés que en el
+ * POST**: en el POST, omitirlo es «la libreta» (el default de un front viejo);
+ * acá omitirlo es «no me dijiste a dónde» y responde 400. Sin esa diferencia, un
+ * body mal armado movería páginas a la libreta privada de quien lo mandó — o sea
+ * que un bug del cliente **se las sacaría al equipo en silencio**.
+ */
+notasRouter.patch('/:id/mover', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ ok: false, message: 'id inválido' });
+    return;
+  }
+  if (!('espacioId' in (req.body ?? {}))) {
+    res.status(400).json({ ok: false, message: 'falta espacioId (null para tu libreta)' });
+    return;
+  }
+  const destino = req.body.espacioId === null ? null : espacioPedido(req.body.espacioId);
+  if (destino === 'invalido') {
+    res.status(400).json({ ok: false, message: 'espacio inválido' });
+    return;
+  }
+
+  const r = await moverNota(db, { id, destino, quien: await quienPregunta(req.vendedoraId!) });
+  if (!r.ok && r.motivo === 'no-encontrada') {
+    res.status(404).json({ ok: false, message: 'la nota no existe (o está archivada)' });
+    return;
+  }
+  // Moverla a donde ya está no es un error que valga la pena mostrarle a nadie:
+  // es un clic de más. Se contesta 200 sin haber escrito nada.
+  if (!r.ok && r.motivo === 'sin-cambio') {
+    res.json({ ok: true, sinCambio: true });
+    return;
+  }
+  if (!r.ok) {
+    res.status(403).json({ ok: false, message: 'no podés mover esa página ahí' });
+    return;
+  }
+  res.json({ ok: true, nota: conOrigenNota(r.nota) });
+});
+
+/**
+ * EL LINK PÚBLICO de una página (ADR 0047).
+ *
+ * `POST` abre (idempotente: si ya tiene, devuelve el mismo) · `DELETE` corta.
+ * La página que sirve el token vive **fuera de `/api`**, en `routes/publico.ts`.
+ *
+ * ⚠️ El server devuelve **el token**, no la URL entera: el origen público no lo
+ * conoce (Hermes se sirve por OTA y la cáscara puede estar en otro lado), y
+ * armarlo acá con una env sería un lugar más donde puede quedar mal. La pantalla
+ * lo compone con su propio origen.
+ */
+notasRouter.post('/:id/link', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ ok: false, message: 'id inválido' });
+    return;
+  }
+  const r = await abrirLink(db, { notaId: id, quien: await quienPregunta(req.vendedoraId!) });
+  if (!r.ok && r.motivo === 'no-encontrada') {
+    res.status(404).json({ ok: false, message: 'la nota no existe (o está archivada)' });
+    return;
+  }
+  if (!r.ok) {
+    res.status(403).json({ ok: false, message: 'no podés compartir esa página' });
+    return;
+  }
+  res.json({ ok: true, token: r.token });
+});
+
+notasRouter.delete('/:id/link', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ ok: false, message: 'id inválido' });
+    return;
+  }
+  const r = await cortarLink(db, { notaId: id, quien: await quienPregunta(req.vendedoraId!) });
+  if (!r.ok && r.motivo === 'no-encontrada') {
+    res.status(404).json({ ok: false, message: 'la nota no existe' });
+    return;
+  }
+  if (!r.ok) {
+    res.status(403).json({ ok: false, message: 'no podés cortar ese link' });
+    return;
+  }
+  res.json({ ok: true, token: null });
 });
 
 notasRouter.patch('/:id/archivar', async (req, res) => {

@@ -1,6 +1,7 @@
 import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { db as DbSingleton } from '../db/client.js';
-import { gestiones, notas } from '../db/schema.js';
+import { gestiones, notaLink, notas } from '../db/schema.js';
+import { planearMovimiento } from '../espacios/mover.js';
 import { puedeEditar, type QuienPregunta } from '../espacios/visibilidad.js';
 import { visibleParaSql } from '../espacios/visibilidadSql.js';
 import { aTextoPlano } from './textoPlano.js';
@@ -30,14 +31,40 @@ import { aTextoPlano } from './textoPlano.js';
  * («la tocó Sindy») y contra lo que se cuenta el uso. Ya no es quién la ve.
  */
 
-export const LIMITE_TEXTO = 2000;
+/**
+ * CUÁNTO PUEDE ESCRIBIR UNA PÁGINA — sobre el texto APLANADO, no sobre el JSON.
+ *
+ * ══ POR QUÉ SUBIÓ DE 2.000 A 20.000 ═════════════════════════════════════════
+ *
+ * Los 2.000 se eligieron para una **nota pegada a una conversación** (#47): dos
+ * renglones de «paga el viernes». Con espacios compartidos (ADR 0046) la unidad
+ * pasó a ser **una página del equipo**, y ahí el número estaba mal medido.
+ *
+ * Lo que lo decide, medido en producción el 10-ago-2026: **el playbook que el
+ * equipo YA mantiene —los 27 `hechos` activos— son 5.267 caracteres.** O sea que
+ * lo que la vendedora querría poner en un espacio **no entraba**: entraba en tres
+ * páginas. Un tope que parte en tres lo único que alguien mantiene no es una
+ * guarda, es un defecto.
+ *
+ * 20.000 es ~10 páginas de texto y **cuatro veces** ese playbook: sobra para lo
+ * que existe y sigue frenando lo que no es una nota. El tope de verdad contra el
+ * abuso no es éste sino `TOPE_DOC_BYTES` (512 KB del `jsonb`, en `routes/notas.ts`),
+ * porque es el que acota lo que realmente entra a la base — 20.000 caracteres de
+ * texto son ~20 KB, muy por debajo.
+ *
+ * ⚠️ **Subirlo es expand-only y no toca ninguna fila**: nada guardado deja de
+ * validar. Bajarlo, en cambio, dejaría páginas que existen y ya no se pueden
+ * guardar — y el síntoma sería «no se guardó» sobre algo que la vendedora ve
+ * entero en pantalla.
+ */
+export const LIMITE_TEXTO = 20_000;
 
 export type NotaFila = typeof notas.$inferSelect;
 
 export type ResultadoValidacion = { ok: true; texto: string } | { ok: false; motivo: string };
 
 /**
- * trim + no vacío + ≤ 2.000. Los emojis SÍ pasan: una nota nunca viaja a
+ * trim + no vacío + ≤ `LIMITE_TEXTO`. Los emojis SÍ pasan: una nota nunca viaja a
  * Cerberus, así que la regla latin1 dura #4 del CLAUDE.md no aplica acá.
  */
 export function validarTexto(valor: unknown): ResultadoValidacion {
@@ -135,6 +162,16 @@ export interface NotaListada {
    * filas no tienen columna donde ponerlo.
    */
   espacioId: number | null;
+  /**
+   * El token del link público, o `null` si no está compartida (ADR 0047).
+   *
+   * Va en el LISTADO y no solo en la página abierta porque la pregunta que
+   * contesta —**«¿qué tengo publicado afuera?»**— se hace sobre el conjunto, no
+   * sobre una página. Sin esto, compartir sería una acción sin inventario.
+   *
+   * En una histórica de `gestiones` es SIEMPRE null: esas no se pueden compartir.
+   */
+  token?: string | null;
 }
 
 /**
@@ -165,6 +202,7 @@ async function listarNotasHistoricas(
       archivadoAt: null,
       origen: 'gestion' as const,
       espacioId: null,
+      token: null,
     }));
 }
 
@@ -200,8 +238,14 @@ export async function listarNotas(
 
   const [nuevas, historicas] = await Promise.all([
     base
-      .select()
+      // 🔴 EL LEFT JOIN AL LINK NO ES ADORNO: es la única forma de ver **cuáles
+      // de mis páginas están afuera** (ADR 0047). Sin él, compartir sería una
+      // acción sin inventario — se abre un link, pasan dos semanas, y no hay
+      // ninguna pantalla que conteste «¿qué tengo publicado?». Es un LEFT JOIN
+      // por un índice UNIQUE sobre `nota_id`, así que cuesta nada.
+      .select({ nota: notas, token: notaLink.token })
       .from(notas)
+      .leftJoin(notaLink, eq(notaLink.notaId, notas.id))
       .where(
         and(
           eq(notas.clave, opciones.clave),
@@ -214,7 +258,10 @@ export async function listarNotas(
     espacioId === null ? listarNotasHistoricas(base, opciones) : Promise.resolve([]),
   ]);
 
-  const combinadas: NotaListada[] = [...nuevas.map((n) => ({ ...n, origen: 'nota' as const })), ...historicas];
+  const combinadas: NotaListada[] = [
+    ...nuevas.map((f) => ({ ...f.nota, origen: 'nota' as const, token: f.token })),
+    ...historicas,
+  ];
 
   combinadas.sort((a, b) => {
     if (a.fijada !== b.fijada) return a.fijada ? -1 : 1;
@@ -317,6 +364,40 @@ export async function editarNota(
   if (noPuedeTocar(existente, opciones.quien)) return { ok: false, motivo: 'prohibido' };
 
   const [fila] = await base.update(notas).set(opciones.cambios).where(eq(notas.id, opciones.id)).returning();
+  return { ok: true, nota: fila };
+}
+
+/**
+ * MOVER UNA PÁGINA DE LUGAR (`espacio_id`). La regla vive pura en
+ * `espacios/mover.ts`; acá solo el IO.
+ *
+ * ⚠️ **NO toca `editado_at`.** Mover no es editar: la página no cambió una letra,
+ * cambió quién la ve. Si lo tocara, «editada» pasaría a significar dos cosas
+ * distintas y la lista mostraría actividad donde no la hubo.
+ *
+ * Devuelve `motivo: 'prohibido'` para cualquier rechazo de permiso — el llamador
+ * ya sabe cuál fue, porque `planearMovimiento` se lo dijo antes con su motivo
+ * propio.
+ */
+export async function moverNota(
+  base: typeof DbSingleton,
+  opciones: { id: number; destino: number | null; quien: QuienPregunta },
+): Promise<ResultadoMutacion | { ok: false; motivo: 'sin-cambio' }> {
+  const [existente] = await base.select().from(notas).where(eq(notas.id, opciones.id));
+  if (!existente || existente.archivadoAt) return { ok: false, motivo: 'no-encontrada' };
+
+  const plan = planearMovimiento(
+    { vendedoraId: existente.vendedoraId, espacioId: existente.espacioId },
+    opciones.destino,
+    opciones.quien,
+  );
+  if (!plan.ok) return { ok: false, motivo: plan.motivo === 'ya-esta-ahi' ? 'sin-cambio' : 'prohibido' };
+
+  const [fila] = await base
+    .update(notas)
+    .set({ espacioId: plan.destino })
+    .where(eq(notas.id, opciones.id))
+    .returning();
   return { ok: true, nota: fila };
 }
 

@@ -401,6 +401,32 @@ Una página vive en **mi libreta privada** o en un **espacio con miembros elegid
 - Capturas: `docs/evidencia/libreta-espacios-*.png`. Sin server:
   `node scratchpad/api-espacios.mjs` + `VITE_API_URL=http://localhost:4199 npx vite --port 5199`.
 
+### El link público y mover páginas (ADR 0047)
+
+- 🔴 **`/n/<token>` ES LA PRIMERA PUERTA ANÓNIMA DEL REPO, y vive FUERA de `/api`.** El perímetro es
+  cerrado por defecto (cicatriz del #36: 19 de 27 routers abiertos) y sus tres excepciones son
+  credenciales de servicio. Una excepción DENTRO de `/api` sería un prefijo que el próximo router
+  hereda sin notarlo. El token es `randomBytes(16)`, **nunca el id** (con el id, `/n/1`, `/n/2` es la
+  libreta de todos), y lo que no tiene forma de token se descarta **antes** de tocar la base.
+- 🔴 **Cortar BORRA la fila** (no un flag), y hay **un link por página** (índice UNIQUE): con dos,
+  cortar uno deja el otro vivo. Archivar la página también la saca del link.
+- **La respuesta pública lleva `titulo`+`texto`+`doc` y NADA más** — sin autora, espacio, fechas ni
+  id; hay test que compara las claves. `noindex` no es opcional. Un token inexistente, uno cortado y
+  una página archivada contestan **lo mismo**.
+- **El HTML es puro y vive aparte** (`espacios/paginaPublica.ts`): el router importa `db`, así que un
+  test puro no podría cargarlo — y ese test es el que importa, porque **es el único lugar donde texto
+  de una persona se vuelve HTML para un desconocido**. Se pinta desde `texto`, no desde `doc`, y no
+  lleva una línea de JavaScript.
+- 🔴 **Mover pide LOS DOS permisos** (`espacios/mover.ts`): origen y destino. Sin el de origen, mover
+  es la puerta de atrás para LEER lo que la frontera niega; sin el de destino, para PLANTAR.
+- 🔴 **Traer una página a tu libreta SE LA SACA AL EQUIPO** — se pregunta nombrando a la gente, no con
+  «¿estás segura?». Compartir hacia un espacio no pregunta nada. ⚠️ **Mover no toca `editado_at`**.
+- **El tope de una página pasó de 2.000 a 20.000**: el playbook real del equipo (27 `hechos`) son
+  **5.267 caracteres** y no entraba. ⚠️ El número vive en server y front y **ya divergieron una vez**:
+  el candado es `notas/limiteTexto.paridad.test.ts`.
+- **La lista marca con 🔗 lo que está afuera**: sin eso compartir es una acción sin inventario.
+- Mapa de todo el frente: `docs/mapa-libreta.md`. Capturas: `docs/evidencia/libreta-link-*.png`.
+
 ## Auth
 
 Login de vendedoras **contra Cerberus** (Django, sin API REST): `cerberus/auth.ts` hace el handshake CSRF

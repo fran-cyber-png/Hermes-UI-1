@@ -140,20 +140,49 @@ function NuevoEspacio({ onListo, onCancelar }: { onListo: () => void; onCancelar
   );
 }
 
-/** Administrar los miembros de un espacio — solo para quien lo creó. */
-function Miembros({ espacio, onCerrar }: { espacio: Espacio; onCerrar: () => void }) {
+/** Administrar un espacio: su nombre, sus miembros, y archivarlo. Solo quien lo creó. */
+function Miembros({ espacio, onCerrar, onArchivado }: { espacio: Espacio; onCerrar: () => void; onArchivado: () => void }) {
   const padron = usePadron(true);
-  const { agregarMiembro, sacarMiembro } = useMutacionesEspacios();
+  const { agregarMiembro, sacarMiembro, renombrar, archivar } = useMutacionesEspacios();
+  const [nombre, setNombre] = useState(espacio.nombre);
   const adentro = new Set(espacio.miembros.map((m) => m.trim().toLowerCase()));
 
   return (
     <div className="space-y-2 rounded-lg border border-border bg-card p-2.5">
       <div className="flex items-center justify-between">
-        <p className="truncate text-xs font-medium text-foreground">Quiénes ven «{espacio.nombre}»</p>
+        <p className="truncate text-xs font-medium text-foreground">El espacio «{espacio.nombre}»</p>
         <button type="button" onClick={onCerrar} aria-label="Cerrar" className="rounded p-0.5 text-muted-foreground hover:bg-muted">
           <X className="size-3.5" />
         </button>
       </div>
+
+      {/* RENOMBRAR. Guarda al salir del campo y con Enter: sin esto, un nombre mal
+          puesto no tenía arreglo desde la app — había que archivar el espacio y
+          rehacerlo, moviendo las páginas a mano. */}
+      <input
+        value={nombre}
+        onChange={(e) => setNombre(e.target.value)}
+        onBlur={() => {
+          const limpio = nombre.trim();
+          if (limpio && limpio !== espacio.nombre) renombrar.mutate({ espacioId: espacio.id, nombre: limpio });
+          else setNombre(espacio.nombre);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+          // Escape descarta y NO se propaga: el shell no tiene por qué enterarse
+          // de que alguien se arrepintió de un nombre.
+          if (e.key === 'Escape') {
+            e.stopPropagation();
+            setNombre(espacio.nombre);
+            e.currentTarget.blur();
+          }
+        }}
+        aria-label="Nombre del espacio"
+        maxLength={80}
+        className="h-7 w-full rounded border border-input bg-card px-2 text-xs outline-none focus:border-ring"
+      />
+
+      <p className="text-[0.6875rem] font-medium uppercase tracking-wide text-muted-foreground">Quiénes lo ven</p>
 
       <div className="flex flex-wrap gap-1">
         {(padron.data ?? []).map((p) => {
@@ -183,6 +212,21 @@ function Miembros({ espacio, onCerrar }: { espacio: Espacio; onCerrar: () => voi
           );
         })}
       </div>
+
+      {/* ARCHIVAR. La ruta existía desde ADR 0046 y NO tenía botón: un espacio que
+          ya no hacía falta se quedaba en la lista para siempre. Archivar el lugar
+          NO toca las páginas — siguen en la base, y por eso no se pregunta como si
+          fuera un borrado. */}
+      <button
+        type="button"
+        onClick={() => archivar.mutate(espacio.id, { onSuccess: onArchivado })}
+        className="text-xs text-muted-foreground hover:text-destructive hover:underline"
+      >
+        Archivar este espacio
+      </button>
+      <p className="text-[0.6875rem] text-muted-foreground">
+        Las páginas no se borran, pero dejan de estar a la vista del equipo.
+      </p>
     </div>
   );
 }
@@ -232,7 +276,16 @@ export function SelectorDeEspacio({
 
       {administrando !== null && actual && administrando === actual.id ? (
         <div className="pt-1">
-          <Miembros espacio={actual} onCerrar={() => setAdministrando(null)} />
+          <Miembros
+            espacio={actual}
+            onCerrar={() => setAdministrando(null)}
+            // Al archivarlo desaparece de la lista: hay que volver a la libreta o
+            // el selector queda apuntando a un lugar que ya no existe.
+            onArchivado={() => {
+              setAdministrando(null);
+              onIr(null);
+            }}
+          />
         </div>
       ) : (
         puedoTocarEste && (
@@ -247,7 +300,7 @@ export function SelectorDeEspacio({
             }}
             className="w-full rounded-lg px-2.5 py-1 text-left text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
           >
-            Quiénes ven «{actual!.nombre}»…
+            Administrar «{actual!.nombre}»…
           </button>
         )
       )}
