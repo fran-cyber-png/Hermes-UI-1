@@ -38,7 +38,7 @@ const CONVERSACION = {
   contexto_texto: null,
   respondida: false,
   ventana_abierta: true,
-  pide_info: false,
+  pregunto: false,
   n: 1,
   referencia: 'r1',
   ultimo_at: new Date().toISOString(),

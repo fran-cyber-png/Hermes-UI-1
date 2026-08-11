@@ -158,7 +158,7 @@ export function conversacionDeSugerencia(m: MensajeBandeja): Conversacion {
     // conversaciones donde la persona escribió y nadie contestó.
     respondida: false,
     ventana_abierta: false,
-    pide_info: false,
+    pregunto: false,
     n: 0,
     referencia: m.disparadaPor,
     ultimo_at: m.disparadaPor,

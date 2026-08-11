@@ -71,7 +71,7 @@ export function conversacionDeTelefono({
     contexto_texto: null,
     respondida: false,
     ventana_abierta: false,
-    pide_info: false,
+    pregunto: false,
     n: 0,
     referencia: iso,
     ultimo_at: iso,

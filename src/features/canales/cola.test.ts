@@ -19,9 +19,9 @@ function almacen(inicial: Record<string, string>) {
 }
 
 describe('migracionDesdeKeyVieja', () => {
-  it('«pide-info» sobrevive como filtro secundario, no se pierde', () => {
+  it('«pide-info» sobrevive: hoy la misma pregunta la contesta «Preguntaron precio»', () => {
     const a = almacen({ [KEY_FILTRO_VIEJO]: JSON.stringify('pide-info') });
-    expect(migracionDesdeKeyVieja(a.leer, a.borrar)).toEqual({ tab: 'todo', filtroSec: 'pide-info' });
+    expect(migracionDesdeKeyVieja(a.leer, a.borrar)).toEqual({ tab: 'todo', filtroSec: 'pregunto-precio' });
   });
 
   it('«puedo-escribirle» NO revive como «Por vencer»: eso abría la cola vacía', () => {
@@ -85,16 +85,18 @@ describe('parametrosDeCola', () => {
   });
 
   it('el filtro secundario viaja como `intencion` (compat con el server)', () => {
-    expect(parametrosDeCola({ tab: 'todo', filtroSec: 'pide-info', categoria: null })).toEqual({ intencion: 'pide-info' });
-    expect(parametrosDeCola({ tab: 'todo', filtroSec: 'sin-responder', categoria: null })).toEqual({
-      intencion: 'sin-responder',
+    expect(parametrosDeCola({ tab: 'todo', filtroSec: 'pregunto-precio', categoria: null })).toEqual({
+      intencion: 'pregunto-precio',
+    });
+    expect(parametrosDeCola({ tab: 'todo', filtroSec: 'te-escribieron', categoria: null })).toEqual({
+      intencion: 'te-escribieron',
     });
   });
 
   it('los tres ejes se combinan (tab + filtro + categoría)', () => {
     expect(
-      parametrosDeCola({ tab: 'no-leidos', filtroSec: 'pide-info', categoria: 'precio' }),
-    ).toEqual({ tab: 'no-leidos', intencion: 'pide-info', categoria: 'precio' });
+      parametrosDeCola({ tab: 'no-leidos', filtroSec: 'pregunto-precio', categoria: 'precio' }),
+    ).toEqual({ tab: 'no-leidos', intencion: 'pregunto-precio', categoria: 'precio' });
   });
 
   it('la línea viaja como `linea`, y «todas» no emite el param', () => {
@@ -109,8 +111,8 @@ describe('parametrosDeCola', () => {
 
   it('la línea convive con los recortes: es otro eje, no los reemplaza', () => {
     expect(
-      parametrosDeCola({ tab: 'no-leidos', filtroSec: 'pide-info', categoria: null, linea: '51941654039' }),
-    ).toEqual({ tab: 'no-leidos', intencion: 'pide-info', linea: '51941654039' });
+      parametrosDeCola({ tab: 'no-leidos', filtroSec: 'pregunto-precio', categoria: null, linea: '51941654039' }),
+    ).toEqual({ tab: 'no-leidos', intencion: 'pregunto-precio', linea: '51941654039' });
   });
 
   it('«las mías» NO viaja como `linea`: no es un teléfono y el server lo rechazaría', () => {
@@ -154,16 +156,20 @@ describe('filtrosActivos — qué está recortando la cola AHORA MISMO', () => {
   });
 
   it('nombra el filtro secundario con su rótulo visible, no con su valor', () => {
-    expect(filtrosActivos({ ...limpia, filtroSec: 'pide-info' })).toEqual([{ clave: 'filtro', label: 'Piden info' }]);
-    expect(filtrosActivos({ ...limpia, filtroSec: 'sin-responder' })).toEqual([
-      { clave: 'filtro', label: 'Sin responder' },
+    expect(filtrosActivos({ ...limpia, filtroSec: 'pregunto-precio' })).toEqual([
+      { clave: 'filtro', label: 'Preguntaron precio' },
+    ]);
+    expect(filtrosActivos({ ...limpia, filtroSec: 'te-escribieron' })).toEqual([
+      { clave: 'filtro', label: 'Te escribieron' },
     ]);
   });
 
   it('la categoría y la búsqueda también son recortes, y se acumulan en orden', () => {
-    expect(filtrosActivos({ tab: 'no-leidos', filtroSec: 'pide-info', categoria: 'precio', busqueda: ' juan ' })).toEqual([
+    expect(
+      filtrosActivos({ tab: 'no-leidos', filtroSec: 'pregunto-precio', categoria: 'precio', busqueda: ' juan ' }),
+    ).toEqual([
       { clave: 'tab', label: 'No leídos' },
-      { clave: 'filtro', label: 'Piden info' },
+      { clave: 'filtro', label: 'Preguntaron precio' },
       { clave: 'categoria', label: 'precio' },
       { clave: 'busqueda', label: '«juan»' },
     ]);

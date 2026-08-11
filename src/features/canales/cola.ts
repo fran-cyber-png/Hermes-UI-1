@@ -25,10 +25,9 @@ export type Tab = 'todo' | 'no-leidos' | 'favoritos';
 /** Los filtros secundarios: angostan dentro del tab (#49). */
 export type FiltroSec =
   | ''
-  | 'pide-info'
-  | 'sin-responder'
+  | 'pregunto-precio'
+  | 'te-escribieron'
   | 'puedo-escribirle'
-  | 'ya-compraron'
   | 'bot-escalada'
   | 'bot-caliente';
 
@@ -38,33 +37,73 @@ export const TABS: { valor: Tab; label: string; vacio: string }[] = [
   { valor: 'favoritos', label: 'Favoritos', vacio: 'No marcaste favoritos.' },
 ];
 
+/**
+ * ══ EL CRITERIO: QUÉ TIENE QUE CUMPLIR UN CHIP PARA GANARSE EL LUGAR ══
+ *
+ * Salió del censo del 11-ago-2026, cuando se midió qué devolvía cada chip de esta
+ * barra sobre las 3.995 conversaciones de la ventana. Dos de seis mentían y uno
+ * era la mesa entera con otro nombre. Las cuatro condiciones:
+ *
+ *   1. **Es trabajo, no un estado.** Si la fila ya está atendida, no entra —
+ *      salvo que «atendida» no signifique terminada, y entonces hay que poder
+ *      decir por qué (ver «Preguntaron precio»).
+ *   2. **Se puede hacer hoy.**
+ *   3. **Cabe en un turno**: entre ~5 y ~50 filas. Cero es un callejón sin
+ *      salida; 500 es la mesa entera con otro nombre, y se aprende a ignorarla.
+ *   4. **No lo contesta otro chip.**
+ *
+ * Los tres que se retiraron, con su número medido:
+ *
+ *   · **«Piden info» (37)** — mentía. El 76 % de lo que enganchaba su predicado
+ *     era el texto que PRELLENA META en un anuncio click-to-WhatsApp, y contaba
+ *     como pedido a quien se despedía («gracias por la información, en otra
+ *     ocasión»). Lo reemplaza «Preguntaron precio», con el predicado arreglado en
+ *     `server/src/cola/pregunta.ts`.
+ *   · **«Sin responder» (505)** — falla la 2 y la 3: **472 (93 %) tenían más de
+ *     7 días** y solo 5 seguían dentro de la ventana de Meta. Lo reemplaza «Te
+ *     escribieron», que es lo mismo cortado a una semana.
+ *   · **«Ya compraron» (1.082)** — falla la 3: es el **27 % de la mesa**, y de
+ *     esas solo 99 hablaron alguna vez. No es una lista de trabajo, es un
+ *     atributo — y como atributo ya se ve: la fila lleva su píldora verde y la
+ *     ficha abre con la banda de cliente (#133). El server sigue aceptando
+ *     `intencion=ya-compraron`.
+ */
 export const FILTROS_SEC: { valor: Exclude<FiltroSec, ''>; label: string; ayuda: string }[] = [
   /**
-   * «PIDEN INFO» = pidió algo Y NADIE LE CONTESTÓ. La segunda mitad es la que lo
-   * vuelve usable.
+   * «PREGUNTARON PRECIO» — y por qué **no** mira si ya se contestó.
    *
-   * Medido en prod el 5-ago-2026: el predicado a secas daba **675**, y **647 de
-   * esas (96 %) ya estaban respondidas**. Un chip que ofrece 675 en una cola de
-   * 2.565 no ayuda a elegir a quién atender — es la quinta parte de la mesa, y
-   * de cada 25 filas 24 son trabajo hecho. Con la condición son 28.
+   * Su antecesor («Piden info») era `pide_info AND NOT respondida`, y esa segunda
+   * mitad era un parche sobre un predicado que mentía: 675 filas con el 96 % ya
+   * respondido obligaban a angostar por algún lado. Con el predicado arreglado no
+   * hace falta: **65 conversaciones en 30 días** nombran plata, y eso ya cabe en
+   * un turno.
    *
-   * Queda DENTRO de «Sin responder», a propósito: de las 454 que esperan, éstas
-   * pidieron algo concreto. Por eso va primero en la barra — es la prioridad
-   * dentro de la deuda, no otra deuda.
+   * Y no DEBE mirarlo, porque acá «ya le contesté» no significa terminado: quien
+   * preguntó el precio, recibió respuesta y se calló es el seguimiento más
+   * rentable de la mesa — ADR 0044 midió **540** conversaciones que se callaron
+   * justo con el precio. Filtrarlas sería esconder exactamente las que valen.
    *
-   * El HECHO no cambió: la fila sigue sabiendo que esa persona pidió info aunque
-   * ya se le haya contestado. Lo que se angostó es la pregunta del chip, que no
-   * es «¿qué dijo?» sino «¿a quién atiendo?».
+   * Quién espera respuesta lo contesta el chip de al lado; no hay que decirlo dos
+   * veces (condición 4).
    */
   {
-    valor: 'pide-info',
-    label: 'Piden info',
-    ayuda: 'Pidió información o precio y todavía nadie le contestó',
+    valor: 'pregunto-precio',
+    label: 'Preguntaron precio',
+    ayuda: 'Habló de plata: precio, cuotas, formas de pago o cómo inscribirse — le hayas contestado o no',
   },
+  /**
+   * «TE ESCRIBIERON» — la deuda que todavía se puede pagar.
+   *
+   * La deuda entera son 505 y no se esconde: la fila vieja sigue en la cola y el
+   * orden la sigue poniendo donde corresponde. Lo que se retira es la PROMESA de
+   * que esas 505 eran el trabajo del día. El corte vive en el server
+   * (`DIAS_DEUDA_VIVA`), no acá: el chip no puede prometer un número que la
+   * consulta después no devuelva.
+   */
   {
-    valor: 'sin-responder',
-    label: 'Sin responder',
-    ayuda: 'Nadie del equipo contestó todavía — la deuda entera, incluidos los que no pidieron nada',
+    valor: 'te-escribieron',
+    label: 'Te escribieron',
+    ayuda: 'Escribió esta semana y nadie del equipo contestó todavía',
   },
   /**
    * ══ «PUEDO ESCRIBIRLE» — LA VENTANA DE CONVERSACIÓN (server: cola/ventana.ts) ══
@@ -90,14 +129,6 @@ export const FILTROS_SEC: { valor: Exclude<FiltroSec, ''>; label: string; ayuda:
     label: 'Puedo escribirle',
     ayuda: 'La ventana sigue abierta: 24 h desde que escribió, 7 días desde que comentó',
   },
-  /**
-   * «Ya compraron» (#133) va PRIMERO de los tres cuando la vendedora elige a
-   * quién atender: son 140 de 1.997 y convierten mucho más barato que un frío.
-   * Va último en la barra igual, porque los otros dos son el trabajo del día
-   * (deuda y pedidos) y este es una oportunidad — pero con su número al lado, que
-   * es lo que hace que se lo mire.
-   */
-  { valor: 'ya-compraron', label: 'Ya compraron', ayuda: 'Ya te compró alguna vez: el lead más barato de convertir' },
   /**
    * ══ LOS DOS DEL BOT — y por qué SOLO aparecen cuando tienen algo que decir ══
    *
@@ -129,6 +160,20 @@ const TABS_VALIDOS: readonly string[] = TABS.map((t) => t.valor);
 
 export function esTab(x: unknown): x is Tab {
   return typeof x === 'string' && TABS_VALIDOS.includes(x);
+}
+
+const FILTROS_VALIDOS: readonly string[] = FILTROS_SEC.map((f) => f.valor);
+
+/**
+ * ¿Este string es un filtro que HOY existe? El hermano de `esTab`, y por el mismo
+ * motivo: la lista de filtros cambia, y quien reciba un valor de afuera —el
+ * caché persistido, un link viejo, la llamada legada de `VistaEmbudo`— tiene que
+ * preguntarle a la lista y no a un `||` de valores escritos a mano. Un `||` es
+ * lo que dejó `'pide-info' || 'sin-responder'` vivo en `conversaciones.ts`
+ * después de que los dos chips se retiraran.
+ */
+export function esFiltroSec(x: unknown): x is Exclude<FiltroSec, ''> {
+  return typeof x === 'string' && FILTROS_VALIDOS.includes(x);
 }
 
 /**
@@ -180,7 +225,10 @@ export const LINEA_MIAS = 'mias';
  * traduce UNA vez, al arrancar, y el valor viejo se borra para no volver a
  * pisar lo que la vendedora elija después.
  *
- *   · `pide-info`        → tab Todo + el filtro secundario «Piden info» (existe).
+ *   · `pide-info`        → tab Todo + **«Preguntaron precio»**. El chip que tenía
+ *     elegido ya no existe, y la pregunta que estaba haciendo —«¿quién quiere
+ *     algo?»— hoy la contesta ése. Mandarla a la cola entera sería castigarla por
+ *     un cambio que no pidió.
  *   · `puedo-escribirle` → tab Todo, SIN filtro. Su reencarnación de #49 era
  *     «Por vencer», que hoy devuelve cero filas en producción: aterrizar en una
  *     cola vacía es peor que aterrizar en la cola entera.
@@ -205,7 +253,7 @@ export function migracionDesdeKeyVieja(
     // Valor sin JSON válido: se usa tal cual y, si no matchea, cae en el default.
   }
 
-  if (valor === 'pide-info') return { tab: 'todo', filtroSec: 'pide-info' };
+  if (valor === 'pide-info') return { tab: 'todo', filtroSec: 'pregunto-precio' };
   return { tab: 'todo', filtroSec: '' };
 }
 

@@ -50,7 +50,9 @@ import { opcionesDeLinea, seDibujaElSelector } from './alcance';
  * seguridad detrás de un scroll horizontal invisible no es una red.
  *
  * Cuesta ~26 px de alto y los paga con que los tres chips del trabajo diario
- * —«Piden info», «Sin responder», «Ya compraron»— entran sin scrollear.
+ * —«Preguntaron precio», «Te escribieron», «Puedo escribirle»— entran sin
+ * scrollear. Desde el 11-ago-2026 son tres y no cinco: dos chips se retiraron
+ * por mentir o por no caber en un turno (ver el docblock de `FILTROS_SEC`).
  */
 /** ¿Hay más chips a la izquierda / a la derecha de lo que se ve? (los 4 px son ruido de subpíxel). */
 function sombrasDe(el: HTMLElement): { izq: boolean; der: boolean } {
@@ -233,8 +235,10 @@ export function BarraFiltros({
   onFiltro: (f: FiltroSec) => void;
   /** Cuántas filas daría cada filtro dentro del recorte actual (el server los cuenta). */
   conteos?: {
-    pideInfo: number;
-    sinResponder: number;
+    preguntoPrecio: number;
+    teEscribieron: number;
+    /** Sin chip desde el 11-ago-2026 (eran 505, el 93 % de más de una semana). */
+    sinResponder?: number;
     yaCompraron?: number;
     botEscalada?: number;
     botCaliente?: number;
@@ -256,19 +260,17 @@ export function BarraFiltros({
 }) {
   const categorias = categoriasDeLaBarra(catalogo, categoriaActiva);
   const conteoDe = (valor: string) =>
-    valor === 'pide-info'
-      ? conteos?.pideInfo
-      : valor === 'sin-responder'
-        ? conteos?.sinResponder
+    valor === 'pregunto-precio'
+      ? conteos?.preguntoPrecio
+      : valor === 'te-escribieron'
+        ? conteos?.teEscribieron
         : valor === 'puedo-escribirle'
           ? conteos?.puedoEscribirle
-          : valor === 'ya-compraron'
-            ? conteos?.yaCompraron
-            : valor === 'bot-escalada'
-              ? conteos?.botEscalada
-              : valor === 'bot-caliente'
-                ? conteos?.botCaliente
-                : undefined;
+          : valor === 'bot-escalada'
+            ? conteos?.botEscalada
+            : valor === 'bot-caliente'
+              ? conteos?.botCaliente
+              : undefined;
 
   /**
    * Los dos del bot se esconden en cero (regla 4 del docblock). El ACTIVO se

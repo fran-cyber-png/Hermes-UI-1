@@ -59,7 +59,7 @@ const rotulos = (c: HTMLElement) =>
  */
 describe('el chip de la ventana de conversación', () => {
   it('se dibuja SIEMPRE con su número: la ventana no es cosa de una línea sola', () => {
-    const c = pintar({ conteos: { pideInfo: 12, sinResponder: 30, puedoEscribirle: 47 } });
+    const c = pintar({ conteos: { preguntoPrecio: 12, teEscribieron: 30, puedoEscribirle: 47 } });
     const texto = rotulos(c).join('|');
     expect(texto).toContain('Puedo escribirle');
     expect(texto).toContain('47');
@@ -67,7 +67,7 @@ describe('el chip de la ventana de conversación', () => {
 
   it('el número que muestra es el SUYO, no el del chip de al lado', () => {
     const c = pintar({
-      conteos: { pideInfo: 12, sinResponder: 30, puedoEscribirle: 47, yaCompraron: 78 },
+      conteos: { preguntoPrecio: 12, teEscribieron: 30, puedoEscribirle: 47, yaCompraron: 78 },
     });
     const chip = rotulos(c).find((r) => r.includes('Puedo escribirle')) ?? '';
     expect(chip).toContain('47');
@@ -76,7 +76,7 @@ describe('el chip de la ventana de conversación', () => {
   });
 
   it('un server viejo no manda el conteo y el chip sale sin número, no con un 0 falso', () => {
-    const c = pintar({ conteos: { pideInfo: 12, sinResponder: 30 } });
+    const c = pintar({ conteos: { preguntoPrecio: 12, teEscribieron: 30 } });
     const chip = rotulos(c).find((r) => r.includes('Puedo escribirle')) ?? '';
     expect(chip).toContain('Puedo escribirle');
     expect(chip).not.toContain('0');
@@ -84,12 +84,12 @@ describe('el chip de la ventana de conversación', () => {
 
   /**
    * LA RAZÓN POR LA QUE ESTE PR RESCATA LAS DOS PISTAS. Con las cuatro líneas
-   * vivas y un chip más, en una sola pista «Sin responder» —la red que devuelve
+   * vivas y un chip más, en una sola pista «Te escribieron» —la red que devuelve
    * la deuda entera cuando lo leído baja— quedaba detrás de un scroll invisible.
    */
-  it('con las cuatro líneas vivas, «Sin responder» sigue en la pista de los filtros', () => {
+  it('con las cuatro líneas vivas, «Te escribieron» sigue en la pista de los filtros', () => {
     const c = pintar({
-      conteos: { pideInfo: 28, sinResponder: 454, puedoEscribirle: 47, yaCompraron: 78 },
+      conteos: { preguntoPrecio: 28, teEscribieron: 454, puedoEscribirle: 47, yaCompraron: 78 },
       lineas: [
         { numero: '51986394450', etiqueta: 'Ventas Perú', estado: 'conectado' },
         { numero: '51941654039', etiqueta: 'Walter Ventas', estado: 'conectado' },
@@ -103,16 +103,16 @@ describe('el chip de la ventana de conversación', () => {
     const filtros = Array.from(pistas[1]!.querySelectorAll('[data-chip]')).map(
       (b) => b.textContent?.trim() ?? '',
     );
-    expect(filtros.join('|')).toContain('Sin responder');
+    expect(filtros.join('|')).toContain('Te escribieron');
     expect(filtros.join('|')).toContain('Puedo escribirle');
   });
 });
 
 describe('los chips del bot', () => {
   it('NO se dibujan cuando el bot no dijo nada (las otras tres líneas)', () => {
-    const c = pintar({ conteos: { pideInfo: 12, sinResponder: 30, botEscalada: 0, botCaliente: 0 } });
+    const c = pintar({ conteos: { preguntoPrecio: 12, teEscribieron: 30, botEscalada: 0, botCaliente: 0 } });
     const texto = rotulos(c).join('|');
-    expect(texto).toContain('Piden info');
+    expect(texto).toContain('Preguntaron precio');
     expect(texto).not.toContain('Pidió ayuda');
     expect(texto).not.toContain('calientes');
   });
@@ -120,12 +120,12 @@ describe('los chips del bot', () => {
   it('tampoco cuando el server es viejo y ni manda los conteos', () => {
     // Un server sin este cambio no manda `botEscalada`. `undefined` no puede
     // dibujar un chip vacío: se comporta como cero.
-    const c = pintar({ conteos: { pideInfo: 12, sinResponder: 30 } });
+    const c = pintar({ conteos: { preguntoPrecio: 12, teEscribieron: 30 } });
     expect(rotulos(c).join('|')).not.toContain('Pidió ayuda');
   });
 
   it('APARECEN con su número cuando el bot escaló algo — el chip nuevo ES el aviso', () => {
-    const c = pintar({ conteos: { pideInfo: 12, sinResponder: 30, botEscalada: 3, botCaliente: 14 } });
+    const c = pintar({ conteos: { preguntoPrecio: 12, teEscribieron: 30, botEscalada: 3, botCaliente: 14 } });
     const texto = rotulos(c).join('|');
     expect(texto).toContain('Pidió ayuda');
     expect(texto).toContain('3');
@@ -136,13 +136,13 @@ describe('los chips del bot', () => {
     // Si desapareciera al filtrar, la vendedora se quedaría mirando una cola
     // vacía sin el chip que la apaga. Mismo criterio que la categoría activa,
     // que entra a la barra aunque el tope la dejara afuera.
-    const c = pintar({ filtroSec: 'bot-escalada', conteos: { pideInfo: 0, sinResponder: 0, botEscalada: 0 } });
+    const c = pintar({ filtroSec: 'bot-escalada', conteos: { preguntoPrecio: 0, teEscribieron: 0, botEscalada: 0 } });
     expect(rotulos(c).join('|')).toContain('Pidió ayuda');
   });
 
   it('filtrar por el chip del bot llama a `onFiltro` con su valor', () => {
     const onFiltro = vi.fn();
-    const c = pintar({ onFiltro, conteos: { pideInfo: 0, sinResponder: 0, botEscalada: 3 } });
+    const c = pintar({ onFiltro, conteos: { preguntoPrecio: 0, teEscribieron: 0, botEscalada: 3 } });
     const chip = Array.from(c.querySelectorAll<HTMLButtonElement>('[data-chip]')).find((b) =>
       b.textContent?.includes('Pidió ayuda'),
     );
@@ -181,7 +181,7 @@ describe('el segmentado de línea', () => {
     expect(texto).not.toContain('Escuela');
     expect(texto).not.toContain('Las mías');
     // La barra sigue viva: lo que se fue es el selector, no los filtros.
-    expect(texto).toContain('Piden info');
+    expect(texto).toContain('Preguntaron precio');
   });
 
   it('con VARIAS propias sí hay elección: «Las mías» + las suyas, sin «Todas»', () => {
@@ -207,7 +207,7 @@ describe('el segmentado de línea', () => {
    * 🔴 DOS PISTAS, NO UNA — y no es cosmética.
    *
    * Compartiendo una sola barra, cuatro líneas vivas se comían los 336 px y
-   * «Sin responder» quedaba fuera de la vista, detrás de un scroll horizontal
+   * «Te escribieron» quedaba fuera de la vista, detrás de un scroll horizontal
    * que no se anuncia. Desde que la cola ordena por la banda de leído, ese chip
    * es la RED DE SEGURIDAD de la cola entera: lo que ya se miró baja, y él lo
    * trae de vuelta. Una red detrás de un scroll invisible no es una red.
@@ -218,22 +218,22 @@ describe('el segmentado de línea', () => {
    * segmentado adentro de la pista de los filtros—, y eso es lo que se mira.
    */
   it('la línea y los filtros viven en pistas SEPARADAS', () => {
-    const c = pintar({ lineas: LINEAS, onLinea: () => {}, hayMias: false, conteos: { pideInfo: 12, sinResponder: 454 } });
+    const c = pintar({ lineas: LINEAS, onLinea: () => {}, hayMias: false, conteos: { preguntoPrecio: 12, teEscribieron: 454 } });
     const pistas = Array.from(c.querySelectorAll<HTMLElement>('[role="toolbar"]'));
     expect(pistas).toHaveLength(2);
 
     const textoDe = (el: HTMLElement) =>
       Array.from(el.querySelectorAll('[data-chip]')).map((b) => b.textContent?.trim() ?? '').join('|');
     expect(textoDe(pistas[0]!)).toContain('Todas');
-    expect(textoDe(pistas[0]!)).not.toContain('Sin responder');
-    expect(textoDe(pistas[1]!)).toContain('Sin responder');
+    expect(textoDe(pistas[0]!)).not.toContain('Te escribieron');
+    expect(textoDe(pistas[1]!)).toContain('Te escribieron');
     expect(textoDe(pistas[1]!)).not.toContain('Todas');
   });
 
   it('sin selector de línea queda UNA sola pista: la de los filtros', () => {
     // Con una línea propia el segmentado no se dibuja (regla de `alcance.ts`), y
     // entonces no hay por qué gastar los 26 px de una fila vacía.
-    const c = pintar({ lineas: LINEAS, onLinea: () => {}, hayMias: true, conteos: { pideInfo: 12, sinResponder: 454 } });
+    const c = pintar({ lineas: LINEAS, onLinea: () => {}, hayMias: true, conteos: { preguntoPrecio: 12, teEscribieron: 454 } });
     expect(c.querySelectorAll('[role="toolbar"]')).toHaveLength(1);
   });
 

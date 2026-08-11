@@ -116,7 +116,7 @@ export function conversacionDeRecordatorio(r: Recordatorio): Conversacion {
     contexto_texto: null,
     respondida: false,
     ventana_abierta: false,
-    pide_info: false,
+    pregunto: false,
     n: 1,
     referencia: r.cuando,
     ultimo_at: r.cuando,

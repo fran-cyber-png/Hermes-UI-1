@@ -61,7 +61,7 @@ const CONVERSACION = {
   contexto_texto: null,
   respondida: false,
   ventana_abierta: true,
-  pide_info: true,
+  pregunto: true,
   n: 4,
   referencia: 'r1',
   ultimo_at: HACE(6),

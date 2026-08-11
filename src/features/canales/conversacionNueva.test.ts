@@ -63,7 +63,7 @@ describe('conversacionDeTelefono — la clave que arma el front tiene que ser la
       n: 0,
       nivel: 5,
       respondida: false,
-      pide_info: false,
+      pregunto: false,
       texto: null,
     });
     expect(c.referencia).toBe(RELOJ.toISOString());

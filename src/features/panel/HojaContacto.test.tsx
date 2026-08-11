@@ -27,7 +27,7 @@ const CONTACTO: Conversacion = {
   contexto_texto: null,
   respondida: false,
   ventana_abierta: false,
-  pide_info: false,
+  pregunto: false,
   n: 0,
   referencia: '2026-08-05T14:00:00.000Z',
   ultimo_at: '2026-08-05T14:00:00.000Z',

@@ -96,7 +96,7 @@ export function ConversacionActiva({
       contexto_texto: conversacion.contexto_texto,
       occurred_at: conversacion.referencia,
       status: conversacion.respondida ? 'contactado' : 'nuevo',
-      pide_info: conversacion.pide_info,
+      pide_info: conversacion.pregunto,
       ventana_abierta: conversacion.ventana_abierta,
       dias: conversacion.dias,
     };

@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/datos/cliente';
-import { parametrosDeCola, type EstadoCola } from './cola';
+import { esFiltroSec, parametrosDeCola, type EstadoCola } from './cola';
 import type { FilaDesglose } from '../vistas/tablero';
 
 /**
@@ -67,7 +67,20 @@ export interface Conversacion {
    * que es como se comportaba antes. La lectura vive en `canales/ventana.ts`.
    */
   ventana_cierra?: string | null;
-  pide_info: boolean;
+  /**
+   * ¿PIDIÓ ALGO? Los tres niveles del predicado viven en el server
+   * (`cola/pregunta.ts`): precio, un sustantivo concreto, o un pedido genérico
+   * que no sea el texto del anuncio.
+   */
+  pregunto: boolean;
+  /** Nombró plata: precio, cuotas, yape, cómo inscribirse. Es el chip. */
+  pregunto_precio?: boolean;
+  /**
+   * El último entrante lo escribió el ANUNCIO, no la persona. AUSENTE = server
+   * viejo o respuesta rehidratada del caché (ADR 0007): ahí no se dibuja nada y
+   * la fila se comporta como antes de este frente.
+   */
+  solo_clic?: boolean;
   /** Cuántos mensajes agrupa la conversación (1 en comentarios). */
   n: number;
   referencia: string;
@@ -138,8 +151,12 @@ type Pagina = {
   conteos?: Record<string, number>;
   /** Cuántas filas daría cada filtro secundario dentro del recorte actual. Primera página. */
   conteosFiltro?: {
-    pideInfo: number;
-    sinResponder: number;
+    preguntoPrecio: number;
+    teEscribieron: number;
+    /** La deuda entera, sin corte de antigüedad. Ya no tiene chip: eran 505 y el
+     *  93 % de más de una semana. Se sigue contando porque es el número que dice
+     *  si la deuda vieja crece. */
+    sinResponder?: number;
     yaCompraron?: number;
     /** El bot se frenó y espera a una persona. Opcional: un server viejo no lo manda. */
     botEscalada?: number;
@@ -180,13 +197,13 @@ export function useConversaciones(
 ) {
   // Compat: `VistaEmbudo` (otro frente) todavía llama `useConversaciones(intencion, canal, etapa)`
   // por posición, con el string viejo de intención. Un string legado se normaliza
-  // a un estado: `''` = todo, y solo `pide-info`/`por-vencer` sobreviven como
+  // a un estado: `''` = todo, y solo los filtros que HOY existen sobreviven como
   // filtro secundario; `canal`/`etapa` posicionales entran igual al estado.
   const norm: EstadoCola =
     typeof estado === 'string'
       ? {
           tab: 'todo',
-          filtroSec: estado === 'pide-info' || estado === 'sin-responder' ? estado : '',
+          filtroSec: esFiltroSec(estado) ? estado : '',
           categoria: null,
           canal: canal || undefined,
           etapa: etapa || undefined,

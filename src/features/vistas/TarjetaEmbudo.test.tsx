@@ -25,7 +25,7 @@ const BASE: Conversacion = {
   contexto_texto: null,
   respondida: false,
   ventana_abierta: false,
-  pide_info: false,
+  pregunto: false,
   n: 3,
   referencia: '2026-08-05T12:00:00.000Z',
   ultimo_at: '2026-08-05T12:00:00.000Z',

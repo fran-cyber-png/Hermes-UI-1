@@ -191,13 +191,15 @@ export function ColaUnificada({
     ? statsDia.data?.porVendedora.find((v) => v.vendedora === miVendedora)?.conversaciones_hoy
     : undefined;
 
-  const conteoPideInfo = useQuery({
-    queryKey: ['conversaciones', 'conteo', 'pide-info'],
-    queryFn: () => api<{ total?: number }>('/api/conversaciones?intencion=pide-info&limit=1&offset=0'),
+  // La salida de «estás al día»: a quién mirar cuando no hay deuda. Es el chip de
+  // plata y no el de deuda, justamente porque acá ya no queda deuda que ofrecer.
+  const conteoPrecio = useQuery({
+    queryKey: ['conversaciones', 'conteo', 'pregunto-precio'],
+    queryFn: () => api<{ total?: number }>('/api/conversaciones?intencion=pregunto-precio&limit=1&offset=0'),
     enabled: despachada,
     staleTime: 60_000,
   });
-  const nPideInfo = conteoPideInfo.data?.total ?? 0;
+  const nPreguntoPrecio = conteoPrecio.data?.total ?? 0;
 
   const { agenda } = useAgenda();
   const nAgenda = pendientesQueApuran(agenda.data?.recordatorios);
@@ -257,7 +259,9 @@ export function ColaUnificada({
       contexto_texto: null,
       respondida: false,
       ventana_abierta: false,
-      pide_info: false,
+      pregunto: false,
+      pregunto_precio: false,
+      solo_clic: false,
       n: 0,
       referencia: new Date().toISOString(),
       ultimo_at: new Date().toISOString(),
@@ -622,13 +626,13 @@ export function ColaUnificada({
                   <p className="mt-1.5 text-sm text-muted-foreground">No queda deuda en la cola ahora mismo.</p>
                 </>
               )}
-              {nPideInfo > 0 ? (
+              {nPreguntoPrecio > 0 ? (
                 <button
                   type="button"
-                  onClick={() => setFiltroSec('pide-info')}
+                  onClick={() => setFiltroSec('pregunto-precio')}
                   className="mt-4 rounded-lg border border-border px-3 py-1.5 text-xs font-bold text-foreground transition-colors hover:border-primary hover:text-primary"
                 >
-                  Ver los {nPideInfo} que piden info →
+                  Ver los {nPreguntoPrecio} que preguntaron precio →
                 </button>
               ) : onIrAgenda ? (
                 <button
@@ -678,7 +682,7 @@ export function ColaUnificada({
                 seleccionada={seleccionada === c.clave}
                 onAbrir={onSeleccionar}
                 etapa={etapas?.[c.persona_id ?? '']}
-                mostrarPideInfo={filtroSec !== 'pide-info'}
+                mostrarPregunto={filtroSec !== 'pregunto-precio'}
                 catalogoCategorias={catalogo}
                 miVendedora={miVendedora}
                 esNueva={esNueva(c)}
