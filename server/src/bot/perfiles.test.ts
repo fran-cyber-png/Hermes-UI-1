@@ -26,7 +26,7 @@ describe("a qué línea le toca qué perfil", () => {
 });
 
 describe("el prompt de campaña no puede sonar a la Escuela", () => {
-  const prompt = armarSystemPrompt(vacio, PERFIL_CAMPANA_BETTO);
+  const prompt = armarSystemPrompt({ hechos: [...PERFIL_CAMPANA_BETTO.hechos], piezas: [], lecciones: [] }, PERFIL_CAMPANA_BETTO);
 
   test("🔴 no nombra a la asesora ni el negocio de la Escuela", () => {
     // El defecto que este archivo existe para tapar: con el prompt fijo, prender
@@ -39,47 +39,65 @@ describe("el prompt de campaña no puede sonar a la Escuela", () => {
     }
   });
 
-  test("dice de quién es la línea y a qué elección", () => {
-    assert.match(prompt, /Betto Barrionuevo/);
+  test("habla en primera persona, como el candidato (decisión del dueño)", () => {
+    assert.match(prompt, /Eres Betto Barrionuevo Romero/);
+    assert.match(prompt, /Escribes en primera persona/);
+  });
+
+  test("dice a qué postula y a qué elección", () => {
     assert.match(prompt, /Gobernador Regional/);
     assert.match(prompt, /Áncash/);
     assert.match(prompt, /PODEMOS PERÚ/);
     assert.match(prompt, /4 de octubre de 2026/);
   });
 
-  test("🔴 le prohíbe hablar como el candidato — es una persona real", () => {
-    // Cada frase en primera persona sería una declaración suya, citable.
-    assert.match(prompt, /NO eres Betto/);
-    assert.match(prompt, /NUNCA hables en primera persona como Betto/);
+  test("el primer contacto saluda y agradece antes de preguntar", () => {
+    assert.match(prompt, /soy Betto Barrionuevo\. Gracias por escribirme/);
+    assert.match(prompt, /pregunta su NOMBRE/);
   });
 
   test("🔴 le prohíbe prometer, y eso incluye plata y gestiones", () => {
+    // Acá el daño de una frase de más no es una venta perdida: es un compromiso
+    // público que alguien va a reclamar, y va firmado con su nombre.
     assert.match(prompt, /NUNCA prometas NADA/);
     assert.match(prompt, /NUNCA pidas ni ofrezcas dinero/);
+  });
+
+  test("🔴 no afirma ser humano si le preguntan — escala", () => {
+    // Hablar en su voz es una cosa; jurar que del otro lado hay una persona es
+    // la que se convierte en la nota de prensa.
+    assert.match(prompt, /NUNCA\s+afirmes ser una persona/);
+    assert.match(prompt, /pregunto_si_es_bot/);
+  });
+
+  test("🔴 no inventa propuestas ni plan de gobierno", () => {
+    assert.match(prompt, /NUNCA inventes propuestas, planes de gobierno/);
+    assert.match(prompt, /preferible quedar corto que afirmar algo falso/);
   });
 
   test("no opina de otros candidatos ni responde ataques", () => {
     assert.match(prompt, /NUNCA opines sobre otros candidatos/);
   });
 
-  test("sin datos afirmables, el prompt DICE que escala — no improvisa", () => {
-    assert.equal(PERFIL_CAMPANA_BETTO.hechos.length, 0);
-    assert.match(prompt, /No hay datos afirmables configurados todavía/);
+  test("los datos afirmables son SOLO su biografía pública, sin propuestas", () => {
+    const textos = PERFIL_CAMPANA_BETTO.hechos.map((h) => h.texto).join(" ");
+    assert.match(textos, /Gobernador Regional de Áncash/);
+    assert.match(textos, /contador público/);
+    for (const prohibido of ["propongo", "haré", "vamos a construir", "prometo"]) {
+      assert.ok(!textos.includes(prohibido), `un dato afirmable no puede decir «${prohibido}»`);
+    }
   });
 });
 
 describe("el guardrail sigue al perfil, no a la Escuela", () => {
-  test("🔴 «soy Betto» es una violación de identidad en su propia línea", () => {
-    const v = evaluarReglas("Hola, soy Betto y le agradezco su mensaje.", PERFIL_CAMPANA_BETTO);
-    assert.ok(v.some((x) => x.regla === "identidad"), "tenía que marcar identidad");
+  test("presentarse como Betto es CORRECTO en su propia línea", () => {
+    const v = evaluarReglas("Hola, soy Betto Barrionuevo. Gracias por escribirme.", PERFIL_CAMPANA_BETTO);
+    assert.equal(v.filter((x) => x.regla === "identidad").length, 0);
   });
 
-  test("presentarse como el equipo NO se marca", () => {
-    const v = evaluarReglas(
-      "Hola, le saluda el equipo de campaña de Betto Barrionuevo. ¿Cuál es su nombre?",
-      PERFIL_CAMPANA_BETTO,
-    );
-    assert.equal(v.filter((x) => x.regla === "identidad").length, 0);
+  test("🔴 pero presentarse con OTRO nombre se sigue marcando", () => {
+    const v = evaluarReglas("Hola, soy Juan Pérez del comando.", PERFIL_CAMPANA_BETTO);
+    assert.ok(v.some((x) => x.regla === "identidad"), "tenía que marcar identidad");
   });
 
   test("🔴 en campaña NO hay sedes: nombrar una es inventarla", () => {
