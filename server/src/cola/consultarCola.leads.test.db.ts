@@ -162,3 +162,63 @@ test("🔴 por el camino REAL de la columna (?etapa=interesado) el formulario de
   // Y las tres conviven en la MISMA columna: el lead no la reemplaza ni la parte.
   assert.equal(filas.length, 3);
 });
+
+test("🔴 el reparto NO puede esconder los formularios: quien está en la rueda los sigue viendo", async (t) => {
+  /**
+   * ══ MEDIDO EN LOCAL CONTRA UNA COPIA DE PRODUCCIÓN (11-ago-2026) ═════════
+   *
+   * `esMiaSql` mira `conversacion_asignada`, que se llena en el webhook de la
+   * Cloud API — o sea, cuando llega un MENSAJE. Un lead de landing no pasa por
+   * ahí y **nunca puede tener una fila**: el recorte del reparto no lo filtra,
+   * lo elimina.
+   *
+   * Con `ventas10@grupogoberna.com` (está en la rueda, así que `enElReparto` se
+   * prende sola) «Te esperan» devolvía **1 tarjeta y CERO formularios**, contra
+   * las 522 que ve alguien fuera de la rueda. El frente entero era invisible
+   * justo para las cinco personas que venden.
+   *
+   * ⚠️ Lo que este test NO dice: que esté bien que las cinco vean la misma pila.
+   * Está escrito en `consultarCola.ts` que se acepta a ojos abiertos hasta que
+   * repartir leads sea un frente propio. Lo que fija es que **esconderlos es
+   * peor**, y que la conversación ajena SÍ se sigue recortando.
+   */
+  const db = await baseDePrueba(t);
+  await sembrarLead(db, { ...deLanding, phone: "+51987654329", fullName: "Ana de la landing" });
+  // Una conversación de OTRA persona, sin asignar a nadie: tiene que seguir
+  // cayéndose con el recorte del reparto puesto. Si no, la exención sería un
+  // agujero en el reparto en vez de una exención acotada a los formularios.
+  await sembrarMensaje(db, { personaId: "51900000099" });
+
+  const r = await consultarCola(db, { etapa: "interesado", misAsignadas: true, vendedoraId: "ventas10@grupogoberna.com" });
+
+  assert.ok(filaDe(r, "51987654329"), "el formulario tiene que seguir estando: el reparto no lo alcanza");
+  assert.equal(
+    filaDe(r, "51900000099"),
+    undefined,
+    "la conversación sin asignar SÍ se recorta: la exención es solo para los formularios",
+  );
+});
+
+test("🔴 una tarjeta por PERSONA, no por envío de formulario", async (t) => {
+  /**
+   * Medido en producción: dentro de la ventana de 30 días son **154 envíos de
+   * 145 personas**. Sin el `DISTINCT ON`, «makanaky» ocupaba cuatro tarjetas
+   * seguidas de las primeras veinte de la columna — y la vendedora le abre
+   * conversación dos veces creyendo que son dos leads.
+   */
+  const db = await baseDePrueba(t);
+  const hace = (h: number) => new Date(Date.now() - h * 60 * 60 * 1000);
+  await sembrarLead(db, {
+    ...deLanding, phone: "+51987654330", fullName: "Rita", campaignName: "Oratoria", createdTime: hace(30),
+  });
+  await sembrarLead(db, {
+    ...deLanding, phone: "+51987654330", fullName: "Rita", campaignName: "Gestión Pública", createdTime: hace(2),
+  });
+
+  const filas = (await consultarCola(db, { etapa: "interesado" })).conversaciones as Array<Record<string, unknown>>;
+  const suyas = filas.filter((f) => String(f.persona_id ?? "").endsWith("987654330"));
+
+  assert.equal(suyas.length, 1, "dos envíos de la misma persona son UNA tarjeta");
+  // Gana el más reciente: lo último que dijo que quería es lo que hay que contestarle.
+  assert.equal(suyas[0]?.texto, "Gestión Pública");
+});

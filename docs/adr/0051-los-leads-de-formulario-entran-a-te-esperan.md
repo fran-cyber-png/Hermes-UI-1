@@ -126,6 +126,42 @@ conversaciones por fecha, que es la consecuencia de que la columna signifique «
 | llegados en la última semana | 45 |
 | el resto | se intercala por fecha entre las 377, en vez de ir después de todas |
 
+### 🔴 Y al verlo corriendo aparecieron dos defectos más que ningún test veía
+
+Levantar Hermes en local **contra una copia de producción** (dump read-only de 16 tablas, ~85 MB)
+mostró en diez minutos dos cosas que ni el SQL ni los tests con datos sembrados podían mostrar. **Es
+la lección de «la galería mostraba el caso ideal», otra vez**: los datos de verdad tienen formas que
+uno no siembra.
+
+**1. El reparto no escondía los formularios: los borraba.** `esMiaSql` mira
+`conversacion_asignada`, que se llena en el webhook de la Cloud API — o sea, **cuando llega un
+mensaje**. Un lead de landing no pasa por ahí y no puede tener una fila nunca, así que el recorte no
+lo filtra, lo elimina.
+
+| quién mira | «Te esperan», antes | después |
+|---|---|---|
+| `luz` (fuera de la rueda) | 531 | 522 |
+| **`ventas10@…` (en la rueda)** | **1 · cero formularios** | **146** |
+
+O sea: el frente entero era invisible **justo para las cinco personas que venden**. La exención va
+**por fila** (`(esMia) OR tipo = 'lead'`) y no apagando el recorte: las conversaciones ajenas se
+tienen que seguir recortando, y hay test de las dos mitades.
+
+⚠️ **La consecuencia se acepta a ojos abiertos**: las cinco ven la misma pila, así que dos pueden
+abrirle a la misma persona. Es peor que repartirlos y muchísimo mejor que esconderlos — y repartirlos
+es un frente propio, con su lugar ya pensado (`contacto_habilitado`, ADR 0035). Mismo criterio que
+`sinLineasPropias`: un filtro que no puede filtrar se dice, no se aplica.
+
+**2. Una tarjeta por ENVÍO, no por persona.** La misma persona manda el formulario varias veces:
+dentro de la ventana son **154 envíos de 145 personas** (en el histórico, 25.399 de 21.217).
+«makanaky» ocupaba **cuatro tarjetas seguidas** de las primeras veinte, con cuatro cursos distintos.
+La vendedora le abre conversación dos veces creyendo que son dos leads — el daño exacto que el
+reparto existe para evitar. Se arregla con `DISTINCT ON` por sufijo de teléfono, ganando el envío más
+reciente (lo último que dijo que quería es lo que hay que contestarle).
+
+⚠️ **El subselect que lo encierra no es decorativo**: un `ORDER BY` suelto en un brazo de `UNION ALL`
+se lo queda la unión entera, y ahí `phone` no existe — la consulta ni arranca.
+
 ### Alcance: esto también cambia el orden de **Mensajes**
 
 Los leads ya entraban a esa cola (el mismo `todo`), también en el nivel 5. Con la enmienda, un
@@ -140,3 +176,22 @@ ese trabajo se hace — dos órdenes distintos para el mismo hecho es el defecto
 `docs/evidencia/te-esperan-con-formularios.png` — las dos formas conviviendo en la columna.
 ⚠️ Los tests con base (`consultarCola.leads.test.db.ts`) **no se corrieron localmente** (sin Docker
 en la máquina): los corre **N2b** en CI. El SQL sí se validó contra la base de producción.
+
+### De la enmienda (11-ago-2026)
+
+La app real, corriendo en local **contra una copia de los datos de producción**:
+
+- `docs/evidencia/te-esperan-formularios-arriba.png` — **522 Te esperan**, encabezada por los
+  formularios de hoy (`← 2 h`, `← 6 h`, `← 9 h`…), cada uno con su píldora «Formulario» y su curso.
+  La cabecera dice **«19 ahora»**, que son los del nivel 0.
+- `docs/evidencia/te-esperan-vendedora-de-la-rueda.png` — la MISMA columna vista por
+  `ventas10@grupogoberna.com`: **146**. Antes de la enmienda, **1**.
+
+⚠️ En las dos capturas el chip dice «Reconectá con Cerberus para registrar ventas»: es del entorno
+local (el token se firmó a mano, sin sesión de Cerberus), no un defecto de la pantalla.
+
+**Cómo se rehace** (todo read-only contra producción):
+`pg_dump --data-only` de las 16 tablas de la cola → restaurar en la base local con
+`SET session_replication_role = replica` → `VITE_API_URL=http://127.0.0.1:4100 npm run dev`.
+⚠️ **El `.env` de la raíz apunta el front a `hermes-api.goberna.us`**: sin ese override, «local»
+mira producción — se ve enseguida porque todo da 401, pero conviene saberlo antes.

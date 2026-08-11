@@ -811,7 +811,33 @@ async function ejecutarCola(
    * daría cero filas y se leería como «no te asignaron nada».
    */
   const esMia = conAsignacion ? esMiaSql(vendedoraId) : null;
-  const soloMias = conAsignacion && (opciones.misAsignadas || opciones.enElReparto) && esMia ? [esMia] : [];
+  /**
+   * ══ 🔴 EL REPARTO NO ALCANZA A LOS FORMULARIOS, Y SI SE APLICA LOS BORRA ═══
+   *
+   * `esMiaSql` mira `conversacion_asignada`, que se llena en el webhook de la
+   * Cloud API — o sea, **cuando llega un MENSAJE**. Un lead de landing no pasa
+   * por ahí y nunca puede tener una fila: el predicado no lo filtra, lo elimina.
+   *
+   * Medido en local contra una copia de producción (11-ago-2026): con
+   * `ventas10@grupogoberna.com` —que está en la rueda, así que `enElReparto` se
+   * prende sola— «Te esperan» devolvía **1 tarjeta y CERO formularios**, contra
+   * las 531 (154 de ellas formularios) que ve alguien fuera de la rueda. El
+   * frente entero era invisible **justo para las cinco personas que venden**.
+   *
+   * Por eso la exención es POR FILA y no apagando el recorte: las 377
+   * conversaciones tienen que seguir recortándose (para eso existe el reparto),
+   * y los formularios tienen que seguir estando.
+   *
+   * ⚠️ **La consecuencia se acepta a ojos abiertos**: las cinco ven la MISMA pila
+   * de formularios, así que dos pueden abrirle a la misma persona. Es peor que
+   * repartirlos y muchísimo mejor que esconderlos — y repartirlos es un frente
+   * propio, con su lugar ya pensado (`contacto_habilitado`, ADR 0035). Es el
+   * mismo criterio de `sinLineasPropias`: un filtro que no puede filtrar se dice,
+   * no se aplica.
+   */
+  const mia = esMia ? sql`((${esMia}) OR tipo = 'lead')` : null;
+  const soloMias =
+    conAsignacion && (opciones.misAsignadas || opciones.enElReparto) && mia ? [mia] : [];
 
   const condiciones = [...condicionesBase, ...condicionesRecorte, ...soloMias];
 

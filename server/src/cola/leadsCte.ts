@@ -30,7 +30,26 @@ import { fuenteLeadSql, productoLeadSql } from "../dashboard/fuenteLead.js";
  * volvería la misma pila muerta que «Nunca contestaron», que se acaba de sacar
  * por eso mismo (ADR 0050).
  *
- * ── LA DEDUPLICACIÓN, Y HACIA QUÉ LADO FALLA ─────────────────────────────
+ * ── 🔴 UNA TARJETA POR PERSONA, NO POR ENVÍO DE FORMULARIO ───────────────
+ * La misma persona manda el formulario varias veces —medido en producción el
+ * 11-ago-2026: dentro de la ventana de 30 días son **154 envíos de 145
+ * personas**, y en el histórico 25.399 envíos de 21.217—. Sin el `DISTINCT ON`,
+ * «makanaky» ocupaba **cuatro tarjetas seguidas** de las primeras veinte de la
+ * columna, y la vendedora le abre conversación dos veces creyendo que son dos
+ * leads: exactamente el daño que el reparto existe para evitar.
+ *
+ * Gana el envío **más reciente**: lo último que la persona dijo que quería es lo
+ * que hay que contestarle. ⚠️ Eso significa que de alguien que llenó cuatro
+ * formularios distintos se muestra **un** curso, no cuatro — la tarjeta es «a
+ * quién le abro conversación», no el inventario de lo que le interesa.
+ *
+ * ⚠️ **La `clave` sigue siendo `lead:<id>`, o sea la del envío que ganó**, así
+ * que un formulario nuevo de la misma persona le cambia la clave a la tarjeta.
+ * Se acepta: lo único que cuelga de una clave es el estado personal
+ * (pin/leído), y volver a aparecer sin leer después de que la persona insistió
+ * es más correcto que menos.
+ *
+ * ── LA DEDUPLICACIÓN CONTRA LAS CONVERSACIONES, Y HACIA QUÉ LADO FALLA ────
  * Un lead que YA tiene conversación no puede aparecer dos veces, así que se
  * descarta por teléfono contra `interactions`. Se compara con
  * `sufijoTelefonoSql` —**la llave canónica** de la ficha, el padrón y el chip de
@@ -65,7 +84,12 @@ export const sufijosConConversacionCte: SQL = sql`
  * cambiar para los tres brazos a la vez.
  */
 export const leadsCte = (ventana: (columna: SQL) => SQL): SQL => sql`
-  SELECT
+  -- ⚠️ EL SUBSELECT NO ES DECORATIVO: un ORDER BY suelto en un brazo de UNION ALL
+  -- se lo queda la UNIÓN entera, no el brazo — y ahí la columna phone no existe (los otros
+  -- dos brazos no la tienen), así que la consulta ni arranca. Encerrado, el
+  -- DISTINCT ON y su desempate quedan donde corresponde.
+  SELECT * FROM (
+  SELECT DISTINCT ON (${sufijoTelefonoSql("phone")})
     'lead:' || id::text                         AS clave,
     -- El canal es 'landing' y NO 'web': 'web' es el valor crudo que icarus
     -- escribe en platform, y acá se habla el vocabulario de la cola. La
@@ -124,4 +148,10 @@ export const leadsCte = (ventana: (columna: SQL) => SQL): SQL => sql`
     AND (${fuenteLeadSql}) = 'landing'
     AND (${ventana(sql`created_time`)})
     AND ${sufijoTelefonoSql("phone")} NOT IN (SELECT sufijo FROM sufijos_con_conversacion)
+  -- 🔴 UNA TARJETA POR PERSONA, NO POR ENVÍO — el desempate del DISTINCT ON.
+  -- Gana el formulario MÁS RECIENTE: lo último que la persona dijo que quería es
+  -- lo que hay que contestarle. El id DESC desempata dos envíos con el mismo
+  -- created_time (el mismo tick del reloj), como en ultimasGestionesSql.
+  ORDER BY ${sufijoTelefonoSql("phone")}, created_time DESC, id DESC
+  ) AS lead_por_persona
 `;

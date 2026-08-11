@@ -745,6 +745,19 @@ y las conversaciones.
     sembralo en `urgencia.paridad.test.db.ts` — si no, las dos escrituras divergen mudas.
   · ⚠️ **Cambia también el orden de Mensajes**, a propósito: los leads ya estaban en esa cola, en el
     nivel 5. Dos órdenes distintos para el mismo hecho es #37.
+- 🔴 **EL REPARTO NO LOS FILTRA: LOS BORRA — y por eso lleva exención explícita.** `esMiaSql` mira
+  `conversacion_asignada`, que se llena en el webhook de la Cloud API (o sea, **cuando llega un
+  mensaje**): un lead no pasa por ahí y no puede tener fila nunca. Medido en local contra una copia
+  de prod: `ventas10@` (en la rueda, así que `enElReparto` se prende sola) veía **1 tarjeta y cero
+  formularios** contra las 522 de alguien fuera de la rueda. La exención es **por fila**
+  (`(esMia) OR tipo = 'lead'`), no apagando el recorte — las conversaciones ajenas se siguen
+  recortando, y hay test de las dos mitades. ⚠️ Se acepta que las cinco vean la misma pila: repartir
+  leads es otro frente (`contacto_habilitado`, ADR 0035).
+- 🔴 **UNA TARJETA POR PERSONA, NO POR ENVÍO** (`DISTINCT ON` por sufijo, gana el más reciente): la
+  misma persona manda el formulario varias veces — **154 envíos de 145 personas** en la ventana,
+  25.399 de 21.217 en el histórico. Sin eso «makanaky» ocupaba **cuatro tarjetas seguidas** y la
+  vendedora le abre conversación dos veces. ⚠️ **El subselect que lo encierra no es decorativo**: un
+  `ORDER BY` suelto en un brazo de `UNION ALL` se lo queda la unión entera y ahí `phone` no existe.
 - ⚠️ **Se caen del UNION con recorte de LÍNEA o de CANAL**, como los comentarios: nadie les escribió,
   así que no entraron por ningún número nuestro — y su brazo lee `leads`, que **no tiene columna
   `canal`**, así que el `AND canal = …` de los otros dos ni siquiera compilaría.
@@ -756,7 +769,14 @@ y las conversaciones.
   lead hay que **abrirle** el chat en frío, que en whatsmeow es el camino corto al ban (regla dura
   #7). Por eso la píldora **«Formulario»**, y va en el **segundo renglón** — al lado del nombre se lo
   comía en 225 px. **Lo mostró la captura, no un test.**
-- Capturas: `docs/evidencia/te-esperan-con-formularios.png`.
+- Capturas: `docs/evidencia/te-esperan-con-formularios.png`,
+  `te-esperan-formularios-arriba.png`, `te-esperan-vendedora-de-la-rueda.png`.
+- 🔴 **LOS DOS DEFECTOS DE ARRIBA LOS ENCONTRÓ CORRER LA APP CONTRA UNA COPIA DE PRODUCCIÓN**, no un
+  test ni el SQL: los datos sembrados no tienen ni gente que manda el formulario cuatro veces ni una
+  rueda de reparto cargada. **Para un frente que toca la cola, traé los datos** — `pg_dump
+  --data-only` de las 16 tablas (~85 MB), restaurar con `SET session_replication_role = replica`, y
+  `VITE_API_URL=http://127.0.0.1:4100 npm run dev`. ⚠️ **El `.env` de la raíz apunta el front a
+  `hermes-api.goberna.us`**: sin ese override, «local» le pega a producción.
 
 ## Los leads de formulario en el radar (8-ago-2026)
 
