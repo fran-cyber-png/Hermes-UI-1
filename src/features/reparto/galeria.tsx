@@ -38,7 +38,7 @@ function fila(over: Partial<Conversacion>): Conversacion {
     contexto_texto: null,
     respondida: false,
     ventana_abierta: false,
-    pide_info: true,
+    pregunto: true,
     n: 2,
     referencia: haceHoras(3),
     ultimo_at: haceHoras(3),
@@ -84,7 +84,7 @@ const LINEAS = [
   { numero: '51984429504', etiqueta: 'Ventas Meta', estado: 'conectado' },
 ];
 
-const CONTEOS = { pideInfo: 311, sinResponder: 478, yaCompraron: 78, botEscalada: 3, botCaliente: 14 };
+const CONTEOS = { preguntoPrecio: 65, teEscribieron: 33, botEscalada: 33, botCaliente: 30 };
 
 // `useLineas()` pide `/api/whatsapp/lineas`. Acá no hay server, así que se le
 // siembra la respuesta en el caché: el componente no se entera de la diferencia

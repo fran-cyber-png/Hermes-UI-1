@@ -25,13 +25,13 @@ const PARAMS = new URLSearchParams(location.search);
 /**
  * Las columnas, con la forma real de producción (medida el 10-ago-2026).
  *
- * ⚠️ **`sin_respuesta` se sacó el 10-ago y volvió el 11** (ADR 0052): sacarla
- * escondía el trabajo del día. Está acá con su tamaño REAL —2.575, el montón más
- * grande— justamente para que la captura muestre lo ajustado que quedó el grid.
+ * ⚠️ **`sin_respuesta` ya no está**: desde el 10-ago dejó de ser columna
+ * (decisión del dueño — era el 65 % de la mesa y nadie la trabajaba). Sigue
+ * derivándose en el server, así que si alguien la vuelve a poner acá la galería
+ * mentiría sobre lo que la pantalla dibuja.
  */
 const POR_ETAPA: Record<string, number> = {
   interesado: 377,
-  sin_respuesta: 2575,
   contactado: 217,
   cotizado: 798,
   cierre: 12,
@@ -48,7 +48,6 @@ const POR_RECORTE: Record<string, Record<string, number>> = {
   // recién, por definición—, y ahí la otra mitad de la regla del cero lo esconde
   // sola. Está puesto en el TOTAL a propósito: es el caso que hay que poder ver.
   interesado: { ventana: 377, seguir: 88, precio: 0 },
-  sin_respuesta: { ventana: 0, seguir: 310, precio: 2248 },
   contactado: { ventana: 0, seguir: 24, precio: 0 },
   cotizado: { ventana: 2, seguir: 82, precio: 798 },
 };
@@ -67,7 +66,6 @@ const NOMBRES = [
 /** Cada columna arranca en otro bloque de números: ver abajo por qué importa. */
 const DESDE: Record<string, number> = {
   interesado: 400,
-  sin_respuesta: 500,
   contactado: 0,
   cotizado: 100,
   cierre: 200,
@@ -115,7 +113,7 @@ function tarjetas(etapa: string, cuantas: number) {
         ventana_abierta: false,
         // Sin conversación no hay ventana que abrir: hay que ABRIRLE el chat.
         ventana_cierra: null,
-        pide_info: false,
+        pregunto: false,
         n: 1,
         referencia: cuando,
         ultimo_at: cuando,
@@ -191,8 +189,6 @@ const DESGLOSE = [
   // Los números son los MEDIDOS en producción el 8-ago-2026 (ver `POR_RECORTE`):
   // «en ventana» deja 0 de 544 y 2 de 3.051 —por eso ese chip casi no aparece— y
   // «para seguir» es el único que recorta de verdad.
-  { etapa: 'sin_respuesta', yaLeHablamos: true, precio: true, viva: false, ventana: false, paraSeguir: true, n: 310 },
-  { etapa: 'sin_respuesta', yaLeHablamos: true, precio: true, viva: false, ventana: false, paraSeguir: false, n: 2265 },
   { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, ventana: false, paraSeguir: true, n: 24 },
   { etapa: 'contactado', yaLeHablamos: true, precio: false, viva: false, ventana: false, paraSeguir: false, n: 193 },
   { etapa: 'cotizado', yaLeHablamos: true, precio: true, viva: false, ventana: true, paraSeguir: false, n: 2 },

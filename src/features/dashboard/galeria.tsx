@@ -54,7 +54,7 @@ function chats(cuantos: number) {
       contexto_texto: null,
       telefono,
       pais_dato: pais,
-      pide_info: i % 2 === 0,
+      pregunto: i % 2 === 0,
       ventana_dias: null,
       ventana_abierta: false,
       respondida: i % 3 === 0,

@@ -42,7 +42,7 @@ function fila(over: Partial<Conversacion>): Conversacion {
     contexto_texto: null,
     respondida: false,
     ventana_abierta: false,
-    pide_info: true,
+    pregunto: true,
     n: 2,
     referencia: haceHoras(3),
     ultimo_at: haceHoras(3),
@@ -202,10 +202,9 @@ function Galeria() {
               filtroSec=""
               onFiltro={() => {}}
               conteos={{
-                pideInfo: 28,
-                sinResponder: 454,
-                puedoEscribirle: 47,
-                yaCompraron: 78,
+                preguntoPrecio: 65,
+                teEscribieron: 33,
+                puedoEscribirle: 25,
               }}
               lineas={LINEAS}
               lineaActiva=""
@@ -220,10 +219,9 @@ function Galeria() {
               filtroSec="puedo-escribirle"
               onFiltro={() => {}}
               conteos={{
-                pideInfo: 12,
-                sinResponder: 31,
-                puedoEscribirle: 47,
-                yaCompraron: 9,
+                preguntoPrecio: 18,
+                teEscribieron: 5,
+                puedoEscribirle: 25,
               }}
               lineas={LINEAS}
               lineaActiva="mias"

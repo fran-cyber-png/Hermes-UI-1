@@ -321,9 +321,12 @@ burbuja de `HiloWhatsapp.tsx`.
 - **Y BAJA.** El orden es `fijada → fijada_at → no_leido DESC → nivel → antigüedad`
   (`bandaPinOrdenSql`). Decisión del dueño del 7-ago. ⚠️ **Lo que cuesta**: un chat leído y urgente queda
   debajo de uno sin leer que no lo es.
-- 🔴 **La red que hace aceptable eso ya existía: el chip «Sin responder»**, que filtra por `NOT
-  respondida` —sin mirar el cursor de lectura— y lleva su número. **Sin ese chip la decisión escondería
-  deuda.** `cola/abrirMarcaLeido.test.db.ts` lo verifica explícitamente.
+- 🔴 **La red que hace aceptable eso es un chip que filtra por `NOT respondida`** —sin mirar el cursor de
+  lectura— y lleva su número. **Sin ese chip la decisión escondería deuda.**
+  `cola/abrirMarcaLeido.test.db.ts` lo verifica explícitamente. ⚠️ **Desde ADR 0052 ese chip es «Te
+  escribieron»**, que es lo mismo cortado a 7 días (`NOT respondida` a secas daba 505 con el 93 % de más
+  de una semana). Sigue siendo red para este caso, y mejor: un chat que acabás de abrir es reciente por
+  definición.
 - **Leer cambia el ORDEN, no la URGENCIA.** El nivel de `urgencia.ts` no se toca: es la misma regla que
   comparte con el radar, con su test de paridad.
 - 🔴 **EL CURSOR VA PRIMERO Y LOS TILDES DESPUÉS.** Al revés tardaba **3 segundos** (el endpoint esperaba
@@ -592,8 +595,8 @@ La cola ordena la DEUDA. Esta es la otra pregunta: **¿a quién todavía se le p
 - **El oro vuelve a significar tiempo que se acaba**: solo abajo de `UMBRAL_ORO_MS` (3 h). El front lee
   `ventana_cierra` como **opcional** y conserva la marca vieja de respaldo (N4 va solo, N5 es un botón).
 - ⚠️ **La barra de filtros pasa a DOS PISTAS**: arriba qué cola (la línea), abajo el recorte. Con las
-  cuatro líneas en una sola pista, **«Sin responder» quedaba detrás de un scroll invisible** — y ese chip
-  es la red de «abrir marca leído». Cada pista lleva **su propio** estado de sombra y navegación por
+  cuatro líneas en una sola pista, **el chip de la deuda quedaba detrás de un scroll invisible** — y ese
+  chip es la red de «abrir marca leído». Cada pista lleva **su propio** estado de sombra y navegación por
   teclado, y **lo encendido se trae a la vista tocando solo `scrollLeft`** (con
   `scrollIntoView({block:'nearest'})` los chips activos arrastraban la página entera).
 - **Y EN EL PIPELINE**: tercer chip de recorte en Contactados y **la píldora en TODAS las columnas** — el
@@ -830,6 +833,49 @@ Las dos reglas viven en **`server/src/dashboard/fuenteLead.ts`**, puras y con te
   implementación que pueda divergir (#37).
 - **Umbral**: `SENALES_DIAS_ENFRIAMIENTO` (default 3; un valor inválido se ignora). Medir precisión sobre
   datos reales: `cd server && npm run medir:cotizaciones [días]` (read-only).
+
+## Cada filtro de la cola se gana el lugar (ADR 0052)
+
+**El chip «Piden info» mentía: el 82 % de lo que enganchaba era el texto que PRELLENA META** al tocar
+el botón de un anuncio («Hola Quiero más información del Diploma…», 424 conversaciones con ese texto
+exacto). El predicado nuevo vive en `server/src/cola/pregunta.ts`; la barra, en `canales/cola.ts`.
+
+- **EL CRITERIO, y es lo que hay que releer antes de agregar un chip** (docblock de `FILTROS_SEC`):
+  (1) es trabajo, no un estado · (2) se puede hacer hoy · (3) **cabe en un turno, ~5 a 50 filas** ·
+  (4) no lo contesta otro chip. Medido sobre 3.995 conversaciones, de seis chips **dos mentían y uno
+  era la mesa entera con otro nombre** («Ya compraron», 1.082 = 27 %).
+- **TRES NIVELES, y los vetos solo pisan a los débiles**: `PRECIO` (plata: no lo tumba ninguna
+  cortesía) · `CONCRETO` (temario, certificado, requisitos — **le gana al veto del anuncio**, porque
+  el texto de Meta no contiene ninguna de esas palabras) · `GENERICO` (información, `info`, me
+  interesa — éste **sí** cede ante el anuncio, el cierre y la autorespuesta ajena). 685 → **115**.
+  · ⚠️ **Los dos intentos que fallaron están escritos en el módulo, y valen más que la regla**: sacar
+    `informaci` perdía «Necesito información» (escrito a mano); vetar la cortesía sobre TODO el
+    predicado descartaba «Pásame la cotización urgentemente quiero comprar ahora mismo».
+- 🔴 **«Preguntaron precio» NO filtra por `respondida`, a propósito.** «Ya le contesté» no es
+  terminado: quien preguntó el precio y se calló es el seguimiento más rentable (ADR 0044 midió 540).
+  El chip viejo necesitaba `AND NOT respondida` porque su predicado mentía; arreglado, el parche sobra.
+- 🔴 **EL REGEX COMPARTIDO NO PUEDE USAR `\b` NI `\y`.** En Postgres `\b` es un backspace; `\y` no
+  existe en JavaScript. `cola/precio.ts` ya lo documentaba y **`canales/consultas.ts` lo pisó igual**:
+  su copia con `info\b` **nunca matcheó nada**, sin error y sin log (`'necesito info hoy' ~* 'info\b'`
+  → `f`, verificado en la base). El borde se escribe a mano: `(^|[^a-záéíóúñ])info([^a-záéíóúñ]|$)`.
+- 🔴 **«Solo hizo clic» se arregla en el PREVIEW, no con una píldora.** `textoDePreview` gana un paso
+  0 y esas 563 filas dicen **«📣 Vino del anuncio»** (la frase que la cadena YA tenía). Una píldora no
+  servía: el renglón 2 ya está repartido y esas filas casi siempre traen chip de curso — y sobre todo,
+  **una etiqueta al lado de la mentira no la corrige, la acompaña.** El programa no se pierde: lo dice
+  el chip de curso.
+- ⚠️ **La deuda vieja no se esconde: se le retira la promesa.** Las 472 sin responder de +7 días
+  siguen en la cola y en `conteosFiltro.sinResponder` (sin chip). Qué hacer con ellas es otro frente.
+- ⚠️ **Compat**: `pide-info`, `sin-responder` y `ya-compraron` se siguen aceptando como `?intencion=`
+  (criterio de `por-vencer`), y `pide-info` se sirve con el predicado NUEVO. `pregunto_precio` y
+  `solo_clic` viajan **opcionales**: ausentes = server viejo o caché de IndexedDB (ADR 0007), y ahí se
+  comporta como antes.
+- Ver sin server: `npx vite --port 5199` → `/galeria-filtros.html`. ⚠️ **Sirve los textos y los
+  números REALES de producción**; una galería con el caso ideal ya escondió tres defectos una vez.
+  Captura: `docs/evidencia/filtros-cola-nuevos.png`.
+- **Lo que el censo encontró y este frente NO arregla**: de 3.995 conversaciones solo 1.061 tienen un
+  entrante, **396 escribieron y nunca recibieron respuesta** (36 % de la línea grande), y al primer
+  mensaje se contesta en <5 min el **15 %** en las líneas humanas contra el **65 %** en la del bot.
+  Eso es operación antes que código.
 
 ## Lo que el bot dijo, EN LA COLA
 
