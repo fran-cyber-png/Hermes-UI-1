@@ -48,7 +48,8 @@
     "backfill": "tsx src/scripts/backfill.ts",
     "backfill:categorias": "tsx src/scripts/backfillCategorias.ts",
     "guion:consultoria": "tsx src/scripts/sembrarGuionConsultoria.ts",
-    "campana": "tsx src/scripts/campana.ts"
+    "campana": "tsx src/scripts/campana.ts",
+    "routing:refrescar": "tsx src/scripts/routingRefrescar.ts"
   },
   "dependencies": {
     "@anthropic-ai/bedrock-sdk": "^0.32.0",

@@ -1,0 +1,75 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { aQuienLeCae, leerEstado, ordenarCampanas, type CampanaEnRouting } from "./dominio.js";
+
+test("`ACTIVE` es lo único que se lee como activa", () => {
+  assert.equal(leerEstado("ACTIVE"), "activa");
+  assert.equal(leerEstado("active"), "activa");
+  assert.equal(leerEstado(" ACTIVE "), "activa");
+});
+
+test("lo que Meta nombra pausado se lee pausada, incluido el del adset", () => {
+  assert.equal(leerEstado("PAUSED"), "pausada");
+  assert.equal(leerEstado("ADSET_PAUSED"), "pausada");
+  assert.equal(leerEstado("CAMPAIGN_PAUSED"), "pausada");
+});
+
+test("🔴 un estado que no conocemos NO cae en «pausada»", () => {
+  // Decir «pausada» sobre una campaña que está gastando plata es peor que
+  // decir que no se sabe; y decir «activa» prometería tráfico que no existe.
+  assert.equal(leerEstado("WITH_ISSUES"), "desconocido");
+  assert.equal(leerEstado("IN_PROCESS"), "desconocido");
+  assert.equal(leerEstado(null), "desconocido");
+  assert.equal(leerEstado(""), "desconocido");
+});
+
+const campana = (p: Partial<CampanaEnRouting>): CampanaEnRouting => ({
+  campanaId: "c",
+  nombre: "Campaña",
+  estado: "activa",
+  anuncios: 1,
+  personas: 0,
+  ultima: null,
+  vendedoraId: null,
+  ...p,
+});
+
+test("primero lo que puede traer gente mañana, después lo que ya no reparte", () => {
+  const orden = ordenarCampanas([
+    campana({ campanaId: "pausada-grande", estado: "pausada", personas: 81 }),
+    campana({ campanaId: "activa-chica", estado: "activa", personas: 11 }),
+    campana({ campanaId: "rara", estado: "desconocido", personas: 40 }),
+  ]).map((c) => c.campanaId);
+
+  // La pausada trae 7× más gente y va última igual: ya no decide nada.
+  assert.deepEqual(orden, ["activa-chica", "rara", "pausada-grande"]);
+});
+
+test("a igualdad de estado y volumen el orden es estable, no el que quiera la base", () => {
+  const orden = ordenarCampanas([
+    campana({ campanaId: "b", nombre: "Zeta", personas: 5 }),
+    campana({ campanaId: "a", nombre: "Alfa", personas: 5 }),
+  ]).map((c) => c.campanaId);
+  assert.deepEqual(orden, ["a", "b"]);
+});
+
+// ── A quién le cae ───────────────────────────────────────────────────────────
+
+const MAPA = new Map([["ad-1", "camp-1"]]);
+const REGLAS = new Map([["camp-1", "ventas10@grupogoberna.com"]]);
+const deAnuncio = (ad: string) => MAPA.get(ad);
+const deCampana = (c: string) => REGLAS.get(c);
+
+test("con anuncio resuelto y regla puesta, le cae a esa persona", () => {
+  assert.equal(aQuienLeCae("ad-1", deAnuncio, deCampana), "ventas10@grupogoberna.com");
+});
+
+test("🔴 los tres caminos dudosos devuelven null, que es «que decida la rueda»", () => {
+  // Sin anuncio: el mensaje no vino de una campaña.
+  assert.equal(aQuienLeCae(null, deAnuncio, deCampana), null);
+  assert.equal(aQuienLeCae("   ", deAnuncio, deCampana), null);
+  // Anuncio estrenado hoy: existe en Meta y todavía no en `campana_anuncio`.
+  assert.equal(aQuienLeCae("ad-nuevo", deAnuncio, deCampana), null);
+  // Campaña conocida y sin regla: es el estado inicial de TODAS.
+  assert.equal(aQuienLeCae("ad-1", deAnuncio, () => undefined), null);
+});

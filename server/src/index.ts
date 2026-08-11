@@ -14,6 +14,7 @@ import { decisionsRouter } from "./routes/decisions.js";
 import { interactionsRouter } from "./routes/interactions.js";
 import { conversacionesRouter } from "./routes/conversaciones.js";
 import { repartoRouter } from "./routes/reparto.js";
+import { routingRouter } from "./routes/routing.js";
 import { padronRouter } from "./routes/padron.js";
 import { campanaRouter } from "./routes/campana.js";
 import { authRouter } from "./routes/auth.js";
@@ -119,6 +120,7 @@ app.use("/api/venta", ventaRouter); // el formulario de venta dentro de Hermes
 app.use("/api/interactions", interactionsRouter);
 app.use("/api/conversaciones", conversacionesRouter); // la cola unificada: una fila por conversación
 app.use("/api/reparto", repartoRouter); // de quién es cada conversación cuando 7 comparten una línea
+app.use("/api/routing", routingRouter); // qué campaña de Meta cae en qué vendedora (solo la línea de Cloud API)
 app.use("/api/campana", campanaRouter); // el catálogo de plantillas de Meta con su salud (solo lectura, supervisor)
 app.use("/api/padron", padronRouter); // los 72.923 contactos de icarus: el supervisor reparte, la vendedora ve lo suyo
 app.use("/api/responder", responderRouter);

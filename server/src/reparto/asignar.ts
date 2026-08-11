@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { db as Base } from "../db/client.js";
 import { conversacionAsignada, repartoRueda } from "../db/reparto.js";
+import { duenoPorCampana } from "../routing/repositorio.js";
 import { siguienteEnLaRueda, type EnLaRueda } from "./rueda.js";
 
 /**
@@ -21,6 +22,12 @@ export async function asignarSiHaceFalta(
   base: typeof Base,
   clave: string,
   numeroPropio: string,
+  /**
+   * El `source_id` del referral, cuando el mensaje vino de un click-to-WhatsApp.
+   * Con él se pregunta si la CAMPAÑA de ese anuncio tiene dueño elegido; sin él
+   * (o sin regla) manda la rueda, exactamente como antes de este frente.
+   */
+  adId?: string | null,
 ): Promise<string | null> {
   try {
     const [yaTiene] = await base
@@ -29,13 +36,30 @@ export async function asignarSiHaceFalta(
       .where(eq(conversacionAsignada.clave, clave));
     if (yaTiene) return yaTiene.vendedoraId;
 
-    const rueda = await leerRueda(base, numeroPropio);
-    const quien = siguienteEnLaRueda(rueda);
+    /**
+     * 🔴 LA REGLA DE CAMPAÑA LE GANA A LA RUEDA, y ese es todo el frente: la
+     * rueda reparte parejo porque no sabe nada de quién viene; una regla la puso
+     * una persona sabiendo de qué campaña se trata. Lo específico le gana a lo
+     * general, la misma forma que el alias por `adId` contra el título inferido
+     * (`cursos/`) y que lo manual contra lo derivado en el grafo de identidad.
+     *
+     * ⚠️ **No se le exige estar en la rueda.** El destino ya se verificó contra
+     * `destinosPosibles` al guardar la regla, y la rueda contesta otra pregunta
+     * («¿entre quiénes se reparte lo que no tiene dueño?»). Exigirlo haría que
+     * sacar a alguien de la rueda le apagara sus campañas en silencio.
+     */
+    const porCampana = await duenoPorCampana(base, numeroPropio, adId);
+    const quien = porCampana ?? siguienteEnLaRueda(await leerRueda(base, numeroPropio));
     if (!quien) return null;
 
     await base
       .insert(conversacionAsignada)
-      .values({ clave, vendedoraId: quien, numeroPropio, motivo: "round-robin" })
+      .values({
+        clave,
+        vendedoraId: quien,
+        numeroPropio,
+        motivo: porCampana ? "campana" : "round-robin",
+      })
       // Dos mensajes de la misma persona pueden entrar casi juntos. Sin esto,
       // el segundo reventaría por PK duplicada y —por el catch de abajo— se
       // perdería en silencio. Con esto, el primero manda y el segundo no hace nada.

@@ -1495,6 +1495,11 @@ export { lecciones } from "./lecciones.js";
 // Es un FILTRO, no un permiso — ver `db/reparto.ts`.
 export { repartoRueda, conversacionAsignada } from "./reparto.js";
 
+// El ruteo por campaña: qué campaña de Meta cae en qué vendedora. Se apoya en el
+// de arriba (misma tabla de asignaciones, otro `motivo`) y arranca vacío: sin
+// reglas el reparto es el round-robin de siempre — ver `db/routing.ts`.
+export { campanaAnuncio, campanaRuteo } from "./routing.js";
+
 // El reparto del PADRÓN (los 72.923 contactos de icarus, que no escribieron
 // nunca). A diferencia del de arriba, acá el recorte SÍ es una frontera: la
 // vendedora ve lo habilitado y nada más — ver `db/padron.ts` y `padron/supervisor.ts`.

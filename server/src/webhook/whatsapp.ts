@@ -208,8 +208,15 @@ export async function recibirWhatsapp(req: Request, res: Response): Promise<void
              * escribe nada. El día que haya que repartir otra, se cuelga del mismo
              * seam.
              */
-            await asignarSiHaceFalta(db, clave, numeroLinea).catch((err: unknown) =>
-              console.error("[reparto] asignarSiHaceFalta falló:", (err as Error).message),
+            /**
+             * ⚠️ **El `source_id` sale del MISMO mensaje que se acaba de guardar**,
+             * no de una consulta posterior: el referral viaja SOLO en el primer
+             * mensaje de la conversación, que es exactamente el que dispara el
+             * reparto. Buscarlo después sería buscarlo cuando ya no está.
+             */
+            await asignarSiHaceFalta(db, clave, numeroLinea, m.referral?.source_id).catch(
+              (err: unknown) =>
+                console.error("[reparto] asignarSiHaceFalta falló:", (err as Error).message),
             );
           }
         }
