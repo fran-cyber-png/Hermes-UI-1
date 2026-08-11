@@ -69,9 +69,8 @@ describe('recortesDeColumna — qué chips se ofrecen', () => {
   });
 
   test('Cierre y Perdidos no llevan recorte: uno es archivo, el otro es otro frente', () => {
-    expect(recortesDeColumna('perdido', RESUMEN, 'todas')).toEqual([]);
     expect(recortesDeColumna('cierre', RESUMEN, 'todas')).toEqual([]);
-    expect(COLUMNAS_CON_RECORTE).toEqual(['interesado', 'contactado', 'cotizado']);
+    expect(COLUMNAS_CON_RECORTE).toEqual(['interesado', 'sin_respuesta', 'contactado', 'cotizado']);
   });
 
   /**

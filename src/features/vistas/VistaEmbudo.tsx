@@ -68,13 +68,20 @@ import {
  * sin reflow (es una app de escritorio, no una página) y sin scroll horizontal,
  * que en esta app no existe.
  *
- * ⚠️ **LA CUENTA SE REHIZO EL 10-ago-2026** y sigue dando cinco columnas, pero
- * son OTRAS cinco: entró «Te esperan» y salió «Nunca contestaron».
+ * ⚠️ **LA CUENTA SE REHIZO DOS VECES EN DOS DÍAS.** El 10-ago entró «Te esperan»
+ * y salió «Nunca contestaron» (cinco); el 11-ago volvió «Nunca contestaron»
+ * porque sacarla escondía el trabajo del día (ADR 0052), así que son **seis**.
  *
  * A 1280 el contenido son ~1.256 px (menos el padding de 12 de cada lado) y los
- * cuatro gaps de 8 px se comen 32. Los mínimos suman **1.060**, así que entra con
- * ~164 de aire. **Si se agrega una sexta, esta cuenta se rehace**: no alcanza con
- * sumar otro `minmax`, y es lo que va a pasar con «Llenaron el formulario».
+ * cuatro gaps de 8 px se comen 32. Los mínimos suman **1.035**, con ~189 de aire.
+ *
+ * 🔴 **SE INTENTARON SEIS Y NO ENTRAN.** Dos cuentas distintas (1.120 y 1.020 de
+ * mínimos) dieron la última columna **cortada contra el borde**, con las tarjetas
+ * desbordadas: el aire que sobra en el `minmax` se lo comen los paddings de la
+ * tarjeta y del contenedor, que no están en esa cuenta. Por eso volvió a cinco,
+ * sacando `perdido` —cero filas en toda la historia— para que entrara
+ * `sin_respuesta`. **La cuenta se verifica con una captura a 1280, no en la
+ * cabeza**: las dos veces que la hice de memoria, me equivoqué.
  *
  * El reparto sigue diciendo dónde está el trabajo: las dos columnas donde se
  * vende («Contestaron», «Saben el precio») se llevan el ancho, y «Te esperan» va
@@ -82,7 +89,7 @@ import {
  * persona acaba de mandar—. «Dijeron que no» sigue siendo un cajón.
  */
 const GRID =
-  'grid min-h-0 flex-1 grid-cols-[minmax(225px,1.05fr)_minmax(250px,1.2fr)_minmax(250px,1.2fr)_minmax(185px,0.8fr)_minmax(150px,0.6fr)] gap-2 overflow-x-auto';
+  'grid min-h-0 flex-1 grid-cols-[minmax(215px,1fr)_minmax(180px,0.75fr)_minmax(240px,1.2fr)_minmax(240px,1.2fr)_minmax(160px,0.6fr)] gap-2 overflow-x-auto';
 
 /**
  * El ícono de cada recorte. Vive acá y no en `tablero.ts` porque un componente de
@@ -154,34 +161,34 @@ export function VistaEmbudo({
   // (`interesado` está en ETAPAS_CONSULTABLES), así que no hizo falta tocar nada
   // del lado de allá — lo que había era una pantalla que no la pedía.
   const teEsperan = useConversaciones(opcionesDe('interesado'));
+  const sinRespuesta = useConversaciones(opcionesDe('sin_respuesta'));
   const contactados = useConversaciones(opcionesDe('contactado'));
   const cotizados = useConversaciones(opcionesDe('cotizado'));
   const cierres = useConversaciones(opcionesDe('cierre'));
-  const perdidos = useConversaciones(opcionesDe('perdido'));
   const porColumna: Record<EtapaTrabajo, ReturnType<typeof useConversaciones>> = {
     interesado: teEsperan,
+    sin_respuesta: sinRespuesta,
     contactado: contactados,
     cotizado: cotizados,
     cierre: cierres,
-    perdido: perdidos,
   };
 
   // El desglose (conteos reales por etapa × turno × precio) viene en la primera
   // página de cualquier columna: es la MISMA foto, contada una vez.
   const desglose =
     teEsperan.desglose ??
+    sinRespuesta.desglose ??
     contactados.desglose ??
     cotizados.desglose ??
-    cierres.desglose ??
-    perdidos.desglose;
+    cierres.desglose;
   // El respaldo mientras el server desplegado no sirva el desglose: el front sale
   // a producción sin reinicio (N4) y el server recién en el botón (N5).
   const conteos =
     teEsperan.conteos ??
+    sinRespuesta.conteos ??
     contactados.conteos ??
     cotizados.conteos ??
-    cierres.conteos ??
-    perdidos.conteos;
+    cierres.conteos;
 
   /**
    * El desglose de «Te esperan» — los dos trabajos que la tira mostraba y que
@@ -487,7 +494,7 @@ export function VistaEmbudo({
             // El «Ver más» cuenta siempre sobre lo que la columna está pidiendo.
             const faltan = quedanPorTraer(cifras.principal, columna.items.length);
             const esDestino = sobre === col.id && arrastrada != null;
-            const esPerdidos = col.id === 'perdido';
+            const esPerdidos = false;
             const esCierre = col.id === 'cierre';
             const esTeEsperan = col.id === 'interesado';
             const esContactados = col.id === 'contactado';

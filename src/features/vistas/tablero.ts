@@ -22,24 +22,17 @@ import { ETAPA_ROTULO, type Etapa } from '../../lib/etapas';
  * `sin_respuesta(0) < interesado(1)`— y esto es presentación. «Te esperan» va
  * primera porque es donde se empieza el día, no porque sea el peldaño más bajo.
  *
- * ══ 🔴 «NUNCA CONTESTARON» NO ES UNA COLUMNA, Y ESO ES DELIBERADO ══════════
+ * ⚠️ **«Nunca contestaron» SE SACÓ Y SE REPUSO** (ADR 0050 → ADR 0052): sacarla
+ * hacía desaparecer de la mesa lo que la vendedora acababa de trabajar. Ver su
+ * bloque, abajo.
  *
- * Decisión del dueño del 10-ago-2026: *«para el pipeline es por las puras»*.
- * Eran **2.575 de 3.971 tarjetas — el 65 % del tablero** — de gente a la que le
- * escribimos y nunca dijo una palabra. Ocupaban una columna entera de una
- * pantalla que sirve para decidir a quién atender, y nadie las atendía.
- *
- * ⚠️ **La etapa NO se retiró: se retiró la COLUMNA.** `sin_respuesta` se sigue
- * derivando en el server (ADR 0044), se sigue pudiendo pedir por `?etapa=`,
- * sigue teniendo su rótulo y se sigue viendo en Mensajes. Lo que hace
- * `repartirColumnas` con esas tarjetas es no pintarlas — exactamente lo que
- * hacía con `interesado` antes de hoy. **Sacarla de acá no borra un dato, saca
- * un montón muerto de la mesa de trabajo.**
- *
- * 🔴 **Y no reabre el defecto de ADR 0044**, que es la pregunta obvia: esas
- * conversaciones no vuelven a inflar Contactados ni Saben el precio, porque su
- * etapa efectiva sigue siendo `sin_respuesta` en el server. La derivación es la
- * que las mantiene afuera; esta lista solo decide qué se dibuja.
+ * 🔴 **Y para que entrara salió «Dijeron que no», porque SEIS COLUMNAS NO ENTRAN
+ * A 1280.** No es una opinión: se probó, y la captura mostró la última columna
+ * cortada contra el borde con las tarjetas desbordadas. El intercambio se eligió
+ * por el dato — `perdido` tiene **CERO filas en toda la historia** (nadie declara
+ * una pérdida; en este negocio la gente se calla) y es archivo, no trabajo.
+ * Sigue siendo etapa: se puede declarar desde el chat y se ve en Mensajes; lo
+ * que no tiene es una columna vacía ocupando ancho que la mesa necesita.
  */
 export const COLUMNAS_TRABAJO = [
   /**
@@ -70,6 +63,31 @@ export const COLUMNAS_TRABAJO = [
     pista: 'Escribieron y nadie les contestó todavía. La pelota es tuya.',
     vacio: 'Nadie esperando respuesta. Cuando alguien escriba, aparece acá.',
   },
+  /**
+   * ══ NUNCA CONTESTARON — VUELVE, Y ESTA VEZ CON EL PORQUÉ ══════════════════
+   *
+   * 🔴 **Se sacó el 10-ago (ADR 0050) y se repuso al día siguiente**, porque el
+   * argumento para sacarla era cierto y la consecuencia no se vio: son 2.575
+   * conversaciones que nadie trabaja *en conjunto*, sí — pero cada una fue, en
+   * su momento, alguien a quien una vendedora le acababa de escribir.
+   *
+   * Sacarla hizo que **el trabajo del día desapareciera de la mesa**: la
+   * vendedora manda la información, el lead todavía no contesta, y la tarjeta se
+   * esfuma del tablero. Reportado por Luz el 11-ago: «se me están desapareciendo
+   * los leads».
+   *
+   * La lección, que es la que hay que no volver a pagar: **una columna grande y
+   * fría no es lo mismo que una columna inútil.** El tamaño medía el pasado
+   * acumulado; lo que se rompió fue el presente — el eco de lo que la vendedora
+   * acaba de hacer. Si vuelve a molestar, se recorta (el chip «Para seguir» ya
+   * existe), no se esconde.
+   */
+  {
+    id: 'sin_respuesta',
+    titulo: ETAPA_ROTULO.sin_respuesta.varios,
+    pista: 'Les escribiste y todavía no contestaron.',
+    vacio: 'Acá caen las conversaciones que abriste vos y nadie respondió aún.',
+  },
   {
     id: 'contactado',
     titulo: ETAPA_ROTULO.contactado.varios,
@@ -87,12 +105,6 @@ export const COLUMNAS_TRABAJO = [
     titulo: ETAPA_ROTULO.cierre.varios,
     pista: 'No se declara: se gana con la venta.',
     vacio: 'Registrá la venta desde la ficha y la tarjeta llega sola.',
-  },
-  {
-    id: 'perdido',
-    titulo: ETAPA_ROTULO.perdido.varios,
-    pista: 'Lo dijiste vos. No vuelve solo.',
-    vacio: 'Nadie dijo que no.',
   },
 ] as const;
 
@@ -318,6 +330,7 @@ export type Recorte = 'todas' | 'precio' | 'ventana' | 'seguir' | 'seCallo';
  */
 export const COLUMNAS_CON_RECORTE: readonly EtapaTrabajo[] = [
   'interesado',
+  'sin_respuesta',
   'contactado',
   'cotizado',
 ];

@@ -21,37 +21,39 @@ import {
 const tarjeta = (clave: string, etapa?: string) => ({ clave, etapa_efectiva: etapa });
 
 describe('las columnas de trabajo', () => {
-  test('cada columna pide SU etapa efectiva, y son las cinco que se trabajan', () => {
+  test('cada columna pide SU etapa efectiva, y son las seis que se trabajan', () => {
     expect(COLUMNAS_TRABAJO.map((c) => c.id)).toEqual([
       // «Te esperan» va PRIMERA desde el 10-ago-2026 (decisión del dueño, que
-      // revierte #87): es la única columna donde la pelota es NUESTRA, así que
-      // es donde se empieza el día.
+      // revierte #87): es la única columna donde la pelota es NUESTRA.
       'interesado',
+      // 🔴 «Nunca contestaron» se sacó el 10-ago y VOLVIÓ el 11 (ADR 0052).
+      'sin_respuesta',
       'contactado',
       'cotizado',
       'cierre',
-      'perdido',
-    ]);
+      ]);
   });
 
   /**
-   * 🔴 El mismo día, y por la misma decisión: *«para el pipeline es por las
-   * puras»*. Eran 2.575 de 3.971 tarjetas —el 65 % de la mesa— de gente que
-   * nunca dijo una palabra, en una pantalla que sirve para decidir a quién
-   * atender.
+   * 🔴 EL TEST QUE CAMBIÓ DE SIGNO EN UN DÍA, y por eso lleva el porqué escrito.
    *
-   * ⚠️ Lo que se retiró es la COLUMNA, no la etapa: el server la sigue
-   * derivando (ADR 0044) y por eso esas conversaciones **no vuelven a inflar**
-   * «Contestaron» ni «Saben el precio». Si alguien la reagrega acá sin querer,
-   * este test se lo dice.
+   * El 10-ago se sacó «Nunca contestaron» del tablero: eran 2.575 tarjetas —el
+   * 65 % de la mesa— que nadie trabajaba en conjunto. El argumento era cierto y
+   * la consecuencia no se vio: **cada una de esas tarjetas fue, en su momento,
+   * alguien a quien una vendedora le acababa de escribir.** Sacarla hizo que el
+   * trabajo del día se esfumara — mandás la info, el lead todavía no contesta, y
+   * la tarjeta desaparece. Lo reportó Luz al día siguiente.
+   *
+   * La lección: **una columna grande y fría no es una columna inútil.** El
+   * tamaño medía el pasado acumulado; lo que se rompió fue el presente.
    */
-  test('🔴 «nunca contestaron» NO es columna: es un montón muerto, no una lista de trabajo', () => {
-    expect(COLUMNAS_TRABAJO.map((c) => c.id)).not.toContain('sin_respuesta');
+  test('🔴 «nunca contestaron» SÍ es columna: sin ella se esfuma el trabajo del día', () => {
+    expect(COLUMNAS_TRABAJO.map((c) => c.id)).toContain('sin_respuesta');
   });
 
-  test('una tarjeta «sin respuesta» no se pinta en ninguna columna', () => {
-    const repartidas = repartirColumnas([['contactado', [tarjeta('a', 'sin_respuesta')]]], {});
-    expect([...repartidas.values()].flat()).toEqual([]);
+  test('una tarjeta «sin respuesta» se pinta en su columna', () => {
+    const repartidas = repartirColumnas([['sin_respuesta', [tarjeta('a', 'sin_respuesta')]]], {});
+    expect(repartidas.get('sin_respuesta')?.map((c) => c.clave)).toEqual(['a']);
   });
 
   test('🔴 «sin respuesta» NO está en la lista de etapas declarables', async () => {
@@ -68,14 +70,14 @@ describe('repartirColumnas — dónde cae cada tarjeta', () => {
     ['contactado', [tarjeta('a', 'contactado'), tarjeta('b', 'contactado')]],
     ['cotizado', [tarjeta('c', 'cotizado')]],
     ['cierre', []],
-    ['perdido', [tarjeta('d', 'perdido')]],
+    ['cierre', [tarjeta('d', 'cierre')]],
   ];
 
   test('sin movimientos, cada tarjeta queda en la columna que la trajo', () => {
     const mapa = repartirColumnas(cargadas, {});
     expect(mapa.get('contactado')!.map((t) => t.clave)).toEqual(['a', 'b']);
     expect(mapa.get('cotizado')!.map((t) => t.clave)).toEqual(['c']);
-    expect(mapa.get('perdido')!.map((t) => t.clave)).toEqual(['d']);
+    expect(mapa.get('cierre')!.map((t) => t.clave)).toEqual(['d']);
   });
 
   test('un movimiento optimista muda la tarjeta: sale de la columna vieja y entra ARRIBA de la nueva', () => {
@@ -91,7 +93,7 @@ describe('repartirColumnas — dónde cae cada tarjeta', () => {
       ['contactado', [tarjeta('x', 'cotizado')]],
       ['cotizado', [tarjeta('x', 'cotizado')]],
       ['cierre', []],
-      ['perdido', []],
+      ['cierre', []],
     ];
     const mapa = repartirColumnas(enTransicion, {});
     expect(mapa.get('cotizado')!.map((t) => t.clave)).toEqual(['x']);
@@ -103,7 +105,7 @@ describe('repartirColumnas — dónde cae cada tarjeta', () => {
       ['contactado', [tarjeta('y', 'interesado')]],
       ['cotizado', []],
       ['cierre', []],
-      ['perdido', []],
+      ['cierre', []],
     ];
     const mapa = repartirColumnas(conVieja, {});
     expect(mapa.get('contactado')).toEqual([]);
