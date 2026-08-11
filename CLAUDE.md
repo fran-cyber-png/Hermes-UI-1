@@ -716,13 +716,47 @@ para derivar. `Te esperan → Nunca contestaron → Contestaron → Saben el pre
 - ⚠️ **El valor es un par `{uno, varios}`**, no un string: una columna es un montón y una ficha es
   una persona. Con un solo string cada consumidor volvía a conjugar — que es cómo nacieron las cinco
   copias. `rotuloEtapa(etapa, 'uno'|'varios')` **degrada al id**, nunca tira (N4 va antes que N5).
-- 🔴 **FALTA LA PRIMERA COLUMNA Y ES LA MÁS GRANDE**: `leads` tiene **26.175** filas y **25.386
-  (97,5 %) nunca tuvieron una conversación**, así que el Pipeline ordena el **2,5 %** del negocio.
-  **No es «Te esperan»** (ahí hay hilo abierto y contestar es gratis): un lead de landing exige
-  **abrir en frío**, y eso es un problema de canal antes que de código. Va primera y se llama
-  «Llenaron el formulario». ⚠️ Obliga a **rehacer la cuenta del grid** y arrastra la virtualización.
-  Medido el 10-ago-2026; el último lead entró **ese mismo día** con el caño de WhatsApp cerrado.
+- ⚠️ **Lo que este ADR daba por faltante —una sexta columna «Llenaron el formulario»— NO se hizo, y
+  se decidió al revés**: los leads entran a «Te esperan». Ver ADR 0051 acá abajo.
 - Captura: `docs/evidencia/embudo-rotulos-claros.png`.
+
+### Los formularios entran a «Te esperan» (ADR 0051, enmienda 11-ago-2026)
+
+Decisión del dueño: **la columna no es «te escribieron por WhatsApp», es «la pelota es nuestra»**. Un
+tercer brazo en el `UNION ALL` de la cola (`server/src/cola/leadsCte.ts`), al lado de los comentarios
+y las conversaciones.
+
+- ⚠️ **No son 25.386 tarjetas, son ~154**: la cola mira **30 días** (`ventanaCola`), y eso no es una
+  limitación sino la definición — un lead de hace ocho meses no está esperando. Por eso tampoco hizo
+  falta virtualizar nada, contra lo que el plan había dimensionado.
+- **No hizo falta una etapa nueva**: un lead sin mensajes tiene `hablo = false` y
+  `ya_le_hablamos = false`, y con eso `etapaDerivada` cae **sola** en `interesado`. No entra a
+  `sin_respuesta`, que exige que le hayamos escrito.
+- 🔴 **`tipo = 'lead'` GOBIERNA EL ORDEN DE LA COLA, no es una etiqueta.** Los niveles de
+  `cola/urgencia.ts` preguntaban `tipo === 'mensaje'`, así que un lead **caía al nivel 5** —«el
+  resto: ventanas cerradas, nada corre peligro»— y como todas las conversaciones de «Te esperan» son
+  nivel 3, los 154 formularios quedaban **después de las 377: página 10** de una lista que pagina de
+  a 40. La columna los contaba y no se podían ver. Quién decide: **`ESPERAN_RESPUESTA`**
+  (`['mensaje','lead']`), y `urgenciaSql.ts` **genera su `IN` desde esa constante**.
+  · ⚠️ **Es una lista explícita, NO `tipo !== 'comentario'`**: con la negación, un `tipo` nuevo entra
+    de callado arriba de todo en la mesa de trabajo.
+  · 🔴 **El test de paridad no lo vio por DOS razones que se tapaban**: no sembraba ningún lead, y su
+    `comoItem` colapsaba a `'mensaje'` todo lo que no fuera comentario. Si tocás un tipo de fila,
+    sembralo en `urgencia.paridad.test.db.ts` — si no, las dos escrituras divergen mudas.
+  · ⚠️ **Cambia también el orden de Mensajes**, a propósito: los leads ya estaban en esa cola, en el
+    nivel 5. Dos órdenes distintos para el mismo hecho es #37.
+- ⚠️ **Se caen del UNION con recorte de LÍNEA o de CANAL**, como los comentarios: nadie les escribió,
+  así que no entraron por ningún número nuestro — y su brazo lee `leads`, que **no tiene columna
+  `canal`**, así que el `AND canal = …` de los otros dos ni siquiera compilaría.
+- **La deduplicación falla hacia el lado seguro**: se descarta por `sufijoTelefonoSql` (la llave
+  canónica, #37) contra `interactions`. Un choque del sufijo de 9 (#119) **esconde** un lead, nunca
+  duplica una conversación viva — al revés de `clienteSql.ts`, donde un falso positivo pinta una
+  venta que no existe, y por eso allá hay guarda de país y acá no.
+- 🔴 **DOS TRABAJOS OPUESTOS COMPARTEN COLUMNA**: a quien te escribió le contestás y es gratis; a un
+  lead hay que **abrirle** el chat en frío, que en whatsmeow es el camino corto al ban (regla dura
+  #7). Por eso la píldora **«Formulario»**, y va en el **segundo renglón** — al lado del nombre se lo
+  comía en 225 px. **Lo mostró la captura, no un test.**
+- Capturas: `docs/evidencia/te-esperan-con-formularios.png`.
 
 ## Los leads de formulario en el radar (8-ago-2026)
 

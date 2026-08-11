@@ -74,6 +74,67 @@ nota de ADR 0035: *«Repartir NO manda nada»*.
 Mostrarlos ya vale por sí solo —hasta hoy el Pipeline ordenaba el 2,5 % del negocio y estas 141
 personas no existían en ninguna pantalla— pero la acción es un frente propio.
 
+---
+
+## Enmienda (11-ago-2026) — estaban en la columna y no se podían ver
+
+**Reporte del dueño**: *«"te esperan" debería salir tmb los formularios enviados a icarus»* — sobre
+una captura donde la columna **ya decía 531** (377 conversaciones + los 154 formularios de hoy).
+
+O sea: el frente estaba entero y el número era correcto. Lo que fallaba era **el orden**.
+
+### El defecto, en tres hechos
+
+1. `leadsCte` emite `tipo = 'lead'`.
+2. `cola/urgencia.ts` ramificaba por `tipo === 'mensaje'` en los niveles 0, 3 y 4, así que un lead
+   **no matcheaba ninguno de los cinco primeros y caía al 5** — el nivel que ese mismo archivo
+   describe como *«EL RESTO: ventanas cerradas y comentarios respondidos. Nada de esto corre
+   peligro»*. Justo al revés de lo que es un lead recién llegado.
+3. Todas las conversaciones de «Te esperan» son **nivel 3**: `interesado` se deriva de
+   `NOT respondida`, que ES la condición del nivel 3.
+
+Con `ORDER BY nivel ASC` y 40 filas por página, **los 154 formularios quedaban después de las 377
+conversaciones: página 10**. La columna los contaba y no había forma de llegar a ellos.
+
+### 🔴 Y era una divergencia MUDA entre las dos escrituras de la urgencia
+
+`urgencia.paridad.test.db.ts` existe justo para atrapar esto (#37), y no lo vio por dos razones que
+se tapaban entre sí: **no sembraba ningún lead**, y su `comoItem` colapsaba a `'mensaje'` todo lo que
+no fuera comentario — así que la función pura decía nivel 0/3 y el SQL decía 5 sobre la misma fila.
+Ahora el tipo viaja tal cual y hay un caso sembrado por nivel.
+
+### El arreglo
+
+`ESPERAN_RESPUESTA = ['mensaje', 'lead']` en `cola/urgencia.ts`, y `urgenciaSql.ts` **genera su `IN`
+desde esa constante** en vez de tipearlo — era la cuarta escritura de la misma lista.
+
+⚠️ **La lista es explícita y no `tipo !== 'comentario'`**: con la negación, un `tipo` nuevo entraría
+de callado arriba de todo en la cola de la vendedora. Que caiga al nivel 5 es un default aburrido;
+que se cuele en la deuda, no.
+
+**Un formulario se ordena igual que un mensaje entrante**, que es lo que es: `< 24 h` → nivel 0
+(VIVO, el más reciente primero — *velocidad = venta*, el argumento que el nivel 0 ya tenía escrito);
+más viejo → nivel 3 (ESPERA, el más viejo primero). **No se ordenan aparte: se intercalan** con las
+conversaciones por fecha, que es la consecuencia de que la columna signifique «la pelota es nuestra».
+
+### Qué se ve, medido en producción el 11-ago-2026
+
+| | |
+|---|---|
+| formularios en la columna | **154** (eran 141 el 10-ago) |
+| **suben al nivel 0 (arriba de todo, incluidas las conversaciones)** | **20** |
+| llegados en la última semana | 45 |
+| el resto | se intercala por fecha entre las 377, en vez de ir después de todas |
+
+### Alcance: esto también cambia el orden de **Mensajes**
+
+Los leads ya entraban a esa cola (el mismo `todo`), también en el nivel 5. Con la enmienda, un
+formulario de hoy aparece **arriba** en la mesa de trabajo. Es la consecuencia buscada y no un efecto
+colateral: si «la pelota es nuestra» ordena el Pipeline, tiene que ordenar igual la pantalla donde
+ese trabajo se hace — dos órdenes distintos para el mismo hecho es el defecto de #37.
+
+---
+
 ## Evidencia
 
 `docs/evidencia/te-esperan-con-formularios.png` — las dos formas conviviendo en la columna.
