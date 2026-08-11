@@ -16,6 +16,8 @@ import { borrarSesionCerberus, obtenerSesionCerberus } from './sesionStore.js';
 
 const BASE = (process.env.CERBERUS_BASE_URL ?? 'https://app.goberna.us').replace(/\/$/, '');
 const URL_VENTA = `${BASE}/ventas/crearVenta/`;
+/** El mismo endpoint con el que la pantalla de Cerberus repuebla el select al cambiar el país. */
+const urlLocalesDePais = (paisId: string) => `${BASE}/ventas/api/locales/${encodeURIComponent(paisId)}/`;
 
 export interface Opcion {
   id: string;
@@ -25,9 +27,38 @@ export interface Opcion {
 export interface FormularioVenta {
   monedas: Opcion[];
   paises: Opcion[];
+  /**
+   * Los locales ACTIVOS, sin recortar por país — es lo que trae el HTML del
+   * formulario cuando todavía no hay país elegido (`VentaForm.__init__` solo
+   * filtra el queryset con el form *bound*).
+   *
+   * ⚠️ Por eso esta lista **puede ofrecer un local que no es del país elegido**, y
+   * ese par lo rechaza `VentaForm.clean` («El local debe pertenecer al país
+   * seleccionado»). La lista fina se pide con `cargarLocalesDePais`; ésta es el
+   * respaldo para cuando ese pedido no se puede hacer.
+   */
+  locales: Opcion[];
   /** Choices estáticos de VentaForm — Medio y Origen se llenan solos, pero van igual. */
   medios: Opcion[];
   origenes: Opcion[];
+}
+
+/**
+ * UNA CUOTA, Y ES SOLO UNA FECHA.
+ *
+ * Cerberus **recalcula el monto de cada cuota en su backend** a partir del total
+ * de la venta (`_distribuir_monto_en_cuotas`, `sales/views.py:860`) y fuerza el
+ * `numero_cuota` por índice «para evitar manipulación del correlativo desde
+ * cliente». O sea que de acá viaja **cuántas cuotas son y cuándo vence cada una**,
+ * nada más: mandar un monto sería mandar un dato que el otro lado ignora, y un
+ * dato ignorado se lee como un dato respetado.
+ *
+ * `fecha_registro` tampoco se manda: sin ella Cerberus pone su `localdate()`, que
+ * es lo que queremos y encima con SU reloj, no con el del server de Hermes.
+ */
+export interface CuotaVenta {
+  /** `YYYY-MM-DD` — lo que produce un `<input type="date">` y lo que `parse_date` entiende. */
+  fechaVencimiento: string;
 }
 
 export interface ProductoVenta {
@@ -41,12 +72,28 @@ export interface OrdenVenta {
   clienteId: number;
   monedaId: string;
   paisId: string;
-  /** Preventa: para cursos (sin stock) evita exigir local/ubicación. */
+  /**
+   * EL LOCAL, Y ES OBLIGATORIO — desde el 22-jul-2026 (`sales/forms.py:132`,
+   * `local.required = True`) con un comentario que lo dice entero: «en preventa
+   * TAMBIÉN se exige local: aunque no se valida stock, se necesita saber desde
+   * dónde se despachará el producto cuando llegue».
+   *
+   * Hermes mandaba `''` acá y por eso **cada** intento moría en «Formulario
+   * inválido», también la Cotización. Ver el ADR del frente.
+   */
+  localId: string;
+  /** Preventa: para cursos (sin stock) no reserva stock ni exige ubicación. */
   preventa: boolean;
   medio: string;
   origen: string;
   montoTotal: number;
   productos: ProductoVenta[];
+  /**
+   * EL CRONOGRAMA DE PAGO. Vacío está permitido **solo** en `cotizacion`: una
+   * cotización es un presupuesto y no entra a tesorería, así que Cerberus no le
+   * pide cronograma (`views.py:947`). Una venta sin cuotas es un 400 seguro.
+   */
+  cuotas: CuotaVenta[];
   /** 'cotizacion' (presupuesto, seguro) o 'venta' (final). */
   saveMode: 'cotizacion' | 'venta';
   /**
@@ -109,9 +156,132 @@ export async function cargarFormulario(vendedoraId: string): Promise<FormularioV
   return {
     monedas: parseOpciones(html, 'moneda'),
     paises: parseOpciones(html, 'pais'),
+    // Sale del MISMO HTML que ya se parseaba, y estaba ahí desde siempre: el
+    // `<select name="local">` nunca se leyó, así que la venta viajaba sin local.
+    locales: parseOpciones(html, 'local'),
     medios: MEDIOS,
     origenes: ORIGENES,
   };
+}
+
+/**
+ * Los locales de UN país — la lista que Cerberus considera válida para ese país.
+ *
+ * Existe porque el filtro no es cosmético: `VentaForm.clean` rechaza la venta
+ * entera si el local no pertenece al país. Ofrecer la lista completa y dejar que
+ * Cerberus diga que no es hacerle perder el intento a la vendedora con el cliente
+ * esperando.
+ *
+ * ⚠️ **`null` es «no se pudo preguntar», nunca «no hay locales»** — un array vacío
+ * significaría que ese país no tiene ninguno, y con eso el front dejaría el select
+ * mudo. Quien llama degrada a la lista completa del formulario.
+ */
+export async function cargarLocalesDePais(vendedoraId: string, paisId: string): Promise<Opcion[] | null> {
+  const s = await obtenerSesionCerberus(vendedoraId);
+  if (!s) return null;
+  const r = await fetch(urlLocalesDePais(paisId), {
+    headers: { cookie: `sessionid=${s.sessionid}; csrftoken=${s.csrftoken}` },
+    signal: AbortSignal.timeout(15_000),
+  });
+  // Mismo criterio que `cargarFormulario`: el redirect al login puede ser sesión
+  // muerta O falta de permiso, y borrar la sesión acá arma el bucle de relogueo.
+  if (r.url.includes('/ingresar') || !r.ok) return null;
+  const cuerpo = (await r.json()) as { success?: boolean; locales?: { id: number | string; nombre: string }[] };
+  if (!cuerpo?.success || !Array.isArray(cuerpo.locales)) return null;
+  return cuerpo.locales.map((l) => ({ id: String(l.id), nombre: String(l.nombre) }));
+}
+
+/**
+ * POR QUÉ ESTA ORDEN NO SE PUEDE MANDAR — pura, y es la puerta que faltaba.
+ *
+ * Devuelve el motivo exacto, o `null` si se puede. Existe porque el 400 de Django
+ * llega en su idioma («Formulario inválido») y sin decir qué campo: la vendedora
+ * leía eso y no tenía nada que corregir. Reenviarlo tal cual era el estado del
+ * arte hasta hoy, y por eso `gestiones` tiene **0 filas en `cierre`**.
+ *
+ * Cada regla es un espejo de una de Cerberus y dice cuál — si allá cambian, acá
+ * el mensaje miente y hay que venir a este archivo.
+ */
+export function motivoParaNoRegistrar(orden: OrdenVenta): string | null {
+  if (!orden.clienteId || !orden.monedaId || !orden.paisId || orden.productos.length === 0) {
+    return 'Faltan cliente, moneda, país o productos.';
+  }
+  // `sales/forms.py:132` — required desde el 22-jul-2026, también en preventa.
+  if (!orden.localId) return 'Elegí el local: Cerberus lo exige para saber desde dónde se despacha.';
+  // `sales/views.py:947-956` — solo la venta real necesita cronograma.
+  if (orden.saveMode === 'venta') {
+    if (orden.cuotas.length === 0) return 'Una venta necesita al menos una cuota.';
+    if (orden.cuotas.some((c) => !c.fechaVencimiento)) {
+      return 'Todas las cuotas necesitan fecha de vencimiento.';
+    }
+  }
+  return null;
+}
+
+/**
+ * EL CUERPO QUE SE LE POSTEA A `crear_venta`, armado aparte y puro.
+ *
+ * Está separado del `fetch` para poder interrogarlo sin red: los dos campos que
+ * este frente arregla —`local` y `cuotas_json`— viajaron vacíos durante siete
+ * meses y ningún test podía verlo, porque el único lugar donde existían era
+ * adentro de una función que sale a internet.
+ *
+ * Cada valor sale saneado para el MySQL latin1 de Cerberus (regla dura #4, #108).
+ * Va acá, al armar el cuerpo, y no campo por campo: hoy solo `venta_request_key`
+ * lleva texto de origen humano —el username de la vendedora—, pero el día que
+ * alguien agregue `observacion` (el `mostrar_observacion_pdf` de abajo delata que
+ * Cerberus la tiene esperando) o el nombre del cliente, nace cubierto sin que
+ * nadie se acuerde.
+ */
+export function cuerpoDeVenta(args: {
+  csrf: string;
+  vendedoraId: string;
+  orden: OrdenVenta;
+  ahora?: Date;
+}): URLSearchParams {
+  const { csrf, vendedoraId, orden } = args;
+  const ahora = args.ahora ?? new Date();
+
+  // El productos_json con la forma exacta que espera crear_venta.
+  const productosJson = JSON.stringify(
+    orden.productos.map((p) => ({
+      producto_id: p.productoId,
+      cantidad: p.cantidad,
+      precio_regular: p.precioRegular,
+      precio_venta: p.precioVenta,
+      precio_total: p.precioVenta * p.cantidad,
+    })),
+  );
+
+  // Solo la fecha: el monto y el número los pone Cerberus (ver `CuotaVenta`).
+  const cuotasJson = JSON.stringify(orden.cuotas.map((c) => ({ fecha_vencimiento: c.fechaVencimiento })));
+
+  return cuerpoParaCerberus({
+    csrfmiddlewaretoken: csrf,
+    cliente: String(orden.clienteId),
+    moneda: orden.monedaId,
+    pais: orden.paisId,
+    local: orden.localId,
+    // `ubicacion` sigue vacía a propósito: `forms.py:133` la deja opcional, y con
+    // productos que no requieren stock (los cursos) Cerberus no la pide nunca.
+    ubicacion: '',
+    medio: orden.medio,
+    origen: orden.origen,
+    estado: '1',
+    monto_total: String(orden.montoTotal),
+    fecha_venta: ahora.toISOString().slice(0, 16),
+    is_preventa: orden.preventa ? 'true' : '',
+    productos_json: productosJson,
+    cuotas_json: cuotasJson,
+    save_mode: orden.saveMode,
+    mostrar_observacion_pdf: 'true',
+    // Idempotencia: dos clicks no crean dos ventas. Y —desde #161— también LA LLAVE DE
+    // ATRIBUCIÓN: acá adentro viaja la conversación, Cerberus la guarda tal cual en
+    // `Venta.idempotency_key` y la devuelve en el webhook. Es el único campo que hace el viaje
+    // completo, así que es el único lugar donde la atribución puede volverse determinista.
+    // Sin conversación usable, `armarLlaveAtribucion` devuelve exactamente la llave de antes.
+    venta_request_key: armarLlaveAtribucion({ vendedoraId, clave: orden.clave }),
+  });
 }
 
 export type VeredictoVenta =
@@ -166,47 +336,8 @@ export async function crearVenta(vendedoraId: string, orden: OrdenVenta): Promis
     /* seguimos con el token que tenemos */
   }
 
-  // 2. El productos_json con la forma exacta que espera crear_venta.
-  const productosJson = JSON.stringify(
-    orden.productos.map((p) => ({
-      producto_id: p.productoId,
-      cantidad: p.cantidad,
-      precio_regular: p.precioRegular,
-      precio_venta: p.precioVenta,
-      precio_total: p.precioVenta * p.cantidad,
-    })),
-  );
-
-  // Cada valor sale saneado para el MySQL latin1 de Cerberus (regla dura #4,
-  // #108). Va acá, al armar el cuerpo, y no campo por campo: hoy solo
-  // `venta_request_key` lleva texto de origen humano —el username de la
-  // vendedora—, pero el día que alguien agregue `observacion` (el
-  // `mostrar_observacion_pdf` de abajo delata que Cerberus la tiene esperando)
-  // o el nombre del cliente, nace cubierto sin que nadie se acuerde.
-  const body = cuerpoParaCerberus({
-    csrfmiddlewaretoken: csrf,
-    cliente: String(orden.clienteId),
-    moneda: orden.monedaId,
-    pais: orden.paisId,
-    local: '',
-    ubicacion: '',
-    medio: orden.medio,
-    origen: orden.origen,
-    estado: '1',
-    monto_total: String(orden.montoTotal),
-    fecha_venta: new Date().toISOString().slice(0, 16),
-    is_preventa: orden.preventa ? 'true' : '',
-    productos_json: productosJson,
-    cuotas_json: '[]',
-    save_mode: orden.saveMode,
-    mostrar_observacion_pdf: 'true',
-    // Idempotencia: dos clicks no crean dos ventas. Y —desde #161— también LA LLAVE DE
-    // ATRIBUCIÓN: acá adentro viaja la conversación, Cerberus la guarda tal cual en
-    // `Venta.idempotency_key` y la devuelve en el webhook. Es el único campo que hace el viaje
-    // completo, así que es el único lugar donde la atribución puede volverse determinista.
-    // Sin conversación usable, `armarLlaveAtribucion` devuelve exactamente la llave de antes.
-    venta_request_key: armarLlaveAtribucion({ vendedoraId, clave: orden.clave }),
-  });
+  // 2. El cuerpo, armado por la función pura que los tests pueden interrogar.
+  const body = cuerpoDeVenta({ csrf, vendedoraId, orden });
 
   try {
     const r = await fetch(URL_VENTA, {

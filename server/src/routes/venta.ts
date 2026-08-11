@@ -1,7 +1,14 @@
 import { Router } from 'express';
 import { requiereVendedora } from '../auth/sesion.js';
 import { asentarVentaEnEmbudo } from './gestiones.js';
-import { cargarFormulario, crearVenta, type OrdenVenta } from '../cerberus/venta.js';
+import {
+  cargarFormulario,
+  cargarLocalesDePais,
+  crearVenta,
+  motivoParaNoRegistrar,
+  type CuotaVenta,
+  type OrdenVenta,
+} from '../cerberus/venta.js';
 import { buscarProductos } from '../cerberus/productos.js';
 import { aLatin1 } from '../cerberus/latin1.js';
 
@@ -33,6 +40,30 @@ ventaRouter.get('/formulario', requiereVendedora, async (req, res) => {
   }
 });
 
+/**
+ * Los locales de UN país — porque el local tiene que pertenecer al país elegido
+ * (`VentaForm.clean`) y ofrecer uno de otro país es regalar un intento fallido.
+ *
+ * ⚠️ **Nunca es un error para la pantalla**: si Cerberus no contesta, se devuelve
+ * `locales: null` con un 200, y el front se queda con la lista completa del
+ * formulario. Un 502 acá dejaría el select vacío y la venta imposible por un hipo
+ * de una lista auxiliar.
+ */
+ventaRouter.get('/locales', requiereVendedora, async (req, res) => {
+  const pais = typeof req.query.pais === 'string' ? req.query.pais : '';
+  if (!/^\d+$/.test(pais)) {
+    res.status(400).json({ ok: false, message: 'Falta el país.' });
+    return;
+  }
+  // El try tiene dueño por lo mismo que el de `/formulario` (#223): Express 4 no
+  // captura el rechazo de un handler async y adentro hay un fetch con timeout.
+  try {
+    res.json({ locales: await cargarLocalesDePais(req.vendedoraId!, pais) });
+  } catch {
+    res.json({ locales: null });
+  }
+});
+
 /** Buscador de cursos (API pública de Cerberus, solo lectura). */
 ventaRouter.get('/productos', requiereVendedora, async (req, res) => {
   // Saneado aunque sea solo lectura: es un borde saliente hacia Cerberus (#108),
@@ -55,19 +86,31 @@ ventaRouter.post('/crear', requiereVendedora, async (req, res) => {
     clienteId: Number(b.clienteId),
     monedaId: String(b.monedaId ?? ''),
     paisId: String(b.paisId ?? ''),
+    localId: String(b.localId ?? ''),
     preventa: b.preventa !== false, // por defecto preventa (cursos sin stock)
     medio: String(b.medio ?? 'organico'),
     origen: String(b.origen ?? 'whatsapp'),
     montoTotal: Number(b.montoTotal ?? 0),
     productos: Array.isArray(b.productos) ? b.productos : [],
+    // Solo la fecha sobrevive del cuerpo: el monto y el número los pone Cerberus.
+    cuotas: (Array.isArray(b.cuotas) ? b.cuotas : []).map(
+      (c: { fechaVencimiento?: unknown }): CuotaVenta => ({
+        fechaVencimiento: String(c?.fechaVencimiento ?? ''),
+      }),
+    ),
     saveMode: b.saveMode === 'venta' ? 'venta' : 'cotizacion',
     // La conversación viaja a Cerberus dentro del `venta_request_key` y vuelve en el webhook
     // (#161). El front ya mandaba `clave` para asentar el embudo; ahora también cierra el lazo.
     clave: b.clave ? String(b.clave) : null,
   };
 
-  if (!orden.clienteId || !orden.monedaId || !orden.paisId || orden.productos.length === 0) {
-    res.status(400).json({ ok: false, message: 'Faltan cliente, moneda, país o productos.' });
+  // Lo que Cerberus va a rechazar, dicho en castellano y sin gastar el viaje: su
+  // 400 llega como «Formulario inválido», que no le dice a la vendedora qué
+  // corregir. La regla vive pura en `cerberus/venta.ts`, al lado de la cita del
+  // archivo de Django que la impone.
+  const motivo = motivoParaNoRegistrar(orden);
+  if (motivo) {
+    res.status(400).json({ ok: false, message: motivo });
     return;
   }
 
