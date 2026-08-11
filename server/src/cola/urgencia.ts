@@ -41,7 +41,7 @@
  */
 
 export interface ItemUrgencia {
-  tipo: 'comentario' | 'mensaje';
+  tipo: 'comentario' | 'mensaje' | 'lead';
   /** Solo significa algo en comentarios: la ventana de 7 días de Meta sigue abierta. */
   ventanaAbierta: boolean;
   /** ¿Existe un saliente posterior al último entrante? Derivada, nunca estado de fila. */
@@ -64,6 +64,40 @@ export interface ItemUrgencia {
 /** Una conversación se considera VIVA si el entrante sin responder llegó hace menos de esto. */
 export const ACTIVO_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * ══ 🔴 QUÉ FILAS ESPERAN UNA RESPUESTA NUESTRA ═════════════════════════════
+ *
+ * Un chat de WhatsApp **y un formulario de landing** (`cola/leadsCte.ts`, el
+ * tercer brazo de la unión). Los dos son deuda nuestra; un comentario de Meta no
+ * entra acá porque tiene su propio nivel, el 2, gobernado por la ventana de 7
+ * días.
+ *
+ * ── EL DEFECTO QUE ESTO ARREGLA, MEDIDO EL 11-ago-2026 ───────────────────
+ * Los niveles se preguntaban `tipo === 'mensaje'`, así que un lead —`tipo =
+ * 'lead'`— **no matcheaba ninguno de los cinco primeros y caía al 5**, que este
+ * mismo archivo describe como *«EL RESTO: ventanas cerradas y comentarios
+ * respondidos. Nada de esto corre peligro»*. Justo al revés de lo que es.
+ *
+ * Y como las 377 conversaciones de «Te esperan» son todas nivel 3 —`interesado`
+ * se deriva de `NOT respondida`, que ES el nivel 3—, los **154 formularios de la
+ * columna quedaban debajo de las 377, o sea en la página 10** de una lista que
+ * pagina de a 40. La columna los contaba (531) y no había forma de verlos: el
+ * frente estaba entero salvo esta línea.
+ *
+ * 🔴 **Y era una divergencia MUDA entre las dos escrituras de la regla**: el
+ * `comoItem` de `urgencia.paridad.test.db.ts` ya colapsaba todo lo que no es
+ * comentario a `'mensaje'`, así que la función pura decía nivel 0/3 y el SQL
+ * decía 5 — el test no lo veía sólo porque no sembraba ningún lead. Ahora siembra.
+ *
+ * ⚠️ **La lista es EXPLÍCITA y no `tipo !== 'comentario'`**: con la negación, un
+ * `tipo` nuevo entraría de callado a la deuda de la vendedora. Que un tipo nuevo
+ * caiga al nivel 5 es un default aburrido; que se cuele arriba de todo, no.
+ */
+export const ESPERAN_RESPUESTA: readonly ItemUrgencia['tipo'][] = ['mensaje', 'lead'];
+
+const esperaRespuesta = (tipo: ItemUrgencia['tipo']): boolean =>
+  ESPERAN_RESPUESTA.includes(tipo);
+
 /** Nivel de urgencia; menor = más arriba en la cola. */
 export type Clave = { nivel: 0 | 1 | 2 | 3 | 4 | 5; orden: number };
 
@@ -73,7 +107,7 @@ export function claveUrgencia(item: ItemUrgencia, ahora: Date): Clave {
 
   // Nivel 0 — VIVO: mensaje sin responder, con un entrante reciente. El MÁS
   // RECIENTE primero (negamos el tiempo): velocidad de respuesta = conversión.
-  if (item.tipo === 'mensaje' && !item.respondida && edad < ACTIVO_MS) {
+  if (esperaRespuesta(item.tipo) && !item.respondida && edad < ACTIVO_MS) {
     return { nivel: 0, orden: -t };
   }
 
@@ -93,7 +127,7 @@ export function claveUrgencia(item: ItemUrgencia, ahora: Date): Clave {
   }
 
   // Nivel 3 — ESPERA: mensaje sin responder pero ya viejo. Todavía es trabajo.
-  if (item.tipo === 'mensaje' && !item.respondida) {
+  if (esperaRespuesta(item.tipo) && !item.respondida) {
     return { nivel: 3, orden: t };
   }
 
@@ -102,7 +136,7 @@ export function claveUrgencia(item: ItemUrgencia, ahora: Date): Clave {
   // RECIENTE primero (negamos): a los dos días se rescata, a los catorce ya es
   // archivo. Solo aplica a conversaciones — un comentario respondido no abre
   // ninguna espera, se archiva.
-  if (item.tipo === 'mensaje' && item.respondida) {
+  if (esperaRespuesta(item.tipo) && item.respondida) {
     return { nivel: 4, orden: -t };
   }
 

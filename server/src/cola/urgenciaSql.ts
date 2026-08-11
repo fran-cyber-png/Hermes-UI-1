@@ -1,5 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
-import { ACTIVO_MS } from "./urgencia.js";
+import { ACTIVO_MS, ESPERAN_RESPUESTA } from "./urgencia.js";
 
 /**
  * LA MISMA URGENCIA, DICHA EN SQL.
@@ -26,13 +26,27 @@ import { ACTIVO_MS } from "./urgencia.js";
  *   referencia (timestamptz) · seguimiento_en (timestamptz, NULL si no hay).
  */
 
+/**
+ * ══ QUIÉN ESPERA RESPUESTA — GENERADO DESDE LA CONSTANTE, NO TIPEADO ═══════
+ *
+ * `ESPERAN_RESPUESTA` vive en `urgencia.ts` (un chat de WhatsApp y un formulario
+ * de landing; el porqué y el defecto que arregló están escritos allá). Acá se
+ * PROYECTA en vez de repetirse: escribir `IN ('mensaje','lead')` a mano sería la
+ * cuarta escritura de la misma lista, y la última vez que estas dos formas se
+ * separaron el SQL se quedó en cuatro niveles mientras el módulo tenía seis (#37).
+ */
+const ESPERA_RESPUESTA = sql`tipo IN (${sql.join(
+  ESPERAN_RESPUESTA.map((t) => sql`${t}`),
+  sql`, `,
+)})`;
+
 // Las seis condiciones de `claveUrgencia`, en su orden de precedencia. VIVO le
 // gana a VENCIDO a propósito — la decisión está explicada en urgencia.ts, no acá.
-const VIVO = sql`(tipo = 'mensaje' AND NOT respondida AND referencia > now() - ${ACTIVO_MS} * interval '1 millisecond')`;
+const VIVO = sql`(${ESPERA_RESPUESTA} AND NOT respondida AND referencia > now() - ${ACTIVO_MS} * interval '1 millisecond')`;
 const VENCIDO = sql`(seguimiento_en IS NOT NULL AND seguimiento_en <= now())`;
 const EXPIRA = sql`(tipo = 'comentario' AND ventana_abierta AND NOT respondida)`;
-const ESPERA = sql`(tipo = 'mensaje' AND NOT respondida)`;
-const SILENCIO = sql`(tipo = 'mensaje' AND respondida)`;
+const ESPERA = sql`(${ESPERA_RESPUESTA} AND NOT respondida)`;
+const SILENCIO = sql`(${ESPERA_RESPUESTA} AND respondida)`;
 
 /**
  * VIVO suelto — «alguien está escribiendo AHORA»: el nivel 0, sin el resto del

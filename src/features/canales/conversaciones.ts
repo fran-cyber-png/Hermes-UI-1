@@ -20,7 +20,15 @@ export interface Conversacion {
    * línea por la que haya entrado.
    */
   canal: 'facebook' | 'instagram' | 'whatsapp' | 'landing';
-  tipo: 'comentario' | 'mensaje';
+  /**
+   * ⚠️ `lead` es el tercer valor y **no es decorativo: gobierna el orden de la
+   * cola**. `server/src/cola/urgencia.ts` decide con él si la fila es deuda
+   * nuestra (niveles 0 y 3) o «el resto» (nivel 5). Estuvo faltando acá mientras
+   * el server ya lo emitía, y el día que se preguntó por él quedó a la vista que
+   * un lead caía en el nivel 5 — o sea, debajo de las 377 conversaciones de su
+   * propia columna. Ver ADR 0051, enmienda del 11-ago-2026.
+   */
+  tipo: 'comentario' | 'mensaje' | 'lead';
   persona_id: string | null;
   persona_nombre: string | null;
   /** El número propio de Goberna por el que entró (solo mensajes). */

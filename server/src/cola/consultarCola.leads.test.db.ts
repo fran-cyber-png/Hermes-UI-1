@@ -117,3 +117,48 @@ test("el desglose los cuenta en interesado, así la cabecera y la lista coincide
   // sea imposible (#37).
   assert.equal(enInteresado, 2);
 });
+
+test("🔴 por el camino REAL de la columna (?etapa=interesado) el formulario de hoy sale PRIMERO", async (t) => {
+  /**
+   * ══ LA ENMIENDA DEL 11-ago-2026 (ADR 0051) ═══════════════════════════════
+   *
+   * Los tests de arriba prueban que el lead ENTRA a la columna, y todos pasaban
+   * mientras el dueño reportaba que los formularios «no salían». Los dos eran
+   * ciertos: entraban, y quedaban en la **página 10**.
+   *
+   * El motivo era el orden. `cola/urgencia.ts` ramificaba por `tipo ===
+   * 'mensaje'`, así que un lead caía al **nivel 5** («el resto») mientras todas
+   * las conversaciones de «Te esperan» son nivel 3 — `interesado` se deriva de
+   * `NOT respondida`, que ES la condición del nivel 3. Con `ORDER BY nivel ASC`
+   * y 40 por página, los 154 formularios iban después de las 377 conversaciones.
+   *
+   * Este test pide la columna **como la pide el Pipeline** —con `etapa`, que es
+   * lo que ningún test de arriba hacía— y fija las dos mitades: el nivel y el
+   * lugar. Es la lección de ADR 0049: el defecto vivía en la costura, y los
+   * tests que llaman al seam sin sus parámetros reales no la tocan.
+   */
+  const db = await baseDePrueba(t);
+  const hace = (horas: number) => new Date(Date.now() - horas * 60 * 60 * 1000);
+
+  // Las conversaciones que hoy llenan la columna: escribieron y nadie contestó.
+  await sembrarMensaje(db, { personaId: "51900000021", occurredAt: hace(21 * 24) });
+  await sembrarMensaje(db, { personaId: "51900000010", occurredAt: hace(10 * 24) });
+  // Y el formulario que llegó hoy: la persona levantó la mano hace dos horas.
+  await sembrarLead(db, { ...deLanding, phone: "+51987654328", createdTime: hace(2) });
+
+  const r = await consultarCola(db, { etapa: "interesado" });
+  const filas = r.conversaciones as Array<Record<string, unknown>>;
+
+  assert.equal(
+    String(filas[0]?.persona_id ?? "").replace(/\D/g, ""),
+    "51987654328",
+    "el formulario de hace 2 h tiene que encabezar «Te esperan»: velocidad = venta",
+  );
+  assert.equal(filaDe(r, "51987654328")?.nivel, 0, "es VIVO, no «el resto»");
+  assert.ok(
+    filas.every((f) => f.nivel !== 5),
+    "ninguna fila de esta columna puede caer en el nivel 5: ahí van las ventanas cerradas",
+  );
+  // Y las tres conviven en la MISMA columna: el lead no la reemplaza ni la parte.
+  assert.equal(filas.length, 3);
+});

@@ -1,7 +1,12 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { baseDePrueba } from "../pruebas/base.js";
-import { sembrarComentario, sembrarMensaje, sembrarRecordatorio } from "../pruebas/sembrar.js";
+import {
+  sembrarComentario,
+  sembrarLead,
+  sembrarMensaje,
+  sembrarRecordatorio,
+} from "../pruebas/sembrar.js";
 import { consultarCola } from "./consultarCola.js";
 import { consultarRadar } from "./consultarRadar.js";
 import { claveUrgencia, ordenarPorUrgencia, type ItemUrgencia } from "./urgencia.js";
@@ -35,7 +40,16 @@ type Fila = {
 
 function comoItem(f: Fila): ItemUrgencia {
   return {
-    tipo: f.tipo === "comentario" ? "comentario" : "mensaje",
+    /**
+     * 🔴 EL TIPO VIAJA TAL CUAL, y antes no.
+     *
+     * Esto decía `f.tipo === "comentario" ? "comentario" : "mensaje"`, o sea que
+     * colapsaba a `'mensaje'` **el brazo de los leads** (`cola/leadsCte.ts`,
+     * `tipo = 'lead'`). Con eso, la función pura decía nivel 0/3 sobre un lead y
+     * el SQL decía 5 — la divergencia exacta que este archivo existe para
+     * atrapar—, y el test no la veía porque no sembraba ninguno. Ahora siembra.
+     */
+    tipo: f.tipo as ItemUrgencia["tipo"],
     ventanaAbierta: f.ventana_abierta,
     respondida: f.respondida,
     referencia: new Date(f.referencia),
@@ -107,6 +121,69 @@ describe("paridad SQL ≡ TS de la urgencia (#37)", () => {
       ahora,
     ).map((i) => i.clave);
     assert.deepEqual(filas.map((f) => f.clave), puro, "el SQL y la función pura ordenan distinto");
+  });
+
+  test("🔴 un formulario de landing es DEUDA, no «el resto»: entra a los niveles 0 y 3 como un mensaje", async (t) => {
+    /**
+     * EL DEFECTO QUE ESTE TEST FIJA (medido en producción el 11-ago-2026).
+     *
+     * Los niveles preguntaban `tipo = 'mensaje'`, así que un lead —el tercer
+     * brazo de la unión, `cola/leadsCte.ts`— no matcheaba ninguno de los cinco
+     * primeros y **caía al nivel 5, «el resto»**. Como todas las conversaciones
+     * de «Te esperan» son nivel 3, los 154 formularios de esa columna quedaban
+     * debajo de las 377 conversaciones: página 10 de una lista que pagina de a
+     * 40. La columna los contaba y no había forma de verlos.
+     */
+    const db = await baseDePrueba(t);
+    const deLanding = { platform: "web", formName: "icarus:landing" } as const;
+    // Uno de hoy: es el caso que más importa — velocidad de respuesta = venta.
+    await sembrarLead(db, { ...deLanding, phone: "+51955000111", createdTime: hace(2) });
+    // Y uno de la semana pasada: sigue siendo deuda, pero ya no está vivo.
+    await sembrarLead(db, { ...deLanding, phone: "+51955000222", createdTime: hace(5 * 24) });
+    // Una conversación sin responder de hace tres días, para verlos convivir.
+    await sembrarMensaje(db, { personaId: "p-espera", occurredAt: hace(3 * 24) });
+
+    const filas = (await consultarCola(db, {})).conversaciones as Fila[];
+    const porTelefono = new Map(filas.map((f) => [f.persona_id, f]));
+
+    assert.equal(
+      porTelefono.get("51955000111")?.nivel,
+      0,
+      "un formulario de hace 2 h está VIVO: la persona levantó la mano hoy",
+    );
+    assert.equal(
+      porTelefono.get("51955000222")?.nivel,
+      3,
+      "uno de hace 5 días sigue siendo deuda nuestra (ESPERA), nunca «el resto»",
+    );
+    assert.ok(
+      filas.every((f) => f.nivel !== 5),
+      "ningún lead puede caer en el nivel 5: ahí van las ventanas cerradas",
+    );
+
+    /**
+     * Y lo que la vendedora ve: el formulario de hoy ARRIBA de todo — antes
+     * salía último de los tres. Los otros dos comparten el nivel 3, y ahí manda
+     * el más VIEJO (`orden = t` ascendente, `urgencia.ts`): el lead de hace 5
+     * días le gana a la conversación de hace 3. Es la misma regla para los dos,
+     * que es exactamente lo que se buscaba — los leads no se ordenan aparte, se
+     * intercalan.
+     */
+    assert.deepEqual(filas.map((f) => f.persona_id), [
+      "51955000111",
+      "51955000222",
+      "p-espera",
+    ]);
+
+    // La paridad, sobre estas mismas filas: el SQL y la función pura coinciden.
+    const ahora = new Date();
+    for (const fila of filas) {
+      assert.equal(
+        fila.nivel,
+        claveUrgencia(comoItem(fila), ahora).nivel,
+        `la fila ${fila.clave} salió con nivel ${fila.nivel} del SQL y el módulo dice otra cosa`,
+      );
+    }
   });
 
   test("entre vencidos manda la fecha del COMPROMISO, no la del mensaje", async (t) => {
