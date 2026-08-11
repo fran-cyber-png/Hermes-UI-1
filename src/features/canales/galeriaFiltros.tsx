@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import '../../index.css';
 import { queryClient } from '../../lib/datos/cliente';
+import { AvisoFilaQueBajo } from './AvisoFilaQueBajo';
 import { BarraFiltros } from './BarraFiltros';
 import { FilaConversacion } from './FilaConversacion';
 import type { FiltroSec } from './cola';
@@ -182,6 +183,25 @@ function Galeria() {
             onCategoria={() => {}}
             onListas={() => {}}
           />
+        </section>
+
+        <section className="rounded-xl border border-border bg-card p-3">
+          <p className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+            «Le contesto y desaparece» — el aviso, con la misma forma que el pin de orientación
+          </p>
+          <p className="mb-2 px-1 text-xs text-muted-foreground">
+            Contestar mueve la fila del nivel 0/3 (deuda) al 4 (silencio) y, con cientos de filas de
+            deuda arriba y páginas de 40, cae fuera de lo cargado. No se reordena: se va de la vista.
+          </p>
+          <div className="overflow-hidden rounded-lg border border-border">
+            <AvisoFilaQueBajo
+              aviso={{
+                clave: 'conv:whatsapp:51987654321:51986394450',
+                texto: 'Le contestaste a Rosa M.: bajó con las que esperan respuesta.',
+              }}
+              onFijar={() => {}}
+            />
+          </div>
         </section>
 
         <section className="space-y-3">

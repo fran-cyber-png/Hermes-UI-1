@@ -26,6 +26,8 @@ import { BarraFiltros } from './BarraFiltros';
 import { useConversaciones, useEstadoConversacion, type Conversacion } from './conversaciones';
 import { useLineas } from './lineas';
 import { FilaConversacion } from './FilaConversacion';
+import { AvisoFilaQueBajo } from './AvisoFilaQueBajo';
+import { avisoDeFilaQueSeFue } from './filaQueSeFue';
 import { MenuFila } from './MenuFila';
 import { ListaCategorias } from './ListaCategorias';
 import { nombreCanal } from './BadgeCanal';
@@ -301,6 +303,44 @@ export function ColaUnificada({
   // honesto es el que se ve; sin ella manda el total que contó el server.
   const nVisibles = busqueda ? visibles.length : total;
   const pinVisible = noEstaEnLista && (busqueda !== '' || hayFiltroActivo);
+
+  /**
+   * «LE CONTESTÉ Y DESAPARECIÓ» — el complemento EXACTO del pin de arriba.
+   *
+   * El pin cubre «no coincide con el recorte». Lo que no tenía red era el caso
+   * sin ningún recorte —como Luz abre la cola—: contestar mueve la fila del
+   * nivel 0/3 al 4 (`server/src/cola/urgencia.ts`) y, con cientos de filas de
+   * deuda arriba y páginas de 40, **cae fuera de lo cargado**. No se reordena:
+   * se va de la vista.
+   *
+   * La regla vive pura en `filaQueSeFue.ts` (con sus cinco guardas y sus tests);
+   * acá solo se le da el «antes», que es lo único que un componente puede saber
+   * y una función pura no.
+   */
+  const clavesAntes = useRef<string[]>([]);
+  /**
+   * Las claves como UNA cadena, y no como array, por dos razones que van juntas:
+   * el array es nuevo en cada render —así que un efecto que dependa de él corre
+   * siempre y pisa el «antes» antes de que el aviso lo lea— y la regla de hooks
+   * exige una dependencia que se pueda chequear estáticamente.
+   *
+   * El separador es seguro: una clave es `conv:<canal>:<persona>:<numero>` o
+   * `int:<id>`, y ninguna de las dos formas lleva `|`.
+   */
+  const clavesAhora = visibles.map((c) => c.clave).join('|');
+  const aviso = avisoDeFilaQueSeFue({
+    abierta: seleccionada,
+    nombre: conversacionAbierta?.persona_nombre,
+    claves: clavesAhora ? clavesAhora.split('|') : [],
+    clavesAntes: clavesAntes.current,
+    fijadaArriba: pinVisible,
+    cargando,
+  });
+  useEffect(() => {
+    // El «antes» se actualiza SOLO con una lista ya cargada: guardar el vacío de
+    // un refetch en vuelo borraría la memoria justo antes de necesitarla.
+    if (!cargando) clavesAntes.current = clavesAhora ? clavesAhora.split('|') : [];
+  }, [cargando, clavesAhora]);
   const canalPin =
     conversacionAbierta?.canal ?? (seleccionada?.startsWith('conv:') ? seleccionada.split(':')[1] : null);
   const origenPin = canalPin ? nombreCanal(canalPin) : 'un comentario';
@@ -582,6 +622,13 @@ export function ColaUnificada({
               {busqueda ? 'Limpiar búsqueda' : 'Ver en Todo'}
             </button>
           </div>
+        )}
+
+        {aviso && (
+          <AvisoFilaQueBajo
+            aviso={aviso}
+            onFijar={conversacionAbierta ? () => togglear(conversacionAbierta, 'fijada') : undefined}
+          />
         )}
 
         {cargando ? (
