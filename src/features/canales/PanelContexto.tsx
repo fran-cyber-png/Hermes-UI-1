@@ -10,6 +10,7 @@ import { RegistrarGestion } from '../gestion/RegistrarGestion';
 import { Intereses } from '../gestion/Intereses';
 import { PanelNotas } from '../notas/PanelNotas';
 import { BloqueLeadForm } from '../cerberus/BloqueLeadForm';
+import { personaEsTelefono, telefonoDe } from './canal';
 import { PersonaUnificada } from '../identidad/PersonaUnificada';
 
 /**
@@ -144,12 +145,16 @@ export function PanelContexto({
           </>
         )}
 
-        {/* El lead-form por teléfono (#113). En los canales de Meta el número no
-            viene, así que esto se auto-oculta; queda cableado para cuando la
-            unificación cross-canal (#58) aporte el teléfono de un DM/comentario. */}
+        {/* El lead-form por teléfono (#113): nombre real, CORREO y campaña. En los
+            canales de Meta el número no viene, así que esto se auto-oculta; queda
+            cableado para cuando la unificación cross-canal (#58) aporte el
+            teléfono de un DM/comentario.
+            ⚠️ La condición es «¿hay teléfono?» y no «¿es WhatsApp?»: un lead de
+            landing trae el suyo, y con la pregunta vieja su correo —el insumo
+            para cotizarle— no se mostraba nunca (`canales/canal.ts`). */}
         <BloqueLeadForm
-          telefono={conversacion.canal === 'whatsapp' ? conversacion.persona_id : null}
-          activo={conversacion.canal === 'whatsapp'}
+          telefono={telefonoDe(conversacion)}
+          activo={personaEsTelefono(conversacion.canal)}
           pushname={conversacion.persona_nombre}
         />
 

@@ -18,6 +18,7 @@ import { ZonaPendientes } from './ZonaPendientes';
 import { FichaContacto } from '../cerberus/FichaContacto';
 import { VentaDesdeElPanel } from '../venta/VentaDesdeElPanel';
 import { origenDeLead } from '../cerberus/leadForm';
+import { personaEsTelefono } from '../canales/canal';
 
 function fichaDeCliente(f: Ficha | undefined): Extract<Ficha, { estado: 'cliente' }> | null {
   return f?.estado === 'cliente' ? f : null;
@@ -50,11 +51,25 @@ export function PanelDerecho({
    * presentación: decide cómo se ve el botón, no qué pasa al tocarlo.
    */
   const [vendiendo, setVendiendo] = useState(false);
-  const esWa = conversacion.canal === 'whatsapp';
+  /**
+   * 🔴 ACÁ LA PREGUNTA ES «¿HAY TELÉFONO?», NO «¿ES WHATSAPP?» — y se llamaba
+   * `esWa`, que es lo que rompió la ficha de los leads de formulario.
+   *
+   * Los seis usos de abajo (la ficha de Cerberus, el lead-form, la banda de
+   * estado, su spinner, el número del encabezado y el «cargando» de Meta) son
+   * todos la MISMA pregunta, y para un lead de landing la respuesta es SÍ:
+   * `cola/leadsCte.ts` emite el teléfono como `persona_id`. Con el nombre viejo,
+   * el panel de Raul Duran salía con «Sin ficha · este canal no lo trae» al lado
+   * de su propio número — y sin su correo, que es el insumo para cotizarle.
+   *
+   * ⚠️ Ninguno de los seis es un permiso de ENVÍO ni un pedido de FOTO: esas son
+   * las otras dos preguntas, y siguen siendo solo-WhatsApp (ver `canales/canal.ts`).
+   */
+  const tieneTelefono = personaEsTelefono(conversacion.canal);
   const telefono = conversacion.persona_id;
 
-  const ficha = useFicha(telefono, esWa);
-  const lead = useLeadForm(telefono, esWa);
+  const ficha = useFicha(telefono, tieneTelefono);
+  const lead = useLeadForm(telefono, tieneTelefono);
   const { data: senales } = useSenales([conversacion.clave]);
   const { data: intereses } = useIntereses(conversacion.clave);
   const { data: eventos } = useEventos(conversacion.clave);
@@ -62,8 +77,8 @@ export function PanelDerecho({
 
   const padron = marcaDeCliente(conversacion);
   const estado = estadoDelContacto({
-    conTelefono: esWa,
-    cargando: ficha.isPending && esWa,
+    conTelefono: tieneTelefono,
+    cargando: ficha.isPending && tieneTelefono,
     error: ficha.isError,
     ficha: ficha.data,
     /**
@@ -116,13 +131,13 @@ export function PanelDerecho({
       <EncabezadoTimeline
         iniciales={iniciales}
         nombre={nombre}
-        telefono={esWa && telefono ? formatearTelefono(telefono) : ''}
+        telefono={tieneTelefono && telefono ? formatearTelefono(telefono) : ''}
         canal={conversacion.canal}
         acento={estado.acento}
         tituloEstado={estado.titulo}
         compras={estado.compras}
         chips={chips}
-        cargandoMeta={esWa && lead.isPending}
+        cargandoMeta={tieneTelefono && lead.isPending}
         meta={
           lead.data?.lead
             ? {

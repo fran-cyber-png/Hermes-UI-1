@@ -6,6 +6,8 @@ import { sectionLabel } from '../../lib/styles';
 import type { Conversacion } from '../canales/conversaciones';
 import { Avatar } from '../canales/Avatar';
 import { BloqueLeadForm, useLeadForm } from './BloqueLeadForm';
+import { personaEsTelefono } from '../canales/canal';
+import { quiereFoto } from '../canales/fotoVisible';
 import { PersonaUnificada } from '../identidad/PersonaUnificada';
 import type { Ficha } from './ficha';
 
@@ -107,10 +109,23 @@ export function FichaContacto({
    */
   embebida?: boolean;
 }) {
-  // La ficha se resuelve por teléfono. Solo aplica a WhatsApp (ahí el persona_id
-  // ES el teléfono); en comentarios el persona_id es un id de Meta, no un número.
-  const esTelefono = conversacion.canal === 'whatsapp';
+  /**
+   * La ficha se resuelve POR TELÉFONO — y ésa es la única pregunta que hay que
+   * hacerle al canal acá. Decía `canal === 'whatsapp'`, que es una respuesta
+   * correcta a otra pregunta: en un comentario de Meta el `persona_id` es un id
+   * y no un número, pero en un lead de landing **es el teléfono**
+   * (`cola/leadsCte.ts`). Con la versión vieja, la ficha de un lead salía vacía
+   * y encima decía «este canal no lo trae» al lado de su propio número.
+   */
+  const esTelefono = personaEsTelefono(conversacion.canal);
   const telefono = conversacion.persona_id;
+  /**
+   * 🔴 **LA FOTO ES OTRA PREGUNTA, Y ACÁ NO SE COLAPSA.** Pedirle a WhatsApp la
+   * foto de perfil de alguien a quien **nunca le escribimos** es exactamente lo
+   * que #59 evita. Un lead de landing tiene teléfono y no tiene hilo: se le
+   * busca la ficha, no la foto. Vive en `canales/fotoVisible.ts`.
+   */
+  const conFotoDePerfil = quiereFoto(conversacion.canal);
   const { data, isPending, isError } = useFicha(telefono, esTelefono);
   const qc = useQueryClient();
 
@@ -128,8 +143,8 @@ export function FichaContacto({
           <div className="mt-1 flex items-center gap-2.5">
             <Avatar
               nombre={conversacion.persona_nombre ?? telefono}
-              telefono={esTelefono ? telefono : null}
-              conFoto={esTelefono}
+              telefono={conFotoDePerfil ? telefono : null}
+              conFoto={conFotoDePerfil}
               className="size-8 shrink-0 rounded-[11px] bg-secondary text-xs font-bold text-navy"
             />
             <div className="min-w-0 truncate text-sm font-bold text-foreground">
@@ -142,7 +157,7 @@ export function FichaContacto({
       <div className={embebida ? 'min-h-0 flex-1 overflow-y-auto' : 'min-h-0 flex-1 overflow-y-auto p-4'}>
         {!esTelefono ? (
           <p className="text-xs leading-relaxed text-muted-foreground">
-            La ficha por teléfono aplica a WhatsApp. Para este canal, la ficha cruzada está en camino.
+            La ficha de Cerberus se busca por teléfono, y este canal no trae uno.
           </p>
         ) : isPending ? (
           // Skeleton con la anatomía de la ficha — nunca un flash de «no es cliente».
