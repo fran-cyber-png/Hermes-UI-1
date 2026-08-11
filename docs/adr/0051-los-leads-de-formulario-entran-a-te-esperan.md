@@ -162,6 +162,34 @@ reciente (lo último que dijo que quería es lo que hay que contestarle).
 ⚠️ **El subselect que lo encierra no es decorativo**: un `ORDER BY` suelto en un brazo de `UNION ALL`
 se lo queda la unión entera, y ahí `phone` no existe — la consulta ni arranca.
 
+### 🔴 Y un tercero, al abrir la ficha: `canal === 'whatsapp'` respondía TRES preguntas
+
+La ficha de un lead salía **«Sin ficha», 33 % por completar, timeline de una línea** y con el texto
+*«La ficha por teléfono aplica a WhatsApp. Para este canal, la ficha cruzada está en camino»* — **al
+lado de su propio número**.
+
+**No faltaba ningún dato.** `GET /api/contactos/lead?telefono=50768757512` ya devolvía
+`{nombre, email: "raul-jr14@hotmail.es", campana, fecha, fuente}`. El front no lo pedía: `PanelDerecho`
+apagaba **las dos** consultas —la de Cerberus y la del formulario— con un booleano llamado `esWa`.
+
+`canal === 'whatsapp'` está escrito **20 veces** en `src/` respondiendo tres preguntas distintas, y
+para un lead de landing **dos se responden al revés**:
+
+| pregunta | landing | dónde vive ahora |
+|---|---|---|
+| ¿el `persona_id` es un teléfono? | **sí** | **`canales/canal.ts`** (`personaEsTelefono`) |
+| ¿le pedimos la foto de perfil de WhatsApp? | **no** | `canales/fotoVisible.ts` (`quiereFoto`) |
+| ¿se le puede MANDAR algo? | **no** | `DosRespuestas`, `PanelPlantillas`, `BloqueHechos`, `compuertas.ts` |
+
+Solo la primera se unifica. **Las otras dos se quedan donde están: separarlas ES el arreglo**;
+unificarlas de nuevo sería volver al defecto. En `FichaContacto` la foto se desacopla explícito
+(`conFotoDePerfil = quiereFoto(canal)`) para que arreglar la ficha no habilite de rebote un pedido de
+foto de perfil para **154 números a los que nunca les escribimos** — justo lo que #59 evita. Hay un
+test que se pone rojo si alguien vuelve a colapsarlas.
+
+⚠️ Y el texto del caso sin teléfono dejó de mentir: decía «este canal no lo trae» sobre un canal que
+sí lo trae.
+
 ### Alcance: esto también cambia el orden de **Mensajes**
 
 Los leads ya entraban a esa cola (el mismo `todo`), también en el nivel 5. Con la enmienda, un
@@ -186,6 +214,11 @@ La app real, corriendo en local **contra una copia de los datos de producción**
   La cabecera dice **«19 ahora»**, que son los del nivel 0.
 - `docs/evidencia/te-esperan-vendedora-de-la-rueda.png` — la MISMA columna vista por
   `ventas10@grupogoberna.com`: **146**. Antes de la enmienda, **1**.
+- `docs/evidencia/ficha-lead-de-formulario.png` — la ficha de Raul Duran con **su teléfono**
+  (`+50 768 757 512`), **«Lead nuevo»** en vez de «Sin ficha», origen **Landing**, la campaña, el
+  primer contacto y la **Llegada** en el timeline.
+- `docs/evidencia/ficha-lead-de-formulario-correo.png` — el mismo panel, bajado: **📋 Del formulario
+  web · Correo `raul-jr14@hotmail.es`** (copiable) · Campaña · «Lo llenó el 11 ago 2026».
 
 ⚠️ En las dos capturas el chip dice «Reconectá con Cerberus para registrar ventas»: es del entorno
 local (el token se firmó a mano, sin sesión de Cerberus), no un defecto de la pantalla.

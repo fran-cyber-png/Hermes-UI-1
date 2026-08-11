@@ -769,8 +769,20 @@ y las conversaciones.
   lead hay que **abrirle** el chat en frío, que en whatsmeow es el camino corto al ban (regla dura
   #7). Por eso la píldora **«Formulario»**, y va en el **segundo renglón** — al lado del nombre se lo
   comía en 225 px. **Lo mostró la captura, no un test.**
+- 🔴 **`canal === 'whatsapp'` RESPONDE TRES PREGUNTAS DISTINTAS, y para un lead las respuestas son
+  OPUESTAS.** Está escrito **20 veces** en `src/`, y confundirlas dejaba la ficha de un lead vacía
+  —«Sin ficha · este canal no lo trae»— **al lado de su propio número** y sin su correo. El dato no
+  faltaba: `/api/contactos/lead` ya lo devolvía; el front no lo pedía.
+  · **¿el `persona_id` es un teléfono?** → **`canales/canal.ts`** (`personaEsTelefono`). `landing` **sí**.
+  · **¿le pedimos la foto de perfil?** → `canales/fotoVisible.ts` (`quiereFoto`). `landing` **no**:
+    nunca le escribimos (#59).
+  · **¿se le puede MANDAR algo?** → `DosRespuestas`, `PanelPlantillas`, `BloqueHechos`,
+    `compuertas.ts`. `landing` **no**: no hay hilo (regla dura #7).
+  ⚠️ **Solo la primera se unificó. Las otras dos se quedan separadas: eso ES el arreglo.** Hay test
+  (`canal.test.ts`) que se pone rojo si alguien las vuelve a colapsar.
 - Capturas: `docs/evidencia/te-esperan-con-formularios.png`,
-  `te-esperan-formularios-arriba.png`, `te-esperan-vendedora-de-la-rueda.png`.
+  `te-esperan-formularios-arriba.png`, `te-esperan-vendedora-de-la-rueda.png`,
+  `ficha-lead-de-formulario.png`, `ficha-lead-de-formulario-correo.png`.
 - 🔴 **LOS DOS DEFECTOS DE ARRIBA LOS ENCONTRÓ CORRER LA APP CONTRA UNA COPIA DE PRODUCCIÓN**, no un
   test ni el SQL: los datos sembrados no tienen ni gente que manda el formulario cuatro veces ni una
   rueda de reparto cargada. **Para un frente que toca la cola, traé los datos** — `pg_dump
