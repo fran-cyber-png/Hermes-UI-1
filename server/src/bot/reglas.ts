@@ -1,3 +1,4 @@
+import { PERFIL_ESCUELA, type PerfilDeLinea } from "./perfiles.js";
 import { normalizarTexto } from "../autorespuesta/rechazo.js";
 
 /**
@@ -52,6 +53,12 @@ export interface Violacion {
 
 /** La única asesora que el bot puede ser (decisión del dueño, 3-ago-2026). */
 const ASESORA = "sofia rodriguez";
+/**
+ * ⚠️ Los dos valores de arriba son los de la ESCUELA y quedaron como respaldo:
+ * lo que manda es el perfil de la línea (`bot/perfiles.ts`). Con ellos clavados,
+ * el guardrail de otra línea marcaba como inventado lo correcto y dejaba pasar
+ * lo falso — o sea, exactamente al revés de para lo que existe.
+ */
 
 /**
  * Las sedes que existen, en `CONTEXTO_NEGOCIO`. Cualquier otra que el bot
@@ -65,7 +72,7 @@ interface Patron {
   lectura: string;
   re: RegExp;
   /** Si devuelve false, no se marca. Para los casos que la expresión sola no separa. */
-  confirmar?: (texto: string, m: RegExpMatchArray) => boolean;
+  confirmar?: (texto: string, m: RegExpMatchArray, perfil: PerfilDeLinea) => boolean;
 }
 
 const PATRONES: Patron[] = [
@@ -101,9 +108,13 @@ const PATRONES: Patron[] = [
     // «nuestra sede en la región es en Panamá» capturaba «la» —el primer `en`
     // que encontraba— y el caso real se escapaba entero.
     re: /\bsede\b[^.]{0,60}?\ben\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)/,
-    confirmar: (_t, m) => {
+    confirmar: (_t, m, perfil) => {
       const lugar = normalizarTexto(m[1] ?? "");
-      return lugar.length > 2 && !SEDES_REALES.some((s) => lugar.includes(normalizarTexto(s)));
+      // ⚠️ SIN FALLBACK A LAS DE LA ESCUELA. Un perfil con `sedes: []` está
+      // diciendo «acá no hay ninguna sede que ofrecer», no «usá las de al
+      // lado»: heredarlas aprobaría «nuestra sede en Lima» en una línea que no
+      // tiene oficinas, que es justo la alucinación que esta regla ataja.
+      return lugar.length > 2 && !perfil.sedes.some((s) => lugar.includes(normalizarTexto(s)));
     },
   },
 ];
@@ -114,18 +125,21 @@ const PATRONES: Patron[] = [
  * La identidad se evalúa aparte porque su forma es distinta: no es «aparece un
  * patrón malo», es «se presenta con un nombre que no es el suyo».
  */
-export function evaluarReglas(texto: string | null): Violacion[] {
+export function evaluarReglas(
+  texto: string | null,
+  perfil: PerfilDeLinea = PERFIL_ESCUELA,
+): Violacion[] {
   if (!texto || texto.trim() === "") return [];
   const violaciones: Violacion[] = [];
 
   for (const p of PATRONES) {
     const m = texto.match(p.re);
     if (!m) continue;
-    if (p.confirmar && !p.confirmar(texto, m)) continue;
+    if (p.confirmar && !p.confirmar(texto, m, perfil)) continue;
     violaciones.push({ regla: p.regla, lectura: p.lectura, fragmento: m[0].trim().slice(0, 80) });
   }
 
-  const identidad = violacionDeIdentidad(texto);
+  const identidad = violacionDeIdentidad(texto, perfil);
   if (identidad) violaciones.push(identidad);
 
   return violaciones;
@@ -138,16 +152,17 @@ export function evaluarReglas(texto: string | null): Violacion[] {
  * persona en el cuerpo del mensaje no es adoptar su identidad, y marcarlo sería
  * el falso positivo que apaga la regla.
  */
-function violacionDeIdentidad(texto: string): Violacion | null {
+function violacionDeIdentidad(texto: string, perfil: PerfilDeLinea): Violacion | null {
+  const suya = perfil.identidad;
   const m = texto.match(/\b(?:soy|te saluda|le saluda|habla)\s+([A-ZÁÉÍÓÚÑ][\wÁÉÍÓÚÑáéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][\wÁÉÍÓÚÑáéíóúñ]+)?)/);
   if (!m) return null;
   const nombre = normalizarTexto(m[1] ?? "");
-  if (nombre === "" || ASESORA.startsWith(nombre) || nombre.startsWith(ASESORA)) return null;
+  if (nombre === "" || suya.startsWith(nombre) || nombre.startsWith(suya)) return null;
   // Un nombre de pila solo («soy Sofía») también cuenta como correcto.
-  if (ASESORA.split(" ").includes(nombre)) return null;
+  if (suya.split(" ").includes(nombre)) return null;
   return {
     regla: "identidad",
-    lectura: `Se presentó como «${m[1]}» y no como Sofía Rodríguez`,
+    lectura: `Se presentó como «${m[1]}» y no con la identidad de su línea`,
     fragmento: m[0].trim().slice(0, 80),
   };
 }

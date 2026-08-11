@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { validarSalida } from "./guardrails.js";
 import { armarSystemPrompt, armarContextoContacto } from "./prompt.js";
+import type { PerfilDeLinea } from "./perfiles.js";
 import { crearTools } from "./tools.js";
 import { trocear } from "./chunker.js";
 import type { Accion, RespuestaBot, Turno, ResumenPieza } from "./acciones.js";
@@ -20,6 +21,11 @@ interface EntradaAgente {
   familiasValidas?: ReadonlySet<string>;
   /** Lo que esta conversación ya recibió (`plantilla:12`). Ver `crearTools`. */
   piezasYaEnviadas?: ReadonlySet<string>;
+  /**
+   * Quién es el bot en esta línea (`bot/perfiles.ts`). Opcional: sin él arma el
+   * prompt de la Escuela, que es como se comportaba antes de que hubiera dos.
+   */
+  perfil?: PerfilDeLinea;
 }
 
 type ContentBlock = 
@@ -61,11 +67,14 @@ export function crearAgente(cliente: ClienteAnthropic) {
     async responder(
       entrada: EntradaAgente,
     ): Promise<RespuestaBot | { error: string; codigo: string }> {
-      const sistemaGrande = armarSystemPrompt({
-        hechos: entrada.hechos,
-        piezas: entrada.piezas,
-        lecciones: entrada.lecciones,
-      });
+      const sistemaGrande = armarSystemPrompt(
+        {
+          hechos: entrada.hechos,
+          piezas: entrada.piezas,
+          lecciones: entrada.lecciones,
+        },
+        entrada.perfil,
+      );
 
       const acciones: Accion[] = [];
       const { definiciones, handlers } = crearTools(

@@ -47,6 +47,7 @@ import {
   VENDEDORA_ID_DEL_BOT,
 } from "./frenos.js";
 import { armarSystemPrompt } from "./prompt.js";
+import { perfilDeLinea, type PerfilDeLinea } from "./perfiles.js";
 import { leerPiezas } from "../catalogo/repositorio.js";
 import { piezasParaElBot, ENFOQUE_PRODUCTO } from "./recuperador.js";
 import { recolectarContextoContacto, aBloqueDePrompt } from "./contexto.js";
@@ -204,6 +205,8 @@ export interface CtxPipeline {
   datosEstado: DatosEstado;
   decision: { accion: "responder" } | { accion: "saltar"; motivo: MotivoSalto } | null;
   systemPrompt: string | null;
+  /** Quién es el bot en esta línea. Lo resuelve `paso8Prompt`. */
+  perfil: PerfilDeLinea;
   /** Lo que el bot puede mandar este turno (catálogo filtrado por enfoque). */
   piezas: ResumenPieza[];
   /**
@@ -282,6 +285,7 @@ function ctxInicial(
     datosEstado: {},
     decision: null,
     systemPrompt: null,
+    perfil: perfilDeLinea(numeroPropio),
     piezas: [],
     piezasYaEnviadas: new Set(),
     textoRespuesta: null,
@@ -479,18 +483,28 @@ async function paso7Recuperar(ctx: CtxPipeline): Promise<void> {
 
 async function paso8Prompt(ctx: CtxPipeline): Promise<void> {
   const t = tramoDePipeline("prompt", ctx.traza);
-  const hechosDisponibles: Hecho[] = [...CATALOGO_POR_DEFECTO];
+  // QUIÉN ES EL BOT EN ESTA LÍNEA. Sin esto, el bot de una línea que no es de la
+  // Escuela se presentaba como asesora comercial y ofrecía diplomados — el
+  // prompt no recibía la línea, así que no había forma de que dijera otra cosa.
+  const perfil = perfilDeLinea(ctx.numeroPropio);
+  // Los datos afirmables son los de SU perfil: el catálogo de la Escuela habla
+  // de cursos y cuotas, y afirmarlo en otra línea es inventar.
+  const hechosDisponibles: Hecho[] = [...perfil.hechos];
 
   // Las Lecciones se cargan UNA vez y las usan el prompt Y el agente: con dos
   // lecturas, el modelo podría recibir un conjunto en el system y otro en el
   // turno, y nadie lo notaría hasta que una lección no surtiera efecto.
   ctx.lecciones = await ctx.leerLecciones().catch(() => []);
 
-  ctx.systemPrompt = armarSystemPrompt({
-    hechos: hechosDisponibles,
-    piezas: ctx.piezas,
-    lecciones: ctx.lecciones,
-  });
+  ctx.perfil = perfil;
+  ctx.systemPrompt = armarSystemPrompt(
+    {
+      hechos: hechosDisponibles,
+      piezas: ctx.piezas,
+      lecciones: ctx.lecciones,
+    },
+    perfil,
+  );
   t.cerrar("ok");
 }
 
@@ -529,6 +543,7 @@ async function paso10Agente(ctx: CtxPipeline): Promise<void> {
 
   const agente = crearAgente(ctx.clienteLLM);
   const resultado = await agente.responder({
+    perfil: ctx.perfil,
     historial,
     contactoCtx: ctx.contactoCtx,
     hechos: [...CATALOGO_POR_DEFECTO],
