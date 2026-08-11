@@ -79,6 +79,20 @@ describe("el prompt de campaña no puede sonar a la Escuela", () => {
     assert.match(prompt, /NUNCA opines sobre otros candidatos/);
   });
 
+  test("🔴 el link del canal viaja como dato afirmable, para que lo copie literal", () => {
+    // Un link reescrito o acortado por el modelo no lleva a ningún lado, y el
+    // error se ve recién cuando alguien lo toca. Por eso va en
+    // <datos_que_puedes_afirmar>, que el prompt manda citar sin cambiar.
+    assert.match(prompt, /https:\/\/whatsapp\.com\/channel\/0029VbDqAmdFnSzIFH8xrZ3B/);
+    assert.match(prompt, /cópialo TAL CUAL/);
+  });
+
+  test("🔴 el canal se ofrece UNA vez y no en el saludo — insistir es que te bloqueen", () => {
+    assert.match(prompt, /UNA sola vez por conversación/);
+    assert.match(prompt, /NUNCA lo repitas si ya lo enviaste/);
+    assert.match(prompt, /No lo mandes en el primer mensaje/);
+  });
+
   test("los datos afirmables son SOLO su biografía pública, sin propuestas", () => {
     const textos = PERFIL_CAMPANA_BETTO.hechos.map((h) => h.texto).join(" ");
     assert.match(textos, /Gobernador Regional de Áncash/);
