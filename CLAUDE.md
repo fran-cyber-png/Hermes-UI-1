@@ -585,9 +585,12 @@ La cola ordena la DEUDA. Esta es la otra pregunta: **¿a quién todavía se le p
   nuestra respuesta no la extiende. Con `referencia`, responder a las 23 h se leería como «te quedan 24 h
   más».
 - 🔴 **LA SEÑAL SE DICE EN POSITIVO Y NO PUEDE DEJAR DE ESTARLO.** El plazo es duro **solo en la línea de
-  la Cloud API**; en las tres líneas whatsmeow Meta **no rechaza nada** (el riesgo ahí es el ban). Un «ya
-  no le podés escribir» sería falso en tres de cuatro líneas. **Una ventana cerrada no dibuja NADA.**
-  Misma forma que `limitesMedia`: el plazo lo impone el transporte.
+  la Cloud API**; en whatsmeow Meta **no rechaza nada** (el riesgo ahí es el ban). Un «ya no le podés
+  escribir» sería falso en toda línea whatsmeow. **Una ventana cerrada no dibuja NADA.** Misma forma que
+  `limitesMedia`: el plazo lo impone el transporte.
+  ⚠️ **El argumento se escribió con «tres de cuatro líneas» y el reparto cambió** (11-ago-2026: quedan
+  dos, una de cada transporte). La regla NO depende del conteo —depende de que exista más de un
+  transporte—, así que no se toca; pero si alguna vez corre SOLO la Cloud API, este 🔴 hay que releerlo.
 - La regla vive **una vez**, pura, en `cola/ventana.ts`, con su gemelo `ventanaCierraSql` y
   `ventana.paridad.test.db.ts` de candado — que verifica **el instante** del cierre, no solo el sí/no.
   ⚠️ **`ventanaDiasSql` NO se toca**: es el contrato de `EXPIRA`, vale solo para comentarios y tiene su
@@ -1328,10 +1331,40 @@ central: `PUT /api/admin/numeros/:numero` (upsert declarativo, `vendedoras[]` re
   `server/src/cola/lineas.ts` y es **FAIL-OPEN**: sin filas asignadas se sirve TODO y la respuesta lo dice
   (`sinLineasPropias`), porque una vendedora que abre una cola vacía no lee «no tenés líneas», lee «se
   perdieron las conversaciones».
-- ✅ **El ruteo multi-número YA ESTÁ VIVO** (medido el 29-jul-2026): **tres líneas vinculadas y corriendo**.
-  `WHATSAPP_NUMEROS` es el CSV que las levanta; `WHATSAPP_NUMERO` quedó como el singular viejo. **Agregar una
-  cuarta línea no es infraestructura nueva** — es el mismo camino (`wa:vincular`, sesión propia en disco,
-  fila en `numeros_wa`).
+- **QUÉ LÍNEAS CORREN HOY (11-ago-2026): DOS.** `51984429504` «Ventas Meta» (Cloud API, es la que trae
+  los leads) y `51963139984` «Betto» (whatsmeow, campaña). Las otras tres se **retiraron** ese día por
+  decisión del dueño porque estaban caídas: `51986394450` «Ventas Perú» —el 62 % del universo histórico—
+  sin archivo de sesión y sin un entrante desde el **28-jul**, `51941654039` «Walter» desde el **5-ago**,
+  `51944531711` «Sindy» sin tráfico nunca. Re-vincular cualquiera es el mismo camino de siempre
+  (`wa:vincular`, sesión propia en disco, fila en `numeros_wa`).
+- 🔴 **`numeros_wa.activo` NO TIENE UN SOLO LECTOR — retirar una línea con la baja lógica es TEATRO.**
+  El único lector en `server/src` es `dashboard/negocio.ts`, y ni ahí alcanza: es la segunda rama de un
+  `UNION` cuya primera rama saca los números desde `interactions`, así que una línea con tráfico reciente
+  sigue apareciendo aunque esté inactiva. Ni `UPDATE ... SET activo = false` ni
+  `DELETE /api/admin/numeros/:numero` sacan la línea del selector ni sus conversaciones de la cola — y el
+  DELETE tampoco **detiene el transporte**, contra lo que promete `docs/multi-numero/hermes.md`.
+  **La palanca real es el `.env` de VPS1**: `WHATSAPP_NUMEROS` (que es lo que lee `numerosConfigurados`,
+  `whatsapp/gestor.ts:41`, con `WHATSAPP_NUMERO` de respaldo) **y `BOT_LINEAS`**, que es aparte — si se
+  olvida, el bot queda habilitado sobre líneas muertas y **contestaría como «Sofía Rodríguez» el día que
+  alguna se re-vincule**. `WHATSAPP_CLOUD_API_NUMERO_PROPIO` es otra variable y no se toca.
+  · ⚠️ **Nunca dejar `WHATSAPP_NUMEROS` vacío**: con `WHATSAPP_TRANSPORTE=whatsmeow` el server **no
+    arranca** (`wiring.ts:195`) y Hermes se cae para todas.
+  · ⚠️ **Nunca `?purgar=true` ni tocar `.wa-sessions/`**: es lo único irreversible del frente — recuperar
+    una sesión exige el teléfono físico y escanear el QR. La baja lógica sin purgar se deshace sola.
+  · ⚠️ **Cerberus las puede resucitar**: `activo` tiene `.default(true)` en el Zod del upsert, así que un
+    `PUT /api/admin/numeros/:numero` que no mande el campo las reactiva sin log. Y `vendedoras` tiene
+    `default([])`: un push incompleto **vacía `numero_vendedora`** de ese número.
+- 🔴 **N5 SALE VERDE Y NO REINICIA SI EL SHA YA ESTÁ DESPLEGADO — así que un cambio de `.env` NO se
+  aplica.** Pasó el 11-ago: se editó el `.env`, se disparó `desplegar-server.yml`, salió `success` y el
+  servicio ni se movió (`ActiveEnterTimestamp` y el PID del log, idénticos). **Para un cambio de entorno,
+  reiniciar a mano** (`sudo systemctl restart hermes`) y verificar con esos dos, nunca con el color del
+  workflow. ⚠️ Y el auto-revert de `hermes-deploy` **no cubre esto**: revierte el CÓDIGO, no el `.env` —
+  la red es el backup que hiciste antes de editar.
+- ⚠️ **Con una sola línea whatsmeow, `primero()` es la de CAMPAÑA.** Las fotos de perfil, `marcarLeido`
+  sin `numeroPropio` y la auto-respuesta salen por ahí (`routes/whatsapp.ts:386` y `:287`,
+  `autorespuesta/reloj.ts:42`), o sea que los leads de la Escuela se consultan por la línea de un
+  candidato — un cruce entre los dos planos de Goberna. **Deuda abierta**: migrar esos tres consumidores
+  a `gestorWhatsapp().de(numeroPropio)`.
 - **El vinculador es UNO A LA VEZ y por eso se puede soltar**: `POST .../vincular` arranca (responde
   `vinculando`, **el QR NO viene acá**: viaja en `.../vincular/estado` como `esperando_qr`) y **`DELETE
   .../vincular` cancela**. Sin esa puerta, una vinculación que nadie escaneó bloqueaba a todos los demás
@@ -1391,7 +1424,10 @@ Decisión en **ADR 0017** (puente clave↔persona); #58.
 
 **VPS1** (`deploy@161.132.39.165`), en `/srv/hermes`: servicio systemd `hermes` (PORT=4110), Postgres propio
 `hermes_db` (127.0.0.1:5438), API pública **`https://hermes-api.goberna.us`** (nginx + certbot
-dns-cloudflare; el 4110 no se expone), número 51986394450 vinculado ALLÁ.
+dns-cloudflare; el 4110 no se expone).
+⚠️ **Acá decía «número 51986394450 vinculado ALLÁ» y quedó viejo**: esa línea se retiró el 11-ago-2026
+(sin sesión desde el 28-jul). Hoy corren **`51963139984` por whatsmeow y `51984429504` por Cloud API** —
+ver §«Administración de números» para cómo se retira una línea de verdad.
 
 **Hay CD, en cinco niveles** (`docs/despliegue-continuo.md`; ADR 0021 y 0022). Todo corre en el **runner
 self-hosted de VPS1** (label `vps1-hermes`), que es uno solo: los jobs se serializan.

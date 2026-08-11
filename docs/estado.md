@@ -1,4 +1,4 @@
-# Estado de Hermes — para retomar (2026-07-22, tras el track de rendimiento)
+# Estado de Hermes — para retomar (2026-07-22, tras el track de rendimiento · **retocado el 11-ago-2026**: las líneas que corren y la barra de Mensajes)
 
 > **Empezá por acá.** La foto completa: qué funciona, qué falta, y el contexto para seguir sin
 > re-descubrir nada. Repo: **github.com/Goberna-Lab/hermes** (privado, `main`). El norte de producto
@@ -120,11 +120,11 @@ contra el schema nuevo — es justamente lo que hace seguro el rollback automát
 |---|---|
 | **Dashboard** (página principal) | Diseño por panel 3-lentes+juez: banda "Tu mañana" (vencidos/hoy + "Atender a {nombre} →"), radar en vivo (filas 2 líneas, calientes con borde oro, filtros que delatan fuentes muertas), riel (embudo-barra clickeable, top cursos pedidos, equipo Hoy\|7d) |
 | **Pipeline** | Kanban con las 5 etapas del dueño (Interesados→Contactados→Cotizados→Cierre·Perdidos), arrastre, y **compuertas server-side**: a Cotizados con ≥1 curso de interés; a Cierre SOLO registrando la venta (la venta lo mueve sola: cotización→cotizado+intereses, venta→cierre+conversión) |
-| **Mensajes** (chat) | Cola unificada 4 canales + búsqueda + **chat nuevo** · hilo WhatsApp **con media completa** (ver/mandar imágenes, videos, audios, flyers — clip con leyenda) · Messenger read-only · comentarios privado-antes-que-público · **BarraGestion arriba de todo chat**: etapa 1-clic, etiquetas, intereses, Agendar, **Llamar** (tel: + Copiar de respaldo) |
+| **Mensajes** (chat) | Cola unificada 4 canales + búsqueda + **chat nuevo** · **barra de 3 chips que se ganan el lugar (ADR 0052, 11-ago-2026): «Preguntaron precio» · «Te escribieron» · «Puedo escribirle»** — se retiraron «Piden info» (medía el texto que prellena Meta, no una pregunta), «Sin responder» (505 filas con el 93 % de +7 días) y «Ya compraron» (27 % de la mesa) · el preview ya no finge una pregunta donde hubo un clic de anuncio · avisa cuándo una conversación contestada bajó de lugar · hilo WhatsApp **con media completa** (ver/mandar imágenes, videos, audios, flyers — clip con leyenda) · Messenger read-only · comentarios privado-antes-que-público · **BarraGestion arriba de todo chat**: etapa 1-clic, etiquetas, intereses, Agendar, **Llamar** (tel: + Copiar de respaldo) |
 | **Contactos** | Búsqueda por teléfono → ficha Cerberus 4 estados |
 | **Correos** | Composer 1-a-1 auditado + enviados del equipo. **Fail-closed**: falta el SMTP (ver pendientes) |
 | **Agenda** | Calendario estilo GCal (mes/semana/día, chips por tipo, crear en día vacío, detalle flotante). Agendar mueve interesado→**contactado** solo. Badge dorado en el riel |
-| **Infra** | API pública HTTPS + SSE + UI servida (OTA) · WhatsApp vinculado EN el VPS (51986394450, fix `@lid` con 14.7k mapeos) · webhook de landings listo (Bravo→Hermes) · cáscara **Tauri** 3-5 MB (mac+win, permiso tel:) · **Electron archivado el 7-ago-2026 (ADR 0039)**: la cáscara es una sola |
+| **Infra** | API pública HTTPS + SSE + UI servida (OTA) · WhatsApp vinculado EN el VPS (**desde el 11-ago-2026 corren DOS líneas: `51984429504` Cloud API + `51963139984` whatsmeow**; las otras tres se retiraron por estar caídas — fix `@lid` con 14.7k mapeos) · webhook de landings listo (Bravo→Hermes) · cáscara **Tauri** 3-5 MB (mac+win, permiso tel:) · **Electron archivado el 7-ago-2026 (ADR 0039)**: la cáscara es una sola |
 | **Navegador** (⌘9) | Vive **adentro de la mesa** como webview hijo (**ADR 0043**, enmienda 0040): barra con atrás/adelante/recargar y dirección, y la sesión de trabajo separada del Chrome personal. Medido el 8-ago: **ChatGPT carga y Google NO bloquea el login** en el webview embebido (macOS/WKWebView). Se esconde cuando se abre Ivi o la cabina — es una capa del SO encima del DOM |
 
 ### 🔴 La cáscara va por otro camino que la UI, y hoy están desparejas
@@ -195,9 +195,18 @@ que escribió cada persona, su antigüedad). Eso se arregla en #166.
 Está primero a propósito: **ninguna de las tres se arregla desde el código**, y las tres valen más
 que cualquier rediseño del tablero.
 
-1. **Las líneas de WhatsApp no reciben.** La principal (`51986394450`, 8.704 mensajes) sin un
-   entrante desde el **28-jul**; el 8-ago **no entró un solo mensaje por ninguna línea**. Un tablero
-   mejor ordena lo que entra — con el caño cerrado no hay nada que ordenar.
+1. ~~**Las líneas de WhatsApp no reciben.**~~ **RESUELTO COMO DECISIÓN, no como arreglo
+   (11-ago-2026).** Era cierto: `51986394450` (el 62 % del universo, 8.704 mensajes) sin un entrante
+   desde el **28-jul**, `51941654039` desde el **5-ago**, `51944531711` nunca. Las tres estaban
+   `sin-vincular` — sin archivo de sesión. **El dueño decidió retirarlas** en vez de re-vincularlas:
+   se trabaja con **`51984429504` «Ventas Meta»** (Cloud API, la que trae los leads) y
+   **`51963139984` «Betto»** (campaña).
+   · ⚠️ **Lo que NO se resolvió**: sus **2.875 conversaciones siguen en la cola** hasta que venzan la
+     ventana de 30 días (Ventas Perú ~27-ago, Walter ~4-sep). Sacarlas antes es un frente de código.
+   · 🔴 **Cómo se retiró, porque la forma natural no funciona**: NO con `activo = false` (esa columna
+     no tiene lectores), sino editando `WHATSAPP_NUMEROS` **y `BOT_LINEAS`** en el `.env` de VPS1 y
+     **reiniciando a mano** — N5 sale verde y no reinicia si el SHA ya está desplegado. Detalle en
+     `CLAUDE.md` §«Administración de números».
 2. **Los leads de landing cayeron 98,8 % desde enero**: 2.937 (ene) → 1.570 (mar) → 1.166 (may) →
    361 (jun) → 143 (jul) → **36 (ago)**. Es marketing, no CRM.
 3. **El 97,4 % de los leads que sí llegaron nunca recibió un mensaje**: de 25.226 con teléfono,
@@ -215,6 +224,8 @@ tocar código.
    `ssh deploy@161.132.39.165 'cat /srv/hermes/.landing-webhook-url'` (runbook §9).
 3. **Cerrar la sesión de WhatsApp de la laptop** (el teléfono tiene 2 dispositivos vinculados;
    debe atender solo el VPS). Dev local: `WHATSAPP_TRANSPORTE=falso`.
+   ⚠️ Esto era por `51986394450`, que se retiró el 11-ago. Sigue valiendo como higiene: la credencial
+   de una línea no va en una laptop, y esa sesión sigue existiendo en el teléfono.
 4. **Certificado de code signing Windows** (OV ~US$100-300/año) para matar el aviso de SmartScreen.
 
 ### De código (en orden sugerido)

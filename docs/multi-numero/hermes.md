@@ -25,9 +25,16 @@ mensajes de WhatsApp tiene `numeroPropio` poblado**. Lo que falta es runtime + a
 Hoy hay **un** transporte (`WHATSAPP_NUMERO`, singleton `whatsapp()` en `server/src/whatsapp/wiring.ts`).
 Para N números:
 
-- [ ] **`GestorWhatsapp`** reemplaza el singleton por un `Map<numero, transporte>`; levanta un transporte
-  por cada número `activo` con sesión. **Fallback**: si `numeros_wa` está vacía, usa `WHATSAPP_NUMERO`
-  (VPS1 sigue andando sin tocar nada).
+- [x] **`GestorWhatsapp`** reemplaza el singleton por un `Map<numero, transporte>`.
+
+  > 🔴 **SE IMPLEMENTÓ DISTINTO DE COMO DICE ACÁ, y la diferencia importa.** Este plan decía «levanta
+  > un transporte por cada número `activo` con sesión». **No lee `activo` ni lee `numeros_wa`**: la
+  > lista sale de la variable de entorno `WHATSAPP_NUMEROS` (con `WHATSAPP_NUMERO` de respaldo),
+  > `server/src/whatsapp/gestor.ts:41`. Verificado el 11-ago-2026: `numeros_wa.activo` no tiene un solo
+  > lector en `server/src` fuera de `dashboard/negocio.ts`.
+  >
+  > Consecuencia práctica: **retirar una línea es editar el `.env` de VPS1 y reiniciar**, no marcarla
+  > inactiva. Y `BOT_LINEAS` es otra variable que hay que tocar en el mismo cambio.
 - [ ] **Guarda #0** en `EnvioControlado`: la orden ya lleva `numeroPropio`; enrutar al transporte de ESE
   número y rechazar (sin auditar) si no coincide. Hoy `numeroPropio` se **audita pero no se rutea** —
   con 2 números una respuesta puede salir por el equivocado.
@@ -138,9 +145,17 @@ Cerberus manda el **estado deseado completo**. Idempotente (retry-safe).
 → `200` `{ "numero": Numero }` · `400 entrada_invalida`
 
 #### `DELETE /api/admin/numeros/:numero` — baja lógica
-Marca `activo = false` y detiene su transporte. **No borra la sesión** (`.wa-sessions/<numero>.db` queda).
+Marca `activo = false`. **No borra la sesión** (`.wa-sessions/<numero>.db` queda).
 → `200` `{ "ok": true }` · `404 no_existe`
 Purga destructiva de la credencial (opcional, guardado): `?purgar=true` borra también la `.db`.
+
+> 🔴 **ACÁ DECÍA «y detiene su transporte». NO LO HACE** (verificado el 11-ago-2026:
+> `routes/admin.ts` llama a `desactivarNumero` y nada más — no hay una sola llamada al gestor). O sea
+> que este endpoint escribe una fila y **no cambia nada de lo que se ve**: ni el selector de líneas, ni
+> la cola, ni el transporte que sigue corriendo. Un acuse `200` que no hace nada es peor que un error.
+>
+> ⚠️ Y `?purgar=true` **sí** hace algo, y es lo único irreversible del frente: borra `.db`, `-wal` y
+> `-shm`. Recuperar una sesión perdida exige el teléfono físico y escanear el QR.
 
 #### `POST /api/admin/numeros/:numero/vincular` — arranca la vinculación
 Arranca el pareo (uno-a-la-vez: SQLite no admite dos escritores de la misma sesión — reusa
