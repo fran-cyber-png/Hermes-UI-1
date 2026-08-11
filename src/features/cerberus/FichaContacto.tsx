@@ -117,7 +117,7 @@ export function FichaContacto({
    * (`cola/leadsCte.ts`). Con la versión vieja, la ficha de un lead salía vacía
    * y encima decía «este canal no lo trae» al lado de su propio número.
    */
-  const esTelefono = personaEsTelefono(conversacion.canal);
+  const esTelefono = personaEsTelefono(conversacion.canal, conversacion.persona_id);
   const telefono = conversacion.persona_id;
   /**
    * 🔴 **LA FOTO ES OTRA PREGUNTA, Y ACÁ NO SE COLAPSA.** Pedirle a WhatsApp la

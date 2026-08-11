@@ -11,7 +11,7 @@ import { hiloDe, mismaLinea } from '../whatsapp/hilo.js';
 import { enviarMediaYProyectar, enviarTextoYProyectar } from '../whatsapp/enviarYProyectar.js';
 import { resolverAnuncio } from '../meta/anuncio.js';
 import { RUTA_MEDIA, nombreSeguro } from '../whatsapp/mediaDir.js';
-import { normalizarTelefono } from '../whatsapp/identidadWa.js';
+import { normalizarTelefono, identidadDeParametro } from '../whatsapp/identidadWa.js';
 import { FotoNoDisponibleError, type FotoPerfil, type MediaSaliente } from '../whatsapp/transporte.js';
 import { claseDeMime, limitesDe, motivoPorTamano } from '../whatsapp/limitesMedia.js';
 import { cancelarPorRespuestaHumana, faltaEsquema } from '../autorespuesta/repositorio.js';
@@ -142,7 +142,7 @@ whatsappRouter.get('/lineas', async (req, res) => {
 
 /** El hilo completo de una conversación, en orden cronológico + de dónde vino el lead. */
 whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
-  const telefono = req.params.telefono.replace(/\D/g, '');
+  const telefono = identidadDeParametro(req.params.telefono);
   // Con varias líneas vivas, la MISMA persona puede tener dos conversaciones que
   // para ella son dos chats distintos. Sin este scope las dos se ven como una, y
   // la respuesta puede salir por el número que el lead no conoce.
@@ -226,7 +226,7 @@ whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
  * adivinada).
  */
 whatsappRouter.post('/leido/:telefono', requiereVendedora, async (req, res) => {
-  const telefono = req.params.telefono.replace(/\D/g, '');
+  const telefono = identidadDeParametro(req.params.telefono);
   const numeroPropio = typeof req.query.numeroPropio === 'string' ? req.query.numeroPropio : undefined;
 
   // ── 1 · EL CURSOR PRIMERO. Es lo único que la vendedora está esperando. ──

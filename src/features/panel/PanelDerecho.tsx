@@ -65,7 +65,7 @@ export function PanelDerecho({
    * ⚠️ Ninguno de los seis es un permiso de ENVÍO ni un pedido de FOTO: esas son
    * las otras dos preguntas, y siguen siendo solo-WhatsApp (ver `canales/canal.ts`).
    */
-  const tieneTelefono = personaEsTelefono(conversacion.canal);
+  const tieneTelefono = personaEsTelefono(conversacion.canal, conversacion.persona_id);
   const telefono = conversacion.persona_id;
 
   const ficha = useFicha(telefono, tieneTelefono);

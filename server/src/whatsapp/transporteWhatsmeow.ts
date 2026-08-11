@@ -18,7 +18,13 @@ import {
   type ResultadoEnvio,
   type TransporteWhatsapp,
 } from './transporte.js';
-import { normalizarTelefono, telefonoDeContacto, jidDeTelefono, esJidDeGrupo } from './identidadWa.js';
+import {
+  normalizarTelefono,
+  telefonoDeContacto,
+  identidadDeLid,
+  jidDeTelefono,
+  esJidDeGrupo,
+} from './identidadWa.js';
 import { detectarOrigen } from './origen.js';
 import { tieneContenido } from './contenido.js';
 import { esSoloReaccion, reaccionDeWhatsmeow, type ReaccionEntrante } from '../reacciones/dominio.js';
@@ -216,7 +222,19 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
       // eslint-disable-next-line no-console
       if (telefono) console.log(`[wa lid] ${info.chat} → ${telefono}`);
     }
-    if (!telefono) return null; // Ni teléfono ni lid mapeado: se descarta, no se inventa.
+    // ── EL TERCER ESCALÓN: EL LID **ES** LA IDENTIDAD ──────────────────────
+    // El teléfono real es siempre preferible y por eso se intenta dos veces
+    // antes. Pero cuando no hay forma de saberlo —el caso de todo lead nuevo no
+    // agendado, ver `identidadWa.ts`— la alternativa a esto era **descartar el
+    // mensaje**: alguien escribió, el CRM lo tiró y nadie se enteró. Con la
+    // identidad `lid:` la conversación entra, se agrupa y se puede contestar.
+    // Lo único que no se puede es cruzarla con Cerberus, y eso ya degrada solo.
+    if (!telefono) {
+      telefono = identidadDeLid(info.chat);
+      // eslint-disable-next-line no-console
+      if (telefono) console.log(`[wa lid] ${info.chat} sin teléfono conocido → identidad ${telefono}`);
+    }
+    if (!telefono) return null; // Ni teléfono, ni lid mapeado, ni lid legible: no se inventa.
 
     if (esReaccion) {
       // Quién reaccionó: el lead, o nosotros desde el teléfono de la línea. Se

@@ -59,4 +59,17 @@ describe('telefonoDe', () => {
   it('null donde el persona_id no es un número — nunca el id de Meta como si lo fuera', () => {
     expect(telefonoDe({ canal: 'instagram', persona_id: '17841400000000000' })).toBe(null);
   });
+
+  it('🔴 tampoco un LID de WhatsApp: el canal es whatsapp y NO hay teléfono', () => {
+    // WhatsApp no entrega el número de quien escribe por primera vez sin estar
+    // agendado. La fila entra con `lid-…` y es una cadena de dígitos que no es
+    // un número: buscarla como tal traería la ficha de otra persona.
+    expect(telefonoDe({ canal: 'whatsapp', persona_id: 'lid-195997208682673' })).toBe(null);
+    expect(personaEsTelefono('whatsapp', 'lid-195997208682673')).toBe(false);
+  });
+
+  it('sin el persona_id la respuesta es la de siempre — el parámetro es opcional', () => {
+    expect(personaEsTelefono('whatsapp')).toBe(true);
+    expect(personaEsTelefono('whatsapp', '51987654321')).toBe(true);
+  });
 });

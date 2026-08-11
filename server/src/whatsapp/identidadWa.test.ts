@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 import { test, describe } from 'node:test';
-import { normalizarTelefono, sufijoTelefono, telefonoDeContacto, jidDeTelefono, esJidDeGrupo } from './identidadWa.js';
+import {
+  normalizarTelefono,
+  sufijoTelefono,
+  telefonoDeContacto,
+  jidDeTelefono,
+  esJidDeGrupo,
+  identidadDeLid,
+  esIdentidadDeLid,
+  identidadDeParametro,
+  PREFIJO_LID,
+} from './identidadWa.js';
 
 /**
  * Esta es la línea donde muere el vocabulario JID de WhatsApp. Si un JID se
@@ -48,5 +58,51 @@ describe('identidad WhatsApp ↔ teléfono', () => {
 
   test('un teléfono basura para armar JID lanza, no arma un JID inválido', () => {
     assert.throws(() => jidDeTelefono('123'), /inválido/i);
+  });
+});
+
+/**
+ * LA IDENTIDAD `lid-` — para el contacto cuyo teléfono WhatsApp NO entrega.
+ *
+ * Un lead que escribe por primera vez y no está agendado llega como
+ * `<id>@lid` y su teléfono no existe en ningún lado (medido: ni en
+ * `whatsmeow_lid_map`, ni en `whatsmeow_contacts`, ni en la IPC del wrapper).
+ * Antes se descartaba el mensaje entero. Estos tests fijan las tres propiedades
+ * que hacen que eso sea seguro.
+ */
+describe('identidad de LID', () => {
+  test('deriva la identidad del JID, con y sin sufijo de dispositivo', () => {
+    assert.equal(identidadDeLid('195997208682673@lid'), 'lid-195997208682673');
+    assert.equal(identidadDeLid('195997208682673:42@lid'), 'lid-195997208682673');
+    assert.equal(identidadDeLid('51987654321@s.whatsapp.net'), null);
+    assert.equal(identidadDeLid('12036@g.us'), null);
+  });
+
+  test('🔴 NO se puede confundir con un teléfono: normalizar y sufijo dan null', () => {
+    // Sin esta guarda, `replace(/\D/g,'')` dejaría pasar el id como un número de
+    // 15 dígitos y su sufijo de 9 cruzaría con el padrón de clientes: la ficha
+    // de OTRA persona pegada a este chat.
+    assert.equal(normalizarTelefono('lid-195997208682673'), null);
+    assert.equal(sufijoTelefono('lid-195997208682673'), null);
+  });
+
+  test('🔴 la identidad NO lleva `:` — la clave de conversación se parsea por posición', () => {
+    // `conv:<canal>:<persona>:<numeroPropio>` se corta con split(':'). Un `:`
+    // acá correría los campos sin que nada falle.
+    assert.ok(!PREFIJO_LID.includes(':'));
+    const clave = `conv:whatsapp:${identidadDeLid('195997208682673@lid')}:51963139984`;
+    assert.equal(clave.split(':').length, 4);
+  });
+
+  test('se puede RESPONDER: la identidad vuelve a su JID de LID', () => {
+    assert.equal(jidDeTelefono('lid-195997208682673'), '195997208682673@lid');
+    assert.ok(esIdentidadDeLid('lid-195997208682673'));
+    assert.ok(!esIdentidadDeLid('51987654321'));
+  });
+
+  test('sobrevive al saneo de la URL, y un teléfono se sigue saneando igual', () => {
+    assert.equal(identidadDeParametro('lid-195997208682673'), 'lid-195997208682673');
+    assert.equal(identidadDeParametro('+51 987 654 321'), '51987654321');
+    assert.equal(identidadDeParametro('lid-'), '');
   });
 });
