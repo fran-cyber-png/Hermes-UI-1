@@ -260,11 +260,11 @@ describe("paridad SQL ≡ TS de la urgencia (#37)", () => {
     assert.deepEqual(radar.map((f) => f.nivel), [0, 1, 2, 3, 4, 5]);
   });
 
-  test("pide_info: la cola y el radar coinciden — antes tenían regex distintos (#96)", async (t) => {
+  test("«¿pidió algo?»: la cola y el radar coinciden — antes tenían regex distintos (#96)", async (t) => {
     // "detalle" estaba SOLO en el regex viejo de la cola/interactions, no en el
     // del radar (que tenía "inversion"/"temario" en su lugar). Antes del fix:
-    // cola.pide_info=true, radar.pide_info=false — divergencia real. Con el
-    // regex canónico compartido, los dos tienen que coincidir.
+    // cola=true, radar=false — divergencia real. Desde cola/pregunta.ts el
+    // predicado es uno solo y los dos tienen que coincidir.
     const db = await baseDePrueba(t);
     await sembrarMensaje(db, {
       personaId: "p-pide-info",
@@ -272,11 +272,11 @@ describe("paridad SQL ≡ TS de la urgencia (#37)", () => {
       texto: "Quisiera el detalle del curso, por favor",
     });
 
-    const [filaCola] = (await consultarCola(db, {})).conversaciones as (Fila & { pide_info: boolean })[];
-    const [filaRadar] = (await consultarRadar(db)) as (Fila & { pide_info: boolean })[];
+    const [filaCola] = (await consultarCola(db, {})).conversaciones as (Fila & { pregunto: boolean })[];
+    const [filaRadar] = (await consultarRadar(db)) as (Fila & { pregunto: boolean })[];
 
-    assert.equal(filaCola.pide_info, true, "la cola tiene que reconocer este texto como pide_info");
-    assert.equal(filaRadar.pide_info, true, "el radar tiene que reconocer LO MISMO — mismo regex");
+    assert.equal(filaCola.pregunto, true, "la cola tiene que reconocer este texto como un pedido");
+    assert.equal(filaRadar.pregunto, true, "el radar tiene que reconocer LO MISMO — mismo predicado");
   });
 
   test("con varios seguimientos pendientes manda el más viejo", async (t) => {

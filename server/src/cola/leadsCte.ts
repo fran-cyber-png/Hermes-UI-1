@@ -135,7 +135,14 @@ export const leadsCte = (ventana: (columna: SQL) => SQL): SQL => sql`
     -- prometería que se le puede escribir gratis, y es al revés — a este hay que
     -- ABRIRLE la conversación, que es el trabajo caro (regla dura #7).
     false                                       AS ventana_abierta,
-    false                                       AS pide_info,
+    -- Un formulario no es un mensaje: no hay texto que la persona haya escrito
+    -- para preguntar nada, y el curso que eligió ya viaja por su propio camino
+    -- (el chip de curso). Marcar pregunto acá inventaría una pregunta.
+    false                                       AS pregunto,
+    false                                       AS pregunto_precio,
+    -- Y tampoco es «solo hizo clic»: ese rótulo es del texto que Meta prellena en
+    -- WhatsApp. Un lead de formulario ya se distingue con su propia píldora.
+    false                                       AS solo_clic,
     1                                           AS n
   FROM leads
   WHERE phone IS NOT NULL

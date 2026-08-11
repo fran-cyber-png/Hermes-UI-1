@@ -2,9 +2,8 @@ import { sql } from "drizzle-orm";
 import type { db } from "../db/client.js";
 import { soloMisClavesSql } from "../dashboard/personal.js";
 import { ordenarRadar } from "./radar.js";
+import { preguntoAgrupadoSql, preguntoSql, soloClicAgrupadoSql } from "./pregunta.js";
 import {
-  pideInfoAgrupadoSql,
-  pideInfoSql,
   referenciaSql,
   respondidaSql,
   seguimientosPendientesSql,
@@ -45,7 +44,8 @@ export type ChatRadar = {
   contexto_texto: string | null;
   telefono: string | null;
   pais_dato: string | null;
-  pide_info: boolean;
+  pregunto: boolean;
+  solo_clic: boolean;
   /**
    * Los días que quedan de la ventana de Meta (#22). NULL donde no hay ventana
    * —WhatsApp y todo lo que no sea un comentario de FB/IG—, 0 cuando ya se
@@ -127,7 +127,8 @@ export async function consultarRadar(
         -- Lo que pide la persona es lo ÚLTIMO que dijo, no todo lo que dijo
         -- alguna vez (#49): el bool_or de antes dejaba el chip pegado para
         -- siempre. Mismo fragmento que la cola — una sola semántica.
-        (${pideInfoAgrupadoSql})                                       AS pide_info,
+        (${preguntoAgrupadoSql})                                      AS pregunto,
+        (${soloClicAgrupadoSql})                                      AS solo_clic,
         -- En WhatsApp no hay ventana: el número está vinculado como dispositivo de
         -- un teléfono real, no como cuenta de negocio (ver CONTEXT.md). NULL es
         -- «no aplica» — la fila no muestra cuenta regresiva ninguna.
@@ -155,7 +156,8 @@ export async function consultarRadar(
         NULL::text AS texto_clase, NULL::jsonb AS texto_origen,
         i.contexto_texto,
         NULL::text AS telefono, NULL::text AS pais_dato,
-        (${pideInfoSql("i.texto")}) AS pide_info,
+        (${preguntoSql("i.texto")}) AS pregunto,
+        false AS solo_clic,
         (${ventanaDiasSql("i.occurred_at", "i.canal")}) AS ventana_dias,
         -- Misma fuente que la cola: status lo persiste responder.ts.
         (i.status <> 'nuevo')                       AS respondida,

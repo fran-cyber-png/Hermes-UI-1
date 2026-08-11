@@ -1,6 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { diasDe, rangoDe } from "../lib/rangos.js";
+import { preguntoSql } from "../cola/pregunta.js";
 
 /**
  * Las consultas de canales, en un solo lugar.
@@ -13,8 +14,26 @@ import { diasDe, rangoDe } from "../lib/rangos.js";
  * reglas cambian, cambian en un lugar.
  */
 
-/** Alguien pidiendo información. Es una heurística de texto, y por eso vive acá y no en el aire. */
-export const PIDE_INFO = sql`texto ~* '(informaci|info\\b|precio|costo|cuánto|cuanto|inscri|matricul|interes|quiero|cómo|más datos|mas datos|detalle)'`;
+/**
+ * ALGUIEN PIDIENDO INFORMACIÓN — y la copia que este archivo prometía no tener.
+ *
+ * 🔴 Acá vivía un regex propio, y el comentario de arriba afirmaba que la regla
+ * cambiaba «en un lugar». Eran dos, y la de acá estaba **rota desde el día que se
+ * escribió**: decía `info\b`, y en Postgres `\b` es un backspace, no un borde de
+ * palabra. Verificado contra la base viva el 11-ago-2026:
+ *
+ *     select 'necesito info hoy' ~* 'info\y';  -- t   (el canónico)
+ *     select 'necesito info hoy' ~* 'info\b';  -- f   (esta copia)
+ *
+ * Esa rama nunca matcheó nada, sin error y sin log. Tampoco tenía `inversion` ni
+ * `temario`, que el otro sí. No hizo daño visible porque `/api/overview` —su
+ * único consumidor— no lo llama ningún componente del front; el daño era el que
+ * hace toda copia dormida: el que la despierte hereda un predicado falso.
+ *
+ * Ahora es el predicado canónico de `cola/pregunta.ts`, el mismo que la cola, el
+ * radar y `/api/interactions`.
+ */
+export const PIDE_INFO = preguntoSql("texto");
 
 /**
  * Lo que TODAVÍA se puede responder en privado.

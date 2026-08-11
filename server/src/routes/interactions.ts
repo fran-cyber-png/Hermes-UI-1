@@ -2,7 +2,7 @@ import { Router } from "express";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { diasDe, rangoDe } from "../lib/rangos.js";
-import { pideInfoSql } from "../cola/urgenciaSql.js";
+import { preguntoSql } from "../cola/pregunta.js";
 
 export const interactionsRouter = Router();
 
@@ -14,10 +14,11 @@ export const interactionsRouter = Router();
  * Es una HERRAMIENTA de filtrado, no un veredicto: quien usa la plataforma
  * decide si mira todo o solo lo que pide algo. No se esconde nada.
  *
- * El regex vive una sola vez en `cola/urgenciaSql.ts` (#96) — antes esta era
- * una de tres copias que habían divergido.
+ * El predicado vive una sola vez en `cola/pregunta.ts` — antes esta era una de
+ * tres copias que habían divergido, y la que quedó rota (`info\b`) nunca
+ * matcheó nada en Postgres.
  */
-const PIDE_INFO = pideInfoSql("texto");
+const PIDE_INFO = preguntoSql("texto");
 
 /**
  * ¿Sigue abierta la ventana para mandarle un mensaje privado?

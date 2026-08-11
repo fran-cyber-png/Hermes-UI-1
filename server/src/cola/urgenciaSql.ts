@@ -125,7 +125,7 @@ export const VENTANA_MENSAJE_HORAS = 24;
  * es «no aplica», que es distinto de 0 («se cerró»); la pantalla los dice
  * distinto y por eso no se colapsan acá.
  *
- * Toma los nombres de columna como parámetros, igual que `pideInfoSql`: los
+ * Toma los nombres de columna como parámetros, igual que `preguntoSql` (`cola/pregunta.ts`): los
  * call-sites las referencian distinto (`occurred_at` a secas en la cola,
  * `i.occurred_at` calificado en el CTE del radar).
  */
@@ -169,7 +169,7 @@ export function ventanaAbiertaSql(ventanaDias: SQL): SQL {
  * distinto, así que no se colapsan acá.
  *
  * Toma los nombres de columna como parámetros —igual que `ventanaDiasSql` y
- * `pideInfoSql`— porque los call-sites las califican distinto.
+ * `preguntoSql`— porque los call-sites las califican distinto.
  */
 export function ventanaCierraSql(ultimoEntranteAt: string, canal: string, tipo: string): SQL {
   const desde = sql.raw(ultimoEntranteAt);
@@ -207,7 +207,7 @@ export function puedoEscribirleSql(ventanaCierra: SQL): SQL {
  * solo puede decir «vencido», que no le dice a la vendedora qué tiene que hacer.
  *
  * Va con `array_agg(... ORDER BY cuando)` y no con `min(nota)` —el mismo patrón
- * que `pideInfoAgrupadoSql` acá abajo— porque tiene que ser la nota de LA MISMA
+ * que `preguntoAgrupadoSql` (`cola/pregunta.ts`)— porque tiene que ser la nota de LA MISMA
  * FILA que dio el `min(cuando)`. Un `min(nota)` devolvería la menor
  * alfabéticamente, que puede ser la de otro recordatorio: la pantalla mostraría
  * una fecha con el texto de otra promesa.
@@ -222,56 +222,19 @@ export const seguimientosPendientesSql: SQL = sql`
 `;
 
 /**
- * El regex canónico de «pide info» (#96) como LITERAL SQL entre comillas — UNA
- * vez, para que los dos fragmentos de abajo lo compartan sin duplicarlo. Es una
- * constante fija (no entra input de nadie), así que `sql.raw` es seguro y produce
- * el MISMO SQL que el literal inline que tenía `pideInfoSql` antes.
+ * ⚠️ ACÁ VIVÍA `PIDE_INFO_REGEX_SQL`, y se retiró el 11-ago-2026.
+ *
+ * Era el regex de «pide info»: 14 palabras sueltas sobre el último entrante.
+ * Medido en producción enganchaba **685** conversaciones de 3.995, y **563 de
+ * esas eran el texto que PRELLENA META** cuando alguien toca el botón de un
+ * anuncio click-to-WhatsApp — o sea que el chip no decía «esta persona pidió
+ * algo», decía «esta persona vino de un anuncio». Además contaba como pedido a
+ * quien se estaba despidiendo (`interes` matchea «no me interesa»).
+ *
+ * Su reemplazo, con los tres niveles y las mediciones que los obligaron, vive en
+ * **`cola/pregunta.ts`**. Este módulo sigue siendo el de la URGENCIA: qué pide
+ * la persona es otra pregunta y ya no se contesta desde acá.
  */
-const PIDE_INFO_REGEX_SQL = `'(informaci|info\\y|precio|costo|cuánto|cuanto|inscri|matricul|interes|quiero|cómo|más datos|mas datos|detalle|inversion|temario)'`;
-
-/**
- * ¿ESTE TEXTO PIDE QUE LA CONTACTEN? — el PREDICADO base, sobre un texto suelto.
- * Canónico (#96): antes había dos regex divergidos, uno en `cola/consultarCola.ts`
- * + `routes/interactions.ts` (más rico) y otro, más pobre, en
- * `cola/consultarRadar.ts` (pero con `inversion`/`temario`, que el otro no tenía).
- * Este es la UNIÓN de ambos — no pierde señal de ninguno.
- *
- * Se aplica a lo que es UNA sola cosa dicha: un comentario de FB/IG (que es su
- * propio último mensaje). Para una CONVERSACIÓN agrupada, el fragmento correcto
- * es `pideInfoAgrupadoSql` — no este.
- *
- * Toma la columna como parámetro (mismo patrón que `diaLimaSql` en
- * `horaLimaSql.ts`): los call-sites la referencian distinto — `texto` a secas
- * en cola/interactions, `i.texto` calificado en el CTE de comentarios del radar.
- */
-export function pideInfoSql(columna: string): SQL {
-  return sql`${sql.raw(columna)} ~* ${sql.raw(PIDE_INFO_REGEX_SQL)}`;
-}
-
-/**
- * ¿PIDE INFO ESTA CONVERSACIÓN? — el MISMO predicado aplicado al **último
- * entrante con texto**, dentro de un `GROUP BY` (como `respondidaSql`).
- *
- * POR QUÉ EL ÚLTIMO Y NO `bool_or`: antes esto se derivaba con un `bool_or`
- * histórico y el chip «Pide info» quedaba pegado a TODAS — una persona que
- * preguntó el precio hace semanas lo llevaba para siempre, aunque lo último que
- * dijera fuera «no gracias». Con 1800 conversaciones en cola eso volvió el chip
- * ruido puro: dejó de distinguir al lead caliente del que ya dijo que no.
- * Decisión del dueño (#49): **manda lo último que dijo**.
- *
- * `FILTER (... AND texto IS NOT NULL)`: un audio, una foto o un sticker POSTERIOR
- * no apagan el pedido — la última palabra es el último mensaje que TIENE palabras.
- * `COALESCE(..., false)`: sin ningún entrante con texto, no pide info.
- *
- * Es UNA sola semántica para toda la casa: la usan la cola (`consultarCola`) y el
- * radar del Dashboard (`consultarRadar`). Si divergen otra vez, el chip vuelve a
- * significar cosas distintas en dos pantallas — que es el bug que esto cerró.
- */
-export const pideInfoAgrupadoSql: SQL = sql`COALESCE(
-  (array_agg(texto ORDER BY occurred_at DESC)
-     FILTER (WHERE direccion = 'entrante' AND texto IS NOT NULL))[1] ~* ${sql.raw(PIDE_INFO_REGEX_SQL)},
-  false
-)`;
 
 /**
  * ¿RESPONDIDA? — hay un saliente igual o posterior al último entrante. Antes

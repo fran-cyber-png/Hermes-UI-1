@@ -4,8 +4,6 @@ import { soloMisClavesSql } from "../dashboard/personal.js";
 import {
   nivelUrgenciaSql,
   ordenUrgenciaSql,
-  pideInfoAgrupadoSql,
-  pideInfoSql,
   puedoEscribirleSql,
   referenciaSql,
   respondidaSql,
@@ -17,6 +15,14 @@ import {
 } from "./urgenciaSql.js";
 import { etapaEfectivaSql, ultimasGestionesSql, ventaPosteriorCteSql } from "./etapaEfectivaSql.js";
 import { precioEnviadoSql, primerPrecioAtSql } from "./precio.js";
+import {
+  DIAS_DEUDA_VIVA,
+  preguntoAgrupadoSql,
+  preguntoPrecioAgrupadoSql,
+  preguntoPrecioSql,
+  preguntoSql,
+  soloClicAgrupadoSql,
+} from "./pregunta.js";
 import { leadsCte, sufijosConConversacionCte } from "./leadsCte.js";
 import {
   etapaDesdeSql,
@@ -57,7 +63,7 @@ import { lineasDeVendedoraConProposito } from "../numeros/repositorio.js";
  * `respondida` es DERIVADA (hay un saliente posterior al último entrante), no un
  * estado de fila. El orden es la urgencia de SEIS niveles de `cola/urgencia.ts`,
  * proyectada a SQL en `cola/urgenciaSql.ts` (#37): esta consulta no define
- * ningún criterio propio (`respondida`, `referencia` y `pide_info` también salen
+ * ningún criterio propio (`respondida`, `referencia` y `pregunto` también salen
  * de ahí, #96), y el test de paridad (`urgencia.paridad.test.db.ts`) falla si la
  * cola y el radar vuelven a ordenar distinto.
  *
@@ -205,7 +211,10 @@ const comentariosCte = (filtroCanal: SQL, incluirPins: boolean) => sql`
     -- que un comentario nunca cae en «sin respuesta» (cola/etapaEfectivaSql.ts).
     true                                        AS hablo,
     (${VENTANA_ABIERTA})                        AS ventana_abierta,
-    (${pideInfoSql("texto")})                    AS pide_info,
+    (${preguntoSql("texto")})                   AS pregunto,
+    (${preguntoPrecioSql("texto")})             AS pregunto_precio,
+    -- Un comentario de FB/IG nunca es el texto de un anuncio de WhatsApp.
+    false                                       AS solo_clic,
     1                                           AS n
   FROM interactions
   WHERE tipo = 'comentario'
@@ -306,9 +315,12 @@ const conversacionesCte = sql`
     -- el 8-ago-2026 nunca dijeron una palabra. Ver cola/etapaEfectivaSql.ts.
     COALESCE(bool_or(direccion = 'entrante'), false)                 AS hablo,
     false                                                          AS ventana_abierta,
-    -- «Pide info» del ÚLTIMO entrante con texto, no un bool_or histórico (#49):
-    -- mismo fragmento que el radar — una sola semántica (ADR 0014).
-    (${pideInfoAgrupadoSql})                                        AS pide_info,
+    -- ¿PIDIÓ ALGO? — del ÚLTIMO entrante con texto, no un bool_or histórico
+    -- (#49): mismo fragmento que el radar, una sola semántica (ADR 0014).
+    -- Los tres niveles y por qué son tres viven en cola/pregunta.ts.
+    (${preguntoAgrupadoSql})                                        AS pregunto,
+    (${preguntoPrecioAgrupadoSql})                                  AS pregunto_precio,
+    (${soloClicAgrupadoSql})                                        AS solo_clic,
     count(*)::int                                                  AS n
   FROM msg
   GROUP BY canal, persona_id, numero_propio
@@ -459,7 +471,16 @@ export interface ResultadoCola {
    * es un salto al vacío. Sale de la MISMA consulta que el total, sin costo extra.
    */
   conteosFiltro?: {
-    pideInfo: number;
+    /** Nombró plata: precio, cuotas, yape, inscripción (`cola/pregunta.ts`). */
+    preguntoPrecio: number;
+    /** Escribió, nadie contestó, y todavía es de esta semana. */
+    teEscribieron: number;
+    /**
+     * La deuda ENTERA, sin corte de antigüedad. Ya no tiene chip —eran 505 con
+     * el 93 % de más de una semana— pero se sigue contando: es el número que
+     * dice si la deuda vieja crece, y el día que alguien decida qué hacer con
+     * ella va a querer verlo.
+     */
     sinResponder: number;
     yaCompraron: number;
     /** El bot se frenó y espera a una persona (`cola/botSql.ts`). */
@@ -707,37 +728,53 @@ async function ejecutarCola(
   // página y el total (los conteos son del embudo, no de la vendedora).
   const condicionesBase: SQL[] = [];
   /**
-   * ⚠️ «PIDEN INFO» ES `pide_info` **Y SIN RESPONDER**, y esa segunda mitad es
-   * la que lo vuelve un chip usable.
+   * ══ «PREGUNTARON PRECIO» — Y POR QUÉ ESTE CHIP **NO** MIRA SI YA SE CONTESTÓ ══
    *
-   * ── El número que lo obligó ──
-   * Medido en producción el 5-ago-2026: `pide_info` a secas daba **675**
-   * conversaciones, de las cuales **647 (96 %) YA habían sido respondidas**. Un
-   * chip que ofrece 675 en una cola de 2.565 no ayuda a elegir a quién atender:
-   * es la quinta parte de la mesa, y de cada 25 filas 24 son trabajo hecho.
-   * Con la segunda condición son **28** — y esas 28 sí son una lista de tareas.
+   * El chip anterior («Piden info») era `pide_info AND NOT respondida`, y esa
+   * segunda mitad era un parche sobre un predicado que mentía: `pide_info` a
+   * secas daba 675 con el 96 % ya respondido, así que hubo que angostarlo por
+   * otro lado. Con el predicado arreglado (`cola/pregunta.ts`) el problema
+   * desaparece solo: **65 conversaciones en 30 días** nombran plata. Eso ya cabe
+   * en un turno de trabajo sin ayuda de nadie.
    *
-   * ── Por qué se angosta el FILTRO y no el PREDICADO ──
-   * `pideInfoAgrupadoSql` responde «¿lo último que dijo fue pedir info?», y eso
-   * es un hecho verdadero sobre la conversación que la FILA muestra y que el
-   * radar del Dashboard comparte. Cambiarlo ahí haría que una fila ya atendida
-   * dejara de decir qué pidió esa persona — se perdería información correcta
-   * para arreglar un problema que es de otro nivel.
+   * Y no debe mirar `respondida`, porque acá «ya le contesté» **no significa
+   * terminado**: alguien que preguntó el precio hace tres días, recibió respuesta
+   * y se calló es el seguimiento más rentable que hay en la mesa (ADR 0044 midió
+   * 540 conversaciones que se callaron justo con el precio). Filtrar por
+   * `NOT respondida` escondería exactamente esas.
    *
-   * El chip no pregunta «¿qué dijo?», pregunta «¿a quién atiendo?». Son dos
-   * preguntas distintas sobre el mismo hecho, y sólo la segunda necesita saber
-   * si alguien ya contestó.
-   *
-   * ── Consecuencia buscada: queda DENTRO de «Sin responder» ──
-   * Ahora «Piden info» es un subconjunto estricto de «Sin responder»: de las
-   * 454 que esperan, éstas 28 pidieron algo concreto. Es exactamente lo que
-   * significa «angostan dentro del tab», y es la prioridad dentro de la deuda.
-   *
-   * `respondida` sale de `urgenciaSql.ts` — no se define ningún criterio propio.
+   * Quién espera respuesta ya lo contesta el chip de al lado, y el orden de la
+   * cola sigue poniendo la deuda arriba: no hace falta decirlo dos veces.
    */
-  if (intencion === "pide-info") condicionesBase.push(sql`pide_info AND NOT respondida`);
-  // `sin-responder`: la deuda real de la mesa. Reusa la columna `respondida` que
-  // ya deriva `urgenciaSql.ts` — no define ningún criterio propio.
+  if (intencion === "pregunto-precio") condicionesBase.push(sql`pregunto_precio`);
+  /**
+   * ══ «TE ESCRIBIERON» — LA DEUDA QUE TODAVÍA SE PUEDE PAGAR ══
+   *
+   * `NOT respondida` a secas daba **505** conversaciones en producción
+   * (11-ago-2026), de las cuales **472 (93 %) tenían más de 7 días** y solo
+   * **5** seguían dentro de la ventana de 24 h de Meta. Una lista así no se
+   * trabaja: se aprende a ignorarla, y con ella se ignora lo de hoy. Con el
+   * corte de `DIAS_DEUDA_VIVA` son **33**.
+   *
+   * ⚠️ Lo viejo NO se esconde de la cola: la fila sigue ahí y el orden la sigue
+   * poniendo donde corresponde. Lo que se retira es la PROMESA de que esas 505
+   * eran el trabajo del día.
+   */
+  if (intencion === "te-escribieron") {
+    condicionesBase.push(
+      sql`NOT respondida AND ultimo_entrante_at > now() - (${DIAS_DEUDA_VIVA} || ' days')::interval`,
+    );
+  }
+  /**
+   * COMPAT — los dos valores viejos se siguen aceptando aunque el panel ya no
+   * tenga sus chips, igual que `por-vencer` (ver `src/features/canales/cola.ts`):
+   * el contrato de la API no se rompe por un cambio de UI, y una app vieja o un
+   * link guardado tienen que seguir devolviendo algo razonable.
+   *
+   * `pide-info` se sirve con el predicado NUEVO: la pregunta que quien lo pidió
+   * quería hacer es «¿quién pidió algo y espera?», y eso ahora se responde bien.
+   */
+  if (intencion === "pide-info") condicionesBase.push(sql`pregunto AND NOT respondida`);
   if (intencion === "sin-responder") condicionesBase.push(sql`NOT respondida`);
   // `por-vencer` sigue aceptándose aunque el panel ya no tenga su chip: el
   // contrato de la API no se rompe por un cambio de UI (ver `src/features/canales/cola.ts`).
@@ -885,7 +922,7 @@ async function ejecutarCola(
     )
     SELECT todo.clave AS clave, canal, tipo, persona_id, persona_nombre, numero_propio,
            texto, contexto_texto, ultima_clase, ultima_origen, origen_anuncio, respondida, ya_le_hablamos,
-           precio_enviado, ventana_abierta, pide_info, n,
+           precio_enviado, ventana_abierta, pregunto, pregunto_precio, solo_clic, n,
            referencia, ultimo_at, seguimiento_en,
            -- CUÁNDO SE CIERRA LA PUERTA (cola/ventana.ts). Viaja el INSTANTE del
            -- cierre, no «6 h»: el texto de la cuenta regresiva es presentación y
@@ -955,7 +992,8 @@ async function ejecutarCola(
       soloMias.length ? sql`(${pred}) AND (${soloMias[0]!})` : pred;
     const [r] = await base.execute<{
       n: number;
-      pide_info: number;
+      pregunto_precio: number;
+      te_escribieron: number;
       sin_responder: number;
       ya_compraron: number;
       bot_escalada: number;
@@ -969,7 +1007,10 @@ async function ejecutarCola(
       cats AS (${categoriasCteSql}),
       padron AS (${padronCteSql(conPadron)})
       SELECT count(*) FILTER (WHERE ${yTodas([...condicionesBase, ...soloMias])})::int AS n,
-             count(*) FILTER (WHERE ${conMias(sql`pide_info AND NOT respondida`)})::int AS pide_info,
+             -- Cada conteo usa EL MISMO predicado que su filtro de arriba: el
+             -- chip no puede prometer un número y la cola devolver otro.
+             count(*) FILTER (WHERE ${conMias(sql`pregunto_precio`)})::int   AS pregunto_precio,
+             count(*) FILTER (WHERE ${conMias(sql`NOT respondida AND ultimo_entrante_at > now() - (${DIAS_DEUDA_VIVA} || ' days')::interval`)})::int AS te_escribieron,
              count(*) FILTER (WHERE ${conMias(sql`NOT respondida`)})::int   AS sin_responder,
              count(*) FILTER (WHERE ${conMias(yaComproSql)})::int           AS ya_compraron,
              count(*) FILTER (WHERE ${conMias(botEscaladaSql)})::int        AS bot_escalada,
@@ -993,7 +1034,8 @@ async function ejecutarCola(
     `);
     total = r?.n;
     conteosFiltro = {
-      pideInfo: r?.pide_info ?? 0,
+      preguntoPrecio: r?.pregunto_precio ?? 0,
+      teEscribieron: r?.te_escribieron ?? 0,
       sinResponder: r?.sin_responder ?? 0,
       yaCompraron: r?.ya_compraron ?? 0,
       botEscalada: r?.bot_escalada ?? 0,

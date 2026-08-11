@@ -228,6 +228,6 @@ test("los conteos de los chips cuentan el UNIVERSO del recorte, no el del filtro
   const r = await consultarCola(db, { intencion: "pide-info" });
   assert.equal(r.total, 1);
   // …pero los conteos de los chips siguen contando sobre las dos.
-  assert.equal(r.conteosFiltro?.pideInfo, 1);
+  assert.equal(r.conteosFiltro?.teEscribieron, 1);
   assert.equal(r.conteosFiltro?.sinResponder, 1);
 });

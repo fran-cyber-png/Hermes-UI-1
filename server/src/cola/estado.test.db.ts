@@ -80,10 +80,10 @@ test("sin la tabla `estado_conversacion`, la cola SIGUE sirviendo (degradada, no
   assert.equal(r.conversaciones.length, 1, "la cola contesta igual: el trabajo pendiente se ve");
   assert.equal(r.sinEstado, true, "y lo dice en voz alta, no finge que nadie fijó nada");
 
-  const fila = r.conversaciones[0] as { fijada: boolean; favorita: boolean; pide_info: boolean };
+  const fila = r.conversaciones[0] as { fijada: boolean; favorita: boolean; pregunto: boolean };
   assert.equal(fila.fijada, false, "sin estado personal: defaults, no explosión");
   assert.equal(fila.favorita, false);
-  assert.equal(fila.pide_info, true, "lo que NO depende de la tabla sigue funcionando");
+  assert.equal(fila.pregunto, true, "lo que NO depende de la tabla sigue funcionando");
 });
 
 test("degradada, un tab personal no miente con «no hay nada»: devuelve la cola", async (t) => {

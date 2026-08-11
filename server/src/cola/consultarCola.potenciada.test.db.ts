@@ -24,7 +24,7 @@ interface Fila {
   fijada: boolean;
   favorita: boolean;
   no_leido: boolean;
-  pide_info: boolean;
+  pregunto: boolean;
   categorias: string[];
   nivel: number;
 }
@@ -138,33 +138,33 @@ test("categoria filtra por la etiqueta asignada y la fila trae sus categorías",
   assert.deepEqual(conCategoria[0].categorias, ["precio"], "la fila trae sus categorías (en minúsculas)");
 });
 
-test("pide_info es del ÚLTIMO entrante, no un bool_or histórico", async (t) => {
+test("«¿pidió algo?» es del ÚLTIMO entrante, no un bool_or histórico", async (t) => {
   const db = await baseDePrueba(t);
   // Pidió precio, después dijo que no. Lo ÚLTIMO manda: el chip NO se prende.
   await sembrarMensaje(db, { personaId: "51900aaa", texto: "hola, ¿cuánto cuesta?", occurredAt: new Date(Date.now() - 60_000) });
   await sembrarMensaje(db, { personaId: "51900aaa", texto: "no gracias, mejor lo dejo por ahora", occurredAt: new Date() });
 
   const [fila] = await filas(db);
-  assert.equal(fila.pide_info, false, "lo último fue «no gracias»: no pide info");
+  assert.equal(fila.pregunto, false, "lo último fue «no gracias»: no pidió nada");
 });
 
-test("pide_info se prende si el último entrante SÍ pide", async (t) => {
+test("se prende si el último entrante SÍ pide", async (t) => {
   const db = await baseDePrueba(t);
   await sembrarMensaje(db, { personaId: "51900bbb", texto: "hola", occurredAt: new Date(Date.now() - 60_000) });
   await sembrarMensaje(db, { personaId: "51900bbb", texto: "quiero saber el precio", occurredAt: new Date() });
 
   const [fila] = await filas(db);
-  assert.equal(fila.pide_info, true, "lo último pide precio: el chip se prende");
+  assert.equal(fila.pregunto, true, "lo último pide precio: la señal se prende");
 });
 
-test("un audio POSTERIOR no apaga «pide info»: manda el último entrante CON TEXTO", async (t) => {
+test("un audio POSTERIOR no apaga el pedido: manda el último entrante CON TEXTO", async (t) => {
   const db = await baseDePrueba(t);
   await sembrarMensaje(db, { personaId: "51900ccc", texto: "quiero saber el precio", occurredAt: new Date(Date.now() - 60_000) });
   // Manda un audio después: no dice nada nuevo, no puede borrar el pedido.
   await sembrarMensaje(db, { personaId: "51900ccc", texto: null, mediaClase: "audio", occurredAt: new Date() });
 
   const [fila] = await filas(db);
-  assert.equal(fila.pide_info, true, "el audio no tiene palabras: la última palabra sigue siendo el pedido");
+  assert.equal(fila.pregunto, true, "el audio no tiene palabras: la última palabra sigue siendo el pedido");
 });
 
 test("una conversación FIJADA sigue en la cola aunque se caiga de la ventana de 30 días", async (t) => {
