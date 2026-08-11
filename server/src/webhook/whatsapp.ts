@@ -9,6 +9,7 @@ import { notificarEntrante } from "../bot/ingesta.js";
 import { configDesdeEnv } from "../bot/config.js";
 import { claveDeLlamada } from "./llamadas.js";
 import { asignarSiHaceFalta } from "../reparto/asignar.js";
+import { porQueFallo } from "../lib/porQueFallo.js";
 
 /**
  * Receptor de la WhatsApp Cloud API — la ACTIVACIÓN de la atribución de click-to-WhatsApp (docs/36 §2).
@@ -119,7 +120,7 @@ export async function recibirWhatsapp(req: Request, res: Response): Promise<void
           }).catch((err: unknown) => {
             // Un recibo perdido no puede tumbar el webhook: lo que viene
             // después son mensajes de verdad, con una persona esperando.
-            console.error("[entrega] no se pudo aplicar el recibo:", (err as Error).message);
+            console.error("[entrega] no se pudo aplicar el recibo:", porQueFallo(err));
           });
         }
 

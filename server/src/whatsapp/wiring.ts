@@ -14,6 +14,7 @@ import { db } from '../db/client.js';
 import { guardarReaccion } from '../reacciones/repositorio.js';
 import { aplicarRecibo } from '../entrega/repositorio.js';
 import type { TransporteWhatsapp } from './transporte.js';
+import { porQueFallo } from '../lib/porQueFallo.js';
 
 /**
  * EL ARMADO DE WHATSAPP AL ARRANCAR EL SERVER — ahora de N números (#50).
@@ -144,7 +145,7 @@ function montar(numero: string, cual: string): WhatsappArmado {
       })
       .catch((err: unknown) => {
         // eslint-disable-next-line no-console
-        console.error('[entrega] no se pudo aplicar el recibo:', (err as Error).message);
+        console.error('[entrega] no se pudo aplicar el recibo:', porQueFallo(err));
       });
   });
 
