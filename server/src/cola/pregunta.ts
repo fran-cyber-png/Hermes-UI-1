@@ -35,10 +35,24 @@ import { sql, type SQL } from "drizzle-orm";
  * información», «Un poco más de información x favor», «Información sobre el
  * curso». Lo que hay que vetar no es la palabra: es **el texto de Meta**.
  *
- * El segundo intento vetaba la cortesía sobre todo el predicado, y también estaba
- * mal: descartaba **«Pásame la cotización urgentemente quiero comprar ahora
- * mismo»**, que es el mejor lead que hubo en la mesa en 30 días. De ahí salen los
- * dos niveles:
+ * El segundo intento vetaba la cortesía sobre TODO el predicado, y también estaba
+ * mal. El ejemplo con el que se escribió esta regla —«Pásame la cotización
+ * urgentemente quiero comprar ahora mismo»— resultó ser **Walter probando el
+ * bot** el 31-jul (el bot le contesta «Perfecto, Walter»): no es un lead, es una
+ * conversación entre dos líneas nuestras. 🔴 **Antes de citar un texto de
+ * producción como caso, cruzá su `persona_id` contra `numeros_wa`**: una línea de
+ * Goberna escribiéndole a otra se ve exactamente igual que una persona.
+ *
+ * La regla sobrevive porque **el caso real existe y es más fuerte**. De las 63
+ * conversaciones de gente real cuyo último mensaje nombra plata, **6 llevan
+ * además una fórmula de cortesía**, y entre ellas:
+ *
+ *     «Cual es el precio. Gracias»
+ *     «Sí gracias por la información si hago un negocio en éstos días les envío el pago»
+ *     «Me inscribí en este curso, me lo dieron bastante barato…»
+ *
+ * Un veto de cortesía sobre todo el predicado descarta esas tres. De ahí los
+ * niveles:
  *
  *   · **PRECIO** (fuerte) — habla de plata: precio, cuotas, yape, link de pago,
  *     cotización, inscribirme. **Ningún veto de cortesía lo tumba.** Si alguien

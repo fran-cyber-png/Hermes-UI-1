@@ -33,7 +33,12 @@ const CORPUS = [
   // El anuncio CON una pregunta agregada por la persona.
   "Hola Quiero más información del Diploma de Inteligencia y Contrainteligencia ¿Cuál es el costo?",
   // Señales de plata.
+  // ⚠️ La primera NO es un lead: es Walter probando el bot. Se conserva por su
+  // forma; las tres de abajo son de gente real y son las que justifican la regla.
   "Pásame la cotización urgentemente quiero comprar ahora mismo",
+  "Cual es el precio. Gracias",
+  "Sí gracias por la información si hago un negocio en éstos días les envío el pago",
+  "Es un precio elevado. Gracias..para la próxima cuando ya vaya como candidato",
   "Cuantas cuotas?",
   "el nombre de yape es a nombre de una empresa?",
   "Más tarde hago el pago",

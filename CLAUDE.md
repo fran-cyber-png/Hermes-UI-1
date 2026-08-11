@@ -850,7 +850,12 @@ exacto). El predicado nuevo vive en `server/src/cola/pregunta.ts`; la barra, en 
   interesa — éste **sí** cede ante el anuncio, el cierre y la autorespuesta ajena). 685 → **115**.
   · ⚠️ **Los dos intentos que fallaron están escritos en el módulo, y valen más que la regla**: sacar
     `informaci` perdía «Necesito información» (escrito a mano); vetar la cortesía sobre TODO el
-    predicado descartaba «Pásame la cotización urgentemente quiero comprar ahora mismo».
+    predicado descartaba «Cual es el precio. Gracias» y otras 5 de gente real que mezclan
+    agradecimiento con señal de plata.
+  · 🔴 **ANTES DE CITAR UN TEXTO DE PRODUCCIÓN COMO CASO, CRUZÁ SU `persona_id` CONTRA `numeros_wa`.**
+    El ejemplo original de esa regla se documentó como «el mejor lead de la mesa» y es **Walter
+    probando el bot** (el bot le contesta «Perfecto, Walter»). Una línea de Goberna escribiéndole a
+    otra se ve idéntica a una persona.
 - 🔴 **«Preguntaron precio» NO filtra por `respondida`, a propósito.** «Ya le contesté» no es
   terminado: quien preguntó el precio y se calló es el seguimiento más rentable (ADR 0044 midió 540).
   El chip viejo necesitaba `AND NOT respondida` porque su predicado mentía; arreglado, el parche sobra.

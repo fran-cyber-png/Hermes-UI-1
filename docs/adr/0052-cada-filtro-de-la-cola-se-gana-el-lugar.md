@@ -96,9 +96,34 @@ El primer intento fue **sacar `informaci` del regex**. Estaba mal y lo mostró e
 perdían pedidos escritos a mano y reales — «Necesito información», «Un poco más de información x
 favor», «Información sobre el curso». *Lo que hay que vetar no es la palabra: es el texto de Meta.*
 
-El segundo intento **vetaba la cortesía sobre todo el predicado**, y también estaba mal:
-descartaba **«Pásame la cotización urgentemente quiero comprar ahora mismo»**, el mejor lead que
-hubo en la mesa en 30 días. De ahí salen los niveles:
+El segundo intento **vetaba la cortesía sobre todo el predicado**, y también estaba mal: descarta
+frases que mezclan un agradecimiento con una señal de plata.
+
+> ⚠️ **CORRECCIÓN (11-ago-2026, misma tarde).** El ejemplo con el que se escribió esta regla era
+> falso. Se citó **«Pásame la cotización urgentemente quiero comprar ahora mismo»** como «el mejor
+> lead de la mesa»; verificado después cruzando `persona_id` contra `numeros_wa`, es **Walter
+> probando el bot** el 31-jul — el bot le contesta «Perfecto, Walter». Es una conversación entre dos
+> líneas nuestras, no un lead.
+>
+> 🔴 **Antes de citar un texto de producción como caso, cruzá su `persona_id` contra `numeros_wa`.**
+> Una línea de Goberna escribiéndole a otra se ve **exactamente igual** que una persona: mismo
+> `persona_id` con forma de teléfono, mismo hilo, mismo todo. Lo encontró asignar conversaciones,
+> no una revisión del ADR.
+
+**La regla sobrevive porque el caso real existe y es más fuerte.** De las **63** conversaciones de
+gente real cuyo último mensaje nombra plata, **6 llevan además una fórmula de cortesía**:
+
+| texto real | qué es |
+|---|---|
+| `Cual es el precio. Gracias` | una pregunta de precio, con «gracias» al final |
+| `Sí gracias por la información si hago un negocio en éstos días les envío el pago` | alguien que va a pagar |
+| `Me inscribí en este curso, me lo dieron bastante barato…` | ya se inscribió |
+| `Es un precio elevado. Gracias..para la próxima` | una objeción de precio |
+| `Buenos días. Estoy evaluando mi inscripción. No puedo confirmar por ahora.` | vivo, evaluando |
+| `Gracias pero andaré viajando estos meses…no me inscribiré` | un no de verdad |
+
+Un veto de cortesía sobre todo el predicado descarta las seis, incluidas las tres primeras. De ahí
+salen los niveles:
 
 | Nivel | Qué reconoce | Vetos que lo tumban |
 |---|---|---|

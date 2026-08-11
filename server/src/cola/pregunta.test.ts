@@ -61,9 +61,26 @@ describe("el texto que escribe el anuncio, no la persona", () => {
 
 describe("el nivel PRECIO no lo tumba ninguna cortesía", () => {
   test("«Pásame la cotización urgentemente quiero comprar ahora mismo»", () => {
-    // El segundo intento de arreglo vetaba la cortesía sobre TODO el predicado y
-    // descartaba el mejor lead de la mesa en 30 días.
+    // ⚠️ Este texto existe en producción pero NO es un lead: es Walter probando el
+    // bot el 31-jul (el bot le contesta «Perfecto, Walter»). Se conserva como caso
+    // porque la FORMA es la de una señal de compra —y el predicado tiene que
+    // agarrarla venga de quien venga—, pero la regla se justifica con los reales
+    // de acá abajo. Cruzá `persona_id` contra `numeros_wa` antes de citar un texto.
     assert.equal(preguntoPrecio("Pásame la cotización urgentemente quiero comprar ahora mismo"), true);
+  });
+
+  test("🔴 los REALES que un veto de cortesía descartaría", () => {
+    // Medido: de 63 conversaciones de gente real cuyo último mensaje nombra plata,
+    // 6 llevan además una fórmula de cortesía. Estas tres son las que valen, y son
+    // exactamente las que el segundo intento de arreglo perdía.
+    for (const texto of [
+      "Cual es el precio. Gracias",
+      "Sí gracias por la información si hago un negocio en éstos días les envío el pago",
+      "Me inscribí en este curso, me lo dieron bastante barato y la empresa esta en mí país",
+    ]) {
+      assert.equal(preguntoPrecio(texto), true, texto);
+      assert.equal(pregunto(texto), true, texto);
+    }
   });
 
   test("una pregunta de plata con la cortesía adelante sigue contando", () => {

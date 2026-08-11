@@ -79,7 +79,8 @@ const CASOS: { rotulo: string; nota: string; c: Conversacion }[] = [
   },
   {
     rotulo: 'Preguntó precio',
-    nota: '65 en 30 días. Nombró plata: entra al chip esté contestada o no.',
+    nota:
+      '65 en 30 días. Nombró plata: entra al chip esté contestada o no. ⚠️ Este texto es real pero NO es un lead: es Walter probando el bot.',
     c: fila({
       persona_id: '51912345678',
       persona_nombre: 'Luis Ángel',
