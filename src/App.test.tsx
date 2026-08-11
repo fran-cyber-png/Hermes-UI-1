@@ -338,3 +338,112 @@ describe('el Navegador como novena vista', () => {
     expect(m.contenedor.textContent).toContain('Cerberus');
   });
 });
+
+/**
+ * ROUTING COMO DÉCIMA VISTA — y la primera que NO la ve todo el mundo.
+ *
+ * Dos cosas que ningún test puro puede ver, y por eso están acá:
+ *
+ *   1. Que el riel de una persona sea distinto del de otra. La regla
+ *      (`vistas/acceso.ts`) está testeada aparte; lo que se rompe en el
+ *      CABLEADO es que el riel siga leyendo `VISTAS` y las dibuje todas.
+ *   2. 🔴 Que ⌘2..⌘9 SIGAN ANDANDO con diez vistas. El rango se comparaba como
+ *      CADENA, y `'2' <= '10'` es **false**: con la décima vista quedaba
+ *      andando ⌘1 y se rompían las ocho del medio. El candado de la ÚLTIMA
+ *      vista —el que atrapó los dos defectos anteriores— no habría visto éste,
+ *      porque la décima no tiene tecla.
+ */
+describe('Routing, la décima vista', () => {
+  /** Entra con otro usuario: el riel depende de quién sos, no del build. */
+  async function abrirAppComo(id: string): Promise<Montado> {
+    localStorage.setItem('hermes.token', tokenVivo(id));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (String(url).includes('/api/auth/yo')) {
+          return new Response(JSON.stringify({ vendedora: { id, nombre: id }, cerberus: true }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        return new Response('{"ok":false}', { status: 503, headers: { 'content-type': 'application/json' } });
+      }),
+    );
+    return abrirApp();
+  }
+
+  const rielDe = (m: Montado) =>
+    [...m.contenedor.querySelectorAll('nav[aria-label="Vistas"] button[data-vista]')].map(
+      (b) => b.getAttribute('data-vista'),
+    );
+
+  it('está en el riel de alan, última', async () => {
+    const m = await abrirAppComo('alan');
+    expect(rielDe(m).at(-1)).toBe('routing');
+  });
+
+  it('y en el de Usuario1, que entra escribiendo su nombre en minúscula', async () => {
+    const m = await abrirAppComo('usuario1');
+    expect(rielDe(m)).toContain('routing');
+  });
+
+  it('no está en el riel de nadie más', async () => {
+    const m = await abrirApp(); // `ana`
+    expect(rielDe(m)).not.toContain('routing');
+    expect(rielDe(m)).toHaveLength(9);
+  });
+
+  /**
+   * Se verifica que montó el componente REAL y no solo el `h1` de la cabecera:
+   * con el server contestando 503 a todo (ver arriba), la vista cae en su
+   * cartel de error, que es su comportamiento escrito. Un esqueleto no diría eso.
+   */
+  it('se abre desde el riel y monta la vista de verdad', async () => {
+    const m = await abrirAppComo('alan');
+
+    m.contenedor.querySelector<HTMLButtonElement>('button[data-vista="routing"]')!.click();
+    await reposar();
+    await reposar();
+
+    expect(vistaActual(m)).toBe('Routing');
+    expect(m.contenedor.textContent).toContain('No se puede mostrar el ruteo');
+  });
+
+  /**
+   * 🔴 EL CANDADO QUE IMPORTA ACÁ. Con la comparación de cadenas, este test se
+   * pone rojo: ⌘4 no hacía nada y la vista seguía siendo el Dashboard.
+   */
+  it('con diez vistas, ⌘2..⌘9 siguen andando', async () => {
+    const m = await abrirAppComo('alan');
+
+    teclear('4', { meta: true });
+    await reposar();
+    expect(vistaActual(m)).toBe('Mensajes');
+
+    teclear('9', { meta: true });
+    await reposar();
+    expect(vistaActual(m)).toBe('Navegador');
+  });
+
+  /**
+   * No hay tecla ⌘10, así que el tooltip no la nombra: prometer una tecla que
+   * no existe se prueba una vez, no anda, y no se vuelve a confiar en el resto.
+   */
+  it('no promete un ⌘10 que no existe', async () => {
+    const m = await abrirAppComo('alan');
+    const boton = m.contenedor.querySelector('button[data-vista="routing"]');
+
+    expect(boton?.getAttribute('title')).toBe('Routing');
+  });
+
+  it('la cabina cuenta las vistas de quien la abre', async () => {
+    const m = await abrirAppComo('alan');
+
+    teclear('?');
+    await reposar();
+
+    // Nueve teclas para diez vistas: la cabina no inventa la décima.
+    expect(m.contenedor.textContent).toContain('⌘9');
+    expect(m.contenedor.textContent).not.toContain('⌘10');
+  });
+});

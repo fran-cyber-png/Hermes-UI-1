@@ -13,6 +13,7 @@ import {
   Mail,
   MessagesSquare,
   Notebook,
+  Route,
   Users,
   Bot,
 } from 'lucide-react';
@@ -37,6 +38,8 @@ import { VistaAgenda } from './features/agenda/VistaAgenda';
 import { VistaCorreos } from './features/correos/VistaCorreos';
 import { VistaEntrenamiento } from './features/entrenamiento/VistaEntrenamiento';
 import { VistaNavegador } from './features/navegador/VistaNavegador';
+import { VistaRouting } from './features/routing/VistaRouting';
+import { veRouting } from './features/vistas/acceso';
 import { pendientesQueApuran, useAgenda } from './features/agenda/agenda';
 import { Login } from './features/auth/Login';
 import { useSesion } from './features/auth/sesion';
@@ -103,10 +106,37 @@ const VISTAS = [
   // y se vuelve, como a la Libreta se entra a escribir. La acción primaria se
   // puede nombrar en dos palabras: «abrir un sitio».
   { id: 'navegador', label: 'Navegador', icono: Compass },
+  // La décima, y la PRIMERA que no la ve todo el mundo: `soloPara` decide quién
+  // la tiene en el riel (`features/vistas/acceso.ts`). Está vacía a propósito —
+  // el lugar se reservó antes que el contenido.
+  //
+  // ⚠️ Lo que `soloPara` hace es ESCONDER, no proteger. Mientras la vista no
+  // pida nada al server no hay diferencia; el día que pida, el recorte va en el
+  // `WHERE` de su ruta (ADR 0035/0036) y esto sigue siendo solo el riel.
+  { id: 'routing', label: 'Routing', icono: Route, soloPara: veRouting },
 ] as const;
 
 type Vista = (typeof VISTAS)[number]['id'];
 
+/**
+ * CUÁNTAS VISTAS ALCANZA EL TECLADO. No es un tope de diseño: es cuántas teclas
+ * de dígito hay para un acorde (⌘0 es del navegador, no nuestro). De la décima
+ * en adelante se entra por el riel, y el `title` del botón **no promete** una
+ * tecla que no existe.
+ *
+ * 🔴 Y hay una trampa que ya casi muerde: el rango se comparaba como CADENA
+ * (`e.key >= '1' && e.key <= String(VISTAS.length)`). Con nueve vistas eso
+ * andaba de casualidad; con diez, `String(10)` es `'10'` y `'2' <= '10'` da
+ * **false** — se rompían ⌘2..⌘9 y quedaba andando solo ⌘1. Ahora se compara el
+ * NÚMERO, y el tope sigue derivándose (del mínimo entre lo que esta persona ve
+ * y las teclas que existen), nunca de un número escrito a mano.
+ */
+const TECLAS_DE_VISTA = 9;
+
+/** Las vistas que ESTA persona tiene en el riel. Sin `soloPara`, la ve todo el mundo. */
+function vistasDe(vendedoraId: string | null | undefined) {
+  return VISTAS.filter((v) => ('soloPara' in v ? v.soloPara(vendedoraId) : true));
+}
 
 /**
  * ¿El teclado está "ocupado" escribiendo? Ningún atajo global pisa un input.
@@ -118,16 +148,24 @@ function tecleandoEn(e: KeyboardEvent): boolean {
   return t instanceof HTMLElement && Boolean(t.closest(SELECTOR_CAMPOS));
 }
 
-const ATAJOS: { tecla: string; que: string }[] = [
-  ...VISTAS.map((v, i) => ({ tecla: `⌘${i + 1}`, que: v.label })),
-  { tecla: '/', que: 'Buscar en la cola' },
-  { tecla: '↑↓ ⏎', que: 'Recorrer la cola' },
-  { tecla: 'Esc', que: 'Cerrar la conversación' },
-  { tecla: 'n', que: 'Tu libreta personal' },
-  { tecla: 'i', que: 'Preguntarle a Ivi' },
-  { tecla: 'a', que: 'Revisar las auto-respuestas' },
-  { tecla: '?', que: 'Esta ayuda' },
-];
+/**
+ * LA CABINA LEE LAS VISTAS DE ESTA PERSONA, no `VISTAS`. Con la lista completa
+ * prometería una tecla que no lleva a ningún lado —y peor: la numeración se
+ * correría, así que ⌘4 diría una vista y abriría otra— apenas alguna vista deje
+ * de ser para todas. Una sola lista, un solo número (#37).
+ */
+function atajosDe(vistas: readonly { label: string }[]): { tecla: string; que: string }[] {
+  return [
+    ...vistas.slice(0, TECLAS_DE_VISTA).map((v, i) => ({ tecla: `⌘${i + 1}`, que: v.label })),
+    { tecla: '/', que: 'Buscar en la cola' },
+    { tecla: '↑↓ ⏎', que: 'Recorrer la cola' },
+    { tecla: 'Esc', que: 'Cerrar la conversación' },
+    { tecla: 'n', que: 'Tu libreta personal' },
+    { tecla: 'i', que: 'Preguntarle a Ivi' },
+    { tecla: 'a', que: 'Revisar las auto-respuestas' },
+    { tecla: '?', que: 'Esta ayuda' },
+  ];
+}
 
 /**
  * LAS TECLAS DE LA REVISIÓN, aparte porque solo existen adentro del modo — y
@@ -150,7 +188,16 @@ const ATAJOS_REVISION: { tecla: string; que: string }[] = [
 ];
 
 /** La cabina: el mapa de teclas, en voz de imprenta. Se abre con «?». */
-function Cabina({ onCerrar, enRevision }: { onCerrar: () => void; enRevision: boolean }) {
+function Cabina({
+  onCerrar,
+  enRevision,
+  atajos,
+}: {
+  onCerrar: () => void;
+  enRevision: boolean;
+  /** Los de ESTA persona: el riel y la cabina cuentan las vistas igual. */
+  atajos: { tecla: string; que: string }[];
+}) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/20" onClick={onCerrar} role="dialog" aria-modal="true" aria-label="Atajos de teclado">
       <div className="w-72 rounded-2xl bg-card p-5 shadow-panel animate-entrar" onClick={(e) => e.stopPropagation()}>
@@ -173,7 +220,7 @@ function Cabina({ onCerrar, enRevision }: { onCerrar: () => void; enRevision: bo
           </>
         )}
         <dl className="mt-3 space-y-1.5">
-          {ATAJOS.map((a) => (
+          {atajos.map((a) => (
             <div key={a.tecla + a.que} className="flex items-center justify-between gap-3">
               <dt className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] font-semibold text-foreground">{a.tecla}</dt>
               <dd className="text-xs text-muted-foreground">{a.que}</dd>
@@ -236,10 +283,15 @@ export default function App() {
   const { agenda } = useAgenda();
   const apuran = pendientesQueApuran(agenda.data?.recordatorios);
 
+  // El riel de ESTA persona. El riel, los ⌘N y la cabina leen esta lista y no
+  // `VISTAS`: con dos listas, la tecla que anda y el rótulo que la anuncia se
+  // separan sin que nada lo diga (#37).
+  const vistas = vistasDe(vendedora?.id);
+
   // La transición direccional: bajar en el riel entra desde abajo, subir desde arriba.
   function cambiarVista(destino: Vista) {
-    const desde = VISTAS.findIndex((v) => v.id === vista);
-    const hasta = VISTAS.findIndex((v) => v.id === destino);
+    const desde = vistas.findIndex((v) => v.id === vista);
+    const hasta = vistas.findIndex((v) => v.id === destino);
     if (hasta !== desde) setDireccion(hasta > desde ? 'abajo' : 'arriba');
     setVista(destino);
   }
@@ -279,11 +331,17 @@ export default function App() {
         return;
       }
       // Los acordes con ⌘/Ctrl no escriben texto: pasan aun con el foco en un input.
-      // El rango sale de VISTAS, no de un '6' escrito a mano: al agregar la
-      // séptima el atajo se quedó corto sin que nada lo dijera, y el próximo
-      // que agregue una vista no tiene por qué acordarse de este `if`.
-      if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= String(VISTAS.length)) {
-        const destino = VISTAS[Number(e.key) - 1];
+      // El rango se DERIVA —de las vistas de esta persona, no de un '6' escrito
+      // a mano: al agregar la séptima el atajo se quedó corto sin que nada lo
+      // dijera, y el próximo que agregue una vista no tiene por qué acordarse
+      // de este `if`.
+      //
+      // 🔴 Y se compara el NÚMERO, no la cadena. Con `e.key <= String(n)` y diez
+      // vistas, `'2' <= '10'` es false: andaba ⌘1 y se rompían las ocho del
+      // medio — o sea que el candado de la ÚLTIMA vista no lo habría visto.
+      if (e.metaKey || e.ctrlKey) {
+        const n = Number(e.key);
+        const destino = n >= 1 && n <= Math.min(vistas.length, TECLAS_DE_VISTA) ? vistas[n - 1] : undefined;
         if (destino) {
           e.preventDefault();
           cambiarVista(destino.id);
@@ -354,8 +412,10 @@ export default function App() {
     }
     window.addEventListener('keydown', alTeclear);
     return () => window.removeEventListener('keydown', alTeclear);
+    // `vendedora?.id` está acá porque de él sale `vistas`: sin eso, el listener
+    // se quedaría con el riel de quien estaba antes y ⌘N abriría otra cosa.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vista, cabina, abierta, revision.activo, revision.actualId, revision.fila]);
+  }, [vista, cabina, abierta, revision.activo, revision.actualId, revision.fila, vendedora?.id]);
 
   if (cargando) {
     // El esqueleto con la anatomía del shell: riel, header, tres placas.
@@ -432,14 +492,18 @@ export default function App() {
         </div>
 
         <div className="flex flex-col gap-1" style={NO_ARRASTRABLE}>
-          {VISTAS.map((v, i) => {
+          {vistas.map((v, i) => {
             const Icono = v.icono;
             const activa = vista === v.id;
             return (
               <button
                 key={v.id}
                 type="button"
-                title={`${v.label} · ⌘${i + 1}`}
+                data-vista={v.id}
+                // De la décima en adelante no hay tecla, así que el tooltip no
+                // la nombra: prometer un ⌘10 que no existe es peor que no decir
+                // nada — se prueba una vez, no anda, y no se vuelve a confiar.
+                title={i < TECLAS_DE_VISTA ? `${v.label} · ⌘${i + 1}` : v.label}
                 onClick={() => cambiarVista(v.id)}
                 className={
                   'relative flex w-[4.25rem] flex-col items-center gap-0.5 rounded-xl py-1.5 transition-[color,background-color,box-shadow,transform] duration-200 ease-house active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
@@ -637,6 +701,10 @@ export default function App() {
                 navegador), y por eso no hay un registro global que pueda
                 desincronizarse en silencio. */}
             {vista === 'navegador' && <VistaNavegador tapado={cabina || ivi} />}
+            {/* Vacía a propósito (ver su archivo). Quién la ve se decide en el
+                riel, no acá: esto renderiza si el estado dice `routing`, y a ese
+                estado solo se llega desde un botón que existe para dos personas. */}
+            {vista === 'routing' && <VistaRouting />}
             {/* El fallback dibuja la anatomía de la vista (lista + página) en vez
                 de un texto: lo que se está esperando son 269 KB de editor, y un
                 cartel de «cargando» donde después va a haber una hoja hace
@@ -669,7 +737,7 @@ export default function App() {
         )}
       </div>
 
-      {cabina && <Cabina onCerrar={() => setCabina(false)} enRevision={revision.activo} />}
+      {cabina && <Cabina onCerrar={() => setCabina(false)} enRevision={revision.activo} atajos={atajosDe(vistas)} />}
       <ConsultaIvi abierta={ivi} onCerrar={() => setIvi(false)} />
     </div>
   );

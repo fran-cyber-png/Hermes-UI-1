@@ -28,9 +28,20 @@ antes de tocar arquitectura)** · `docs/estado.md` la foto de hoy · `docs/adr/`
 
 - **Front** (`src/`): React 19 + Vite 8 (React Compiler), Tailwind 4, TanStack Query, lucide-react.
   **Sin router** — un espacio con vistas conmutadas por estado (ADR 0002): Dashboard · Pipeline ·
-  Contactos · Mensajes · Correos · Agenda · Entrenar bot · Libreta · Navegador (⌘1..⌘9).
+  Contactos · Mensajes · Correos · Agenda · Entrenar bot · Libreta · Navegador (⌘1..⌘9) · **Routing**.
   ⚠️ **El rango se DERIVA de `VISTAS`**: agregar una vista es tocar ese array y nada más, y el candado
   que importa es el de la ÚLTIMA — un número clavado dejaría andando a todas menos esa.
+  🔴 **Y con la DÉCIMA el rango se derivaba y estaba mal igual** (ADR 0053): comparaba **cadenas**
+  (`e.key <= String(VISTAS.length)`), y `'2' <= '10'` da **false** — quedaba andando ⌘1 y se rompían
+  las ocho del medio. El candado de «la ÚLTIMA» **no puede ver esto**: la décima no tiene tecla (no
+  existe ⌘10), así que ese test ni se puede escribir y el que se pone rojo es ⌘2. Ahora se compara el
+  NÚMERO y el tope es `Math.min(vistas.length, TECLAS_DE_VISTA)`, donde 9 es **cuántas teclas de
+  dígito hay**, no un tope de diseño. De la décima en adelante el `title` **no promete** una tecla.
+  ⚠️ **Y el riel ya no es igual para todas**: una entrada puede llevar `soloPara`
+  (`features/vistas/acceso.ts`), y **el riel, los ⌘N y la Cabina leen la MISMA lista filtrada**
+  (`vistasDe`) — con dos, la cabina anuncia un número que abre otra vista. Eso es **visibilidad, no
+  una frontera**: esconder algo del riel no protege nada, el recorte de datos va en el `WHERE` de su
+  ruta (ADR 0035/0036).
   Qué entra al riel es un criterio, no un número (**ADR 0034**, enmienda 0002): un **LUGAR** con
   **acción primaria nombrable**; lo que se consulta y se cierra —Cabina `?`, Ivi `i`— no entra.
   Marca en `src/index.css` (azul + dorado, Montserrat; **el dorado significa tiempo que se acaba**,
@@ -905,6 +916,42 @@ nadie. **El bot solo servía mientras alguien lo vigilaba.**
   `tibio`/`frio` no se dibujan (serían 50 de 66 filas). La lectura de los seis motivos vive pura en
   `src/features/canales/bot.ts`, y un motivo desconocido cae en «Pidió ayuda», nunca en un throw ni en un
   motivo parecido.
+
+## El ruteo por campaña — qué pauta cae en qué vendedora (ADR 0053)
+
+La rueda reparte parejo **porque no sabe de dónde viene nadie**. Acá se le dice que una campaña
+entera tiene dueña. Vista **Routing** (`src/features/routing/`), server en `server/src/routing/`,
+migración **0025**. Detalle y lo medido: `docs/adr/0053-el-ruteo-por-campana.md`.
+
+- 🔴 **CATORCE ANUNCIOS SON DOS CAMPAÑAS** (medido el 11-ago-2026 en `51984429504`), y por eso la
+  unidad es la CAMPAÑA: `[AGO] OSINT…` ACTIVE con 4 anuncios y 10 personas, `[JUL] INTELIGENCIA | WSP`
+  PAUSED con 10 y 78. Por anuncio serían catorce renglones para dos decisiones, y cada anuncio nuevo
+  nacería sin regla.
+- 🔴 **META NO MANDA EL NOMBRE DE LA CAMPAÑA**: el `referral` trae `source_id` (el ad_id) y el
+  `headline`, nada más. Se resuelve contra la Graph API (`campaign{id,name,effective_status}`).
+  ⚠️ **Y el `headline` NO es identidad**: el mismo `ad_id` llega con dos titulares distintos cuando le
+  cambian el creativo — agrupar por titular parte una campaña en dos, mudo. Se agrupa por `source_id`.
+  ⚠️ Con `?ids=` se resuelven de a 50, pero **un id inválido tira el LOTE ENTERO**: hay reintento de a
+  uno (`routing/meta.ts`), o un `12345` de una prueba vieja dejaba sin resolver a las trece de verdad.
+- 🔴 **`campana_anuncio` NO ES UN CACHÉ, ES UNA PRECONDICIÓN**: el reparto corre adentro del webhook,
+  con un lead esperando, así que ahí **no se le puede preguntar nada a Meta**. Un anuncio estrenado
+  hoy cae a la rueda hasta que alguien refresque — y por eso **los anuncios sin resolver se CUENTAN en
+  la pantalla**: son el único motivo por el que una campaña viva puede faltar de la lista.
+- **La tabla vacía ES el interruptor**: sin reglas, el reparto es el round-robin de siempre. Elegir en
+  la pantalla es encender; no hay flag. `aQuienLeCae` devuelve `null` —«que decida la rueda»— en los
+  tres casos dudosos, y ninguno es un error (fail-open, como todo el reparto).
+- 🔴 **LA LÍNEA SALE DEL ENV `WHATSAPP_CLOUD_API_NUMERO_PROPIO`, NO DEL GESTOR DE WHATSAPP.** Buscarla
+  por transporte vivo ataba la pantalla a que el proceso esté arriba: con él caído, Routing decía «no
+  hay línea» mientras las reglas seguían guardadas y aplicándose. **Un ruteo es config: se mira justo
+  cuando algo anda mal.** No son dos fuentes — `whatsapp/wiring.ts` monta la línea con esa variable.
+- ⚠️ **Refrescar es un POST** (`/api/routing/refrescar`, `npm run routing:refrescar` dry-run por
+  default), nunca dentro del GET: mirar la pantalla no puede cambiar el estado, ni tardar lo que tarde
+  Meta. `--todo` es lo único que refresca el ESTADO (una campaña pausada ayer sigue diciendo «activa»).
+- ⚠️ **La regla NO reasigna lo ya repartido** (se aplica en el primer mensaje) y **sacarla BORRA la
+  fila**, al revés de `reparto_rueda`: acá la fila es una preferencia, no la pertenencia de nadie.
+- **Sigue siendo un FILTRO, no un permiso**, y **solo existe en la línea de Cloud API**: las tres de
+  whatsmeow no reciben `referral`, así que ahí la decisión no se puede tomar.
+- Capturas: `docs/evidencia/routing-campanas.png`, `routing-campana-elegida.png`.
 
 ## El reparto de leads — de quién es cada conversación
 
