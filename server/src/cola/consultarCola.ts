@@ -41,9 +41,9 @@ import {
 import { padronCteSql, padronJoinSql, yaComproSql } from "./clienteSql.js";
 import { botCalienteSql, botEscaladaSql, botJoinSql } from "./botSql.js";
 import { asignadaJoinSql, duenoSql, esMiaSql } from "./asignadaSql.js";
-import { recorteDeLineas } from "./lineas.js";
+import { recorteDeLineas, soloSusLineas } from "./lineas.js";
 import { estaEnAlgunaRueda } from "../reparto/asignar.js";
-import { lineasDeVendedora } from "../numeros/repositorio.js";
+import { lineasDeVendedoraConProposito } from "../numeros/repositorio.js";
 
 /**
  * LA COLA UNIFICADA — una fila por CONVERSACIÓN, no por mensaje. Extraída de la
@@ -570,15 +570,24 @@ export async function consultarCola(
   // A QUÉ LÍNEAS SE ACOTA — se resuelve UNA vez, ANTES del loop: el recorte no
   // depende de qué tabla degradó, así que releer `numero_vendedora` en cada
   // reintento sería una consulta por nada.
+  // Las líneas de quien mira, CON su propósito. Antes esta lectura solo ocurría
+  // con `?mias=1`; ahora hace falta siempre que haya vendedora, porque el
+  // recorte exclusivo (campaña) no depende de que el cliente pida nada — si
+  // dependiera, se apagaría dejando de mandar el parámetro.
+  const misAsignadasConProposito = opciones.vendedoraId
+    ? await lineasDeVendedoraConProposito(base, opciones.vendedoraId).catch((e) => {
+        // Degrada al comportamiento de siempre: sin poder leer el mapa se sirve
+        // todo, como con `?mias=1` sin filas. Nunca una cola vacía sin explicar.
+        console.warn("[cola] no se pudo leer las líneas de la vendedora: se sirve todo", e);
+        return [] as { numero: string; proposito: string }[];
+      })
+    : [];
+
   const { lineas, sinLineasPropias } = recorteDeLineas({
     linea: opciones.linea,
     misLineas: opciones.misLineas,
-    // Solo se le pregunta al mapa si hace falta: sin `mias` puesto, esta consulta
-    // no existe y la cola de siempre no paga nada.
-    asignadas:
-      opciones.misLineas && opciones.vendedoraId
-        ? await lineasDeVendedora(base, opciones.vendedoraId)
-        : [],
+    exclusivas: soloSusLineas(misAsignadasConProposito),
+    asignadas: misAsignadasConProposito.map((l) => l.numero),
   });
 
   // ¿PARTICIPA DEL REPARTO? Se pregunta UNA vez, antes del loop, por lo mismo

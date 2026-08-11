@@ -18,6 +18,7 @@ import { cancelarPorRespuestaHumana, faltaEsquema } from '../autorespuesta/repos
 import { procedenciaDelComposer, type LeerPasoDeSecuencia } from '../procedencia/desdeElComposer.js';
 import { obtenerPlantilla } from '../plantillas/repositorio.js';
 import { listarNumeros } from '../numeros/repositorio.js';
+import { soloSusLineas } from '../cola/lineas.js';
 import { upsertEstado } from '../cola/estado.js';
 import { reaccionesPorMensaje } from '../reacciones/repositorio.js';
 import { estadosPorMensaje } from '../entrega/repositorio.js';
@@ -121,17 +122,33 @@ whatsappRouter.get('/lineas', async (req, res) => {
 
   let etiquetas = new Map<string, string>();
   let mias = new Set<string>();
+  let exclusiva = false;
   try {
     const registradas = await listarNumeros(db);
     etiquetas = new Map(registradas.map((n) => [n.numero, n.etiqueta]));
     const yo = req.vendedoraId;
-    if (yo) mias = new Set(registradas.filter((n) => n.vendedoras.includes(yo)).map((n) => n.numero));
+    if (yo) {
+      // Normalizando los DOS lados: Cerberus empuja la grafía que tiene («Luz»)
+      // y el `vendedoraId` sale de lo que se tipeó al entrar («luz»). Con
+      // comparación exacta, sus líneas no son suyas y no hay un solo síntoma.
+      const igual = (v: string) => v.trim().toLowerCase() === yo.trim().toLowerCase();
+      const misNumeros = registradas.filter((n) => n.vendedoras.some(igual));
+      mias = new Set(misNumeros.map((n) => n.numero));
+      // Quien atiende una línea de campaña no elige entre colas: ofrecerle las
+      // de la Escuela sería ofrecerle trabajo que no es suyo. Misma regla que
+      // recorta la cola (`cola/lineas.ts`), leída del mismo dato.
+      exclusiva = soloSusLineas(misNumeros) && mias.size > 0;
+    }
   } catch (e) {
     console.warn('[lineas] no se pudieron leer los rótulos de `numeros_wa`: van con el número crudo', e);
   }
 
+  // Fail-open igual que siempre: si el mapa no se pudo leer, `exclusiva` queda
+  // en false y se ofrecen todas — quedarse sin filtro es peor que ver de más.
+  const ofrecidas = exclusiva ? vivas.filter((l) => mias.has(l.numero)) : vivas;
+
   res.json({
-    lineas: vivas.map((l) => ({
+    lineas: ofrecidas.map((l) => ({
       numero: l.numero,
       etiqueta: etiquetas.get(l.numero)?.trim() || l.numero,
       estado: l.transporte.estado().estado,

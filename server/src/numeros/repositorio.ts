@@ -73,6 +73,32 @@ export async function lineasDeVendedora(db: Base, vendedoraId: string): Promise<
   return filas.map((f) => f.numero);
 }
 
+/**
+ * Las líneas de esta persona **con su propósito**, para poder decidir si ve solo
+ * las suyas (`cola/lineas.ts` → `soloSusLineas`).
+ *
+ * Es una consulta aparte y no un campo más en `lineasDeVendedora` porque las dos
+ * responden preguntas distintas —«¿cuáles son las suyas?» vs. «¿qué clase de
+ * línea es cada una?»— y la primera la llaman lugares a los que el propósito no
+ * les importa. Sigue siendo este módulo el único dueño de `numero_vendedora`.
+ *
+ * El JOIN es interno a propósito: una asignación a un número que ya no está en
+ * `numeros_wa` no puede decidir nada sobre lo que se ve.
+ */
+export async function lineasDeVendedoraConProposito(
+  db: Base,
+  vendedoraId: string,
+): Promise<{ numero: string; proposito: string }[]> {
+  return db
+    .select({
+      numero: schema.numeroVendedora.numero,
+      proposito: schema.numerosWa.proposito,
+    })
+    .from(schema.numeroVendedora)
+    .innerJoin(schema.numerosWa, eq(schema.numerosWa.numero, schema.numeroVendedora.numero))
+    .where(eq(schema.numeroVendedora.vendedoraId, vendedoraId));
+}
+
 export async function obtenerNumero(db: Base, numero: string): Promise<NumeroRow | null> {
   const [n] = await db
     .select()
