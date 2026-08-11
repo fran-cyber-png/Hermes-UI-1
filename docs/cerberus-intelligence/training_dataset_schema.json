@@ -1,0 +1,61 @@
+{
+  "training_dataset_schema_version": "v0.1.0",
+  "fecha": "2026-08-11",
+
+  "advertencia_que_ordena_todo": "El conjunto dorado NO EXISTE hoy. Medido y verificado adversarialmente: 50 claves de 4.000 conversaciones tienen alguna etiqueta (1,25 %), y de esas 50 sólo 18 llevan al menos una etiqueta de una vendedora REAL — las otras 32 (64 %) son de cuenta de prueba o del bot. El techo real de juicios humanos de toda la organización es 18 conversaciones. Cualquier plan que suponga miles de etiquetas está suponiendo trabajo que nadie hizo.",
+
+  "material_disponible_medido": {
+    "etiquetas_humanas_hermes": {"gestiones": 39, "bot_calificaciones": 43, "intereses": 29, "categorias": 40, "eventos_contacto": 2, "nota": "solapan: 50 claves distintas en total, de las cuales 18 tienen etiqueta de vendedora real — desglose: etiquetas 11 · gestiones 6 · intereses 4 · recordatorios 1 · eventos_contacto 0"},
+    "etiquetas_del_sistema_previo": {"funnel_events": 512, "nota": "es lo ÚNICO con volumen: 512 mensajes ruteados por el LLM previo con su intent. Candidato a semilla, NO a ground truth."},
+    "embeddings_reusables": {"n": 12338, "dims": 768, "indice": "HNSW ya construido", "cobertura": "35,7 % de las 34.523 interactions de leads_crm", "nota": "Reusables si el modelo que los generó se puede identificar; si no, re-embeber cuesta horas, no dinero."},
+    "outcome_conversacional": {"pares_saliente_entrante": 1129, "tasa": "11,42 %"},
+    "outcome_comercial_desde_conversacion": {"n": 17, "de": 1464, "veredicto": "INSUFICIENTE para entrenar. ⚠️ Y NO significa que conversar no venda: `conversiones_wa` cubre 2024-03 → 2026-08 mientras `interactions` de Hermes cubre 3 SEMANAS (2026-07-21 → 2026-08-11). Los 1.447 'anteriores' son ventas que ocurrieron antes de que Hermes existiera para esa persona. Es un límite de medición, no un hecho del negocio."},
+    "outcome_comercial_desde_formulario": {"positivos": 1002, "poblacion": 19670, "tasa": "5,09 %", "veredicto": "ESTE SÍ. Es el único outcome comercial con volumen."}
+  },
+
+  "particiones": {
+    "regla_dura": "El split es POR PERSONA, nunca por mensaje. Una persona con 4 mensajes repartidos entre train y test filtra su propio estilo y su propio desenlace.",
+    "segunda_regla": "Además del split por persona, el conjunto de evaluación final es TEMPORAL: se entrena con lo anterior a una fecha y se evalúa con lo posterior. Motivo medido: la línea de producto cambió por completo entre 2016 y 2026 (2016 vacantes de community manager · 2020 seminarios de pandemia · 2026 diplomas y medallas). Un split aleatorio sobre 10 años mide una capacidad que no existe.",
+    "conjuntos": [
+      {"id": "train", "criterio": "por persona, anterior al corte temporal"},
+      {"id": "validation", "criterio": "por persona, anterior al corte, disjunto de train"},
+      {"id": "test", "criterio": "POSTERIOR al corte temporal — el único número que se reporta hacia afuera"},
+      {"id": "challenge_set", "criterio": "curado a mano: hard negatives de cada par confundible (pide_precio ↔ pregunta_proceso_pago, pide_info_generica ↔ pide_info_producto, soporte_postventa ↔ pide_info)", "tamano_objetivo": "20 por par"},
+      {"id": "unknown_set", "criterio": "mensajes que NINGUNA LF vota y que el LLM marca con baja confianza. Mide la detección de lo desconocido, no la clasificación."},
+      {"id": "canal_cruzado", "criterio": "entrenar con Messenger, evaluar con WhatsApp. Mide si el modelo aprendió el negocio o aprendió el canal."}
+    ]
+  },
+
+  "esquema_del_ejemplo": {
+    "type": "object",
+    "required": ["ejemplo_id", "persona_id", "canal", "occurred_at", "texto", "procedencia", "etiqueta", "label_source", "label_confidence", "dataset_version", "taxonomy_version"],
+    "properties": {
+      "ejemplo_id": {"type": "string"},
+      "persona_id": {"type": "string", "description": "La llave del split. Obligatoria."},
+      "canal": {"type": "string", "enum": ["whatsapp", "messenger", "instagram", "landing"]},
+      "occurred_at": {"type": "string", "format": "date-time", "description": "La llave del split temporal. Obligatoria."},
+      "texto": {"type": "string", "description": "PII redactada en el corpus de trabajo; el original queda en la base."},
+      "procedencia": {"type": "string"},
+      "etiqueta": {"type": "string"},
+      "label_source": {"type": "string", "enum": ["humano", "llm", "labeling_function", "consenso_debil", "outcome", "sistema_previo"]},
+      "label_confidence": {"type": "number"},
+      "label_version": {"type": "string"},
+      "taxonomy_version": {"type": "string"},
+      "dataset_version": {"type": "string"},
+      "review_status": {"type": "string", "enum": ["sin_revisar", "revisado_ok", "revisado_corregido", "descartado"]},
+      "desacuerdo": {"type": "array", "items": {"type": "object"}, "description": "Qué dijo cada fuente cuando no coincidieron. Los desacuerdos son el dato más valioso del conjunto: son la cola de active learning."}
+    }
+  },
+
+  "matriz_de_acuerdo": {
+    "fuentes": ["labeling_function", "embedding_vecino", "llm", "crm", "outcome", "humano"],
+    "regla": "Ninguna fuente es ground truth por sí sola. El LLM en particular es una fuente débil más, no la verdad — el pedido lo dice y los datos lo confirman: el sistema previo tenía shadow mode prendido y `ai_feedback` con CERO filas, o sea que nadie verificó nunca al LLM.",
+    "prioridad_de_revision_humana": ["outcome contradice a la predicción", "llm ≠ labeling_function", "clase de alto valor (soporte_postventa, pregunta_proceso_pago)", "ninguna fuente vota", "cluster nuevo"]
+  },
+
+  "versionado": {
+    "dataset": "dataset_vN — inmutable una vez publicado; un cambio de etiquetas es un dataset nuevo, no una edición.",
+    "taxonomia": "taxonomy_vN, con un mapa explícito de migración vN→vN+1 por clase (fusión, división, renombre, retiro). Sin el mapa, las métricas de dos versiones no son comparables y el histórico se pierde.",
+    "regla_de_migracion": "Una fusión es automática. Una DIVISIÓN exige re-etiquetar a mano los ejemplos de la clase madre: no se puede inferir a cuál de las dos hijas iba cada uno."
+  }
+}

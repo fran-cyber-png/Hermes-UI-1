@@ -1,0 +1,112 @@
+{
+  "signal_catalog_version": "v0.1.0",
+  "fecha": "2026-08-11",
+  "principio": "Una señal se DERIVA, no se guarda — salvo que derivarla sea caro. Hermes ya decidió esto tres veces (ADR 0013 etapa, 0014 no_leido, 0016 señales) y funciona.",
+
+  "decaimiento_medido": {
+    "fuente": "hermes_db, 1.131 pares saliente→entrante, ventana 2026-07-21 → 2026-08-11",
+    "distribucion": {"<=1h": "80,5 %", "<=4h": "90,0 %", "<=24h": "95,9 %", "<=72h": "98,9 %", "<=7d": "99,8 %"},
+    "mediana": "0,57 h (34 min)",
+    "lectura": "Si la persona va a volver, vuelve rápido. A las 24 h ya ocurrió el 95,9 % de todo lo que iba a ocurrir.",
+    "consecuencia_dura": "⚠️ `SENALES_DIAS_ENFRIAMIENTO` vale 3 DÍAS por default (`server/src/senales/`). A los 3 días ya pasó el 98,9 % de la señal: el umbral está fijado donde ya no queda nada que decidir. La recomendación medida es HORAS, no días — un primer corte razonable es 4 h (90 %) para «se enfrió» y 24 h (95,9 %) para «se perdió».",
+    "caveat_honesto": "Esta es la distribución CONDICIONAL a que la respuesta ocurrió. No mide la tasa base (11,42 %). Sirve para fijar el plazo de una señal, no para predecir si habrá respuesta."
+  },
+
+  "senales": [
+    {
+      "id": "precio_enviado",
+      "definicion": "Le mandamos un monto con moneda plausible.",
+      "fuente": "saliente + `cola/precio.ts`",
+      "frecuencia": "611 conversaciones con precio (medido en ADR 0041)",
+      "fuerza": "alta",
+      "velocidad": "persistente — no caduca",
+      "estado": "YA IMPLEMENTADA — `senales/cotizacion.ts`. No reconstruir."
+    },
+    {
+      "id": "se_enfrio_tras_precio",
+      "definicion": "Vio el precio y dejó de escribir.",
+      "fuente": "`senales/enfriamiento.ts`",
+      "frecuencia": "540 de 798 Cotizados (medido, ADR 0044)",
+      "fuerza": "muy alta — es la objeción más frecuente y la menos trabajada",
+      "velocidad": "rápida",
+      "estado": "IMPLEMENTADA pero con el UMBRAL MAL FIJADO (ver `decaimiento_medido`)."
+    },
+    {
+      "id": "respondio",
+      "definicion": "Contestó a un saliente nuestro.",
+      "fuente": "derivada del hilo",
+      "frecuencia_medida": "1.129 de 9.885 salientes = 11,42 %",
+      "fuerza": "media",
+      "velocidad": "efímera — 80,5 % dentro de 1 h",
+      "estado": "ES LA ÚNICA SEÑAL DE RESULTADO CON VOLUMEN ENTRENABLE de toda la organización."
+    },
+    {
+      "id": "nunca_hablo",
+      "definicion": "Recibió salientes y jamás escribió una palabra.",
+      "fuente": "derivada",
+      "frecuencia_medida": "2.528 de 3.940 personas (64,2 %); recibieron 3.028 salientes",
+      "fuerza": "alta — en NEGATIVO",
+      "velocidad": "persistente",
+      "estado": "IMPLEMENTADA como etapa `sin_respuesta` (ADR 0044). Es difusión, no conversación."
+    },
+    {
+      "id": "entrego_contacto",
+      "definicion": "Pasó teléfono o correo para seguir por otro canal.",
+      "fuente": "LF determinística",
+      "frecuencia_medida": "27,2 % del texto libre de Messenger · 0,7 % del de WhatsApp",
+      "fuerza": "alta en Messenger, nula en WhatsApp",
+      "velocidad": "persistente",
+      "estado": "NUEVA. Es la conversión real del canal Messenger y hoy no se mide."
+    },
+    {
+      "id": "es_cliente",
+      "definicion": "Ya compró alguna vez, con venta que lo respalde.",
+      "fuente": "`icarus.sales` — NUNCA `n_purchases`",
+      "frecuencia_medida": "4.847 de 73.004 contactos = 6,64 %",
+      "fuerza": "muy alta",
+      "velocidad": "persistente",
+      "estado": "IMPLEMENTADA (`clientes_padron`). ⚠️ CORREGIDO POR VERIFICACIÓN: los 5.802 sin respaldo (54,56 %) NO son un contador que miente — el 78 % tiene su primera compra ANTES de que empiece el espejo `icarus.sales`. El desacuerdo es 100,00 % exacto en 2020–2023 y 0,68 % en 2025: eso es una ventana faltante, no un dato falso. Dentro de la ventana real, el desacuerdo es 1,26 %. La regla (exigir venta) sigue bien; el motivo escrito en el CLAUDE.md de Hermes está mal."
+    },
+    {
+      "id": "lleno_formulario",
+      "definicion": "Dejó sus datos en una landing.",
+      "fuente": "`icarus.contact_form_submissions` (25.538)",
+      "frecuencia_medida": "19.670 contactos con al menos un formulario",
+      "fuerza": "media",
+      "velocidad": "lenta",
+      "estado": "VIVA. Y su outcome ES entrenable: 1.002 compraron DESPUÉS del primer formulario (5,09 %)."
+    },
+    {
+      "id": "engagement_de_campana",
+      "definicion": "Abrió, clickeó o rebotó un envío de campaña.",
+      "fuente": "`icarus.campaign_events` (43.875)",
+      "fuerza": "media",
+      "velocidad": "rápida",
+      "estado": "SIN EXPLOTAR. Es el mayor volumen de señal conductual sin usar de la organización."
+    },
+    {
+      "id": "se_presenta_como_candidato",
+      "definicion": "Declara cargo político, distrito y partido.",
+      "fuente": "extracción de entidades",
+      "frecuencia_medida": "2,3 % de los entrantes libres de WhatsApp (cluster 0, n=34)",
+      "fuerza": "estratégica, no comercial",
+      "velocidad": "persistente",
+      "estado": "NUEVA y descubierta por clustering. Es el puente al negocio de consultoría."
+    },
+    {
+      "id": "escalada_del_bot",
+      "definicion": "El bot se frenó y pidió una persona.",
+      "fuente": "`bot_calificaciones.escalada`",
+      "frecuencia_medida": "43 filas en Hermes; en el sistema previo 7 escalaciones y LAS 7 fallaron al notificar",
+      "fuerza": "muy alta — es una petición explícita de ayuda",
+      "velocidad": "efímera",
+      "estado": "IMPLEMENTADA en Hermes con chip de filtro. ⚠️ La lección del sistema previo: la señal servía y el aviso no llegaba a nadie."
+    }
+  ],
+
+  "senales_rechazadas": [
+    {"id": "competitor_signal", "motivo": "MEDIDO: ausente del corpus. No apareció en 48 clusters ni en la muestra de 10 años."},
+    {"id": "decision_maker_signal", "motivo": "Concepto B2B; el corpus es B2C individual."},
+    {"id": "urgency_signal como atributo del texto", "motivo": "La urgencia es del reloj, no del mensaje. Ya vive en `cola/urgencia.ts`."}
+  ]
+}

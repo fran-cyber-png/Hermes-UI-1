@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Clasificación de un mensaje — contrato de salida",
+  "version": "v0.1.0",
+  "principio": "Ninguna clasificación se puede serializar sin su evidencia, su versión de taxonomía y su versión de clasificador. El tipo lo impide, no una convención — es la misma regla que `Medicion` ya aplica en `server/src/resultados/`.",
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["mensaje_id", "procedencia", "as_of", "taxonomy_version", "classifier_version"],
+  "properties": {
+    "mensaje_id": {"type": "string"},
+    "as_of": {"type": "string", "format": "date-time", "description": "Cuándo se calculó. Una clasificación sin instante no se puede auditar ni caducar."},
+
+    "procedencia": {
+      "type": "string",
+      "enum": ["sin_texto", "prellenado_anuncio", "payload_de_boton", "volcado_de_formulario", "sistema_meta", "cortesia_o_acuse", "humano_libre"],
+      "description": "DETERMINÍSTICA. Siempre presente. Si no es `humano_libre`, `accion` DEBE estar ausente."
+    },
+
+    "accion": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["etiqueta", "confianza", "decision", "evidencia"],
+      "description": "Presente SÓLO si procedencia = humano_libre.",
+      "properties": {
+        "etiqueta": {
+          "type": "string",
+          "description": "NO se cierra con enum a propósito: una etiqueta desconocida tiene que poder llegar de un clasificador más nuevo sin volverse un 502. El consumidor cae en la rama conservadora, igual que `tipo` en `eventos_contacto` y que el vocabulario de Ivi.",
+          "pattern": "^[a-z][a-z_]{0,39}$"
+        },
+        "confianza": {"type": "number", "minimum": 0, "maximum": 1, "description": "CALIBRADA, no la probabilidad cruda del softmax. Ver evaluation_plan.md §5."},
+        "decision": {
+          "type": "string",
+          "enum": ["ACEPTADA", "DELEGADA_A_LLM", "A_REVISION_HUMANA", "ABSTENIDA"],
+          "description": "Qué hizo el router con esa confianza. Sin este campo no se puede medir la política de abstención por separado del modelo."
+        },
+        "alternativas": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {"type": "object", "required": ["etiqueta", "confianza"], "additionalProperties": false,
+                    "properties": {"etiqueta": {"type": "string"}, "confianza": {"type": "number"}}}
+        },
+        "evidencia": {
+          "type": "array",
+          "minItems": 1,
+          "description": "POR QUÉ. Nunca chain-of-thought: sólo referencias auditables.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["tipo", "fuente", "fuerza"],
+            "properties": {
+              "tipo": {"type": "string", "enum": ["regex", "labeling_function", "vecino_embedding", "llm", "campo_crm", "regla_de_negocio"]},
+              "fuente": {"type": "string", "description": "Nombre de la LF, id del vecino, modelo del LLM, columna del CRM."},
+              "span": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2, "description": "Offsets en el texto. NO se copia el texto: se referencia, para no duplicar PII."},
+              "fuerza": {"type": "number", "minimum": 0, "maximum": 1}
+            }
+          }
+        }
+      }
+    },
+
+    "entidades": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["tipo", "valor_normalizado", "fuente"],
+        "properties": {
+          "tipo": {"type": "string", "enum": ["telefono", "correo", "cargo_politico", "partido", "distrito", "producto", "monto", "fecha"]},
+          "valor_normalizado": {"type": "string"},
+          "span": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2},
+          "fuente": {"type": "string", "enum": ["regex", "diccionario", "llm"]},
+          "confianza": {"type": "number"}
+        }
+      }
+    },
+
+    "taxonomy_version": {"type": "string", "description": "Sin esto, una etiqueta de hace tres meses no se puede comparar con una de hoy."},
+    "classifier_version": {"type": "string"},
+    "costo_usd": {"type": ["number", "null"], "description": "Medido, por clasificación. El sistema previo lo tenía (`ai_request_costs`) y por eso hoy sabemos que cuesta $0,0011 por mensaje. Conservarlo."},
+    "latencia_ms": {"type": ["integer", "null"]}
+  },
+
+  "invariantes": [
+    "procedencia != 'humano_libre'  ⟹  accion == null. Preguntarle la intención al texto de un anuncio es el defecto que este contrato existe para impedir.",
+    "accion != null  ⟹  len(accion.evidencia) >= 1. Una clasificación sin evidencia no se puede supervisar, sólo obedecer.",
+    "Una etiqueta desconocida NUNCA tira: se lee tal cual y el consumidor cae en su rama conservadora.",
+    "`confianza` es calibrada; la probabilidad cruda del modelo NO se serializa en ese campo."
+  ]
+}

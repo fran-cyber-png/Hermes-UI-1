@@ -1,0 +1,201 @@
+{
+  "taxonomy_version": "v0.1.0",
+  "fecha": "2026-08-11",
+  "estado": "PROPUESTA — ninguna clase está validada contra un conjunto dorado todavía",
+  "principio": "Cada clase de acá salió de un cluster medido o de una LF con cobertura medida. Ninguna se inventó por completitud. Las clases que la bibliografía de CRM da por obvias y NO aparecen en los datos están en 'clases_rechazadas' con el motivo.",
+
+  "advertencia_de_uso": "La taxonomía NO es lo primero que corre. Antes va `procedencia`, que es determinística y explica el 68 % de los entrantes vivos. Preguntarle la intención a un texto que escribió Meta es el defecto que este diseño existe para no repetir.",
+
+  "dimensiones": [
+    {
+      "id": "procedencia",
+      "tipo": "DETERMINISTICA",
+      "mutuamente_excluyente": true,
+      "multi_label": false,
+      "por_que_va_primero": "Sobre 3.219 entrantes de WhatsApp medidos el 11-ago-2026: 845 sin texto (26,3 %) + 817 prellenados por el anuncio (25,4 %) + 516 saludos de ≤12 caracteres (16,0 %) = 67,7 % sin intención que inferir.",
+      "mecanismo": "regex + longitud. Sin modelo. Sin costo.",
+      "clases": [
+        {"id": "sin_texto", "definicion": "Adjunto sin texto: audio, imagen, sticker, documento.", "frecuencia_medida": "26,3 % de los entrantes de WhatsApp; 12,8 % de Messenger", "accion": "No clasificar. Si es audio, transcribir es un frente propio y de mayor valor que clasificar texto."},
+        {"id": "prellenado_anuncio", "definicion": "El texto lo escribió Meta en el anuncio Click-to-WhatsApp, no la persona.", "frecuencia_medida": "25,4 % de los entrantes de WhatsApp. 568 apariciones idénticas de una sola cadena.", "accion": "La intención NO se infiere: se JOINea con el anuncio (`ctwaClid`, `meta_wa_ctwa`). Es un dato, no una inferencia."},
+        {"id": "payload_de_boton", "definicion": "Respuesta a un botón del árbol viejo de Messenger («Empezar», «💒 Volver al Menú»).", "frecuencia_medida": "Domina el top-10 literal de Messenger; «Empezar» aparece 1.425 veces", "accion": "El botón ES la etiqueta. Mapa fijo."},
+        {"id": "volcado_de_formulario", "definicion": "El anuncio volcó el formulario dentro del chat («Country: MX / Full name: …»).", "frecuencia_medida": "39 en Messenger", "accion": "Parsear campos. Extracción, no clasificación."},
+        {"id": "sistema_meta", "definicion": "Mensaje de la plataforma, no de la persona («Facebook creó este chat porque…»).", "frecuencia_medida": "12 en Messenger", "accion": "Descartar del corpus de entrenamiento. Contamina."},
+        {"id": "cortesia_o_acuse", "definicion": "Saludo, gracias, «ok», emoji suelto.", "frecuencia_medida": "16,0 % de los entrantes de WhatsApp", "accion": "No clasificar. Puede alimentar la señal de engagement."},
+        {"id": "humano_libre", "definicion": "Texto que escribió una persona con contenido propio.", "frecuencia_medida": "~21 % de los entrantes de WhatsApp ≈ 230/semana · 41,4 % de Messenger", "accion": "ESTO es lo único que va al clasificador."}
+      ]
+    },
+
+    {
+      "id": "accion",
+      "tipo": "CLASIFICACION",
+      "mutuamente_excluyente": true,
+      "multi_label": false,
+      "aplica_solo_a": "procedencia = humano_libre",
+      "abstencion_obligatoria": true,
+      "nota_de_calidad": "El clustering NO encontró estructura limpia: silhouette 0,066 con k=48 sobre 15.792 documentos, y creciendo monótonamente con k — o sea, no hay un número natural de clases. Por eso la taxonomía es CHICA y con una clase abierta grande, en vez de un árbol de 100 intents que la data no sostiene.",
+      "clases": [
+        {
+          "id": "entrega_contacto",
+          "definicion": "La persona pasa su teléfono o correo para que la contacten por otro canal.",
+          "evidencia": "27,2 % del texto libre de Messenger (LF medida). Cuatro clusters distintos convergen acá (31, 42, 7, 25).",
+          "positivos": ["Mi número de WhatsApp es <TEL>", "Escríbame a mi correo <MAIL>", "<TEL>. Escríbame por favor"],
+          "negativos_duros": ["Ya te pasé mi número la semana pasada y nadie me escribió (→ soporte_postventa)", "El curso cuesta <TEL> soles? (número que NO es contacto)"],
+          "valor_de_negocio": "ALTO. Es la conversión REAL del canal Messenger: el salto a WhatsApp. Hoy no se mide.",
+          "observabilidad": "ALTA — regex"
+        },
+        {
+          "id": "pide_precio",
+          "definicion": "Pregunta cuánto cuesta.",
+          "evidencia": "9,4 % Messenger · 4,6 % WhatsApp (LF medida). Clusters 33, 4, 1, 5.",
+          "positivos": ["Cuál es el costo del diplomado", "Precio por favor", "Son 199 dólares?"],
+          "negativos_duros": ["El pago es en una sola exhibición? (→ pregunta_proceso_pago)", "Ya pagué y no me llegó nada (→ soporte_postventa)"],
+          "valor_de_negocio": "ALTO — y YA IMPLEMENTADO en `cola/precio.ts` y `senales/cotizacion.ts`. NO reimplementar.",
+          "observabilidad": "ALTA"
+        },
+        {
+          "id": "pide_info_generica",
+          "definicion": "Pide información sin decir de qué ni preguntar nada concreto.",
+          "evidencia": "11,7 % Messenger · 3,9 % WhatsApp (LF medida). Clusters 37, 17, 11.",
+          "positivos": ["Información por favor", "Me puede enviar información"],
+          "negativos_duros": ["Quiero información del diplomado de Inteligencia (→ pide_info_producto)"],
+          "valor_de_negocio": "MEDIO. Su valor es que NO dice qué quiere: obliga a preguntar, y esa pregunta es una acción distinta.",
+          "observabilidad": "MEDIA — se solapa con casi todo",
+          "riesgo": "Es la clase basurero. Vigilar que no absorba a las demás."
+        },
+        {
+          "id": "pide_info_producto",
+          "definicion": "Nombra un producto concreto y pide información de ese.",
+          "evidencia": "Clusters 8, 41, 7, 3 (Messenger) y 8, 2, 3 (WhatsApp).",
+          "positivos": ["Información del diplomado de asesor presidencial", "y sobre los libros por favor"],
+          "negativos_duros": ["Información por favor (→ pide_info_generica)"],
+          "valor_de_negocio": "ALTO — pero el PRODUCTO ya lo resuelve `server/src/cursos/` con `alias_curso` (57 filas). Esta clase sólo marca que se nombró uno; cuál es, lo dice el diccionario existente.",
+          "observabilidad": "ALTA vía diccionario"
+        },
+        {
+          "id": "pregunta_logistica",
+          "definicion": "Fechas, horarios, duración, modalidad, sede, requisitos, certificado.",
+          "evidencia": "Cluster 6 de WhatsApp; abundante en los ejemplos de todos los años.",
+          "positivos": ["Cuándo empiezan las clases", "Es presencial o virtual?", "Cuáles son los requisitos?"],
+          "negativos_duros": ["Cuánto dura y cuánto cuesta (multi-intención: ver `nota_multi_intencion`)"],
+          "valor_de_negocio": "MEDIO-ALTO: es respondible con el catálogo y es donde un bot rinde sin riesgo.",
+          "observabilidad": "MEDIA"
+        },
+        {
+          "id": "pregunta_proceso_pago",
+          "definicion": "Cómo inscribirse, cómo y dónde pagar, cuotas, facturación.",
+          "evidencia": "Cluster 9 de WhatsApp; cluster 28 de Messenger.",
+          "positivos": ["El segundo pago cuándo se realiza?", "Cómo me puedo inscribir"],
+          "negativos_duros": ["Cuánto cuesta (→ pide_precio)"],
+          "valor_de_negocio": "MUY ALTO: es la señal más cercana a la compra que aparece en el texto.",
+          "observabilidad": "ALTA"
+        },
+        {
+          "id": "soporte_postventa",
+          "definicion": "Ya compró y algo falló: no entra al campus, no llegó el diploma, perdió el acceso.",
+          "evidencia": "0,3 % Messenger · 0,9 % WhatsApp (LF medida). Cluster 7 de WhatsApp.",
+          "positivos": ["No me ha llegado el correo", "Me sale usuario no válido", "hicieron que me bloqueen"],
+          "negativos_duros": ["Cómo accedo al curso si me inscribo? (todavía no compró → pregunta_proceso_pago)"],
+          "valor_de_negocio": "EL MÁS ALTO por unidad. Es una persona que YA PAGÓ y hoy compite en la misma cola con un lead frío.",
+          "observabilidad": "ALTA"
+        },
+        {
+          "id": "rechazo_o_aplazamiento",
+          "definicion": "Dice que no, o que ahora no.",
+          "evidencia": "0,2 % Messenger · 1,5 % WhatsApp (LF medida).",
+          "positivos": ["Por ahora no pero lo tendré presente", "Esta quincena no puedo"],
+          "negativos_duros": ["Gracias (NO es despedida — regla ya escrita en `autorespuesta/rechazo.ts`)"],
+          "valor_de_negocio": "ALTO y SUBREGISTRADO: el informe del negocio dice que el aplazamiento es la objeción #1 con 13 %, y medimos 0,2–1,5 %. La brecha es el hallazgo, no la clase.",
+          "observabilidad": "ALTA — ya implementada"
+        },
+        {
+          "id": "se_presenta_como_candidato",
+          "definicion": "La persona se identifica con cargo político, distrito y partido.",
+          "evidencia": "DESCUBIERTA por clustering, no propuesta a priori: cluster 0 de WhatsApp, n=34 (2,3 %).",
+          "positivos": ["Jesús Cabrera Alcalde Distrito de Chao Partido Podemos Perú"],
+          "negativos_duros": ["Me interesa el curso de consultor político (habla del producto, no de sí mismo)"],
+          "valor_de_negocio": "ESTRATÉGICO. Es el puente al OTRO negocio de Goberna (consultoría / Centurión) y hoy ninguna pantalla lo captura. Es extracción de entidades, no scoring.",
+          "observabilidad": "ALTA"
+        },
+        {
+          "id": "ruido_no_lead",
+          "definicion": "Phishing suplantando a Meta, spam de terceros, mensaje ajeno al negocio.",
+          "evidencia": "4,2 % del texto libre reciente de Messenger sin deduplicar (cluster 2, n=134 de 3.200).",
+          "positivos": ["⚠️ Su página de Facebook será eliminada permanentemente…", "Soy del equipo de soporte de Facebook"],
+          "negativos_duros": ["Una queja real de una alumna (→ soporte_postventa)"],
+          "valor_de_negocio": "Evita contaminar el entrenamiento y evita que una vendedora lo atienda.",
+          "observabilidad": "MUY ALTA — firma léxica propia"
+        },
+        {
+          "id": "OTRO",
+          "definicion": "Texto humano libre que no cae en ninguna clase de arriba.",
+          "evidencia": "52,9 % del texto libre de Messenger y 88,5 % del de WhatsApp NO recibe voto de ninguna LF.",
+          "es_clase_abierta": true,
+          "accion": "Alimenta el descubrimiento de taxonomía (§P). Un `OTRO` que crece es una clase nueva pidiendo nacer, no un error."
+        },
+        {
+          "id": "EVIDENCIA_INSUFICIENTE",
+          "definicion": "El texto existe pero no alcanza para decidir. Distinto de OTRO: acá el problema es la señal, no el catálogo.",
+          "es_abstencion": true,
+          "accion": "Nunca se fuerza una clase. Va a revisión humana si el contacto es valioso; si no, se deja sin etiqueta."
+        }
+      ],
+      "nota_multi_intencion": "MEDIDO: sólo 1,8 % de los mensajes de Messenger y 0,1 % de los de WhatsApp reciben más de un voto. La multi-etiqueta NO se justifica en v0 — se deja mono-etiqueta y se revisa si el conflicto sube."
+    },
+
+    {
+      "id": "producto",
+      "tipo": "DICCIONARIO_EXISTENTE",
+      "no_construir": true,
+      "vive_en": "server/src/cursos/ + tabla `alias_curso` (57 filas) + `cola/cursoSql.ts`",
+      "nota": "Ya resuelto, con precedencia definida (interés registrado > formulario > anuncio) y test de paridad SQL↔TS. Reimplementarlo es #37."
+    },
+
+    {
+      "id": "etapa",
+      "tipo": "DERIVADA_EXISTENTE",
+      "no_construir": true,
+      "vive_en": "etapaEfectivaSql (ADR 0044/0050)",
+      "nota": "Se deriva de acciones del comprador, no se declara. Cinco columnas ya decididas."
+    }
+  ],
+
+  "validacion_independiente": {
+    "que_es": "La taxonomía de arriba se indujo por clustering NO SUPERVISADO sobre el texto, sin mirar el sistema previo. Después se comparó con `leads_crm.funnel_events` (512 filas, 16 tipos), que es lo que un router LLM en producción etiquetó entre el 8 y el 26-may-2026. Las dos convergen — y eso es la mejor evidencia disponible de que estas clases existen en el negocio y no en el método.",
+    "distribucion_medida_del_router_previo": {
+      "inbound_inquiry": 384, "escalated_to_human": 43, "asked_price": 20, "off_topic_message": 16,
+      "asked_schedule": 10, "asked_modality": 7, "sensitive_data_attempted": 7, "shared_payment_proof": 6,
+      "asked_certificate": 4, "asked_payment_methods": 3, "complained_postventa": 3,
+      "asked_clarification": 2, "expressed_no_interest": 2, "reported_access_issue": 2,
+      "negotiation_attempt": 2, "requested_access": 1
+    },
+    "mapa": [
+      {"router_previo": "inbound_inquiry (384, 75 %)", "esta_taxonomia": "pide_info_generica", "nota": "Coinciden en que la clase mayoritaria es la que NO dice qué quiere."},
+      {"router_previo": "asked_price", "esta_taxonomia": "pide_precio"},
+      {"router_previo": "asked_schedule + asked_modality + asked_certificate", "esta_taxonomia": "pregunta_logistica"},
+      {"router_previo": "asked_payment_methods + shared_payment_proof", "esta_taxonomia": "pregunta_proceso_pago"},
+      {"router_previo": "complained_postventa + reported_access_issue + requested_access", "esta_taxonomia": "soporte_postventa"},
+      {"router_previo": "expressed_no_interest", "esta_taxonomia": "rechazo_o_aplazamiento"},
+      {"router_previo": "off_topic_message", "esta_taxonomia": "ruido_no_lead"},
+      {"router_previo": "escalated_to_human (43)", "esta_taxonomia": "NO es una acción del mensaje: es una decisión del sistema. Va como señal, no como clase."},
+      {"router_previo": "negotiation_attempt (2)", "esta_taxonomia": "RECHAZADA acá por ausencia — y 2 casos en 512 confirman el rechazo."},
+      {"router_previo": "sensitive_data_attempted (7)", "esta_taxonomia": "NO PREVISTA. Clase candidata para v0.2: alguien mandó datos sensibles por el chat."}
+    ],
+    "lo_que_el_router_previo_NO_tenia": ["entrega_contacto (la clase #1 de Messenger)", "se_presenta_como_candidato", "procedencia como capa separada"],
+    "advertencia": "⚠️ El sistema previo tenía TRES taxonomías vivas que no se hablaban: `ai_rules` (86 filas / 85 tags / 12 prefijos, de las cuales sólo 61 estaban `enabled=true`), el enum `Intent` de `router.ts` (29 valores) y `funnel_events.event_type` (16 tipos). Sólo 6 de 95 plantillas estaban cableadas a un tag. Reusar cualquiera tal cual arrastra el conflicto: lo único con etiquetas detrás son los 512 de `funnel_events`."
+  },
+
+  "clases_rechazadas": [
+    {"id": "comparacion_competencia", "motivo": "MEDIDO: prácticamente ausente. No apareció en ningún cluster de los 48, ni en la muestra estratificada de 10 años. Goberna no compite por comparación en este canal."},
+    {"id": "negociacion", "motivo": "No aparece. El precio se pregunta, no se negocia."},
+    {"id": "decision_maker / stakeholder", "motivo": "Concepto B2B. El corpus es B2C individual: la persona que pregunta es la que paga."},
+    {"id": "hot / warm / cold", "motivo": "RECHAZADA EXPLÍCITAMENTE. Es un SCORE, no un intent, y mezclarlos es el error que §9 del pedido advierte. Además `bot_calificaciones` ya lo emite (temperatura) y en 43 filas sólo usa 2 de sus valores."},
+    {"id": "urgencia", "motivo": "No es del mensaje: es del reloj. Ya vive en `cola/urgencia.ts` con su test de paridad."}
+  ],
+
+  "riesgos_de_esta_taxonomia": [
+    "`pide_info_generica` puede absorber a `pide_info_producto` y a `pregunta_logistica`. Vigilar con la matriz de confusión; si pasa, fusionarlas es preferible a mantener una frontera que nadie puede aplicar.",
+    "`entrega_contacto` es enorme en Messenger (27,2 %) y casi nula en WhatsApp (0,7 %). NO es una clase estable entre canales: es un artefacto de que Messenger era un embudo hacia WhatsApp. Un modelo entrenado con los dos corpus mezclados va a sobreajustar a esto.",
+    "El corpus de Messenger cubre 2016–2026 y la línea de producto cambió por completo (2016 = vacantes de community manager; 2020 = seminarios en pandemia; 2026 = diplomas y medallas). Entrenar con todo es entrenar sobre un negocio que ya no existe.",
+    "Ninguna clase tiene todavía un ejemplo etiquetado por una persona. El conjunto dorado no existe."
+  ]
+}

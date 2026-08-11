@@ -1,0 +1,79 @@
+{
+  "ontology_version": "v0.1.0",
+  "fecha": "2026-08-11",
+  "principio": "La separación FACT/ATTRIBUTE/ENTITY/SIGNAL/INTENT/STATE/SCORE/PREDICTION/ACTION/OUTCOME del pedido es CORRECTA y se conserva — con dos enmiendas que los datos obligan.",
+
+  "enmiendas_a_la_separacion_propuesta": [
+    {
+      "enmienda": "Se agrega PROCEDENCIA como categoría de primer nivel, arriba de INTENT.",
+      "motivo": "MEDIDO: el 67,7 % de los entrantes vivos no tiene intención porque el texto no lo escribió la persona (lo prellenó Meta), o no hay texto. Sin esta categoría, el sistema le atribuye intención a su propio anuncio. Ya pasó: el chip «Piden info» de Hermes cuenta como pregunta el texto del anuncio."
+    },
+    {
+      "enmienda": "OUTCOME se parte en dos: OUTCOME_CONVERSACIONAL (respondió) y OUTCOME_COMERCIAL (compró), y NO se pueden usar igual.",
+      "motivo": "MEDIDO: sólo 16 ventas en toda la base de Hermes son posteriores al primer mensaje de esa persona (1,1 % de 1.464). El outcome comercial NO es entrenable desde la conversación. El conversacional sí: 1.129 pares saliente→entrante (11,42 %)."
+    }
+  ],
+
+  "entidades": [
+    {
+      "id": "Persona",
+      "definicion": "El ser humano. NO es la cuenta, ni el teléfono, ni el PSID.",
+      "identificadores": ["telefono_e164", "email", "psid_facebook", "wa_id", "contact_id_icarus", "cliente_id_cerberus"],
+      "estado_medido": "ROTO. El grafo `ontologia.identidades` (22.364 filas) contiene SOLO email y teléfono — cero PSIDs. De los 34.118 PSIDs de Messenger, 918 (2,69 %) se pueden atar a un cliente. El corpus grande está HUÉRFANO.",
+      "cardinalidad_medida": "ICARUS 73.004 contactos · GOBERNACRM 53.366 (99,37 % ya en ICARUS: aporta 333) · HERMES 3.940 con conversación"
+    },
+    {
+      "id": "Conversacion",
+      "definicion": "El hilo con una Persona por un canal y un número propio.",
+      "estado_medido": "EXISTE en WhatsApp (bidireccional). NO EXISTE en Messenger: mediana 2 mensajes por persona, 47,58 % escribió exactamente uno, y no hay ni un saliente guardado.",
+      "advertencia": "Llamar «conversación» a un mensaje suelto de 2016 es lo que hace que 76.869 parezca un corpus conversacional. No lo es."
+    },
+    {
+      "id": "Mensaje",
+      "definicion": "Un hecho individual con dirección, canal, momento y (a veces) texto.",
+      "atributos_obligatorios": ["direccion", "canal", "occurred_at", "procedencia"],
+      "nota": "`procedencia` es obligatoria y se calcula al ingresar, no al consultar."
+    },
+    {
+      "id": "Producto",
+      "definicion": "Curso, diplomado, libro, evento.",
+      "estado_medido": "340 productos en ICARUS. Familia por prefijo de SKU, con la excepción `GEN*` que agrupa cursos distintos.",
+      "no_construir": "El mapa anuncio→familia ya existe: `alias_curso` (57 filas) + `cursos/precedencia.ts`."
+    },
+    {
+      "id": "Campana",
+      "definicion": "El anuncio o formulario por el que entró la Persona.",
+      "por_que_importa": "Para el 25,4 % de los entrantes vivos, la campaña ES la intención declarada. Se JOINea, no se infiere."
+    },
+    {
+      "id": "Venta",
+      "definicion": "La transacción en Cerberus.",
+      "estado_medido": "7.164 en ICARUS (espejo vivo, 15 ventas hoy). 99,69 % con contact_id. ⚠️ MULTIMONEDA SIN NORMALIZAR: USD 2.541 · PEN 1.773 · MXN 1.722 · BOB 945 · DOP 111 · COP 70. Sumar el total produce una cifra sin significado.",
+      "advertencia_critica": "Las tres 'fuentes de venta' (HERMES conversiones_wa, ICARUS sales, MESSENGER ontologia.venta) son LA MISMA venta espejada. Sumarlas inventa ~21.000 ventas que no existen."
+    },
+    {
+      "id": "Vendedora",
+      "definicion": "Quien atiende.",
+      "advertencia": "Su id tiene DOS grafías vivas en producción (`Luz` vs `luz`). Todo cruce normaliza los dos lados o falla mudo."
+    }
+  ],
+
+  "relaciones": [
+    {"desde": "Persona", "rel": "escribio", "hasta": "Mensaje", "cardinalidad": "1:N", "estado": "vivo"},
+    {"desde": "Persona", "rel": "entroPor", "hasta": "Campana", "cardinalidad": "1:N", "estado": "vivo — 25.538 formularios"},
+    {"desde": "Persona", "rel": "compro", "hasta": "Venta", "cardinalidad": "1:N", "estado": "vivo en ICARUS; ROTO hacia la conversación (16 casos)"},
+    {"desde": "Persona", "rel": "declaraInteresEn", "hasta": "Producto", "cardinalidad": "1:N", "estado": "casi vacío — 29 filas en `intereses`"},
+    {"desde": "Persona", "rel": "tieneIdentidad", "hasta": "Identidad", "cardinalidad": "1:N", "estado": "ROTO para PSIDs"},
+    {"desde": "Conversacion", "rel": "asignadaA", "hasta": "Vendedora", "cardinalidad": "N:1", "estado": "vivo — 1.098"},
+    {"desde": "Mensaje", "rel": "tieneProcedencia", "hasta": "Procedencia", "cardinalidad": "N:1", "estado": "PROPUESTO"},
+    {"desde": "Mensaje", "rel": "expresa", "hasta": "Accion", "cardinalidad": "N:1", "estado": "PROPUESTO — sólo si procedencia = humano_libre"},
+    {"desde": "Persona", "rel": "generó", "hasta": "Senal", "cardinalidad": "1:N", "estado": "parcial — `senales/` ya deriva cotizado y enfriado"},
+    {"desde": "Persona", "rel": "estaEn", "hasta": "Etapa", "cardinalidad": "N:1", "estado": "vivo y derivado (ADR 0044)"}
+  ],
+
+  "lo_que_NO_es_una_entidad": [
+    "«Intent» no es una entidad: es un atributo de un Mensaje, y sólo de los que escribió una persona.",
+    "«Lead» no es una entidad distinta de Persona: es una Persona en una etapa. Tratarlo aparte fue lo que produjo tres tablas de contactos que no se hablan.",
+    "«Score» no es una entidad: es una función de Señales evaluada en un instante, y por eso lleva SIEMPRE su `as_of`."
+  ]
+}
