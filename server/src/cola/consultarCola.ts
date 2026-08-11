@@ -215,6 +215,9 @@ const comentariosCte = (filtroCanal: SQL, incluirPins: boolean) => sql`
     (${preguntoPrecioSql("texto")})             AS pregunto_precio,
     -- Un comentario de FB/IG nunca es el texto de un anuncio de WhatsApp.
     false                                       AS solo_clic,
+    -- ¿Habría entrado SIN la banda de pin? Es lo que separa el universo de la
+    -- cola (que sube las fijadas viejas) del universo del embudo, que no.
+    (${ventanaCola(sql`occurred_at`)})          AS en_ventana,
     1                                           AS n
   FROM interactions
   WHERE tipo = 'comentario'
@@ -321,6 +324,11 @@ const conversacionesCte = sql`
     (${preguntoAgrupadoSql})                                        AS pregunto,
     (${preguntoPrecioAgrupadoSql})                                  AS pregunto_precio,
     (${soloClicAgrupadoSql})                                        AS solo_clic,
+    -- ¿Habría entrado SIN la banda de pin? Una conversación fijada trae TODOS
+    -- sus mensajes (el OR de pins no mira la fecha), así que esto responde
+    -- exactamente «¿tiene algún mensaje adentro de la ventana?».
+    -- (Sin backticks: esto vive dentro de un template literal.)
+    bool_or(${ventanaCola(sql`occurred_at`)})                       AS en_ventana,
     count(*)::int                                                  AS n
   FROM msg
   GROUP BY canal, persona_id, numero_propio
@@ -621,14 +629,29 @@ export async function consultarCola(
   // Cuatro degradaciones posibles ⇒ como mucho cinco intentos.
   for (let intento = 0; ; intento++) {
     try {
-      const r = await ejecutarCola(
-        base,
-        { ...opciones, enElReparto },
-        lineas,
-        conEstado,
-        conPadron,
-        conBot,
-        conAsignacion,
+      /**
+       * 🔴 UNA TRANSACCIÓN POR INTENTO, Y NO ES POR ATOMICIDAD: es lo único que
+       * garantiza que las consultas de este pedido caigan en la MISMA conexión,
+       * que es lo que hace posible la tabla temporal de `ejecutarCola`. Con el
+       * pool, dos `execute` seguidos pueden ir a backends distintos y la segunda
+       * no vería la tabla.
+       *
+       * ⚠️ **Va ADENTRO del `try` del loop de degradación, y ese orden importa.**
+       * Un error de tabla ausente aborta la transacción entera; si la
+       * transacción envolviera al loop, el primer fallo dejaría todos los
+       * reintentos contestando «current transaction is aborted» y la cola no
+       * degradaría: se caería. Así, cada intento estrena transacción limpia.
+       */
+      const r = await base.transaction((tx) =>
+        ejecutarCola(
+          tx,
+          { ...opciones, enElReparto },
+          lineas,
+          conEstado,
+          conPadron,
+          conBot,
+          conAsignacion,
+        ),
       );
       return {
         ...r,
@@ -700,8 +723,15 @@ function mencionaTabla(e: unknown, tabla: string): boolean {
   return false;
 }
 
+/**
+ * Lo único que este módulo le pide a la base: poder ejecutar SQL. Así la misma
+ * función sirve al singleton, a una transacción y al `db` de un test con base,
+ * sin arrastrar los genéricos de drizzle por siete firmas.
+ */
+type Ejecutor = Pick<typeof db, "execute">;
+
 async function ejecutarCola(
-  base: typeof db,
+  base: Ejecutor,
   opciones: OpcionesCola,
   lineas: readonly string[],
   conEstado: boolean,
@@ -890,13 +920,49 @@ async function ejecutarCola(
   const donde = (c: SQL[]) => (c.length ? sql`WHERE ${sql.join(c, sql` AND `)}` : sql``);
   const yTodas = (c: SQL[]) => (c.length ? sql.join(c, sql` AND `) : sql`true`);
 
+  /**
+   * 🔴 `todo` SE CALCULA UNA VEZ POR PEDIDO, Y ANTES SE CALCULABA TRES.
+   *
+   * La página, los conteos de los chips y el desglose del embudo son tres
+   * `execute` distintos, y los tres arrancaban con el MISMO `conTodo(...)`: el
+   * hash join de las 13.195 interacciones contra `events`, el sort de 10 MB que
+   * cae a disco y los ~20 agregados con regex sobre el texto. Medido en
+   * producción el 11-ago-2026: **1.645 + 1.310 + 1.193 ms**, y la primera página
+   * —la única que el front pide— tardaba 5,6 s contra 1,8 s de la segunda, que
+   * se saltea dos de las tres.
+   *
+   * La tabla temporal muere sola con el `COMMIT` (`ON COMMIT DROP`), así que no
+   * hay nada que limpiar ni nada que pueda sobrevivir a la conexión y ensuciar
+   * el próximo pedido que la tome del pool.
+   *
+   * 🔴 **SE LLAMA `todo`, IGUAL QUE LA CTE QUE REEMPLAZA, Y NO ES POR COMODIDAD.**
+   * Varias CTEs de las consultas de abajo (`ventas`, `padron`, `cats`) leen
+   * `FROM todo`, y **una CTE no puede ver un alias del `FROM`**: con la tabla
+   * llamada `cola_todo` y un `FROM cola_todo todo`, esas CTEs se evalúan antes y
+   * revientan con `relation "todo" does not exist`. Lo encontró el test con base
+   * —los cuatro degradados a la vez, que es como se ve desde afuera cualquier
+   * error en esta consulta—, no el typecheck.
+   *
+   * ⚠️ **El desglose NO lee de acá, y eso lo garantiza el SHADOWING de SQL**: su
+   * consulta declara su propia CTE `todo` (con `pins = null` a propósito, porque
+   * su universo es la foto del embudo, sin las fijadas viejas que entran por la
+   * banda de pin), y un nombre de CTE **tapa** a una tabla homónima. Si alguien
+   * le sacara esa CTE, empezaría a leer esta tabla y le sumaría a alguna etapa
+   * las conversaciones fijadas fuera de la ventana — una diferencia que en
+   * pantalla es un número y nada más. Lo fija `desglose.pins.test.db.ts`.
+   */
+  await base.execute(sql`
+    CREATE TEMP TABLE todo ON COMMIT DROP AS
+    ${conTodo(filtroCanal, pins, lineas, canal)}
+    SELECT * FROM todo
+  `);
+
   // El orden es la urgencia canónica (cola/urgenciaSql.ts) con la BANDA DE PIN
   // encima (#49): las fijadas arriba de todo, dentro de la banda sigue mandando
   // el nivel 0–5. `etapa_manual` llega de la última gestión (etapaEfectivaSql.ts);
   // el estado personal, del LEFT JOIN a `estado_conversacion`.
   const filas = await base.execute(sql`
-    ${conTodo(filtroCanal, pins, lineas, canal)},
-    seguimientos AS (
+    WITH seguimientos AS (
       ${seguimientosPendientesSql}
     ),
     ultimas_gestiones AS (
@@ -1001,8 +1067,7 @@ async function ejecutarCola(
       puedo_escribirle: number;
       mios: number;
     }>(sql`
-      ${conTodo(filtroCanal, pins, lineas, canal)},
-      ultimas_gestiones AS (${ultimasGestionesSql}),
+      WITH ultimas_gestiones AS (${ultimasGestionesSql}),
       ventas AS (${ventaPosteriorCteSql}),
       cats AS (${categoriasCteSql}),
       padron AS (${padronCteSql(conPadron)})
@@ -1055,6 +1120,8 @@ async function ejecutarCola(
       conAsignacion,
       lineas,
       canal,
+      // Acá SÍ: estamos adentro de la transacción y `todo` ya está armado.
+      true,
     );
     conteos = plegarConteos(desglose);
   }
@@ -1077,7 +1144,7 @@ async function ejecutarCola(
  * bug de verdad y no una diferencia de definición (la lección de #37).
  */
 async function desglosarEmbudo(
-  base: typeof db,
+  base: Ejecutor,
   filtroCanal: SQL,
   condiciones: SQL[],
   conPadron: boolean,
@@ -1097,10 +1164,41 @@ async function desglosarEmbudo(
   // Sin él, el brazo de los leads de formulario se sumaría al desglose aunque la
   // cola esté recortada a WhatsApp, y los conteos dirían otra cosa que la lista.
   canal?: string,
+  /**
+   * ¿Ya hay una tabla temporal `todo` armada en esta transacción?
+   *
+   * 🔴 **DOS LLAMADORES CON DOS CONTEXTOS, y confundirlos rompe el Dashboard.**
+   * `ejecutarCola` corre adentro de una transacción y ya pagó el `todo` para la
+   * página y los conteos: ahí compartirlo se ahorra la tercera pasada. Pero
+   * `contarPorEtapaEfectiva` (el embudo del Dashboard) entra por la puerta de al
+   * lado, sin transacción y sin tabla, así que tiene que armarse el suyo. Lo
+   * encontró el test de paridad con el Dashboard, no el typecheck.
+   */
+  desdeTablaCompartida = false,
 ): Promise<FilaDesglose[]> {
-  const donde = condiciones.length ? sql`WHERE ${sql.join(condiciones, sql` AND `)}` : sql``;
+  /**
+   * 🔴 `en_ventana` ES LO QUE LE PERMITE COMPARTIR LA TABLA TEMPORAL DE LA COLA.
+   *
+   * Este desglose armaba su propio `todo` con `pins = null`, y esa era la ÚNICA
+   * diferencia con el de la cola: sin la banda de pin, una conversación fijada
+   * cuyos mensajes quedaron todos fuera de la ventana no entra a la foto del
+   * embudo. Rearmarlo costaba una tercera pasada completa —1.193 ms medidos en
+   * producción— para excluir un puñado de filas.
+   *
+   * Ahora los tres brazos del UNION traen `en_ventana` («¿habría entrado sin el
+   * pin?») y acá se recorta con eso. **El universo es exactamente el mismo que
+   * antes**, y lo fija `consultarCola.desglosePins.test.db.ts` sembrando justo
+   * el caso que los distingue: una conversación fijada y vieja.
+   *
+   * ⚠️ El filtro va en los DOS modos y en el propio no cambia nada: sin pins,
+   * `msg` ya trae solo mensajes de la ventana, así que `en_ventana` es verdadero
+   * para todas. Dejarlo en un solo camino sería tener dos definiciones del
+   * universo del embudo esperando a divergir (#37).
+   */
+  const soloDelEmbudo = [sql`en_ventana`, ...condiciones];
+  const donde = sql`WHERE ${sql.join(soloDelEmbudo, sql` AND `)}`;
   const filas = await base.execute<FilaDesglose>(sql`
-    ${conTodo(filtroCanal, null, lineas, canal)},
+    ${desdeTablaCompartida ? sql`WITH` : sql`${conTodo(filtroCanal, null, lineas, canal)},`}
     ultimas_gestiones AS (${ultimasGestionesSql}),
     ventas AS (${ventaPosteriorCteSql}),
     padron AS (${padronCteSql(conPadron)})

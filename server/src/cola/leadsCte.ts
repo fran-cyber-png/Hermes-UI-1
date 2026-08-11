@@ -143,6 +143,9 @@ export const leadsCte = (ventana: (columna: SQL) => SQL): SQL => sql`
     -- Y tampoco es «solo hizo clic»: ese rótulo es del texto que Meta prellena en
     -- WhatsApp. Un lead de formulario ya se distingue con su propia píldora.
     false                                       AS solo_clic,
+    -- Un lead nunca entra por la banda de pin (no se puede fijar lo que todavía
+    -- no es una conversación), así que siempre está en el universo del embudo.
+    true                                        AS en_ventana,
     1                                           AS n
   FROM leads
   WHERE phone IS NOT NULL
