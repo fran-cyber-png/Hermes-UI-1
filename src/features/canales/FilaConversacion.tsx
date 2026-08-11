@@ -129,7 +129,7 @@ export function FilaConversacion({
   seleccionada,
   onAbrir,
   etapa,
-  mostrarPideInfo = true,
+  mostrarPregunto = true,
   catalogoCategorias,
   miVendedora,
   esNueva = false,
@@ -143,8 +143,8 @@ export function FilaConversacion({
   onAbrir: (c: Conversacion) => void;
   /** Etapa del embudo si el shell la conoce — chip vía `ETAPA_CHIP` compartido. */
   etapa?: string | null;
-  /** En el filtro «Piden info» el chip es redundante: se apaga desde afuera. */
-  mostrarPideInfo?: boolean;
+  /** Dentro del filtro de pedidos el chip es redundante: se apaga desde afuera. */
+  mostrarPregunto?: boolean;
   /** El catálogo de la vendedora, para resolver el color de la píldora de categoría (#49). */
   catalogoCategorias?: readonly { nombre: string; color: string }[];
   /** Quién está mirando: sin esto no se puede saber qué fila es ajena (`dueno.ts`). */
@@ -182,7 +182,7 @@ export function FilaConversacion({
   const tintaNombre = c.respondida ? 'text-muted-foreground' : 'text-foreground';
   const clasePreview = c.respondida
     ? 'text-muted-foreground'
-    : c.pide_info
+    : c.pregunto
       ? 'font-medium text-foreground'
       : 'text-foreground';
   const chipEtapa = etapa ? (ETAPA_CHIP[etapa] ?? 'bg-secondary text-secondary-foreground') : '';
@@ -424,10 +424,10 @@ export function FilaConversacion({
               {curso.nombre}
             </span>
           ) : (
-            mostrarPideInfo &&
-            c.pide_info && (
+            mostrarPregunto &&
+            c.pregunto && (
               <span className="shrink-0 rounded bg-primary/10 px-1 py-px text-[11px] font-semibold text-primary">
-                Pide info
+                {c.pregunto_precio ? 'Preguntó precio' : 'Preguntó'}
               </span>
             )
           )}
@@ -451,7 +451,12 @@ export function FilaConversacion({
             <span className="shrink-0 text-[11px] font-medium text-muted-foreground">+{categorias.length - 1}</span>
           )}
           <p className={'min-w-0 flex-1 truncate text-sm ' + clasePreview}>
-            {textoDePreview({ texto: c.texto, clase: c.ultima_clase, origen: c.ultima_origen })}
+            {textoDePreview({
+              texto: c.texto,
+              clase: c.ultima_clase,
+              origen: c.ultima_origen,
+              soloClic: c.solo_clic,
+            })}
           </p>
           {/* Conteo de mensajes: neutro y rotulado. El AZUL queda para «sin leer». */}
           {c.n > 1 && !c.respondida && (

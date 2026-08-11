@@ -30,7 +30,10 @@ export interface LeadChat {
   contexto_texto: string | null;
   telefono: string | null;
   pais_dato: string | null;
-  pide_info: boolean;
+  /** ¿Pidió algo? El predicado vive en el server (`cola/pregunta.ts`). */
+  pregunto: boolean;
+  /** El último entrante lo escribió el ANUNCIO. Ausente = server viejo o caché. */
+  solo_clic?: boolean;
   /**
    * Los días que quedan de la Ventana de Meta (#22). `null` donde no hay ventana
    * —WhatsApp y todo lo que no sea un comentario de FB/IG—, `0` cuando ya se
@@ -236,7 +239,8 @@ export function conversacionDeChat(c: LeadChat): Conversacion {
     contexto_texto: c.contexto_texto,
     respondida: c.respondida,
     ventana_abierta: c.ventana_abierta,
-    pide_info: c.pide_info,
+    pregunto: c.pregunto,
+    solo_clic: c.solo_clic,
     n: 1,
     referencia: c.referencia,
     ultimo_at: c.cayo_at,

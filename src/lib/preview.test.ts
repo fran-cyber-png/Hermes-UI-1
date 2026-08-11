@@ -1,5 +1,41 @@
 import { describe, expect, test } from 'vitest';
-import { SIN_TEXTO, textoDePreview } from './preview';
+import { DEL_ANUNCIO, SIN_TEXTO, textoDePreview } from './preview';
+
+/** El texto exacto que WhatsApp prellena al tocar el botón de un anuncio. */
+const TEXTO_DEL_ANUNCIO = 'Hola Quiero más información del Diploma de Inteligencia y Contrainteligencia';
+
+/**
+ * 🔴 EL PASO 0 — «lo escribió el anuncio» le gana a «hay palabras».
+ *
+ * Medido en producción el 11-ago-2026: **563 de 3.995 conversaciones** (14 % de
+ * la mesa) tienen ese texto como último entrante, 424 palabra por palabra. La
+ * fila lo mostraba como preview y la vendedora leía una pregunta donde hubo un
+ * clic — y contestaba, en vez de ABRIR la conversación.
+ */
+describe('textoDePreview — el texto que escribió el anuncio', () => {
+  test('con `soloClic`, el texto de Meta NO se muestra como algo que la persona dijo', () => {
+    expect(textoDePreview({ texto: TEXTO_DEL_ANUNCIO, soloClic: true })).toBe(DEL_ANUNCIO);
+  });
+
+  test('le gana a las palabras Y a la media: es el primer peldaño de la cadena', () => {
+    expect(textoDePreview({ texto: TEXTO_DEL_ANUNCIO, clase: 'imagen', soloClic: true })).toBe(DEL_ANUNCIO);
+  });
+
+  test('🔴 AUSENTE se comporta como antes del frente: muestra el texto', () => {
+    // Un server viejo no manda el campo, y una respuesta rehidratada del caché de
+    // IndexedDB (ADR 0007) tampoco. Degrada hacia lo viejo, nunca hacia una fila
+    // muda — que sería una regresión invisible atada al deploy.
+    expect(textoDePreview({ texto: TEXTO_DEL_ANUNCIO })).toBe(TEXTO_DEL_ANUNCIO);
+    expect(textoDePreview({ texto: TEXTO_DEL_ANUNCIO, soloClic: false })).toBe(TEXTO_DEL_ANUNCIO);
+  });
+
+  test('reusa la frase que la cadena YA tenía, no una nueva', () => {
+    // Sin texto ni media y con origen de anuncio, el peldaño 3 dice lo mismo. Dos
+    // redacciones para el mismo hecho es cómo nacen las pantallas que se
+    // contradicen (#37) — y acá conviven en la MISMA lista.
+    expect(textoDePreview({ texto: null, origen: { fuente: 'anuncio' } })).toBe(DEL_ANUNCIO);
+  });
+});
 
 /**
  * Lo que se fija es el ORDEN de la cadena de respaldo, que es toda la decisión:

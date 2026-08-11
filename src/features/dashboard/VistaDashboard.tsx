@@ -766,9 +766,9 @@ export function VistaDashboard({
                           sin que nadie lo pintara. Un formulario no tiene mensaje:
                           su equivalente es el producto que pidió. */}
                       <div className="mt-0.5 flex items-center gap-2">
-                        {esChat && fila.chat.pide_info && (
+                        {esChat && fila.chat.pregunto && (
                           <span className="shrink-0 rounded bg-primary/10 px-1 py-px text-[11px] font-semibold text-primary">
-                            Pide info
+                            Preguntó
                           </span>
                         )}
                         <p className="min-w-0 flex-1 truncate text-[13px] text-foreground">
@@ -777,6 +777,7 @@ export function VistaDashboard({
                                 texto: fila.chat.texto,
                                 clase: fila.chat.texto_clase,
                                 origen: fila.chat.texto_origen,
+                                soloClic: fila.chat.solo_clic,
                               })
                             : (fila.form.producto ?? fila.form.campana ?? 'sin campaña')}
                         </p>
