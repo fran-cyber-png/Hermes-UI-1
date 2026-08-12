@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Bot, Check, CheckCheck, FileText, SmilePlus, Loader2, Megaphone, Paperclip, Phone, Play, QrCode, Send, Link2, Trash2, WifiOff, X } from 'lucide-react';
+import { AlertTriangle, Bot, Check, CheckCheck, Copy, FileText, SmilePlus, Loader2, Megaphone, Paperclip, Phone, Play, QrCode, Send, Link2, Trash2, WifiOff, X } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
 import { useBlobAutenticado } from '../../lib/datos/blobAutenticado';
 import { formatoTelefono, tempClass } from '../../lib/formato';
@@ -287,6 +287,72 @@ function BotonReaccionar({
   );
 }
 
+/**
+ * COPIAR UN MENSAJE — lo que la vendedora venía a buscar cuando dijo que el chat
+ * no se puede copiar.
+ *
+ * Va en los DOS SENTIDOS, al revés que reaccionar: el mensaje que más se copia es
+ * el PROPIO —el precio que ya se pasó, el link de pago, la respuesta que salió
+ * bien— para volver a usarlo en otra conversación. Y **no depende de la sesión de
+ * WhatsApp**: copiar es local, así que con la línea caída el botón sigue sirviendo,
+ * que es justo cuando más falta hace.
+ *
+ * Sin texto no hay botón: un adjunto suelto o el «Vino del anuncio» no tienen nada
+ * que poner en el portapapeles, y un botón que copia la cadena vacía es peor que
+ * ninguno (parece que anduvo).
+ *
+ * El mismo molde que `BotonReaccionar`: SIEMPRE en el DOM, invisible hasta el
+ * hover. Montarlo al pasar por encima haría que el primer clic caiga en la nada.
+ * Mientras dice «Copiado» se queda visible aunque el mouse ya se haya ido — si
+ * no, la confirmación desaparecería en el mismo gesto que la disparó.
+ */
+function BotonCopiar({ texto }: { texto: string }) {
+  const [copiado, setCopiado] = useState(false);
+
+  // El acuse se apaga solo. El `clearTimeout` no es higiene: sin él, copiar dos
+  // veces seguidas deja el primer temporizador vivo y apaga el segundo acuse
+  // antes de tiempo.
+  useEffect(() => {
+    if (!copiado) return;
+    const t = window.setTimeout(() => setCopiado(false), 1500);
+    return () => window.clearTimeout(t);
+  }, [copiado]);
+
+  return (
+    <div className="relative flex items-center">
+      <button
+        type="button"
+        onClick={() => {
+          // `?.` porque fuera de un contexto seguro el portapapeles no existe, y
+          // que falte no puede tirarse el hilo entero por delante.
+          void navigator.clipboard?.writeText(texto);
+          setCopiado(true);
+        }}
+        title={copiado ? 'Copiado' : 'Copiar el mensaje'}
+        aria-label={copiado ? 'Copiado' : 'Copiar el mensaje'}
+        className={
+          'flex size-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-[0_1px_3px_rgba(14,42,82,0.12)] transition-opacity hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ' +
+          (copiado ? 'opacity-100' : 'opacity-0 group-hover/burbuja:opacity-100 focus-visible:opacity-100')
+        }
+      >
+        {copiado ? <Check size={13} className="text-success" /> : <Copy size={13} />}
+      </button>
+
+      {/* La palabra, y no solo el ícono que cambia: un tilde hay que saber leerlo.
+          Va ABSOLUTA a propósito — cualquier cosa que crezca en este renglón le
+          come ancho a la burbuja de al lado, que ya está en su `max-w`. */}
+      {copiado && (
+        <span
+          role="status"
+          className="pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded-full bg-navy px-1.5 py-0.5 text-[10px] font-semibold text-white"
+        >
+          Copiado
+        </span>
+      )}
+    </div>
+  );
+}
+
 function AdjuntoRoto() {
   return (
     <p className="rounded-lg border border-border bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
@@ -567,6 +633,30 @@ export function HiloWhatsapp({
                     hiloVistoRef.current === telefono &&
                     vistosRef.current.size > 0 &&
                     !vistosRef.current.has(m.id);
+                  // LAS ACCIONES DE LA BURBUJA, y las dos tienen alcances
+                  // distintos a propósito: COPIAR va en los dos sentidos y sin
+                  // mirar la sesión (es local); REACCIONAR sigue siendo solo de
+                  // los entrantes y solo con la línea viva — si no, el clic no
+                  // haría nada.
+                  const acciones =
+                    m.texto || (m.direccion === 'entrante' && conectado) ? (
+                      <div className="flex shrink-0 items-center gap-1">
+                        {m.direccion === 'entrante' && conectado && (
+                          <BotonReaccionar
+                            mia={m.reacciones?.find((r) => r.nuestra)?.emoji ?? null}
+                            onElegir={(emoji) =>
+                              reaccionar.mutate({
+                                numeroPropio,
+                                telefono,
+                                mensajeId: m.external_id,
+                                emoji,
+                              })
+                            }
+                          />
+                        )}
+                        {m.texto && <BotonCopiar texto={m.texto} />}
+                      </div>
+                    ) : null;
                   return (
                     <div
                       key={m.id}
@@ -578,12 +668,17 @@ export function HiloWhatsapp({
                         // con el espaciado normal, queda a mitad de camino entre
                         // dos mensajes — se lee como si fuera del de abajo.
                         (m.reacciones?.length ? 'pb-2 ' : '') +
-                        // `group/burbuja`: el botón de reaccionar aparece al pasar
-                        // por encima de ESTA fila, no de todo el hilo.
+                        // `group/burbuja`: las acciones aparecen al pasar por
+                        // encima de ESTA fila, no de todo el hilo.
                         'group/burbuja items-end gap-1 ' +
                         (m.direccion === 'saliente' ? 'justify-end' : 'justify-start')
                       }
                     >
+                      {/* Las acciones van SIEMPRE del lado de afuera: a la
+                          izquierda en los salientes, a la derecha en los
+                          entrantes. Del lado de adentro se montarían encima del
+                          hilo, y del lado del borde se salen de la vista. */}
+                      {m.direccion === 'saliente' && acciones}
                       {/* Columna: la burbuja y, colgando de su borde, las
                           reacciones. El `max-w` vive acá para que la píldora del
                           emoji no ensanche el mensaje. */}
@@ -652,22 +747,7 @@ export function HiloWhatsapp({
                         />
                       )}
                       </div>
-                      {/* Solo en los ENTRANTES: reaccionar a lo que uno mismo
-                          escribió no significa nada para el lead. Y solo con la
-                          sesión viva — si no, el clic no haría nada. */}
-                      {m.direccion === 'entrante' && conectado && (
-                        <BotonReaccionar
-                          mia={m.reacciones?.find((r) => r.nuestra)?.emoji ?? null}
-                          onElegir={(emoji) =>
-                            reaccionar.mutate({
-                              numeroPropio,
-                              telefono,
-                              mensajeId: m.external_id,
-                              emoji,
-                            })
-                          }
-                        />
-                      )}
+                      {m.direccion === 'entrante' && acciones}
                     </div>
                   );
                 })}
