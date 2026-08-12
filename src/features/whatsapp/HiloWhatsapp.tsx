@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Bot, Check, CheckCheck, Copy, CornerUpLeft, FileText, SmilePlus, Loader2, Megaphone, Paperclip, Phone, Play, QrCode, Send, Link2, Trash2, WifiOff, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, Bot, Check, CheckCheck, Copy, CornerDownRight, CornerUpLeft, FileText, SmilePlus, Loader2, Megaphone, Paperclip, Phone, Play, QrCode, Send, Link2, Trash2, WifiOff, X } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
 import { useBlobAutenticado } from '../../lib/datos/blobAutenticado';
 import { formatoTelefono, tempClass } from '../../lib/formato';
@@ -17,7 +17,7 @@ import { alPonerEnComposer } from './puenteComposer';
 import { piezaDelTexto } from './procedenciaComposer';
 import { textoDelBoton } from '../autorespuesta/revision';
 import { TextoWhatsapp } from './TextoWhatsapp';
-import { rotuloDeCita, sePuedeCitar, type CitaHilo } from './cita';
+import { citaDeMensaje, clavesDelHilo, respondidos, rotuloDeCita, sePuedeCitar, type CitaHilo } from './cita';
 import { Avatar } from '../canales/Avatar';
 import type { Conversacion } from '../canales/conversaciones';
 import {
@@ -386,37 +386,64 @@ function BotonResponder({ onResponder }: { onResponder: () => void }) {
 /**
  * EL MENSAJE CITADO, ADENTRO DE LA BURBUJA — la tirita gris de WhatsApp.
  *
- * Es un `div` y no un botón a propósito: **tocarlo no envía nada**, y tampoco
- * navega. En WhatsApp la tirita salta al mensaje original; acá eso sería un
- * scroll a algo que puede no estar en la ventana de 200, o sea un clic que a
- * veces no hace nada — peor que uno que nunca hace nada.
+ * ── Por qué el fondo cambió ─────────────────────────────────────────────────
+ * Era `bg-muted` (#F5F7FB) sobre una burbuja `bg-card` (#FFFFFF): contraste
+ * **1.04**, o sea invisible — el mismo defecto de clase que tenía `::selection`.
+ * Lo único que marcaba la cita era el salto tipográfico, y el filete de 3 px al
+ * 60 % es una uña, no una barra. Ahora el tinte de navy funciona sobre las DOS
+ * burbujas (la blanca y la `secondary`) y el filete es sólido.
  *
- * El filete de la izquierda es lo que la hace legible como cita y no como una
- * segunda línea del mensaje. Navy, nunca oro: el oro es tiempo que se acaba.
+ * ── El caso sin autor, que era el peor ──────────────────────────────────────
+ * Cuando Hermes no encontró el citado, `autor` es `null` y la tirita quedaba
+ * **una sola línea gris de 11 px**, sin nada en negrita: perdía su ancla y se
+ * leía como un subtítulo del propio mensaje. Ahora «Un mensaje anterior» ocupa
+ * la línea del autor —en negrita— y no se duplica abajo, porque cuando no hay
+ * autor el extracto ES ese mismo texto.
+ *
+ * ── 🔴 Botón SOLO cuando hay a dónde ir ─────────────────────────────────────
+ * ADR 0054 dejó el salto afuera con un argumento correcto: «un scroll a algo que
+ * puede no estar en la ventana de 200, o sea un clic que a veces no hace nada —
+ * peor que uno que nunca hace nada». La salida no es no construirlo: es que el
+ * clic **exista solo cuando funciona**. `onSaltar` llega `undefined` si el citado
+ * no está en pantalla, y entonces esto sigue siendo un `div` inerte, sin cursor
+ * ni foco. Quién está en pantalla lo decide `clavesDelHilo` (`cita.ts`), NO
+ * `direccion === null`, que responde otra pregunta.
+ *
+ * Navy, nunca oro: el oro es tiempo que se acaba.
  */
 function CitaEnBurbuja({
   cita,
   nombreContacto,
-  saliente,
+  onSaltar,
 }: {
   cita: CitaHilo;
   nombreContacto: string | null;
-  saliente: boolean;
+  /** Solo cuando el citado está EN EL DOM. Sin esto la tirita no es interactiva. */
+  onSaltar?: () => void;
 }) {
   const { autor, extracto } = rotuloDeCita(cita, nombreContacto);
+  const base = 'mb-1 block w-full overflow-hidden rounded-lg border-l-4 border-navy bg-navy/[0.07] px-2 py-1 text-left';
+  const contenido = (
+    <>
+      <div className="truncate text-[11px] font-bold text-navy">{autor ?? extracto}</div>
+      {autor && <div className="truncate text-[11px] text-muted-foreground">{extracto}</div>}
+    </>
+  );
+
+  if (!onSaltar) return <div className={base}>{contenido}</div>;
   return (
-    <div
+    <button
+      type="button"
+      onClick={onSaltar}
+      title="Ir al mensaje"
+      aria-label={`Ir al mensaje citado: ${extracto}`}
       className={
-        'mb-1 overflow-hidden rounded-lg border-l-[3px] border-navy/60 px-2 py-1 ' +
-        // En el saliente el fondo de la burbuja ya es `secondary`: la tirita
-        // necesita separarse de ÉL, no del blanco. Con el mismo tono en los dos
-        // lados, adentro de un saliente se ve como parte del mensaje.
-        (saliente ? 'bg-card/70' : 'bg-muted')
+        base +
+        ' cursor-pointer transition-colors hover:bg-navy/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40'
       }
     >
-      {autor && <div className="truncate text-[11px] font-bold text-navy">{autor}</div>}
-      <div className="truncate text-[11px] text-muted-foreground">{extracto}</div>
-    </div>
+      {contenido}
+    </button>
   );
 }
 
@@ -636,6 +663,49 @@ export function HiloWhatsapp({
   const mensajes = hilo.data?.mensajes ?? [];
   const grupos = agruparPorDia(mensajes);
 
+  /** Qué `external_id` están dibujados, para saber a cuáles se puede saltar. */
+  const enPantalla = useMemo(() => clavesDelHilo(mensajes), [mensajes]);
+  /** A quiénes les respondieron. Se deriva de las citas que ya vinieron. */
+  const conRespuesta = useMemo(() => respondidos(mensajes), [mensajes]);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  /** El mensaje al que se acaba de saltar, mientras dura el resalte. */
+  const [destacado, setDestacado] = useState<string | null>(null);
+  const timerDestaque = useRef<number | null>(null);
+  useEffect(() => () => { if (timerDestaque.current != null) window.clearTimeout(timerDestaque.current); }, []);
+
+  /**
+   * SALTAR AL MENSAJE CITADO.
+   *
+   * 🔴 **A mano sobre `scrollTop`, NUNCA `scrollIntoView`** — regla de la casa,
+   * escrita en `canales/BarraFiltros.tsx`: se probó con `block: 'nearest'` y
+   * **scrollea los ancestros igual**, o sea que arrastra la página entera. Acá
+   * eso movería la mesa con la cola y el panel adentro.
+   *
+   * El destino se busca por `data-mensaje` (la convención del repo para esto es
+   * `data-*` + `querySelector`, no un ref por elemento: son hasta 200).
+   *
+   * ⚠️ En jsdom no hay layout: todos los rects dan 0 y el scroll no se mueve. Eso
+   * está bien — el test fija el cableado (que la tirita sea botón y que marque el
+   * destacado); que la vista se mueva se comprueba con la captura.
+   */
+  function saltarAlCitado(externalId: string) {
+    const cont = scrollRef.current;
+    const el = cont?.querySelector<HTMLElement>(`[data-mensaje="${CSS.escape(externalId)}"]`);
+    if (cont && el) {
+      const caja = cont.getBoundingClientRect();
+      const dest = el.getBoundingClientRect();
+      // Un respiro arriba para que el mensaje no quede pegado al borde: si queda
+      // al ras, no se lee como «llegué acá», se lee como que se cortó.
+      const AIRE = 24;
+      if (dest.top < caja.top + AIRE) cont.scrollTop -= caja.top + AIRE - dest.top;
+      else if (dest.bottom > caja.bottom) cont.scrollTop += dest.bottom - caja.bottom + AIRE;
+    }
+    setDestacado(externalId);
+    if (timerDestaque.current != null) window.clearTimeout(timerDestaque.current);
+    timerDestaque.current = window.setTimeout(() => setDestacado(null), 1600);
+  }
+
   // Al abrir la conversación: marcar leído (una vez por teléfono).
   useEffect(() => {
     if (telefono) marcarLeido.mutate({ telefono, numeroPropio });
@@ -680,7 +750,7 @@ export function HiloWhatsapp({
       <BadgeOrigen origen={hilo.data?.origen ?? null} />
 
       {/* El hilo */}
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-muted/30 p-4">
+      <div ref={scrollRef} data-hilo className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-muted/30 p-4">
         {hilo.isPending ? (
           <SkeletonHilo />
         ) : hilo.isError ? (
@@ -738,12 +808,8 @@ export function HiloWhatsapp({
                         {puedeCitar && (
                           <BotonResponder
                             onResponder={() =>
-                              setCitando({
-                                mensajeExternalId: m.external_id,
-                                texto: m.texto,
-                                direccion: m.direccion,
-                                mediaClase: m.media?.clase ?? null,
-                              })
+                              // La MISMA lectura que usa el doble clic (#37).
+                              setCitando(citaDeMensaje(m))
                             }
                           />
                         )}
@@ -777,12 +843,44 @@ export function HiloWhatsapp({
                           emoji no ensanche el mensaje. */}
                       <div className="flex max-w-[75%] flex-col">
                       <div
+                        // El ancla del salto. React no emite `key` al HTML, así que
+                        // sin esto no hay NADA en el DOM que identifique un mensaje.
+                        data-mensaje={m.external_id}
+                        // Doble clic para responder, como lo pidió el dueño. Se
+                        // ignora lo que nazca en un control: la imagen vive adentro
+                        // de un `<button>` que abre el visor, los enlaces abren el
+                        // navegador, y la tirita —ahora que es botón— salta.
+                        onDoubleClick={(e) => {
+                          if ((e.target as HTMLElement).closest('button, a, video, audio')) return;
+                          if (sugerencia || !sePuedeCitar(m)) return;
+                          setCitando(citaDeMensaje(m));
+                          // 🔴 La selección se limpia A PROPÓSITO, y esto es lo que
+                          // se pierde: adentro de una burbuja, el doble clic deja de
+                          // seleccionar la palabra. No hay forma de tener las dos —
+                          // responder mueve el foco al composer y eso colapsa la
+                          // selección igual. Limpiarla nosotros evita el resalte
+                          // FANTASMA (texto pintado como seleccionado que ya no lo
+                          // está, donde ⌘C copia otra cosa), que sería mentirle a la
+                          // pantalla. Para copiar quedan arrastrar y el botón Copiar,
+                          // que además se lleva el mensaje entero.
+                          window.getSelection()?.removeAllRanges();
+                        }}
                         className={
                           'rounded-2xl text-sm ' +
                           (m.media && (m.media.clase === 'imagen' || m.media.clase === 'video') ? 'p-1.5 ' : 'px-3.5 py-2 ') +
+                          // ⚠️ El resalte del salto va con TERNARIO, no concatenando
+                          // `ring-2` después: la burbuja entrante ya trae
+                          // `ring-1 ring-border`, y en Tailwind no gana el que está
+                          // más a la derecha del string sino el que sale después en
+                          // el CSS. Emitir un juego de clases o el otro, nunca los dos.
+                          (destacado === m.external_id
+                            ? 'ring-2 ring-primary '
+                            : m.direccion === 'saliente'
+                              ? ''
+                              : 'ring-1 ring-border ') +
                           (m.direccion === 'saliente'
                             ? 'rounded-br-md bg-secondary text-navy shadow-[0_1px_2px_rgba(14,42,82,0.06)]'
-                            : 'rounded-bl-md bg-card text-foreground ring-1 ring-border')
+                            : 'rounded-bl-md bg-card text-foreground')
                         }
                       >
                         {/* La cita va ARRIBA de todo, adjunto incluido: es el
@@ -793,7 +891,14 @@ export function HiloWhatsapp({
                             <CitaEnBurbuja
                               cita={m.cita}
                               nombreContacto={conversacion.persona_nombre}
-                              saliente={m.direccion === 'saliente'}
+                              // Botón solo si el citado ESTÁ dibujado. Ver `cita.ts`:
+                              // que el server lo haya resuelto no quiere decir que
+                              // esté en los 200 que se sirvieron.
+                              onSaltar={
+                                enPantalla.has(m.cita.mensajeExternalId)
+                                  ? () => saltarAlCitado(m.cita!.mensajeExternalId)
+                                  : undefined
+                              }
                             />
                           </div>
                         )}
@@ -840,6 +945,23 @@ export function HiloWhatsapp({
                             </span>
                           )}
                           <span className="inline-flex items-center gap-1">
+                            {/* «LE RESPONDIERON A ESTE» — entra al mismo cluster que
+                                la hora y los ✓✓ porque contesta la misma pregunta
+                                («¿qué pasó con este mensaje?») y porque la burbuja
+                                ya no tiene lugar para otra banda.
+                                🔴 La marca solo AFIRMA: **no existe** una marca de
+                                «nadie respondió». Se deriva de las citas que están
+                                entre los 200 servidos, así que puede faltar — y que
+                                falte no significa nada. Omite, nunca inventa. */}
+                            {conRespuesta.has(m.external_id) && (
+                              <CornerDownRight
+                                size={11}
+                                className="shrink-0 text-navy"
+                                aria-label="Respondieron a este mensaje"
+                              >
+                                <title>Respondieron a este mensaje</title>
+                              </CornerDownRight>
+                            )}
                             {new Date(m.occurred_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
                             {m.entrega && <TildesDeEntrega estado={m.entrega} />}
                           </span>
@@ -1076,6 +1198,15 @@ function ComposerWa({
     }
     setAdjunto(new File([r.archivo], nombreFinalDePegado(r.archivo, new Date()), { type: r.archivo.type }));
     setAvisoPegado(r.aviso);
+    // 🔴 EL FOCO VA ACÁ, en la rama donde el adjunto QUEDÓ, y no en quien llama.
+    // ⌘V no lo necesita —su handler vive EN el textarea, así que pegar implica
+    // foco— pero el arrastre escucha en la ventana: si la vendedora venía de tocar
+    // el hilo, Enter no llegaría al handler y el reflejo «soltar y apretar Enter»
+    // fallaría mudo. Y tiene que ser ACÁ y no en el `drop`, porque `aceptarArchivos`
+    // devuelve `true` también cuando RECHAZA: enfocar ahí dejaba la caja lista para
+    // que el próximo Enter mandara el texto suelto, sin el adjunto que se rechazó
+    // —y en modo revisión enfocaba justo después de decir «acá no se adjunta».
+    textareaRef.current?.focus();
     return true;
   }
 
@@ -1117,11 +1248,29 @@ function ComposerWa({
     const traeArchivos = (e: DragEvent) => tipos(e).includes('Files');
     /** Lo que el navegador abriría solo si lo soltás: un archivo o una URL. */
     const puedeNavegar = (e: DragEvent) => traeArchivos(e) || tipos(e).includes('text/uri-list');
+    /**
+     * 🔴 UN DROP DENTRO DE UNA CAJA DE TEXTO NO SE TOCA.
+     *
+     * Ahí el default del navegador es ESCRIBIR, no navegar — y es el que queremos:
+     * arrastrar el link de pago desde el navegador adentro del composer es un gesto
+     * que ya andaba. Cancelarlo por estar cazando URLs lo rompería, y encima
+     * contestaría un consejo equivocado («bajalo y arrastralo desde la carpeta» no
+     * aplica a un link). Es el gemelo del `preventDefault` del pegado, que va solo
+     * cuando hay archivo.
+     */
+    const enUnaCaja = (e: DragEvent) =>
+      e.target instanceof HTMLElement &&
+      (e.target.isContentEditable ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLInputElement);
 
     function alArrastrar(e: DragEvent) {
-      if (!puedeNavegar(e)) return;
+      if (!puedeNavegar(e) || enUnaCaja(e)) return;
       e.preventDefault();
-      setArrastrando(true);
+      // La banda solo se enciende cuando de verdad se puede adjuntar. Con una URL
+      // se cancela igual (esa es la guarda) pero NO se promete: prometer y después
+      // retractarse es peor que no prometer nada.
+      if (traeArchivos(e)) setArrastrando(true);
     }
     function alSalir(e: DragEvent) {
       // `relatedTarget` nulo = el puntero se fue de la ventana. Sin esa guarda el
@@ -1129,7 +1278,7 @@ function ComposerWa({
       if (!e.relatedTarget) setArrastrando(false);
     }
     function alSoltar(e: DragEvent) {
-      if (!puedeNavegar(e)) return;
+      if (!puedeNavegar(e) || enUnaCaja(e)) return;
       // Se cancela SIEMPRE, incluso cuando no vamos a adjuntar nada: cancelar es
       // lo que impide que el webview se vaya a la imagen.
       e.preventDefault();
@@ -1146,19 +1295,9 @@ function ComposerWa({
       // Por REF y no directo: así los listeners se enganchan una sola vez y la
       // función que corre sigue siendo la última. Sin esto habría que dejar el
       // efecto sin deps, y entonces los tres listeners se dan de baja y de alta
-      // en CADA tecla que se escribe en el composer.
-      const hubo = aceptarRef.current(e.dataTransfer?.files);
-
-      // 🔴 EL FOCO, que es lo que separa «adjuntó» de «se puede mandar».
-      // ⌘V no necesita esto porque su handler VIVE en el textarea, así que pegar
-      // implica que la caja ya tenía el foco. El drop escucha en la ventana: si
-      // la vendedora venía de tocar el hilo (scrollear, citar, reaccionar), el
-      // foco está en cualquier lado y **Enter no llega al handler**, que cuelga
-      // del `onKeyDown` del textarea. El botón anda igual, pero el reflejo que se
-      // aprende con ⌘V —soltar y apretar Enter— fallaba en silencio.
-      // `textareaRef` es un ref: estable entre renders, así que usarlo adentro de
-      // un efecto con deps vacías es correcto.
-      if (hubo) textareaRef.current?.focus();
+      // en CADA tecla que se escribe en el composer. (El foco lo pone
+      // `aceptarArchivos` en la rama donde el adjunto quedó.)
+      aceptarRef.current(e.dataTransfer?.files);
     }
 
     window.addEventListener('dragover', alArrastrar);

@@ -100,3 +100,70 @@ export function extractoDeCita(cita: Pick<CitaHilo, 'texto' | 'mediaClase'>): st
 export function sePuedeCitar(m: { texto?: string | null; media?: { clase: string } | null }): boolean {
   return Boolean(m.texto?.trim() || m.media);
 }
+
+/** Lo mínimo que estas dos funciones necesitan de un mensaje del hilo. */
+type MensajeCitable = { external_id: string; cita?: CitaHilo | null };
+
+/**
+ * UN MENSAJE DEL HILO, VISTO COMO CITA — la misma lectura para las DOS puertas.
+ *
+ * Hay dos formas de empezar a responder (el botón de la burbuja y el doble clic)
+ * y las dos tienen que armar exactamente el mismo objeto: es lo que termina en el
+ * `citaDe` del POST, y si una de las dos lo arma distinto el síntoma **lo tiene el
+ * lead** —la tirita le llega mal o no le llega— y acá no se ve nada. Es el mismo
+ * argumento por el que `decidirPegado` la comparten ⌘V y el arrastre (#37).
+ */
+export function citaDeMensaje(m: {
+  external_id: string;
+  texto: string | null;
+  direccion: 'entrante' | 'saliente';
+  media?: { clase: string } | null;
+}): CitaHilo {
+  return {
+    mensajeExternalId: m.external_id,
+    texto: m.texto,
+    direccion: m.direccion,
+    mediaClase: m.media?.clase ?? null,
+  };
+}
+
+/**
+ * LOS `external_id` QUE ESTÁN EN PANTALLA — la única respuesta honesta a «¿puedo
+ * saltar a este citado?».
+ *
+ * 🔴 **`cita.direccion === null` NO sirve para esto**, y confundirlos es el error
+ * que hay que no cometer. Ese `null` significa «Hermes no encontró el mensaje en
+ * la base»; la consulta que lo resuelve (`server/src/whatsapp/citaRepositorio.ts`)
+ * busca por `external_id` en toda la tabla, **sin acotar a los 200 que el hilo
+ * sirve**. O sea que hay TRES estados y no dos:
+ *
+ *   1. citado dentro de los 200  → resuelto, y **está** en el DOM;
+ *   2. citado más viejo que 200  → **resuelto igual**, y NO está en el DOM;
+ *   3. citado que no está en Hermes → `direccion: null`.
+ *
+ * El caso 2 es el peligroso: la tirita se ve completa, con autor y texto, y no hay
+ * a dónde saltar. Por eso la presencia se pregunta contra lo que el front TIENE, y
+ * los dos ids comparan directo porque comparten la receta `wa:<id>`.
+ */
+export function clavesDelHilo(mensajes: readonly MensajeCitable[]): Set<string> {
+  return new Set(mensajes.map((m) => m.external_id));
+}
+
+/**
+ * LOS MENSAJES A LOS QUE ALGUIEN RESPONDIÓ, derivados de las citas que ya vinieron.
+ *
+ * No hace falta ni una columna ni un endpoint: si una respuesta cita a X, entonces
+ * X fue respondido. El dato ya viaja, solo que apuntando al revés.
+ *
+ * ⚠️ **El límite, y es real**: solo ve las respuestas que están entre los 200
+ * mensajes servidos. Un mensaje viejo al que le respondieron hace un mes no se
+ * marca. Eso es un hueco honesto —marca de menos, nunca de más— y la alternativa
+ * sería una consulta inversa en el server para pintar un ícono.
+ */
+export function respondidos(mensajes: readonly MensajeCitable[]): Set<string> {
+  const marcados = new Set<string>();
+  for (const m of mensajes) {
+    if (m.cita?.mensajeExternalId) marcados.add(m.cita.mensajeExternalId);
+  }
+  return marcados;
+}

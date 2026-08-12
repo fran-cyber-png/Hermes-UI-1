@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'vitest';
-import { CITADO_DESCONOCIDO, extractoDeCita, rotuloDeCita, sePuedeCitar, TOPE_EXTRACTO } from './cita';
+import {
+  CITADO_DESCONOCIDO,
+  citaDeMensaje,
+  clavesDelHilo,
+  extractoDeCita,
+  respondidos,
+  rotuloDeCita,
+  sePuedeCitar,
+  TOPE_EXTRACTO,
+} from './cita';
 import type { CitaHilo } from './cita';
 
 /**
@@ -91,5 +100,71 @@ describe('qué se puede citar', () => {
     // tirita saldría en blanco, y una cita en blanco no señala nada.
     expect(sePuedeCitar({ texto: null, media: null })).toBe(false);
     expect(sePuedeCitar({ texto: '   ' })).toBe(false);
+  });
+});
+
+/** Un mensaje del hilo, con lo mínimo que estas funciones miran. */
+const msj = (external_id: string, cita?: string) => ({
+  external_id,
+  cita: cita ? ({ mensajeExternalId: cita, texto: 'x', direccion: 'entrante', mediaClase: null } as CitaHilo) : null,
+});
+
+describe('quién está en pantalla', () => {
+  test('junta los external_id de lo servido', () => {
+    const c = clavesDelHilo([msj('wa:A'), msj('wa:B'), msj('wa:C')]);
+    expect([...c].sort()).toEqual(['wa:A', 'wa:B', 'wa:C']);
+  });
+
+  test('🔴 responde «está dibujado», que NO es lo mismo que «el server lo resolvió»', () => {
+    // El caso que hace falta distinguir: una cita con autor y texto —o sea
+    // resuelta— que apunta a un mensaje más viejo que los 200 servidos. Se ve
+    // completa y no hay a dónde saltar. Si se usara `direccion !== null` como
+    // señal, esto daría verdadero y el clic no haría nada.
+    const resueltaPeroAusente: CitaHilo = {
+      mensajeExternalId: 'wa:VIEJO',
+      texto: 'el precio es 490',
+      direccion: 'saliente',
+      mediaClase: null,
+    };
+    expect(resueltaPeroAusente.direccion).not.toBeNull();
+    expect(clavesDelHilo([msj('wa:A'), msj('wa:B')]).has('wa:VIEJO')).toBe(false);
+  });
+});
+
+describe('a quién le respondieron', () => {
+  test('el citado queda marcado, el que cita no', () => {
+    const r = respondidos([msj('wa:A'), msj('wa:B', 'wa:A')]);
+    expect(r.has('wa:A')).toBe(true);
+    expect(r.has('wa:B')).toBe(false);
+  });
+
+  test('dos respuestas al mismo mensaje son una sola marca', () => {
+    expect(respondidos([msj('wa:A'), msj('wa:B', 'wa:A'), msj('wa:C', 'wa:A')]).size).toBe(1);
+  });
+
+  test('🔴 la marca solo AFIRMA: si la respuesta quedó fuera de lo servido, omite', () => {
+    // Se deriva de las citas que están entre los 200 mensajes que el hilo trae.
+    // Un mensaje al que le respondieron hace un mes no se marca — y eso es un
+    // hueco honesto: omite, nunca inventa. Por eso NO existe una marca de «nadie
+    // respondió»: la ausencia no significa nada.
+    expect(respondidos([msj('wa:A')]).has('wa:A')).toBe(false);
+  });
+
+  test('un citado que no está en el hilo igual entra: los dos conjuntos son independientes', () => {
+    const mensajes = [msj('wa:B', 'wa:FUERA')];
+    expect(respondidos(mensajes).has('wa:FUERA')).toBe(true);
+    expect(clavesDelHilo(mensajes).has('wa:FUERA')).toBe(false);
+  });
+});
+
+describe('leer un mensaje como cita', () => {
+  test('copia el id, el texto, la dirección y la clase del adjunto', () => {
+    expect(
+      citaDeMensaje({ external_id: 'wa:A', texto: 'hola', direccion: 'saliente', media: { clase: 'imagen' } }),
+    ).toEqual({ mensajeExternalId: 'wa:A', texto: 'hola', direccion: 'saliente', mediaClase: 'imagen' });
+  });
+
+  test('sin adjunto la clase es null, no undefined', () => {
+    expect(citaDeMensaje({ external_id: 'wa:A', texto: 'hola', direccion: 'entrante' }).mediaClase).toBeNull();
   });
 });

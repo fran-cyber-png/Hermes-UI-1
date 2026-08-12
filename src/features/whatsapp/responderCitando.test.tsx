@@ -337,3 +337,200 @@ describe('la cita recibida, dentro de la burbuja', () => {
     expect(m.contenedor.textContent).not.toContain('Un mensaje anterior');
   });
 });
+
+/** Un mensaje del hilo, con cita opcional. */
+const conCita = (id: number, externalId: string, cita?: Record<string, unknown>) => ({
+  id,
+  direccion: 'entrante',
+  autor: TELEFONO,
+  texto: `mensaje ${id}`,
+  occurred_at: AHORA,
+  external_id: externalId,
+  ...(cita ? { cita } : {}),
+});
+
+const tirita = (m: Montado) =>
+  [...m.contenedor.querySelectorAll<HTMLElement>('[aria-label^="Ir al mensaje citado"]')];
+
+describe('saltar al mensaje citado', () => {
+  test('🔴 la cita es BOTÓN cuando el citado está dibujado', async () => {
+    conMensajes([
+      EL_PRECIO,
+      conCita(9, 'wa:RESPUESTA', {
+        mensajeExternalId: 'wa:EL_PRECIO',
+        texto: 'El diploma sale S/ 450',
+        direccion: 'saliente',
+        mediaClase: null,
+      }),
+    ]);
+    const m = await abrir();
+    expect(tirita(m)).toHaveLength(1);
+    expect(tirita(m)[0].tagName).toBe('BUTTON');
+  });
+
+  test('🔴 y NO lo es cuando el server la resolvió pero el mensaje no está en pantalla', async () => {
+    // Éste es el test que mata la objeción del ADR 0054. La cita viene COMPLETA
+    // —con autor y con texto—, o sea que `direccion !== null`; lo que no hay es a
+    // dónde saltar, porque el citado es más viejo que los 200 servidos. Si la
+    // presencia se dedujera de `direccion`, acá habría un botón que no hace nada.
+    conMensajes([
+      conCita(9, 'wa:RESPUESTA', {
+        mensajeExternalId: 'wa:MAS_VIEJO_QUE_200',
+        texto: 'algo que dijimos hace un mes',
+        direccion: 'saliente',
+        mediaClase: null,
+      }),
+    ]);
+    const m = await abrir();
+    expect(tirita(m)).toHaveLength(0);
+    // La cita se sigue DIBUJANDO: lo que no está es el botón.
+    expect(m.contenedor.textContent).toContain('algo que dijimos hace un mes');
+  });
+
+  test('el hueco honesto tampoco es botón, y dice qué es', async () => {
+    conMensajes([
+      conCita(9, 'wa:RESPUESTA', {
+        mensajeExternalId: 'wa:DE_ANTES',
+        texto: null,
+        direccion: null,
+        mediaClase: null,
+      }),
+    ]);
+    const m = await abrir();
+    expect(tirita(m)).toHaveLength(0);
+    expect(m.contenedor.textContent).toContain('Un mensaje anterior');
+  });
+
+  test('tocarla marca el destino, y solo el destino', async () => {
+    conMensajes([
+      EL_PRECIO,
+      LA_PREGUNTA,
+      conCita(9, 'wa:RESPUESTA', {
+        mensajeExternalId: 'wa:EL_PRECIO',
+        texto: 'El diploma sale S/ 450',
+        direccion: 'saliente',
+        mediaClase: null,
+      }),
+    ]);
+    const m = await abrir();
+    tocar(tirita(m)[0]);
+    await reposar();
+
+    const destino = m.contenedor.querySelector('[data-mensaje="wa:EL_PRECIO"]')!;
+    const otro = m.contenedor.querySelector('[data-mensaje="wa:LA_PREGUNTA"]')!;
+    expect(destino.className).toContain('ring-primary');
+    expect(otro.className).not.toContain('ring-primary');
+  });
+});
+
+describe('a quién le respondieron', () => {
+  test('el mensaje citado lleva la marca; el que cita, no', async () => {
+    conMensajes([
+      EL_PRECIO,
+      conCita(9, 'wa:RESPUESTA', {
+        mensajeExternalId: 'wa:EL_PRECIO',
+        texto: 'El diploma sale S/ 450',
+        direccion: 'saliente',
+        mediaClase: null,
+      }),
+    ]);
+    const m = await abrir();
+    const marcas = [...m.contenedor.querySelectorAll('[aria-label="Respondieron a este mensaje"]')];
+    expect(marcas).toHaveLength(1);
+    expect(m.contenedor.querySelector('[data-mensaje="wa:EL_PRECIO"]')!.contains(marcas[0])).toBe(true);
+  });
+
+  test('🔴 no existe la marca de «nadie respondió»: la ausencia no dice nada', async () => {
+    // La derivación solo ve las respuestas que están entre los 200 servidos, así
+    // que puede faltar. Por eso la marca solo afirma — y por eso el hilo no puede
+    // tener en ninguna parte una leyenda negativa.
+    conMensajes([EL_PRECIO, LA_PREGUNTA]);
+    const m = await abrir();
+    expect(m.contenedor.querySelectorAll('[aria-label="Respondieron a este mensaje"]')).toHaveLength(0);
+    expect(m.contenedor.textContent).not.toContain('Sin respuesta');
+    expect(m.contenedor.textContent).not.toContain('sin responder');
+  });
+});
+
+describe('doble clic para responder', () => {
+  const dobleClic = (el: Element) =>
+    el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+
+  test('pone la cita, igual que el botón', async () => {
+    conMensajes([EL_PRECIO]);
+    const m = await abrir();
+    dobleClic(m.contenedor.querySelector('[data-mensaje="wa:EL_PRECIO"]')!);
+    await reposar();
+    expect(m.contenedor.textContent).toContain('Respondiendo a Vos');
+  });
+
+  test('🔴 el `citaDe` que sale por el doble clic es el MISMO que sale por el botón', async () => {
+    // Las dos puertas comparten `citaDeMensaje`. Si una lo armara distinto, el
+    // síntoma lo tiene el LEAD —la tirita le llega mal— y acá no se ve nada.
+    conMensajes([EL_PRECIO]);
+    const m1 = await abrir();
+    dobleClic(m1.contenedor.querySelector('[data-mensaje="wa:EL_PRECIO"]')!);
+    await reposar();
+    escribir(caja(m1), 'por doble clic');
+    teclear('Enter', { target: caja(m1) });
+    await reposar();
+    const porDobleClic = enviados[0]?.citaDe;
+
+    m1.desmontar();
+    conMensajes([EL_PRECIO]);
+    const m2 = await abrir();
+    tocar(botonesResponder(m2)[0]);
+    await reposar();
+    escribir(caja(m2), 'por el botón');
+    teclear('Enter', { target: caja(m2) });
+    await reposar();
+
+    expect(porDobleClic).toBe('wa:EL_PRECIO');
+    expect(enviados[0]?.citaDe).toBe(porDobleClic);
+  });
+
+  test('🔴 limpia la selección: nada de resalte fantasma', async () => {
+    // Responder mueve el foco al composer y eso colapsa la selección igual. Si no
+    // la limpiáramos nosotros, podría quedar texto pintado como seleccionado que
+    // ya no lo está — y ahí ⌘C copia otra cosa. Es el costo dicho del gesto:
+    // adentro de la burbuja, el doble clic deja de seleccionar la palabra.
+    conMensajes([EL_PRECIO]);
+    const m = await abrir();
+    const burbuja = m.contenedor.querySelector('[data-mensaje="wa:EL_PRECIO"]')!;
+    const rango = document.createRange();
+    rango.selectNodeContents(burbuja);
+    window.getSelection()!.addRange(rango);
+    expect(window.getSelection()!.rangeCount).toBe(1);
+
+    dobleClic(burbuja);
+    await reposar();
+    expect(window.getSelection()!.rangeCount).toBe(0);
+  });
+
+  test('no responde si nace en un control: la imagen abre su visor, el enlace su navegador', async () => {
+    conMensajes([EL_PRECIO]);
+    const m = await abrir();
+    const burbuja = m.contenedor.querySelector('[data-mensaje="wa:EL_PRECIO"]')!;
+    const boton = burbuja.querySelector('button') ?? document.createElement('button');
+    burbuja.appendChild(boton);
+    dobleClic(boton);
+    await reposar();
+    expect(m.contenedor.textContent).not.toContain('Respondiendo a');
+  });
+
+  test('en modo revisión no pone cita: ahí se aprueba un texto', async () => {
+    conMensajes([EL_PRECIO]);
+    const m = await abrir({
+      id: 7,
+      texto: 'Hola, gracias por escribirnos.',
+      campana: null,
+      paso: { actual: 1, total: 3 },
+      trabajando: false,
+      onAprobar: () => {},
+      onDescartar: () => {},
+    });
+    dobleClic(m.contenedor.querySelector('[data-mensaje="wa:EL_PRECIO"]')!);
+    await reposar();
+    expect(m.contenedor.textContent).not.toContain('Respondiendo a');
+  });
+});
