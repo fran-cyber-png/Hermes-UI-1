@@ -114,6 +114,43 @@ contra el schema nuevo — es justamente lo que hace seguro el rollback automát
 
 **En qué estado está la base**: `cd /srv/hermes/server && npm run db:estado` (solo lee).
 
+## 🚀 Lo del 11/12-ago-2026 — en `main`, todavía SIN desplegar (los dos van por N5)
+
+### La cola era lenta, y no por lo que parecía (PR #361)
+
+Medido en producción, no supuesto: `hermes_db` al **569 % de CPU** con load average **20** sobre
+tablas de 13.195 filas. `/api/whatsapp/sesion` contestaba en **5 ms** —el server Node estaba sano—
+y `/api/conversaciones` en **5,6 s**.
+
+**La causa**: `?offset=0` dispara tres consultas (página, conteos, desglose) y las tres rearmaban el
+MISMO CTE pesado. 1.645 + 1.310 + 1.193 ms. El experimento que lo aisló: la primera página tardaba
+5,6 s y la segunda 1,8 s, porque la segunda se saltea dos de las tres — y el front siempre pide la
+primera. El Pipeline, que pide seis columnas de una, hacía **18 pasadas**.
+
+**El arreglo**: `todo` se materializa una vez en una tabla temporal. **4.797 → 1.632 ms (66 %)**,
+medido contra la base de producción por un túnel SSH, viejo contra nuevo en la misma máquina.
+
+⚠️ **Lo que se descartó midiendo, y estaba en el plan**: subir `work_mem` (empeora) y subir
+`shared_buffers` (100 % de aciertos de caché, cero lecturas de disco). Aislar el fragmento en un
+`.sql` daba lo contrario que el seam real, porque suelto Postgres lo paraleliza.
+
+**Daño colateral que se explica solo con esto**: el bot de la línea de campaña tardaba **2 a 5
+minutos** por mensaje con `intereses/senales/memoria: timeout` — a las 16:38 el mismo bot tardaba
+7 s. Era víctima de la saturación, no causa.
+
+### Routing: qué campaña de Meta cae en qué vendedora (ADR 0053, PR #357)
+
+La décima vista del riel, y la primera que **no la ve todo el mundo**. Hasta hoy los leads de la
+línea de Cloud API se repartían por rueda, que reparte parejo **porque no sabe de dónde viene
+nadie**.
+
+Medido antes de diseñar: en 30 días llegaron **14 anuncios que son 2 campañas** —`[AGO] OSINT`
+(ACTIVE, 4 anuncios, 10 personas) y `[JUL] INTELIGENCIA | WSP` (PAUSED, 10 anuncios, 78)—, y Meta
+**no manda el nombre de la campaña** en el referral: hay que resolverlo contra la Graph API.
+
+**La tabla de reglas arranca vacía y eso ES el interruptor**: sin reglas el reparto es exactamente
+el round-robin de hoy.
+
 ## Qué hay en `main` (≠ lo que corre en producción)
 
 | Área | Estado |

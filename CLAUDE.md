@@ -1578,6 +1578,33 @@ Solo en `server/.env` (gitignored). **Se referencian por nombre, jamás se pegan
 - **El transporte falso repite ids entre reinicios** (`falso-1`, `falso-2`…): reprocesar colisiona con la
   idempotencia y el mensaje no entra. Para demos limpias, borrar los `external_id LIKE 'wa:falso-%'`.
 - **whatsmeow trae binario Go por plataforma**: en el deploy linux, `npm install` baja el binario linux.
+- 🔴 **`consultarCola` MATERIALIZA `todo` UNA VEZ POR PEDIDO, EN UNA TABLA TEMPORAL.** Las tres
+  consultas —página, conteos de los chips y desglose del embudo— arrancaban con el MISMO
+  `conTodo(...)`, o sea tres veces el hash join de 13.195 interacciones contra `events`, el sort de
+  10 MB que cae a disco y ~20 agregados con regex. Medido en producción el 11-ago-2026: 1.645 +
+  1.310 + 1.193 ms, y la primera página —la única que el front pide— tardaba **5,6 s** contra 1,8 s
+  de la segunda. Con la tabla temporal: **4.797 → 1.632 ms**, y el Pipeline pasa de 18 pasadas a 6.
+  · ⚠️ **La transacción va ADENTRO del `try` del loop de degradación.** Al revés, el primer error de
+    tabla ausente aborta la transacción y los cuatro reintentos contestan «current transaction is
+    aborted»: la cola dejaría de degradar y se caería.
+  · ⚠️ **La tabla se llama `todo`, igual que la CTE que reemplaza**, porque varias CTEs de esas
+    consultas leen `FROM todo` y **una CTE no puede ver un alias del `FROM`**. Con otro nombre
+    revientan con `relation "todo" does not exist`.
+  · 🔴 **El desglose mira OTRO universo** (arma su `todo` con `pins = null`: una conversación fijada
+    y vieja sube a la cola pero no entra a la foto del embudo). Comparte la tabla gracias a
+    `en_ventana` —«¿habría entrado sin el pin?»— en los tres brazos del UNION. Y
+    `contarPorEtapaEfectiva` (el embudo del Dashboard) entra SIN transacción y sin tabla, así que
+    sigue armándose el suyo: lo pide el flag `desdeTablaCompartida`. Candado:
+    `consultarCola.desglosePins.test.db.ts`.
+  · ⚠️ **Lo que NO era**: `work_mem` 4→64 MB **empeora** (4,1 → 4,5 s con el seam real; aislado en un
+    `.sql` da al revés porque ahí Postgres paraleliza y adentro de la consulta grande no), y
+    `shared_buffers` no tiene nada que ganar (100 % de aciertos, cero lecturas de disco). **Para
+    medir un cambio, corré el SEAM COMPLETO contra datos reales** — hay un A/B listo en
+    `server/scratchpad/medir-cola.ts`, que va por un túnel SSH a la base de producción.
+- ⚠️ **`err.message` de una consulta de drizzle NO dice por qué falló: dice el SQL.** postgres.js lo
+  arma como «Failed query: …» y guarda la causa en `err.cause`. Por eso el webhook escupió **96 «no
+  se pudo aplicar el recibo» en una hora sin explicar ninguno**. Para loguear un `catch` de base va
+  `porQueFallo()` (`server/src/lib/porQueFallo.ts`), no `err.message`.
 - **La cola sirve conversaciones, no filas** (`/api/conversaciones`, no `/api/interactions`): los mensajes se
   agrupan por `(canal, persona, número propio)`; los comentarios siguen individuales.
 - **Backticks dentro de un comentario SQL cierran el `` sql`` `` template**: TS1005 en cascada. Un comentario
