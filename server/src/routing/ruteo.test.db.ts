@@ -6,7 +6,14 @@ import { conversacionAsignada, repartoRueda } from "../db/reparto.js";
 import { campanaAnuncio, campanaCable } from "../db/routing.js";
 import { asignarSiHaceFalta, reasignar } from "../reparto/asignar.js";
 import { campanaMeta } from "../db/routing.js";
-import { duenosPorCampana, fotoDeRouting, ponerCables, guardarCampanas } from "./repositorio.js";
+import {
+  cablearProducto,
+  duenosPorCampana,
+  fotoDeRouting,
+  ponerCables,
+  guardarCampanas,
+} from "./repositorio.js";
+import { aliasCurso } from "../db/schema.js";
 
 /**
  * EL RUTEO POR CAMPAÑA, contra una Postgres de verdad.
@@ -347,3 +354,93 @@ test("y la carga que ya tenía cuenta: no arranca de cero por estar fuera de la 
   const quien = await asignarSiHaceFalta(db, `conv:whatsapp:51900000403:${LINEA}`, LINEA, AD_OSINT);
   assert.equal(quien, "ana", "le toca a la que menos tiene, y zoe ya tenía dos");
 });
+
+/**
+ * 🔴 CABLEAR UN PRODUCTO ENTERO — y sobre todo, DESCABLEARLO.
+ *
+ * Estos existen porque el `quitar` salió a la pantalla roto y **ningún test lo
+ * vio**: el `DELETE` se había escrito con un `= ANY(${arreglo})` armado a mano,
+ * drizzle bindeaba el arreglo como un parámetro escalar y Postgres rechazaba la
+ * consulta entera. El síntoma fue la franja roja con el SQL crudo, en la cara de
+ * quien estaba configurando el ruteo (12-ago-2026).
+ *
+ * Un test puro no lo podía atrapar: el SQL se arma bien y falla al ejecutarse.
+ */
+test("cablear un producto: agregar suma sin pisar, y quitar quita", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarRueda(db);
+  await guardarCampanas(db, [
+    { campanaId: CAMP_OSINT, nombre: "[AGO] OSINT", estado: "activa", numeros: [LINEA] },
+    { campanaId: CAMP_INTELIGENCIA, nombre: "[JUL] OSINT WSP", estado: "activa", numeros: [LINEA] },
+  ]);
+  // Cada pieza arranca con una vendedora DISTINTA: es el caso donde un
+  // `reemplazar` disfrazado de `agregar` se notaría.
+  await ponerCables(db, LINEA, CAMP_OSINT, ["ana"], "quien");
+  await ponerCables(db, LINEA, CAMP_INTELIGENCIA, ["beto"], "quien");
+
+  const familia = await familiaDeLasDos(db);
+  const cablesAhora = async () =>
+    (await db.select().from(campanaCable).where(eq(campanaCable.numeroPropio, LINEA)))
+      .map((f) => `${f.campanaId}→${f.vendedoraId}`)
+      .sort();
+
+  await cablearProducto(db, LINEA, familia, ["caro"], "quien", "agregar");
+  assert.deepEqual(await cablesAhora(), [
+    `${CAMP_INTELIGENCIA}→beto`,
+    `${CAMP_INTELIGENCIA}→caro`,
+    `${CAMP_OSINT}→ana`,
+    `${CAMP_OSINT}→caro`,
+  ], "agregar suma a las dos y NO borra lo que cada una tenía");
+
+  await cablearProducto(db, LINEA, familia, ["caro"], "quien", "quitar");
+  assert.deepEqual(
+    await cablesAhora(),
+    [`${CAMP_INTELIGENCIA}→beto`, `${CAMP_OSINT}→ana`],
+    "quitar saca solo esa y deja lo demás intacto",
+  );
+});
+
+/**
+ * 🔴 Y quitar tiene que andar CON LA OTRA GRAFÍA. En producción el mismo humano
+ * es `Luz` en `numero_vendedora` y `luz` al entrar: si el DELETE comparara
+ * exacto, el cable se vería en pantalla, no se podría cortar, y los leads le
+ * seguirían cayendo. Sin error y sin log.
+ */
+test("quitar un cable de producto anda aunque la grafía no coincida", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarRueda(db);
+  await guardarCampanas(db, [
+    { campanaId: CAMP_OSINT, nombre: "[AGO] OSINT", estado: "activa", numeros: [LINEA] },
+  ]);
+  await ponerCables(db, LINEA, CAMP_OSINT, ["Luz"], "quien");
+
+  await cablearProducto(db, LINEA, await familiaDeLasDos(db), ["luz"], "quien", "quitar");
+
+  const quedan = await db.select().from(campanaCable).where(eq(campanaCable.numeroPropio, LINEA));
+  assert.deepEqual(quedan.map((f) => f.vendedoraId), [], "«luz» tiene que borrar la fila que dice «Luz»");
+});
+
+/** Un pedido vacío no puede borrar todo ni romper la consulta. */
+test("cablear un producto sin vendedoras no toca nada", async (t) => {
+  const db = await baseDePrueba(t);
+  await guardarCampanas(db, [
+    { campanaId: CAMP_OSINT, nombre: "[AGO] OSINT", estado: "activa", numeros: [LINEA] },
+  ]);
+  await ponerCables(db, LINEA, CAMP_OSINT, ["ana"], "quien");
+  const familia = await familiaDeLasDos(db);
+
+  await cablearProducto(db, LINEA, familia, [], "quien", "agregar");
+  await cablearProducto(db, LINEA, familia, [], "quien", "quitar");
+
+  const quedan = await db.select().from(campanaCable).where(eq(campanaCable.numeroPropio, LINEA));
+  assert.deepEqual(quedan.map((f) => f.vendedoraId), ["ana"]);
+});
+
+/**
+ * La familia sale del catálogo real (`alias_curso`), no de una constante: si el
+ * test la inventara, estaría probando otra cosa que la pantalla.
+ */
+async function familiaDeLasDos(db: Db): Promise<string> {
+  await db.insert(aliasCurso).values({ alias: "osint", familia: "DIPICOT", nombreCurso: "Diploma en OSINT", activo: true });
+  return "DIPICOT";
+}

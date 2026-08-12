@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { db as Base } from "../db/client.js";
 import { campanaAnuncio, campanaMeta, campanaCable, cursoRuteo } from "../db/routing.js";
 import { leerEstado, llegaALaLinea, ordenarCampanas, type CampanaEnRouting } from "./dominio.js";
@@ -521,16 +521,27 @@ export async function cablearProducto(
           )
           .onConflictDoNothing();
       } else {
-        // ⚠️ Se compara NORMALIZANDO: la fila puede decir `Luz` y el pedido `luz`
-        // (las dos grafías están vivas en prod). Con comparación exacta, quitar
-        // no quita y el cable queda pegado sin síntoma.
+        if (enMinuscula.length === 0) continue;
+        /**
+         * ⚠️ Se compara NORMALIZANDO: la fila puede decir `Luz` y el pedido
+         * `luz` (las dos grafías están vivas en prod). Con comparación exacta,
+         * quitar no quita y el cable queda pegado sin síntoma.
+         *
+         * 🔴 **`inArray` y NO un `= ANY(${array})` a mano.** Escrito así,
+         * drizzle bindea el arreglo como UN parámetro escalar y Postgres
+         * rechaza la consulta entera: `delete from "campana_cable" … = ANY(($3))`
+         * con `$3` = `ventas14@grupogoberna.com`. Se vio en pantalla el
+         * 12-ago-2026 al cortar un cable de producto — la franja roja con el SQL
+         * crudo. `inArray` genera `in ($3, $4, …)`, que es lo que el driver sabe
+         * mandar.
+         */
         await tx
           .delete(campanaCable)
           .where(
             and(
               eq(campanaCable.numeroPropio, numeroPropio ?? ""),
               eq(campanaCable.campanaId, c.campanaId),
-              sql`lower(${campanaCable.vendedoraId}) = ANY(${enMinuscula})`,
+              inArray(sql`lower(${campanaCable.vendedoraId})`, enMinuscula),
             ),
           );
       }
@@ -545,13 +556,11 @@ export async function cablearProducto(
           .values(unicas.map((vendedoraId) => ({ curso, vendedoraId, asignadaPor: quienLosPone })))
           .onConflictDoNothing();
       } else {
+        if (enMinuscula.length === 0) continue;
         await tx
           .delete(cursoRuteo)
           .where(
-            and(
-              eq(cursoRuteo.curso, curso),
-              sql`lower(${cursoRuteo.vendedoraId}) = ANY(${enMinuscula})`,
-            ),
+            and(eq(cursoRuteo.curso, curso), inArray(sql`lower(${cursoRuteo.vendedoraId})`, enMinuscula)),
           );
       }
     }

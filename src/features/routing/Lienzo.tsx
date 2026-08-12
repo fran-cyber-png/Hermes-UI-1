@@ -71,6 +71,16 @@ export function Lienzo({
   const [arrastre, setArrastre] = useState<{ de: string; x: number; y: number } | null>(null);
   /** El puerto ARMADO por teclado. Es el mismo gesto en dos tiempos. */
   const [armado, setArmado] = useState<string | null>(null);
+  /**
+   * 🔴 **SOBRE QUÉ NODO ESTÁ EL OJO — y esto no es adorno.** Con cuatro piezas y
+   * siete vendedoras hay hasta 28 curvas que nacen y mueren en los mismos
+   * puntos: el dueño lo dijo mirando la captura el 12-ago-2026, *«se confunden
+   * los cables»*. Separarlas geométricamente no alcanza (el destino ES el mismo
+   * punto), así que lo que se hace es **apagar las que no son**: pasando por
+   * encima de una tarjeta, sus cables quedan sólidos y el resto se va al fondo.
+   * Sirve en los dos sentidos — sobre una vendedora se ve qué le entra.
+   */
+  const [resaltado, setResaltado] = useState<string | null>(null);
 
   const registrar = useCallback((id: string, lado: 'izq' | 'der', el: HTMLElement | null) => {
     const previo = puertos.current.get(id) ?? {};
@@ -189,6 +199,12 @@ export function Lienzo({
   const conectado = (de: string, a: string) =>
     cables.some((c) => c.tipo === 'regla' && c.de === de && c.a === a);
 
+  /** ¿Este cable toca el nodo que tiene el ojo encima? */
+  const suyo = (c: CableLienzo) => Boolean(resaltado) && (c.de === resaltado || c.a === resaltado);
+  /** ¿Este nodo tiene al menos un cable? Decide si su puerto va lleno o hueco. */
+  const conCable = (id: string) =>
+    cables.some((c) => c.tipo === 'regla' && (c.de === id || c.a === id));
+
   return (
     <div
       ref={marco}
@@ -220,14 +236,23 @@ export function Lienzo({
               d={t.d}
               fill="none"
               stroke="currentColor"
-              strokeWidth={t.cable.tipo === 'pertenencia' ? 1.5 : 2}
+              strokeWidth={
+                t.cable.tipo === 'pertenencia' ? 1.5 : suyo(t.cable) && resaltado ? 2.75 : 2
+              }
               strokeDasharray={t.cable.tipo === 'pertenencia' ? '4 4' : undefined}
               className={
-                t.cable.tipo === 'pertenencia'
-                  ? 'text-border'
-                  : t.cable.pendiente
-                    ? 'text-navy/40'
-                    : 'text-navy/70'
+                'transition-[stroke-width,color] duration-150 ease-house ' +
+                (t.cable.tipo === 'pertenencia'
+                  ? resaltado && !suyo(t.cable)
+                    ? 'text-border/30'
+                    : 'text-border'
+                  : !resaltado
+                    ? t.cable.pendiente
+                      ? 'text-navy/40'
+                      : 'text-navy/70'
+                    : suyo(t.cable)
+                      ? 'text-navy'
+                      : 'text-navy/12')
               }
             />
           </g>
@@ -256,6 +281,9 @@ export function Lienzo({
               key={n.id}
               nodo={n}
               armado={armado === n.id}
+              conCable={conCable(n.id)}
+              apagado={Boolean(resaltado) && resaltado !== n.id && !cables.some((c) => suyo(c) && (c.de === n.id || c.a === n.id))}
+              onOjo={setResaltado}
               destinoPosible={Boolean(arrastre || armado) && sePuedeUnir(columnas, arrastre?.de ?? armado, n.id)}
               conectado={
                 (arrastre?.de ?? armado) ? conectado((arrastre?.de ?? armado)!, n.id) : false
@@ -284,6 +312,9 @@ const ICONO = { producto: Boxes, campana: Megaphone, formulario: FileText, vende
 function Nodo({
   nodo,
   armado,
+  conCable,
+  apagado,
+  onOjo,
   destinoPosible,
   conectado,
   registrar,
@@ -294,6 +325,9 @@ function Nodo({
 }: {
   nodo: NodoLienzo;
   armado: boolean;
+  conCable: boolean;
+  apagado: boolean;
+  onOjo: (id: string | null) => void;
   destinoPosible: boolean;
   conectado: boolean;
   registrar: (id: string, lado: 'izq' | 'der', el: HTMLElement | null) => void;
@@ -312,7 +346,14 @@ function Nodo({
      * a soltar en un lugar donde soltar no hacía nada, y eso se lee como que el
      * arrastre «no anda». El puntito queda como señal, no como blanco.
      */
-    <div className="relative" data-puerto-izq={nodo.entrada ? nodo.id : undefined}>
+    <div
+      className="relative"
+      data-puerto-izq={nodo.entrada ? nodo.id : undefined}
+      onMouseEnter={() => onOjo(nodo.id)}
+      onMouseLeave={() => onOjo(null)}
+      onFocus={() => onOjo(nodo.id)}
+      onBlur={() => onOjo(null)}
+    >
       {nodo.entrada && (
         <button
           type="button"
@@ -321,19 +362,31 @@ function Nodo({
           onClick={onTocar}
           aria-label={`Puerto de entrada de ${nodo.titulo}`}
           ref={(el) => registrar(nodo.id, 'izq', el)}
+          /**
+           * 🔴 **EL PUERTO SE VE SIEMPRE.** Era `bg-muted` sobre fondo claro: o
+           * sea, invisible. Los cables llegaban al borde de la tarjeta y no había
+           * nada que dijera «acá se enchufa» — el dueño lo pidió con todas las
+           * letras el 12-ago-2026: *«a la izquierda y derecha debería haber
+           * puntos de conexión»*. Hueco = libre, lleno = tiene cable.
+           */
           className={
-            'absolute -left-1.5 top-1/2 z-10 h-3 w-3 -translate-y-1/2 rounded-full border-2 border-card transition-transform duration-150 ease-house focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
-            (destinoPosible ? 'scale-125 ' : '') +
-            (conectado || destinoPosible ? 'bg-navy' : 'bg-muted')
+            'absolute -left-1.5 top-1/2 z-10 h-3 w-3 -translate-y-1/2 rounded-full border-2 transition-[transform,background-color,border-color] duration-150 ease-house focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
+            (destinoPosible ? 'scale-150 ' : 'hover:scale-125 ') +
+            (conectado || destinoPosible || conCable
+              ? 'border-navy bg-navy'
+              : 'border-navy/45 bg-card')
           }
         />
       )}
 
       <div
         className={
-          'rounded-xl border bg-card px-2.5 py-2 transition-[border-color,background-color] duration-200 ease-house ' +
+          'rounded-xl border bg-card px-2.5 py-2 transition-[border-color,background-color,opacity] duration-200 ease-house ' +
           (destinoPosible ? 'border-navy/50 bg-navy/5' : nodo.abierto ? 'border-navy/30' : 'border-border') +
-          (nodo.estado === 'pausada' ? ' opacity-70' : '')
+          (nodo.estado === 'pausada' ? ' opacity-70' : '') +
+          // Apagar lo que NO participa de la rama que se está mirando. Es el
+          // mismo gesto que el de los cables: se lee una rama a la vez.
+          (apagado ? ' opacity-40' : '')
         }
       >
         <p className="flex items-start gap-1.5">
@@ -412,7 +465,8 @@ function Nodo({
           aria-pressed={armado}
           ref={(el) => registrar(nodo.id, 'der', el)}
           className={
-            'absolute -right-1.5 top-1/2 z-10 h-3 w-3 -translate-y-1/2 cursor-grab rounded-full border-2 border-card bg-navy transition-transform duration-150 ease-house active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
+            'absolute -right-1.5 top-1/2 z-10 h-3 w-3 -translate-y-1/2 cursor-grab rounded-full border-2 border-navy transition-[transform,background-color] duration-150 ease-house active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
+            (conCable ? 'bg-navy ' : 'bg-card ') +
             (armado ? 'scale-150' : 'hover:scale-125')
           }
         />
