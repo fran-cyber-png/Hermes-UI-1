@@ -857,6 +857,8 @@ function ComposerWa({
   const [adjunto, setAdjunto] = useState<File | null>(null);
   /** Lo que el pegado dejó afuera o rechazó. Se limpia solo al elegir otro adjunto. */
   const [avisoPegado, setAvisoPegado] = useState<string | null>(null);
+  /** Hay un archivo colgando del puntero: el composer lo dice, o soltarlo es a ciegas. */
+  const [arrastrando, setArrastrando] = useState(false);
   /**
    * Un VIDEO que no entra por el tope de la línea. No es lo mismo que
    * `avisoPegado`: acá hay algo que hacer —achicarlo— y hay un archivo que
@@ -918,25 +920,96 @@ function ComposerWa({
    * archivo hace falta, porque Chrome además pega su ruta como texto.
    */
   function onPegar(e: React.ClipboardEvent<HTMLTextAreaElement>) {
-    const r = decidirPegado(e.clipboardData.files, {
+    // El `preventDefault` lo decide `aceptarArchivos`: solo hubo archivo si
+    // devuelve true.
+    if (aceptarArchivos(e.clipboardData.files)) e.preventDefault();
+  }
+
+  /**
+   * LO QUE HACEN ⌘V Y EL ARRASTRE, QUE ES EXACTAMENTE LO MISMO.
+   *
+   * Las dos puertas comparten esta función y, más abajo, la MISMA decisión pura
+   * (`decidirPegado`): qué mime entra, qué tope aplica la línea, cómo se renombra
+   * lo genérico. Dos puertas al mismo envío que aceptaran cosas distintas es el
+   * defecto #37 de manual — y acá se notaría tarde, cuando a un lead le llegue
+   * por una vía algo que la otra rechazaba.
+   *
+   * Devuelve `true` si había archivo (haya entrado o no). Quien llama usa eso
+   * para decidir su `preventDefault`: en el pegado, hacerlo de más rompe pegar
+   * texto, que es el 99 % de los ⌘V.
+   */
+  function aceptarArchivos(archivos: FileList | null | undefined): boolean {
+    if (!archivos || archivos.length === 0) return false;
+    const r = decidirPegado(archivos, {
       enRevision: Boolean(sugerencia),
       limites: limitesMedia,
     });
-    if (r.tipo === 'texto') return;
-    e.preventDefault();
+    if (r.tipo === 'texto') return false;
     if (r.tipo === 'rechazado') {
       // Un video pesado no es un callejón: se puede achicar acá mismo.
-      const soloUno = e.clipboardData.files.length === 1 ? e.clipboardData.files[0] : null;
+      const soloUno = archivos && archivos.length === 1 ? archivos[0] : null;
       if (soloUno?.type.startsWith('video/') && motivoPorTamano(soloUno, limitesMedia)) {
         ofrecerAchicar(soloUno, r.motivo);
-        return;
+        return true;
       }
       setAvisoPegado(r.motivo);
-      return;
+      return true;
     }
     setAdjunto(new File([r.archivo], nombreFinalDePegado(r.archivo, new Date()), { type: r.archivo.type }));
     setAvisoPegado(r.aviso);
+    return true;
   }
+
+  /**
+   * ARRASTRAR UN ARCHIVO Y SOLTARLO — la tercera puerta al mismo adjunto.
+   *
+   * 🔴 **Escucha en la VENTANA, no en un rectángulo.** Dos razones, y la segunda
+   * es la que obliga: (1) la vendedora suelta el flyer sobre la conversación, que
+   * es donde está mirando, no sobre la cajita de escribir; (2) si nadie cancela el
+   * default, **el webview NAVEGA al archivo soltado** y ella se queda afuera de
+   * Hermes con un JPG a pantalla completa y sin botón de volver. Cancelarlo solo
+   * dentro de la zona dejaría ese agujero en todo el resto de la pantalla.
+   *
+   * Se filtra por `types` incluyendo `'Files'`: sin eso esto se comería el
+   * arrastre de las tarjetas del Pipeline, que es un drag del DOM sin archivos.
+   *
+   * El composer solo existe con una conversación abierta, así que el alcance de
+   * estos listeners es exactamente el correcto y se van solos al cerrarla.
+   *
+   * ⚠️ En la app de escritorio esto NO alcanza: Tauri se queda los drops del SO
+   * antes de que el DOM los vea. Por eso `dragDropEnabled: false` en
+   * `src-tauri/tauri.conf.json` — y por eso este frente necesita reinstalar la app,
+   * no le alcanza con el OTA.
+   */
+  useEffect(() => {
+    const traeArchivos = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
+
+    function alArrastrar(e: DragEvent) {
+      if (!traeArchivos(e)) return;
+      e.preventDefault();
+      setArrastrando(true);
+    }
+    function alSalir(e: DragEvent) {
+      // `relatedTarget` nulo = el puntero se fue de la ventana. Sin esa guarda el
+      // resalte parpadea en cada borde entre elementos que cruza el arrastre.
+      if (!e.relatedTarget) setArrastrando(false);
+    }
+    function alSoltar(e: DragEvent) {
+      if (!traeArchivos(e)) return;
+      e.preventDefault();
+      setArrastrando(false);
+      aceptarArchivos(e.dataTransfer?.files);
+    }
+
+    window.addEventListener('dragover', alArrastrar);
+    window.addEventListener('dragleave', alSalir);
+    window.addEventListener('drop', alSoltar);
+    return () => {
+      window.removeEventListener('dragover', alArrastrar);
+      window.removeEventListener('dragleave', alSalir);
+      window.removeEventListener('drop', alSoltar);
+    };
+  });
 
   /** Abre el flujo de compresión y limpia lo que había: es un solo adjunto por mensaje. */
   function ofrecerAchicar(archivo: File, motivo: string) {
@@ -982,9 +1055,28 @@ function ComposerWa({
     <footer
       className={
         'shrink-0 border-t p-3 transition-colors duration-200 ease-house ' +
-        (sugerencia ? 'border-navy/30 bg-navy/[0.04]' : 'border-border')
+        (arrastrando
+          ? 'border-primary bg-primary/[0.06]'
+          : sugerencia
+            ? 'border-navy/30 bg-navy/[0.04]'
+            : 'border-border')
       }
     >
+      {/* Que se vea DÓNDE va a caer. Sin esto, arrastrar sobre una pantalla que no
+          reacciona se lee como «acá no se puede» y la vendedora vuelve al clip.
+          En revisión el aviso es el contrario, porque ahí el adjunto se rechaza
+          (ADR 0018) y descubrirlo recién al soltar sería peor. */}
+      {arrastrando && (
+        <div
+          className={
+            'mb-2 flex items-center justify-center gap-2 rounded-xl border border-dashed px-3 py-2 text-xs font-semibold ' +
+            (sugerencia ? 'border-warning/50 text-warning-foreground' : 'border-primary/50 text-navy')
+          }
+        >
+          <Paperclip size={13} />
+          {sugerencia ? 'Acá no se adjunta: estás aprobando un texto preparado.' : 'Soltá acá para adjuntarlo'}
+        </div>
+      )}
       {/* ── LA MARCA DE QUE ESTO NO LO ESCRIBIÓ ELLA ──
           El texto vive en el composer —que es donde se edita— pero el composer
           es también donde ella escribe de su puño. Sin esta banda, a los cinco
