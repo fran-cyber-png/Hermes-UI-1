@@ -46,6 +46,10 @@ export interface NodoConectable {
   /** La línea chica de abajo: estado y volumen. */
   pie: string;
   origen: 'campana' | 'formulario';
+  /** Su producto, o `null` si no resuelve a ninguno: entonces se cablea suelto. */
+  familia: string | null;
+  /** Cuánta gente trajo en la ventana. Ordena la lista: primero lo que más pesa. */
+  volumen: number;
   vendedoras: string[];
 }
 

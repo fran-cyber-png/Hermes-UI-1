@@ -36,6 +36,7 @@ const campana = (p: Partial<CampanaEnRouting>): CampanaEnRouting => ({
   anuncios: 1,
   personas: 0,
   ultima: null,
+  familia: null,
   vendedoras: [],
   ...p,
 });

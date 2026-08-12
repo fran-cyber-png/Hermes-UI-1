@@ -20,8 +20,11 @@ import {
   ponerCables,
   cursosDeFormulario,
   ponerCablesDeCurso,
+  cablearProducto,
 } from "../routing/repositorio.js";
 import { lineaDeCloudApi } from "../routing/linea.js";
+import { nombreDeProducto } from "../routing/producto.js";
+import { aliasesActivos } from "../cursos/repositorio.js";
 
 /**
  * ROUTING — qué campaña de Meta cae en qué vendedora.
@@ -79,11 +82,33 @@ routingRouter.get("/", async (_req, res) => {
       // ninguna— así que si su tabla falta, el resto de la pantalla sigue.
       cursosDeFormulario(db).catch(() => []),
     ]);
+
+    /**
+     * EL CATÁLOGO DE PRODUCTOS lo arma el SERVER y no el navegador, por lo de
+     * siempre: el nombre lindo de un producto sale de una regla
+     * (`nombreDeProducto`) y con dos implementaciones la pantalla mostraría un
+     * nombre y el acuse de la acción masiva otro.
+     */
+    const aliases = await aliasesActivos(db).catch(() => []);
+    const familias = new Set(
+      [...foto.campanas, ...cursos].map((x) => x.familia).filter((f): f is string => Boolean(f)),
+    );
+    const productos = [...familias]
+      .map((familia) => ({
+        familia,
+        nombre: nombreDeProducto(
+          familia,
+          cursos.filter((c) => c.familia === familia).map((c) => ({ curso: c.curso, leads: c.leads })),
+          aliases,
+        ),
+      }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
     res.json({
       linea,
       etiqueta: numero?.etiqueta ?? null,
       ventanaDias: VENTANA_DIAS,
       cursos,
+      productos,
       ...foto,
       destinos: destinosPosibles({ rueda: enLaRueda, mapa: numero?.vendedoras ?? [] }),
     });
@@ -201,6 +226,62 @@ routingRouter.put("/cursos", async (req, res) => {
     }
     await ponerCablesDeCurso(db, curso, pedidas, req.vendedoraId ?? "");
     res.json({ ok: true, curso, vendedoras: pedidas });
+  } catch (e) {
+    res.status(500).json({ ok: false, message: (e as Error).message });
+  }
+});
+
+/**
+ * CABLEAR UN PRODUCTO ENTERO — la acción masiva.
+ *
+ * 🔴 **Escribe el cable en cada campaña y cada formulario del producto; NO crea
+ * una regla que los demás hereden.** Decisión del dueño del 12-ago-2026, y es lo
+ * que hace que la cola no tenga que cambiar una línea: sigue leyendo
+ * `campana_ruteo` y `curso_ruteo`, sin precedencias que resolver.
+ *
+ * ⚠️ **Pisa lo que había**, incluida una campaña que tuviera otro cable. Por eso
+ * la pantalla nombra ANTES qué va a pisar: una acción masiva silenciosa es la
+ * forma más rápida de que alguien pierda una regla que puso a mano.
+ *
+ * ⚠️ Y por eso mismo la respuesta dice **qué tocó**: sin eso, «listo» sobre 5
+ * renglones es indistinguible de «listo» sobre 0 (el caso de un producto cuyas
+ * campañas dejaron de mandar a esta línea).
+ */
+routingRouter.put("/productos", async (req, res) => {
+  const parsed = z
+    .object({ familia: z.string().min(1), vendedoras: z.array(z.string().min(1)).max(20) })
+    .safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, message: "se espera `familia` y `vendedoras`" });
+    return;
+  }
+  const familia = parsed.data.familia.trim();
+  const pedidas = [...new Set(parsed.data.vendedoras.map((v) => v.trim()).filter(Boolean))];
+  const linea = lineaDeCloudApi();
+
+  try {
+    if (pedidas.length > 0) {
+      const [enLaRueda, numero] = await Promise.all([
+        linea ? vendedorasDeLaRueda(db, linea) : Promise.resolve([] as string[]),
+        linea ? obtenerNumero(db, linea).catch(() => null) : Promise.resolve(null),
+      ]);
+      const destinos = destinosPosibles({ rueda: enLaRueda, mapa: numero?.vendedoras ?? [] });
+      const desconocidas = pedidas.filter((v) => !esDestinoValido(v, destinos));
+      if (desconocidas.length > 0) {
+        res.status(409).json({
+          ok: false,
+          motivo: "vendedora_desconocida",
+          message:
+            `${desconocidas.map((d) => `«${d}»`).join(", ")} no participa del reparto. ` +
+            (destinos.length ? `Se le puede dar a: ${destinos.join(", ")}.` : ""),
+          destinos,
+        });
+        return;
+      }
+    }
+
+    const tocados = await cablearProducto(db, linea, familia, pedidas, req.vendedoraId ?? "");
+    res.json({ ok: true, familia, vendedoras: pedidas, ...tocados });
   } catch (e) {
     res.status(500).json({ ok: false, message: (e as Error).message });
   }

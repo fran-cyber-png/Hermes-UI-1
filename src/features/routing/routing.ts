@@ -21,6 +21,8 @@ export interface CampanaEnRouting {
   /** Cuántas PERSONAS escribieron por ella (no cuántos mensajes). */
   personas: number;
   ultima: string | null;
+  /** Su producto, o `null`. Medido: las campañas resuelven 19 de 44. */
+  familia: string | null;
   /** LOS CABLES: a quiénes les puede caer. Vacío = a la rueda del reparto. */
   vendedoras: string[];
 }
@@ -31,10 +33,18 @@ export interface CampanaEnRouting {
  */
 export interface CursoEnRouting {
   curso: string;
+  /** Su producto, o `null` si no resuelve a ninguno. */
+  familia: string | null;
   leads: number;
   ultimo: string | null;
   /** Vacío = lo ve todo el equipo, como hasta ahora. */
   vendedoras: string[];
+}
+
+/** Un producto: lo que junta varias campañas con sus formularios. */
+export interface ProductoEnRouting {
+  familia: string;
+  nombre: string;
 }
 
 export interface FotoDeRouting {
@@ -44,6 +54,8 @@ export interface FotoDeRouting {
   campanas: CampanaEnRouting[];
   /** Los cursos que llegan por los formularios de icarus. */
   cursos: CursoEnRouting[];
+  /** El catálogo de productos, con su nombre comercial. Lo arma el server. */
+  productos: ProductoEnRouting[];
   /** Anuncios que trajeron gente y todavía no se resolvieron contra Meta. */
   anunciosSinResolver: number;
   /**
@@ -87,6 +99,23 @@ export function useRouting() {
  * nombres de producto con espacios, tildes y `&`, y en el path quedan a merced
  * de cualquier proxy que normalice por su cuenta.
  */
+/**
+ * CABLEAR UN PRODUCTO ENTERO. **Escribe el cable en cada una de sus campañas y
+ * formularios**; no crea una regla que los demás hereden. Por eso el acuse dice
+ * cuántos tocó: «listo» sobre cinco renglones y sobre cero se ven igual.
+ */
+export function useConectarProducto() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ familia, vendedoras }: { familia: string; vendedoras: string[] }) =>
+      api<{ campanas: number; cursos: number }>('/api/routing/productos', {
+        method: 'PUT',
+        body: JSON.stringify({ familia, vendedoras }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['routing'] }),
+  });
+}
+
 export function useConectarCurso() {
   const qc = useQueryClient();
   return useMutation({

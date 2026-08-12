@@ -38,6 +38,11 @@ export interface CampanaEnRouting {
   /** La última vez que alguien llegó por esta campaña. ISO, o `null`. */
   ultima: string | null;
   /**
+   * A qué producto pertenece (`alias_curso`). `null` = no resuelve a ninguno, y
+   * entonces se cablea suelta — son 25 de 44, así que no es el caso raro.
+   */
+  familia: string | null;
+  /**
    * LOS CABLES: a quiénes les puede caer. Vacío = a la rueda general.
    *
    * ⚠️ Es un ARREGLO y no un nombre, y por eso el orden importa poco pero la

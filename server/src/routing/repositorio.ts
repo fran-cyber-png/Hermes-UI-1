@@ -3,6 +3,8 @@ import type { db as Base } from "../db/client.js";
 import { campanaAnuncio, campanaMeta, campanaRuteo, cursoRuteo } from "../db/routing.js";
 import { leerEstado, llegaALaLinea, ordenarCampanas, type CampanaEnRouting } from "./dominio.js";
 import { cursoDeLeadSql } from "../gente/leadDeTelefono.js";
+import { aliasesActivos } from "../cursos/repositorio.js";
+import { familiaDe } from "./producto.js";
 
 /**
  * LO QUE LEE Y ESCRIBE EL RUTEO. El veredicto vive en `dominio.ts` (puro); acá
@@ -178,6 +180,11 @@ export async function fotoDeRouting(
     });
   }
 
+  // El diccionario de productos. Una consulta por pedido y no una por fila: son
+  // ~40 aliases y ~44 campañas, y resolver en TypeScript deja `familiaDeTexto`
+  // como única implementación (el gemelo en SQL sería el defecto de #37).
+  const aliases = await aliasesActivos(base as never).catch(() => []);
+
   let ultimoRefresco: Date | null = null;
   let enOtraLinea = 0;
   const campanas: CampanaEnRouting[] = [];
@@ -197,6 +204,7 @@ export async function fotoDeRouting(
       anuncios: v?.anuncios ?? 0,
       personas: v?.personas ?? 0,
       ultima: v?.ultima ?? null,
+      familia: familiaDe(aliases, c.nombre),
       vendedoras: cables.get(c.campanaId) ?? [],
     });
   }
@@ -327,6 +335,8 @@ export async function guardarCampanas(
 /** Un curso de formulario, como se lo ve en la pantalla. */
 export interface CursoEnRouting {
   curso: string;
+  /** Su producto. Los cursos resuelven 19 de 21: son nombres comerciales. */
+  familia: string | null;
   /** Cuántos leads llegaron por ese curso en la ventana. */
   leads: number;
   /** El último. ISO, o `null`. */
@@ -352,7 +362,7 @@ export async function cursosDeFormulario(
   base: typeof Base,
   dias = VENTANA_DIAS,
 ): Promise<CursoEnRouting[]> {
-  const [vistos, cables] = await Promise.all([
+  const [vistos, cables, aliases] = await Promise.all([
     base.execute<{ curso: string; leads: number; ultimo: string }>(sql`
       SELECT ${cursoDeLeadSql}                     AS curso,
              count(*)::int                         AS leads,
@@ -363,19 +373,22 @@ export async function cursosDeFormulario(
        GROUP BY 1
     `),
     cablesDeCurso(base),
+    aliasesActivos(base as never).catch(() => []),
   ]);
 
   const filas = new Map<string, CursoEnRouting>();
   for (const v of vistos) {
     filas.set(v.curso, {
       curso: v.curso,
+      familia: familiaDe(aliases, v.curso),
       leads: Number(v.leads ?? 0),
       ultimo: new Date(v.ultimo).toISOString(),
       vendedoras: cables.get(v.curso) ?? [],
     });
   }
   for (const [curso, vendedoras] of cables) {
-    if (!filas.has(curso)) filas.set(curso, { curso, leads: 0, ultimo: null, vendedoras });
+    if (!filas.has(curso))
+      filas.set(curso, { curso, familia: familiaDe(aliases, curso), leads: 0, ultimo: null, vendedoras });
   }
 
   // Primero lo que más gente trae; a igualdad, alfabético para que dos aperturas
@@ -414,4 +427,56 @@ export async function ponerCablesDeCurso(
       .insert(cursoRuteo)
       .values(unicas.map((vendedoraId) => ({ curso, vendedoraId, asignadaPor: quienLosPone })));
   });
+}
+
+/**
+ * CABLEA TODO UN PRODUCTO — sus campañas de Meta y sus cursos de formulario.
+ *
+ * 🔴 **Escribe en cada uno; no crea una regla de producto.** Lo que se ve en cada
+ * renglón ES la regla (decisión del dueño del 12-ago-2026), así que la cola no
+ * cambia: sigue leyendo `campana_ruteo` y `curso_ruteo` sin precedencias.
+ *
+ * ⚠️ **Todo adentro de UNA transacción.** A medio aplicar, un producto quedaría
+ * con dos campañas en una vendedora y tres en otra — un estado que nadie pidió y
+ * que además se lee como si alguien lo hubiera configurado así.
+ *
+ * Devuelve qué tocó: sin ese número, «listo» sobre cinco renglones es
+ * indistinguible de «listo» sobre cero.
+ */
+export async function cablearProducto(
+  base: typeof Base,
+  numeroPropio: string | null,
+  familia: string,
+  vendedoras: readonly string[],
+  quienLosPone: string,
+): Promise<{ campanas: number; cursos: number }> {
+  const [aliases, catalogo, cursos] = await Promise.all([
+    aliasesActivos(base as never).catch(() => []),
+    campanasConocidas(base),
+    base.execute<{ curso: string }>(sql`
+      SELECT DISTINCT ${cursoDeLeadSql} AS curso
+        FROM leads
+       WHERE created_time > now() - ${`${VENTANA_DIAS} days`}::interval
+         AND NULLIF(btrim(${cursoDeLeadSql}), '') IS NOT NULL
+    `),
+  ]);
+
+  const deLaFamilia = (texto: string) => familiaDe(aliases, texto) === familia;
+  // Solo las que esta línea puede recibir: cablear una que manda a otro teléfono
+  // escribiría una regla que no se va a aplicar nunca.
+  const campanas = catalogo.filter(
+    (c) => deLaFamilia(c.nombre) && (!numeroPropio || llegaALaLinea(c.numeros, numeroPropio)),
+  );
+  const losCursos = [...cursos].map((c) => c.curso).filter(deLaFamilia);
+
+  await base.transaction(async (tx) => {
+    for (const c of campanas) {
+      await ponerCables(tx as never, numeroPropio ?? "", c.campanaId, vendedoras, quienLosPone);
+    }
+    for (const curso of losCursos) {
+      await ponerCablesDeCurso(tx as never, curso, vendedoras, quienLosPone);
+    }
+  });
+
+  return { campanas: campanas.length, cursos: losCursos.length };
 }
