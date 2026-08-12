@@ -16,6 +16,12 @@ import '../../index.css';
  * el del navegador, con su `DataTransfer` real, y no un evento sintético.
  *
  * `?revision=1` abre el modo revisión, donde pegar un adjunto se rechaza.
+ *
+ * ⚠️ **Los tres casos de cita que hay abajo NO son decoración.** En este repo una
+ * galería con el caso ideal ya escondió tres defectos (radar de leads, 8-ago), así
+ * que acá están el bonito Y los dos feos: la cita a un mensaje que Hermes no tiene
+ * (el hueco honesto) y la cita a un adjunto sin texto. Los dos van a ser lo NORMAL
+ * las primeras semanas del frente, porque la captura empieza de hoy en adelante.
  */
 
 const TELEFONO = '51987654321';
@@ -48,6 +54,44 @@ const MENSAJES = [
   { id: 8, direccion: 'saliente', autor: 'luz', texto: 'Te reenvío el comprobante', occurred_at: HACE(2), external_id: 'e8', entrega: 'fallido' },
   // Un mensaje viejo, de antes de este frente: SIN estado. No dibuja nada.
   { id: 9, direccion: 'saliente', autor: 'luz', texto: 'Cualquier cosa me escribís', occurred_at: HACE(1), external_id: 'e9' },
+
+  // ── LAS TRES CITAS, y dos son el caso feo ──────────────────────────────
+  // 1 · El caso bonito: responde a un mensaje que Hermes tiene entero.
+  {
+    id: 10,
+    direccion: 'entrante',
+    autor: TELEFONO,
+    texto: '¿Esas dos cuotas son sin interés?',
+    occurred_at: HACE(1),
+    external_id: 'e10',
+    cita: {
+      mensajeExternalId: 'e3',
+      texto: '¡Hola Javier! Sí, todavía hay cupos. Te paso el temario.',
+      direccion: 'saliente',
+      mediaClase: null,
+    },
+  },
+  // 2 · EL HUECO HONESTO: la cita apunta a algo anterior a la captura. Ni autor
+  //     ni texto — y el mensaje se dibuja igual, con su tirita puesta.
+  {
+    id: 11,
+    direccion: 'entrante',
+    autor: TELEFONO,
+    texto: 'me refería a esto que me mandaron la semana pasada',
+    occurred_at: HACE(1),
+    external_id: 'e11',
+    cita: { mensajeExternalId: 'wa:DE_ANTES', texto: null, direccion: null, mediaClase: null },
+  },
+  // 3 · Una cita a un ADJUNTO sin texto: se nombra por lo que es.
+  {
+    id: 12,
+    direccion: 'saliente',
+    autor: 'luz',
+    texto: 'Ese es el flyer de la edición de agosto',
+    occurred_at: HACE(1),
+    external_id: 'e12',
+    cita: { mensajeExternalId: 'e0', texto: null, direccion: 'entrante', mediaClase: 'imagen' },
+  },
 ];
 
 const CONVERSACION = {

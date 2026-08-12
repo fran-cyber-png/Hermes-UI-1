@@ -3,6 +3,7 @@ import { api, ErrorApi } from '../../lib/datos/cliente';
 import { tokenGuardado } from '../../lib/datos/token';
 import { API_URL } from '../../config';
 import type { PiezaDeclarada } from './procedenciaComposer';
+import type { CitaHilo } from './cita';
 
 /** Un adjunto del hilo: el archivo ya vive en el server, esto es la referencia. */
 export interface MediaHilo {
@@ -64,6 +65,19 @@ export interface MensajeHilo {
    * escuchábamos— y dibujar un ✓ ahí sería afirmar algo que nadie confirmó.
    */
   entrega?: EstadoEntregaWa;
+  /**
+   * A QUÉ MENSAJE RESPONDE ESTE — la tirita gris de WhatsApp.
+   *
+   * **Opcional y `null`-able**: opcional porque un server viejo no la manda (el
+   * front sale por N4 y el server por N5, así que esa ventana existe en cada
+   * deploy), y `null` porque el server nuevo la manda explícita en cada mensaje.
+   * Las dos formas significan lo mismo acá: no hay tirita.
+   *
+   * Que venga con `texto: null` **no** significa que no haya cita: significa que
+   * el mensaje citado no está en Hermes, y ahí se dibuja el hueco honesto. La
+   * lectura vive en `cita.ts`, no en el JSX.
+   */
+  cita?: CitaHilo | null;
 }
 
 /**
@@ -212,6 +226,13 @@ export function useConversacionWa(telefono: string | null) {
       referencia: string;
       /** De qué pieza salió (#169). Ausente = escrito a mano: la línea de base. */
       pieza?: PiezaDeclarada;
+      /**
+       * A qué mensaje responde: **el `external_id` y nada más**. De quién era y
+       * qué decía lo resuelve el server contra lo que ya guardó — es un dato que
+       * el LEAD va a ver, y declararlo desde acá sería la segunda fuente de
+       * verdad para el mismo hecho (ver `whatsapp/citaRepositorio.ts`).
+       */
+      citaDe?: string;
     }) =>
       api<{ ok: true; idExterno: string }>('/api/whatsapp/enviar', {
         method: 'POST',

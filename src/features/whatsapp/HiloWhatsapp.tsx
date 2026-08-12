@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Bot, Check, CheckCheck, Copy, FileText, SmilePlus, Loader2, Megaphone, Paperclip, Phone, Play, QrCode, Send, Link2, Trash2, WifiOff, X } from 'lucide-react';
+import { AlertTriangle, Bot, Check, CheckCheck, Copy, CornerUpLeft, FileText, SmilePlus, Loader2, Megaphone, Paperclip, Phone, Play, QrCode, Send, Link2, Trash2, WifiOff, X } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
 import { useBlobAutenticado } from '../../lib/datos/blobAutenticado';
 import { formatoTelefono, tempClass } from '../../lib/formato';
@@ -17,6 +17,7 @@ import { alPonerEnComposer } from './puenteComposer';
 import { piezaDelTexto } from './procedenciaComposer';
 import { textoDelBoton } from '../autorespuesta/revision';
 import { TextoWhatsapp } from './TextoWhatsapp';
+import { rotuloDeCita, sePuedeCitar, type CitaHilo } from './cita';
 import { Avatar } from '../canales/Avatar';
 import type { Conversacion } from '../canales/conversaciones';
 import {
@@ -353,6 +354,72 @@ function BotonCopiar({ texto }: { texto: string }) {
   );
 }
 
+/**
+ * RESPONDER CITANDO — «quiero que se pueda responder al mensaje como wspp».
+ *
+ * Va en los DOS SENTIDOS, como copiar: citar lo propio es lo que se hace cuando
+ * se retoma un precio que ya se pasó («sobre esto que te decía…»). Y **no depende
+ * de la sesión**, también como copiar: esto no manda nada, deja la cita puesta en
+ * la caja. El freno de «no se puede enviar» ya vive en el botón de mandar, y
+ * ponerlo también acá dejaría a la vendedora sin poder ni preparar la respuesta
+ * mientras la línea se reconecta.
+ *
+ * No aparece en modo revisión: ahí se aprueba un texto preparado, no se compone.
+ *
+ * Mismo molde que los otros dos: SIEMPRE en el DOM, invisible hasta el hover.
+ * Montarlo al pasar por encima haría que el primer clic caiga en la nada.
+ */
+function BotonResponder({ onResponder }: { onResponder: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onResponder}
+      title="Responder citando este mensaje"
+      aria-label="Responder citando este mensaje"
+      className="flex size-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground opacity-0 shadow-[0_1px_3px_rgba(14,42,82,0.12)] transition-opacity hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 group-hover/burbuja:opacity-100"
+    >
+      <CornerUpLeft size={13} />
+    </button>
+  );
+}
+
+/**
+ * EL MENSAJE CITADO, ADENTRO DE LA BURBUJA — la tirita gris de WhatsApp.
+ *
+ * Es un `div` y no un botón a propósito: **tocarlo no envía nada**, y tampoco
+ * navega. En WhatsApp la tirita salta al mensaje original; acá eso sería un
+ * scroll a algo que puede no estar en la ventana de 200, o sea un clic que a
+ * veces no hace nada — peor que uno que nunca hace nada.
+ *
+ * El filete de la izquierda es lo que la hace legible como cita y no como una
+ * segunda línea del mensaje. Navy, nunca oro: el oro es tiempo que se acaba.
+ */
+function CitaEnBurbuja({
+  cita,
+  nombreContacto,
+  saliente,
+}: {
+  cita: CitaHilo;
+  nombreContacto: string | null;
+  saliente: boolean;
+}) {
+  const { autor, extracto } = rotuloDeCita(cita, nombreContacto);
+  return (
+    <div
+      className={
+        'mb-1 overflow-hidden rounded-lg border-l-[3px] border-navy/60 px-2 py-1 ' +
+        // En el saliente el fondo de la burbuja ya es `secondary`: la tirita
+        // necesita separarse de ÉL, no del blanco. Con el mismo tono en los dos
+        // lados, adentro de un saliente se ve como parte del mensaje.
+        (saliente ? 'bg-card/70' : 'bg-muted')
+      }
+    >
+      {autor && <div className="truncate text-[11px] font-bold text-navy">{autor}</div>}
+      <div className="truncate text-[11px] text-muted-foreground">{extracto}</div>
+    </div>
+  );
+}
+
 function AdjuntoRoto() {
   return (
     <p className="rounded-lg border border-border bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
@@ -553,6 +620,17 @@ export function HiloWhatsapp({
   // Solo lo NUEVO se anima: ids ya vistos por hilo (se resetea al cambiar de teléfono).
   const vistosRef = useRef<Set<number>>(new Set());
   const hiloVistoRef = useRef(telefono);
+  /**
+   * EL MENSAJE QUE SE ESTÁ CITANDO, si hay alguno.
+   *
+   * Vive acá y no en `ComposerWa` porque el gesto nace en la BURBUJA (que se
+   * dibuja acá) y se consume en la caja. Y por eso también hay que apagarlo a
+   * mano al cambiar de conversación: el composer se remonta solo con su `key`,
+   * este estado no — sin el efecto, abrir otro chat lo encontraría con la cita
+   * del anterior puesta, y esa cita apunta a un mensaje que ese lead nunca vio.
+   */
+  const [citando, setCitando] = useState<CitaHilo | null>(null);
+  useEffect(() => setCitando(null), [telefono]);
 
   const conectado = sesion?.estado === 'conectado';
   const mensajes = hilo.data?.mensajes ?? [];
@@ -633,13 +711,16 @@ export function HiloWhatsapp({
                     hiloVistoRef.current === telefono &&
                     vistosRef.current.size > 0 &&
                     !vistosRef.current.has(m.id);
-                  // LAS ACCIONES DE LA BURBUJA, y las dos tienen alcances
-                  // distintos a propósito: COPIAR va en los dos sentidos y sin
-                  // mirar la sesión (es local); REACCIONAR sigue siendo solo de
-                  // los entrantes y solo con la línea viva — si no, el clic no
-                  // haría nada.
+                  // LAS ACCIONES DE LA BURBUJA, y las tres tienen alcances
+                  // distintos a propósito: COPIAR y RESPONDER van en los dos
+                  // sentidos y sin mirar la sesión (no mandan nada);
+                  // REACCIONAR sigue siendo solo de los entrantes y solo con la
+                  // línea viva — si no, el clic no haría nada.
+                  // Responder además se apaga en revisión: ahí se aprueba un
+                  // texto preparado, no se compone uno nuevo.
+                  const puedeCitar = !sugerencia && sePuedeCitar(m);
                   const acciones =
-                    m.texto || (m.direccion === 'entrante' && conectado) ? (
+                    m.texto || puedeCitar || (m.direccion === 'entrante' && conectado) ? (
                       <div className="flex shrink-0 items-center gap-1">
                         {m.direccion === 'entrante' && conectado && (
                           <BotonReaccionar
@@ -650,6 +731,18 @@ export function HiloWhatsapp({
                                 telefono,
                                 mensajeId: m.external_id,
                                 emoji,
+                              })
+                            }
+                          />
+                        )}
+                        {puedeCitar && (
+                          <BotonResponder
+                            onResponder={() =>
+                              setCitando({
+                                mensajeExternalId: m.external_id,
+                                texto: m.texto,
+                                direccion: m.direccion,
+                                mediaClase: m.media?.clase ?? null,
                               })
                             }
                           />
@@ -692,6 +785,18 @@ export function HiloWhatsapp({
                             : 'rounded-bl-md bg-card text-foreground ring-1 ring-border')
                         }
                       >
+                        {/* La cita va ARRIBA de todo, adjunto incluido: es el
+                            contexto de lo que sigue, y abajo se leería como una
+                            aclaración de después. */}
+                        {m.cita && (
+                          <div className={m.media && (m.media.clase === 'imagen' || m.media.clase === 'video') ? 'mx-0.5 mt-0.5' : ''}>
+                            <CitaEnBurbuja
+                              cita={m.cita}
+                              nombreContacto={conversacion.persona_nombre}
+                              saliente={m.direccion === 'saliente'}
+                            />
+                          </div>
+                        )}
                         {m.media && <MediaEnBurbuja media={m.media} />}
                         {m.texto ? (
                           <div className={'whitespace-pre-wrap break-words' + (m.media ? ' px-2 pt-1.5' : '')}>
@@ -773,6 +878,8 @@ export function HiloWhatsapp({
         personaNombre={conversacion.persona_nombre}
         conectado={conectado}
         limitesMedia={sesion?.limitesMedia}
+        cita={citando}
+        onQuitarCita={() => setCitando(null)}
         enviar={enviar}
         enviarMedia={enviarMedia}
       />
@@ -830,6 +937,8 @@ function ComposerWa({
   personaNombre,
   conectado,
   limitesMedia,
+  cita,
+  onQuitarCita,
   enviar,
   enviarMedia,
   sugerencia,
@@ -841,6 +950,9 @@ function ComposerWa({
   conectado: boolean;
   /** Cuánto acepta ESTA línea por clase. Ausente en un server viejo: solo el techo. */
   limitesMedia?: LimitesMediaWa;
+  /** El mensaje que se está citando. Lo elige la burbuja, lo dibuja y lo manda esta caja. */
+  cita: CitaHilo | null;
+  onQuitarCita: () => void;
   enviar: MutacionEnviar;
   enviarMedia: MutacionEnviarMedia;
   sugerencia?: SugerenciaEnComposer;
@@ -889,6 +1001,13 @@ function ComposerWa({
     if (conectado) textareaRef.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conectado]);
+
+  // Elegir a quién responder deja el cursor en la caja. El gesto es «responder»,
+  // no «marcar»: sin esto hay que volver a hacer clic para escribir, y encima el
+  // Escape que suelta la cita no llegaría (vive en el `onKeyDown` de la caja).
+  useEffect(() => {
+    if (cita) textareaRef.current?.focus();
+  }, [cita]);
 
   // El panel derecho puede dejar una respuesta sugerida acá para editarla antes
   // de mandar (#101). Poner texto en la caja NO es enviar: la vendedora lo
@@ -1034,11 +1153,21 @@ function ComposerWa({
             // SALIR, no sobre el que llegó: si ella lo reescribió entero, lo
             // que sale es de ella y así queda contado.
             pieza: piezaDelTexto(telefono, t),
+            // Solo el id: de quién era y qué decía lo resuelve el server.
+            ...(cita ? { citaDe: cita.mensajeExternalId } : {}),
           }),
         enviarConAdjunto: (archivo, caption) =>
           enviarMedia.mutateAsync({ numeroPropio, telefono, referencia: conversacionClave, archivo, caption }),
         telefonoVisibleAhora: () => telefonoActualRef.current,
-        limpiarTextoVisible: () => setTexto(''),
+        limpiarTextoVisible: () => {
+          setTexto('');
+          // La cita se suelta con el texto y no aparte: una tirita que sobrevive
+          // al envío hace que el mensaje SIGUIENTE salga citando lo mismo, y eso
+          // no se nota hasta que lo ve el lead. Va acá y no en `ejecutarEnvio`
+          // porque las dos ramas (texto y adjunto) pasan por esta función — el
+          // caso contrario es `olvidarPieza`, que solo está en la del adjunto.
+          onQuitarCita();
+        },
         limpiarAdjuntoVisible: () => {
           setAdjunto(null);
           setAvisoPegado(null);
@@ -1143,6 +1272,45 @@ function ComposerWa({
         />
       )}
 
+      {/* ── LA TIRITA: A QUÉ MENSAJE SE ESTÁ RESPONDIENDO ──
+          Arriba de la caja y no adentro, como en WhatsApp: es contexto de lo que
+          se va a escribir, no parte del texto. Con la X y con Escape — dos
+          salidas porque el gesto se dispara con un clic chico y equivocarse tiene
+          que costar una tecla, no buscar un botón de 12 px. */}
+      {cita && (
+        <div className="mb-2 flex items-start gap-2 rounded-xl border border-border bg-muted/60 py-1.5 pl-0 pr-1.5">
+          <div className="ml-2.5 min-w-0 flex-1 border-l-[3px] border-navy/60 pl-2">
+            {(() => {
+              const { autor, extracto } = rotuloDeCita(cita, personaNombre);
+              return (
+                <>
+                  <div className="truncate text-[11px] font-bold text-navy">
+                    {autor ? `Respondiendo a ${autor}` : 'Respondiendo a un mensaje anterior'}
+                  </div>
+                  <div className="truncate text-[11px] text-muted-foreground">{extracto}</div>
+                </>
+              );
+            })()}
+            {/* Con adjunto la cita NO viaja, y hay que decirlo ANTES de mandar:
+                enterarse después es enterarse cuando ya lo vio el lead. */}
+            {adjunto && (
+              <div className="mt-0.5 text-[11px] font-semibold text-warning-foreground">
+                Con un adjunto la cita no viaja: sale como un mensaje suelto.
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onQuitarCita}
+            title="Quitar la cita · Esc"
+            aria-label="Quitar la cita"
+            className="mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
+
       {/* El adjunto elegido, antes de mandarlo: se ve, se puede sacar. */}
       {adjunto && (
         <div className="mb-2 flex items-center gap-2 rounded-xl border border-border bg-secondary/50 px-3 py-2">
@@ -1222,6 +1390,21 @@ function ComposerWa({
             if (!sugerencia) guardarBorrador(telefono, valor);
           }}
           onKeyDown={(e) => {
+            /**
+             * ESCAPE SUELTA LA CITA, y solo cuando hay una.
+             *
+             * La tecla está libre acá: `App.tsx` filtra sus atajos globales con
+             * `tecleandoEn`, así que hoy Escape con el foco en el composer no
+             * hace nada. El `stopPropagation` va igual y solo con cita puesta —
+             * sin cita no se toca nada, para no quedarnos con un Escape que
+             * alguien más pueda necesitar mañana.
+             */
+            if (e.key === 'Escape' && cita) {
+              e.preventDefault();
+              e.stopPropagation();
+              onQuitarCita();
+              return;
+            }
             if (sugerencia) {
               // ⌘/Ctrl+Enter aprueba; Enter solo, NO. Es la asimetría a
               // propósito: acá el texto viene escrito y el dedo está editando,

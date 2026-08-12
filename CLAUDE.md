@@ -324,6 +324,46 @@ burbuja de `HiloWhatsapp.tsx`.
     primer clic caiga en la nada. La mutación es **optimista**.
 - Ver sin server: `/galeria-composer.html`. Capturas: `docs/evidencia/reacciones-en-el-hilo.png`.
 
+## Responder citando un mensaje (ADR 0054)
+
+Molde: las reacciones. Una señal que cuelga de un mensaje, dos dialectos, una forma canónica
+(`server/src/whatsapp/cita.ts`) y **la receta `wa:<id>` importada de `reacciones/dominio.ts`** — con
+dos recetas el JOIN da cero filas en silencio. **Sin migración**: una cita es un ATRIBUTO del mensaje
+(no cambia nunca, no existe sin él), así que va como una clave más del crudo, al lado de `media`.
+
+- 🔴 **`stanzaID` VA CON D MAYÚSCULA, y los tipos publicados dicen lo contrario.** El `.d.ts` de
+  `@whatsmeow-node` y su `examples/reply-and-mentions.ts` declaran `stanzaId`; el binario Go tiene
+  **13 `stanzaID` y CERO `stanzaId`**, con tres `json:"stanzaID,omitempty"` (medido el 12-ago-2026 con
+  `strings`). Seguir el `.d.ts` manda un campo que `encoding/json` **descarta sin un solo error**: el
+  mensaje sale y la cita no. Al leer se aceptan las dos, al escribir van las dos (el precedente es
+  `origen.ts:39`). Candado: `cita.paridad.test.ts`. **Corolario**: con cita hay que usar
+  `sendRawMessage`, porque el `MessageContent` tipado solo admite la grafía equivocada.
+- 🔴 **SIN CITA, NINGÚN TRANSPORTE CAMBIA UNA LETRA DEL PROTO.** whatsmeow sigue mandando
+  `{ conversation }` por `sendMessage` y Cloud API sigue sin `context`. Mover el caso normal a
+  `extendedTextMessage` «ya que estamos» sería cambiar el 100 % de los envíos por una función nueva.
+- 🔴 **EL NAVEGADOR MANDA SOLO EL ID (`citaDe`), y el server resuelve el resto.** Tiene el autor y el
+  texto en pantalla, pero es un dato que **el lead va a ver**: el `participant` mal puesto le atribuye
+  la tirita a otra persona y un `quotedMessage` inventado le muestra un texto que nadie escribió. Vive
+  en `whatsapp/citaRepositorio.ts`. Un id que Hermes no conoce **se cita igual** (lo resuelve WhatsApp):
+  se pierde el preview, no la cita.
+- 🔴 **EL CITADO QUE NO ESTÁ SE DIBUJA COMO HUECO, nunca se descarta el mensaje**: «Un mensaje
+  anterior» y **sin autor** (no se afirma de quién era sin haberlo mirado). No es un borde raro: la
+  ingesta tiraba el `contextInfo`, así que **no hay historia que reproyectar** y esto va a ser
+  mayoritario las primeras semanas. La lectura vive pura en `src/features/whatsapp/cita.ts`.
+- ⚠️ El citado se resuelve en una **segunda consulta**, donde ya se resuelven reacciones y ✓✓: en
+  `hiloDe` sería un self-join sobre la tabla que esa consulta ya está leyendo.
+- ⚠️ **«Responder» va en los DOS sentidos y sin mirar la sesión** (como Copiar: no manda nada), y **no
+  existe en modo revisión**. Un mensaje sin texto ni adjunto —la marca «Vino del anuncio»— no se puede
+  citar: su tirita saldría en blanco. **Escape suelta la cita**, y solo cuando hay una.
+- ⚠️ **Citar al mandar un ADJUNTO no está hecho**, y el composer lo dice ANTES de mandar. Recibir y
+  dibujar una cita a un adjunto sí anda. **Tocar la tirita no salta al original** a propósito: puede
+  estar fuera de la ventana de 200, y un clic que a veces no hace nada es peor que uno que nunca hace.
+- 🔴 **Y el hilo servía los 200 mensajes MÁS VIEJOS** (`ORDER BY occurred_at ASC LIMIT 200` son los
+  PRIMEROS). Muerde en 1 de 4.009 conversaciones… y justo acá, porque una cita apunta a lo reciente.
+  Ahora el `LIMIT` va sobre el orden DESC y la respuesta sale ASC (`MENSAJES_DEL_HILO`).
+- Capturas: `docs/evidencia/responder-citando-*.png`. Sin server: `/galeria-composer.html` — sirve los
+  tres casos **incluidos los feos**, porque el ideal ya escondió tres defectos una vez.
+
 ## Abrir un chat lo marca leído — y NO lo mueve de lugar
 
 - **El bug**: `POST /api/whatsapp/leido/:telefono` mandaba los ticks azules al lead y **no tocaba
