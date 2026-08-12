@@ -142,6 +142,21 @@ window.fetch = (async (entrada: RequestInfo | URL, init?: RequestInit) => {
     console.info('[galeria] POST /reaccionar', typeof entrada === 'object' && 'body' in entrada ? '' : '');
     return json({ ok: true, quitada: false });
   }
+  // Las RESPUESTAS RÁPIDAS del `/`. Son los datos recomendados de verdad: estas
+  // frases y estas claves salieron del catálogo de producción, no de un ejemplo
+  // lindo — una galería con el caso ideal ya escondió tres defectos.
+  if (url.includes('/api/hechos/catalogo'))
+    return json({
+      editable: true,
+      origen: 'tabla',
+      hechos: [
+        { clave: 'cuotas', rotulo: 'Dos cuotas', texto: 'Se puede pagar en dos cuotas sin interés: la primera reserva tu lugar.', momentos: [], orden: 1, activo: true },
+        { clave: 'acceso-un-anio', rotulo: 'Acceso un año', texto: 'El acceso a la plataforma lo tenés por todo un año desde que arranca.', momentos: [], orden: 2, activo: true },
+        { clave: 'publico-general', rotulo: 'Para público general', texto: 'Es para público general: no se pide carrera ni experiencia previa.', momentos: [], orden: 3, activo: true },
+        { clave: 'certifica', rotulo: 'Quién certifica', texto: 'Certifica la Escuela de Gobierno de Goberna, con registro.', momentos: [], orden: 4, activo: true },
+        { clave: 'yape', rotulo: 'Pago con Yape', texto: 'Podés pagar con Yape al 986 394 450 a nombre de Goberna.', momentos: [], orden: 5, activo: true },
+      ],
+    });
   if (url.includes('/api/whatsapp/enviar')) return json({ ok: true, idExterno: 'wa:galeria' });
   return json({}, 404);
 }) as typeof fetch;

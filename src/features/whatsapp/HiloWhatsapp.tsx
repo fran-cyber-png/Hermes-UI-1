@@ -14,7 +14,11 @@ import {
 } from './pegarAdjunto';
 import { AdjuntoPesado } from './AdjuntoPesado';
 import { alPonerEnComposer } from './puenteComposer';
-import { piezaDelTexto } from './procedenciaComposer';
+import { anotarPieza, piezaDelTexto } from './procedenciaComposer';
+import { aplicarRespuesta, comandoEnCurso, filtrarRespuestas } from './comandoBarra';
+import { SelectorRapido } from './SelectorRapido';
+import { useCatalogoHechos, type HechoDelCatalogo } from '../hechos/catalogo';
+import { PantallaHechos } from '../hechos/PantallaHechos';
 import { textoDelBoton } from '../autorespuesta/revision';
 import { TextoWhatsapp } from './TextoWhatsapp';
 import { citaDeMensaje, clavesDelHilo, respondidos, rotuloDeCita, sePuedeCitar, type CitaHilo } from './cita';
@@ -1093,6 +1097,66 @@ function ComposerWa({
   const [avisoPegado, setAvisoPegado] = useState<string | null>(null);
   /** Hay un archivo colgando del puntero: el composer lo dice, o soltarlo es a ciegas. */
   const [arrastrando, setArrastrando] = useState(false);
+
+  /**
+   * ── LAS RESPUESTAS RÁPIDAS, CON `/` ──────────────────────────────────────
+   *
+   * Son los «datos recomendados» de siempre (tabla `hechos`): el catálogo ya
+   * existía con 30 frases cargadas, ya tenía pantalla de edición y su `clave` ya
+   * era el nombre del atajo. Lo único que faltaba era la puerta.
+   *
+   * ⚠️ **En modo revisión no se abre**: ahí la caja no es para escribir, es para
+   * aprobar un texto que ya salió preparado, y meterle una frase suelta lo
+   * convierte en otra cosa sin que quede registro de qué se aprobó.
+   */
+  const [cursor, setCursor] = useState(0);
+  const [indiceRapida, setIndiceRapida] = useState(0);
+  const [hechosAbiertos, setHechosAbiertos] = useState(false);
+  const catalogo = useCatalogoHechos(!sugerencia);
+  const comando = sugerencia ? null : comandoEnCurso(texto, cursor);
+  const rapidas = useMemo(
+    () =>
+      comando
+        ? filtrarRespuestas((catalogo.data?.hechos ?? []).filter((h) => h.activo), comando.consulta)
+        : [],
+    [comando?.consulta, catalogo.data],
+  );
+  // Al cambiar lo tipeado, la marca vuelve arriba: dejarla donde estaba haría
+  // que Enter eligiera algo que ya no es lo que se está viendo.
+  useEffect(() => setIndiceRapida(0), [comando?.consulta]);
+
+  /** Escribe en la caja y deja el cursor donde corresponde, sin perder el foco. */
+  function reemplazarEnLaCaja(nuevo: string, posicion: number) {
+    setTexto(nuevo);
+    setCursor(posicion);
+    if (!sugerencia) guardarBorrador(telefono, nuevo);
+    const caja = textareaRef.current;
+    caja?.focus();
+    // En el frame siguiente: React todavía no pintó el valor nuevo, y mover el
+    // cursor sobre el viejo lo deja en cualquier lado.
+    requestAnimationFrame(() => caja?.setSelectionRange(posicion, posicion));
+  }
+
+  function elegirRapida(h: HechoDelCatalogo) {
+    if (!comando) return;
+    const r = aplicarRespuesta(texto, comando, h.texto);
+    reemplazarEnLaCaja(r.texto, r.cursor);
+    /**
+     * LA PROCEDENCIA (ADR 0022): sin esto el envío sale como línea de base y la
+     * frase no se puede medir nunca.
+     *
+     * Se anota **el texto de la PIEZA**, no el de la caja: `piezaDelTexto` compara
+     * contra eso al mandar, y como acá la frase se inserta adentro de un mensaje
+     * más largo, la comparación que corresponde es «lo contiene» → `editada: true`.
+     *
+     * ⚠️ Se llama `anotarPieza` directo y no `ponerEnComposer`, aunque el docblock
+     * del módulo diga que lo llama el puente. El puente REEMPLAZA la caja entera y
+     * deja el cursor al final; el `/` inserta en el medio y el cursor tiene que
+     * quedar detrás de lo insertado. Lo que ese docblock viene a evitar —que una
+     * superficie ponga texto sin declarar de dónde salió— acá no pasa: se declara.
+     */
+    anotarPieza(telefono, { clase: 'hecho', ref: h.clave, via: 'panel-datos' }, h.texto);
+  }
   /**
    * Un VIDEO que no entra por el tope de la línea. No es lo mismo que
    * `avisoPegado`: acá hay algo que hacer —achicarlo— y hay un archivo que
@@ -1521,7 +1585,20 @@ function ComposerWa({
           en una columna de siete palabras — o sea, ilegible justo en la pantalla
           que existe para leerlo. Apilar además ordena la lectura: primero lo que
           se va a mandar, después qué hacer con eso. */}
-      <div className={sugerencia ? 'flex flex-col gap-2' : 'flex items-end gap-2'}>
+      {/* `relative` para que el selector se cuelgue de ESTA fila: así queda del
+          ancho de la caja y no del pie entero. */}
+      <div className={'relative ' + (sugerencia ? 'flex flex-col gap-2' : 'flex items-end gap-2')}>
+        {comando && (
+          <SelectorRapido
+            consulta={comando.consulta}
+            respuestas={rapidas}
+            indice={Math.min(indiceRapida, Math.max(0, rapidas.length - 1))}
+            onIndice={setIndiceRapida}
+            onElegir={elegirRapida}
+            onAdministrar={() => setHechosAbiertos(true)}
+          />
+        )}
+        {hechosAbiertos && <PantallaHechos onCerrar={() => setHechosAbiertos(false)} />}
         <input
           ref={archivoRef}
           type="file"
@@ -1565,11 +1642,49 @@ function ComposerWa({
           onChange={(e) => {
             const valor = e.target.value;
             setTexto(valor);
+            setCursor(e.target.selectionStart ?? valor.length);
             // La sugerencia editada NO se guarda como borrador de la vendedora:
             // es de la máquina hasta que ella la apruebe (y ahí va al server).
             if (!sugerencia) guardarBorrador(telefono, valor);
           }}
+          // Mover el cursor con las flechas o con el mouse NO dispara `onChange`,
+          // y el comando se corta EN el cursor: sin esto, volver atrás en el
+          // texto para meter una respuesta no abriría nada.
+          onSelect={(e) => setCursor((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
           onKeyDown={(e) => {
+            /**
+             * EL SELECTOR DE RESPUESTAS SE LLEVA LAS TECLAS PRIMERO.
+             *
+             * 🔴 Va ANTES de todo lo demás, y el que obliga es **Enter**: más
+             * abajo Enter MANDA el mensaje, así que sin esta rama elegir una
+             * respuesta con Enter le dispararía al lead lo que hubiera en la
+             * caja — incluido el `/cuo` a medio escribir. Y Escape tiene que
+             * cerrar el selector antes de soltar la cita: hay dos cosas
+             * abiertas y se cierran de la de adentro hacia afuera.
+             */
+            if (comando && rapidas.length > 0) {
+              const mover = (d: number) => {
+                e.preventDefault();
+                setIndiceRapida((i) => (i + d + rapidas.length) % rapidas.length);
+              };
+              if (e.key === 'ArrowDown') return mover(1);
+              if (e.key === 'ArrowUp') return mover(-1);
+              // Tab elige igual que Enter: es el reflejo de cualquier autocompletado.
+              if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
+                e.preventDefault();
+                elegirRapida(rapidas[Math.min(indiceRapida, rapidas.length - 1)]);
+                return;
+              }
+            }
+            if (e.key === 'Escape' && comando) {
+              // Cerrar sin elegir descarta el `/loquesea`: dejarlo obliga a
+              // borrarlo a mano, y es basura que la vendedora no escribió para
+              // el lead. La tecla se corta acá para no soltar también la cita.
+              e.preventDefault();
+              e.stopPropagation();
+              reemplazarEnLaCaja(texto.slice(0, comando.desde) + texto.slice(comando.hasta), comando.desde);
+              return;
+            }
             /**
              * ESCAPE SUELTA LA CITA, y solo cuando hay una.
              *
