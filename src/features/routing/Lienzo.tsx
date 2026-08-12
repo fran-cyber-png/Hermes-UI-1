@@ -78,14 +78,23 @@ export function Lienzo({
     else puertos.current.set(id, { ...previo, [lado]: undefined });
   }, []);
 
+  /**
+   * 🔴 **SE SUMA EL SCROLL, Y SIN ESO EL LIENZO MIENTE APENAS NO ENTRA.** El
+   * `svg` es `absolute inset-0` dentro de un contenedor con `overflow-auto`, así
+   * que su origen es el del CONTENIDO y no el del recuadro visible: midiendo
+   * contra `getBoundingClientRect()` a secas, en cuanto hay scroll los cables se
+   * dibujan corridos —y con ellos su área de clic, o sea que «tocá el cable para
+   * cortarlo» corta el que no era.
+   */
   const centroDe = useCallback((id: string, lado: 'izq' | 'der') => {
-    const base = marco.current?.getBoundingClientRect();
+    const marcoEl = marco.current;
     const el = puertos.current.get(id)?.[lado];
-    if (!base || !el) return null;
+    if (!marcoEl || !el) return null;
+    const base = marcoEl.getBoundingClientRect();
     const r = el.getBoundingClientRect();
     return {
-      x: (lado === 'der' ? r.right : r.left) - base.left,
-      y: r.top + r.height / 2 - base.top,
+      x: (lado === 'der' ? r.right : r.left) - base.left + marcoEl.scrollLeft,
+      y: r.top + r.height / 2 - base.top + marcoEl.scrollTop,
     };
   }, []);
 
@@ -124,18 +133,26 @@ export function Lienzo({
     else onCortar(de, a);
   }
 
+  /** Del punto de la pantalla al sistema de coordenadas del contenido. */
+  function enElLienzo(e: { clientX: number; clientY: number }) {
+    const m = marco.current;
+    const base = m?.getBoundingClientRect();
+    return {
+      x: e.clientX - (base?.left ?? 0) + (m?.scrollLeft ?? 0),
+      y: e.clientY - (base?.top ?? 0) + (m?.scrollTop ?? 0),
+    };
+  }
+
   function alBajarEnPuerto(e: React.PointerEvent, id: string) {
     e.preventDefault();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    const base = marco.current?.getBoundingClientRect();
-    setArrastre({ de: id, x: e.clientX - (base?.left ?? 0), y: e.clientY - (base?.top ?? 0) });
+    setArrastre({ de: id, ...enElLienzo(e) });
     setArmado(null);
   }
 
   function alMover(e: React.PointerEvent) {
     if (!arrastre) return;
-    const base = marco.current?.getBoundingClientRect();
-    setArrastre({ ...arrastre, x: e.clientX - (base?.left ?? 0), y: e.clientY - (base?.top ?? 0) });
+    setArrastre({ ...arrastre, ...enElLienzo(e) });
   }
 
   /**
@@ -175,7 +192,7 @@ export function Lienzo({
   return (
     <div
       ref={marco}
-      className="relative flex min-h-0 flex-1 items-center justify-center gap-16 overflow-auto p-6"
+      className="relative flex min-h-0 flex-1 items-start justify-center gap-16 overflow-auto p-6 [&>div]:my-auto"
       onPointerMove={alMover}
       onPointerUp={alSoltarPuntero}
       onPointerCancel={() => setArrastre(null)}
@@ -183,7 +200,7 @@ export function Lienzo({
       {/* Los cables van en su capa. `pointer-events-none` en el `svg` y `auto` en
           cada trazo: así el cable se puede tocar para cortarlo, pero el resto de
           la capa no se come los clics de las tarjetas que hay debajo. */}
-      <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
+      <svg className="pointer-events-none absolute left-0 top-0 h-full w-full min-h-full min-w-full" aria-hidden>
         {trazos.map((t) => (
           <g key={t.clave}>
             {/* El trazo grueso invisible es el área de clic: 2 px de cable es
@@ -227,7 +244,7 @@ export function Lienzo({
         )}
       </svg>
 
-      {columnas.map((col, i) => (
+      {columnas.map((col) => (
         <div key={col.id} className="relative flex shrink-0 flex-col gap-1.5" style={{ width: `${col.ancho}rem` }}>
           {col.titulo && (
             <p className="pb-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
@@ -238,8 +255,6 @@ export function Lienzo({
             <Nodo
               key={n.id}
               nodo={n}
-              primera={i === 0}
-              ultima={i === columnas.length - 1}
               armado={armado === n.id}
               destinoPosible={Boolean(arrastre || armado) && sePuedeUnir(columnas, arrastre?.de ?? armado, n.id)}
               conectado={
@@ -268,8 +283,6 @@ const ICONO = { producto: Boxes, campana: Megaphone, formulario: FileText, vende
 
 function Nodo({
   nodo,
-  primera,
-  ultima,
   armado,
   destinoPosible,
   conectado,
@@ -280,8 +293,6 @@ function Nodo({
   onEntrar,
 }: {
   nodo: NodoLienzo;
-  primera: boolean;
-  ultima: boolean;
   armado: boolean;
   destinoPosible: boolean;
   conectado: boolean;
@@ -293,8 +304,16 @@ function Nodo({
 }) {
   const Icono = ICONO[nodo.icono];
   return (
-    <div className="relative">
-      {!primera && (
+    /**
+     * 🔴 **EL BLANCO DEL ARRASTRE ES LA TARJETA, NO EL PUNTITO.** El destino se
+     * resuelve con `closest('[data-puerto-izq]')`, así que con el atributo solo
+     * en el botón de 12 px había que acertarle a 12 px con el mouse — y lo que
+     * se ILUMINA al arrastrar es la tarjeta entera. O sea: la pantalla invitaba
+     * a soltar en un lugar donde soltar no hacía nada, y eso se lee como que el
+     * arrastre «no anda». El puntito queda como señal, no como blanco.
+     */
+    <div className="relative" data-puerto-izq={nodo.entrada ? nodo.id : undefined}>
+      {nodo.entrada && (
         <button
           type="button"
           data-puerto-izq={nodo.id}
@@ -363,6 +382,10 @@ function Nodo({
           <div className="mt-1.5 max-h-44 space-y-1 overflow-y-auto border-t border-border pt-1.5">
             {nodo.cargando ? (
               <p className="pl-[18px] text-[10px] text-muted-foreground">Buscando sus anuncios…</p>
+            ) : nodo.fallo ? (
+              <p className="pl-[18px] text-[10px] text-destructive">
+                No se pudieron leer sus anuncios.
+              </p>
             ) : (nodo.adentro ?? []).length === 0 ? (
               <p className="pl-[18px] text-[10px] text-muted-foreground">
                 Ningún anuncio suyo trajo gente en la ventana.
@@ -379,7 +402,7 @@ function Nodo({
         )}
       </div>
 
-      {!ultima && (
+      {nodo.salida && (
         <button
           type="button"
           data-puerto-der={nodo.id}

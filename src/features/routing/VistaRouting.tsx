@@ -6,6 +6,7 @@ import {
   ID,
   cablesDe,
   cablesHuerfanos,
+  cablesDeProducto,
   columnasDePieza,
   columnasDeProducto,
   leerId,
@@ -92,6 +93,44 @@ export function VistaRouting() {
    */
   const espejo = useRef<CableLienzo[]>([]);
 
+  /**
+   * ⌘Z — LA PILA DE CÓMO DESHACER.
+   *
+   * 🔴 **Guarda la operación INVERSA, no una foto del estado.** Con fotos, un
+   * `Deshacer` pisaría también los cambios que otra persona guardó mientras
+   * tanto (acá editan varias supervisoras sobre la misma línea). La inversa de
+   * «conectar A→B» es «cortar A→B» y no toca nada más — se aplica igual que un
+   * gesto y viaja por el mismo camino, así que un `409` la revierte sola.
+   *
+   * ⚠️ **La acción masiva NO entra en la pila, a propósito.** «Poner este cable
+   * en las N» REEMPLAZA el conjunto de cada pieza, así que su inversa necesita
+   * los conjuntos que había antes, uno por pieza — y un `Deshacer` que restaura
+   * de a poco, con un fallo en el medio, deja el producto a mitad de camino sin
+   * que nadie lo sepa. Por eso ese botón pregunta primero y este atajo no lo
+   * alcanza.
+   */
+  const deshacer = useRef<{ de: string; a: string; accion: 'conectar' | 'cortar' }[]>([]);
+  const aplicarRef = useRef<
+    (de: string, a: string, accion: 'conectar' | 'cortar', o?: { anotar?: boolean }) => void
+  >(() => {});
+  /** Solo para que la pila (que vive en un ref) pueda pintar su atajo. */
+  const [, redibujarPila] = useState(0);
+
+  useEffect(() => {
+    function alTeclear(e: KeyboardEvent) {
+      if (e.key !== 'z' && e.key !== 'Z') return;
+      if (!e.metaKey && !e.ctrlKey) return;
+      const ultima = deshacer.current.pop();
+      if (!ultima) return;
+      e.preventDefault();
+      aplicarRef.current(ultima.de, ultima.a, ultima.accion, { anotar: false });
+      // Lo que se deshace no vuelve a la pila: `aplicar` no la toca en este caso.
+      redibujarPila((n) => n + 1);
+    }
+    window.addEventListener('keydown', alTeclear);
+    return () => window.removeEventListener('keydown', alTeclear);
+  }, []);
+
   /** `Escape` cierra la campaña abierta. En captura: el foco suele estar en un puerto. */
   useEffect(() => {
     if (!abierta) return;
@@ -138,7 +177,12 @@ export function VistaRouting() {
       </div>
     );
   }
-  if (error) return <Cartel titulo="No se puede mostrar el ruteo" detalle={error.message} />;
+  /**
+   * ⚠️ **`&& !data`**: con datos en mano, un refetch que falla no puede llevarse
+   * la pantalla entera al cartel. Lo que se pierde es la actualización, no lo
+   * que ya está — y el fallo se dice abajo, sin borrar el trabajo de nadie.
+   */
+  if (error && !data) return <Cartel titulo="No se puede mostrar el ruteo" detalle={error.message} />;
   if (!data) return null;
   if (data.sinMigracion) {
     return (
@@ -183,6 +227,7 @@ export function VistaRouting() {
     id: armadoVisible(abierta, producto, pieza),
     anuncios: anuncios.data?.anuncios ?? [],
     cargando: anuncios.isLoading,
+    fallo: anuncios.isError,
   };
   const armado = producto
     ? columnasDeProducto(producto, data.destinos, apertura)
@@ -207,18 +252,68 @@ export function VistaRouting() {
    * `cables`**: sacar el congelamiento permite que dos guardados se solapen, y
    * el espejo es lo que impide que el segundo pise al primero.
    */
-  function aplicar(de: string, a: string, accion: 'conectar' | 'cortar') {
+  function aplicar(
+    de: string,
+    a: string,
+    accion: 'conectar' | 'cortar',
+    { anotar = true } = {},
+  ) {
+    const { tipo, clave } = leerId(de);
+    // La inversa, para ⌘Z. `anotar: false` es el propio Deshacer: si se anotara,
+    // ⌘Z alternaría entre dos estados en vez de recorrer la historia hacia atrás.
+    if (anotar) {
+      deshacer.current.push({ de, a, accion: accion === 'conectar' ? 'cortar' : 'conectar' });
+      if (deshacer.current.length > 50) deshacer.current.shift();
+      redibujarPila((n) => n + 1);
+    }
+
+    /**
+     * 🔴 **EL PRODUCTO SE CABLEA DERECHO A LA VENDEDORA, Y EL EFECTO SE VE.** Lo
+     * que se guarda es un cable POR PIEZA (no hay regla de producto), así que
+     * acá se aplica el mismo cambio a todas y el lienzo se llena de cables
+     * solo: el gesto es uno y **el resultado queda auditable pieza por pieza**,
+     * que es lo contrario de una regla heredada que hay que adivinar.
+     *
+     * ⚠️ **`agregar`/`quitar`, nunca `reemplazar`**: un arrastre no puede
+     * borrarle a las otras piezas las vendedoras que ya tenían. Para eso está
+     * el botón de abajo, que dice qué va a pisar.
+     */
+    if (tipo === 'prod') {
+      const suyas = producto?.piezas ?? [];
+      const siguientes = suyas.reduce((acc, p) => conCambio(acc, p.id, a, accion), espejo.current);
+      espejo.current = siguientes;
+      setCables(siguientes);
+      conectarProducto.mutate({
+        familia: clave,
+        vendedoras: [leerId(a).clave],
+        modo: accion === 'conectar' ? 'agregar' : 'quitar',
+      });
+      return;
+    }
+
     const siguientes = conCambio(espejo.current, de, a, accion);
     espejo.current = siguientes;
     setCables(siguientes);
     const destinos = destinosDe(siguientes, de).map((v) => leerId(v).clave);
-    const { tipo, clave } = leerId(de);
     if (tipo === 'campana') conectar.mutate({ campanaId: clave, vendedoras: destinos });
     else if (tipo === 'curso') conectarCurso.mutate({ curso: clave, vendedoras: destinos });
   }
 
   const fallo = conectar.error ?? conectarCurso.error ?? conectarProducto.error;
+  // El atajo vive en un `useEffect` sin dependencias (va antes de los early
+  // returns), así que llega al `aplicar` de este render por acá.
+  aplicarRef.current = aplicar;
+
   const enPantalla = new Set(armado.columnas.flatMap((c) => c.nodos.map((n) => n.id)));
+  /**
+   * El cable del producto entero se DERIVA de los de sus piezas (existe solo si
+   * TODAS lo tienen), así que reacciona al gesto en el acto y no hace falta una
+   * tercera tabla. Ver `cablesDeProducto`.
+   */
+  const cablesVisibles = [
+    ...cables,
+    ...(producto ? cablesDeProducto(producto, cables) : []),
+  ].filter((c) => enPantalla.has(c.de) && enPantalla.has(c.a));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -234,6 +329,14 @@ export function VistaRouting() {
         <div className="ml-auto flex items-center gap-2">
           {/* 🔴 Guardar AVISA, no congela — ver el comentario de `aplicar`. */}
           {guardando && <span className="text-[11px] text-muted-foreground">Guardando…</span>}
+          {/* Un deshacer que no se anuncia no existe: nadie prueba ⌘Z en una
+              pantalla de configuración por las dudas. */}
+          {deshacer.current.length > 0 && (
+            <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+              <kbd className="rounded border border-border px-1 py-0.5 font-mono text-[10px]">⌘Z</kbd>
+              deshace
+            </span>
+          )}
           {data.actualizadoAt && (
             <span className="text-[11px] text-muted-foreground">
               Meta: {haceCuanto(data.actualizadoAt) ?? '—'}
@@ -344,10 +447,7 @@ export function VistaRouting() {
             <>
               <Lienzo
                 columnas={armado.columnas}
-                cables={[
-                  ...armado.pertenencia,
-                  ...cables.filter((c) => enPantalla.has(c.de) && enPantalla.has(c.a)),
-                ]}
+                cables={[...armado.pertenencia, ...cablesVisibles]}
                 onConectar={(de, a) => aplicar(de, a, 'conectar')}
                 onCortar={(de, a) => aplicar(de, a, 'cortar')}
                 onEntrar={(id) => setAbierta((y) => (y === id ? null : id))}
@@ -356,7 +456,18 @@ export function VistaRouting() {
                 <PieDeProducto
                   producto={producto}
                   guardando={guardando}
-                  acuse={conectarProducto.data ?? null}
+                  /**
+                   * ⚠️ **El acuse es de UNA familia y se compara con la que está
+                   * en pantalla.** `conectarProducto.data` sobrevive al cambio
+                   * de producto, así que el siguiente decía «Listo: 5 campañas»
+                   * sin que nadie lo hubiera tocado — y encima tapaba el renglón
+                   * que avisa QUÉ va a pisar, justo donde todavía no se pisó nada.
+                   */
+                  acuse={
+                    conectarProducto.variables?.familia === producto.familia
+                      ? (conectarProducto.data ?? null)
+                      : null
+                  }
                   onAplicar={(vendedoras) =>
                     conectarProducto.mutate({ familia: producto.familia, vendedoras })
                   }
@@ -371,9 +482,9 @@ export function VistaRouting() {
         </div>
       </div>
 
-      {fallo && (
+      {(fallo || error) && (
         <p className="shrink-0 border-t border-destructive/30 bg-destructive/5 px-6 py-2 text-[11px] text-destructive">
-          {(fallo as Error).message}
+          {((fallo ?? error) as Error).message}
         </p>
       )}
     </div>

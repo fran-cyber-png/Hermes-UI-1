@@ -39,15 +39,19 @@ export interface Pieza {
 /**
  * QUÉ PIEZA ESTÁ ABIERTA Y QUÉ TIENE ADENTRO.
  *
- * ⚠️ **`cargando` no se puede deducir de `anuncios: []`**: una campaña cuyos
- * anuncios todavía no llegaron y una campaña que no tiene ninguno se ven igual
- * desde acá, y decir «no tiene anuncios» mientras se están pidiendo es afirmar
- * algo falso sobre la pauta.
+ * 🔴 **TRES ESTADOS, NO DOS: `cargando` · `fallo` · «no hay».** Una campaña
+ * cuyos anuncios todavía no llegaron, una a la que no se le pudo preguntar, y
+ * una que de verdad no trajo a nadie, **se ven igual desde acá** si el tipo solo
+ * distingue lista-vacía de lista-llena. Decir «ningún anuncio suyo trajo gente»
+ * cuando el pedido falló es afirmar algo falso sobre la pauta — y sobre eso se
+ * decide si un adset se apaga. Es la misma regla que el resto de la casa:
+ * «no se pudo preguntar» no es «no hay».
  */
 export interface Apertura {
   id: string | null;
   anuncios: readonly { adId: string; titular: string | null; personas: number }[];
   cargando: boolean;
+  fallo?: boolean;
 }
 
 const CERRADO: Apertura = { id: null, anuncios: [], cargando: false };
@@ -151,8 +155,40 @@ const COL_VENDEDORAS = (destinos: readonly string[]): ColumnaLienzo => ({
     id: ID.vendedora(d),
     titulo: nombreCortoLocal(d),
     icono: 'vendedora' as const,
+    // Lo único que recibe cables. No tiene salida: acá termina el flujo.
+    entrada: true,
   })),
 });
+
+/**
+ * EL CABLE DEL PRODUCTO ENTERO — existe **solo si TODAS sus piezas lo tienen**.
+ *
+ * 🔴 **Se DERIVA, no se guarda**, y por eso no hace falta una tercera tabla que
+ * se pueda desincronizar: cablear el producto escribe en cada pieza (decisión
+ * del dueño en `server/src/routing/producto.ts`), así que «el producto va a
+ * Luz» es exactamente «todas sus piezas van a Luz». Es la misma familia de
+ * decisiones que la etapa efectiva (ADR 0044) y las señales (ADR 0016).
+ *
+ * ⚠️ Con una pieza que no lo tiene, el cable del producto **no se dibuja** — y
+ * eso es correcto: dibujarlo diría «todas», y sería falso. La mezcla se ve en
+ * los cables de cada pieza, que están a la vista al lado.
+ */
+export function cablesDeProducto(
+  producto: Producto,
+  cables: readonly CableLienzo[],
+): CableLienzo[] {
+  if (producto.piezas.length === 0) return [];
+  const suyas = producto.piezas.map((p) => p.id);
+  const hay = (de: string, a: string) =>
+    cables.some((c) => c.tipo === 'regla' && c.de === de && c.a === a);
+  const candidatas = [
+    ...new Set(cables.filter((c) => c.tipo === 'regla' && suyas.includes(c.de)).map((c) => c.a)),
+  ];
+  return candidatas
+    .filter((a) => suyas.every((id) => hay(id, a)))
+    .sort((x, y) => x.localeCompare(y, 'es'))
+    .map((a) => ({ de: ID.producto(producto.familia), a, tipo: 'regla' as const }));
+}
 
 /** «1 campañas» se lee como un error de la pantalla, no como un dato. */
 function cuantas(n: number, uno: string, varios: string): string {
@@ -192,6 +228,16 @@ export function columnasDeProducto(
             titulo: producto.nombre,
             icono: 'producto',
             pie: `${producto.volumen} leads · ${cuantas(campanas, 'campaña', 'campañas')} · ${cuantas(formularios, 'formulario', 'formularios')}`,
+            /**
+             * 🔴 **El puerto del producto va DERECHO a la vendedora, saltándose
+             * sus piezas** — pedido del dueño el 12-ago-2026: *«si quiero
+             * enlazar de frente el producto con la vendedora que se haga las
+             * conexiones automáticamente»*. Lo que se guarda sigue siendo un
+             * cable por pieza (no hay regla de producto, `producto.ts`), así
+             * que al soltar aparecen los N cables de abajo: el gesto es masivo
+             * y **el resultado es visible pieza por pieza**.
+             */
+            salida: true,
           },
         ],
       },
@@ -247,9 +293,13 @@ function aNodo(p: Pieza, apertura: Apertura = CERRADO): NodoLienzo {
     icono: p.icono,
     pie: p.vendedoras.length ? p.vendedoras.map(nombreCortoLocal).join(', ') : p.pie,
     estado: p.estado,
+    // Sale hacia las vendedoras. NO recibe: el cable del producto es de
+    // pertenencia y lo decide el catálogo, no un arrastre.
+    salida: true,
     abrible,
     abierto,
     cargando: abierto && apertura.cargando,
+    fallo: abierto && Boolean(apertura.fallo),
     adentro: abierto
       ? apertura.anuncios.map((a) => ({
           id: `anuncio:${a.adId}`,

@@ -107,12 +107,35 @@ export function useRouting() {
 export function useConectarProducto() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ familia, vendedoras }: { familia: string; vendedoras: string[] }) =>
+    /**
+     * ⚠️ **`modo` decide si el gesto es destructivo, y el default NO lo es por
+     * accidente**: `reemplazar` es el del botón «Poner este cable en las N»,
+     * que dice qué va a pisar. El arrastre manda `agregar`/`quitar` — ver
+     * `ModoDeCableado` en el server.
+     */
+    mutationFn: ({
+      familia,
+      vendedoras,
+      modo,
+    }: {
+      familia: string;
+      vendedoras: string[];
+      modo?: 'reemplazar' | 'agregar' | 'quitar';
+    }) =>
       api<{ campanas: number; cursos: number }>('/api/routing/productos', {
         method: 'PUT',
-        body: JSON.stringify({ familia, vendedoras }),
+        body: JSON.stringify({ familia, vendedoras, modo: modo ?? 'reemplazar' }),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['routing'] }),
+    /**
+     * 🔴 **`onSettled` y NO `onSuccess`: un rechazo TIENE que traer la foto de
+     * vuelta.** El cable se dibuja con el gesto (antes de que el server
+     * conteste), y quien lo revierte es el refetch. Con `onSuccess`, un `409`
+     * —destino que no está en la rueda, que es el rechazo más probable acá— no
+     * invalidaba nada: quedaba el cable dibujado sobre una regla que no existe,
+     * y la franja roja de abajo no alcanza porque lo que la persona mira es el
+     * cable.
+     */
+    onSettled: () => qc.invalidateQueries({ queryKey: ['routing'] }),
   });
 }
 
@@ -121,7 +144,16 @@ export function useConectarCurso() {
   return useMutation({
     mutationFn: ({ curso, vendedoras }: { curso: string; vendedoras: string[] }) =>
       api('/api/routing/cursos', { method: 'PUT', body: JSON.stringify({ curso, vendedoras }) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['routing'] }),
+    /**
+     * 🔴 **`onSettled` y NO `onSuccess`: un rechazo TIENE que traer la foto de
+     * vuelta.** El cable se dibuja con el gesto (antes de que el server
+     * conteste), y quien lo revierte es el refetch. Con `onSuccess`, un `409`
+     * —destino que no está en la rueda, que es el rechazo más probable acá— no
+     * invalidaba nada: quedaba el cable dibujado sobre una regla que no existe,
+     * y la franja roja de abajo no alcanza porque lo que la persona mira es el
+     * cable.
+     */
+    onSettled: () => qc.invalidateQueries({ queryKey: ['routing'] }),
   });
 }
 
@@ -133,7 +165,16 @@ export function useConectar() {
         method: 'PUT',
         body: JSON.stringify({ vendedoras }),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['routing'] }),
+    /**
+     * 🔴 **`onSettled` y NO `onSuccess`: un rechazo TIENE que traer la foto de
+     * vuelta.** El cable se dibuja con el gesto (antes de que el server
+     * conteste), y quien lo revierte es el refetch. Con `onSuccess`, un `409`
+     * —destino que no está en la rueda, que es el rechazo más probable acá— no
+     * invalidaba nada: quedaba el cable dibujado sobre una regla que no existe,
+     * y la franja roja de abajo no alcanza porque lo que la persona mira es el
+     * cable.
+     */
+    onSettled: () => qc.invalidateQueries({ queryKey: ['routing'] }),
   });
 }
 
@@ -150,7 +191,16 @@ export function useRefrescarDesdeMeta() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api<Refresco>('/api/routing/refrescar', { method: 'POST' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['routing'] }),
+    /**
+     * 🔴 **`onSettled` y NO `onSuccess`: un rechazo TIENE que traer la foto de
+     * vuelta.** El cable se dibuja con el gesto (antes de que el server
+     * conteste), y quien lo revierte es el refetch. Con `onSuccess`, un `409`
+     * —destino que no está en la rueda, que es el rechazo más probable acá— no
+     * invalidaba nada: quedaba el cable dibujado sobre una regla que no existe,
+     * y la franja roja de abajo no alcanza porque lo que la persona mira es el
+     * cable.
+     */
+    onSettled: () => qc.invalidateQueries({ queryKey: ['routing'] }),
   });
 }
 

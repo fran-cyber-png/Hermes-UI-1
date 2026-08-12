@@ -460,12 +460,26 @@ export async function ponerCablesDeCurso(
  * Devuelve qué tocó: sin ese número, «listo» sobre cinco renglones es
  * indistinguible de «listo» sobre cero.
  */
+/**
+ * CÓMO SE APLICA UN CABLE DE PRODUCTO SOBRE SUS PIEZAS.
+ *
+ * 🔴 **`agregar`/`quitar` existen porque un ARRASTRE no puede ser destructivo.**
+ * El botón «Poner este cable en las N» dice explícitamente qué va a pisar y para
+ * eso está `reemplazar`. Pero tirar un cable del producto a una vendedora es el
+ * MISMO verbo que tirarlo de una pieza —conectar a esa persona—, y si eso
+ * reemplazara el conjunto, arrastrar hacia Luz **borraría a Tracy de las otras
+ * cuatro piezas sin decir una palabra**. Un gesto de un dedo no puede tener el
+ * alcance de un botón que pregunta.
+ */
+export type ModoDeCableado = "reemplazar" | "agregar" | "quitar";
+
 export async function cablearProducto(
   base: typeof Base,
   numeroPropio: string | null,
   familia: string,
   vendedoras: readonly string[],
   quienLosPone: string,
+  modo: ModoDeCableado = "reemplazar",
 ): Promise<{ campanas: number; cursos: number }> {
   const [aliases, catalogo, cursos] = await Promise.all([
     aliasesActivos(base as never).catch(() => []),
@@ -486,12 +500,60 @@ export async function cablearProducto(
   );
   const losCursos = [...cursos].map((c) => c.curso).filter(deLaFamilia);
 
+  const unicas = [...new Set(vendedoras.map((v) => v.trim()).filter(Boolean))];
+  const enMinuscula = unicas.map((v) => v.toLowerCase());
+
   await base.transaction(async (tx) => {
     for (const c of campanas) {
-      await ponerCables(tx as never, numeroPropio ?? "", c.campanaId, vendedoras, quienLosPone);
+      if (modo === "reemplazar") {
+        await ponerCables(tx as never, numeroPropio ?? "", c.campanaId, vendedoras, quienLosPone);
+      } else if (modo === "agregar") {
+        if (unicas.length === 0) continue;
+        await tx
+          .insert(campanaCable)
+          .values(
+            unicas.map((vendedoraId) => ({
+              numeroPropio: numeroPropio ?? "",
+              campanaId: c.campanaId,
+              vendedoraId,
+              asignadaPor: quienLosPone,
+            })),
+          )
+          .onConflictDoNothing();
+      } else {
+        // ⚠️ Se compara NORMALIZANDO: la fila puede decir `Luz` y el pedido `luz`
+        // (las dos grafías están vivas en prod). Con comparación exacta, quitar
+        // no quita y el cable queda pegado sin síntoma.
+        await tx
+          .delete(campanaCable)
+          .where(
+            and(
+              eq(campanaCable.numeroPropio, numeroPropio ?? ""),
+              eq(campanaCable.campanaId, c.campanaId),
+              sql`lower(${campanaCable.vendedoraId}) = ANY(${enMinuscula})`,
+            ),
+          );
+      }
     }
     for (const curso of losCursos) {
-      await ponerCablesDeCurso(tx as never, curso, vendedoras, quienLosPone);
+      if (modo === "reemplazar") {
+        await ponerCablesDeCurso(tx as never, curso, vendedoras, quienLosPone);
+      } else if (modo === "agregar") {
+        if (unicas.length === 0) continue;
+        await tx
+          .insert(cursoRuteo)
+          .values(unicas.map((vendedoraId) => ({ curso, vendedoraId, asignadaPor: quienLosPone })))
+          .onConflictDoNothing();
+      } else {
+        await tx
+          .delete(cursoRuteo)
+          .where(
+            and(
+              eq(cursoRuteo.curso, curso),
+              sql`lower(${cursoRuteo.vendedoraId}) = ANY(${enMinuscula})`,
+            ),
+          );
+      }
     }
   });
 

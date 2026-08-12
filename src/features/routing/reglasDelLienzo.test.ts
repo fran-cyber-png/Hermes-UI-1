@@ -9,37 +9,60 @@ import {
 } from './reglasDelLienzo';
 
 const COLUMNAS: ColumnaLienzo[] = [
-  { id: 'producto', ancho: 13, nodos: [{ id: 'prod:DIPCPOL', titulo: 'Consultor', icono: 'producto' }] },
+  {
+    id: 'producto',
+    ancho: 17,
+    nodos: [{ id: 'prod:DIPCPOL', titulo: 'Consultor', icono: 'producto', salida: true }],
+  },
   {
     id: 'piezas',
-    ancho: 16,
+    ancho: 17,
     nodos: [
-      { id: 'campana:1', titulo: '[AGO] CP', icono: 'campana' },
-      { id: 'curso:X', titulo: 'Formulario CP', icono: 'formulario' },
+      { id: 'campana:1', titulo: '[AGO] CP', icono: 'campana', salida: true },
+      { id: 'curso:X', titulo: 'Formulario CP', icono: 'formulario', salida: true },
     ],
   },
   {
     id: 'vendedoras',
     ancho: 12,
     nodos: [
-      { id: 'v:ventas11', titulo: 'ventas11', icono: 'vendedora' },
-      { id: 'v:ventas12', titulo: 'ventas12', icono: 'vendedora' },
+      { id: 'v:ventas11', titulo: 'ventas11', icono: 'vendedora', entrada: true },
+      { id: 'v:ventas12', titulo: 'ventas12', icono: 'vendedora', entrada: true },
     ],
   },
 ];
 
+/**
+ * 🔴 LA CONECTABILIDAD ES DEL NODO, NO DE LA COLUMNA.
+ *
+ * Antes esto se derivaba de la adyacencia («solo de una columna a la
+ * siguiente») y por eso habilitaba producto → pieza: un cable que se dibujaba
+ * igual que los de verdad y que **no salía nunca al server**, porque `aplicar()`
+ * solo tiene rama para `campana:` y `curso:`. La pantalla afirmaba una regla que
+ * no existía, sin error y sin log. Ahora cada nodo declara `salida`/`entrada`.
+ */
 describe('qué puertos se pueden unir', () => {
-  it('solo de una columna a la siguiente', () => {
+  it('una pieza va a una vendedora', () => {
     expect(sePuedeUnir(COLUMNAS, 'campana:1', 'v:ventas11')).toBe(true);
-    expect(sePuedeUnir(COLUMNAS, 'prod:DIPCPOL', 'campana:1')).toBe(true);
+    expect(sePuedeUnir(COLUMNAS, 'curso:X', 'v:ventas12')).toBe(true);
   });
 
   /**
-   * 🔴 El cable producto → vendedora saltearía la pieza, que es DONDE VIVE LA
-   * REGLA. La pantalla lo dibujaría y el server no sabría qué guardar.
+   * 🔴 **El producto va DERECHO a la vendedora, salteándose sus piezas** —
+   * pedido del dueño el 12-ago-2026. Lo que se guarda sigue siendo un cable por
+   * pieza, así que el gesto es masivo y el resultado queda a la vista abajo.
    */
-  it('no se puede saltear una columna', () => {
-    expect(sePuedeUnir(COLUMNAS, 'prod:DIPCPOL', 'v:ventas11')).toBe(false);
+  it('el producto llega derecho a la vendedora', () => {
+    expect(sePuedeUnir(COLUMNAS, 'prod:DIPCPOL', 'v:ventas11')).toBe(true);
+  });
+
+  /**
+   * 🔴 Y NO a sus piezas: ese era el cable fantasma. La pertenencia la decide el
+   * catálogo (`alias_curso`), no un arrastre.
+   */
+  it('el producto NO se cablea a sus propias piezas', () => {
+    expect(sePuedeUnir(COLUMNAS, 'prod:DIPCPOL', 'campana:1')).toBe(false);
+    expect(sePuedeUnir(COLUMNAS, 'prod:DIPCPOL', 'curso:X')).toBe(false);
   });
 
   it('no se puede al revés ni consigo mismo', () => {
@@ -47,6 +70,11 @@ describe('qué puertos se pueden unir', () => {
     // guarda queda un cable invertido que nadie pidió.
     expect(sePuedeUnir(COLUMNAS, 'v:ventas11', 'campana:1')).toBe(false);
     expect(sePuedeUnir(COLUMNAS, 'campana:1', 'campana:1')).toBe(false);
+  });
+
+  /** Una vendedora no tiene salida: acá termina el flujo. */
+  it('una vendedora no le manda nada a nadie', () => {
+    expect(sePuedeUnir(COLUMNAS, 'v:ventas11', 'v:ventas12')).toBe(false);
   });
 
   it('un nodo que no está en ninguna columna no se une a nada', () => {

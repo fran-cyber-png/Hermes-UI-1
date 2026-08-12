@@ -271,7 +271,12 @@ routingRouter.get("/campanas/:campanaId/anuncios", async (req, res) => {
  */
 routingRouter.put("/productos", async (req, res) => {
   const parsed = z
-    .object({ familia: z.string().min(1), vendedoras: z.array(z.string().min(1)).max(20) })
+    .object({
+      familia: z.string().min(1),
+      vendedoras: z.array(z.string().min(1)).max(20),
+      // El default es el de la pantalla vieja (el botón masivo). Ver `ModoDeCableado`.
+      modo: z.enum(["reemplazar", "agregar", "quitar"]).default("reemplazar"),
+    })
     .safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ ok: false, message: "se espera `familia` y `vendedoras`" });
@@ -302,8 +307,15 @@ routingRouter.put("/productos", async (req, res) => {
       }
     }
 
-    const tocados = await cablearProducto(db, linea, familia, pedidas, req.vendedoraId ?? "");
-    res.json({ ok: true, familia, vendedoras: pedidas, ...tocados });
+    const tocados = await cablearProducto(
+      db,
+      linea,
+      familia,
+      pedidas,
+      req.vendedoraId ?? "",
+      parsed.data.modo,
+    );
+    res.json({ ok: true, familia, vendedoras: pedidas, modo: parsed.data.modo, ...tocados });
   } catch (e) {
     res.status(500).json({ ok: false, message: (e as Error).message });
   }

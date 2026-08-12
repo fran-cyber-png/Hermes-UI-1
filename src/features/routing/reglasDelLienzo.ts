@@ -28,9 +28,29 @@ export interface NodoLienzo {
    */
   abrible?: boolean;
   abierto?: boolean;
-  /** Lo que se ve adentro cuando está abierto. Vacío ≠ cargando: ver `cargando`. */
+  /**
+   * Lo que se ve adentro cuando está abierto.
+   * ⚠️ Vacío significa TRES cosas distintas y hay que poder separarlas: ver
+   * `Apertura` en `piezas.ts`.
+   */
   adentro?: { id: string; titulo: string; pie: string }[];
   cargando?: boolean;
+  fallo?: boolean;
+  /**
+   * 🔴 **DE DÓNDE PUEDE SALIR Y A DÓNDE PUEDE ENTRAR UN CABLE — Y ES DEL NODO,
+   * NO DE LA COLUMNA.** Antes el puerto derecho se dibujaba en todo nodo que no
+   * estuviera en la última columna y `sePuedeUnir` decía que sí a cualquier par
+   * de columnas vecinas. Consecuencia medida el 12-ago-2026: **se podía tirar un
+   * cable del producto a una de sus piezas, se dibujaba igual que uno de verdad,
+   * y no salía ningún `PUT`** — `aplicar()` solo tiene rama para `campana:` y
+   * `curso:`, así que el origen `prod:` caía al vacío sin error y sin log. La
+   * pantalla afirmaba una regla que el server nunca vio.
+   *
+   * Con esto la conectabilidad se DECLARA donde se sabe (`piezas.ts`), y un nodo
+   * nuevo nace sin puertos hasta que alguien decida que los tiene.
+   */
+  salida?: boolean;
+  entrada?: boolean;
   /** `pausada` se dibuja apagada; `activa` es la que decide algo mañana. */
   estado?: 'activa' | 'pausada' | 'desconocido';
 }
@@ -70,15 +90,13 @@ export function claveDeCable(de: string, a: string): string {
 /**
  * ¿SE PUEDEN UNIR ESTOS DOS PUERTOS?
  *
- * 🔴 **Se decide por COLUMNA y no por nodo**, y no es un detalle: un cable solo
- * tiene sentido de una columna a la SIGUIENTE. Sin esta regla se podría unir un
- * producto directo con una vendedora salteando sus piezas — un cable que la
- * pantalla dibujaría y que el server no sabría guardar, porque la regla vive en
- * la pieza.
+ * 🔴 **Lo decide LO QUE CADA NODO DECLARA, no dónde cayó.** La versión anterior
+ * lo derivaba de la adyacencia de columnas y por eso habilitaba pares que nadie
+ * sabía guardar — ver el comentario de `NodoLienzo.salida`. Un origen sin
+ * `salida` no dibuja puerto y no une; un destino sin `entrada`, tampoco.
  *
- * ⚠️ Y se prohíbe explícitamente el mismo nodo consigo mismo y el sentido
- * inverso: arrastrar de derecha a izquierda es un gesto que la gente hace, y sin
- * la guarda se convierte en un cable al revés que nadie pidió.
+ * ⚠️ Se prohíbe explícitamente el mismo nodo consigo mismo: arrastrar y soltar
+ * en el lugar es un gesto que la gente hace sin querer.
  */
 export function sePuedeUnir(
   columnas: readonly ColumnaLienzo[],
@@ -86,9 +104,10 @@ export function sePuedeUnir(
   a: string | null,
 ): boolean {
   if (!de || !a || de === a) return false;
-  const iDe = columnas.findIndex((c) => c.nodos.some((n) => n.id === de));
-  const iA = columnas.findIndex((c) => c.nodos.some((n) => n.id === a));
-  return iDe >= 0 && iA === iDe + 1;
+  const nodos = columnas.flatMap((c) => c.nodos);
+  return Boolean(
+    nodos.find((n) => n.id === de)?.salida && nodos.find((n) => n.id === a)?.entrada,
+  );
 }
 
 /**
