@@ -116,13 +116,19 @@ export function VistaRouting() {
 
   const productosVisibles =
     filtro === 'todo' || filtro === 'producto' ? productos.filter((p) => coincide(p.nombre)) : [];
+  /**
+   * En «Todo» lo que ya está adentro de un producto no se repite suelto: sería la
+   * misma regla ofrecida dos veces, y dos números sobre el mismo tráfico.
+   *
+   * ⚠️ **Salvo cuando hay búsqueda.** Sin esta excepción, escribir el nombre de
+   * una campaña que pertenece a un producto contestaba «Nada coincide con el
+   * filtro» — la pantalla negando algo que tiene a la vista. Buscar es pedir por
+   * nombre, y quien pide por nombre quiere ESA cosa, no su grupo.
+   */
   const sueltasVisibles = piezas.filter(
     (p) =>
       coincide(p.titulo) &&
-      // En «Todo» lo que ya está adentro de un producto no se repite suelto:
-      // sería la misma regla ofrecida dos veces, y dos números sobre el mismo
-      // tráfico.
-      (filtro === 'todo' ? p.familia === null : filtro === p.icono),
+      (filtro === 'todo' ? p.familia === null || Boolean(q) : filtro === p.icono),
   );
 
   const productoElegido = productos.find((p) => ID.producto(p.familia) === elegido) ?? null;
@@ -297,6 +303,7 @@ export function VistaRouting() {
                 <PieDeProducto
                   producto={producto}
                   guardando={guardando}
+                  acuse={conectarProducto.data ?? null}
                   onAplicar={(vendedoras) =>
                     conectarProducto.mutate({ familia: producto.familia, vendedoras })
                   }
@@ -337,10 +344,17 @@ function resumen(piezas: Pieza[]): string {
 function PieDeProducto({
   producto,
   guardando,
+  acuse,
   onAplicar,
 }: {
   producto: Producto;
   guardando: boolean;
+  /**
+   * 🔴 CUÁNTAS PIEZAS TOCÓ EL SERVER, y se muestra. «Listo» sobre cinco piezas y
+   * «listo» sobre cero se ven igual — y el cero pasa de verdad: un producto cuyas
+   * campañas dejaron de mandar a esta línea no tiene nada que cablear.
+   */
+  acuse: { campanas: number; cursos: number } | null;
   onAplicar: (vendedoras: string[]) => void;
 }) {
   const union = [...new Set(producto.piezas.flatMap((p) => p.vendedoras))].sort((a, b) =>
@@ -361,9 +375,11 @@ function PieDeProducto({
         Poner este cable en las {producto.piezas.length}
       </button>
       <p className="min-w-0 flex-1 text-[11px] leading-relaxed text-muted-foreground">
-        {union.length === 0
-          ? 'Tirá un cable en alguna pieza y después podés repetirlo en todas.'
-          : `Deja ${union.join(', ')} en las ${producto.piezas.length} piezas.`}
+        {acuse
+          ? `Listo: ${acuse.campanas} campaña${acuse.campanas === 1 ? '' : 's'} y ${acuse.cursos} formulario${acuse.cursos === 1 ? '' : 's'}.`
+          : union.length === 0
+            ? 'Tirá un cable en alguna pieza y después podés repetirlo en todas.'
+            : `Deja ${union.join(', ')} en las ${producto.piezas.length} piezas.`}
         {distintas.length > 0 && (
           <span className="text-foreground">
             {' '}

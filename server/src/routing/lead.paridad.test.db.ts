@@ -69,3 +69,57 @@ test("el orden de los cables no cambia el resultado: se ordena antes de elegir",
   const b = duenoDeLead("51993166578", ["beto", "zoe", "ana"]);
   assert.equal(a, b);
 });
+
+/**
+ * 🔴 LA LLAVE DEL CURSO TIENE QUE SER LA MISMA DE LOS DOS LADOS.
+ *
+ * El cable se guarda con el curso que LISTA la pantalla, y la cola matchea con
+ * `cr.curso = todo.curso_lead`. Si las dos expresiones difieren, el PUT contesta
+ * ok, la pieza se ve conectada **y la regla no se aplica nunca**: sin error, sin
+ * log y sin fila rara.
+ *
+ * Pasó de verdad: el primer borrador listaba con `cursoDeLeadSql` y la cola
+ * matcheaba con `productoLeadSql`. Son parecidas y no iguales — difieren cuando
+ * `form_name` no lleva el prefijo `icarus:` (todo el webhook de Bravo) o cuando
+ * `campaign_name` viene vacío (23 filas medidas en producción).
+ */
+import { cursosDeFormulario } from "./repositorio.js";
+
+const CASOS = [
+  { que: "icarus normal", form: "icarus:landing", campana: "Diploma del Consultor Político" },
+  { que: "icarus SIN product_name", form: "icarus:Datos", campana: null },
+  { que: "webhook de Bravo", form: "consultor-politico", campana: "utm-agosto" },
+  { que: "sin form_name", form: null, campana: "Diploma de OSINT" },
+];
+
+for (const caso of CASOS) {
+  test(`la llave del curso coincide con la de la cola — ${caso.que}`, async (t) => {
+    const db = await baseDePrueba(t);
+    const [ev] = await db.execute<{ id: number }>(sql`
+      INSERT INTO events (source, external_id, occurred_at, payload)
+      VALUES ('icarus_landing', ${`ev:${caso.que}`}, now(), '{}'::jsonb) RETURNING id
+    `);
+    await db.execute(sql`
+      INSERT INTO leads (event_id, lead_id, platform, phone, campaign_name, form_name, created_time, status)
+      VALUES (${ev!.id}, ${`l:${caso.que}`}, 'web', '51900000001',
+              ${caso.campana}, ${caso.form}, now(), 'nuevo')
+    `);
+
+    const listados = (await cursosDeFormulario(db)).map((c) => c.curso);
+    // La cola: el mismo `curso_lead` que emite `leadsCte`, leído crudo.
+    const [fila] = await db.execute<{ curso: string | null }>(sql`
+      SELECT (CASE WHEN form_name LIKE 'icarus:%' THEN NULLIF(btrim(campaign_name), '')
+                   ELSE COALESCE(NULLIF(btrim(form_name), ''), NULLIF(btrim(campaign_name), ''))
+              END) AS curso FROM leads LIMIT 1
+    `);
+
+    if (fila?.curso == null) {
+      assert.deepEqual(listados, [], "si la cola no puede nombrar el curso, la pantalla no lo ofrece");
+    } else {
+      assert.ok(
+        listados.includes(fila.curso),
+        `la pantalla lista ${JSON.stringify(listados)} y la cola matchea «${fila.curso}»`,
+      );
+    }
+  });
+}

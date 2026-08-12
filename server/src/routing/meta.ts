@@ -197,7 +197,14 @@ export async function cuentasDePauta(
   const delEntorno = (process.env.META_AD_ACCOUNT_ID ?? "").trim();
   if (delEntorno) return [delEntorno];
 
-  const unicos = [...new Set(adIds.map((a) => a.trim()).filter(Boolean))].slice(0, TOPE_POR_LOTE);
+  /**
+   * ⚠️ **Se preguntan TODOS, en lotes — no los primeros 50.** El borrador cortaba
+   * con un `slice(TOPE_POR_LOTE)` y eso alcanza para hoy (13 anuncios en 30 días)
+   * y deja de alcanzar en cuestión de meses: a partir del anuncio 51, una cuenta
+   * de pauta entera puede no aparecer nunca en el catálogo, y `refrescar`
+   * contestaría `ok: true` sin haberla mirado.
+   */
+  const unicos = [...new Set(adIds.map((a) => a.trim()).filter(Boolean))];
   if (unicos.length === 0) return [];
 
   const cuentas = new Set<string>();
@@ -205,15 +212,20 @@ export async function cuentasDePauta(
     const id = typeof cuerpo?.account_id === "string" ? cuerpo.account_id.trim() : "";
     if (id) cuentas.add(id);
   };
-  try {
-    const r = await cliente.get("", { ids: unicos.join(","), fields: "account_id" });
-    for (const ad of unicos) anotar(r?.[ad]);
-  } catch {
-    for (const ad of unicos) {
-      try {
-        anotar(await cliente.get(ad, { fields: "account_id" }));
-      } catch {
-        // Un anuncio que Meta ya no reconoce no puede dejar sin catálogo al resto.
+  for (let i = 0; i < unicos.length; i += TOPE_POR_LOTE) {
+    const lote = unicos.slice(i, i + TOPE_POR_LOTE);
+    try {
+      const r = await cliente.get("", { ids: lote.join(","), fields: "account_id" });
+      for (const ad of lote) anotar(r?.[ad]);
+    } catch {
+      // Un id podrido tira el lote entero (ver `resolverAnuncios`): se reintenta
+      // de a uno para no perder las cuentas buenas por culpa del malo.
+      for (const ad of lote) {
+        try {
+          anotar(await cliente.get(ad, { fields: "account_id" }));
+        } catch {
+          // Un anuncio que Meta ya no reconoce no puede dejar sin catálogo al resto.
+        }
       }
     }
   }

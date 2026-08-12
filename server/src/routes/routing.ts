@@ -24,6 +24,7 @@ import {
   anunciosDeCampana,
 } from "../routing/repositorio.js";
 import { lineaDeCloudApi } from "../routing/linea.js";
+import { esTablaAusente } from "../cola/estadoSql.js";
 import { nombreDeProducto } from "../routing/producto.js";
 import { aliasesActivos } from "../cursos/repositorio.js";
 
@@ -365,6 +366,20 @@ routingRouter.post("/refrescar", async (req, res) => {
     const guardados = await guardarAnuncios(db, resueltos);
     res.json({ ok: true, campanas, preguntados: pedir.length, resueltos: guardados, fallaron });
   } catch (e) {
+    /**
+     * ⚠️ **Un fallo de la BASE no es «Meta no contestó».** Con la migración sin
+     * aplicar, el borrador mostraba «meta_no_contesto» y mandaba a revisar el
+     * token, el permiso de la app y la cuenta de pauta — todo sano. Cada causa
+     * con su nombre.
+     */
+    if (esTablaAusente(e)) {
+      res.status(503).json({
+        ok: false,
+        motivo: "ruteo_no_migrado",
+        message: "faltan las tablas del ruteo: no hay dónde guardar lo que conteste Meta",
+      });
+      return;
+    }
     res.status(502).json({ ok: false, motivo: "meta_no_contesto", message: (e as Error).message });
   }
 });

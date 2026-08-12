@@ -2,7 +2,8 @@ import { and, eq, sql } from "drizzle-orm";
 import type { db as Base } from "../db/client.js";
 import { campanaAnuncio, campanaMeta, campanaCable, cursoRuteo } from "../db/routing.js";
 import { leerEstado, llegaALaLinea, ordenarCampanas, type CampanaEnRouting } from "./dominio.js";
-import { cursoDeLeadSql } from "../gente/leadDeTelefono.js";
+import { productoLeadSql } from "../dashboard/fuenteLead.js";
+import { esTablaAusente } from "../cola/estadoSql.js";
 import { aliasesActivos } from "../cursos/repositorio.js";
 import { familiaDe } from "./producto.js";
 
@@ -153,7 +154,15 @@ export async function fotoDeRouting(
       cablesDe(base, numeroPropio),
       campanasConocidas(base),
     ]);
-  } catch {
+  } catch (e) {
+    /**
+     * ⚠️ **Solo una TABLA AUSENTE es «falta la migración».** El borrador
+     * contestaba `sinMigracion` ante cualquier fallo, así que un timeout o una
+     * caída momentánea de la base reemplazaban la pantalla entera por «aplicá la
+     * migración» — y quien la lea va a buscar el problema en el lugar
+     * equivocado. Lo demás sube y sale como el error que es.
+     */
+    if (!esTablaAusente(e)) throw e;
     return {
       campanas: [],
       anunciosSinResolver: 0,
@@ -348,11 +357,19 @@ export interface CursoEnRouting {
 /**
  * LOS CURSOS QUE LLEGAN POR FORMULARIO, con su volumen y sus cables.
  *
- * 🔴 **El curso sale de `cursoDeLeadSql`, que ya sabe que `form_name` de icarus
- * es un placeholder con namespace y que el nombre bueno vive en
- * `campaign_name`.** Escribir acá un `COALESCE` propio sería la tercera lectura
- * del mismo dato — y de las dos que había, una estaba mal (8-ago-2026: el panel
- * decía «97 % sin curso identificado» mientras la cola pintaba el chip).
+ * 🔴 **EL CURSO SALE DE `productoLeadSql`, EL MISMO FRAGMENTO QUE USA LA COLA.**
+ * Y no es una preferencia: es la llave con la que se guarda el cable y la llave
+ * con la que después se matchea (`cr.curso = todo.curso_lead` en
+ * `cola/asignadaSql.ts`). El primer borrador usaba `cursoDeLeadSql`, que es
+ * PARECIDO y no igual — difiere cuando `form_name` no lleva el prefijo `icarus:`
+ * o cuando `campaign_name` viene vacío.
+ *
+ * Lo que eso producía, medido por la auditoría del 12-ago-2026: la pantalla
+ * listaba un curso «Datos», la supervisora le ponía un cable, el PUT contestaba
+ * ok **y la regla no se aplicaba nunca** porque el `curso_lead` de esos leads era
+ * otro. Sin error, sin log, y con la pantalla mostrando la pieza como conectada.
+ * Son 23 filas hoy (las de icarus sin `product_name`) y todas las del webhook de
+ * Bravo, donde las dos expresiones dan dos strings REALES distintos.
  *
  * ⚠️ Se listan los cursos VISTOS en la ventana **más** los que ya tienen cable,
  * aunque no hayan traído a nadie: si un curso deja de traer leads por un mes, su
@@ -364,12 +381,12 @@ export async function cursosDeFormulario(
 ): Promise<CursoEnRouting[]> {
   const [vistos, cables, aliases] = await Promise.all([
     base.execute<{ curso: string; leads: number; ultimo: string }>(sql`
-      SELECT ${cursoDeLeadSql}                     AS curso,
+      SELECT ${productoLeadSql}                    AS curso,
              count(*)::int                         AS leads,
              max(created_time)                     AS ultimo
         FROM leads
        WHERE created_time > now() - ${`${dias} days`}::interval
-         AND NULLIF(btrim(${cursoDeLeadSql}), '') IS NOT NULL
+         AND NULLIF(btrim(${productoLeadSql}), '') IS NOT NULL
        GROUP BY 1
     `),
     cablesDeCurso(base),
@@ -454,10 +471,10 @@ export async function cablearProducto(
     aliasesActivos(base as never).catch(() => []),
     campanasConocidas(base),
     base.execute<{ curso: string }>(sql`
-      SELECT DISTINCT ${cursoDeLeadSql} AS curso
+      SELECT DISTINCT ${productoLeadSql} AS curso
         FROM leads
        WHERE created_time > now() - ${`${VENTANA_DIAS} days`}::interval
-         AND NULLIF(btrim(${cursoDeLeadSql}), '') IS NOT NULL
+         AND NULLIF(btrim(${productoLeadSql}), '') IS NOT NULL
     `),
   ]);
 
