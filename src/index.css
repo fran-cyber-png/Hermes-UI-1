@@ -262,10 +262,25 @@
 }
 
 @layer base {
-  /* Seleccionar texto también es de la marca. */
+  /* Seleccionar texto también es de la marca — pero antes que de la marca, tiene
+     que VERSE.
+     🔴 LA TRAMPA, Y YA MORDIÓ: el color de selección no puede coincidir con el
+     fondo de ningún contenedor de texto. Acá decía `background: var(--secondary)`
+     con `color: var(--navy)`, que son EXACTAMENTE los dos colores de la burbuja
+     saliente del hilo de WhatsApp (`bg-secondary text-navy`). Contraste 1.00 en el
+     fondo y 1.00 en el texto: arrastrar el mouse sobre un mensaje propio no
+     cambiaba un solo píxel. Sobre la burbuja entrante (`bg-card`) daba 1.10, que
+     tampoco se ve. La selección funcionaba perfecto y era invisible, así que la
+     vendedora concluía que el chat no se puede copiar.
+     `--primary-hover` es el azul de marca más oscuro que NO es fondo en reposo de
+     ningún contenedor —solo estado de hover—, así que se despega de las dos
+     burbujas y de la mesa. Sin oro: el oro es tiempo que se acaba.
+     El contraste lo fija `src/seleccionVisible.test.ts`; una sola declaración
+     alcanza porque este archivo no tiene tokens de tema oscuro (`color-scheme:
+     light`), y el día que los tenga la regla hay que repetirla ahí. */
   ::selection {
-    background: var(--secondary);
-    color: var(--navy);
+    background: var(--primary-hover);
+    color: var(--primary-foreground);
   }
 
   /* El foco de teclado, uno solo y visible, en toda la app. El outline sigue el

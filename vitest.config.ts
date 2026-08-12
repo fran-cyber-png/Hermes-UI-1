@@ -27,6 +27,20 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    /**
+     * `index.css` SE PUEDE LEER; el resto del CSS sigue apagado.
+     *
+     * Vitest sirve todo `.css` como cadena VACÍA por default, y eso incluye a
+     * `?raw`. `seleccionVisible.test.ts` —que mide el contraste del resalte de
+     * selección contra el fondo de las burbujas del hilo— leía `''` y pasaba por
+     * vacío: el falso verde de siempre. Con esto esa lectura devuelve la fuente.
+     *
+     * Es un regex y no `true` a propósito: prender el CSS entero haría que
+     * cualquier test que monte algo con estilos pague PostCSS + Tailwind para no
+     * mirar ni un píxel (jsdom no hace layout). Y NO lleva `$`, porque el id que
+     * se compara viene con la query pegada (`index.css?raw`).
+     */
+    css: { include: [/index\.css/] },
   },
   // Lo inyecta `vite.config.ts` en los builds de verdad; acá alcanza un valor
   // fijo. Sin esto, importar `persistencia.ts` reventaría por el global ausente.
