@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   cablesDe,
+  cablesDeProducto,
   cablesHuerfanos,
   columnasDePieza,
   columnasDeProducto,
@@ -28,7 +29,7 @@ describe('🔴 el cable no puede volverse invisible por la grafía', () => {
    */
   it('resuelve el destino normalizando, y usa la grafía de la columna', () => {
     const r = cablesDe([pieza({ vendedoras: ['Luz'] })], ['luz', 'Tracy']);
-    expect(r).toEqual([{ de: 'campana:1', a: 'v:luz', tipo: 'regla' }]);
+    expect(r).toEqual([{ de: 'campana:1', a: 'v:luz', tipo: 'regla', color: 'campana' }]);
   });
 
   it('anda en los dos sentidos', () => {
@@ -44,7 +45,9 @@ describe('un cable hacia alguien que ya no está', () => {
   const piezas = [pieza({ vendedoras: ['luz', 'se-fue@goberna.com'] })];
 
   it('no se dibuja: inventarle un nodo sería ofrecer a alguien que el server rechaza', () => {
-    expect(cablesDe(piezas, ['luz'])).toEqual([{ de: 'campana:1', a: 'v:luz', tipo: 'regla' }]);
+    expect(cablesDe(piezas, ['luz'])).toEqual([
+      { de: 'campana:1', a: 'v:luz', tipo: 'regla', color: 'campana' },
+    ]);
   });
 
   it('pero se DENUNCIA, para que la ausencia no sea muda', () => {
@@ -151,5 +154,52 @@ describe('🔴 abrir una campaña no se lleva el producto ni a sus hermanas', ()
     const cols = columnasDePieza(unaCampana, ['luz'], { id: 'campana:1', anuncios, cargando: false });
     expect(cols.map((c) => c.id)).toEqual(['pieza', 'vendedoras']);
     expect(cols[0]?.nodos[0]?.adentro).toHaveLength(1);
+  });
+});
+
+/**
+ * 🔴 CADA CABLE LLEVA DE DÓNDE VIENE.
+ *
+ * Con todas las curvas del mismo navy no se sabía qué era cada nodo ni se podía
+ * seguir un cable entre las veintiocho que nacen y mueren en los mismos puntos.
+ * El color no es decoración: es el único dato que distingue una campaña de pago
+ * de un formulario orgánico cuando lo que mirás es el trazo, no la tarjeta.
+ */
+describe('el color del cable dice de dónde viene', () => {
+  it('una campaña y un formulario no pintan igual', () => {
+    const cables = cablesDe(
+      [
+        pieza({ id: 'campana:1', icono: 'campana', vendedoras: ['luz'] }),
+        pieza({ id: 'curso:X', icono: 'formulario', vendedoras: ['luz'] }),
+      ],
+      ['luz'],
+    );
+    expect(cables.map((c) => c.color)).toEqual(['campana', 'formulario']);
+  });
+
+  /** El cable del producto es el agregado, así que va en el color de la casa. */
+  it('el del producto va aparte', () => {
+    const p = pieza({ id: 'campana:1', familia: 'F', vendedoras: ['luz'] });
+    const producto = { familia: 'F', nombre: 'X', piezas: [p], volumen: 1 };
+    const suyos = cablesDeProducto(producto, cablesDe([p], ['luz']));
+    expect(suyos).toEqual([{ de: 'prod:F', a: 'v:luz', tipo: 'regla', color: 'producto' }]);
+  });
+
+  /**
+   * ⚠️ Y el punteado de pertenencia también: es lo que deja ver, de un vistazo,
+   * cuántas de las piezas de un producto son pauta y cuántas son formulario.
+   */
+  it('el punteado de pertenencia hereda el tipo de la pieza', () => {
+    const producto = {
+      familia: 'F',
+      nombre: 'X',
+      piezas: [
+        pieza({ id: 'campana:1', icono: 'campana', familia: 'F' }),
+        pieza({ id: 'curso:X', icono: 'formulario', familia: 'F' }),
+      ],
+      volumen: 0,
+    };
+    const { pertenencia } = columnasDeProducto(producto, ['luz']);
+    expect(pertenencia.map((c) => c.color)).toEqual(['campana', 'formulario']);
   });
 });

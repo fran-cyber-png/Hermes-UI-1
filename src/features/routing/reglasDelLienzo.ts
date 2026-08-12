@@ -51,6 +51,20 @@ export interface NodoLienzo {
    */
   salida?: boolean;
   entrada?: boolean;
+  /**
+   * 🔴 **UN PUNTO DONDE EL CABLE ATERRIZA, SIN SER UN DESTINO CONECTABLE — y sin
+   * esto el mapa se corta.** El cable de PERTENENCIA (producto → sus piezas) nace
+   * en el puerto derecho del producto y muere en el izquierdo de la pieza; pero
+   * la pieza no acepta cables de regla, así que al hacer los puertos declarativos
+   * se quedó sin punto izquierdo y **el cable dejó de dibujarse entero**: el
+   * producto aparecía suelto, sin nada que lo uniera a lo que le entra
+   * (12-ago-2026, visto en captura).
+   *
+   * Es un ANCLA, no un puerto: se dibuja más chico, no es un botón y no recibe
+   * el arrastre. La pertenencia la decide el catálogo, no un gesto — ofrecerla
+   * como destino sería el cable fantasma otra vez.
+   */
+  anclaIzq?: boolean;
   /** `pausada` se dibuja apagada; `activa` es la que decide algo mañana. */
   estado?: 'activa' | 'pausada' | 'desconocido';
 }
@@ -78,6 +92,17 @@ export interface CableLienzo {
   de: string;
   a: string;
   tipo: 'regla' | 'pertenencia';
+  /**
+   * 🔴 **EL CABLE TOMA EL COLOR DE SU ORIGEN, y eso hace dos trabajos de una.**
+   * Con todas las curvas del mismo navy, ni se sabe qué es cada nodo ni se puede
+   * seguir un cable entre veintiocho que nacen y mueren en los mismos puntos —
+   * las dos quejas del dueño el 12-ago-2026: *«se confunden los cables»* y
+   * *«tener mapeado qué son campañas y qué son formularios»*.
+   *
+   * ⚠️ Es de la paleta `--cat-*` de la casa, la misma de las categorías. **Sin
+   * oro**: el dorado significa tiempo que se acaba y acá no corre nada.
+   */
+  color?: 'campana' | 'formulario' | 'producto';
   /** Todavía no confirmado por el server. Se dibuja distinto — ver §pendiente. */
   pendiente?: boolean;
 }

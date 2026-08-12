@@ -241,18 +241,21 @@ export function Lienzo({
               }
               strokeDasharray={t.cable.tipo === 'pertenencia' ? '4 4' : undefined}
               className={
-                'transition-[stroke-width,color] duration-150 ease-house ' +
-                (t.cable.tipo === 'pertenencia'
+                'transition-[stroke-width,opacity] duration-150 ease-house ' +
+                TONO[t.cable.color ?? 'producto'].texto
+              }
+              opacity={
+                t.cable.tipo === 'pertenencia'
                   ? resaltado && !suyo(t.cable)
-                    ? 'text-border/30'
-                    : 'text-border'
+                    ? 0.15
+                    : 0.45
                   : !resaltado
                     ? t.cable.pendiente
-                      ? 'text-navy/40'
-                      : 'text-navy/70'
+                      ? 0.45
+                      : 0.8
                     : suyo(t.cable)
-                      ? 'text-navy'
-                      : 'text-navy/12')
+                      ? 1
+                      : 0.12
               }
             />
           </g>
@@ -309,6 +312,24 @@ export function Lienzo({
 
 const ICONO = { producto: Boxes, campana: Megaphone, formulario: FileText, vendedora: User };
 
+/**
+ * 🔴 **QUÉ ES CADA COSA SE DICE CON COLOR Y CON PALABRA, no con un ícono de 12
+ * px en gris.** Una campaña de Meta y un formulario de icarus llegan por caminos
+ * distintos, se cablean distinto y se apagan distinto — y en la pantalla se
+ * veían idénticos. Pedido del dueño el 12-ago-2026: *«tener mapeado qué son
+ * campañas y qué son formularios, usar mejor los colores, etiquetas,
+ * conexiones»*.
+ *
+ * Sale de la paleta `--cat-*` de la casa (la de las categorías), **sin oro**: el
+ * dorado significa tiempo que se acaba y acá no corre nada.
+ */
+const TONO = {
+  campana: { texto: 'text-cat-morado', borde: 'border-cat-morado', rotulo: 'Campaña de Meta' },
+  formulario: { texto: 'text-cat-cian', borde: 'border-cat-cian', rotulo: 'Formulario' },
+  producto: { texto: 'text-navy', borde: 'border-navy', rotulo: 'Producto' },
+  vendedora: { texto: 'text-navy', borde: 'border-navy', rotulo: '' },
+} as const;
+
 function Nodo({
   nodo,
   armado,
@@ -337,6 +358,7 @@ function Nodo({
   onEntrar?: () => void;
 }) {
   const Icono = ICONO[nodo.icono];
+  const tono = TONO[nodo.icono];
   return (
     /**
      * 🔴 **EL BLANCO DEL ARRASTRE ES LA TARJETA, NO EL PUNTITO.** El destino se
@@ -354,6 +376,18 @@ function Nodo({
       onFocus={() => onOjo(nodo.id)}
       onBlur={() => onOjo(null)}
     >
+      {/* EL ANCLA: donde aterriza el cable de pertenencia. No es un botón — la
+          pertenencia la decide el catálogo, no un arrastre. */}
+      {!nodo.entrada && nodo.anclaIzq && (
+        <span
+          aria-hidden
+          ref={(el) => registrar(nodo.id, 'izq', el)}
+          className={
+            'absolute -left-1 top-1/2 z-10 h-2 w-2 -translate-y-1/2 rounded-full border bg-card ' +
+            tono.borde
+          }
+        />
+      )}
       {nodo.entrada && (
         <button
           type="button"
@@ -381,7 +415,8 @@ function Nodo({
 
       <div
         className={
-          'rounded-xl border bg-card px-2.5 py-2 transition-[border-color,background-color,opacity] duration-200 ease-house ' +
+          'rounded-xl border border-l-[3px] bg-card px-2.5 py-2 transition-[border-color,background-color,opacity] duration-200 ease-house ' +
+          tono.borde.replace('border-', 'border-l-') + ' ' +
           (destinoPosible ? 'border-navy/50 bg-navy/5' : nodo.abierto ? 'border-navy/30' : 'border-border') +
           (nodo.estado === 'pausada' ? ' opacity-70' : '') +
           // Apagar lo que NO participa de la rama que se está mirando. Es el
@@ -390,12 +425,7 @@ function Nodo({
         }
       >
         <p className="flex items-start gap-1.5">
-          <Icono
-            size={12}
-            strokeWidth={2}
-            className="mt-0.5 shrink-0 text-muted-foreground"
-            aria-hidden
-          />
+          <Icono size={12} strokeWidth={2} className={'mt-0.5 shrink-0 ' + tono.texto} aria-hidden />
           {/* ⚠️ Dos renglones y no `truncate`: los nombres reales son «Diploma
               Internacional de Inteligencia y Contrainteligencia», y cortados no
               se distinguen entre sí — que es justo lo que hay que mirar acá. */}
@@ -423,6 +453,11 @@ function Nodo({
             </button>
           )}
         </p>
+        {tono.rotulo && (
+          <p className={'pl-[18px] text-[9px] font-medium uppercase tracking-wide ' + tono.texto}>
+            {tono.rotulo}
+          </p>
+        )}
         {nodo.pie && <p className="truncate pl-[18px] text-[10px] text-muted-foreground">{nodo.pie}</p>}
 
         {/* LO DE ADENTRO. Va DENTRO de la tarjeta y no en una columna aparte: los
@@ -463,13 +498,17 @@ function Nodo({
           onKeyDown={(e) => onTecla(e, nodo.id, 'der')}
           aria-label={`Tirar un cable desde ${nodo.titulo}`}
           aria-pressed={armado}
-          ref={(el) => registrar(nodo.id, 'der', el)}
-          className={
-            'absolute -right-1.5 top-1/2 z-10 h-3 w-3 -translate-y-1/2 cursor-grab rounded-full border-2 border-navy transition-[transform,background-color] duration-150 ease-house active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
-            (conCable ? 'bg-navy ' : 'bg-card ') +
-            (armado ? 'scale-150' : 'hover:scale-125')
-          }
-        />
+          className="group/puerto absolute -right-3.5 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 cursor-grab items-center justify-center rounded-full active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          <span
+            ref={(el) => registrar(nodo.id, 'der', el)}
+            className={
+              'block h-3 w-3 rounded-full border-2 border-navy transition-transform duration-150 ease-house ' +
+              (conCable ? 'bg-navy ' : 'bg-card ') +
+              (armado ? 'scale-150' : 'group-hover/puerto:scale-150')
+            }
+          />
+        </button>
       )}
     </div>
   );

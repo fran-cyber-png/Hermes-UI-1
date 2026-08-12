@@ -127,7 +127,7 @@ export function cablesDe(piezas: readonly Pieza[], destinos: readonly string[]):
     p.vendedoras.flatMap((v) => {
       const enLaColumna = porNormal.get(v.trim().toLowerCase());
       return enLaColumna
-        ? [{ de: p.id, a: ID.vendedora(enLaColumna), tipo: 'regla' as const }]
+        ? [{ de: p.id, a: ID.vendedora(enLaColumna), tipo: 'regla' as const, color: p.icono }]
         : [];
     }),
   );
@@ -187,7 +187,12 @@ export function cablesDeProducto(
   return candidatas
     .filter((a) => suyas.every((id) => hay(id, a)))
     .sort((x, y) => x.localeCompare(y, 'es'))
-    .map((a) => ({ de: ID.producto(producto.familia), a, tipo: 'regla' as const }));
+    .map((a) => ({
+      de: ID.producto(producto.familia),
+      a,
+      tipo: 'regla' as const,
+      color: 'producto' as const,
+    }));
 }
 
 /** «1 campañas» se lee como un error de la pantalla, no como un dato. */
@@ -245,11 +250,18 @@ export function columnasDeProducto(
         id: 'piezas',
         titulo: 'Lo que le entra',
         ancho: 17,
-        nodos: producto.piezas.map((p) => aNodo(p, apertura)),
+        // El ancla izquierda es donde aterriza el cable punteado del producto.
+        // Solo acá: una pieza suelta no cuelga de nada.
+        nodos: producto.piezas.map((p) => ({ ...aNodo(p, apertura), anclaIzq: true })),
       },
       COL_VENDEDORAS(destinos),
     ],
-    pertenencia: producto.piezas.map((p) => ({ de: id, a: p.id, tipo: 'pertenencia' as const })),
+    pertenencia: producto.piezas.map((p) => ({
+      de: id,
+      a: p.id,
+      tipo: 'pertenencia' as const,
+      color: p.icono,
+    })),
   };
 }
 
