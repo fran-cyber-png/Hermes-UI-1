@@ -1,7 +1,8 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { db as Base } from "../db/client.js";
-import { campanaAnuncio, campanaMeta, campanaRuteo } from "../db/routing.js";
+import { campanaAnuncio, campanaMeta, campanaRuteo, cursoRuteo } from "../db/routing.js";
 import { leerEstado, llegaALaLinea, ordenarCampanas, type CampanaEnRouting } from "./dominio.js";
+import { cursoDeLeadSql } from "../gente/leadDeTelefono.js";
 
 /**
  * LO QUE LEE Y ESCRIBE EL RUTEO. El veredicto vive en `dominio.ts` (puro); acá
@@ -321,4 +322,96 @@ export async function guardarCampanas(
       },
     });
   return filas.length;
+}
+
+/** Un curso de formulario, como se lo ve en la pantalla. */
+export interface CursoEnRouting {
+  curso: string;
+  /** Cuántos leads llegaron por ese curso en la ventana. */
+  leads: number;
+  /** El último. ISO, o `null`. */
+  ultimo: string | null;
+  /** Los cables. Vacío = lo ve todo el equipo, como hoy. */
+  vendedoras: string[];
+}
+
+/**
+ * LOS CURSOS QUE LLEGAN POR FORMULARIO, con su volumen y sus cables.
+ *
+ * 🔴 **El curso sale de `cursoDeLeadSql`, que ya sabe que `form_name` de icarus
+ * es un placeholder con namespace y que el nombre bueno vive en
+ * `campaign_name`.** Escribir acá un `COALESCE` propio sería la tercera lectura
+ * del mismo dato — y de las dos que había, una estaba mal (8-ago-2026: el panel
+ * decía «97 % sin curso identificado» mientras la cola pintaba el chip).
+ *
+ * ⚠️ Se listan los cursos VISTOS en la ventana **más** los que ya tienen cable,
+ * aunque no hayan traído a nadie: si un curso deja de traer leads por un mes, su
+ * regla no se puede borrar desde la pantalla porque el renglón desapareció.
+ */
+export async function cursosDeFormulario(
+  base: typeof Base,
+  dias = VENTANA_DIAS,
+): Promise<CursoEnRouting[]> {
+  const [vistos, cables] = await Promise.all([
+    base.execute<{ curso: string; leads: number; ultimo: string }>(sql`
+      SELECT ${cursoDeLeadSql}                     AS curso,
+             count(*)::int                         AS leads,
+             max(created_time)                     AS ultimo
+        FROM leads
+       WHERE created_time > now() - ${`${dias} days`}::interval
+         AND NULLIF(btrim(${cursoDeLeadSql}), '') IS NOT NULL
+       GROUP BY 1
+    `),
+    cablesDeCurso(base),
+  ]);
+
+  const filas = new Map<string, CursoEnRouting>();
+  for (const v of vistos) {
+    filas.set(v.curso, {
+      curso: v.curso,
+      leads: Number(v.leads ?? 0),
+      ultimo: new Date(v.ultimo).toISOString(),
+      vendedoras: cables.get(v.curso) ?? [],
+    });
+  }
+  for (const [curso, vendedoras] of cables) {
+    if (!filas.has(curso)) filas.set(curso, { curso, leads: 0, ultimo: null, vendedoras });
+  }
+
+  // Primero lo que más gente trae; a igualdad, alfabético para que dos aperturas
+  // de la pantalla no muestren dos órdenes distintos.
+  return [...filas.values()].sort(
+    (a, b) => b.leads - a.leads || a.curso.localeCompare(b.curso, "es"),
+  );
+}
+
+/** Los cables por curso, como conjunto ordenado. */
+export async function cablesDeCurso(base: typeof Base) {
+  const filas = await base
+    .select({ curso: cursoRuteo.curso, vendedoraId: cursoRuteo.vendedoraId })
+    .from(cursoRuteo);
+  const por = new Map<string, string[]>();
+  for (const f of filas) por.set(f.curso, [...(por.get(f.curso) ?? []), f.vendedoraId]);
+  for (const [k, v] of por) por.set(k, v.sort((a, b) => a.localeCompare(b, "es")));
+  return por;
+}
+
+/**
+ * Deja los cables de un curso exactamente como se pidió. Mismo contrato
+ * declarativo que `ponerCables`: viaja el conjunto entero, no un cable.
+ */
+export async function ponerCablesDeCurso(
+  base: typeof Base,
+  curso: string,
+  vendedoras: readonly string[],
+  quienLosPone: string,
+): Promise<void> {
+  const unicas = [...new Set(vendedoras.map((v) => v.trim()).filter(Boolean))];
+  await base.transaction(async (tx) => {
+    await tx.delete(cursoRuteo).where(eq(cursoRuteo.curso, curso));
+    if (unicas.length === 0) return;
+    await tx
+      .insert(cursoRuteo)
+      .values(unicas.map((vendedoraId) => ({ curso, vendedoraId, asignadaPor: quienLosPone })));
+  });
 }

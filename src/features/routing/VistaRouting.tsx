@@ -1,15 +1,14 @@
 import { useState } from 'react';
 import { AlertTriangle, RefreshCw, Route, Search } from 'lucide-react';
 import { nombreCorto } from '../notas/espacios';
-import { TableroDeCables } from './TableroDeCables';
+import { TableroDeCables, type NodoConectable } from './TableroDeCables';
 import {
   haceCuanto,
   rotuloEstado,
   useConectar,
+  useConectarCurso,
   useRefrescarDesdeMeta,
   useRouting,
-  type CampanaEnRouting,
-  type EstadoCampana,
 } from './routing';
 
 /**
@@ -41,6 +40,7 @@ import {
 export function VistaRouting() {
   const { data, isLoading, error } = useRouting();
   const conectar = useConectar();
+  const conectarCurso = useConectarCurso();
   const refrescar = useRefrescarDesdeMeta();
   const [busqueda, setBusqueda] = useState('');
   const [elegida, setElegida] = useState<string | null>(null);
@@ -69,11 +69,44 @@ export function VistaRouting() {
     );
   }
 
+  /**
+   * LAS DOS FUENTES EN UNA SOLA LISTA. Un lead de formulario y un lead de
+   * campaña se atienden igual, y la pregunta «¿quién lo agarra?» es la misma:
+   * partir la pantalla en dos pestañas obligaría a recordar en cuál estaba la
+   * regla que quiero cambiar.
+   *
+   * ⚠️ **Y los formularios traen MÁS gente que las campañas**: 178 leads en 30
+   * días contra 33 de la campaña activa. Van abajo por convención de lectura, no
+   * por importancia.
+   */
+  const nodos: NodoConectable[] = [
+    ...data.campanas.map((c) => ({
+      id: `campana:${c.campanaId}`,
+      titulo: c.nombre,
+      pie: `${rotuloEstado(c.estado)} · ${c.personas} ${c.personas === 1 ? 'persona' : 'personas'}`,
+      origen: 'campana' as const,
+      vendedoras: c.vendedoras,
+    })),
+    ...(data.cursos ?? []).map((c) => ({
+      id: `curso:${c.curso}`,
+      titulo: c.curso,
+      pie: `${c.leads} ${c.leads === 1 ? 'formulario' : 'formularios'} en ${data.ventanaDias} días`,
+      origen: 'formulario' as const,
+      vendedoras: c.vendedoras,
+    })),
+  ];
+
   const q = busqueda.trim().toLowerCase();
-  const visibles = q
-    ? data.campanas.filter((c) => c.nombre.toLowerCase().includes(q))
-    : data.campanas;
-  const campana = data.campanas.find((c) => c.campanaId === elegida) ?? visibles[0] ?? null;
+  const visibles = q ? nodos.filter((n) => n.titulo.toLowerCase().includes(q)) : nodos;
+  const nodo = nodos.find((n) => n.id === elegida) ?? visibles[0] ?? null;
+
+  function guardar(vendedoras: string[]) {
+    if (!nodo) return;
+    const [tipo, ...resto] = nodo.id.split(':');
+    const clave = resto.join(':');
+    if (tipo === 'campana') conectar.mutate({ campanaId: clave, vendedoras });
+    else conectarCurso.mutate({ curso: clave, vendedoras });
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -83,7 +116,7 @@ export function VistaRouting() {
           {data.etiqueta ?? 'Línea de Meta'}{' '}
           <span className="font-mono text-[11px] text-muted-foreground">{data.linea}</span>
         </p>
-        <p className="text-[11px] text-muted-foreground">campañas que mandan gente a esta línea</p>
+        <p className="text-[11px] text-muted-foreground">a quién le caen los leads de cada campaña y cada formulario</p>
         <div className="ml-auto flex items-center gap-2">
           {data.actualizadoAt && (
             <span className="text-[11px] text-muted-foreground">
@@ -149,63 +182,70 @@ export function VistaRouting() {
           <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
             {visibles.length === 0 ? (
               <p className="px-1 py-8 text-center text-[11px] text-muted-foreground">
-                {data.campanas.length === 0
-                  ? 'Ninguna campaña de la cuenta manda gente a esta línea. Probá «Actualizar desde Meta».'
-                  : 'Ninguna campaña coincide con la búsqueda.'}
+                {nodos.length === 0
+                  ? 'Ninguna campaña manda gente a esta línea y no llegaron formularios. Probá «Actualizar desde Meta».'
+                  : 'Nada coincide con la búsqueda.'}
               </p>
             ) : (
-              <ul className="space-y-1">
-                {visibles.map((c) => (
-                  <li key={c.campanaId}>
-                    <FilaCampana
-                      campana={c}
-                      activa={campana?.campanaId === c.campanaId}
-                      onElegir={() => setElegida(c.campanaId)}
-                    />
-                  </li>
-                ))}
-              </ul>
+              <>
+                {(['campana', 'formulario'] as const).map((origen) => {
+                  const grupo = visibles.filter((n) => n.origen === origen);
+                  if (grupo.length === 0) return null;
+                  return (
+                    <section key={origen} className="mb-3">
+                      <p className="px-1 pb-1 font-mono text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                        {origen === 'campana' ? 'Campañas de Meta' : 'Formularios'}
+                      </p>
+                      <ul className="space-y-1">
+                        {grupo.map((n) => (
+                          <li key={n.id}>
+                            <FilaNodo
+                              nodo={n}
+                              activa={nodo?.id === n.id}
+                              onElegir={() => setElegida(n.id)}
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  );
+                })}
+              </>
             )}
           </div>
         </aside>
 
         {/* ── EL TABLERO ── */}
-        {campana ? (
+        {nodo ? (
           <TableroDeCables
-            key={campana.campanaId}
-            campana={campana}
+            key={nodo.id}
+            nodo={nodo}
             destinos={data.destinos}
-            guardando={conectar.isPending}
-            onConectar={(vendedoras) => conectar.mutate({ campanaId: campana.campanaId, vendedoras })}
+            guardando={conectar.isPending || conectarCurso.isPending}
+            onConectar={guardar}
           />
         ) : (
           <div className="flex min-h-0 flex-1 items-center justify-center p-6">
-            <p className="text-xs text-muted-foreground">Elegí una campaña para conectarla.</p>
+            <p className="text-xs text-muted-foreground">Elegí algo de la izquierda para conectarlo.</p>
           </div>
         )}
       </div>
 
-      {conectar.isError && (
+      {(conectar.isError || conectarCurso.isError) && (
         <p className="shrink-0 border-t border-destructive/30 bg-destructive/5 px-6 py-2 text-[11px] text-destructive">
-          {(conectar.error as Error).message}
+          {((conectar.error ?? conectarCurso.error) as Error).message}
         </p>
       )}
     </div>
   );
 }
 
-const COLOR_ESTADO: Record<EstadoCampana, string> = {
-  activa: 'bg-navy text-white',
-  pausada: 'bg-muted text-muted-foreground',
-  desconocido: 'bg-secondary text-muted-foreground',
-};
-
-function FilaCampana({
-  campana,
+function FilaNodo({
+  nodo,
   activa,
   onElegir,
 }: {
-  campana: CampanaEnRouting;
+  nodo: NodoConectable;
   activa: boolean;
   onElegir: () => void;
 }) {
@@ -219,25 +259,15 @@ function FilaCampana({
         (activa ? 'border-navy/30 bg-navy/5' : 'border-transparent hover:bg-secondary')
       }
     >
-      <p className="flex items-center gap-1.5">
-        <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
-          {campana.nombre}
-        </span>
-        <span
-          className={
-            'shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold uppercase leading-none ' +
-            COLOR_ESTADO[campana.estado]
-          }
-        >
-          {rotuloEstado(campana.estado)}
-        </span>
-      </p>
+      <p className="truncate text-xs font-medium text-foreground">{nodo.titulo}</p>
       <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-        {campana.personas} {campana.personas === 1 ? 'persona' : 'personas'}
+        {nodo.pie}
         {' · '}
-        {campana.vendedoras.length === 0
-          ? 'la rueda'
-          : campana.vendedoras.map(nombreCorto).join(', ')}
+        {nodo.vendedoras.length === 0
+          ? nodo.origen === 'campana'
+            ? 'la rueda'
+            : 'todo el equipo'
+          : nodo.vendedoras.map(nombreCorto).join(', ')}
       </p>
     </button>
   );

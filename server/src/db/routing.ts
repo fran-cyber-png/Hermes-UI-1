@@ -126,3 +126,32 @@ export const campanaMeta = pgTable("campana_meta", {
   numeros: text("numeros").array().notNull().default([]),
   actualizadoAt: timestamp("actualizado_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * LOS CABLES DE LOS FORMULARIOS: qué curso cae en qué vendedoras.
+ *
+ * 🔴 **NO LLEVA `numero_propio`, y ahí está toda la diferencia con
+ * `campana_ruteo`.** Un lead de formulario no entró por ninguna línea nuestra
+ * —nadie le escribió todavía— así que la pregunta «¿de qué número?» no tiene
+ * respuesta. Meterle una línea inventada le mentiría a las cinco consultas que
+ * leen `conversacion_asignada` por número.
+ *
+ * ⚠️ Y por eso el dueño de un lead **se deriva y no se guarda** (`routing/lead.ts`):
+ * la clave de un lead en la cola es `lead:<id>` y la misma persona manda el
+ * formulario varias veces —154 envíos de 145 personas en la ventana, ADR 0051—,
+ * así que una asignación pegada al id se pierde justo cuando la persona insiste.
+ *
+ * El `curso` es el nombre de producto tal como llega de icarus
+ * (`campaign_name`). Medido el 12-ago-2026: 178 leads en 30 días, **21 cursos**,
+ * con nombres limpios («Diploma Internacional del Consultor Político», 94).
+ */
+export const cursoRuteo = pgTable(
+  "curso_ruteo",
+  {
+    curso: text("curso").notNull(),
+    vendedoraId: text("vendedora_id").notNull(),
+    asignadaPor: text("asignada_por"),
+    asignadaEn: timestamp("asignada_en", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.curso, t.vendedoraId] })],
+);

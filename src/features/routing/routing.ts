@@ -25,11 +25,25 @@ export interface CampanaEnRouting {
   vendedoras: string[];
 }
 
+/**
+ * UN CURSO DE FORMULARIO — la otra fuente de leads, y la que más volumen trae:
+ * medido el 12-ago-2026, **178 leads en 30 días contra 33 de la campaña activa**.
+ */
+export interface CursoEnRouting {
+  curso: string;
+  leads: number;
+  ultimo: string | null;
+  /** Vacío = lo ve todo el equipo, como hasta ahora. */
+  vendedoras: string[];
+}
+
 export interface FotoDeRouting {
   linea: string;
   etiqueta: string | null;
   ventanaDias: number;
   campanas: CampanaEnRouting[];
+  /** Los cursos que llegan por los formularios de icarus. */
+  cursos: CursoEnRouting[];
   /** Anuncios que trajeron gente y todavía no se resolvieron contra Meta. */
   anunciosSinResolver: number;
   /**
@@ -68,6 +82,20 @@ export function useRouting() {
  * campaña ya asignada y la revertiría medio segundo después. Acá lo que se
  * decide es a quién le caen los leads de mañana; se espera el sí.
  */
+/**
+ * DEJAR LOS CABLES DE UN CURSO. El curso viaja en el body y no en la URL: son
+ * nombres de producto con espacios, tildes y `&`, y en el path quedan a merced
+ * de cualquier proxy que normalice por su cuenta.
+ */
+export function useConectarCurso() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ curso, vendedoras }: { curso: string; vendedoras: string[] }) =>
+      api('/api/routing/cursos', { method: 'PUT', body: JSON.stringify({ curso, vendedoras }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['routing'] }),
+  });
+}
+
 export function useConectar() {
   const qc = useQueryClient();
   return useMutation({

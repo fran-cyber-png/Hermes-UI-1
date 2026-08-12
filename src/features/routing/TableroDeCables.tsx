@@ -1,7 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { Megaphone, User } from 'lucide-react';
+import { FileText, Megaphone, User } from 'lucide-react';
 import { nombreCorto } from '../notas/espacios';
-import { rotuloEstado, type CampanaEnRouting } from './routing';
 
 /**
  * EL TABLERO DE CABLES — la campaña a la izquierda, las vendedoras a la derecha,
@@ -32,17 +31,36 @@ import { rotuloEstado, type CampanaEnRouting } from './routing';
  *
  * **Sin oro**: el dorado significa tiempo que se acaba y acá no corre nada.
  */
+/**
+ * LO QUE SE CONECTA — una campaña de Meta o un curso de formulario. El tablero
+ * no sabe cuál de las dos es: recibe un título, un pie y sus cables.
+ *
+ * ⚠️ Se generalizó al agregar los formularios en vez de duplicar el tablero: dos
+ * copias del mismo dibujo divergen en el primer ajuste de layout, y el que se
+ * queda viejo es siempre el que menos se mira.
+ */
+export interface NodoConectable {
+  /** Para que React remonte al cambiar de nodo y no arrastre cables viejos. */
+  id: string;
+  titulo: string;
+  /** La línea chica de abajo: estado y volumen. */
+  pie: string;
+  origen: 'campana' | 'formulario';
+  vendedoras: string[];
+}
+
 export function TableroDeCables({
-  campana,
+  nodo,
   destinos,
   guardando,
   onConectar,
 }: {
-  campana: CampanaEnRouting;
+  nodo: NodoConectable;
   destinos: string[];
   guardando: boolean;
   onConectar: (vendedoras: string[]) => void;
 }) {
+  const campana = nodo;
   const conectadas = new Set(campana.vendedoras);
   const marco = useRef<HTMLDivElement>(null);
   const puertoCampana = useRef<HTMLDivElement>(null);
@@ -82,7 +100,7 @@ export function TableroDeCables({
     const obs = new ResizeObserver(redibujar);
     if (marco.current) obs.observe(marco.current);
     return () => obs.disconnect();
-  }, [campana.campanaId, campana.vendedoras.join('|'), destinos.join('|')]);
+  }, [nodo.id, campana.vendedoras.join('|'), destinos.join('|')]);
 
   function alternar(vendedora: string) {
     const siguiente = conectadas.has(vendedora)
@@ -113,13 +131,14 @@ export function TableroDeCables({
         <div className="relative w-[16rem] shrink-0">
           <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
             <div className="flex items-start gap-2">
-              <Megaphone size={14} strokeWidth={2} className="mt-0.5 shrink-0 text-navy" aria-hidden />
-              <p className="text-xs font-medium leading-snug text-foreground">{campana.nombre}</p>
+              {nodo.origen === 'campana' ? (
+                <Megaphone size={14} strokeWidth={2} className="mt-0.5 shrink-0 text-navy" aria-hidden />
+              ) : (
+                <FileText size={14} strokeWidth={2} className="mt-0.5 shrink-0 text-navy" aria-hidden />
+              )}
+              <p className="text-xs font-medium leading-snug text-foreground">{nodo.titulo}</p>
             </div>
-            <p className="mt-1.5 text-[11px] text-muted-foreground">
-              {rotuloEstado(campana.estado)} · {campana.personas}{' '}
-              {campana.personas === 1 ? 'persona' : 'personas'}
-            </p>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">{nodo.pie}</p>
           </div>
           {/* El puerto: el punto del que salen todos los cables. */}
           <div
@@ -179,13 +198,27 @@ export function TableroDeCables({
           reparto vino a resolver el 4-ago (dos contestan al mismo lead y nadie
           contesta a otro). */}
       <p className="shrink-0 border-t border-border px-6 py-3 text-[11px] leading-relaxed text-muted-foreground">
-        {campana.vendedoras.length === 0
-          ? 'Sin cables: los leads de esta campaña se reparten por la rueda general, como hasta ahora.'
-          : campana.vendedoras.length === 1
-            ? 'Todos los leads de esta campaña le caen a esa persona.'
-            : `Cada lead le cae a UNA de las ${campana.vendedoras.length} conectadas — la que menos tiene. No a todas.`}{' '}
-        La regla se aplica al primer mensaje de cada conversación nueva; cambiarla no mueve lo ya
-        repartido.
+        {nodo.origen === 'campana' ? (
+          <>
+            {campana.vendedoras.length === 0
+              ? 'Sin cables: los leads de esta campaña se reparten por la rueda general, como hasta ahora.'
+              : campana.vendedoras.length === 1
+                ? 'Todos los leads de esta campaña le caen a esa persona.'
+                : `Cada lead le cae a UNA de las ${campana.vendedoras.length} conectadas — la que menos tiene. No a todas.`}{' '}
+            La regla se aplica al primer mensaje de cada conversación nueva; cambiarla no mueve lo ya
+            repartido.
+          </>
+        ) : (
+          <>
+            {campana.vendedoras.length === 0
+              ? 'Sin cables: estos formularios los ve todo el equipo, como hasta ahora.'
+              : campana.vendedoras.length === 1
+                ? 'Todos los formularios de este curso quedan a cargo de esa persona.'
+                : `Cada formulario queda a cargo de UNA de las ${campana.vendedoras.length} conectadas. No de todas.`}{' '}
+            Acá el reparto va por teléfono y no por carga: un valor derivado tiene que dar lo mismo en
+            cada consulta, y así quien reenvía el formulario vuelve a caer en la misma persona.
+          </>
+        )}
       </p>
     </div>
   );

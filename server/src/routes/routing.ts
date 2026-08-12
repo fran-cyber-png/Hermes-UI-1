@@ -18,6 +18,8 @@ import {
   mapaDeAnuncios,
   guardarCampanas,
   ponerCables,
+  cursosDeFormulario,
+  ponerCablesDeCurso,
 } from "../routing/repositorio.js";
 import { lineaDeCloudApi } from "../routing/linea.js";
 
@@ -69,15 +71,19 @@ routingRouter.get("/", async (_req, res) => {
   if (!linea) return sinLinea(res);
 
   try {
-    const [foto, enLaRueda, numero] = await Promise.all([
+    const [foto, enLaRueda, numero, cursos] = await Promise.all([
       fotoDeRouting(db, linea),
       vendedorasDeLaRueda(db, linea).catch(() => [] as string[]),
       obtenerNumero(db, linea).catch(() => null),
+      // Los formularios de icarus no dependen de la línea —no entraron por
+      // ninguna— así que si su tabla falta, el resto de la pantalla sigue.
+      cursosDeFormulario(db).catch(() => []),
     ]);
     res.json({
       linea,
       etiqueta: numero?.etiqueta ?? null,
       ventanaDias: VENTANA_DIAS,
+      cursos,
       ...foto,
       destinos: destinosPosibles({ rueda: enLaRueda, mapa: numero?.vendedoras ?? [] }),
     });
@@ -145,6 +151,56 @@ routingRouter.put("/campanas/:campanaId", async (req, res) => {
 
     await ponerCables(db, linea, campanaId, pedidas, req.vendedoraId ?? "");
     res.json({ ok: true, campanaId, vendedoras: pedidas });
+  } catch (e) {
+    res.status(500).json({ ok: false, message: (e as Error).message });
+  }
+});
+
+/**
+ * DEJAR LOS CABLES DE UN CURSO DE FORMULARIO.
+ *
+ * ⚠️ **El curso va en el body y no en la ruta**: son nombres de producto con
+ * espacios, tildes y `&` («Diploma técnico en Osint & Socmint»), y meterlos en el
+ * path los deja a merced de cada proxy que normalice la URL por su cuenta.
+ *
+ * Mismo contrato declarativo y la misma verificación de destino que las
+ * campañas: un dedazo mandaría todos los leads de ese curso a alguien que no
+ * existe, y ahí no hay round-robin que los rescate.
+ */
+routingRouter.put("/cursos", async (req, res) => {
+  const parsed = z
+    .object({ curso: z.string().min(1), vendedoras: z.array(z.string().min(1)).max(20) })
+    .safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, message: "se espera `curso` y `vendedoras`" });
+    return;
+  }
+  const curso = parsed.data.curso.trim();
+  const pedidas = [...new Set(parsed.data.vendedoras.map((v) => v.trim()).filter(Boolean))];
+  const linea = lineaDeCloudApi();
+
+  try {
+    if (pedidas.length > 0) {
+      const [enLaRueda, numero] = await Promise.all([
+        linea ? vendedorasDeLaRueda(db, linea) : Promise.resolve([] as string[]),
+        linea ? obtenerNumero(db, linea).catch(() => null) : Promise.resolve(null),
+      ]);
+      const destinos = destinosPosibles({ rueda: enLaRueda, mapa: numero?.vendedoras ?? [] });
+      const desconocidas = pedidas.filter((v) => !esDestinoValido(v, destinos));
+      if (desconocidas.length > 0) {
+        res.status(409).json({
+          ok: false,
+          motivo: "vendedora_desconocida",
+          message:
+            `${desconocidas.map((d) => `«${d}»`).join(", ")} no participa del reparto. ` +
+            (destinos.length ? `Se le puede dar a: ${destinos.join(", ")}.` : ""),
+          destinos,
+        });
+        return;
+      }
+    }
+    await ponerCablesDeCurso(db, curso, pedidas, req.vendedoraId ?? "");
+    res.json({ ok: true, curso, vendedoras: pedidas });
   } catch (e) {
     res.status(500).json({ ok: false, message: (e as Error).message });
   }

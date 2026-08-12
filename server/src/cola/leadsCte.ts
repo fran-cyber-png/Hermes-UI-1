@@ -146,6 +146,12 @@ export const leadsCte = (ventana: (columna: SQL) => SQL): SQL => sql`
     -- Un lead nunca entra por la banda de pin (no se puede fijar lo que todavía
     -- no es una conversación), así que siempre está en el universo del embudo.
     true                                        AS en_ventana,
+    -- EL CURSO DEL FORMULARIO, que es la llave del ruteo por curso
+    -- (routing/lead.ts). Sale de productoLeadSql, el MISMO fragmento que llena
+    -- la columna texto: dos lecturas del nombre del curso divergirían, y de las
+    -- dos que hubo una ya estaba mal (8-ago-2026, fuenteLead.ts).
+    -- (Sin backticks: esto vive dentro de un template literal.)
+    (${productoLeadSql})                        AS curso_lead,
     1                                           AS n
   FROM leads
   WHERE phone IS NOT NULL

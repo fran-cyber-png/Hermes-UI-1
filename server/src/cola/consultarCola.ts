@@ -46,7 +46,7 @@ import {
 } from "./cursoSql.js";
 import { padronCteSql, padronJoinSql, yaComproSql } from "./clienteSql.js";
 import { botCalienteSql, botEscaladaSql, botJoinSql } from "./botSql.js";
-import { asignadaJoinSql, duenoSql, esMiaSql } from "./asignadaSql.js";
+import { asignadaJoinSql, cursoRuteoJoinSql, duenoSql, esMiaSql } from "./asignadaSql.js";
 import { recorteDeLineas, soloSusLineas } from "./lineas.js";
 import { estaEnAlgunaRueda } from "../reparto/asignar.js";
 import { lineasDeVendedoraConProposito } from "../numeros/repositorio.js";
@@ -218,6 +218,8 @@ const comentariosCte = (filtroCanal: SQL, incluirPins: boolean) => sql`
     -- ¿Habría entrado SIN la banda de pin? Es lo que separa el universo de la
     -- cola (que sube las fijadas viejas) del universo del embudo, que no.
     (${ventanaCola(sql`occurred_at`)})          AS en_ventana,
+    -- Un comentario de FB/IG no viene de un formulario: no tiene curso que rutear.
+    NULL::text                                  AS curso_lead,
     1                                           AS n
   FROM interactions
   WHERE tipo = 'comentario'
@@ -329,6 +331,9 @@ const conversacionesCte = sql`
     -- exactamente «¿tiene algún mensaje adentro de la ventana?».
     -- (Sin backticks: esto vive dentro de un template literal.)
     bool_or(${ventanaCola(sql`occurred_at`)})                       AS en_ventana,
+    -- Una conversación de WhatsApp se rutea por CAMPAÑA y por reparto, no por el
+    -- curso del formulario: ese camino es solo de los leads que todavía no hablaron.
+    NULL::text                                                     AS curso_lead,
     count(*)::int                                                  AS n
   FROM msg
   GROUP BY canal, persona_id, numero_propio
@@ -595,6 +600,9 @@ export async function consultarCola(
   let conPadron = true;
   let conBot = true;
   let conAsignacion = true;
+  // Y la del ruteo por curso, que degrada igual: sin la tabla, los leads los ve
+  // todo el equipo — o sea, el comportamiento de ADR 0051.
+  let conCursos = true;
 
   // A QUÉ LÍNEAS SE ACOTA — se resuelve UNA vez, ANTES del loop: el recorte no
   // depende de qué tabla degradó, así que releer `numero_vendedora` en cada
@@ -651,6 +659,7 @@ export async function consultarCola(
           conPadron,
           conBot,
           conAsignacion,
+          conCursos,
         ),
       );
       return {
@@ -659,6 +668,7 @@ export async function consultarCola(
         ...(conPadron ? {} : { sinPadron: true }),
         ...(conBot ? {} : { sinBot: true }),
         ...(conAsignacion ? {} : { sinAsignacion: true }),
+        ...(conCursos ? {} : { sinCursos: true }),
         ...(enElReparto ? { enElReparto: true } : {}),
         ...(sinLineasPropias ? { sinLineasPropias: true } : {}),
       };
@@ -667,6 +677,14 @@ export async function consultarCola(
       // El reparto va primero por la misma razón que el bot y el padrón: apagar
       // lo que el error NOMBRA evita que una tabla ausente se lleve puestas las
       // otras tres.
+      if (conCursos && mencionaTabla(e, "curso_ruteo")) {
+        console.warn(
+          "[cola] `curso_ruteo` no existe: sirvo la cola SIN el ruteo por curso de formulario. " +
+            "Falta la migración `0028_dazzling_goblin_queen`.",
+        );
+        conCursos = false;
+        continue;
+      }
       if (conAsignacion && mencionaTabla(e, "conversacion_asignada")) {
         console.warn(
           "[cola] `conversacion_asignada` no existe: sirvo la cola SIN el dueño de cada " +
@@ -707,7 +725,11 @@ export async function consultarCola(
         conBot = false;
         continue;
       }
-      conAsignacion = false;
+      if (conAsignacion) {
+        conAsignacion = false;
+        continue;
+      }
+      conCursos = false;
     }
   }
 }
@@ -738,6 +760,7 @@ async function ejecutarCola(
   conPadron: boolean,
   conBot: boolean,
   conAsignacion: boolean,
+  conCursos: boolean,
 ): Promise<ResultadoCola> {
   const canal = opciones.canal ?? "";
   const intencion = opciones.intencion ?? "";
@@ -911,7 +934,21 @@ async function ejecutarCola(
    * mismo criterio de `sinLineasPropias`: un filtro que no puede filtrar se dice,
    * no se aplica.
    */
-  const mia = esMia ? sql`((${esMia}) OR tipo = 'lead')` : null;
+  /**
+   * 🔴 LA EXENCIÓN DE LOS LEADS SE ACHICÓ, Y ESO ES EL FRENTE.
+   *
+   * ADR 0051 eximió a los formularios del recorte entero —`OR tipo = 'lead'`—
+   * porque no había forma de que tuvieran dueño: no pasan por el webhook que
+   * llena `conversacion_asignada`. Ahora sí la hay (la regla por curso), así que
+   * la exención queda solo para los que **siguen sin dueño**: sin cable, los ve
+   * todo el equipo, exactamente como hasta hoy.
+   *
+   * ⚠️ Sin el `cl.vendedora_id IS NULL`, un lead cableado a otra persona le
+   * seguiría apareciendo a todas — y el ruteo no serviría para nada.
+   */
+  const mia = esMia
+    ? sql`((${esMia}) OR (tipo = 'lead' AND cl.vendedora_id IS NULL))`
+    : null;
   const soloMias =
     conAsignacion && (opciones.misAsignadas || opciones.enElReparto) && mia ? [mia] : [];
 
@@ -1036,6 +1073,7 @@ async function ejecutarCola(
     ${padronJoinSql(conPadron)}
     ${botJoinSql(conBot)}
     ${asignadaJoinSql(conAsignacion)}
+    ${cursoRuteoJoinSql(conCursos)}
     ${donde(condiciones)}
     ORDER BY ${bandaPinOrdenSql}, nivel ASC, orden ASC
     LIMIT ${limit} OFFSET ${offset}
@@ -1095,6 +1133,7 @@ async function ejecutarCola(
       ${padronJoinSql(conPadron)}
       ${botJoinSql(conBot)}
       ${asignadaJoinSql(conAsignacion)}
+    ${cursoRuteoJoinSql(conCursos)}
       ${donde(condicionesRecorte)}
     `);
     total = r?.n;
@@ -1118,6 +1157,7 @@ async function ejecutarCola(
       conPadron,
       conBot,
       conAsignacion,
+      conCursos,
       lineas,
       canal,
       // Acá SÍ: estamos adentro de la transacción y `todo` ya está armado.
@@ -1156,6 +1196,8 @@ async function desglosarEmbudo(
   // Y el del reparto por lo mismo: si `condiciones` trae el predicado de «Míos»,
   // nombra `ca` y sin el join la consulta ni compila.
   conAsignacion: boolean,
+  /** Igual que arriba: sin `curso_ruteo` el desglose no puede nombrar `cl`. */
+  conCursos: boolean,
   // Las líneas entran acá por lo mismo que entra el canal: definen el UNIVERSO de
   // la foto, no un recorte de columna. Sin esto, con la cola filtrada a Walter la
   // banda de desglose seguiría contando las conversaciones de la otra línea.
@@ -1220,6 +1262,7 @@ async function desglosarEmbudo(
     ${padronJoinSql(conPadron)}
     ${botJoinSql(conBot)}
     ${asignadaJoinSql(conAsignacion)}
+    ${cursoRuteoJoinSql(conCursos)}
     ${donde}
     GROUP BY 1, 2, 3, 4, 5, 6, 7
   `);
@@ -1267,5 +1310,5 @@ export async function contarPorEtapaEfectiva(
   // antes mientras nadie pida un recorte.
   const condiciones =
     soloAsignadasA === null ? [] : [soloMisClavesSql(sql`todo.clave`, soloAsignadasA)];
-  return plegarConteos(await desglosarEmbudo(base, sql``, condiciones, false, false, false, []));
+  return plegarConteos(await desglosarEmbudo(base, sql``, condiciones, false, false, false, false, []));
 }

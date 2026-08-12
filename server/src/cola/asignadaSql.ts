@@ -76,7 +76,40 @@ export function asignadaJoinSql(conAsignacion = true): SQL {
  * dibuja nada (`src/features/canales/dueno.ts`). Una píldora «Sin dueño» en
  * 1.900 filas sería ruido, no información.
  */
-export const duenoSql: SQL = sql`ca.vendedora_id`;
+export const duenoSql: SQL = sql`COALESCE(ca.vendedora_id, cl.vendedora_id)`;
+
+/**
+ * EL DUEÑO DERIVADO DE UN LEAD DE FORMULARIO.
+ *
+ * 🔴 **Se deriva y no se guarda**, y el motivo está en `routing/lead.ts`: un lead
+ * no tiene línea (así que no cabe en `conversacion_asignada`, que es por número)
+ * y su clave es `lead:<id>`, con un id nuevo por cada reenvío del formulario —o
+ * sea que una asignación guardada se perdería justo cuando la persona insiste.
+ *
+ * ⚠️ **`ca` le gana a `cl` en el COALESCE**, y ese orden importa: en cuanto
+ * alguien le escribe, el lead se vuelve conversación y manda el reparto de
+ * verdad. La regla por curso solo alcanza a quien todavía no habló.
+ *
+ * ⚠️ **El reparto acá va por TELÉFONO y no por carga**: un valor derivado tiene
+ * que dar lo mismo en cada consulta, y «quién tiene menos» cambia entre dos
+ * aperturas de la pantalla — el lead saltaría de dueña mientras alguien lo mira.
+ * El gemelo en TypeScript es `indiceDeTelefono`, y `lead.paridad.test.db.ts` los
+ * cruza: si divergen, la vendedora ve en «Míos» un lead que la fila de al lado
+ * atribuye a otra persona, sin un solo error que lo delate.
+ */
+export function cursoRuteoJoinSql(conCursos = true): SQL {
+  if (!conCursos) {
+    return sql`LEFT JOIN (SELECT NULL::text AS vendedora_id WHERE false) cl ON false`;
+  }
+  return sql`LEFT JOIN LATERAL (
+    SELECT (array_agg(cr.vendedora_id ORDER BY cr.vendedora_id))[
+             (COALESCE(NULLIF(right(regexp_replace(COALESCE(todo.persona_id, ''), '[^0-9]', '', 'g'), 3), '')::int, 0) % count(*)) + 1
+           ] AS vendedora_id
+      FROM curso_ruteo cr
+     WHERE todo.tipo = 'lead'
+       AND cr.curso = todo.curso_lead
+  ) cl ON true`;
+}
 
 /**
  * ¿ESTA ES MÍA? El predicado del recorte «Míos» y del conteo de su chip — se dice
@@ -107,5 +140,5 @@ export const duenoSql: SQL = sql`ca.vendedora_id`;
 export function esMiaSql(vendedoraId: string | undefined): SQL {
   const limpio = (vendedoraId ?? "").trim().toLowerCase();
   if (!limpio) return sql`false`;
-  return sql`COALESCE(lower(btrim(ca.vendedora_id)) = ${limpio}, false)`;
+  return sql`COALESCE(lower(btrim(COALESCE(ca.vendedora_id, cl.vendedora_id))) = ${limpio}, false)`;
 }
