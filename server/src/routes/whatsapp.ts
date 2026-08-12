@@ -339,14 +339,18 @@ whatsappRouter.post('/enviar', requiereVendedora, async (req, res) => {
   //
   // `citaDe` es el `external_id` del mensaje al que se responde, y NADA MÁS: de
   // quién era y qué decía lo resuelve el server contra lo que ya guardó. Ver el
-  // porqué en `whatsapp/citaRepositorio.ts` — es un dato que el LEAD va a ver.
+  // porqué en `whatsapp/citaRepositorio.ts` — es un dato que el LEAD va a ver, y
+  // por eso se resuelve ACOTADO A ESTA CONVERSACIÓN: el id viene del navegador.
   const r = await enviarTextoYProyectar({
     vendedoraId: req.vendedoraId!,
     numeroPropio: String(numeroPropio ?? ''),
     telefono: String(telefono ?? ''),
     texto: String(texto ?? ''),
     referencia: String(referencia ?? ''),
-    cita: await resolverCitaSaliente(db, typeof citaDe === 'string' ? citaDe : null),
+    cita: await resolverCitaSaliente(db, typeof citaDe === 'string' ? citaDe : null, {
+      telefono: String(telefono ?? ''),
+      numeroPropio: String(numeroPropio ?? '') || null,
+    }),
     procedencia: await procedenciaDelComposer(req.body?.pieza, leerPasoDeSecuencia(req.vendedoraId!)),
   });
 

@@ -1100,6 +1100,9 @@ function ComposerWa({
    * `src-tauri/tauri.conf.json` — y por eso este frente necesita reinstalar la app,
    * no le alcanza con el OTA.
    */
+  const aceptarRef = useRef(aceptarArchivos);
+  aceptarRef.current = aceptarArchivos;
+
   useEffect(() => {
     const traeArchivos = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
 
@@ -1117,7 +1120,11 @@ function ComposerWa({
       if (!traeArchivos(e)) return;
       e.preventDefault();
       setArrastrando(false);
-      aceptarArchivos(e.dataTransfer?.files);
+      // Por REF y no directo: así los listeners se enganchan una sola vez y la
+      // función que corre sigue siendo la última. Sin esto habría que dejar el
+      // efecto sin deps, y entonces los tres listeners se dan de baja y de alta
+      // en CADA tecla que se escribe en el composer.
+      aceptarRef.current(e.dataTransfer?.files);
     }
 
     window.addEventListener('dragover', alArrastrar);
@@ -1128,7 +1135,7 @@ function ComposerWa({
       window.removeEventListener('dragleave', alSalir);
       window.removeEventListener('drop', alSoltar);
     };
-  });
+  }, []);
 
   /** Abre el flujo de compresión y limpia lo que había: es un solo adjunto por mensaje. */
   function ofrecerAchicar(archivo: File, motivo: string) {

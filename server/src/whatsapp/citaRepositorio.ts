@@ -95,26 +95,46 @@ export async function resolverCitados(
  * la persona equivocada, y un `quotedMessage` inventado le muestra un texto que
  * nadie escribió. Se resuelve del lado que sabe.
  *
+ * ── 🔴 SE ACOTA A ESTA CONVERSACIÓN, Y ES LO ÚNICO PARECIDO A UNA FRONTERA
+ *    QUE HAY EN ESTE FRENTE ──────────────────────────────────────────────
+ * El `citaDe` llega CRUDO del navegador. Sin el `AND persona_id / numero_propio`,
+ * una vendedora puede citar el `external_id` de CUALQUIER conversación y el
+ * `texto` de esa fila se mete en el `quotedMessage` del proto — o sea que **al
+ * lead le llega, adentro de la tirita, lo que otra persona escribió en otro
+ * chat**. En el resto de Hermes «filtro, no permiso» alcanza porque los datos se
+ * sirven a una vendedora; acá el dato SALE del sistema hacia un tercero, y ésa es
+ * una clase distinta de error. Por eso el recorte va en el `WHERE` y no en un
+ * `if` de la ruta.
+ *
  * ── Degrada, nunca tumba ─────────────────────────────────────────────────
- * Un id que Hermes no conoce **se cita igual**: el que tiene que resolverlo es
- * WhatsApp, que sí lo tiene. Lo que se pierde es la tirita con texto, no la cita.
- * Y si la base falla, lo mismo: perder el preview de una cita no puede hacer que
- * la vendedora no pueda contestarle a un lead.
+ * Un id que Hermes no conoce —o que es de otra conversación— **se cita igual**:
+ * el que tiene que resolverlo es WhatsApp, que sí lo tiene. Lo que se pierde es
+ * el texto de la tirita, no la cita. Y si la base falla, lo mismo: perder el
+ * preview no puede hacer que la vendedora no pueda contestarle a un lead.
  */
 export async function resolverCitaSaliente(
   base: typeof Base,
   externalId: string | null | undefined,
+  conversacion: { telefono: string; numeroPropio?: string | null },
 ): Promise<CitaSaliente | undefined> {
   // El id CRUDO es lo que entiende WhatsApp; el prefijo es de Hermes. Se pela acá
   // y en un solo lugar, como ya lo hace la ruta de reaccionar.
   const crudo = String(externalId ?? '').trim().replace(/^wa:/, '');
   if (!crudo) return undefined;
 
+  // Sin `numeroPropio` no se puede acotar la línea, así que alcanza con la
+  // persona: es el caso de los envíos viejos y no vale dejar la cita sin recorte.
+  const mismaLinea = conversacion.numeroPropio
+    ? sql`AND i.numero_propio = ${conversacion.numeroPropio}`
+    : sql``;
+
   try {
     const [fila] = await base.execute<FilaCitada>(sql`
       SELECT i.external_id, i.direccion, i.texto, NULL AS media_clase
       FROM interactions i
       WHERE i.canal = 'whatsapp' AND i.external_id = ${`wa:${crudo}`}
+        AND i.persona_id = ${conversacion.telefono}
+        ${mismaLinea}
       LIMIT 1
     `);
     return { mensajeId: crudo, esNuestro: fila?.direccion === 'saliente', texto: fila?.texto ?? null };

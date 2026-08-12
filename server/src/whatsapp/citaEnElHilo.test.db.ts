@@ -114,12 +114,12 @@ describe("la cita que SALE con un envío", () => {
 
     // El `participant` del proto sale de acá: mal puesto, el lead ve la tirita
     // atribuida a la persona equivocada.
-    assert.deepEqual(await resolverCitaSaliente(db, "wa:MIO"), {
+    assert.deepEqual(await resolverCitaSaliente(db, "wa:MIO", { telefono: LEAD, numeroPropio: LINEA }), {
       mensajeId: "MIO",
       esNuestro: true,
       texto: "S/ 450",
     });
-    assert.deepEqual(await resolverCitaSaliente(db, "wa:SUYO"), {
+    assert.deepEqual(await resolverCitaSaliente(db, "wa:SUYO", { telefono: LEAD, numeroPropio: LINEA }), {
       mensajeId: "SUYO",
       esNuestro: false,
       texto: "¿cuánto?",
@@ -130,7 +130,7 @@ describe("la cita que SALE con un envío", () => {
     const db = await baseDePrueba(t);
     await sembrarMensaje(db, { personaId: LEAD, numeroPropio: LINEA, externalId: "X", texto: "hola" });
 
-    assert.deepEqual(await resolverCitaSaliente(db, "wa:X"), await resolverCitaSaliente(db, "X"));
+    assert.deepEqual(await resolverCitaSaliente(db, "wa:X", { telefono: LEAD, numeroPropio: LINEA }), await resolverCitaSaliente(db, "X", { telefono: LEAD, numeroPropio: LINEA }));
   });
 
   test("🔴 un id que Hermes no conoce SE CITA IGUAL, sin texto", async (t) => {
@@ -138,19 +138,61 @@ describe("la cita que SALE con un envío", () => {
 
     // Quien tiene que resolver el link es WhatsApp, que sí lo tiene. Lo que se
     // pierde es el preview, no la cita.
-    assert.deepEqual(await resolverCitaSaliente(db, "wa:DESCONOCIDO"), {
+    assert.deepEqual(await resolverCitaSaliente(db, "wa:DESCONOCIDO", { telefono: LEAD, numeroPropio: LINEA }), {
       mensajeId: "DESCONOCIDO",
       esNuestro: false,
       texto: null,
     });
   });
 
+  test("🔴 no se puede citar un mensaje de OTRA conversación: el texto NO sale", async (t) => {
+    const db = await baseDePrueba(t);
+    await sembrarMensaje(db, {
+      personaId: "51900000001",
+      numeroPropio: LINEA,
+      externalId: "AJENO",
+      direccion: "entrante",
+      texto: "mi DNI es 40821555",
+    });
+
+    // `citaDe` llega crudo del navegador. Sin el recorte, este texto —de otra
+    // persona, en otro chat— entra en el `quotedMessage` del proto y **el lead
+    // lo ve**. Es la única vez en Hermes que un dato sale del sistema hacia un
+    // tercero, así que acá el recorte no es un filtro: es una frontera.
+    assert.deepEqual(await resolverCitaSaliente(db, "wa:AJENO", { telefono: LEAD, numeroPropio: LINEA }), {
+      mensajeId: "AJENO",
+      esNuestro: false,
+      texto: null,
+    });
+
+    // Y desde SU propia conversación se resuelve igual que siempre: el recorte
+    // no puede romper el caso bueno.
+    const propia = await resolverCitaSaliente(db, "wa:AJENO", { telefono: "51900000001", numeroPropio: LINEA });
+    assert.equal(propia?.texto, "mi DNI es 40821555");
+  });
+
+  test("🔴 la misma persona en OTRA línea tampoco: el recorte incluye el número propio", async (t) => {
+    const db = await baseDePrueba(t);
+    await sembrarMensaje(db, {
+      personaId: LEAD,
+      numeroPropio: "51900009999",
+      externalId: "OTRALINEA",
+      direccion: "entrante",
+      texto: "esto se lo escribí a la otra vendedora",
+    });
+
+    assert.equal(
+      (await resolverCitaSaliente(db, "wa:OTRALINEA", { telefono: LEAD, numeroPropio: LINEA }))?.texto,
+      null,
+    );
+  });
+
   test("sin `citaDe` no hay cita: un envío normal no cambia", async (t) => {
     const db = await baseDePrueba(t);
 
-    assert.equal(await resolverCitaSaliente(db, null), undefined);
-    assert.equal(await resolverCitaSaliente(db, ""), undefined);
-    assert.equal(await resolverCitaSaliente(db, "   "), undefined);
-    assert.equal(await resolverCitaSaliente(db, "wa:"), undefined);
+    assert.equal(await resolverCitaSaliente(db, null, { telefono: LEAD, numeroPropio: LINEA }), undefined);
+    assert.equal(await resolverCitaSaliente(db, "", { telefono: LEAD, numeroPropio: LINEA }), undefined);
+    assert.equal(await resolverCitaSaliente(db, "   ", { telefono: LEAD, numeroPropio: LINEA }), undefined);
+    assert.equal(await resolverCitaSaliente(db, "wa:", { telefono: LEAD, numeroPropio: LINEA }), undefined);
   });
 });

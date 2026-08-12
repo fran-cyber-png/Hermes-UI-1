@@ -216,6 +216,14 @@ Hermes: `src/features/navegador/` (vista ⌘9) + comandos `navegador_*` en `src-
   el workflow sobre `6803145`). Pista: falta `WebView2Loader.dll` al lado del `.exe` de test.
   ⚠️ **El frente que toca `cargo test` de `src-tauri/` tiene que disparar `tauri-windows.yml` a mano en
   su PR** — si no, los está escribiendo a ciegas.
+  · **Desde el 12-ago-2026 el BUILD VA PRIMERO y los tests llevan `continue-on-error`.** El motivo:
+    un test roto le estaba secuestrando el instalador a las vendedoras, que son las que están en
+    Windows — el crate compila, lo que no arranca es el binario de test, y como el paso cortaba el
+    job **no salía `.exe` desde el 4-ago**. Un test roto tiene que costar el test, no el instalador.
+    🔴 **El precio, y hay que tenerlo presente**: `cargo test` ya **no puede voltear el workflow**, y
+    ahí adentro vive `el_navegador_embebido_no_alcanza_ningun_comando`, la guarda del ACL de ADR 0043.
+    O sea que ahora **hay que MIRAR el paso, no el resultado del job**. Devolverle el poder de corte
+    es lo correcto el día que `STATUS_ENTRYPOINT_NOT_FOUND` se arregle.
 - 🔴 **LA CÁSCARA Y LA UI SE DESPLIEGAN POR CAMINOS DISTINTOS, y eso rompió el frente el día 1.**
   «Command abrir_navegador not allowed by ACL» **no era la config**: la UI viaja por OTA y llega en el
   acto, pero el `.dmg`/`.exe` se reinstala a mano, así que ninguna cáscara instalada tenía el comando.
@@ -323,6 +331,39 @@ burbuja de `HiloWhatsapp.tsx`.
   · ⚠️ El botón está **siempre en el DOM**, invisible hasta el hover: montarlo al pasar haría que el
     primer clic caiga en la nada. La mutación es **optimista**.
 - Ver sin server: `/galeria-composer.html`. Capturas: `docs/evidencia/reacciones-en-el-hilo.png`.
+
+## Las otras tres cosas que se hacen sobre un mensaje (12-ago-2026)
+
+Las acciones de la burbuja viven agrupadas en un solo bloque de `HiloWhatsapp.tsx` y **van del lado de
+AFUERA** (izquierda en los salientes, derecha en los entrantes): del lado de adentro se montan sobre el
+hilo, del lado del borde se salen de la vista. Las tres copian el molde de reaccionar —**siempre en el
+DOM**, invisibles hasta el hover— pero **cada una tiene un alcance distinto, y esa asimetría es la
+decisión**: reaccionar es solo de los entrantes y con la línea viva, copiar y responder van en los dos
+sentidos, y copiar además no mira la sesión (es local: con la línea caída sigue sirviendo).
+
+- 🔴 **«NO SE PUEDE COPIAR EL CHAT» ERA UN PROBLEMA DE CONTRASTE, NO DE BLOQUEO.** `::selection` pintaba
+  `var(--secondary)` sobre `var(--navy)` y **la burbuja saliente ES exactamente `bg-secondary
+  text-navy`**: contraste 1.000, o sea que arrastrar el mouse sobre un mensaje propio no cambiaba un
+  solo píxel. La vendedora arrastraba, no veía nada, y concluía que el hilo no se copiaba. Nada estaba
+  bloqueado: no hay `user-select:none`, ni handlers en la burbuja, ni nadie que intercepte ⌘C, y en
+  macOS Tauri instala el menú Editar solo. **El candado es `src/seleccionVisible.test.ts`**, que lee
+  `index.css` y falla si el resalte baja de 3:1 contra el fondo de CUALQUIERA de las dos burbujas.
+  ⚠️ Ese test necesita `css: { include: [/index\.css/] }` en `vitest.config.ts`: por default vitest
+  sirve todo `.css` como cadena VACÍA —incluido `?raw`— y el test pasaba leyendo nada.
+- ⚠️ **Copiar sin texto no se dibuja**: un adjunto suelto o el «Vino del anuncio» no tienen qué poner en
+  el portapapeles, y un botón que copia la cadena vacía parece que anduvo.
+- 🔴 **ARRASTRAR UN ARCHIVO ESCUCHA EN LA VENTANA, NO EN UN RECTÁNGULO** (`aceptarArchivos`, compartida
+  con ⌘V). Dos razones y la segunda obliga: la vendedora suelta el flyer sobre la conversación, no sobre
+  la cajita; y **si nadie cancela el default, el webview NAVEGA al archivo** y ella queda afuera de
+  Hermes con un JPG a pantalla completa y sin botón de volver. Se filtra por `types` con `'Files'` para
+  no comerse el arrastre de las tarjetas del Pipeline.
+  · ⚠️ **La decisión es la MISMA que la del pegado** (`decidirPegado`), no una copia: dos puertas al
+    mismo envío que acepten cosas distintas es #37, y se notaría tarde — cuando a un lead le llegue por
+    una vía algo que la otra rechazaba.
+  · 🔴 **Y en la app de escritorio NO alcanza el front**: Tauri se queda los drops del SO antes de que
+    el DOM los vea, así que hace falta **`dragDropEnabled: false`** en `src-tauri/tauri.conf.json`.
+    Eso es CÁSCARA: **no viaja por OTA, hay que reinstalar** — y en Windows no puede llegar mientras el
+    `.exe` no compile. O sea que el equipo que vende ve el copiar y el responder, y **no** el arrastre.
 
 ## Responder citando un mensaje (ADR 0054)
 
