@@ -1,0 +1,2 @@
+ALTER TABLE "campana_ruteo" DROP CONSTRAINT "campana_ruteo_numero_propio_campana_id_pk";--> statement-breakpoint
+ALTER TABLE "campana_ruteo" ADD CONSTRAINT "campana_ruteo_numero_propio_campana_id_vendedora_id_pk" PRIMARY KEY("numero_propio","campana_id","vendedora_id");

@@ -75,9 +75,10 @@ async function main(): Promise<void> {
   const foto = await fotoDeRouting(db, linea);
   console.log(`\nGuardados ${guardados}. Cómo queda la pantalla:`);
   for (const c of foto.campanas) {
+    const cae = c.vendedoras.length ? c.vendedoras.join(", ") : "la rueda";
     console.log(
       `  ${c.estado.padEnd(11)} ${String(c.personas).padStart(3)} personas · ${c.anuncios} anuncios · ` +
-        `${c.nombre} → ${c.vendedoraId ?? "la rueda"}`,
+        `${c.nombre} → ${cae}`,
     );
   }
   if (foto.anunciosSinResolver > 0) {

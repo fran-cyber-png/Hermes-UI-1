@@ -1,7 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { db as Base } from "../db/client.js";
 import { conversacionAsignada, repartoRueda } from "../db/reparto.js";
-import { duenoPorCampana } from "../routing/repositorio.js";
+import { duenosPorCampana } from "../routing/repositorio.js";
 import { siguienteEnLaRueda, type EnLaRueda } from "./rueda.js";
 
 /**
@@ -48,8 +48,22 @@ export async function asignarSiHaceFalta(
      * («¿entre quiénes se reparte lo que no tiene dueño?»). Exigirlo haría que
      * sacar a alguien de la rueda le apagara sus campañas en silencio.
      */
-    const porCampana = await duenoPorCampana(base, numeroPropio, adId);
-    const quien = porCampana ?? siguienteEnLaRueda(await leerRueda(base, numeroPropio));
+    /**
+     * 🔴 **LOS CABLES DE LA CAMPAÑA SON UNA RUEDA CHICA**, y se elige adentro con
+     * la MISMA regla que la grande: le toca a quien menos tiene. Con un cable eso
+     * es asignación directa; con tres, round-robin entre esas tres. Reusar
+     * `siguienteEnLaRueda` no es ahorro de código: es lo que hace que la
+     * propiedad que el reparto promete —entre el que más y el que menos nunca
+     * hay más de 1— valga también acá.
+     *
+     * ⚠️ La CARGA se cuenta sobre la línea entera, no sobre la campaña: quien
+     * atiende dos campañas ya tiene trabajo, y contarle solo lo de ésta le
+     * mandaría el doble.
+     */
+    const cables = await duenosPorCampana(base, numeroPropio, adId);
+    const cargas = await leerRueda(base, numeroPropio);
+    const porCampana = cables.length ? siguienteEnLaRueda(ruedaDeCables(cables, cargas)) : null;
+    const quien = porCampana ?? siguienteEnLaRueda(cargas);
     if (!quien) return null;
 
     await base
@@ -73,6 +87,30 @@ export async function asignarSiHaceFalta(
   } catch {
     return null;
   }
+}
+
+/**
+ * LOS CABLES, CON LA CARGA QUE YA TIENE CADA UNO.
+ *
+ * ⚠️ **Quien está cableado pero no está en la rueda general arranca en 0**, y no
+ * es un bug: `leerRueda` solo trae a quienes participan del reparto automático, y
+ * conectar un cable NO exige estar ahí (el destino ya se verificó al guardarlo).
+ * Sin este default, esa persona no existiría para la elección y su cable no
+ * llevaría nada.
+ *
+ * El `orden` sale de la posición alfabética: `siguienteEnLaRueda` lo usa solo
+ * para desempatar cargas iguales, y con un orden estable dos leads seguidos en
+ * la misma situación caen siempre en la misma persona — o sea, es reproducible.
+ */
+function ruedaDeCables(cables: readonly string[], cargas: readonly EnLaRueda[]): EnLaRueda[] {
+  const porNombre = new Map(cargas.map((c) => [c.vendedoraId.trim().toLowerCase(), c.asignadas]));
+  return [...cables]
+    .sort((a, b) => a.localeCompare(b, "es"))
+    .map((vendedoraId, orden) => ({
+      vendedoraId,
+      orden,
+      asignadas: porNombre.get(vendedoraId.trim().toLowerCase()) ?? 0,
+    }));
 }
 
 /**

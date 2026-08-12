@@ -21,8 +21,8 @@ export interface CampanaEnRouting {
   /** Cuántas PERSONAS escribieron por ella (no cuántos mensajes). */
   personas: number;
   ultima: string | null;
-  /** A quién le cae. `null` = a la rueda del reparto, como siempre. */
-  vendedoraId: string | null;
+  /** LOS CABLES: a quiénes les puede caer. Vacío = a la rueda del reparto. */
+  vendedoras: string[];
 }
 
 export interface FotoDeRouting {
@@ -30,12 +30,15 @@ export interface FotoDeRouting {
   etiqueta: string | null;
   ventanaDias: number;
   campanas: CampanaEnRouting[];
-  /**
-   * Anuncios que trajeron gente y todavía no se resolvieron contra Meta. Es el
-   * único motivo por el que una campaña viva puede faltar de la lista, así que
-   * se muestra: sin el número, la pantalla afirmaría «estas son todas».
-   */
+  /** Anuncios que trajeron gente y todavía no se resolvieron contra Meta. */
   anunciosSinResolver: number;
+  /**
+   * Campañas de la cuenta que mandan a WhatsApp pero **no a esta línea**. No se
+   * listan porque no se pueden cablear, pero se MUESTRAN como número: medido el
+   * 12-ago-2026, dieciséis de diecisiete adsets activos mandan a otro teléfono,
+   * y esconderlo haría que la pantalla afirme «estas son todas las campañas».
+   */
+  campanasEnOtraLinea: number;
   actualizadoAt: string | null;
   sinMigracion: boolean;
   destinos: string[];
@@ -55,27 +58,31 @@ export function useRouting() {
 }
 
 /**
- * PONER O SACAR LA REGLA. `vendedoraId: null` la saca — la campaña vuelve a la
- * rueda.
+ * DEJAR LOS CABLES DE UNA CAMPAÑA. Viaja el conjunto COMPLETO, no un cable:
+ * con `conectar`/`desconectar` sueltos, dos personas editando la misma campaña
+ * se pisan y la última cree que sumó uno cuando en realidad borró el de la otra.
+ * `vendedoras: []` corta todos y la campaña vuelve a la rueda.
  *
  * ⚠️ **No es optimista, a propósito.** El destino lo VERIFICA el server y un
  * desconocido vuelve 409: pintar el cambio antes de la respuesta mostraría la
  * campaña ya asignada y la revertiría medio segundo después. Acá lo que se
  * decide es a quién le caen los leads de mañana; se espera el sí.
  */
-export function useElegirDueno() {
+export function useConectar() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ campanaId, vendedoraId }: { campanaId: string; vendedoraId: string | null }) =>
+    mutationFn: ({ campanaId, vendedoras }: { campanaId: string; vendedoras: string[] }) =>
       api(`/api/routing/campanas/${encodeURIComponent(campanaId)}`, {
         method: 'PUT',
-        body: JSON.stringify({ vendedoraId }),
+        body: JSON.stringify({ vendedoras }),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['routing'] }),
   });
 }
 
 export interface Refresco {
+  /** Cuántas campañas trajo el catálogo de Meta. */
+  campanas: number;
   preguntados: number;
   resueltos: number;
   fallaron: string[];

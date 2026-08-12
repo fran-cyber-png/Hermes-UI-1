@@ -37,8 +37,14 @@ export interface CampanaEnRouting {
   personas: number;
   /** La última vez que alguien llegó por esta campaña. ISO, o `null`. */
   ultima: string | null;
-  /** A quién le cae. `null` = a la rueda, como siempre. */
-  vendedoraId: string | null;
+  /**
+   * LOS CABLES: a quiénes les puede caer. Vacío = a la rueda general.
+   *
+   * ⚠️ Es un ARREGLO y no un nombre, y por eso el orden importa poco pero la
+   * estabilidad sí: viene ordenado para que dos aperturas de la pantalla no
+   * dibujen los cables al revés.
+   */
+  vendedoras: string[];
 }
 
 /**
@@ -61,27 +67,49 @@ export function ordenarCampanas(campanas: readonly CampanaEnRouting[]): CampanaE
 }
 
 /**
- * A QUIÉN LE CAE UN LEAD QUE LLEGÓ POR ESTE ANUNCIO.
+ * A QUIÉNES LES PUEDE CAER UN LEAD QUE LLEGÓ POR ESTE ANUNCIO.
  *
- * 🔴 **Devuelve `null` en todos los casos dudosos, y `null` significa «que
- * decida la rueda»** — nunca «no asignar». Es la misma forma fail-open que el
- * resto del reparto: un lead que cae en la rueda está peor ruteado; un lead sin
- * dueño está perdido.
+ * 🔴 **Devuelve un CONJUNTO, y el conjunto ES una rueda.** Con un cable es
+ * asignación directa; con tres, round-robin por carga entre esas tres. Por eso
+ * «una o varias vendedoras» y «una rueda propia por campaña» no son dos
+ * features: son esta función devolviendo uno o más nombres.
  *
- * Los tres caminos a `null`, y ninguno es un error:
+ * 🔴 **Vacío significa «que decida la rueda general»** — nunca «no asignar». Es
+ * la misma forma fail-open del resto del reparto: un lead mal ruteado está peor
+ * atendido, un lead sin dueño está perdido.
+ *
+ * Los tres caminos al vacío, y ninguno es un error:
  *   · el mensaje no vino de un anuncio (no hay `adId`);
  *   · el anuncio nunca se resolvió contra Meta (`campana_anuncio` no lo tiene),
  *     que es lo que pasa con un anuncio ESTRENADO HOY;
- *   · su campaña no tiene regla.
+ *   · su campaña no tiene ningún cable.
  */
-export function aQuienLeCae(
+export function aQuienesLesCae(
   adId: string | null | undefined,
   campanaDelAnuncio: (adId: string) => string | undefined,
-  duenoDeCampana: (campanaId: string) => string | undefined,
-): string | null {
+  cablesDeCampana: (campanaId: string) => readonly string[] | undefined,
+): string[] {
   const ad = (adId ?? "").trim();
-  if (!ad) return null;
+  if (!ad) return [];
   const campana = campanaDelAnuncio(ad);
-  if (!campana) return null;
-  return duenoDeCampana(campana) ?? null;
+  if (!campana) return [];
+  return [...(cablesDeCampana(campana) ?? [])];
+}
+
+/**
+ * ¿SE PUEDE RUTEAR ESTA CAMPAÑA DESDE ESTA LÍNEA?
+ *
+ * Solo si alguno de sus adsets manda gente a esta línea. Medido el 12-ago-2026:
+ * de 17 adsets activos, **uno** apunta a la línea que Hermes atiende — los otros
+ * mandan a siete números que el CRM no ve. Ofrecer un cable ahí sería ofrecer un
+ * cable que no puede llevar nada: el lead entra por otro teléfono y este server
+ * nunca se entera.
+ *
+ * ⚠️ Se compara sobre DÍGITOS ya normalizados de los dos lados (Meta manda el
+ * número con separadores y Hermes lo guarda pelado). Sin eso no matchea ninguna
+ * y la pantalla diría «no hay campañas» sobre una cuenta con diecisiete vivas.
+ */
+export function llegaALaLinea(numerosDeLaCampana: readonly string[], linea: string): boolean {
+  const l = linea.replace(/[^0-9]/g, "");
+  return l !== "" && numerosDeLaCampana.some((n) => n.replace(/[^0-9]/g, "") === l);
 }

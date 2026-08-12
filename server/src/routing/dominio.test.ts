@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { aQuienLeCae, leerEstado, ordenarCampanas, type CampanaEnRouting } from "./dominio.js";
+import {
+  aQuienesLesCae,
+  leerEstado,
+  llegaALaLinea,
+  ordenarCampanas,
+  type CampanaEnRouting,
+} from "./dominio.js";
 
 test("`ACTIVE` es lo único que se lee como activa", () => {
   assert.equal(leerEstado("ACTIVE"), "activa");
@@ -30,7 +36,7 @@ const campana = (p: Partial<CampanaEnRouting>): CampanaEnRouting => ({
   anuncios: 1,
   personas: 0,
   ultima: null,
-  vendedoraId: null,
+  vendedoras: [],
   ...p,
 });
 
@@ -53,23 +59,50 @@ test("a igualdad de estado y volumen el orden es estable, no el que quiera la ba
   assert.deepEqual(orden, ["a", "b"]);
 });
 
-// ── A quién le cae ───────────────────────────────────────────────────────────
+// ── A quiénes les cae ────────────────────────────────────────────────────────
 
 const MAPA = new Map([["ad-1", "camp-1"]]);
-const REGLAS = new Map([["camp-1", "ventas10@grupogoberna.com"]]);
+const CABLES = new Map([["camp-1", ["ventas11", "ventas12"]]]);
 const deAnuncio = (ad: string) => MAPA.get(ad);
-const deCampana = (c: string) => REGLAS.get(c);
+const deCampana = (c: string) => CABLES.get(c);
 
-test("con anuncio resuelto y regla puesta, le cae a esa persona", () => {
-  assert.equal(aQuienLeCae("ad-1", deAnuncio, deCampana), "ventas10@grupogoberna.com");
+test("con anuncio resuelto y cables puestos, devuelve TODAS las conectadas", () => {
+  assert.deepEqual(aQuienesLesCae("ad-1", deAnuncio, deCampana), ["ventas11", "ventas12"]);
 });
 
-test("🔴 los tres caminos dudosos devuelven null, que es «que decida la rueda»", () => {
-  // Sin anuncio: el mensaje no vino de una campaña.
-  assert.equal(aQuienLeCae(null, deAnuncio, deCampana), null);
-  assert.equal(aQuienLeCae("   ", deAnuncio, deCampana), null);
-  // Anuncio estrenado hoy: existe en Meta y todavía no en `campana_anuncio`.
-  assert.equal(aQuienLeCae("ad-nuevo", deAnuncio, deCampana), null);
-  // Campaña conocida y sin regla: es el estado inicial de TODAS.
-  assert.equal(aQuienLeCae("ad-1", deAnuncio, () => undefined), null);
+test("un solo cable es asignación directa: la misma función, un solo nombre", () => {
+  assert.deepEqual(
+    aQuienesLesCae("ad-1", deAnuncio, () => ["Tracy"]),
+    ["Tracy"],
+  );
+});
+
+test("🔴 los tres caminos dudosos devuelven vacío, que es «que decida la rueda»", () => {
+  assert.deepEqual(aQuienesLesCae(null, deAnuncio, deCampana), []);
+  assert.deepEqual(aQuienesLesCae("   ", deAnuncio, deCampana), []);
+  assert.deepEqual(aQuienesLesCae("ad-nuevo", deAnuncio, deCampana), [], "anuncio estrenado hoy");
+  assert.deepEqual(aQuienesLesCae("ad-1", deAnuncio, () => undefined), [], "campaña sin cables");
+  assert.deepEqual(aQuienesLesCae("ad-1", deAnuncio, () => []), [], "campaña con cero cables");
+});
+
+// ── Qué campaña se puede rutear ──────────────────────────────────────────────
+
+test("se puede rutear si alguno de sus adsets manda a ESTA línea", () => {
+  assert.equal(llegaALaLinea(["51984429504"], "51984429504"), true);
+  assert.equal(llegaALaLinea(["51986394450", "51984429504"], "51984429504"), true);
+});
+
+test("🔴 no se puede rutear la que manda a un número que Hermes no atiende", () => {
+  // Medido: de 17 adsets activos, 16 mandan a números que el CRM no ve.
+  assert.equal(llegaALaLinea(["51986394450"], "51984429504"), false);
+  assert.equal(llegaALaLinea([], "51984429504"), false);
+});
+
+test("⚠️ compara dígitos: Meta manda el número con separadores y Hermes pelado", () => {
+  assert.equal(llegaALaLinea(["+51 984 429 504"], "51984429504"), true);
+  assert.equal(llegaALaLinea(["51984429504"], "+51-984-429-504"), true);
+});
+
+test("una línea vacía no matchea con nada", () => {
+  assert.equal(llegaALaLinea(["51984429504"], ""), false);
 });

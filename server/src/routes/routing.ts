@@ -4,15 +4,20 @@ import { db } from "../db/client.js";
 import { obtenerNumero } from "../numeros/repositorio.js";
 import { destinosPosibles, esDestinoValido } from "../reparto/destino.js";
 import { vendedorasDeLaRueda } from "../reparto/asignar.js";
-import { clienteDeEntorno, resolverAnuncios } from "../routing/meta.js";
+import {
+  campanasDeWhatsapp,
+  clienteDeEntorno,
+  cuentasDePauta,
+  resolverAnuncios,
+} from "../routing/meta.js";
 import {
   VENTANA_DIAS,
   anunciosVistos,
   fotoDeRouting,
   guardarAnuncios,
   mapaDeAnuncios,
-  ponerRegla,
-  sacarRegla,
+  guardarCampanas,
+  ponerCables,
 } from "../routing/repositorio.js";
 import { lineaDeCloudApi } from "../routing/linea.js";
 
@@ -81,22 +86,23 @@ routingRouter.get("/", async (_req, res) => {
   }
 });
 
-const reglaSchema = z.object({
-  /** `null` saca la regla: la campaña vuelve a repartirse por la rueda. */
-  vendedoraId: z.string().min(1).nullable(),
+const cablesSchema = z.object({
+  /** El conjunto COMPLETO de conectadas. `[]` corta todos los cables. */
+  vendedoras: z.array(z.string().min(1)).max(20),
 });
 
 /**
- * PONER (o sacar) LA REGLA DE UNA CAMPAÑA.
+ * DEJAR LOS CABLES DE UNA CAMPAÑA COMO DICE LA PANTALLA.
  *
- * `PUT` y no `POST` por lo mismo que la asignación del reparto: es declarativo e
- * idempotente («el dueño de esta campaña es X»). Mandarlo dos veces deja lo mismo.
+ * `PUT` y declarativo: viaja el conjunto entero, no un cable. Con
+ * `connect`/`disconnect` por cable, dos personas editando la misma campaña se
+ * pisan sin enterarse — la última cree que sumó uno y en realidad borró el de la
+ * otra. Mandando el conjunto, lo guardado es lo que se veía.
  *
- * El destino se VERIFICA contra los mismos `destinosPosibles` del reparto y un
- * desconocido es **409 enumerando a quién sí se puede**. Sin esa guarda, un
- * dedazo en el username de Cerberus escribe una regla válida y **todos los leads
- * de esa campaña le caen a alguien que no existe** — que es peor que el problema
- * original, porque hasta el round-robin le encontraba dueño.
+ * **Cada destino se VERIFICA** contra los mismos `destinosPosibles` del reparto:
+ * un dedazo en el username de Cerberus escribiría un cable válido y **todos los
+ * leads de esa campaña le caerían a alguien que no existe** — peor que el
+ * round-robin, que al menos les encontraba dueño. El 409 enumera a quién sí.
  */
 routingRouter.put("/campanas/:campanaId", async (req, res) => {
   const linea = lineaDeCloudApi();
@@ -107,41 +113,38 @@ routingRouter.put("/campanas/:campanaId", async (req, res) => {
     res.status(400).json({ ok: false, message: "falta la campaña" });
     return;
   }
-  const parsed = reglaSchema.safeParse(req.body);
+  const parsed = cablesSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ ok: false, message: "se espera `vendedoraId` (o `null` para sacarla)" });
+    res.status(400).json({ ok: false, message: "se espera `vendedoras` (un arreglo, `[]` para cortar todos)" });
     return;
   }
-  const { vendedoraId } = parsed.data;
+  const pedidas = [...new Set(parsed.data.vendedoras.map((v) => v.trim()).filter(Boolean))];
 
   try {
-    if (vendedoraId === null) {
-      const habia = await sacarRegla(db, linea, campanaId);
-      res.json({ ok: true, campanaId, vendedoraId: null, habia });
-      return;
+    if (pedidas.length > 0) {
+      const [enLaRueda, numero] = await Promise.all([
+        vendedorasDeLaRueda(db, linea),
+        obtenerNumero(db, linea).catch(() => null),
+      ]);
+      const destinos = destinosPosibles({ rueda: enLaRueda, mapa: numero?.vendedoras ?? [] });
+      const desconocidas = pedidas.filter((v) => !esDestinoValido(v, destinos));
+      if (desconocidas.length > 0) {
+        res.status(409).json({
+          ok: false,
+          motivo: "vendedora_desconocida",
+          message:
+            `${desconocidas.map((d) => `«${d}»`).join(", ")} no participa de la línea ${linea}. ` +
+            (destinos.length
+              ? `Se le puede dar a: ${destinos.join(", ")}.`
+              : "Esa línea todavía no tiene a nadie en el reparto (`npm run reparto:rueda`)."),
+          destinos,
+        });
+        return;
+      }
     }
 
-    const [enLaRueda, numero] = await Promise.all([
-      vendedorasDeLaRueda(db, linea),
-      obtenerNumero(db, linea).catch(() => null),
-    ]);
-    const destinos = destinosPosibles({ rueda: enLaRueda, mapa: numero?.vendedoras ?? [] });
-    if (!esDestinoValido(vendedoraId, destinos)) {
-      res.status(409).json({
-        ok: false,
-        motivo: "vendedora_desconocida",
-        message:
-          `«${vendedoraId}» no participa de la línea ${linea}. ` +
-          (destinos.length
-            ? `Se le puede dar a: ${destinos.join(", ")}.`
-            : "Esa línea todavía no tiene a nadie en el reparto (`npm run reparto:rueda`)."),
-        destinos,
-      });
-      return;
-    }
-
-    await ponerRegla(db, linea, campanaId, vendedoraId, req.vendedoraId ?? "");
-    res.json({ ok: true, campanaId, vendedoraId });
+    await ponerCables(db, linea, campanaId, pedidas, req.vendedoraId ?? "");
+    res.json({ ok: true, campanaId, vendedoras: pedidas });
   } catch (e) {
     res.status(500).json({ ok: false, message: (e as Error).message });
   }
@@ -177,15 +180,32 @@ routingRouter.post("/refrescar", async (req, res) => {
   try {
     const todo = req.query.todo === "1";
     const [vistos, mapa] = await Promise.all([anunciosVistos(db), mapaDeAnuncios(db)]);
+
+    /**
+     * 🔴 PRIMERO EL CATÁLOGO DE CAMPAÑAS, Y ES LO QUE HACE ÚTIL LA PANTALLA.
+     * Sin esto la lista solo puede mostrar campañas que YA trajeron gente, y el
+     * momento en que querés dejar el cable puesto es justamente antes del primer
+     * lead. Trae también a qué número manda cada una, que es lo que permite
+     * ofrecer solo las que esta línea puede recibir.
+     */
+    const cuentas = await cuentasDePauta([...vistos.map((v) => v.adId), ...mapa.keys()], cliente);
+    let campanas = 0;
+    for (const cuenta of cuentas) {
+      campanas += await guardarCampanas(db, await campanasDeWhatsapp(cuenta, cliente));
+    }
+
+    // Y después los anuncios nuevos: el webhook resuelve `ad_id → campaña`
+    // contra esta tabla, así que sin ella un lead cae a la rueda aunque su
+    // campaña tenga cables.
     const pedir = vistos.map((v) => v.adId).filter((ad) => todo || !mapa.has(ad));
     if (pedir.length === 0) {
-      res.json({ ok: true, preguntados: 0, resueltos: 0, fallaron: [] });
+      res.json({ ok: true, campanas, preguntados: 0, resueltos: 0, fallaron: [] });
       return;
     }
 
     const { resueltos, fallaron } = await resolverAnuncios(pedir, cliente);
     const guardados = await guardarAnuncios(db, resueltos);
-    res.json({ ok: true, preguntados: pedir.length, resueltos: guardados, fallaron });
+    res.json({ ok: true, campanas, preguntados: pedir.length, resueltos: guardados, fallaron });
   } catch (e) {
     res.status(502).json({ ok: false, motivo: "meta_no_contesto", message: (e as Error).message });
   }

@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { db as Base } from "../db/client.js";
-import { campanaAnuncio, campanaRuteo } from "../db/routing.js";
-import { leerEstado, ordenarCampanas, type CampanaEnRouting } from "./dominio.js";
+import { campanaAnuncio, campanaMeta, campanaRuteo } from "../db/routing.js";
+import { leerEstado, llegaALaLinea, ordenarCampanas, type CampanaEnRouting } from "./dominio.js";
 
 /**
  * LO QUE LEE Y ESCRIBE EL RUTEO. El veredicto vive en `dominio.ts` (puro); acá
@@ -72,23 +72,49 @@ export async function mapaDeAnuncios(base: typeof Base) {
   return new Map(filas.map((f) => [f.adId, f]));
 }
 
-/** Las reglas de una línea: campaña → vendedora. */
-export async function reglasDe(base: typeof Base, numeroPropio: string) {
+/**
+ * LOS CABLES DE UNA LÍNEA: campaña → el conjunto de vendedoras conectadas.
+ *
+ * Devuelve el conjunto ORDENADO. El orden no decide a quién le toca —eso lo hace
+ * la carga— pero sí que dos aperturas de la pantalla dibujen los mismos cables
+ * en el mismo lugar.
+ */
+export async function cablesDe(base: typeof Base, numeroPropio: string) {
   const filas = await base
-    .select({
-      campanaId: campanaRuteo.campanaId,
-      vendedoraId: campanaRuteo.vendedoraId,
-      asignadaPor: campanaRuteo.asignadaPor,
-    })
+    .select({ campanaId: campanaRuteo.campanaId, vendedoraId: campanaRuteo.vendedoraId })
     .from(campanaRuteo)
     .where(eq(campanaRuteo.numeroPropio, numeroPropio));
-  return new Map(filas.map((f) => [f.campanaId, f]));
+
+  const por = new Map<string, string[]>();
+  for (const f of filas) por.set(f.campanaId, [...(por.get(f.campanaId) ?? []), f.vendedoraId]);
+  for (const [k, v] of por) por.set(k, v.sort((a, b) => a.localeCompare(b, "es")));
+  return por;
+}
+
+/** El catálogo de campañas que Meta conoce, con los números a los que mandan. */
+export async function campanasConocidas(base: typeof Base) {
+  return base
+    .select({
+      campanaId: campanaMeta.campanaId,
+      nombre: campanaMeta.nombre,
+      estado: campanaMeta.estado,
+      numeros: campanaMeta.numeros,
+      actualizadoAt: campanaMeta.actualizadoAt,
+    })
+    .from(campanaMeta);
 }
 
 export interface FotoDeRouting {
   campanas: CampanaEnRouting[];
   /** Anuncios que trajeron gente y todavía no se resolvieron contra Meta. */
   anunciosSinResolver: number;
+  /**
+   * Campañas de la cuenta que mandan a WhatsApp pero **no a esta línea**. No se
+   * listan —no se pueden rutear— pero se CUENTAN: sin este número la pantalla
+   * afirmaría «estas son todas las campañas» sobre una cuenta donde, medido el
+   * 12-ago-2026, dieciséis de diecisiete adsets activos mandan a otro lado.
+   */
+  campanasEnOtraLinea: number;
   /** Cuándo se le preguntó a Meta por última vez. `null` = nunca. */
   actualizadoAt: string | null;
   /** Sin las tablas migradas la pantalla lo dice en vez de mostrar una lista vacía. */
@@ -98,10 +124,15 @@ export interface FotoDeRouting {
 /**
  * LA FOTO QUE VE LA PANTALLA.
  *
- * ⚠️ **Los anuncios sin resolver se CUENTAN, no se esconden.** Son el único
- * motivo por el que una campaña que está trayendo gente puede no aparecer en la
- * lista, y sin ese número la pantalla afirmaría «estas son todas» sobre una
- * lista incompleta. Es la lección de la galería que mostraba el caso ideal.
+ * 🔴 **La lista sale del catálogo de META, no de `events`.** El primer borrador
+ * la derivaba de los click-to-WhatsApp recibidos, y eso deja afuera justo el caso
+ * que importa: una campaña estrenada hoy, que es cuando querés dejar el cable
+ * puesto ANTES del primer lead. El volumen observado se suma como dato de la
+ * fila, no como condición para existir.
+ *
+ * 🔴 **Y se recorta a las que mandan a ESTA línea** (`llegaALaLinea`). Ofrecer un
+ * cable sobre una campaña que apunta a otro teléfono sería ofrecer un cable que
+ * no puede llevar nada: el lead entra por un número que este server no atiende.
  */
 export async function fotoDeRouting(
   base: typeof Base,
@@ -110,45 +141,69 @@ export async function fotoDeRouting(
 ): Promise<FotoDeRouting> {
   let vistos: AnuncioVisto[];
   let mapa: Awaited<ReturnType<typeof mapaDeAnuncios>>;
-  let reglas: Awaited<ReturnType<typeof reglasDe>>;
+  let cables: Awaited<ReturnType<typeof cablesDe>>;
+  let catalogo: Awaited<ReturnType<typeof campanasConocidas>>;
   try {
-    [vistos, mapa, reglas] = await Promise.all([
+    [vistos, mapa, cables, catalogo] = await Promise.all([
       anunciosVistos(base, dias),
       mapaDeAnuncios(base),
-      reglasDe(base, numeroPropio),
+      cablesDe(base, numeroPropio),
+      campanasConocidas(base),
     ]);
   } catch {
-    return { campanas: [], anunciosSinResolver: 0, actualizadoAt: null, sinMigracion: true };
+    return {
+      campanas: [],
+      anunciosSinResolver: 0,
+      campanasEnOtraLinea: 0,
+      actualizadoAt: null,
+      sinMigracion: true,
+    };
   }
 
-  const porCampana = new Map<string, CampanaEnRouting>();
+  // El volumen observado, por campaña. Un anuncio sin resolver no suma a ninguna.
+  const volumen = new Map<string, { anuncios: number; personas: number; ultima: string }>();
   let sinResolver = 0;
-  let ultimoRefresco: Date | null = null;
-
   for (const v of vistos) {
-    const info = mapa.get(v.adId);
-    if (!info) {
+    const campanaId = mapa.get(v.adId)?.campanaId;
+    if (!campanaId) {
       sinResolver++;
       continue;
     }
-    if (!ultimoRefresco || info.actualizadoAt > ultimoRefresco) ultimoRefresco = info.actualizadoAt;
-
-    const previa = porCampana.get(info.campanaId);
-    porCampana.set(info.campanaId, {
-      campanaId: info.campanaId,
-      nombre: info.campanaNombre,
-      estado: leerEstado(info.estado),
+    const previa = volumen.get(campanaId);
+    volumen.set(campanaId, {
       anuncios: (previa?.anuncios ?? 0) + 1,
       personas: (previa?.personas ?? 0) + v.personas,
-      ultima:
-        previa?.ultima && previa.ultima > v.ultima ? previa.ultima : v.ultima,
-      vendedoraId: reglas.get(info.campanaId)?.vendedoraId ?? null,
+      ultima: previa?.ultima && previa.ultima > v.ultima ? previa.ultima : v.ultima,
+    });
+  }
+
+  let ultimoRefresco: Date | null = null;
+  let enOtraLinea = 0;
+  const campanas: CampanaEnRouting[] = [];
+  for (const c of catalogo) {
+    if (!ultimoRefresco || c.actualizadoAt > ultimoRefresco) ultimoRefresco = c.actualizadoAt;
+    if (!llegaALaLinea(c.numeros, numeroPropio)) {
+      // Solo cuentan las que mandan a ALGÚN WhatsApp: una campaña de tráfico web
+      // no es «de otra línea», simplemente no es de este frente.
+      if (c.numeros.length > 0) enOtraLinea++;
+      continue;
+    }
+    const v = volumen.get(c.campanaId);
+    campanas.push({
+      campanaId: c.campanaId,
+      nombre: c.nombre,
+      estado: leerEstado(c.estado),
+      anuncios: v?.anuncios ?? 0,
+      personas: v?.personas ?? 0,
+      ultima: v?.ultima ?? null,
+      vendedoras: cables.get(c.campanaId) ?? [],
     });
   }
 
   return {
-    campanas: ordenarCampanas([...porCampana.values()]),
+    campanas: ordenarCampanas(campanas),
     anunciosSinResolver: sinResolver,
+    campanasEnOtraLinea: enOtraLinea,
     actualizadoAt: ultimoRefresco?.toISOString() ?? null,
     sinMigracion: false,
   };
@@ -176,64 +231,61 @@ export async function guardarAnuncios(
 }
 
 /**
- * Pone (o cambia) la regla de una campaña.
+ * DEJA LOS CABLES DE UNA CAMPAÑA EXACTAMENTE COMO SE PIDIÓ.
  *
- * ⚠️ **No reasigna nada de lo ya repartido**, a propósito: la regla se aplica en
- * el primer mensaje de cada conversación. Mover conversaciones en curso por
- * cambiar una regla haría que una charla cambie de manos a mitad de camino.
+ * 🔴 **Es declarativo y reemplaza el conjunto entero**, no un `connect`/`disconnect`
+ * por cable. Con operaciones incrementales, dos personas editando la misma
+ * campaña se pisan y ninguna se entera: la última en apretar cree que sumó un
+ * cable y en realidad borró el de la otra. Mandando el conjunto completo, lo que
+ * quedó guardado es lo que la pantalla mostraba.
+ *
+ * ⚠️ **Borra y reinserta adentro de UNA transacción.** Sin ella, una caída entre
+ * el DELETE y el INSERT deja la campaña sin ningún cable —o sea, repartiendo por
+ * la rueda general— que es un estado que nadie pidió.
+ *
+ * Lista vacía = se cortan todos los cables y la campaña vuelve a la rueda.
  */
-export async function ponerRegla(
+export async function ponerCables(
   base: typeof Base,
   numeroPropio: string,
   campanaId: string,
-  vendedoraId: string,
-  quienLaPone: string,
+  vendedoras: readonly string[],
+  quienLosPone: string,
 ): Promise<void> {
-  await base
-    .insert(campanaRuteo)
-    .values({ numeroPropio, campanaId, vendedoraId, asignadaPor: quienLaPone })
-    .onConflictDoUpdate({
-      target: [campanaRuteo.numeroPropio, campanaRuteo.campanaId],
-      set: { vendedoraId, asignadaPor: quienLaPone, asignadaEn: new Date() },
-    });
+  const unicas = [...new Set(vendedoras.map((v) => v.trim()).filter(Boolean))];
+  await base.transaction(async (tx) => {
+    await tx
+      .delete(campanaRuteo)
+      .where(
+        and(eq(campanaRuteo.numeroPropio, numeroPropio), eq(campanaRuteo.campanaId, campanaId)),
+      );
+    if (unicas.length === 0) return;
+    await tx.insert(campanaRuteo).values(
+      unicas.map((vendedoraId) => ({
+        numeroPropio,
+        campanaId,
+        vendedoraId,
+        asignadaPor: quienLosPone,
+      })),
+    );
+  });
 }
 
 /**
- * Saca la regla: la campaña vuelve a la rueda.
+ * A QUIÉNES LES PUEDE CAER ESTE ANUNCIO — la consulta que hace el webhook.
  *
- * **Se BORRA la fila** y no se marca de baja, al revés que `reparto_rueda`. Ahí
- * la baja lógica conserva a quién pertenecían las conversaciones; acá la fila no
- * es de nadie —es una preferencia— y una fila «inactiva» solo daría la duda de
- * si sigue mandando.
+ * 🔴 **Vacío ante cualquier duda, y vacío es «que decida la rueda»**. El `try` es
+ * parte del contrato: el reparto no puede tumbar la ingesta de un mensaje.
  */
-export async function sacarRegla(
-  base: typeof Base,
-  numeroPropio: string,
-  campanaId: string,
-): Promise<boolean> {
-  const filas = await base
-    .delete(campanaRuteo)
-    .where(and(eq(campanaRuteo.numeroPropio, numeroPropio), eq(campanaRuteo.campanaId, campanaId)))
-    .returning({ campanaId: campanaRuteo.campanaId });
-  return filas.length > 0;
-}
-
-/**
- * A QUIÉN LE CAE ESTE ANUNCIO — la consulta que hace el webhook, en UN viaje.
- *
- * 🔴 **Devuelve `null` ante cualquier duda, y `null` es «que decida la rueda»**
- * (ver `aQuienLeCae` en `dominio.ts`). El `try` es parte del contrato: el
- * reparto no puede tumbar la ingesta de un mensaje.
- */
-export async function duenoPorCampana(
+export async function duenosPorCampana(
   base: typeof Base,
   numeroPropio: string,
   adId: string | null | undefined,
-): Promise<string | null> {
+): Promise<string[]> {
   const ad = (adId ?? "").trim();
-  if (!ad) return null;
+  if (!ad) return [];
   try {
-    const [fila] = await base
+    const filas = await base
       .select({ vendedoraId: campanaRuteo.vendedoraId })
       .from(campanaAnuncio)
       .innerJoin(
@@ -243,10 +295,30 @@ export async function duenoPorCampana(
           eq(campanaRuteo.numeroPropio, numeroPropio),
         ),
       )
-      .where(eq(campanaAnuncio.adId, ad))
-      .limit(1);
-    return fila?.vendedoraId ?? null;
+      .where(eq(campanaAnuncio.adId, ad));
+    return filas.map((f) => f.vendedoraId).sort((a, b) => a.localeCompare(b, "es"));
   } catch {
-    return null;
+    return [];
   }
+}
+
+/** Guarda el catálogo de campañas que contestó Meta. Idempotente: refleja el hoy. */
+export async function guardarCampanas(
+  base: typeof Base,
+  filas: readonly { campanaId: string; nombre: string; estado: string; numeros: string[] }[],
+): Promise<number> {
+  if (filas.length === 0) return 0;
+  await base
+    .insert(campanaMeta)
+    .values(filas.map((f) => ({ ...f, actualizadoAt: new Date() })))
+    .onConflictDoUpdate({
+      target: campanaMeta.campanaId,
+      set: {
+        nombre: sql`excluded.nombre`,
+        estado: sql`excluded.estado`,
+        numeros: sql`excluded.numeros`,
+        actualizadoAt: sql`excluded.actualizado_at`,
+      },
+    });
+  return filas.length;
 }
