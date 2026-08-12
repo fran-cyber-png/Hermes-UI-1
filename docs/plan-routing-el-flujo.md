@@ -155,27 +155,55 @@ Hoy «Aplicar a las 4» compite con el arrastre por el mismo espacio mental.
 - ⚠️ **Se mantiene la decisión del 12-ago**: cablear el producto ESCRIBE en cada pieza, no crea una
   regla que hereden. Esta fase no la toca.
 
-### ✅ Fase 3 — Multi-nivel: entrar en un nodo sin perder el flujo
+### ✅ Fase 3 — Entrar en un nodo **sin perder el flujo** (rehecha el 12-ago)
 
-El pedido: *«si quiero entrar en la campaña dentro del flujo»*.
+> ⚠️ **Se implementó y estaba mal, y el dueño lo vio en la primera captura**:
+> *«sale así pero no sale el producto atrás de todo, tiene que ser más fácil de
+> interactuar y vigilar todo»*.
 
-```
-  NIVEL 1   producto ──► piezas ──► vendedoras
-                            │
-                     (entrar en una campaña)
-                            ▼
-  NIVEL 2   campaña ──► sus anuncios ──► vendedoras
-              [AGO] OSINT      4 anuncios, 33 personas
-```
+La primera versión **bajaba un nivel**: entrar en una campaña reemplazaba el
+lienzo entero por `sus anuncios · la campaña · vendedoras`. O sea que para ver el
+detalle de una pieza **había que perder de vista el producto al que pertenece y
+las campañas hermanas** — justo el contexto que hace falta para decidir a quién
+darle el tráfico.
 
-- **Una miga de pan arriba** (`Consultor Político › [AGO] OSINT`) y `Esc` para subir. No es un router
-  (ADR 0002): es estado local de la vista.
-- 🔴 **El nivel del anuncio es de SOLO LECTURA, y hay que decirlo.** El reparto resuelve
-  `ad_id → campaña → vendedoras`: **no existe una regla por anuncio**. Dibujar puertos conectables
-  ahí prometería un control que el server no tiene. Se muestran para entender de dónde vino el
-  volumen, nada más.
-- Al entrar se ve lo que el nivel de arriba esconde: qué anuncio trajo las 33 personas, cuál está
-  pausado, y **a qué número manda cada adset** — que es el agujero más grande del §1.1.
+**Lo que se hizo en su lugar: la campaña se ABRE EN SU LUGAR.** Sus anuncios
+salen dentro del nodo (lista de solo lectura, con tope de alto) y todo lo demás
+se queda donde estaba. Abrir **suma detalle y no cambia la topología** — hay test
+que compara las columnas abierta y cerrada y exige que sean las mismas.
+
+· Los anuncios **no llevan puerto**: no existe una regla por anuncio (el reparto
+  resuelve `ad_id → campaña → vendedoras`), y dibujarles uno prometería un
+  control que el server no tiene. Eso era, literalmente, uno de los cables
+  fantasma que la auditoría encontró.
+· `Escape` cierra. La miga de pan se retiró: no hay a dónde volver si nunca te
+  fuiste.
+· «No se pudo preguntar» ≠ «no hay anuncios»: la apertura tiene **tres** estados.
+
+### ✅ Fase 3b — El producto se cablea derecho a la vendedora (12-ago)
+
+Pedido del dueño: *«si quiero enlazar de frente el producto con la vendedora que
+se haga las conexiones automáticamente»*. El puerto del producto ahora **saltea
+sus piezas y llega a la vendedora**; al soltar, se escribe el cable en cada una
+de sus campañas y formularios (medido: **+4 cables en un gesto**).
+
+· 🔴 **El arrastre manda `agregar`/`quitar`, nunca `reemplazar`.** Un gesto de un
+  dedo no puede borrarle a las otras piezas las vendedoras que ya tenían. Para
+  eso está el botón, que dice explícitamente qué va a pisar.
+· El cable del producto **se deriva**: existe solo si TODAS sus piezas lo tienen.
+  Sin tercera tabla que se pueda desincronizar, y sin mentir cuando hay mezcla.
+
+### ✅ Fase 3c — ⌘Z (12-ago)
+
+Guarda la **operación inversa**, no una foto del estado: con fotos, deshacer
+pisaría lo que otra supervisora guardó mientras tanto. Viaja por el mismo camino
+que un gesto, así que un `409` la revierte sola. Tope de 50.
+
+· ⚠️ **La acción masiva queda afuera del atajo, a propósito**: su inversa
+  necesita los conjuntos previos pieza por pieza, y un deshacer que falla en el
+  medio deja el producto a mitad de camino sin que nadie lo sepa.
+· El atajo **se anuncia** en la cabecera cuando hay algo que deshacer: nadie
+  prueba ⌘Z en una pantalla de configuración por las dudas.
 
 ### Fase 4 — Los agujeros del flujo, a la vista
 
@@ -211,13 +239,22 @@ mandarla a otro, que es escribir en `alias_curso`.
 
 ---
 
-## 5. Orden sugerido
+## 5. Qué queda, en orden
 
-1. **Fase 1** — es la que arregla el «no se entiende», y es independiente de todo lo demás.
-2. **Fase 3** — el multi-nivel, que es el otro pedido explícito.
-3. **Fase 2** — la masiva, una vez que el gesto principal ya está claro.
-4. **Fase 4** — los agujeros; vale por sí sola aunque no se haga nada más.
-5. **Fase 5** — el diccionario, con ADR propio.
+1. **Fase 4 — los agujeros del flujo, a la vista.** Hoy son un renglón de aviso
+   («otras 42 campañas mandan gente a números que Hermes no atiende»). Es la
+   cifra más cara de la pantalla y merece ser un nodo, no una nota al pie.
+2. **Fase 5 — corregir el producto de una pieza** (editar `alias_curso` desde la
+   app). 25 de 44 campañas de Meta no resuelven familia y hoy solo se pueden
+   cablear sueltas. Necesita ADR propio: toca el catálogo que leen la cola y el
+   Dashboard.
+3. **Lo chico que la auditoría dejó anotado** y no entró todavía: el arrastre se
+   dispara con cualquier botón del mouse; dos dedos a la vez cierran el cable del
+   otro; la franja de error se queda pegada y el `??` tapa un error más nuevo; con
+   la rueda vacía la columna «Vendedoras» queda muda en vez de explicarse.
+
+⚠️ **Nada de esto va a producción sin N5** (toca `server/`), y el runner de VPS1
+serializa: contá ~20 min de cola.
 
 ## 6. Lo que hay que medir después, no antes
 
