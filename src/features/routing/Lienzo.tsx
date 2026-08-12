@@ -56,14 +56,12 @@ export function Lienzo({
   onConectar,
   onCortar,
   onEntrar,
-  deshabilitado = false,
 }: {
   columnas: ColumnaLienzo[];
   cables: CableLienzo[];
   onConectar: (de: string, a: string) => void;
   onCortar: (de: string, a: string) => void;
   onEntrar?: (id: string) => void;
-  deshabilitado?: boolean;
 }) {
   const marco = useRef<HTMLDivElement>(null);
   const puertos = useRef(new Map<string, { izq?: HTMLElement; der?: HTMLElement }>());
@@ -127,7 +125,6 @@ export function Lienzo({
   }
 
   function alBajarEnPuerto(e: React.PointerEvent, id: string) {
-    if (deshabilitado) return;
     e.preventDefault();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     const base = marco.current?.getBoundingClientRect();
@@ -155,7 +152,6 @@ export function Lienzo({
   }
 
   function alTeclaEnPuerto(e: React.KeyboardEvent, id: string, lado: 'izq' | 'der') {
-    if (deshabilitado) return;
     if (e.key === 'Escape' && armado) {
       e.preventDefault();
       setArmado(null);
@@ -193,7 +189,7 @@ export function Lienzo({
             {/* El trazo grueso invisible es el área de clic: 2 px de cable es
                 imposible de acertar con el mouse, y sin esto «tocá el cable para
                 cortarlo» sería una promesa que falla nueve de cada diez veces. */}
-            {t.cable.tipo === 'regla' && !deshabilitado && (
+            {t.cable.tipo === 'regla' && (
               <path
                 d={t.d}
                 fill="none"
@@ -245,7 +241,6 @@ export function Lienzo({
               primera={i === 0}
               ultima={i === columnas.length - 1}
               armado={armado === n.id}
-              deshabilitado={deshabilitado}
               destinoPosible={Boolean(arrastre || armado) && sePuedeUnir(columnas, arrastre?.de ?? armado, n.id)}
               conectado={
                 (arrastre?.de ?? armado) ? conectado((arrastre?.de ?? armado)!, n.id) : false
@@ -260,7 +255,7 @@ export function Lienzo({
                   setArmado(null);
                 }
               }}
-              onEntrar={n.entrar && onEntrar ? () => onEntrar(n.entrar!) : undefined}
+              onEntrar={n.abrible && onEntrar ? () => onEntrar(n.id) : undefined}
             />
           ))}
         </div>
@@ -276,7 +271,6 @@ function Nodo({
   primera,
   ultima,
   armado,
-  deshabilitado,
   destinoPosible,
   conectado,
   registrar,
@@ -289,7 +283,6 @@ function Nodo({
   primera: boolean;
   ultima: boolean;
   armado: boolean;
-  deshabilitado: boolean;
   destinoPosible: boolean;
   conectado: boolean;
   registrar: (id: string, lado: 'izq' | 'der', el: HTMLElement | null) => void;
@@ -307,7 +300,6 @@ function Nodo({
           data-puerto-izq={nodo.id}
           onKeyDown={(e) => onTecla(e, nodo.id, 'izq')}
           onClick={onTocar}
-          disabled={deshabilitado}
           aria-label={`Puerto de entrada de ${nodo.titulo}`}
           ref={(el) => registrar(nodo.id, 'izq', el)}
           className={
@@ -321,27 +313,70 @@ function Nodo({
       <div
         className={
           'rounded-xl border bg-card px-2.5 py-2 transition-[border-color,background-color] duration-200 ease-house ' +
-          (destinoPosible ? 'border-navy/50 bg-navy/5' : 'border-border') +
+          (destinoPosible ? 'border-navy/50 bg-navy/5' : nodo.abierto ? 'border-navy/30' : 'border-border') +
           (nodo.estado === 'pausada' ? ' opacity-70' : '')
         }
       >
-        <p className="flex items-center gap-1.5">
-          <Icono size={12} strokeWidth={2} className="shrink-0 text-muted-foreground" aria-hidden />
-          <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">
+        <p className="flex items-start gap-1.5">
+          <Icono
+            size={12}
+            strokeWidth={2}
+            className="mt-0.5 shrink-0 text-muted-foreground"
+            aria-hidden
+          />
+          {/* ⚠️ Dos renglones y no `truncate`: los nombres reales son «Diploma
+              Internacional de Inteligencia y Contrainteligencia», y cortados no
+              se distinguen entre sí — que es justo lo que hay que mirar acá. */}
+          <span
+            title={nodo.titulo}
+            className="min-w-0 flex-1 text-[11px] font-medium leading-snug text-foreground [display:-webkit-box] [overflow:hidden] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
+          >
             {nodo.titulo}
           </span>
           {onEntrar && (
             <button
               type="button"
               onClick={onEntrar}
-              aria-label={`Entrar en ${nodo.titulo}`}
+              aria-expanded={Boolean(nodo.abierto)}
+              aria-label={`${nodo.abierto ? 'Cerrar' : 'Ver'} los anuncios de ${nodo.titulo}`}
               className="-mr-1 shrink-0 rounded p-0.5 text-muted-foreground transition-colors duration-200 ease-house hover:text-navy focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
             >
-              <ChevronRight size={13} strokeWidth={2.2} />
+              <ChevronRight
+                size={13}
+                strokeWidth={2.2}
+                className={
+                  'transition-transform duration-200 ease-house ' + (nodo.abierto ? 'rotate-90' : '')
+                }
+              />
             </button>
           )}
         </p>
         {nodo.pie && <p className="truncate pl-[18px] text-[10px] text-muted-foreground">{nodo.pie}</p>}
+
+        {/* LO DE ADENTRO. Va DENTRO de la tarjeta y no en una columna aparte: los
+            anuncios no se cablean, y sacarlos afuera obligaría a mover el
+            producto y las campañas hermanas fuera de la vista. */}
+        {/* ⚠️ Con tope de alto: hay campañas de 40 anuncios y sin esto el nodo
+            empuja al producto y a las hermanas fuera de la pantalla — que es
+            exactamente lo que este cambio vino a evitar. */}
+        {nodo.abierto && (
+          <div className="mt-1.5 max-h-44 space-y-1 overflow-y-auto border-t border-border pt-1.5">
+            {nodo.cargando ? (
+              <p className="pl-[18px] text-[10px] text-muted-foreground">Buscando sus anuncios…</p>
+            ) : (nodo.adentro ?? []).length === 0 ? (
+              <p className="pl-[18px] text-[10px] text-muted-foreground">
+                Ningún anuncio suyo trajo gente en la ventana.
+              </p>
+            ) : (
+              (nodo.adentro ?? []).map((a) => (
+                <p key={a.id} className="flex items-baseline gap-1.5 pl-[18px]">
+                  <span className="min-w-0 flex-1 truncate text-[10px] text-foreground">{a.titulo}</span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">{a.pie}</span>
+                </p>
+              ))
+            )}
+          </div>
+        )}
       </div>
 
       {!ultima && (
@@ -350,7 +385,6 @@ function Nodo({
           data-puerto-der={nodo.id}
           onPointerDown={(e) => onBajar(e, nodo.id)}
           onKeyDown={(e) => onTecla(e, nodo.id, 'der')}
-          disabled={deshabilitado}
           aria-label={`Tirar un cable desde ${nodo.titulo}`}
           aria-pressed={armado}
           ref={(el) => registrar(nodo.id, 'der', el)}

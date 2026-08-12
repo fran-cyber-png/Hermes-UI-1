@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ChevronRight, RefreshCw, Route, Search } from 'lucide-react';
 import { Lienzo } from './Lienzo';
 import { conCambio, destinosDe, type CableLienzo } from './reglasDelLienzo';
@@ -7,7 +7,6 @@ import {
   cablesDe,
   cablesHuerfanos,
   columnasDePieza,
-  columnasDeCampanaAdentro,
   columnasDeProducto,
   leerId,
   piezasDe,
@@ -70,26 +69,65 @@ export function VistaRouting() {
   const [filtro, setFiltro] = useState<Filtro>('todo');
   const [elegido, setElegido] = useState<string | null>(null);
   /**
-   * EL NIVEL DE ADENTRO. `null` = el lienzo de siempre. No es un router
-   * (ADR 0002): es estado de la vista, y `Esc` sube.
+   * QUÉ CAMPAÑA ESTÁ ABIERTA. `null` = ninguna. **No baja un nivel**: se abre
+   * dentro del mismo lienzo, así que el producto y las hermanas no se van.
    */
-  const [adentro, setAdentro] = useState<string | null>(null);
+  const [abierta, setAbierta] = useState<string | null>(null);
   const [cables, setCables] = useState<CableLienzo[]>([]);
-  const anuncios = useAnunciosDeCampana(adentro ? leerId(adentro).clave : null);
+  const anuncios = useAnunciosDeCampana(abierta ? leerId(abierta).clave : null);
+
+  /**
+   * EL ESPEJO DE `cables`, para poder leer el estado ACTUAL desde un manejador.
+   *
+   * 🔴 **Es la condición para haber sacado el congelamiento** (ver `aplicar`).
+   * Mientras el lienzo se apagaba al guardar, dos gestos no podían solaparse y
+   * `cables` del closure alcanzaba. Ahora sí se solapan: dos cables seguidos
+   * desde el MISMO origen leerían los dos el mismo estado viejo, y el segundo
+   * `PUT` —que declara el conjunto COMPLETO— borraría el cable del primero.
+   *
+   * ⚠️ **La carrera no se pudo gatillar desde Playwright** (12-ago-2026): entre
+   * gesto y gesto React alcanza a re-renderizar. O sea que esto NO tapa un
+   * defecto observado: cierra una ventana que un dedo rápido sí puede abrir y
+   * que, cuando se abriera, sería muda.
+   */
+  const espejo = useRef<CableLienzo[]>([]);
+
+  /** `Escape` cierra la campaña abierta. En captura: el foco suele estar en un puerto. */
+  useEffect(() => {
+    if (!abierta) return;
+    function alTeclear(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      setAbierta(null);
+    }
+    window.addEventListener('keydown', alTeclear, true);
+    return () => window.removeEventListener('keydown', alTeclear, true);
+  }, [abierta]);
 
   const piezas = data ? piezasDe(data) : [];
   const productos = data ? productosDe(data, piezas) : [];
 
+  const guardando = conectar.isPending || conectarCurso.isPending || conectarProducto.isPending;
+
   /**
-   * LA FOTO DEL SERVER SIEMPRE GANA. Al llegar datos nuevos —después de guardar,
-   * o de un rechazo— los cables se rearman de lo guardado. Es lo que revierte un
-   * cable que el server no aceptó, sin que la pantalla tenga que saber por qué.
+   * LA FOTO DEL SERVER SIEMPRE GANA — **pero recién cuando no queda nada en
+   * vuelo.** Al llegar datos nuevos los cables se rearman de lo guardado, y eso
+   * es lo que revierte un cable que el server no aceptó, sin que la pantalla
+   * tenga que saber por qué.
+   *
+   * 🔴 **El `!guardando` es la mitad que faltaba.** Con dos gestos seguidos, el
+   * refetch del primero aterriza mientras el segundo todavía viaja, y esa foto
+   * —correcta, pero vieja— borra el cable recién tirado. Se veía como «a veces
+   * se rompe»: el cable desaparecía y la regla quedaba guardada igual.
    */
   const huella = piezas.map((p) => `${p.id}=${p.vendedoras.join(',')}`).join('|');
   useEffect(() => {
-    setCables(cablesDe(piezas, data?.destinos ?? []));
+    if (guardando) return;
+    const desdeElServer = cablesDe(piezas, data?.destinos ?? []);
+    espejo.current = desdeElServer;
+    setCables(desdeElServer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [huella, (data?.destinos ?? []).join('|')]);
+  }, [huella, (data?.destinos ?? []).join('|'), guardando]);
 
   if (isLoading) {
     return (
@@ -136,28 +174,49 @@ export function VistaRouting() {
   const producto = productoElegido ?? (piezaElegida ? null : (productosVisibles[0] ?? null));
   const pieza = piezaElegida ?? (producto ? null : (sueltasVisibles[0] ?? null));
 
-  const campanaAdentro = adentro ? (piezas.find((p) => p.id === adentro) ?? null) : null;
-  const armado = campanaAdentro
-    ? columnasDeCampanaAdentro(campanaAdentro, anuncios.data?.anuncios ?? [], data.destinos)
-    : producto
-      ? columnasDeProducto(producto, data.destinos)
-      : { columnas: pieza ? columnasDePieza(pieza, data.destinos) : [], pertenencia: [] };
+  /**
+   * ⚠️ Lo abierto se limpia solo si dejó de estar en pantalla (cambió el filtro,
+   * la búsqueda o el producto): si no, la campaña quedaría «abierta» invisible y
+   * al volver aparecería desplegada sin que nadie la tocara.
+   */
+  const apertura = {
+    id: armadoVisible(abierta, producto, pieza),
+    anuncios: anuncios.data?.anuncios ?? [],
+    cargando: anuncios.isLoading,
+  };
+  const armado = producto
+    ? columnasDeProducto(producto, data.destinos, apertura)
+    : { columnas: pieza ? columnasDePieza(pieza, data.destinos, apertura) : [], pertenencia: [] };
 
   /**
    * 🔴 GUARDA EL CONJUNTO COMPLETO DEL ORIGEN, no el cable suelto. El server es
    * declarativo (`PUT` con el arreglo entero) porque con `conectar`/`desconectar`
    * dos personas editando lo mismo se pisan: la última cree que sumó un cable y
    * en realidad borró el de la otra.
+   *
+   * 🔴 **GUARDAR AVISA, NO CONGELA — y esto ES «a veces se rompe».** El lienzo
+   * pasaba `deshabilitado={guardando}` y eso apagaba TODOS los puertos mientras
+   * el `PUT` viajaba: tirabas el segundo cable, `alBajarEnPuerto` volvía en la
+   * primera línea y **no pasaba nada, sin un solo síntoma**. Verificado en el
+   * navegador el 12-ago-2026 (`isDisabled()` del puerto de origen daba `true`
+   * justo después del primer gesto). Cablear a cinco vendedoras son cinco
+   * esperas, y la que se pierde no avisa. Ahora el gesto entra siempre y el
+   * header dice «Guardando…».
+   *
+   * 🔴 **Y por eso el cambio se calcula sobre `espejo.current`, nunca sobre
+   * `cables`**: sacar el congelamiento permite que dos guardados se solapen, y
+   * el espejo es lo que impide que el segundo pise al primero.
    */
-  function guardar(siguientes: CableLienzo[], origen: string) {
+  function aplicar(de: string, a: string, accion: 'conectar' | 'cortar') {
+    const siguientes = conCambio(espejo.current, de, a, accion);
+    espejo.current = siguientes;
     setCables(siguientes);
-    const destinos = destinosDe(siguientes, origen).map((v) => leerId(v).clave);
-    const { tipo, clave } = leerId(origen);
+    const destinos = destinosDe(siguientes, de).map((v) => leerId(v).clave);
+    const { tipo, clave } = leerId(de);
     if (tipo === 'campana') conectar.mutate({ campanaId: clave, vendedoras: destinos });
     else if (tipo === 'curso') conectarCurso.mutate({ curso: clave, vendedoras: destinos });
   }
 
-  const guardando = conectar.isPending || conectarCurso.isPending || conectarProducto.isPending;
   const fallo = conectar.error ?? conectarCurso.error ?? conectarProducto.error;
   const enPantalla = new Set(armado.columnas.flatMap((c) => c.nodos.map((n) => n.id)));
 
@@ -173,6 +232,8 @@ export function VistaRouting() {
           a quién le caen los leads de cada campaña y cada formulario
         </p>
         <div className="ml-auto flex items-center gap-2">
+          {/* 🔴 Guardar AVISA, no congela — ver el comentario de `aplicar`. */}
+          {guardando && <span className="text-[11px] text-muted-foreground">Guardando…</span>}
           {data.actualizadoAt && (
             <span className="text-[11px] text-muted-foreground">
               Meta: {haceCuanto(data.actualizadoAt) ?? '—'}
@@ -191,13 +252,6 @@ export function VistaRouting() {
       </header>
 
       <Avisos data={data} refrescar={refrescar} huerfanos={cablesHuerfanos(piezas, data.destinos)} />
-      {campanaAdentro && (
-        <Migas
-          titulo={campanaAdentro.titulo}
-          cargando={anuncios.isLoading}
-          onSalir={() => setAdentro(null)}
-        />
-      )}
 
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-[19rem] shrink-0 flex-col border-r border-border">
@@ -294,12 +348,11 @@ export function VistaRouting() {
                   ...armado.pertenencia,
                   ...cables.filter((c) => enPantalla.has(c.de) && enPantalla.has(c.a)),
                 ]}
-                deshabilitado={guardando}
-                onConectar={(de, a) => guardar(conCambio(cables, de, a, 'conectar'), de)}
-                onCortar={(de, a) => guardar(conCambio(cables, de, a, 'cortar'), de)}
-                onEntrar={(id) => setAdentro(id)}
+                onConectar={(de, a) => aplicar(de, a, 'conectar')}
+                onCortar={(de, a) => aplicar(de, a, 'cortar')}
+                onEntrar={(id) => setAbierta((y) => (y === id ? null : id))}
               />
-              {producto && !campanaAdentro && (
+              {producto && (
                 <PieDeProducto
                   producto={producto}
                   guardando={guardando}
@@ -325,6 +378,21 @@ export function VistaRouting() {
       )}
     </div>
   );
+}
+
+/**
+ * ¿LO ABIERTO SIGUE EN PANTALLA? Si cambiaste de producto o de filtro, la campaña
+ * que habías abierto ya no se está dibujando: dejarla marcada haría que al volver
+ * apareciera desplegada sin que nadie la tocara.
+ */
+function armadoVisible(
+  abierta: string | null,
+  producto: Producto | null,
+  pieza: Pieza | null,
+): string | null {
+  if (!abierta) return null;
+  const enPantalla = producto ? producto.piezas : pieza ? [pieza] : [];
+  return enPantalla.some((p) => p.id === abierta) ? abierta : null;
 }
 
 function resumen(piezas: Pieza[]): string {
@@ -511,55 +579,6 @@ function Cartel({ titulo, detalle }: { titulo: string; detalle: string }) {
         <p className="text-xs font-medium text-foreground">{titulo}</p>
         <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{detalle}</p>
       </div>
-    </div>
-  );
-}
-
-/**
- * LA MIGA DE PAN DEL NIVEL DE ADENTRO.
- *
- * ⚠️ **`Escape` sube un nivel, y el listener va en captura sobre `window`**: en
- * este lienzo el foco suele estar en un puerto, y sin captura el botón se come
- * la tecla antes de que llegue acá. Es el mismo contrato que el resto de la casa
- * (`escapeDePopover`), y por eso se limpia al desmontar.
- */
-function Migas({
-  titulo,
-  cargando,
-  onSalir,
-}: {
-  titulo: string;
-  cargando: boolean;
-  onSalir: () => void;
-}) {
-  useEffect(() => {
-    function alTeclear(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onSalir();
-      }
-    }
-    window.addEventListener('keydown', alTeclear, true);
-    return () => window.removeEventListener('keydown', alTeclear, true);
-  }, [onSalir]);
-
-  return (
-    <div className="flex shrink-0 items-center gap-1.5 border-b border-border px-6 py-2">
-      <button
-        type="button"
-        onClick={onSalir}
-        className="rounded text-[11px] font-medium text-muted-foreground transition-colors duration-200 ease-house hover:text-navy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-      >
-        Routing
-      </button>
-      <ChevronRight size={12} strokeWidth={2} className="text-muted-foreground" aria-hidden />
-      <span className="truncate text-[11px] font-medium text-foreground">{titulo}</span>
-      <span className="text-[11px] text-muted-foreground">
-        {cargando ? '· buscando sus anuncios…' : '· sus anuncios son de solo lectura'}
-      </span>
-      <kbd className="ml-auto rounded border border-border px-1 py-0.5 font-mono text-[10px] text-muted-foreground">
-        Esc
-      </kbd>
     </div>
   );
 }

@@ -13,8 +13,24 @@ export interface NodoLienzo {
   /** La línea chica de abajo. */
   pie?: string;
   icono: 'producto' | 'campana' | 'formulario' | 'vendedora';
-  /** Cuando existe, el nodo se puede ABRIR y el lienzo baja un nivel (fase 3). */
-  entrar?: string;
+  /**
+   * 🔴 **SE ABRE EN SU LUGAR, NO BAJA UN NIVEL — y eso corrige un defecto de
+   * diseño, no un detalle.** La primera versión reemplazaba el lienzo entero por
+   * el de adentro de la campaña, así que al abrirla **desaparecían el producto y
+   * las campañas hermanas**: quedabas mirando tres columnas sin saber de qué
+   * producto eran ni qué más le entra. El dueño lo dijo mirando la captura el
+   * 12-ago-2026: *«no sale el producto atrás de todo, tiene que ser más fácil de
+   * interactuar y vigilar todo»*.
+   *
+   * Con la apertura en el lugar, el contexto **nunca se pierde**: el producto
+   * sigue a la cabeza, las hermanas siguen a la vista, y lo que se agrega es el
+   * detalle de la que abriste.
+   */
+  abrible?: boolean;
+  abierto?: boolean;
+  /** Lo que se ve adentro cuando está abierto. Vacío ≠ cargando: ver `cargando`. */
+  adentro?: { id: string; titulo: string; pie: string }[];
+  cargando?: boolean;
   /** `pausada` se dibuja apagada; `activa` es la que decide algo mañana. */
   estado?: 'activa' | 'pausada' | 'desconocido';
 }

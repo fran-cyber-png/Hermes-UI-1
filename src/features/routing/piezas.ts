@@ -34,9 +34,23 @@ export interface Pieza {
   familia: string | null;
   volumen: number;
   vendedoras: string[];
-  /** Solo las campañas se pueden abrir: son las únicas que tienen anuncios adentro. */
-  entrar?: string;
 }
+
+/**
+ * QUÉ PIEZA ESTÁ ABIERTA Y QUÉ TIENE ADENTRO.
+ *
+ * ⚠️ **`cargando` no se puede deducir de `anuncios: []`**: una campaña cuyos
+ * anuncios todavía no llegaron y una campaña que no tiene ninguno se ven igual
+ * desde acá, y decir «no tiene anuncios» mientras se están pidiendo es afirmar
+ * algo falso sobre la pauta.
+ */
+export interface Apertura {
+  id: string | null;
+  anuncios: readonly { adId: string; titular: string | null; personas: number }[];
+  cargando: boolean;
+}
+
+const CERRADO: Apertura = { id: null, anuncios: [], cargando: false };
 
 const ROTULO_ESTADO = { activa: 'Activa', pausada: 'Pausada', desconocido: 'No se sabe' } as const;
 
@@ -52,7 +66,6 @@ export function piezasDe(data: FotoDeRouting): Pieza[] {
       familia: c.familia,
       volumen: c.personas,
       vendedoras: c.vendedoras,
-      entrar: ID.campana(c.campanaId),
     })),
     ...(data.cursos ?? []).map((c) => ({
       id: ID.curso(c.curso),
@@ -141,6 +154,11 @@ const COL_VENDEDORAS = (destinos: readonly string[]): ColumnaLienzo => ({
   })),
 });
 
+/** «1 campañas» se lee como un error de la pantalla, no como un dato. */
+function cuantas(n: number, uno: string, varios: string): string {
+  return `${n} ${n === 1 ? uno : varios}`;
+}
+
 /** El `nombreCorto` de la libreta vive en un módulo con react-query; acá alcanza esto. */
 function nombreCortoLocal(vendedoraId: string): string {
   const sinDominio = vendedoraId.includes('@') ? vendedoraId.slice(0, vendedoraId.indexOf('@')) : vendedoraId;
@@ -157,89 +175,87 @@ function nombreCortoLocal(vendedoraId: string): string {
 export function columnasDeProducto(
   producto: Producto,
   destinos: readonly string[],
+  apertura: Apertura = CERRADO,
 ): { columnas: ColumnaLienzo[]; pertenencia: CableLienzo[] } {
   const id = ID.producto(producto.familia);
+  const campanas = producto.piezas.filter((p) => p.icono === 'campana').length;
+  const formularios = producto.piezas.length - campanas;
   return {
     columnas: [
       {
         id: 'producto',
-        ancho: 13,
+        titulo: 'El producto',
+        ancho: 17,
         nodos: [
           {
             id,
             titulo: producto.nombre,
             icono: 'producto',
-            pie: `${producto.piezas.filter((p) => p.icono === 'campana').length} campañas · ${producto.piezas.filter((p) => p.icono === 'formulario').length} formularios`,
+            pie: `${producto.volumen} leads · ${cuantas(campanas, 'campaña', 'campañas')} · ${cuantas(formularios, 'formulario', 'formularios')}`,
           },
         ],
       },
-      { id: 'piezas', titulo: 'Lo que le entra', ancho: 16, nodos: producto.piezas.map(aNodo) },
+      {
+        id: 'piezas',
+        titulo: 'Lo que le entra',
+        ancho: 17,
+        nodos: producto.piezas.map((p) => aNodo(p, apertura)),
+      },
       COL_VENDEDORAS(destinos),
     ],
     pertenencia: producto.piezas.map((p) => ({ de: id, a: p.id, tipo: 'pertenencia' as const })),
   };
 }
 
-/** Las columnas de una pieza suelta: ella y las vendedoras. */
-export function columnasDePieza(pieza: Pieza, destinos: readonly string[]): ColumnaLienzo[] {
+/**
+ * Las columnas de una pieza suelta: ella y las vendedoras.
+ *
+ * ⚠️ Sin columna de producto **a propósito**: acá se cae quien no resuelve
+ * ninguna familia (25 de 44 campañas de Meta). Inventarle un producto vacío para
+ * que las dos pantallas se vean iguales diría que pertenece a algo.
+ */
+export function columnasDePieza(
+  pieza: Pieza,
+  destinos: readonly string[],
+  apertura: Apertura = CERRADO,
+): ColumnaLienzo[] {
   return [
-    { id: 'pieza', ancho: 16, nodos: [aNodo(pieza)] },
+    { id: 'pieza', titulo: 'Sin producto', ancho: 17, nodos: [aNodo(pieza, apertura)] },
     COL_VENDEDORAS(destinos),
   ];
 }
 
 /**
- * EL NIVEL DE ADENTRO DE UNA CAMPAÑA: sus anuncios, ella, y las vendedoras.
+ * UNA PIEZA COMO NODO, con lo que tenga adentro si está abierta.
  *
- * 🔴 **Los anuncios van A LA IZQUIERDA de la campaña, y no a la derecha.** El
- * lienzo se lee en el sentido del flujo, y el flujo real es
- * `anuncio → campaña → vendedora`: el anuncio es de donde VIENE la persona. Con
- * los anuncios a la derecha, el cable de la regla tendría que cruzarlos para
- * llegar a las vendedoras, y el dibujo diría que la campaña le manda algo al
- * anuncio.
+ * 🔴 **Solo las campañas se abren, y los anuncios NO son un puerto.** No existe
+ * una regla por anuncio: el reparto resuelve `ad_id → campaña → vendedoras`, así
+ * que el anuncio es de dónde VIENE la persona, no algo que se cablee. Dibujarlo
+ * con puerto prometería un control que el server no tiene — por eso `adentro` es
+ * una lista de solo lectura dentro del nodo y no una columna con puertos.
  *
- * ⚠️ **Sin puerto de salida conectable**: no existe una regla por anuncio (el
- * reparto resuelve `ad_id → campaña → vendedoras`), así que el cable
- * anuncio → campaña es de PERTENENCIA. Dibujarlo conectable prometería un
- * control que el server no tiene.
+ * ⚠️ El pie dice **las vendedoras si las hay**, y el dato de volumen si no: el
+ * lienzo existe para contestar «¿a quién le cae esto?», y con el volumen siempre
+ * arriba había que seguir el cable con el ojo para saberlo.
  */
-export function columnasDeCampanaAdentro(
-  campana: Pieza,
-  anuncios: readonly { adId: string; titular: string | null; personas: number }[],
-  destinos: readonly string[],
-): { columnas: ColumnaLienzo[]; pertenencia: CableLienzo[] } {
-  const idAnuncio = (adId: string) => `anuncio:${adId}`;
-  return {
-    columnas: [
-      {
-        id: 'anuncios',
-        titulo: 'Sus anuncios',
-        ancho: 15,
-        nodos: anuncios.map((a) => ({
-          id: idAnuncio(a.adId),
-          titulo: a.titular ?? '(sin titular)',
-          icono: 'campana' as const,
-          pie: `${a.personas} ${a.personas === 1 ? 'persona' : 'personas'}`,
-        })),
-      },
-      { id: 'campana', titulo: 'La campaña', ancho: 16, nodos: [aNodo({ ...campana, entrar: undefined })] },
-      COL_VENDEDORAS(destinos),
-    ],
-    pertenencia: anuncios.map((a) => ({
-      de: idAnuncio(a.adId),
-      a: campana.id,
-      tipo: 'pertenencia' as const,
-    })),
-  };
-}
-
-function aNodo(p: Pieza): NodoLienzo {
+function aNodo(p: Pieza, apertura: Apertura = CERRADO): NodoLienzo {
+  const abrible = p.icono === 'campana';
+  const abierto = abrible && apertura.id === p.id;
   return {
     id: p.id,
     titulo: p.titulo,
     icono: p.icono,
     pie: p.vendedoras.length ? p.vendedoras.map(nombreCortoLocal).join(', ') : p.pie,
     estado: p.estado,
-    entrar: p.entrar,
+    abrible,
+    abierto,
+    cargando: abierto && apertura.cargando,
+    adentro: abierto
+      ? apertura.anuncios.map((a) => ({
+          id: `anuncio:${a.adId}`,
+          titulo: a.titular ?? '(sin titular)',
+          pie: `${a.personas} ${a.personas === 1 ? 'persona' : 'personas'}`,
+        }))
+      : undefined,
   };
 }
