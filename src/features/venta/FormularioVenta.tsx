@@ -7,7 +7,15 @@ import { useEscape } from '../../lib/teclado/useEscape';
 import { ETAPAS, colorSegmento, rotuloEtapa } from '../../lib/etapas';
 import { BarraSegmentada } from '../../components/graficos/BarraSegmentada';
 import { useDashboard } from '../dashboard/dashboard';
-import { useCrearVenta, useFormularioVenta, useProductos, type ProductoCurso } from './useVenta';
+import {
+  useCrearVenta,
+  useFormularioVenta,
+  useLocalesDePais,
+  useProductos,
+  type Opcion,
+  type ProductoCurso,
+} from './useVenta';
+import { repartirEnCuotas } from './cuotas';
 import { VentaSinCerberus } from '../auth/AvisoCerberus';
 
 /** Cerberus llama "Origen" al canal por donde llegó el lead. Se infiere, no se elige. */
@@ -16,6 +24,28 @@ const ORIGEN_POR_CANAL: Record<string, { id: string; nombre: string }> = {
   facebook: { id: 'facebook', nombre: 'Facebook' },
   instagram: { id: 'instagram', nombre: 'Instagram' },
 };
+
+/** Referencia estable para el «todavía no hay locales»: si no, el efecto de precarga se redispara siempre. */
+const SIN_LOCALES: Opcion[] = [];
+
+/**
+ * HOY, en la zona horaria de la vendedora, con la forma que pide un `<input
+ * type="date">`.
+ *
+ * ⚠️ **No sale de `toISOString()`**, que es UTC: en Lima (UTC-5) a partir de las
+ * 19:00 devuelve MAÑANA, y la primera cuota —la del pago al contado que se acaba
+ * de cobrar— nacería venciendo al día siguiente.
+ */
+function hoyLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Lo tipeado en el precio de una línea, como número usable. Nunca negativo: un descuento no es una devolución. */
+function precioDe(texto: string): number {
+  const n = Number(texto.replace(',', '.'));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
 
 /**
  * EL FORMULARIO DE VENTA, DENTRO DE HERMES.
@@ -49,6 +79,15 @@ interface Props {
 interface Linea {
   producto: ProductoCurso;
   cantidad: number;
+  /**
+   * EL PRECIO PACTADO, como texto porque se está tipeando.
+   *
+   * Nace en el precio de promoción del catálogo y la vendedora lo puede bajar: es
+   * el descuento real, y Cerberus lo acepta (`precio_venta` dentro del
+   * `productos_json`). El `precio_regular` sigue siendo el del catálogo — sin los
+   * dos, el descuento no se puede ni ver ni medir después.
+   */
+  precio: string;
 }
 
 interface Recibo {
@@ -81,8 +120,17 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
 
   const [monedaId, setMonedaId] = useState('');
   const [paisId, setPaisId] = useState('');
+  const [localId, setLocalId] = useState('');
   const [preventa, setPreventa] = useState(true);
   const [lineas, setLineas] = useState<Linea[]>([]);
+  /**
+   * EL CRONOGRAMA — arranca en UNA cuota que vence hoy.
+   *
+   * El caso normal es pago al contado, y una venta sin cuotas es un 400 seguro de
+   * Cerberus: hacer que la vendedora agregue la primera a mano sería cobrarle un
+   * clic a lo que pasa siempre, para que lo que pasa a veces cueste uno menos.
+   */
+  const [cuotas, setCuotas] = useState<string[]>(() => [hoyLocal()]);
   const [busqueda, setBusqueda] = useState('');
   const [saved, setSaved] = useState<Recibo | null>(null);
   const [folioCopiado, setFolioCopiado] = useState(false);
@@ -99,33 +147,83 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
     }
   }, [form, paisNombre]);
 
+  // Los locales del país elegido. Con Cerberus mudo (`locales: null`) o con un
+  // server viejo que todavía no tiene la ruta, cae a la lista completa del
+  // formulario: peor que ofrecer la lista fina, mucho mejor que un select vacío.
+  const { data: localesDelPais } = useLocalesDePais(paisId);
+  const locales = localesDelPais?.locales ?? form?.locales ?? SIN_LOCALES;
+
+  /**
+   * Precarga del local, y limpieza si dejó de valer.
+   *
+   * ⚠️ Cambiar el país puede invalidar el local ya elegido, y **dejarlo puesto es
+   * regalar un rechazo**: `VentaForm.clean` responde «El local debe pertenecer al
+   * país seleccionado» y tumba la venta entera. Se cae al último que usó, y si
+   * tampoco es de este país, a nada.
+   */
+  useEffect(() => {
+    if (locales.length === 0) return;
+    setLocalId((v) => {
+      if (v && locales.some((l) => l.id === v)) return v;
+      const ultimo = localStorage.getItem('hermes.ultimoLocal');
+      return ultimo && locales.some((l) => l.id === ultimo) ? ultimo : '';
+    });
+  }, [locales]);
+
   // Escape cierra el modal — contrato compartido de los modales (src/lib/teclado/).
   useEscape(onCerrar);
 
   const { data: prods } = useProductos(busqueda, busqueda.length >= 2);
 
   const monto = useMemo(
-    () => lineas.reduce((s, l) => s + l.producto.precioPromocion * l.cantidad, 0),
+    () => lineas.reduce((s, l) => s + precioDe(l.precio) * l.cantidad, 0),
     [lineas],
   );
+  // El espejo del reparto que va a hacer Cerberus. Ver `cuotas.ts`: la autoridad
+  // es su backend, esto es para que la vendedora sepa qué está prometiendo.
+  const montosCuota = repartirEnCuotas(monto, cuotas.length);
+  const cuotasCompletas = cuotas.length > 0 && cuotas.every(Boolean);
   const monedaNombre = form?.monedas.find((m) => m.id === monedaId)?.nombre ?? '';
   const paisDeFicha = form && paisNombre
     ? form.paises.find((x) => x.nombre.trim().toLowerCase() === paisNombre.trim().toLowerCase())
     : null;
 
   function agregar(p: ProductoCurso) {
-    setLineas((ls) => (ls.some((l) => l.producto.id === p.id) ? ls : [...ls, { producto: p, cantidad: 1 }]));
+    setLineas((ls) =>
+      ls.some((l) => l.producto.id === p.id)
+        ? ls
+        : [...ls, { producto: p, cantidad: 1, precio: String(p.precioPromocion) }],
+    );
     setBusqueda('');
   }
   function cantidad(id: string, delta: number) {
     setLineas((ls) => ls.map((l) => (l.producto.id === id ? { ...l, cantidad: Math.max(1, l.cantidad + delta) } : l)));
   }
+  function ponerPrecio(id: string, precio: string) {
+    setLineas((ls) => ls.map((l) => (l.producto.id === id ? { ...l, precio } : l)));
+  }
   function quitar(id: string) {
     setLineas((ls) => ls.filter((l) => l.producto.id !== id));
   }
+  function agregarCuota() {
+    // La nueva vence un mes después de la última: es lo que la vendedora quiere
+    // el 90 % de las veces y sigue siendo editable.
+    setCuotas((cs) => {
+      const ultima = new Date(`${cs[cs.length - 1] || hoyLocal()}T12:00:00`);
+      ultima.setMonth(ultima.getMonth() + 1);
+      return [...cs, `${ultima.getFullYear()}-${String(ultima.getMonth() + 1).padStart(2, '0')}-${String(ultima.getDate()).padStart(2, '0')}`];
+    });
+  }
+  function ponerCuota(i: number, fecha: string) {
+    setCuotas((cs) => cs.map((c, j) => (j === i ? fecha : c)));
+  }
+  function quitarCuota(i: number) {
+    setCuotas((cs) => (cs.length <= 1 ? cs : cs.filter((_, j) => j !== i)));
+  }
 
   async function registrar(saveMode: 'cotizacion' | 'venta') {
-    if (!monedaId || !paisId || lineas.length === 0) return;
+    if (!monedaId || !paisId || !localId || lineas.length === 0) return;
+    if (saveMode === 'venta' && !cuotasCompletas) return;
     // Foto del embudo antes del registro: el recibo dibuja Cierre +1 sobre esta
     // base aunque el refetch llegue después.
     const embudoAntes = dash?.embudo ?? null;
@@ -135,6 +233,7 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
         clienteId,
         monedaId,
         paisId,
+        localId,
         preventa,
         medio,
         origen: origenInfo.id,
@@ -143,9 +242,14 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
           productoId: l.producto.id,
           nombre: l.producto.nombre,
           cantidad: l.cantidad,
+          // El regular es el del catálogo aunque se haya pactado otro precio: es
+          // lo único que deja ver después que hubo un descuento, y cuánto.
           precioRegular: l.producto.precioNormal,
-          precioVenta: l.producto.precioPromocion,
+          precioVenta: precioDe(l.precio),
         })),
+        // Una cotización no necesita cronograma, pero si la vendedora lo armó va
+        // igual: es lo que le está prometiendo al cliente en el presupuesto.
+        cuotas: cuotas.filter(Boolean).map((fechaVencimiento) => ({ fechaVencimiento })),
         saveMode,
         // El contexto de la conversación: con esto el server asienta intereses,
         // conversión y etapa (cotizado/cierre) — el embudo se mueve solo.
@@ -160,6 +264,7 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
       return;
     }
     localStorage.setItem('hermes.ultimaMoneda', monedaId);
+    localStorage.setItem('hermes.ultimoLocal', localId);
     setSaved({ modo: saveMode, folio: r.folio ?? null, embudo: embudoAntes });
   }
 
@@ -169,7 +274,16 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
     setFolioCopiado(true);
   }
 
-  const puede = monedaId && paisId && lineas.length > 0 && !crear.isPending;
+  /**
+   * LAS DOS SALIDAS NO PIDEN LO MISMO, y por eso son dos booleanos.
+   *
+   * El local lo exigen las dos (`sales/forms.py:132`). El cronograma lo exige
+   * solo la venta real: una cotización es un presupuesto y no entra a tesorería
+   * (`sales/views.py:947`). Con un solo `puede` compartido, o la cotización pedía
+   * de más o la venta salía a comerse un 400.
+   */
+  const puedeCotizar = Boolean(monedaId && paisId && localId && lineas.length > 0) && !crear.isPending;
+  const puedeVender = puedeCotizar && cuotasCompletas;
 
   // El mini-embudo del recibo: la foto previa + Cierre creciendo 1, en verde.
   const segmentosRecibo =
@@ -286,11 +400,22 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
                     </span>
                   )}
                 </Campo>
+                {/* El local ocupa la fila entera: los nombres de almacén no entran en media. */}
+                <div className="col-span-2">
+                  <Campo label="Local">
+                    <Select
+                      value={localId}
+                      onChange={setLocalId}
+                      placeholder={paisId ? 'Elegí local' : 'Elegí el país primero'}
+                      opciones={locales}
+                    />
+                  </Campo>
+                </div>
               </div>
 
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
                 <input type="checkbox" checked={preventa} onChange={(e) => setPreventa(e.target.checked)} />
-                Preventa (cursos sin stock: no exige local ni ubicación)
+                Preventa (cursos sin stock: no reserva stock)
               </label>
 
               {/* Origen y Medio NO se eligen: se infieren de dónde vino el lead. */}
@@ -356,9 +481,30 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
                           +
                         </button>
                       </div>
-                      <span className="w-16 text-right font-semibold tabular-nums text-navy">
-                        {(l.producto.precioPromocion * l.cantidad).toFixed(2)}
-                      </span>
+                      {/* LA MONEDA VA ACÁ, NO SOLO EN EL TOTAL. El precio sale del
+                          catálogo de Cerberus, que hoy NO dice en qué moneda está
+                          (`useVenta.ts`, `ProductoCurso.moneda` viene vacío): cambiar el
+                          select de arriba NO reconvierte este número. Con la moneda
+                          pegada al precio el desajuste se VE, que es mejor que un
+                          renglón de prosa explicándolo. */}
+                      {monedaNombre && (
+                        <span className="shrink-0 text-[10px] font-semibold uppercase text-muted-foreground">{monedaNombre}</span>
+                      )}
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={l.precio}
+                        onChange={(e) => ponerPrecio(l.producto.id, e.target.value)}
+                        aria-label={`Precio de ${l.producto.nombre}`}
+                        className="w-16 shrink-0 rounded-md border border-border bg-card px-1.5 py-1 text-right font-semibold tabular-nums text-navy outline-none focus:border-primary"
+                      />
+                      {/* El subtotal solo cuando hay más de uno: con cantidad 1 repetiría
+                          el número de al lado. */}
+                      {l.cantidad > 1 && (
+                        <span className="w-14 shrink-0 text-right tabular-nums text-muted-foreground">
+                          {(precioDe(l.precio) * l.cantidad).toFixed(2)}
+                        </span>
+                      )}
                       <button type="button" aria-label={`Quitar ${l.producto.nombre}`} onClick={() => quitar(l.producto.id)} className="text-destructive">
                         <Trash2 size={13} />
                       </button>
@@ -375,6 +521,57 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
                 </span>
               </div>
 
+              {/* EL CRONOGRAMA — lo que faltaba, y por lo que este modal nunca
+                  registró una venta. Cerberus corta ANTES de validar el formulario
+                  si una venta real llega sin cuotas (`sales/views.py:947`), así que
+                  el botón devolvía «Debe agregar al menos una cuota» y la pantalla
+                  no ofrecía dónde agregarla: una validación imposible de satisfacer.
+                  Los montos son el ESPEJO del reparto de allá (ver `cuotas.ts`). */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className={sectionLabel}>Cuotas</span>
+                  <button
+                    type="button"
+                    onClick={agregarCuota}
+                    className="flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[11px] font-bold text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+                  >
+                    <Plus size={11} /> Agregar cuota
+                  </button>
+                </div>
+                <ul className="flex flex-col gap-1.5">
+                  {cuotas.map((fecha, i) => (
+                    <li key={i} className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-2.5 py-1.5 text-xs">
+                      <span className="w-14 shrink-0 font-medium text-muted-foreground">Cuota {i + 1}</span>
+                      <input
+                        type="date"
+                        value={fecha}
+                        onChange={(e) => ponerCuota(i, e.target.value)}
+                        aria-label={`Vencimiento de la cuota ${i + 1}`}
+                        className="min-w-0 flex-1 rounded-md border border-border bg-card px-1.5 py-1 text-xs tabular-nums outline-none focus:border-primary"
+                      />
+                      <span className="w-16 shrink-0 text-right font-semibold tabular-nums text-navy">
+                        {(montosCuota[i] ?? 0).toFixed(2)}
+                      </span>
+                      {cuotas.length > 1 && (
+                        <button
+                          type="button"
+                          aria-label={`Quitar la cuota ${i + 1}`}
+                          onClick={() => quitarCuota(i)}
+                          className="text-destructive"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {!cuotasCompletas && (
+                  <p className="text-[11px] text-destructive">
+                    Cada cuota necesita su fecha de vencimiento — sin eso Cerberus rechaza la venta.
+                  </p>
+                )}
+              </div>
+
               {crear.isError && (
                 <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive">
                   <AlertTriangle size={14} className="mt-0.5 shrink-0" />
@@ -389,7 +586,7 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
               <button
                 type="button"
                 onClick={() => void registrar('cotizacion')}
-                disabled={!puede}
+                disabled={!puedeCotizar}
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-border py-2.5 text-sm font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-40"
               >
                 Cotización
@@ -397,7 +594,7 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
               <button
                 type="button"
                 onClick={() => void registrar('venta')}
-                disabled={!puede}
+                disabled={!puedeVender}
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-navy py-2.5 text-sm font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] disabled:opacity-40"
               >
                 {crear.isPending ? <Loader2 size={15} className="animate-spin" /> : <ShoppingCart size={15} />}
