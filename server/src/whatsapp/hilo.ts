@@ -40,6 +40,13 @@ export function mismaLinea(numeroPropio: string | undefined) {
 }
 
 /**
+ * CUÁNTOS MENSAJES SE SIRVEN. La conversación más larga de producción tiene 268,
+ * así que el tope casi nunca muerde — pero cuando muerde tiene que dejar afuera
+ * lo VIEJO, no lo reciente.
+ */
+export const MENSAJES_DEL_HILO = 200;
+
+/**
  * El hilo, con la MARCA DE AUTOMÁTICO en cada burbuja (#125, ADR 0015).
  *
  * El adjunto vive en el crudo del evento (`payload->media`): el JOIN lo trae sin
@@ -50,6 +57,20 @@ export function mismaLinea(numeroPropio: string | undefined) {
  *
  * Si la columna todavía no está aplicada, la consulta degrada: el hilo se sirve
  * igual (sin marca) en vez de tirar 500.
+ *
+ * 🔴 **LOS ÚLTIMOS 200, NO LOS PRIMEROS 200.** Esto era `ORDER BY occurred_at ASC
+ * LIMIT 200`, o sea que una conversación de 300 mensajes servía los 200 **más
+ * viejos** y escondía los 100 recientes — justo los que la vendedora abre el chat
+ * para leer. Medido en producción: 1 de 4.009 conversaciones pasa de 200 (la más
+ * larga, 268), así que hoy casi no muerde; muerde en cuanto hay una conversación
+ * larga, y muerde el doble desde que se puede CITAR (una cita apunta a lo
+ * reciente, que es lo que quedaba afuera).
+ *
+ * La subconsulta no es decorativa: el `LIMIT` tiene que aplicarse sobre el orden
+ * DESCENDENTE —si no, «los últimos» no existen— y la respuesta tiene que salir
+ * ascendente, porque así se lee un chat. El desempate por `id` es lo que hace
+ * estable el corte cuando dos mensajes comparten `occurred_at` (pasa con las
+ * secuencias, que salen a 1,5 s pero se sellan con la hora de WhatsApp).
  */
 export async function hiloDe(base: typeof db, telefono: string, numeroPropio?: string, conMarca = true) {
   const marca = conMarca
@@ -71,18 +92,29 @@ export async function hiloDe(base: typeof db, telefono: string, numeroPropio?: s
 
   try {
     return await base.execute(sql`
-      SELECT i.id, i.direccion, i.autor, i.texto, i.occurred_at, i.external_id,
-             i.persona_nombre AS persona_nombre,
-             e.payload->'media' AS media,
-             e.payload->'origen' AS origen,
-             ${marca}
-      FROM interactions i
-      LEFT JOIN events e ON e.id = i.event_id
-      ${join}
-      WHERE i.canal = 'whatsapp' AND i.persona_id = ${telefono}
-        ${mismaLinea(numeroPropio)}
-      ORDER BY i.occurred_at ASC
-      LIMIT 200
+      SELECT * FROM (
+        SELECT i.id, i.direccion, i.autor, i.texto, i.occurred_at, i.external_id,
+               i.persona_nombre AS persona_nombre,
+               e.payload->'media' AS media,
+               e.payload->'origen' AS origen,
+               -- A QUÉ MENSAJE RESPONDE ESTE (la tirita gris de WhatsApp). Vive en
+               -- el crudo del evento, al lado de media y origen: es un hecho del
+               -- mensaje, no una entidad aparte, así que no necesita tabla ni
+               -- migración. Quién era el citado y qué decía se resuelve DESPUÉS, en
+               -- una segunda consulta — un tercer JOIN acá sería sobre la misma
+               -- tabla que ya estamos leyendo.
+               -- (Sin backticks en este comentario a propósito: cierran el template.)
+               e.payload->'cita' AS cita,
+               ${marca}
+        FROM interactions i
+        LEFT JOIN events e ON e.id = i.event_id
+        ${join}
+        WHERE i.canal = 'whatsapp' AND i.persona_id = ${telefono}
+          ${mismaLinea(numeroPropio)}
+        ORDER BY i.occurred_at DESC, i.id DESC
+        LIMIT ${MENSAJES_DEL_HILO}
+      ) AS ultimos
+      ORDER BY occurred_at ASC, id ASC
     `);
   } catch (e) {
     if (conMarca && faltaEsquema(e)) {

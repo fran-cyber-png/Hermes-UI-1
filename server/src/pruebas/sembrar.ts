@@ -45,6 +45,17 @@ export interface MensajeSembrado {
   mediaClase?: string;
   /** El origen del lead (anuncio/landing), en el payload del evento — como lo guarda proyectar. */
   origen?: { fuente: string; titulo?: string | null; adId?: string; ref?: string } | null;
+  /**
+   * A qué mensaje responde, en el payload del evento — como lo guarda
+   * `proyectar.ts`. Se pasa el `external_id` COMPLETO (`wa:<id>`), que es lo que
+   * el hilo después resuelve contra `interactions`.
+   */
+  cita?: { mensajeExternalId: string } | null;
+  /**
+   * El `external_id` de la interacción, sin el prefijo. Por defecto un UUID: se
+   * fija a mano solo cuando el test necesita APUNTARLE (una cita, una reacción).
+   */
+  externalId?: string;
   occurredAt?: Date;
 }
 
@@ -57,7 +68,7 @@ export interface MensajeSembrado {
 export async function sembrarMensaje(db: DbDePrueba, m: MensajeSembrado = {}): Promise<number> {
   const occurredAt = m.occurredAt ?? new Date();
   const numeroPropio = m.numeroPropio ?? "51999999999";
-  const ext = randomUUID();
+  const ext = m.externalId ?? randomUUID();
 
   const [ev] = await db
     .insert(events)
@@ -69,6 +80,7 @@ export async function sembrarMensaje(db: DbDePrueba, m: MensajeSembrado = {}): P
         numeroPropio,
         ...(m.mediaClase ? { media: { clase: m.mediaClase } } : {}),
         ...(m.origen !== undefined ? { origen: m.origen } : {}),
+        ...(m.cita !== undefined ? { cita: m.cita } : {}),
       },
     })
     .returning({ id: events.id });

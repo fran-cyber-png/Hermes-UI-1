@@ -23,8 +23,11 @@ import { index, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core
  * A propósito, y por dos razones. Una reacción puede llegar **antes** que el
  * mensaje al que apunta (reordenamiento del webhook, un backfill a medias), y
  * una FK la rechazaría en vez de guardarla. Y el hilo solo trae los últimos 200
- * mensajes: la reacción a uno más viejo sigue siendo un hecho cierto aunque hoy
- * no se dibuje. El JOIN se hace por el mismo `wa:<id>` con el que se guardan los
+ * mensajes (`MENSAJES_DEL_HILO`, en `whatsapp/hilo.ts` — hasta el 12-ago-2026 este
+ * comentario decía «los últimos» y el SQL traía los PRIMEROS, o sea que la frase
+ * era verdad de la intención y mentira del código): la reacción a uno más viejo
+ * sigue siendo un hecho cierto aunque hoy no se dibuje. El JOIN se hace por el
+ * mismo `wa:<id>` con el que se guardan los
  * mensajes — la receta vive una sola vez, en `reacciones/dominio.ts`.
  */
 export const reaccionesWa = pgTable(
