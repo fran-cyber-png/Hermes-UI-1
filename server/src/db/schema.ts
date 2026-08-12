@@ -1498,7 +1498,10 @@ export { repartoRueda, conversacionAsignada } from "./reparto.js";
 // El ruteo por campaña: qué campaña de Meta cae en qué vendedora. Se apoya en el
 // de arriba (misma tabla de asignaciones, otro `motivo`) y arranca vacío: sin
 // reglas el reparto es el round-robin de siempre — ver `db/routing.ts`.
-export { campanaAnuncio, campanaRuteo, campanaMeta, cursoRuteo } from "./routing.js";
+// `campanaRuteo` sigue exportada aunque NADIE la lea: sacarla del schema haría
+// que drizzle genere su `DROP TABLE`, y eso es justo lo que la guardia
+// expand-only rechaza. La reemplazó `campanaCable` — ver `db/routing.ts`.
+export { campanaAnuncio, campanaRuteo, campanaCable, campanaMeta, cursoRuteo } from "./routing.js";
 
 // El reparto del PADRÓN (los 72.923 contactos de icarus, que no escribieron
 // nunca). A diferencia del de arriba, acá el recorte SÍ es una frontera: la

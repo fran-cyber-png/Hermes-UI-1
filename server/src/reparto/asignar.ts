@@ -61,9 +61,10 @@ export async function asignarSiHaceFalta(
      * mandaría el doble.
      */
     const cables = await duenosPorCampana(base, numeroPropio, adId);
-    const cargas = await leerRueda(base, numeroPropio);
-    const porCampana = cables.length ? siguienteEnLaRueda(ruedaDeCables(cables, cargas)) : null;
-    const quien = porCampana ?? siguienteEnLaRueda(cargas);
+    const porCampana = cables.length
+      ? siguienteEnLaRueda(await ruedaDeCables(base, numeroPropio, cables))
+      : null;
+    const quien = porCampana ?? siguienteEnLaRueda(await leerRueda(base, numeroPropio));
     if (!quien) return null;
 
     await base
@@ -102,15 +103,53 @@ export async function asignarSiHaceFalta(
  * para desempatar cargas iguales, y con un orden estable dos leads seguidos en
  * la misma situación caen siempre en la misma persona — o sea, es reproducible.
  */
-function ruedaDeCables(cables: readonly string[], cargas: readonly EnLaRueda[]): EnLaRueda[] {
-  const porNombre = new Map(cargas.map((c) => [c.vendedoraId.trim().toLowerCase(), c.asignadas]));
+async function ruedaDeCables(
+  base: typeof Base,
+  numeroPropio: string,
+  cables: readonly string[],
+): Promise<EnLaRueda[]> {
+  const cargas = await cargaDeVendedoras(base, numeroPropio, cables);
   return [...cables]
     .sort((a, b) => a.localeCompare(b, "es"))
     .map((vendedoraId, orden) => ({
       vendedoraId,
       orden,
-      asignadas: porNombre.get(vendedoraId.trim().toLowerCase()) ?? 0,
+      asignadas: cargas.get(vendedoraId.trim().toLowerCase()) ?? 0,
     }));
+}
+
+/**
+ * 🔴 LA CARGA SE CUENTA CONTRA `conversacion_asignada`, NO CONTRA LA RUEDA.
+ *
+ * El primer borrador la sacaba de `leerRueda`, que **solo trae a quienes están
+ * `activa='si'`**: cualquier cableada fuera de la rueda activa —Luz, que queda
+ * afuera a propósito; ventas13 y ventas14, que están inactivas— aparecía con
+ * carga **0 para siempre** y se llevaba **todos** los leads de la campaña. Con
+ * dos cables, uno a alguien de la rueda y otro a alguien de afuera, el segundo
+ * ganaba siempre: el round-robin dejaba de repartir sin un solo síntoma.
+ *
+ * Medido sobre la copia de producción: la pantalla ofrece 7 destinos y
+ * `leerRueda` devuelve 4. O sea que el agujero cubría a 3 de cada 7.
+ *
+ * ⚠️ Se compara normalizando los dos lados: en producción el mismo humano tiene
+ * dos grafías (`Luz` de Cerberus, `luz` del login), y con la exacta la carga de
+ * una de las dos daría 0.
+ */
+async function cargaDeVendedoras(
+  base: typeof Base,
+  numeroPropio: string,
+  quienes: readonly string[],
+): Promise<Map<string, number>> {
+  const limpias = [...new Set(quienes.map((q) => q.trim().toLowerCase()).filter(Boolean))];
+  if (limpias.length === 0) return new Map();
+  const filas = await base.execute<{ vendedora_id: string; n: number }>(sql`
+    SELECT lower(btrim(vendedora_id)) AS vendedora_id, count(*)::int AS n
+      FROM conversacion_asignada
+     WHERE numero_propio = ${numeroPropio}
+       AND lower(btrim(vendedora_id)) IN (${sql.join(limpias.map((v) => sql`${v}`), sql`, `)})
+     GROUP BY 1
+  `);
+  return new Map(filas.map((f) => [f.vendedora_id, Number(f.n ?? 0)]));
 }
 
 /**

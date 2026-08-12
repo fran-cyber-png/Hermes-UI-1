@@ -52,6 +52,35 @@ export const campanaAnuncio = pgTable(
 );
 
 /**
+ * ⛔ RETIRADA — la reemplazó `campana_cable`, y se deja declarada A PROPÓSITO.
+ *
+ * Nació en la migración 0025 con la PK `(numero_propio, campana_id)`: **una sola
+ * vendedora por campaña**. Al hacer que una campaña pueda caer en varias, la PK
+ * tenía que ensancharse… y ahí apareció la pared: cambiarla es
+ * `DROP CONSTRAINT`, y la guardia expand-only de N1 lo rechaza con razón —
+ * *«migración destructiva: el rollback automático deja de ser seguro»*. El PR se
+ * quedó en rojo hasta que se hizo lo correcto: **una tabla nueva y un backfill**,
+ * que es lo que expand-only significa.
+ *
+ * Sigue declarada porque **sacarla del schema haría que drizzle genere su
+ * `DROP TABLE`**, o sea el mismo problema por la otra puerta. Se retira en una
+ * migración de limpieza, cuando ya no quede nada leyéndola en ningún deploy.
+ *
+ * **Nadie la lee.** Si aparece un `import` nuevo de acá, es un error.
+ */
+export const campanaRuteo = pgTable(
+  "campana_ruteo",
+  {
+    numeroPropio: text("numero_propio").notNull(),
+    campanaId: text("campana_id").notNull(),
+    vendedoraId: text("vendedora_id").notNull(),
+    asignadaPor: text("asignada_por"),
+    asignadaEn: timestamp("asignada_en", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.numeroPropio, t.campanaId] })],
+);
+
+/**
  * LA REGLA: qué campaña cae en qué vendedoras, por línea.
  *
  * 🔴 **UNA FILA ES UN CABLE, NO UNA REGLA.** La PK es
@@ -61,37 +90,25 @@ export const campanaAnuncio = pgTable(
  * «una o varias» y «ruedas distintas por campaña» no son dos features: son la
  * misma tabla leída de una forma.
  *
- * ⚠️ Hasta la migración 0026 la PK era `(numero_propio, campana_id)` — una sola
- * vendedora por campaña. El cambio es expand-only: las filas viejas siguen
- * siendo válidas, cada una como el único cable de su campaña.
- *
- * ⚠️ **Y la regla se ata a la CAMPAÑA, que Meta rehace todos los meses**
+ * ⚠️ **La regla se ata a la CAMPAÑA, que Meta rehace todos los meses**
  * (`[JUL] OSINT` → `[AGO] OSINT` son ids distintos). Decisión del dueño del
- * 12-ago-2026, tomada sabiéndolo: en septiembre las reglas quedan huérfanas y
- * hay que rehacerlas. La pantalla lo DICE en vez de callárselo — una regla que
- * deja de aplicar sin síntoma es peor que no tenerla.
+ * 12-ago-2026, tomada sabiéndolo: en septiembre las reglas quedan huérfanas y hay
+ * que rehacerlas. La pantalla lo DICE en vez de callárselo — una regla que deja
+ * de aplicar sin síntoma es peor que no tenerla.
  *
- * ⚠️ **La tabla arranca VACÍA y eso es el interruptor.** Sin filas, el reparto
- * es exactamente el round-robin de hoy; el primer cable lo tira una persona en
- * la pantalla. No hace falta una bandera de encendido: conectar *es* encender.
- *
- * ⚠️ **Sigue siendo un FILTRO, no un permiso** (como todo `conversacion_asignada`):
- * decide a quién le APARECE primero y quién queda de responsable, no quién puede
- * abrir el chat.
- *
- * La regla se aplica **una vez, en el primer mensaje**. Cambiarla no reasigna lo
- * ya repartido: una conversación que cambia de manos en medio de la charla es
- * peor que una mal repartida.
+ * ⚠️ **La tabla arranca VACÍA y eso es el interruptor.** Sin filas, el reparto es
+ * exactamente el round-robin de hoy; el primer cable lo tira una persona en la
+ * pantalla. No hace falta una bandera de encendido: conectar *es* encender.
  */
-export const campanaRuteo = pgTable(
-  "campana_ruteo",
+export const campanaCable = pgTable(
+  "campana_cable",
   {
     /** La línea que recibe (hoy solo la de Cloud API). */
     numeroPropio: text("numero_propio").notNull(),
     campanaId: text("campana_id").notNull(),
     /** Username de Cerberus, verificado contra los destinos posibles antes de escribir. */
     vendedoraId: text("vendedora_id").notNull(),
-    /** Quién la puso. Sin esto una regla es una decisión sin dueño. */
+    /** Quién lo puso. Sin esto un cable es una decisión sin dueño. */
     asignadaPor: text("asignada_por"),
     asignadaEn: timestamp("asignada_en", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { eq } from "drizzle-orm";
 import { baseDePrueba } from "../pruebas/base.js";
 import { conversacionAsignada, repartoRueda } from "../db/reparto.js";
-import { campanaAnuncio, campanaRuteo } from "../db/routing.js";
-import { asignarSiHaceFalta } from "../reparto/asignar.js";
+import { campanaAnuncio, campanaCable } from "../db/routing.js";
+import { asignarSiHaceFalta, reasignar } from "../reparto/asignar.js";
 import { campanaMeta } from "../db/routing.js";
 import { duenosPorCampana, fotoDeRouting, ponerCables, guardarCampanas } from "./repositorio.js";
 
@@ -157,7 +157,7 @@ test("el PUT REEMPLAZA el conjunto de cables, no lo acumula", async (t) => {
   await ponerCables(db, LINEA, CAMP_OSINT, ["caro", "beto"], "estephano");
   await ponerCables(db, LINEA, CAMP_OSINT, ["beto"], "estephano");
 
-  const filas = await db.select().from(campanaRuteo).where(eq(campanaRuteo.campanaId, CAMP_OSINT));
+  const filas = await db.select().from(campanaCable).where(eq(campanaCable.campanaId, CAMP_OSINT));
   assert.equal(filas.length, 1, "el cable de caro se cortó al mandar el conjunto sin ella");
   assert.equal(filas[0]!.vendedoraId, "beto");
   assert.equal(filas[0]!.asignadaPor, "estephano", "queda rastro de quién lo puso");
@@ -304,4 +304,46 @@ test("sin catálogo todavía, la pantalla no inventa campañas", async (t) => {
 
   assert.deepEqual(foto.campanas, [], "hay que apretar «Actualizar desde Meta»");
   assert.equal(foto.sinMigracion, false);
+});
+
+/**
+ * 🔴 EL DEFECTO QUE ENCONTRÓ LA AUDITORÍA, Y QUE NINGÚN TEST VEÍA.
+ *
+ * La carga se sacaba de `leerRueda`, que **solo trae a quienes están activas en
+ * la rueda**. Cualquier cableada de afuera —Luz, que queda afuera a propósito;
+ * una inactiva— aparecía con carga 0 **para siempre** y se llevaba TODOS los
+ * leads de la campaña. El round-robin dejaba de repartir sin un solo síntoma.
+ *
+ * Medido sobre la copia de producción: la pantalla ofrece 7 destinos y la rueda
+ * activa tiene 4. El agujero cubría a 3 de cada 7.
+ */
+test("🔴 una cableada que NO está en la rueda activa reparte igual, no se lleva todo", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarRueda(db); // ana, beto, caro — activas
+  await sembrarAnuncios(db);
+  // `zoe` no está en la rueda: es el caso de Luz y de las inactivas.
+  await ponerCables(db, LINEA, CAMP_OSINT, ["ana", "zoe"], "estephano");
+
+  const tocaron: string[] = [];
+  for (let i = 0; i < 4; i++) {
+    tocaron.push((await asignarSiHaceFalta(db, `conv:whatsapp:5190000030${i}:${LINEA}`, LINEA, AD_OSINT))!);
+  }
+
+  assert.equal(tocaron.filter((x) => x === "zoe").length, 2, "zoe recibe la mitad, no las cuatro");
+  assert.equal(tocaron.filter((x) => x === "ana").length, 2);
+});
+
+test("y la carga que ya tenía cuenta: no arranca de cero por estar fuera de la rueda", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarRueda(db);
+  await sembrarAnuncios(db);
+  await ponerCables(db, LINEA, CAMP_OSINT, ["ana", "zoe"], "estephano");
+
+  // zoe ya tiene dos conversaciones de esta línea, asignadas a mano.
+  for (const p of ["51900000401", "51900000402"]) {
+    await reasignar(db, `conv:whatsapp:${p}:${LINEA}`, LINEA, "zoe", "estephano");
+  }
+
+  const quien = await asignarSiHaceFalta(db, `conv:whatsapp:51900000403:${LINEA}`, LINEA, AD_OSINT);
+  assert.equal(quien, "ana", "le toca a la que menos tiene, y zoe ya tenía dos");
 });

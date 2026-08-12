@@ -86,11 +86,48 @@ export function productosDe(data: FotoDeRouting, piezas: Pieza[]): Producto[] {
     .sort((a, b) => b.volumen - a.volumen || a.nombre.localeCompare(b.nombre, 'es'));
 }
 
-/** Los cables de REGLA que hay hoy: cada pieza hacia sus vendedoras. */
-export function cablesDe(piezas: readonly Pieza[]): CableLienzo[] {
+/**
+ * LOS CABLES DE REGLA QUE HAY HOY: cada pieza hacia sus vendedoras.
+ *
+ * 🔴 **EL DESTINO SE RESUELVE CONTRA LA LISTA DE LA COLUMNA, NORMALIZANDO.** En
+ * producción el mismo humano tiene dos grafías vivas (`Luz` es lo que empuja
+ * Cerberus, `luz` lo que se tipea al entrar; y hay `Usuario1`/`usuario1`). Si el
+ * cable guardado dice `Luz` y el nodo de la columna se llama `v:luz`, el cable
+ * apunta a un nodo que no existe: **no se dibuja, no se puede cortar, y la fila
+ * de la izquierda igual dice que esa campaña es de alguien**. Sin error, sin log.
+ *
+ * Se compara normalizado y se usa **la grafía de la columna** para el id, que es
+ * la que el lienzo conoce. Lo guardado no se toca: reescribirlo rompería el cruce
+ * con `gestiones` (la lección de `reparto/destino.ts`).
+ *
+ * ⚠️ Un cable hacia alguien que **no está en los destinos posibles** se descarta
+ * a propósito: dibujarlo obligaría a inventarle un nodo, y ese nodo sería una
+ * persona que la pantalla ofrece y el server rechaza con 409.
+ */
+export function cablesDe(piezas: readonly Pieza[], destinos: readonly string[]): CableLienzo[] {
+  const porNormal = new Map(destinos.map((d) => [d.trim().toLowerCase(), d]));
   return piezas.flatMap((p) =>
-    p.vendedoras.map((v) => ({ de: p.id, a: ID.vendedora(v), tipo: 'regla' as const })),
+    p.vendedoras.flatMap((v) => {
+      const enLaColumna = porNormal.get(v.trim().toLowerCase());
+      return enLaColumna
+        ? [{ de: p.id, a: ID.vendedora(enLaColumna), tipo: 'regla' as const }]
+        : [];
+    }),
   );
+}
+
+/**
+ * A quién NO se le pudo dibujar el cable. Es lo que evita que la ausencia sea
+ * muda: si una pieza tiene una vendedora que no está entre los destinos, la
+ * pantalla lo dice en vez de mostrar la pieza como si no tuviera cables.
+ */
+export function cablesHuerfanos(piezas: readonly Pieza[], destinos: readonly string[]): string[] {
+  const porNormal = new Set(destinos.map((d) => d.trim().toLowerCase()));
+  return [
+    ...new Set(
+      piezas.flatMap((p) => p.vendedoras.filter((v) => !porNormal.has(v.trim().toLowerCase()))),
+    ),
+  ].sort((a, b) => a.localeCompare(b, 'es'));
 }
 
 const COL_VENDEDORAS = (destinos: readonly string[]): ColumnaLienzo => ({

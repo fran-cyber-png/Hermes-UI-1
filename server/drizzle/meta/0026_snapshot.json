@@ -1,5 +1,5 @@
 {
-  "id": "6c442bf6-c550-41cc-b3e2-d34128a5eb6e",
+  "id": "255a1f57-68dc-478e-9a7b-7a05bab44437",
   "prevId": "19fe907d-80ee-4603-b5e2-2b71a612f2bf",
   "version": "7",
   "dialect": "postgresql",
@@ -3529,6 +3529,104 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.campana_cable": {
+      "name": "campana_cable",
+      "schema": "",
+      "columns": {
+        "numero_propio": {
+          "name": "numero_propio",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "campana_id": {
+          "name": "campana_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vendedora_id": {
+          "name": "vendedora_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "asignada_por": {
+          "name": "asignada_por",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "asignada_en": {
+          "name": "asignada_en",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "campana_cable_numero_propio_campana_id_vendedora_id_pk": {
+          "name": "campana_cable_numero_propio_campana_id_vendedora_id_pk",
+          "columns": [
+            "numero_propio",
+            "campana_id",
+            "vendedora_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.campana_meta": {
+      "name": "campana_meta",
+      "schema": "",
+      "columns": {
+        "campana_id": {
+          "name": "campana_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "nombre": {
+          "name": "nombre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estado": {
+          "name": "estado",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "numeros": {
+          "name": "numeros",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "actualizado_at": {
+          "name": "actualizado_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.campana_ruteo": {
       "name": "campana_ruteo",
       "schema": "",
@@ -3568,11 +3666,56 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {
-        "campana_ruteo_numero_propio_campana_id_vendedora_id_pk": {
-          "name": "campana_ruteo_numero_propio_campana_id_vendedora_id_pk",
+        "campana_ruteo_numero_propio_campana_id_pk": {
+          "name": "campana_ruteo_numero_propio_campana_id_pk",
           "columns": [
             "numero_propio",
-            "campana_id",
+            "campana_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.curso_ruteo": {
+      "name": "curso_ruteo",
+      "schema": "",
+      "columns": {
+        "curso": {
+          "name": "curso",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vendedora_id": {
+          "name": "vendedora_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "asignada_por": {
+          "name": "asignada_por",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "asignada_en": {
+          "name": "asignada_en",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "curso_ruteo_curso_vendedora_id_pk": {
+          "name": "curso_ruteo_curso_vendedora_id_pk",
+          "columns": [
+            "curso",
             "vendedora_id"
           ]
         }

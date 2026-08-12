@@ -634,7 +634,14 @@ export async function consultarCola(
   const enElReparto =
     opciones.misAsignadas === true || (await estaEnAlgunaRueda(base, opciones.vendedoraId));
 
-  // Cuatro degradaciones posibles ⇒ como mucho cinco intentos.
+  /**
+   * 🔴 EL TOPE SE DERIVA, NO SE ESCRIBE A MANO. Decía «cuatro degradaciones ⇒
+   * cinco intentos» y quedó corto al agregar la quinta (`conCursos`): con las
+   * cinco tablas ausentes el loop se quedaba sin reintentos y **tiraba 500**, o
+   * sea que la cola dejaba de degradar justo cuando más lo necesita. Lo atrapó
+   * `degradacion.test.db.ts`, no el typecheck.
+   */
+  const DEGRADACIONES = 5;
   for (let intento = 0; ; intento++) {
     try {
       /**
@@ -673,7 +680,7 @@ export async function consultarCola(
         ...(sinLineasPropias ? { sinLineasPropias: true } : {}),
       };
     } catch (e) {
-      if (!esTablaAusente(e) || intento >= 4) throw e;
+      if (!esTablaAusente(e) || intento >= DEGRADACIONES) throw e;
       // El reparto va primero por la misma razón que el bot y el padrón: apagar
       // lo que el error NOMBRA evita que una tabla ausente se lleve puestas las
       // otras tres.
@@ -739,10 +746,36 @@ function mencionaTabla(e: unknown, tabla: string): boolean {
   for (let actual: unknown = e, saltos = 0; actual != null && saltos < 5; saltos++) {
     if (typeof actual !== "object") break;
     const mensaje = (actual as { message?: unknown }).message;
-    if (typeof mensaje === "string" && mensaje.includes(tabla)) return true;
+    if (typeof mensaje === "string" && !esElSqlDeDrizzle(mensaje) && mensaje.includes(tabla)) {
+      return true;
+    }
     actual = (actual as { cause?: unknown }).cause;
   }
   return false;
+}
+
+/**
+ * 🔴 EL MENSAJE DE DRIZZLE ES EL SQL ENTERO, Y ESO ROMPÍA LA DEGRADACIÓN.
+ *
+ * `err.message` de una consulta fallida arranca con `Failed query:` y sigue con
+ * **la consulta completa**, o sea que nombra `clientes_padron`,
+ * `bot_calificaciones`, `conversacion_asignada` y `curso_ruteo` a la vez. Con eso,
+ * `mencionaTabla` daba verdadero para la PRIMERA que preguntara, sin importar
+ * cuál faltaba de verdad.
+ *
+ * Medido por la auditoría contra una base real: con SOLO `clientes_padron`
+ * ausente, la respuesta volvía con `sinPadron`, `sinBot`, `sinAsignacion` y
+ * `sinCursos` los cuatro en true — y con DOS tablas ausentes el loop apagaba las
+ * equivocadas, se quedaba sin banderas y **tiraba 500**: la cola dejaba de
+ * degradar justo en el escenario para el que la degradación existe (la ventana
+ * entre N4 y N5 de un deploy).
+ *
+ * Quién sí nombra la tabla que falta es Postgres, en `err.cause`:
+ * `relation "clientes_padron" does not exist`. Por eso el mensaje envoltorio se
+ * SALTEA y solo se mira la causa.
+ */
+function esElSqlDeDrizzle(mensaje: string): boolean {
+  return mensaje.startsWith("Failed query:");
 }
 
 /**

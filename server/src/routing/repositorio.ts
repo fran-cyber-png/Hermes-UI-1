@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { db as Base } from "../db/client.js";
-import { campanaAnuncio, campanaMeta, campanaRuteo, cursoRuteo } from "../db/routing.js";
+import { campanaAnuncio, campanaMeta, campanaCable, cursoRuteo } from "../db/routing.js";
 import { leerEstado, llegaALaLinea, ordenarCampanas, type CampanaEnRouting } from "./dominio.js";
 import { cursoDeLeadSql } from "../gente/leadDeTelefono.js";
 import { aliasesActivos } from "../cursos/repositorio.js";
@@ -84,9 +84,9 @@ export async function mapaDeAnuncios(base: typeof Base) {
  */
 export async function cablesDe(base: typeof Base, numeroPropio: string) {
   const filas = await base
-    .select({ campanaId: campanaRuteo.campanaId, vendedoraId: campanaRuteo.vendedoraId })
-    .from(campanaRuteo)
-    .where(eq(campanaRuteo.numeroPropio, numeroPropio));
+    .select({ campanaId: campanaCable.campanaId, vendedoraId: campanaCable.vendedoraId })
+    .from(campanaCable)
+    .where(eq(campanaCable.numeroPropio, numeroPropio));
 
   const por = new Map<string, string[]>();
   for (const f of filas) por.set(f.campanaId, [...(por.get(f.campanaId) ?? []), f.vendedoraId]);
@@ -264,12 +264,12 @@ export async function ponerCables(
   const unicas = [...new Set(vendedoras.map((v) => v.trim()).filter(Boolean))];
   await base.transaction(async (tx) => {
     await tx
-      .delete(campanaRuteo)
+      .delete(campanaCable)
       .where(
-        and(eq(campanaRuteo.numeroPropio, numeroPropio), eq(campanaRuteo.campanaId, campanaId)),
+        and(eq(campanaCable.numeroPropio, numeroPropio), eq(campanaCable.campanaId, campanaId)),
       );
     if (unicas.length === 0) return;
-    await tx.insert(campanaRuteo).values(
+    await tx.insert(campanaCable).values(
       unicas.map((vendedoraId) => ({
         numeroPropio,
         campanaId,
@@ -295,13 +295,13 @@ export async function duenosPorCampana(
   if (!ad) return [];
   try {
     const filas = await base
-      .select({ vendedoraId: campanaRuteo.vendedoraId })
+      .select({ vendedoraId: campanaCable.vendedoraId })
       .from(campanaAnuncio)
       .innerJoin(
-        campanaRuteo,
+        campanaCable,
         and(
-          eq(campanaRuteo.campanaId, campanaAnuncio.campanaId),
-          eq(campanaRuteo.numeroPropio, numeroPropio),
+          eq(campanaCable.campanaId, campanaAnuncio.campanaId),
+          eq(campanaCable.numeroPropio, numeroPropio),
         ),
       )
       .where(eq(campanaAnuncio.adId, ad));

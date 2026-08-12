@@ -5,6 +5,7 @@ import { conCambio, destinosDe, type CableLienzo } from './reglasDelLienzo';
 import {
   ID,
   cablesDe,
+  cablesHuerfanos,
   columnasDePieza,
   columnasDeCampanaAdentro,
   columnasDeProducto,
@@ -86,9 +87,9 @@ export function VistaRouting() {
    */
   const huella = piezas.map((p) => `${p.id}=${p.vendedoras.join(',')}`).join('|');
   useEffect(() => {
-    setCables(cablesDe(piezas));
+    setCables(cablesDe(piezas, data?.destinos ?? []));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [huella]);
+  }, [huella, (data?.destinos ?? []).join('|')]);
 
   if (isLoading) {
     return (
@@ -183,7 +184,7 @@ export function VistaRouting() {
         </div>
       </header>
 
-      <Avisos data={data} refrescar={refrescar} />
+      <Avisos data={data} refrescar={refrescar} huerfanos={cablesHuerfanos(piezas, data.destinos)} />
       {campanaAdentro && (
         <Migas
           titulo={campanaAdentro.titulo}
@@ -380,11 +381,19 @@ function PieDeProducto({
 function Avisos({
   data,
   refrescar,
+  huerfanos,
 }: {
   data: FotoDeRouting;
   refrescar: { isError: boolean; error: unknown };
+  /** Cables guardados hacia alguien que ya no está entre los destinos posibles. */
+  huerfanos: string[];
 }) {
-  if (data.campanasEnOtraLinea === 0 && data.anunciosSinResolver === 0 && !refrescar.isError) {
+  if (
+    data.campanasEnOtraLinea === 0 &&
+    data.anunciosSinResolver === 0 &&
+    huerfanos.length === 0 &&
+    !refrescar.isError
+  ) {
     return null;
   }
   return (
@@ -407,6 +416,16 @@ function Avisos({
             {data.anunciosSinResolver === 1 ? 'anuncio trajo' : 'anuncios trajeron'} gente y todavía no
             sabemos de qué campaña {data.anunciosSinResolver === 1 ? 'es' : 'son'}. Sus leads van a la
             rueda hasta que se actualice desde Meta.
+          </span>
+        </p>
+      )}
+      {huerfanos.length > 0 && (
+        <p className="flex items-start gap-2 text-[11px] text-muted-foreground">
+          <AlertTriangle size={13} strokeWidth={2} className="mt-px shrink-0" aria-hidden />
+          <span>
+            Hay cables hacia {huerfanos.join(', ')}, que ya no participa
+            {huerfanos.length === 1 ? '' : 'n'} del reparto de esta línea: no se dibujan y sus leads
+            igual le caen. Para sacarlos, volvé a conectar la pieza desde cero.
           </span>
         </p>
       )}
