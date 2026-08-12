@@ -159,6 +159,30 @@ export function useRefrescarDesdeMeta() {
  * interrogarla sobre el valor que todavía no existe: un estado nuevo de Meta
  * cae en «no se sabe» y lo dice, nunca en «pausada» ni en un throw.
  */
+/** Un anuncio de una campaña. **Solo lectura**: no existe una regla por anuncio. */
+export interface AnuncioDeCampana {
+  adId: string;
+  titular: string | null;
+  personas: number;
+  ultima: string | null;
+}
+
+/**
+ * LOS ANUNCIOS DE UNA CAMPAÑA — se piden solo al entrar en ella.
+ *
+ * ⚠️ `enabled` y no un `if` afuera: sin campaña elegida no hay nada que pedir, y
+ * react-query no puede tener un hook condicional.
+ */
+export function useAnunciosDeCampana(campanaId: string | null) {
+  return useQuery<{ anuncios: AnuncioDeCampana[] }, ErrorApi>({
+    queryKey: ['routing', 'anuncios', campanaId],
+    queryFn: () =>
+      api(`/api/routing/campanas/${encodeURIComponent(campanaId!)}/anuncios`),
+    enabled: Boolean(campanaId),
+    retry: false,
+  });
+}
+
 export function rotuloEstado(estado: EstadoCampana): string {
   switch (estado) {
     case 'activa':

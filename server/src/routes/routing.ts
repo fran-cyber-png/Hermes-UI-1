@@ -21,6 +21,7 @@ import {
   cursosDeFormulario,
   ponerCablesDeCurso,
   cablearProducto,
+  anunciosDeCampana,
 } from "../routing/repositorio.js";
 import { lineaDeCloudApi } from "../routing/linea.js";
 import { nombreDeProducto } from "../routing/producto.js";
@@ -226,6 +227,26 @@ routingRouter.put("/cursos", async (req, res) => {
     }
     await ponerCablesDeCurso(db, curso, pedidas, req.vendedoraId ?? "");
     res.json({ ok: true, curso, vendedoras: pedidas });
+  } catch (e) {
+    res.status(500).json({ ok: false, message: (e as Error).message });
+  }
+});
+
+/**
+ * LOS ANUNCIOS DE UNA CAMPAÑA — el nivel de adentro del lienzo.
+ *
+ * 🔴 **Solo lectura, y no hay un `PUT` gemelo a propósito**: el reparto resuelve
+ * `ad_id → campaña → vendedoras` y no existe una regla por anuncio. Sirve para
+ * entender de dónde vino el volumen, no para cambiarlo.
+ */
+routingRouter.get("/campanas/:campanaId/anuncios", async (req, res) => {
+  const campanaId = String(req.params.campanaId ?? "").trim();
+  if (!campanaId) {
+    res.status(400).json({ ok: false, message: "falta la campaña" });
+    return;
+  }
+  try {
+    res.json({ anuncios: await anunciosDeCampana(db, campanaId) });
   } catch (e) {
     res.status(500).json({ ok: false, message: (e as Error).message });
   }

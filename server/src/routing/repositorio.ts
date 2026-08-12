@@ -480,3 +480,58 @@ export async function cablearProducto(
 
   return { campanas: campanas.length, cursos: losCursos.length };
 }
+
+/** Un anuncio de una campaña, con lo que trajo. */
+export interface AnuncioDeCampana {
+  adId: string;
+  /** El titular del creativo, del último referral que llegó. Puede faltar. */
+  titular: string | null;
+  personas: number;
+  ultima: string | null;
+}
+
+/**
+ * LOS ANUNCIOS DE UNA CAMPAÑA — para el nivel de adentro del lienzo.
+ *
+ * 🔴 **Es SOLO LECTURA, y el server no ofrece guardar nada acá a propósito.** El
+ * reparto resuelve `ad_id → campaña → vendedoras`: **no existe una regla por
+ * anuncio**. Servir esto con forma de algo conectable prometería un control que
+ * no hay.
+ *
+ * ⚠️ **El titular sale del ÚLTIMO referral y no es identidad.** Medido el
+ * 11-ago-2026: el mismo `ad_id` llega con titulares distintos cuando le cambian
+ * el creativo, así que se agrupa por `source_id` y el titular es informativo.
+ */
+export async function anunciosDeCampana(
+  base: typeof Base,
+  campanaId: string,
+  dias = VENTANA_DIAS,
+): Promise<AnuncioDeCampana[]> {
+  const filas = await base.execute<{
+    ad_id: string;
+    titular: string | null;
+    personas: number;
+    ultima: string | null;
+  }>(sql`
+    SELECT a.ad_id                                         AS ad_id,
+           (array_agg(e.payload->'referral'->>'headline'
+                      ORDER BY e.occurred_at DESC)
+              FILTER (WHERE e.payload->'referral'->>'headline' IS NOT NULL))[1] AS titular,
+           count(DISTINCT e.payload->>'from')::int         AS personas,
+           max(e.occurred_at)                              AS ultima
+      FROM campana_anuncio a
+      LEFT JOIN events e
+        ON e.source = 'meta_wa_ctwa'
+       AND e.payload->'referral'->>'source_id' = a.ad_id
+       AND e.occurred_at > now() - ${`${dias} days`}::interval
+     WHERE a.campana_id = ${campanaId}
+     GROUP BY a.ad_id
+     ORDER BY 3 DESC, 1
+  `);
+  return filas.map((f) => ({
+    adId: f.ad_id,
+    titular: f.titular,
+    personas: Number(f.personas ?? 0),
+    ultima: f.ultima ? new Date(f.ultima).toISOString() : null,
+  }));
+}
