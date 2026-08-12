@@ -98,6 +98,11 @@ export function proyectarMensaje(m: MensajeWhatsapp): ResultadoProyeccion {
       // El origen del lead (anuncio/landing) queda en el crudo: es la captura del
       // embudo, y desde acá se puede reproyectar o enriquecer con Meta.
       origen: m.origen ?? null,
+      // A qué mensaje responde. Una clave más del crudo, al lado de media y
+      // origen: es un atributo del mensaje —no cambia nunca, no existe sin él—,
+      // así que no pide tabla, no pide columna y no pide migración. El hilo la
+      // sirve desde acá con el mismo JOIN que ya trae la media.
+      cita: m.cita ?? null,
     },
   };
 

@@ -11,6 +11,7 @@ import {
 } from './transporte.js';
 import { normalizarTelefono } from './identidadWa.js';
 import { reaccionDeCloudApi, type ReaccionEntrante } from '../reacciones/dominio.js';
+import { citaDeCloudApi, type CitaSaliente } from './cita.js';
 import { fueRetenido } from '../campana/estadoDePlantilla.js';
 import { RUTA_MEDIA, nombreSeguro } from './mediaDir.js';
 import { detectarOrigen, detectarOrigenReferral, type Origen } from './origen.js';
@@ -197,13 +198,27 @@ export class TransporteCloudApi implements TransporteWhatsapp {
     };
   }
 
-  async enviarTexto(telefono: string, texto: string): Promise<ResultadoEnvio> {
+  /**
+   * Con cita, la Cloud API pide MUCHO menos que whatsmeow: un `context` con el
+   * `message_id` y nada más. El texto del citado y de quién era los resuelve Meta
+   * del lado del teléfono, así que `CitaSaliente.texto`/`esNuestro` no se usan
+   * acá — no es un olvido, es que este canal no los necesita.
+   *
+   * Sin cita el cuerpo queda idéntico al de siempre: agregar `context: null`
+   * sería un campo nuevo en el 100 % de los envíos por una función nueva.
+   */
+  async enviarTexto(telefono: string, texto: string, cita?: CitaSaliente): Promise<ResultadoEnvio> {
     if (this.sesion.estado !== 'conectado') {
       throw new Error(`No se puede enviar: la sesión está "${this.sesion.estado}".`);
     }
     const numero = normalizarTelefono(telefono);
     if (!numero) throw new Error(`Teléfono inválido: "${telefono}"`);
-    const data = await this.post({ to: numero, type: 'text', text: { body: texto } });
+    const data = await this.post({
+      to: numero,
+      type: 'text',
+      text: { body: texto },
+      ...(cita ? { context: { message_id: cita.mensajeId } } : {}),
+    });
     return { idExterno: data.messages[0].id, ocurridoEn: new Date() };
   }
 
@@ -354,6 +369,9 @@ export class TransporteCloudApi implements TransporteWhatsapp {
       clase: m.type === 'text' ? 'texto' : media ? 'multimedia' : 'otro',
       media,
       origen,
+      // A qué mensaje responde. `m.context` también viene en reenvíos y en el
+      // referral de un anuncio, y ahí no trae `id`: eso lo filtra `citaDeCloudApi`.
+      cita: citaDeCloudApi(m),
     };
   }
 

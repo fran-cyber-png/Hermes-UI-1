@@ -26,6 +26,7 @@ import {
   esJidDeGrupo,
 } from './identidadWa.js';
 import { detectarOrigen } from './origen.js';
+import { citaDeWhatsmeow, contextInfoDeCita, type CitaSaliente } from './cita.js';
 import { tieneContenido } from './contenido.js';
 import { esSoloReaccion, reaccionDeWhatsmeow, type ReaccionEntrante } from '../reacciones/dominio.js';
 import { estadoDeWhatsmeow } from '../entrega/dominio.js';
@@ -270,6 +271,10 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
       media,
       // Captura del embudo: si vino de un anuncio (externalAdReply) o una landing.
       origen: info.isFromMe ? null : detectarOrigen(message, texto),
+      // A qué mensaje responde. Vale en los DOS sentidos: nuestro propio eco
+      // también trae su `contextInfo`, y sin leerlo la respuesta que la vendedora
+      // mandó citando se vería en Hermes como un mensaje suelto.
+      cita: citaDeWhatsmeow(message),
     };
   }
 
@@ -368,11 +373,35 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
     this.susEstado.push(cb);
   }
 
-  async enviarTexto(telefono: string, texto: string): Promise<ResultadoEnvio> {
+  /**
+   * SIN CITA, EL PROTO NO CAMBIA UNA LETRA: sigue siendo `{ conversation }` por
+   * `sendMessage`, que es el camino que manda todo lo que Hermes manda hoy.
+   * Mover el caso normal a `extendedTextMessage` «ya que estamos» sería cambiar
+   * el 100 % de los envíos por una función que todavía no usó nadie.
+   *
+   * Con cita hay que usar `sendRawMessage` y no `sendMessage`: el `MessageContent`
+   * tipado del paquete solo admite `stanzaId` (la grafía que el binario descarta,
+   * ver `cita.ts`), así que pasar por ahí sería pelearse con el tipo para mandar
+   * el campo equivocado. `sendRawMessage` toma un `Record` y no opina.
+   */
+  async enviarTexto(telefono: string, texto: string, cita?: CitaSaliente): Promise<ResultadoEnvio> {
     if (this.sesion.estado !== 'conectado') {
       throw new Error(`No se puede enviar: la sesión está "${this.sesion.estado}".`);
     }
-    const r = await this.client.sendMessage(jidDeTelefono(telefono), { conversation: texto });
+    const jid = jidDeTelefono(telefono);
+    if (!cita) {
+      const r = await this.client.sendMessage(jid, { conversation: texto });
+      return { idExterno: r.id, ocurridoEn: new Date((r.timestamp || Date.now() / 1000) * 1000) };
+    }
+    const r = await this.client.sendRawMessage(jid, {
+      extendedTextMessage: {
+        text: texto,
+        contextInfo: contextInfoDeCita(cita, {
+          propio: jidDeTelefono(this.numeroPropio),
+          contacto: jid,
+        }),
+      },
+    });
     return { idExterno: r.id, ocurridoEn: new Date((r.timestamp || Date.now() / 1000) * 1000) };
   }
 

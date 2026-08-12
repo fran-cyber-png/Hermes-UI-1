@@ -150,6 +150,13 @@ export async function recibirWhatsapp(req: Request, res: Response): Promise<void
                 // es un mensaje interactivo del usuario. Sin esto, un «sí, llamame» se guardaba
                 // como una fila con `texto: null` — indistinguible de un mensaje vacío.
                 interactive: m.interactive ?? null,
+                // A QUÉ MENSAJE RESPONDE (`{ id, from }`) — la tirita gris de WhatsApp.
+                // Va en el crudo aunque hoy quien lo proyecta sea `TransporteCloudApi`
+                // por el otro camino: este `events` es la fuente de verdad, y sin el
+                // campo acá **no hay historia que reproyectar** el día que haga falta.
+                // Es exactamente lo que le pasó a las citas hasta hoy: llegaban y se
+                // tiraban, así que la única forma de tener el dato es de acá en adelante.
+                context: m.context ?? null,
               },
             })
             .onConflictDoNothing({ target: [events.source, events.externalId] });

@@ -90,6 +90,16 @@ export interface MensajeWhatsapp {
    * Solo el PRIMER mensaje de una conversación suele traerlo; el resto es null.
    */
   origen?: import('./origen.js').Origen | null;
+  /**
+   * A QUÉ MENSAJE RESPONDE, si responde a alguno (la tirita gris de WhatsApp).
+   *
+   * **Opcional a propósito**, como `onReaccion`: deja al transporte falso sin
+   * implementarlo. Y **solo el id**: quién dijo el mensaje citado y qué decía se
+   * resuelve del lado de Hermes, contra lo que Hermes ya guardó — copiarlo del
+   * `quotedMessage` del proto sería una segunda fuente de verdad para el mismo
+   * hecho, y la que envejece mal.
+   */
+  cita?: import('./cita.js').CitaEntrante | null;
 }
 
 /**
@@ -182,7 +192,8 @@ export class FotoNoDisponibleError extends Error {
  */
 import type { ReaccionEntrante } from '../reacciones/dominio.js';
 import type { RecibosDeEntrega } from '../entrega/dominio.js';
-export type { ReaccionEntrante, RecibosDeEntrega };
+import type { CitaEntrante, CitaSaliente } from './cita.js';
+export type { ReaccionEntrante, RecibosDeEntrega, CitaEntrante, CitaSaliente };
 
 export interface PlantillaSaliente {
   nombre: string;
@@ -261,8 +272,14 @@ export interface TransporteWhatsapp {
   /**
    * UN mensaje a UN teléfono. La firma es el control: no hay forma de pedirle a
    * esta interfaz que mande a una lista.
+   *
+   * `cita` es OPCIONAL, y eso es parte del diseño: un transporte que no sepa
+   * citar (el falso, mañana otro) sigue cumpliendo el contrato mandando el texto
+   * a secas. Lo que NO puede pasar es que un transporte cambie la forma del
+   * mensaje NORMAL para poder soportar citas: sin cita, el proto es el de
+   * siempre — cambiar el camino que hoy funciona es riesgo puro por cero ganancia.
    */
-  enviarTexto(telefono: string, texto: string): Promise<ResultadoEnvio>;
+  enviarTexto(telefono: string, texto: string, cita?: CitaSaliente): Promise<ResultadoEnvio>;
 
   /**
    * UN adjunto (imagen, video, audio o documento) a UN teléfono. Misma forma
