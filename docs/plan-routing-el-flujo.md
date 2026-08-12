@@ -1,6 +1,6 @@
 # Routing — el mapa del flujo y qué hacemos con él
 
-**Fecha**: 12-ago-2026 · **Estado**: plan, nada de esto está construido salvo lo que dice «✅ ya está»
+**Fecha**: 12-ago-2026 · **Estado**: **fases 1, 2 y 3 construidas** (PR #364). Faltan la 4 y la 5.
 **Base**: ADR 0053 (el ruteo por campaña) + los tres commits de `feat/routing-cables` (PR #364)
 
 > Este documento existe porque la pantalla que hay hoy **funciona y no se entiende**. El pedido del
@@ -124,7 +124,7 @@ hacen nada — la conexión es por clic en la tarjeta. El dibujo promete una int
 
 ## 3. El plan
 
-### Fase 1 — Un solo modelo de interacción, y que el cable siga al gesto
+### ✅ Fase 1 — Un solo modelo de interacción, y que el cable siga al gesto
 
 **Lo mínimo para que se entienda, y lo que más rinde por línea de código.**
 
@@ -145,7 +145,7 @@ hacen nada — la conexión es por clic en la tarjeta. El dibujo promete una int
 **Cómo se verifica**: test de DOM (`jsdom`) sobre el arrastre —`pointerdown`/`pointermove`/`pointerup`
 sintéticos— y captura de las tres situaciones: sin cables, arrastrando, conectado.
 
-### Fase 2 — La acción masiva, explícita y separada del gesto
+### ✅ Fase 2 — La acción masiva, explícita y separada del gesto
 
 Hoy «Aplicar a las 4» compite con el arrastre por el mismo espacio mental.
 
@@ -155,7 +155,7 @@ Hoy «Aplicar a las 4» compite con el arrastre por el mismo espacio mental.
 - ⚠️ **Se mantiene la decisión del 12-ago**: cablear el producto ESCRIBE en cada pieza, no crea una
   regla que hereden. Esta fase no la toca.
 
-### Fase 3 — Multi-nivel: entrar en un nodo sin perder el flujo
+### ✅ Fase 3 — Multi-nivel: entrar en un nodo sin perder el flujo
 
 El pedido: *«si quiero entrar en la campaña dentro del flujo»*.
 
@@ -225,3 +225,24 @@ mandarla a otro, que es escribir en `alias_curso`.
   configurado pero no aplicándose, y eso solo se ve contando `conversacion_asignada.motivo='campana'`.
 - **Si las campañas del mes siguiente nacen sin regla** y cuánto tarda alguien en notarlo. Es el costo
   conocido de no tener herencia, y hay que saber si duele de verdad.
+
+
+---
+
+## 7. Lo que encontró la auditoría, y que este plan no había previsto
+
+Antes de escribir la Fase 1 se corrió una auditoría de cuatro lentes sobre la rama, con **cada
+hallazgo verificado por un agente que intentaba refutarlo** (31 agentes en total). Sobrevivieron
+diez, y **cuatro eran graves**. Ninguno lo habría encontrado el typecheck ni los tests que existían.
+
+| Qué | Por qué importaba |
+|---|---|
+| 🔴 **El PR no podía ponerse verde** | La migración hacía `DROP CONSTRAINT` para ensanchar una PK y la guardia expand-only de N1 la rechaza. **N1 estaba en FAILURE y nadie lo había mirado.** El arreglo es lo que expand-only significa: tabla nueva y backfill. |
+| 🔴 **Una cableada fuera de la rueda activa se llevaba la campaña entera** | La carga salía de `leerRueda`, que solo trae a las activas, así que Luz y las inactivas figuraban con carga 0 **para siempre**. Medido: la pantalla ofrece 7 destinos y la rueda activa tiene 4. |
+| 🔴 **La cola dejaba de degradar con dos tablas ausentes** | `mencionaTabla` miraba `err.message`, que en drizzle es el SQL entero y nombra todas las tablas. Con dos ausentes el loop se quedaba sin banderas y tiraba **500** — justo en la ventana entre N4 y N5. |
+| 🔴 **Un cable podía volverse invisible e imborrable** | Los destinos se comparaban con el `vendedora_id` exacto, y en producción el mismo humano tiene dos grafías (`Luz`/`luz`). |
+| 🔴 **Se cableaba con una expresión del curso y se matcheaba con otra** | La pantalla listaba con `cursoDeLeadSql` y la cola matchea con `productoLeadSql`. El PUT contestaba ok, la pieza se veía conectada **y la regla no se aplicaba nunca**. |
+
+**La lección para el resto del plan**: en este frente los defectos no se ven en la pantalla ni los
+atrapa el compilador — se ven contando filas y leyendo la cadena entera. Las fases 4 y 5 conviene
+auditarlas igual antes de darlas por hechas.
