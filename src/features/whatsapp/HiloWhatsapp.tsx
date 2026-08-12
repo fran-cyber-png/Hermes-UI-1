@@ -1089,8 +1089,17 @@ function ComposerWa({
    * Hermes con un JPG a pantalla completa y sin botón de volver. Cancelarlo solo
    * dentro de la zona dejaría ese agujero en todo el resto de la pantalla.
    *
-   * Se filtra por `types` incluyendo `'Files'`: sin eso esto se comería el
-   * arrastre de las tarjetas del Pipeline, que es un drag del DOM sin archivos.
+   * 🔴 **SE FILTRA POR `Files` O `text/uri-list`, Y LA SEGUNDA MITAD ES EL PARCHE
+   * DE UN AGUJERO REAL.** Con solo `Files`, arrastrar una imagen desde una página
+   * web —que no viaja como archivo sino como URL— salía por el `return` de arriba
+   * **sin cancelar el default**, y entonces pasaba exactamente lo que este bloque
+   * dice evitar: el webview navegaba a la imagen y la vendedora quedaba afuera de
+   * Hermes. O sea que la guarda cubría la mitad del caso que la justifica.
+   * Ahora cancela las dos, y lo que no se puede adjuntar lo DICE en vez de tragarlo.
+   *
+   * ⚠️ **No se ensancha más que eso**: el arrastre de las tarjetas del Pipeline
+   * viaja como `text/plain` y tiene que seguir pasando de largo. Files y URL son
+   * justo lo que el navegador abriría por su cuenta; el resto no navega nada.
    *
    * El composer solo existe con una conversación abierta, así que el alcance de
    * estos listeners es exactamente el correcto y se van solos al cerrarla.
@@ -1104,10 +1113,13 @@ function ComposerWa({
   aceptarRef.current = aceptarArchivos;
 
   useEffect(() => {
-    const traeArchivos = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
+    const tipos = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []);
+    const traeArchivos = (e: DragEvent) => tipos(e).includes('Files');
+    /** Lo que el navegador abriría solo si lo soltás: un archivo o una URL. */
+    const puedeNavegar = (e: DragEvent) => traeArchivos(e) || tipos(e).includes('text/uri-list');
 
     function alArrastrar(e: DragEvent) {
-      if (!traeArchivos(e)) return;
+      if (!puedeNavegar(e)) return;
       e.preventDefault();
       setArrastrando(true);
     }
@@ -1117,14 +1129,36 @@ function ComposerWa({
       if (!e.relatedTarget) setArrastrando(false);
     }
     function alSoltar(e: DragEvent) {
-      if (!traeArchivos(e)) return;
+      if (!puedeNavegar(e)) return;
+      // Se cancela SIEMPRE, incluso cuando no vamos a adjuntar nada: cancelar es
+      // lo que impide que el webview se vaya a la imagen.
       e.preventDefault();
       setArrastrando(false);
+
+      if (!traeArchivos(e)) {
+        // Arrastrado desde una web: viaja la URL, no el archivo, y bajarla nosotros
+        // es otro frente (CORS, y muchas veces es un `blob:` que solo existe en esa
+        // pestaña). Se dice; el silencio acá se lee como que la app no anda.
+        setAvisoPegado('Eso vino de una página web y no trae el archivo. Bajalo primero y arrastralo desde la carpeta.');
+        return;
+      }
+
       // Por REF y no directo: así los listeners se enganchan una sola vez y la
       // función que corre sigue siendo la última. Sin esto habría que dejar el
       // efecto sin deps, y entonces los tres listeners se dan de baja y de alta
       // en CADA tecla que se escribe en el composer.
-      aceptarRef.current(e.dataTransfer?.files);
+      const hubo = aceptarRef.current(e.dataTransfer?.files);
+
+      // 🔴 EL FOCO, que es lo que separa «adjuntó» de «se puede mandar».
+      // ⌘V no necesita esto porque su handler VIVE en el textarea, así que pegar
+      // implica que la caja ya tenía el foco. El drop escucha en la ventana: si
+      // la vendedora venía de tocar el hilo (scrollear, citar, reaccionar), el
+      // foco está en cualquier lado y **Enter no llega al handler**, que cuelga
+      // del `onKeyDown` del textarea. El botón anda igual, pero el reflejo que se
+      // aprende con ⌘V —soltar y apretar Enter— fallaba en silencio.
+      // `textareaRef` es un ref: estable entre renders, así que usarlo adentro de
+      // un efecto con deps vacías es correcto.
+      if (hubo) textareaRef.current?.focus();
     }
 
     window.addEventListener('dragover', alArrastrar);
@@ -1456,6 +1490,11 @@ function ComposerWa({
           <button
             type="button"
             onClick={() => void onEnviar()}
+            // Era un ícono mudo: sin nombre para un lector de pantalla y sin forma
+            // de encontrarlo en un test. El resto de los botones del composer sí
+            // están rotulados («Quitar adjunto», «Quitar la cita»).
+            title="Enviar"
+            aria-label="Enviar"
             disabled={!conectado || (!texto.trim() && !adjunto) || enviando}
             className="group flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_2px_10px_-2px_rgba(37,99,235,0.5)] transition-[background-color,box-shadow,transform] duration-200 ease-house hover:bg-primary-hover hover:shadow-[0_4px_16px_-2px_rgba(37,99,235,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 active:scale-[0.94] disabled:opacity-40 disabled:shadow-none"
           >

@@ -1,6 +1,9 @@
 [package]
 name = "app"
-version = "0.1.0"
+# Espeja `tauri.conf.json`. Estaban desincronizados (0.1.0 acá, 0.3.0 allá) y no
+# molestaba porque el bundle usa el del JSON — pero al buscar «qué versión es
+# ésta» hay dos respuestas y una miente.
+version = "0.4.0"
 description = "A Tauri App"
 authors = ["you"]
 license = ""

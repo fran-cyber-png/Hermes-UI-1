@@ -45,8 +45,11 @@ const CONVERSACION = {
 } as Conversacion;
 
 let montado: Montado | null = null;
+/** Lo que salió por `/enviar-media`. Sin esto no se puede afirmar que el drop MANDA. */
+let enviosMedia: { nombre: string | null; caption: string | null }[] = [];
 
 beforeEach(() => {
+  enviosMedia = [];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (entrada: RequestInfo | URL) => {
@@ -58,6 +61,13 @@ beforeEach(() => {
       }
       if (url.includes('/api/whatsapp/conversacion/')) {
         return new Response(JSON.stringify({ telefono: TELEFONO, mensajes: [], origen: null }), {
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/whatsapp/enviar-media')) {
+        const q = new URL(url, 'http://x').searchParams;
+        enviosMedia.push({ nombre: q.get('nombre'), caption: q.get('caption') });
+        return new Response(JSON.stringify({ ok: true, idExterno: 'wa:1' }), {
           headers: { 'content-type': 'application/json' },
         });
       }
@@ -83,13 +93,21 @@ async function abrirChat(): Promise<Montado> {
  * Un `DragEvent` con archivos. jsdom no implementa `DataTransfer`, así que se
  * arma el mínimo que el handler lee: `types` y `files`.
  */
-function arrastre(tipo: 'dragover' | 'drop' | 'dragleave', archivos: File[] | null): Event {
+/**
+ * `tipos` distingue los tres arrastres que importan:
+ *   `'archivos'` — del Finder, el caso real;
+ *   `'url'`      — desde una web: NO trae `File`, y es el que hacía navegar el webview;
+ *   `'dom'`      — el de las tarjetas del Pipeline, que no se toca.
+ */
+function arrastre(
+  tipo: 'dragover' | 'drop' | 'dragleave',
+  archivos: File[] | null,
+  tipos: 'archivos' | 'url' | 'dom' = archivos ? 'archivos' : 'dom',
+): Event {
   const e = new Event(tipo, { bubbles: true, cancelable: true });
+  const porTipo = { archivos: ['Files'], url: ['text/uri-list', 'text/plain'], dom: ['text/plain'] };
   Object.defineProperty(e, 'dataTransfer', {
-    value: {
-      types: archivos ? ['Files'] : ['text/plain'],
-      files: archivos ?? [],
-    },
+    value: { types: porTipo[tipos], files: archivos ?? [] },
   });
   Object.defineProperty(e, 'relatedTarget', { value: null });
   return e;
@@ -150,6 +168,61 @@ describe('arrastrar un archivo al chat', () => {
     window.dispatchEvent(arrastre('drop', [new File(['x'], 'cosas.zip', { type: 'application/zip' })]));
     await reposar();
     expect(m.contenedor.textContent).toContain('imagen, video, audio o PDF');
+  });
+
+  test('🔴 soltar una foto SIN escribir nada y mandarla con el botón — el caso real', async () => {
+    // Es lo que el dueño pidió con «y que se pueda enviar también»: arrastra una
+    // imagen y no escribe una palabra. Si el botón exigiera texto, acá quedaría
+    // muerto y el síntoma sería exactamente ése.
+    const m = await abrirChat();
+    window.dispatchEvent(arrastre('drop', [captura('flyer-agosto.jpg', 'image/jpeg')]));
+    await reposar();
+
+    const enviar = [...m.contenedor.querySelectorAll('button')].find(
+      (b) => b.getAttribute('title') === 'Enviar' || b.getAttribute('aria-label') === 'Enviar',
+    );
+    expect(enviar, 'no encontré el botón de enviar').toBeTruthy();
+    expect(enviar!.disabled, 'el botón tiene que estar vivo con adjunto y sin texto').toBe(false);
+
+    enviar!.click();
+    await reposar();
+
+    expect(enviosMedia).toHaveLength(1);
+    expect(enviosMedia[0].nombre).toBe('flyer-agosto.jpg');
+    expect(enviosMedia[0].caption).toBeNull();
+  });
+
+  test('🔴 soltar y mandar con Enter: el drop deja el foco en la caja', async () => {
+    // ⌘V no necesita enfocar porque su handler VIVE en el textarea. El drop
+    // escucha en la ventana, así que sin un `focus()` explícito Enter no llega
+    // al handler y el reflejo «soltar y apretar Enter» falla mudo.
+    const m = await abrirChat();
+    const otro = m.contenedor.querySelector('button');
+    (otro as HTMLElement | null)?.focus(); // el foco arranca en cualquier lado
+
+    window.dispatchEvent(arrastre('drop', [captura()]));
+    await reposar();
+
+    const caja = m.contenedor.querySelector('textarea')!;
+    expect(document.activeElement, 'el drop tiene que devolver el foco a la caja').toBe(caja);
+
+    caja.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await reposar();
+    expect(enviosMedia).toHaveLength(1);
+  });
+
+  test('🔴 una imagen arrastrada desde una WEB no navega, y lo dice', async () => {
+    // Sin cancelar el default, el webview se va a la imagen y la vendedora queda
+    // afuera de Hermes sin botón de volver. Es el agujero que la guarda de `Files`
+    // dejaba abierto justo en el caso que la justifica.
+    const m = await abrirChat();
+    const e = arrastre('drop', null, 'url');
+    window.dispatchEvent(e);
+    await reposar();
+
+    expect(e.defaultPrevented, 'el drop de una URL TIENE que cancelarse').toBe(true);
+    expect(m.contenedor.textContent).toContain('Bajalo primero');
+    expect(enviosMedia).toHaveLength(0);
   });
 
   test('EN MODO REVISIÓN el aviso llega ANTES de soltar, no después', async () => {

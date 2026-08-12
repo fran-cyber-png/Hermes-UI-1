@@ -9,7 +9,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
+      /* ⚠️ Sin `* { margin: 0; padding: 0 }`: Tailwind 4 emite sus utilidades
+         dentro de `@layer` y una regla sin capa le gana, así que ese reset se
+         comía el padding de todo lo que se quisiera fotografiar. */
       body { font-family: 'Open Sans', system-ui, sans-serif; background: #f1f5f9; }
     </style>
   </head>
