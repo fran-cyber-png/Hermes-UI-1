@@ -1,4 +1,4 @@
-import type { MediaSaliente, PlantillaSaliente, ResultadoEnvio, TransporteWhatsapp } from './transporte.js';
+import type { CitaSaliente, MediaSaliente, PlantillaSaliente, ResultadoEnvio, TransporteWhatsapp } from './transporte.js';
 import { normalizarTelefono } from './identidadWa.js';
 import { A_MANO, type Procedencia } from '../procedencia/pieza.js';
 
@@ -55,6 +55,17 @@ export interface OrdenEnvio {
    * que el error ensuciaría justo la línea de base.
    */
   procedencia?: Procedencia;
+  /**
+   * A QUÉ MENSAJE RESPONDE (la tirita gris de WhatsApp).
+   *
+   * Viaja **en la orden** por el mismo motivo que `procedencia` y `automatico`:
+   * pasa por la misma puerta, se frena con los mismos frenos y sale en la misma
+   * llamada al transporte. Un `update` posterior no serviría de nada — la cita no
+   * es un dato que se anota, es parte del mensaje que sale.
+   *
+   * Ausente = un mensaje suelto, que es el 99 % de lo que se manda.
+   */
+  cita?: CitaSaliente;
 }
 
 /** Una orden de adjunto: mismas exigencias que el texto + el archivo a mandar. */
@@ -115,7 +126,9 @@ export class EnvioControlado {
     if (lineaAjena) return lineaAjena;
     return this.conGuardas(
       { ...orden, procedencia: orden.procedencia ?? A_MANO },
-      () => this.transporte.enviarTexto(orden.telefono, orden.texto),
+      // La cita va tal cual, sin interpretar: la puerta decide SI sale, no CÓMO
+      // se arma el proto. Sin cita, el transporte manda exactamente lo de siempre.
+      () => this.transporte.enviarTexto(orden.telefono, orden.texto, orden.cita),
     );
   }
 

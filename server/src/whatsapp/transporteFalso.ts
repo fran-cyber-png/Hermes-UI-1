@@ -1,6 +1,7 @@
 import { basename } from 'node:path';
 import {
   FotoNoDisponibleError,
+  type CitaSaliente,
   type EstadoSesion,
   type FotoPerfil,
   type MediaSaliente,
@@ -40,7 +41,7 @@ export class TransporteFalso implements TransporteWhatsapp {
   private susEstado: ((e: EstadoSesion) => void)[] = [];
 
   /** Todo lo que se "envió", para que los tests verifiquen qué salió y en qué orden. */
-  readonly enviados: { telefono: string; texto: string; idExterno: string }[] = [];
+  readonly enviados: { telefono: string; texto: string; idExterno: string; cita?: CitaSaliente }[] = [];
 
   /** Los adjuntos "enviados", con la misma intención de auditoría de prueba. */
   readonly enviadosMedia: { telefono: string; media: MediaSaliente; idExterno: string }[] = [];
@@ -125,7 +126,14 @@ export class TransporteFalso implements TransporteWhatsapp {
     this.susEstado.push(cb);
   }
 
-  async enviarTexto(telefono: string, texto: string): Promise<ResultadoEnvio> {
+  /**
+   * `cita` se ANOTA pero no se interpreta: el falso no habla ningún protocolo, y
+   * armar acá un `contextInfo` sería inventarse un dialecto. Lo que sí tiene que
+   * poder verificar un test es que la cita LLEGÓ hasta el transporte — que es
+   * justo donde un campo opcional se pierde en silencio (le pasó a `automatico`,
+   * ver `ordenes.ts`).
+   */
+  async enviarTexto(telefono: string, texto: string, cita?: CitaSaliente): Promise<ResultadoEnvio> {
     // Un transporte no manda contra una sesión que no está conectada. Fallar acá
     // es lo correcto: es donde la guarda de arriba se entera de que no hay línea.
     if (this.sesion.estado !== 'conectado') {
@@ -134,7 +142,7 @@ export class TransporteFalso implements TransporteWhatsapp {
 
     const idExterno = this.nuevoId();
     const ocurridoEn = this.reloj();
-    this.enviados.push({ telefono, texto, idExterno });
+    this.enviados.push({ telefono, texto, idExterno, cita });
 
     // El eco: un envío también es un mensaje del hilo. Emitirlo como `esMio` deja
     // que la conversación se pinte igual que en un transporte real, donde lo que
@@ -149,6 +157,7 @@ export class TransporteFalso implements TransporteWhatsapp {
       nombreVisible: null,
       texto,
       clase: 'texto',
+      cita: cita ? { mensajeExternalId: `wa:${cita.mensajeId}` } : null,
     });
 
     return { idExterno, ocurridoEn };

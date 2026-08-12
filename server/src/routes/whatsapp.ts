@@ -23,6 +23,7 @@ import { upsertEstado } from '../cola/estado.js';
 import { reaccionesPorMensaje } from '../reacciones/repositorio.js';
 import { estadosPorMensaje } from '../entrega/repositorio.js';
 import { reaccionar } from '../reacciones/enviar.js';
+import { resolverCitados, resolverCitaSaliente } from '../whatsapp/citaRepositorio.js';
 
 /**
  * LA CONVERSACIÓN NATIVA DE WHATSAPP dentro de Hermes: ver el hilo y responder,
@@ -192,7 +193,24 @@ whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
    * vacío. Acá se pega, que es donde se arma la respuesta.
    */
   const ids = mensajes.map((m) => String((m as { external_id: string }).external_id));
-  const [porMensaje, estados] = await Promise.all([
+
+  /**
+   * LOS MENSAJES CITADOS, resueltos en UNA segunda consulta.
+   *
+   * La cita viene del crudo del evento y trae solo un id (`cita.ts`): quién lo
+   * dijo y qué decía se busca acá, contra `interactions`. No es un tercer JOIN
+   * en `hiloDe` a propósito — sería un self-join sobre la tabla que esa consulta
+   * ya está leyendo, para un dato que la mayoría de las filas no tiene.
+   */
+  const citados = [
+    ...new Set(
+      mensajes
+        .map((m) => (m as { cita?: { mensajeExternalId?: string } | null }).cita?.mensajeExternalId)
+        .filter((v): v is string => typeof v === 'string' && v.length > 0),
+    ),
+  ];
+
+  const [porMensaje, estados, citas] = await Promise.all([
     reaccionesPorMensaje(db, ids, numeroPropio),
     // Los ✓✓ solo de los SALIENTES: preguntar por los entrantes sería pedirle a
     // `envios_wa` filas que por definición no tiene.
@@ -200,11 +218,23 @@ whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
       db,
       mensajes.filter((m) => (m as { direccion?: string }).direccion === 'saliente').map((m) => String((m as { external_id: string }).external_id)),
     ),
+    resolverCitados(db, citados),
   ]);
   const enriquecidos = mensajes.map((m) => {
     const fila = m as Record<string, unknown> & { external_id: string };
     const r = porMensaje.get(fila.external_id);
     const e = estados.get(fila.external_id);
+    /**
+     * 🔴 SI EL CITADO NO ESTÁ, SE DIBUJA EL HUECO — nunca se descarta el mensaje
+     * ni se calla la cita. Que el mensaje al que alguien respondió sea anterior a
+     * la vinculación del número (o de antes de que Hermes capturara citas) es lo
+     * NORMAL las primeras semanas, y esconderlo haría que la respuesta se lea
+     * como un mensaje suelto que no contesta nada.
+     */
+    const refCita = (fila.cita as { mensajeExternalId?: string } | null | undefined)?.mensajeExternalId;
+    const cita = refCita
+      ? (citas.get(refCita) ?? { mensajeExternalId: refCita, texto: null, direccion: null, mediaClase: null })
+      : null;
     // Ausentes y no `[]`/`null`: el front distingue «no tiene» de «no se pudo
     // saber» sin tener que inventarse la diferencia. Un mensaje viejo, anterior
     // a este frente, no tiene estado — y no dibujar nada es más honesto que
@@ -213,6 +243,9 @@ whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
       ...fila,
       ...(r?.length ? { reacciones: r } : {}),
       ...(e ? { entrega: e } : {}),
+      // Se pisa la clave cruda del payload con la resuelta (o con `null`): lo que
+      // el front recibe es siempre la forma de `CitaEnElHilo`, nunca el crudo.
+      cita,
     };
   });
 
@@ -298,17 +331,22 @@ whatsappRouter.post('/leido/:telefono', requiereVendedora, async (req, res) => {
  * vendedora (del token), audita, y frena si la sesión está baneada.
  */
 whatsappRouter.post('/enviar', requiereVendedora, async (req, res) => {
-  const { numeroPropio, telefono, texto, referencia } = req.body ?? {};
+  const { numeroPropio, telefono, texto, referencia, citaDe } = req.body ?? {};
 
   // Mandar y persistir el saliente van juntos (`enviarYProyectar.ts`): un envío
   // que sale y no queda en el hilo es un mensaje fantasma, y la vendedora lo
   // manda de nuevo. Las plantillas-secuencia usan la MISMA función.
+  //
+  // `citaDe` es el `external_id` del mensaje al que se responde, y NADA MÁS: de
+  // quién era y qué decía lo resuelve el server contra lo que ya guardó. Ver el
+  // porqué en `whatsapp/citaRepositorio.ts` — es un dato que el LEAD va a ver.
   const r = await enviarTextoYProyectar({
     vendedoraId: req.vendedoraId!,
     numeroPropio: String(numeroPropio ?? ''),
     telefono: String(telefono ?? ''),
     texto: String(texto ?? ''),
     referencia: String(referencia ?? ''),
+    cita: await resolverCitaSaliente(db, typeof citaDe === 'string' ? citaDe : null),
     procedencia: await procedenciaDelComposer(req.body?.pieza, leerPasoDeSecuencia(req.vendedoraId!)),
   });
 

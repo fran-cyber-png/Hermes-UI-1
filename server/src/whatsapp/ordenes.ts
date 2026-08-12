@@ -1,4 +1,4 @@
-import type { MediaSaliente, PlantillaSaliente } from "./transporte.js";
+import type { CitaSaliente, MediaSaliente, PlantillaSaliente } from "./transporte.js";
 import type { OrdenEnvioMedia } from "./envioControlado.js";
 import type { Procedencia } from "../procedencia/pieza.js";
 
@@ -36,6 +36,12 @@ export interface OrdenTexto extends ExtrasDeLaOrden {
   telefono: string;
   texto: string;
   referencia: string;
+  /**
+   * A qué mensaje responde. Va acá y NO en `ExtrasDeLaOrden`: un adjunto y una
+   * plantilla aprobada tampoco la llevan hoy, y ponerla en el tronco común
+   * prometería en el tipo algo que dos de las tres ramas no hacen.
+   */
+  cita?: CitaSaliente;
 }
 
 /**

@@ -7,6 +7,7 @@ import { ordenDeMedia, type OrdenMedia, type OrdenPlantilla, type OrdenTexto } f
 import { db } from "../db/client.js";
 import { momentoDelEnvio } from "../procedencia/momento.js";
 import { A_MANO, aMano, type Procedencia } from "../procedencia/pieza.js";
+import { externalIdDeWa } from "../reacciones/dominio.js";
 
 // La FORMA de una orden vive en `ordenes.ts` (sin `db` adentro, para poder
 // testearla). Se re-exporta para que quien la importaba de acá siga andando.
@@ -88,6 +89,11 @@ export async function enviarTextoYProyectar(o: OrdenTexto): Promise<ResultadoCon
     nombreVisible: null,
     texto: o.texto,
     clase: "texto",
+    // La cita también se proyecta: si no, la vendedora manda una respuesta
+    // citando, el lead la ve con su tirita y en Hermes queda un mensaje suelto
+    // que no contesta nada. El id se vuelve a prefijar con la MISMA receta con la
+    // que se guardan los mensajes — la de `reacciones/dominio.ts`.
+    cita: o.cita ? { mensajeExternalId: externalIdDeWa(o.cita.mensajeId) } : null,
   });
   if ("evento" in proy) await repositorioDrizzle.persistir(proy.evento, proy.interaccion);
 

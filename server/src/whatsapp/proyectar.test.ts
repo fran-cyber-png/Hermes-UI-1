@@ -115,6 +115,25 @@ test('T-M4 — un adjunto viaja al payload del evento y el caption es el texto d
   }
 });
 
+describe('la cita en el crudo — sin migración', () => {
+  test('a qué mensaje responde queda en el payload, al lado de media y origen', () => {
+    // Va al CRUDO y no a una columna porque es un atributo del mensaje: no cambia
+    // nunca y no existe sin él. El hilo lo sirve con el JOIN que ya tiene.
+    const r = proyectarMensaje(mensaje({ cita: { mensajeExternalId: 'wa:EL_PRECIO' } }));
+    assert.ok('evento' in r);
+    if ('evento' in r) assert.deepEqual(r.evento.payload.cita, { mensajeExternalId: 'wa:EL_PRECIO' });
+  });
+
+  test('un mensaje sin cita la deja en `null`, no ausente', () => {
+    // Explícito y no ausente, igual que `media` y `origen`: una clave que a veces
+    // está y a veces no obliga a cada consumidor del crudo a distinguir «no citó»
+    // de «esta fila es de antes», y esa diferencia no le sirve a nadie acá.
+    const r = proyectarMensaje(mensaje());
+    assert.ok('evento' in r);
+    if ('evento' in r) assert.equal(r.evento.payload.cita, null);
+  });
+});
+
 /**
  * ── ATRIBUCIÓN DE LÍNEA (#185) ────────────────────────────────────────────────
  *
