@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { olvidarCacheDeHermes } from '../../lib/datos/cacheDeHermes';
 import { borrarToken, guardarToken, tokenGuardado } from '../../lib/datos/token';
+import { mensajeDeErrorCenturion, tokenCenturionDeLaUrl } from './centurionSso';
 
 /**
  * LA SESIÓN DE LA VENDEDORA, del lado del cliente.
@@ -68,29 +69,53 @@ export function useSesion() {
    * Sin esto, la vendedora se enteraba recién al registrar una venta, con un 409.
    */
   const [cerberusVivo, setCerberusVivo] = useState<boolean | null>(null);
+  /** Vino de Centurión con un link que no sirvió. `Login` lo puede mostrar. */
+  const [errorCenturion, setErrorCenturion] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = tokenGuardado();
-    if (!token) {
-      setCargando(false);
-      return;
-    }
-    // El atajo: con un token que no venció, la app se pinta YA desde el caché.
-    const supuesta = quienDiceSer(token);
-    if (supuesta) {
-      setVendedora(supuesta);
-      setCargando(false);
-    } else {
-      setCargando(true);
-    }
-    setSinServer(false);
-    api<{ vendedora: Vendedora; cerberus?: boolean }>('/api/auth/yo')
-      .then((r) => {
+    async function arrancar() {
+      // ── EL BUZÓN DE CENTURIÓN, primero: se lee UNA VEZ, no es un router ──
+      // (mismo criterio que `notas/porLink.ts`, ADR 0048). Si el canje falla no
+      // se corta acá: puede haber una sesión guardada de un login anterior.
+      const tokenCenturion = tokenCenturionDeLaUrl();
+      if (tokenCenturion) {
+        try {
+          const r = await api<{ token: string; vendedora: Vendedora }>('/api/auth/centurion', {
+            method: 'POST',
+            body: JSON.stringify({ token: tokenCenturion }),
+          });
+          guardarToken(r.token);
+          setVendedora(r.vendedora);
+          setSinServer(false);
+          setCerberusVivo(false); // esta identidad no tiene sesión de Cerberus, y nunca la va a tener.
+          setCargando(false);
+          return;
+        } catch (err) {
+          setErrorCenturion(mensajeDeErrorCenturion(err));
+          // sigue abajo: quizás hay una sesión guardada de antes.
+        }
+      }
+
+      const token = tokenGuardado();
+      if (!token) {
+        setCargando(false);
+        return;
+      }
+      // El atajo: con un token que no venció, la app se pinta YA desde el caché.
+      const supuesta = quienDiceSer(token);
+      if (supuesta) {
+        setVendedora(supuesta);
+        setCargando(false);
+      } else {
+        setCargando(true);
+      }
+      setSinServer(false);
+      try {
+        const r = await api<{ vendedora: Vendedora; cerberus?: boolean }>('/api/auth/yo');
         setVendedora(r.vendedora);
         // El server viejo no manda el campo; ahí no hay nada que denunciar.
         setCerberusVivo(r.cerberus ?? null);
-      })
-      .catch((err) => {
+      } catch (err) {
         if (err instanceof ErrorApi && err.status === 401) {
           // Token muerto de verdad: afuera, y sin dejarle el radar a la que entre.
           borrarToken();
@@ -99,8 +124,11 @@ export function useSesion() {
         } else {
           setSinServer(true); // el server no contesta: el token se queda
         }
-      })
-      .finally(() => setCargando(false));
+      } finally {
+        setCargando(false);
+      }
+    }
+    void arrancar();
   }, [intento]);
 
   /** Vuelve a validar el token guardado (para el estado «no pude conectar con el server»). */
@@ -131,5 +159,5 @@ export function useSesion() {
     void olvidarCacheDeHermes();
   }, []);
 
-  return { vendedora, cargando, sinServer, reintentar, entrar, salir, cerberusVivo };
+  return { vendedora, cargando, sinServer, reintentar, entrar, salir, cerberusVivo, errorCenturion };
 }

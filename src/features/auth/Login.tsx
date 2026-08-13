@@ -55,12 +55,15 @@ export function Login({
   entrar,
   sinServer = false,
   reintentar,
+  errorCenturion = null,
 }: {
   entrar: (u: string, p: string) => Promise<void>;
   /** Fase 3 (App): hay token guardado pero el server no contesta — la sesión no se perdió. */
   sinServer?: boolean;
   /** Fase 3 (App): vuelve a validar el token guardado. */
   reintentar?: () => void;
+  /** Vino con un link de Centurión que no sirvió (venció, o el SSO no está prendido acá). */
+  errorCenturion?: string | null;
 }) {
   const [ultimo] = useState(() => localStorage.getItem(CLAVE_ULTIMO_USUARIO));
   const [username, setUsername] = useState(ultimo ?? '');
@@ -96,6 +99,16 @@ export function Login({
           <div className="mt-3 font-heading text-4xl font-extrabold tracking-[0.06em] text-white">HERMES</div>
           <p className="mt-1.5 text-xs text-navy-muted">La mesa de la vendedora</p>
         </div>
+
+        {errorCenturion && (
+          <div
+            role="alert"
+            className="mb-4 flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3.5 py-2.5"
+          >
+            <AlertTriangle size={14} className="mt-0.5 shrink-0 text-warning-foreground" />
+            <p className="text-xs text-warning-foreground">{errorCenturion}</p>
+          </div>
+        )}
 
         {sinServer && (
           <div

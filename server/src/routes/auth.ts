@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { autenticarEnCerberus } from '../cerberus/auth.js';
 import { guardarSesionCerberus, obtenerSesionCerberus } from '../cerberus/sesionStore.js';
 import { firmarSesion, requiereVendedora } from '../auth/sesion.js';
+import { ssoDeCenturionConfigurado, vendedoraIdDeCenturion, verificarTokenCenturion } from '../auth/centurion.js';
 
 /**
  * El login de las vendedoras. Valida contra Cerberus (la identidad real del
@@ -34,6 +35,47 @@ authRouter.post('/login', async (req, res) => {
 
   const token = firmarSesion(r.vendedora.id);
   res.json({ ok: true, token, vendedora: r.vendedora });
+});
+
+/**
+ * El login de Centurión (Betto y compañía): canjea el token corto que
+ * Centurión firma por una sesión de Hermes, mismo shape que `/login`.
+ *
+ * ⚠️ **Apagado por default, y a propósito.** El Hermes que corre hoy sirve
+ * Escuela y campaña desde el MISMO proceso — el plan de separación de entorno
+ * es justo lo que existe para cortar ese cruce. Prender este login acá
+ * profundizaría el cruce en vez de cerrarlo: alguien de campaña con sesión de
+ * Centurión podría entrar al Hermes que también atiende leads de la Escuela.
+ * Por eso esto solo hace algo si `CENTURION_SSO_SECRET` está seteada, y esa
+ * env nace pensada para el entorno de campaña separado (Fase 1), no para el
+ * `.env` de hoy. Sin la env: 503, nunca un 401 que sugiera "probá con otra
+ * clave" — el problema es de config, no de la vendedora.
+ */
+authRouter.post('/centurion', async (req, res) => {
+  if (!ssoDeCenturionConfigurado()) {
+    res.status(503).json({ ok: false, type: 'sso_no_configurado', message: 'el login de Centurión no está habilitado acá' });
+    return;
+  }
+
+  const { token } = req.body ?? {};
+  if (typeof token !== 'string' || !token) {
+    res.status(400).json({ ok: false, message: 'falta el token de Centurión' });
+    return;
+  }
+
+  const identidad = verificarTokenCenturion(token);
+  if (!identidad) {
+    res.status(401).json({ ok: false, message: 'ese token de Centurión no sirve o venció' });
+    return;
+  }
+
+  const vendedoraId = vendedoraIdDeCenturion(identidad.usuario);
+  const sesion = firmarSesion(vendedoraId);
+  res.json({
+    ok: true,
+    token: sesion,
+    vendedora: { id: vendedoraId, nombre: identidad.nombre ?? identidad.usuario },
+  });
 });
 
 /**

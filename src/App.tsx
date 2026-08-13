@@ -233,7 +233,7 @@ function Cabina({
 }
 
 export default function App() {
-  const { vendedora, cargando, sinServer, reintentar, entrar, salir, cerberusVivo } = useSesion();
+  const { vendedora, cargando, sinServer, reintentar, entrar, salir, cerberusVivo, errorCenturion } = useSesion();
   const [abierta, setAbierta] = useState<Conversacion | null>(null);
   const [vista, setVista] = useState<Vista>('dashboard');
   const [direccion, setDireccion] = useState<'abajo' | 'arriba'>('abajo');
@@ -434,7 +434,7 @@ export default function App() {
     );
   }
   if (!vendedora) {
-    return <Login entrar={entrar} sinServer={sinServer} reintentar={reintentar} />;
+    return <Login entrar={entrar} sinServer={sinServer} reintentar={reintentar} errorCenturion={errorCenturion} />;
   }
 
   // Abrir una conversación desde cualquier vista te trae a la Bandeja: es la
