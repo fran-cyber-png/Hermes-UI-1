@@ -247,6 +247,7 @@ export function TarjetaEmbudo({
           <Avatar
             nombre={nombre.texto}
             telefono={c.canal === 'whatsapp' ? c.persona_id : null}
+            numeroPropio={c.numero_propio}
             conFoto={conFoto}
             className="size-7 rounded-full bg-secondary text-[10px] font-bold text-navy"
           />

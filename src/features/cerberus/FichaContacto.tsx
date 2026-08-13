@@ -144,6 +144,7 @@ export function FichaContacto({
             <Avatar
               nombre={conversacion.persona_nombre ?? telefono}
               telefono={conFotoDePerfil ? telefono : null}
+              numeroPropio={conversacion.numero_propio}
               conFoto={conFotoDePerfil}
               className="size-8 shrink-0 rounded-[11px] bg-secondary text-xs font-bold text-navy"
             />

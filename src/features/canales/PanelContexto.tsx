@@ -72,6 +72,7 @@ export function PanelContexto({
             <Avatar
               nombre={conversacion.persona_nombre}
               telefono={conversacion.canal === 'whatsapp' ? conversacion.persona_id : null}
+              numeroPropio={conversacion.numero_propio}
               conFoto={conversacion.canal === 'whatsapp'}
               className="size-9 rounded-[12px] bg-secondary font-heading text-xs font-bold text-navy"
             />

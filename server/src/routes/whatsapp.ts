@@ -399,6 +399,14 @@ whatsappRouter.get('/media/:archivo', (req, res) => {
  * guarda nada — de lo contrario cada restart envenenaría la caché por 7 días
  * para cualquier contacto consultado en ese hueco (hallazgo de la revisión del
  * PR #75).
+ *
+ * `numeroPropio` es opcional por retrocompatibilidad (un caché de front viejo,
+ * ADR 0007, puede no mandarlo), pero cuando viene se respeta: sin él, esto
+ * consulta SIEMPRE por `whatsapp()` = la primera línea armada, y con más de una
+ * línea whatsmeow eso filtra la foto de un contacto de una línea hacia la cuenta
+ * de otra. Con `numeroPropio` que no resuelve a una línea montada no se cae al
+ * primero (mismo criterio que `GestorWhatsapp.de()`): 503, nunca una consulta
+ * adivinada.
  */
 const FOTO_FRESCA_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -408,6 +416,7 @@ whatsappRouter.get('/foto/:telefono', requiereVendedora, async (req, res) => {
     res.status(400).json({ ok: false, message: 'teléfono inválido' });
     return;
   }
+  const numeroPropio = typeof req.query.numeroPropio === 'string' ? req.query.numeroPropio : undefined;
 
   const [cache] = await db.select().from(fotosPerfil).where(eq(fotosPerfil.telefono, telefono));
   const fresca = cache && Date.now() - cache.actualizadoAt.getTime() < FOTO_FRESCA_MS;
@@ -425,7 +434,12 @@ whatsappRouter.get('/foto/:telefono', requiereVendedora, async (req, res) => {
     // el archivo se perdió del disco: caemos a re-traer abajo.
   }
 
-  const transporte = whatsapp().transporte;
+  const linea = numeroPropio ? gestorWhatsapp().de(numeroPropio) : whatsapp();
+  if (!linea) {
+    res.status(503).json({ ok: false, message: `la línea ${numeroPropio} no está montada ahora mismo` });
+    return;
+  }
+  const transporte = linea.transporte;
   let foto: FotoPerfil | null;
   try {
     foto = transporte.fotoDePerfil ? await transporte.fotoDePerfil(telefono) : null;

@@ -282,6 +282,7 @@ export function FilaConversacion({
         <Avatar
           nombre={c.persona_nombre}
           telefono={c.canal === 'whatsapp' ? c.persona_id : null}
+          numeroPropio={c.numero_propio}
           conFoto={conFoto}
           className="size-9 rounded-full bg-secondary text-xs font-bold text-navy"
         />

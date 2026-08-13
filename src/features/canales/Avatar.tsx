@@ -18,28 +18,38 @@ import { useBlobAutenticado } from '../../lib/datos/blobAutenticado';
  * ante cualquier problema. Sin foto → iniciales, nunca un roto.
  */
 
-function useFotoPerfil(telefono: string | null | undefined): string | null {
-  const { url } = useBlobAutenticado(
-    telefono ? `${API_URL}/api/whatsapp/foto/${encodeURIComponent(telefono)}` : null,
-  );
-  return url;
+function useFotoPerfil(telefono: string | null | undefined, numeroPropio: string | null | undefined): string | null {
+  const url =
+    telefono ?
+      `${API_URL}/api/whatsapp/foto/${encodeURIComponent(telefono)}` +
+      (numeroPropio ? `?numeroPropio=${encodeURIComponent(numeroPropio)}` : '')
+    : null;
+  const { url: blob } = useBlobAutenticado(url);
+  return blob;
 }
 
 export function Avatar({
   nombre,
   telefono,
+  numeroPropio,
   conFoto = false,
   className = '',
 }: {
   nombre: string | null;
   /** Teléfono del contacto (WhatsApp). Solo se usa si `conFoto`. */
   telefono?: string | null;
+  /**
+   * Línea propia por la que entró esta conversación. Sin esto, la foto se pide
+   * SIEMPRE por la primera línea armada — con más de una línea whatsmeow, filtra
+   * la foto de un contacto de una línea hacia la cuenta de otra.
+   */
+  numeroPropio?: string | null;
   /** Traer la foto de perfil. Prender SOLO donde se ve un contacto a la vez. */
   conFoto?: boolean;
   /** Clases del círculo: tamaño, forma, fondo, tinta de las iniciales. */
   className?: string;
 }) {
-  const foto = useFotoPerfil(conFoto ? telefono : null);
+  const foto = useFotoPerfil(conFoto ? telefono : null, numeroPropio);
   const base = 'flex items-center justify-center overflow-hidden ' + className;
 
   if (foto) {

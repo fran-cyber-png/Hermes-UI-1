@@ -737,6 +737,7 @@ export function HiloWhatsapp({
         <Avatar
           nombre={conversacion.persona_nombre ?? telefono}
           telefono={telefono}
+          numeroPropio={numeroPropio}
           conFoto
           className="size-8 rounded-[11px] bg-secondary font-heading text-xs font-bold text-navy"
         />
