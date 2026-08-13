@@ -44,6 +44,7 @@ const HASHES_PERMITIDOS: Record<string, string> = {
   "auth/sesion.ts": "HMAC del token Bearer de la vendedora. Es una credencial, no un contenido.",
   "auth/centurion.ts": "Verifica la firma HS256 del JWT de login de Centurión. Es una credencial, no un contenido.",
   "auth/centurion.test.ts": "El test de lo anterior: firma tokens de prueba con la misma receta.",
+  "routes/auth.centurion.test.db.ts": "El test de cableado de /api/auth/centurion: firma tokens de prueba con la misma receta.",
   "lazo/evento.ts":
     "Seudonimiza un correo antes de mandarlo al SDK. Hashea una IDENTIDAD para esconderla, no un texto para compararlo.",
   "migraciones/referencia.ts":

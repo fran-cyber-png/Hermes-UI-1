@@ -1,8 +1,10 @@
 import { Router } from 'express';
+import { db } from '../db/client.js';
 import { autenticarEnCerberus } from '../cerberus/auth.js';
 import { guardarSesionCerberus, obtenerSesionCerberus } from '../cerberus/sesionStore.js';
 import { firmarSesion, requiereVendedora } from '../auth/sesion.js';
 import { ssoDeCenturionConfigurado, vendedoraIdDeCenturion, verificarTokenCenturion } from '../auth/centurion.js';
+import { lineasDeVendedora } from '../numeros/repositorio.js';
 
 /**
  * El login de las vendedoras. Valida contra Cerberus (la identidad real del
@@ -50,6 +52,16 @@ authRouter.post('/login', async (req, res) => {
  * env nace pensada para el entorno de campaña separado (Fase 1), no para el
  * `.env` de hoy. Sin la env: 503, nunca un 401 que sugiera "probá con otra
  * clave" — el problema es de config, no de la vendedora.
+ *
+ * 🔴 **SIN LÍNEA ASIGNADA, SE RECHAZA — no se sirve fail-open.** `cola/lineas.ts`
+ * es fail-open a propósito para las vendedoras de Cerberus: son personal
+ * interno, y una vendedora nueva sin fila en `numero_vendedora` tiene que ver
+ * la cola, no una pantalla vacía. Una identidad de Centurión es lo opuesto —
+ * una persona AJENA al negocio de la Escuela — y el catálogo de subservicios
+ * de Centurión es COMPARTIDO entre candidaturas: el día que el botón de
+ * "mensajería" se habilite para una, se habilita para todas las que lo
+ * tengan contratado. Sin este candado, la primera de esas personas que haga
+ * clic sin tener línea asignada vería la cola entera de la Escuela.
  */
 authRouter.post('/centurion', async (req, res) => {
   if (!ssoDeCenturionConfigurado()) {
@@ -70,6 +82,16 @@ authRouter.post('/centurion', async (req, res) => {
   }
 
   const vendedoraId = vendedoraIdDeCenturion(identidad.usuario);
+  const lineas = await lineasDeVendedora(db, vendedoraId);
+  if (lineas.length === 0) {
+    res.status(403).json({
+      ok: false,
+      type: 'sin_linea_asignada',
+      message: 'todavía no tenés una línea de WhatsApp asignada en Hermes — avisá a soporte',
+    });
+    return;
+  }
+
   const sesion = firmarSesion(vendedoraId);
   res.json({
     ok: true,
