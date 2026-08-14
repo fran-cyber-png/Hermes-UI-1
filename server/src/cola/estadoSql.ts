@@ -114,7 +114,50 @@ export const favoritaSql: SQL = sql`COALESCE(ec.favorita, false)`;
  * leyó y no se contestó sigue estando ahí, a un clic y con su número. Sin ese
  * chip, esta decisión escondería deuda; con él, solo la ordena distinto.
  */
-export const bandaPinOrdenSql: SQL = sql`fijada DESC, fijada_at ASC, no_leido DESC`;
+/**
+ * ── LO DE OTRA VENDEDORA VA DESPUÉS, y por eso esto es una función ──────────
+ *
+ * 🔴 Reportado por Luz el 14-ago-2026: «veo otros chats y se quedan arriba, no
+ * puedo dar seguimiento». Medido: su línea (`51984429504`) tiene **1.158
+ * conversaciones repartidas entre seis personas**, y el orden de arriba ponía
+ * `no_leido` antes que todo lo demás — así que un chat **de ventas12**, viejo y
+ * con 20 sin leer que ella no va a contestar nunca, le tapaba sus propios leads
+ * del día. Cuanto más abandonada la conversación ajena, más arriba quedaba.
+ *
+ * El criterio nuevo se mete ANTES de `no_leido` y dice sólo esto: **lo que tiene
+ * dueña y no soy yo, va después**. Lo mío y lo que no tiene dueño (que es de
+ * quien lo agarre) siguen compitiendo entre sí exactamente como antes.
+ *
+ * ⚠️ **Esto NO oculta nada, y la diferencia importa**: el reparto es un FILTRO,
+ * no un permiso — las conversaciones ajenas se siguen sirviendo y se siguen
+ * viendo, sólo que abajo. Ocultarlas sería una frontera imaginaria, que es peor
+ * que ninguna porque se le cree (ver §Administración de números).
+ *
+ * ⚠️ Se compara **normalizando los dos lados**: en producción conviven `Luz`
+ * (lo empuja Cerberus a `numero_vendedora`) y `luz` (lo que ella tipea al
+ * entrar). Con comparación exacta, sus propias conversaciones le aparecerían
+ * como ajenas y el arreglo haría exactamente lo contrario de lo que promete.
+ *
+ * Sin `vendedoraId` —un servicio, o un token sin identidad— el criterio no se
+ * agrega y el orden queda idéntico al de antes.
+ *
+ * ⚠️ **Recibe la EXPRESIÓN del dueño, no el alias `asignada_a`.** Postgres
+ * acepta un alias del SELECT en `ORDER BY` sólo si va solo: adentro de una
+ * expresión contesta `column "asignada_a" does not exist`. Lo dijo el test la
+ * primera vez que corrió.
+ *
+ * ⚠️ El `coalesce` no es de estilo: con `dueno IS DISTINCT FROM yo`, una
+ * conversación SIN dueño daría «distinta» y se iría al fondo junto con las
+ * ajenas — y lo que no tiene dueño es justamente de quien lo agarre. Con
+ * `coalesce(dueno, yo)` el hueco se lee como propio, que es lo que es.
+ */
+export function bandaPinOrdenSql(vendedoraId?: string | null, dueno?: SQL): SQL {
+  const ajenaVaDespues =
+    vendedoraId && dueno
+      ? sql`(coalesce(lower(${dueno}), lower(${vendedoraId})) <> lower(${vendedoraId})) ASC, `
+      : sql``;
+  return sql`fijada DESC, fijada_at ASC, ${ajenaVaDespues}no_leido DESC`;
+}
 
 /**
  * Las categorías (etiquetas) de cada conversación, agregadas por clave. Sirve

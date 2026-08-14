@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Bot, Check, CheckCheck, Copy, CornerDownRight, CornerUpLeft, FileText, SmilePlus, Loader2, Megaphone, Paperclip, Phone, Play, QrCode, Send, Link2, Trash2, WifiOff, X } from 'lucide-react';
+import { AlertTriangle, Bot, Check, CheckCheck, Copy, CornerDownRight, CornerUpLeft, CornerUpRight, FileText, SmilePlus, Loader2, Megaphone, Paperclip, Phone, Play, QrCode, Send, Link2, Trash2, WifiOff, X } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
 import { useBlobAutenticado } from '../../lib/datos/blobAutenticado';
 import { formatoTelefono, tempClass } from '../../lib/formato';
 import { usePopover } from '../../lib/teclado/usePopover';
 import { ejecutarEnvioComposer, guardarBorrador, leerBorrador } from './borradorComposer';
+import { ponerEnComposer } from './puenteComposer';
 import {
   decidirPegado,
   motivoPorTamano,
@@ -383,6 +384,37 @@ function BotonResponder({ onResponder }: { onResponder: () => void }) {
       className="flex size-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground opacity-0 shadow-[0_1px_3px_rgba(14,42,82,0.12)] transition-opacity hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 group-hover/burbuja:opacity-100"
     >
       <CornerUpLeft size={13} />
+    </button>
+  );
+}
+
+/**
+ * REENVIAR — deja el texto en la caja, NO lo manda.
+ *
+ * ── Por qué no manda solo ───────────────────────────────────────────────────
+ *
+ * Un botón que reenvía de un clic es un envío sin persona decidiéndolo, y eso
+ * es justo lo que ADR 0015 §37 no permite: «un envío = una acción humana».
+ * Además el caso real que lo motiva —un mensaje que salió mal, o uno que hay
+ * que repetirle a alguien— casi siempre quiere una edición antes de salir: el
+ * nombre, la fecha, el «te reenvío». Cargarlo en el composer da las dos cosas,
+ * y el envío sigue saliendo por la única puerta que audita.
+ *
+ * ⚠️ Va en los DOS sentidos, como Copiar y Responder: reenviar lo que dijo el
+ * lead —para repetírselo a otra persona o retomarlo— es tan útil como repetir
+ * lo nuestro. Y **no mira la sesión**: escribir en la caja no manda nada, así
+ * que con la línea caída sigue sirviendo.
+ */
+function BotonReenviar({ onReenviar }: { onReenviar: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onReenviar}
+      title="Reenviar: deja el texto en la caja para mandarlo de nuevo"
+      aria-label="Reenviar: deja el texto en la caja para mandarlo de nuevo"
+      className="flex size-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground opacity-0 shadow-[0_1px_3px_rgba(14,42,82,0.12)] transition-opacity hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 group-hover/burbuja:opacity-100"
+    >
+      <CornerUpRight size={13} />
     </button>
   );
 }
@@ -819,6 +851,11 @@ export function HiloWhatsapp({
                           />
                         )}
                         {m.texto && <BotonCopiar texto={m.texto} />}
+                        {m.texto && !sugerencia && (
+                          <BotonReenviar
+                            onReenviar={() => ponerEnComposer({ telefono, texto: m.texto! })}
+                          />
+                        )}
                       </div>
                     ) : null;
                   return (

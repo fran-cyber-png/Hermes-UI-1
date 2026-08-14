@@ -1108,7 +1108,7 @@ async function ejecutarCola(
     ${asignadaJoinSql(conAsignacion)}
     ${cursoRuteoJoinSql(conCursos)}
     ${donde(condiciones)}
-    ORDER BY ${bandaPinOrdenSql}, nivel ASC, orden ASC
+    ORDER BY ${bandaPinOrdenSql(opciones.vendedoraId, duenoSql)}, nivel ASC, orden ASC
     LIMIT ${limit} OFFSET ${offset}
   `);
 
