@@ -3,6 +3,7 @@ import { api, ErrorApi } from '../../lib/datos/cliente';
 import { olvidarCacheDeHermes } from '../../lib/datos/cacheDeHermes';
 import { borrarToken, guardarToken, tokenGuardado } from '../../lib/datos/token';
 import { mensajeDeErrorCenturion, tokenCenturionDeLaUrl } from './centurionSso';
+import { tieneSesionDeCerberus } from './identidad';
 
 /**
  * LA SESIÓN DE LA VENDEDORA, del lado del cliente.
@@ -87,7 +88,10 @@ export function useSesion() {
           guardarToken(r.token);
           setVendedora(r.vendedora);
           setSinServer(false);
-          setCerberusVivo(false); // esta identidad no tiene sesión de Cerberus, y nunca la va a tener.
+          // Esta identidad no tiene sesión de Cerberus y nunca la va a tener. Se
+          // pregunta con la MISMA función que `entrar()`, no con un `false` a
+          // mano: son dos puertas al mismo canje y la regla es una sola.
+          setCerberusVivo(tieneSesionDeCerberus(r.vendedora.id));
           setCargando(false);
           return;
         } catch (err) {
@@ -145,9 +149,17 @@ export function useSesion() {
     localStorage.setItem(CLAVE_ULTIMO_USUARIO, username);
     setSinServer(false);
     setVendedora(r.vendedora);
-    // Entrar es, por definición, tener sesión de Cerberus recién hecha: el login
-    // pasó por ahí. Es también el ÚNICO camino que la repone.
-    setCerberusVivo(true);
+    // 🔴 **NO ES «entrar ⇒ hay sesión de Cerberus»: DEPENDE DE QUIÉN ENTRÓ.**
+    // Era cierto cuando la caja de login era Cerberus y nada más; desde el login
+    // directo de Centurión, la misma caja deja pasar identidades que no tienen
+    // usuario del otro lado — y afirmarles una cookie que no existe hace que al
+    // recargar aparezca el aviso «reconectá con Cerberus», cuyo botón llama acá
+    // y vuelve a afirmarla. Un banner que no se puede apagar nunca.
+    //
+    // Se deriva de la IDENTIDAD que devolvió el login, no de que el login haya
+    // salido bien: es el mismo hecho que la puerta `/centurion` ya escribía a
+    // mano (`setCerberusVivo(false)`), dicho una sola vez.
+    setCerberusVivo(tieneSesionDeCerberus(r.vendedora.id));
   }, []);
 
   const salir = useCallback(() => {

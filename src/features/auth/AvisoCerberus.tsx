@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { KeyRound, Loader2 } from 'lucide-react';
 import { usePopover } from '../../lib/teclado/usePopover';
+import { tieneSesionDeCerberus } from './identidad';
 
 /**
  * «PERDISTE LA LLAVE DE CERBERUS» — el aviso que llega ANTES de la venta.
@@ -23,6 +24,16 @@ import { usePopover } from '../../lib/teclado/usePopover';
  *
  * Ámbar, no dorado: en Hermes el oro es tiempo que se acaba. Esto no se acaba,
  * está roto.
+ *
+ * 🔴 **NO SE DIBUJA PARA QUIEN NO PUEDE TENER SESIÓN DE CERBERUS.** Desde el
+ * login directo de Centurión hay identidades que entran a Hermes sin existir en
+ * Cerberus: para ellas `cerberus: false` no es «se perdió», es «nunca hubo», y
+ * el aviso prometía arreglar con un botón algo que ningún botón puede arreglar
+ * —`entrar()` vuelve a pasar por la misma cascada y vuelve a no haber cookie—.
+ * O sea un banner permanente con un botón inútil, en la barra donde vive lo que
+ * bloquea plata. La guarda vive ACÁ y no en el llamador porque es este
+ * componente el que sabe de qué habla, y porque `App.tsx` no es el único que lo
+ * puede montar.
  */
 export function AvisoCerberus({
   usuario,
@@ -56,6 +67,10 @@ export function AvisoCerberus({
       setYendo(false);
     }
   }
+
+  // Va después de los hooks, no antes: un `return` temprano arriba cambiaría el
+  // orden de los hooks entre renders.
+  if (!tieneSesionDeCerberus(usuario)) return null;
 
   return (
     <div className="relative shrink-0">
