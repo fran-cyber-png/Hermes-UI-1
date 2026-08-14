@@ -15,6 +15,7 @@ import {
 import {
   contarMotivosDeLista,
   leerLista,
+  type AlcanceDeLista,
   parsearCsv,
   type FilaDescartada,
 } from "../campana/lista.js";
@@ -137,6 +138,27 @@ const ASIGNAR_A = opcion("asignar-a");
 const ESPERA_MIN_MS = Number(opcion("espera") ?? "60") * 1000;
 /** El CSV con el padrón de afuera. Su presencia ES el modo (ver cabecera). */
 const LISTA = opcion("lista");
+
+/**
+ * HASTA DÓNDE LLEGA LA LISTA: `peru` (default) o `todos`.
+ *
+ * 🔴 **El default restrictivo es a propósito.** El Foro de Estado es presencial
+ * en Lima, así que ahí un mexicano no es un lead perdido sino un mensaje que no
+ * tenía sentido mandar. Pero un CURSO ONLINE se le vende a cualquiera, y con el
+ * alcance peruano el simulacro descarta el 83 % de una lista internacional
+ * diciendo «otro país» — un informe correcto sobre una decisión equivocada.
+ *
+ * Medido sobre la planilla de ventas de IA y Marketing Político: 252 ventas,
+ * **43 peruanas y 209 de otros nueve países**.
+ *
+ *   --paises todos
+ */
+const PAISES = (opcion("paises") ?? "peru").trim().toLowerCase();
+if (PAISES !== "peru" && PAISES !== "todos") {
+  console.error(`--paises sólo acepta «peru» o «todos» (llegó «${PAISES}»).`);
+  process.exit(1);
+}
+const ALCANCE: AlcanceDeLista = PAISES === "todos" ? "todos" : "peru";
 
 // `--subir` es un modo aparte y no necesita lista: la validación de abajo se
 // saltea a propósito (si no, subir el flyer pide fechas que no usa para nada).
@@ -392,7 +414,7 @@ async function traerDeLista(ruta: string): Promise<{
 }> {
   const { readFile } = await import("node:fs/promises");
   const filas = parsearCsv(await readFile(ruta, "utf8"));
-  const { destinatarios: crudos, descartadas } = leerLista(filas);
+  const { destinatarios: crudos, descartadas } = leerLista(filas, ALCANCE);
 
   const telefonos = crudos.map((d) => d.telefono);
 
@@ -683,6 +705,12 @@ async function main() {
      * flags de la línea de comandos, tarde o temprano alguien no lo deduce.
      */
     console.log(`línea ${LINEA} · 🧊 CONTACTO EN FRÍO desde ${LISTA}`);
+    // El alcance se IMPRIME siempre. Un descarte masivo por «otro país» sobre
+    // una campaña que sí era internacional se lee como un problema de la lista,
+    // y es una bandera mal puesta.
+    console.log(
+      `   alcance: ${ALCANCE === "todos" ? "TODOS los países" : "sólo Perú (--paises todos lo amplía)"}`,
+    );
     console.log(`   ${deLista.filasLeidas} filas leídas del archivo`);
   } else {
     console.log(`línea ${LINEA} · leads que escribieron entre ${DESDE} y ${HASTA}`);

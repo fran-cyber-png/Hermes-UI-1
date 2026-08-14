@@ -5,6 +5,8 @@ import {
   contarMotivosDeLista,
   leerLista,
   parsearCsv,
+  aE164Internacional,
+  normalizadorDe,
   type FilaDeLista,
 } from "./lista.js";
 
@@ -163,3 +165,48 @@ test("CRLF cuenta como un solo corte y la línea final vacía no es una fila", (
   assert.equal(filas.length, 2);
   assert.equal(filas[1]?.nombre, "Ana");
 });
+
+  /**
+   * El modo `todos` nació de una planilla real: 252 ventas de IA y Marketing
+   * Político, de las cuales **43 peruanas y 209 de otros nueve países**. Con el
+   * alcance peruano el simulacro descartaba el 83 % diciendo «otro país» — un
+   * informe correcto sobre una decisión equivocada, porque un curso online se le
+   * vende a cualquiera.
+   */
+test("acepta los países del padrón: México, Ecuador, Bolivia, Colombia", () => {
+    for (const t of ["5215512345678", "593987654321", "59175884186", "573001234567"]) {
+      assert.deepEqual(aE164Internacional(t), { ok: true, telefono: t }, `debería aceptar ${t}`);
+    }
+  });
+
+test("el móvil peruano sin código sigue entrando: es la única forma sin prefijo que no es ambigua", () => {
+    assert.deepEqual(aE164Internacional("987654321"), { ok: true, telefono: "51987654321" });
+  });
+
+  /**
+   * 🔴 Lo que NO puede pasar: que ampliar el alcance se coma la validación. Los
+   * dos casos de abajo pasan un chequeo de largo y le llegarían a otra persona.
+   */
+test("🔴 sigue rechazando el código duplicado y el 0 de troncal, como en modo Perú", () => {
+    assert.equal(aE164Internacional("5151997604093").ok, false);
+    assert.equal(aE164Internacional("5930983302338").ok, false);
+  });
+
+test("un número sin código de país que no es peruano se descarta, no se le adivina prefijo", () => {
+    // 8 dígitos: podría ser Bolivia, Guatemala, Panamá o El Salvador. No se elige.
+    assert.deepEqual(aE164Internacional("75884186"), { ok: false, motivo: "telefono_ilegible" });
+  });
+
+test("vacío sigue siendo `sin_telefono`, no ilegible", () => {
+    assert.deepEqual(aE164Internacional(""), { ok: false, motivo: "sin_telefono" });
+  });
+
+test("`normalizadorDe` elige, y el default de leerLista es el restrictivo", () => {
+    assert.equal(normalizadorDe("todos"), aE164Internacional);
+    assert.equal(normalizadorDe("peru"), aE164Peru);
+    // Sin declarar alcance, un mexicano se descarta: se descarta de más, no de menos.
+    const soloPeru = leerLista([{ linea: 2, telefono: "5215512345678", nombre: "Ana", estado: null }]);
+    assert.equal(soloPeru.destinatarios.length, 0);
+    const todos = leerLista([{ linea: 2, telefono: "5215512345678", nombre: "Ana", estado: null }], "todos");
+    assert.equal(todos.destinatarios.length, 1);
+  });

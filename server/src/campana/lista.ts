@@ -118,6 +118,26 @@ export type Normalizacion =
   | { ok: false; motivo: Extract<MotivoDeLista, "sin_telefono" | "otro_pais" | "telefono_ilegible"> };
 
 /**
+ * HASTA DÓNDE LLEGA LA CAMPAÑA — y por qué no es una preferencia de estilo.
+ *
+ * `peru`: sólo peruanos. Es lo correcto para un **evento presencial**: el Foro
+ * es en el Westin de Lima, y mandarle una invitación a alguien de Guadalajara
+ * no es un lead perdido, es un mensaje que no tenía sentido mandar.
+ *
+ * `todos`: cualquier país que `telefono/paises.ts` sepa leer. Es lo correcto
+ * para un **curso online**, donde el país no cambia nada. Medido sobre la
+ * planilla de ventas de IA y Marketing Político (14-ago-2026): de 252 ventas,
+ * **43 son peruanas y 209 no** — con el alcance equivocado se descartaba el
+ * 83 % de la lista, y el simulacro lo habría reportado como «otro país» sin
+ * que eso fuera un problema de los datos.
+ *
+ * ⚠️ El alcance **no** relaja la validación: en `todos` se sigue exigiendo que
+ * el código de país Y el largo nacional cierren (`paisDelNumero`). Lo que
+ * cambia es qué códigos se aceptan, no cuánto se adivina.
+ */
+export type AlcanceDeLista = "peru" | "todos";
+
+/**
  * A E.164 PERUANO, O NADA.
  *
  * Dos formas entran, y ninguna más:
@@ -171,6 +191,45 @@ export function aE164Peru(crudo: string | null | undefined): Normalizacion {
 }
 
 /**
+ * A E.164 DE CUALQUIER PAÍS CONOCIDO — para las campañas que no son de un
+ * evento presencial.
+ *
+ * Lo que acepta:
+ *   · `5215512345678`, `593987654321`, `59175884186` — E.164 cuyo código de
+ *     país **y** largo nacional cierran contra `telefono/paises.ts`.
+ *   · `987654321` — 9 dígitos que empiezan con 9 se leen como peruanos, la
+ *     misma convención local de `aE164Peru`. Es el único caso sin código de
+ *     país que se acepta, porque es el único que en esta casa no es ambiguo.
+ *
+ * 🔴 **Sigue siendo estricto, y ahí está el punto.** No basta con «tiene entre
+ * 8 y 15 dígitos»: `5151997604093` (código duplicado) y `5930983302338`
+ * (Ecuador con el 0 de troncal adentro) pasan ese chequeo y son números que le
+ * llegarían a OTRA persona. `paisDelNumero` los rechaza porque el largo no
+ * cierra, y eso vale igual acá que en el modo peruano.
+ *
+ * ⚠️ Un número sin código de país que **no** sea un móvil peruano se descarta
+ * como ilegible, no se le adivina un prefijo. En una lista con nueve países
+ * mezclados, suponer el código es exactamente cómo se le escribe a un
+ * desconocido.
+ */
+export function aE164Internacional(crudo: string | null | undefined): Normalizacion {
+  const digitos = (crudo ?? "").replace(/\D/g, "");
+  if (digitos.length === 0) return { ok: false, motivo: "sin_telefono" };
+
+  // El local peruano, la única forma sin código que acá no es ambigua.
+  if (digitos.length === PERU.largo && digitos.startsWith(PERU.inicial)) {
+    return { ok: true, telefono: PERU.codigo + digitos };
+  }
+  if (paisDelNumero(digitos)) return { ok: true, telefono: digitos };
+  return { ok: false, motivo: "telefono_ilegible" };
+}
+
+/** El validador que corresponde al alcance. Un solo lugar donde se elige. */
+export function normalizadorDe(alcance: AlcanceDeLista) {
+  return alcance === "todos" ? aE164Internacional : aE164Peru;
+}
+
+/**
  * EL ORDEN DE LOS DESCARTES IMPORTA, igual que en `publico.ts`.
  *
  * Cada fila sale con UN motivo, el primero que la agarra, y el orden va de lo
@@ -183,7 +242,13 @@ export function aE164Peru(crudo: string | null | undefined): Normalizacion {
  * significar los 1.000 primeros. El tope lo aplica el llamador, sobre esta
  * lista ya limpia.
  */
-export function leerLista(filas: readonly FilaDeLista[]): ListaLeida {
+export function leerLista(
+  filas: readonly FilaDeLista[],
+  alcance: AlcanceDeLista = "peru",
+): ListaLeida {
+  // El default es `peru` a propósito: es el alcance más restrictivo, así que
+  // un llamador que se olvide de declararlo descarta de más y no de menos.
+  const aE164 = normalizadorDe(alcance);
   const destinatarios: DestinatarioDeLista[] = [];
   const descartadas: FilaDescartada[] = [];
   const vistos = new Set<string>();
@@ -196,7 +261,7 @@ export function leerLista(filas: readonly FilaDeLista[]): ListaLeida {
       continue;
     }
 
-    const numero = aE164Peru(crudo);
+    const numero = aE164(crudo);
     if (!numero.ok) {
       descartadas.push({ linea: fila.linea, crudo, motivo: numero.motivo });
       continue;
