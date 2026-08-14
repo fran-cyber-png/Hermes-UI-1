@@ -36,6 +36,125 @@ Ninguno hay que arreglarlo. Ese es el 100 % del valor de esta decisión.
 
 ---
 
+## 0.5 ESTADO AL 13-AGO-2026 — leé esto primero
+
+> **Para quien retoma.** Esto es lo que cambió DESPUÉS de escribir el plan, ejecutándolo. Donde este
+> bloque contradiga al resto del documento, **gana este bloque**: el resto se midió el 12-ago y varias
+> de sus afirmaciones se falsificaron al intentar aplicarlas.
+>
+> **Quedan 52 días** hasta el 4-oct-2026.
+
+### 1 · Lo que YA está aplicado en producción (VPS1)
+
+| qué | cómo quedó | con qué se verificó |
+|---|---|---|
+| **§0.1 rebasar el checkout** | al día con `origin/main` | `HEAD..origin/main` = **0** · `tsc --noEmit` verde en front **y** server |
+| **§0.3 la línea fuera de `BOT_LINEAS`** | `BOT_LINEAS=51984429504` | el arranque anuncia `[bot] 1 línea(s) habilitada(s): 51984429504` |
+| **§0.2 el corte de whatsmeow** | `WHATSAPP_TRANSPORTE=falso` | `grep -c 51963139984` en el journal desde el corte = **0** — la sesión del candidato **no se monta** |
+| la línea que factura | `51984429504` (Cloud API) | `[wa estado] 51984429504: conectado` después de cada reload |
+
+Respaldos en VPS1: `server/.env.bak-12ago-1553` y `server/.env.bak-corte-whatsmeow-1602`. **Revertir es
+una línea y un restart.**
+
+⚠️ **Por qué el corte de whatsmeow no costó nada**: la Escuela ya corría con **una sola** línea viva y
+es la Cloud API, que monta **aparte y siempre** (`wiring.ts:215`), independiente de
+`WHATSAPP_TRANSPORTE`. Las otras tres whatsmeow se habían retirado el 11-ago. O sea que whatsmeow en el
+server de Goberna era peso muerto cuyo único efecto vivo era tener la cuenta de un candidato adentro.
+
+> 🔴 **Y el corte tiene un efecto colateral MEDIDO que arregla el fix de código, no otro parche.**
+> `TransporteFalso` **sí** implementa `fotoDePerfil` y, estando «conectado», devuelve `null` — que la
+> ruta cachea como **«no tiene foto», una respuesta real**. Van **31 filas** así, y el caché dura
+> **7 días** (`FOTO_FRESCA_MS`, `routes/whatsapp.ts:411`). **No es fuga** —nada salió por la cuenta del
+> candidato— es basura en el caché, y sale de la misma causa raíz que §0.2.
+
+### 2 · Las tres correcciones al documento, encontradas ejecutándolo
+
+1. 🔴 **El «camino rápido» del §0.2 no existía.** Ver el §0.2, ya reescrito: sus dos formas fallan en
+   direcciones opuestas y el plan nombraba **una sola** de las **dos** variables que tienen el número.
+2. 🔴 **`POST /leido/:telefono` YA lleva `numeroPropio`** (query, `routes/whatsapp.ts:279`) y ya
+   resuelve `gestorWhatsapp().de(numeroPropio)`. El §0.2 lo listaba como si no lo llevara. Lo único que
+   queda ahí es el `else` de `:320`. **La fuga real es `GET /foto/:telefono`, y es UNA línea:
+   `routes/whatsapp.ts:428`, `whatsapp().transporte`.**
+3. ⚠️ **`fotoDePerfil` NO existe en el transporte Cloud API** (`whatsapp/transporte.ts:294-319`: la
+   tienen whatsmeow y el falso, no cloud-api). Pasarle `numeroPropio` a `/foto` **no alcanza**: con la
+   línea de la Escuela el método queda `undefined`, y hay que decidir explícitamente que eso **no se
+   cachea como «no tiene foto»**. Es el mismo defecto que acaba de escribir las 31 filas.
+
+### 3 · Las decisiones del dueño (13-ago)
+
+| # | decisión | qué cierra |
+|---|---|---|
+| **D1** | **Instancia por candidatura** — un producto, N instancias: base, `.env`, servicio y dominio propios | la Fase 1 entera. **Descarta la columna de tenant** (opción D del §3) |
+| **D2** | **Sí, varios candidatos.** Y por eso la instancia: entre rivales el aislamiento no puede ser un `WHERE` | la forma de D1 |
+| destino | **Hermes-candidato vive DENTRO de Centurión** (el satélite, carril 3). **B es el puente, no el destino** | reabre el reloj del plan de integración §8 |
+| auth | **No hay microservicio de auth central** — un seam con proveedores, y para campaña el proveedor **es Centurión** | ver §4 acá abajo |
+| alta de operadores | **el admin candidato crea y administra los agentes digitales DESDE Centurión** | el Hermes de campaña **no necesita tabla de usuarios** |
+| la línea de Betto | se puede desvincular y re-vincular libremente | habilitó el corte de whatsmeow |
+
+**Por qué NO un auth central, en una línea**: sería **un servicio corriendo compartido entre los dos
+planos**, que es exactamente lo que `dos-planos.md` §4 llama *«la peor idea disponible»*; y no sacaría
+una dependencia, agregaría un salto — las vendedoras existen en **Cerberus** porque es el ERP donde son
+empleadas, y los agentes digitales existen en **Centurión** porque ahí viven la candidatura y el
+entitlement. Un central tendría que sincronizar de los dos, y una sincronización es una segunda copia
+de la verdad (#37).
+
+### 4 · 🔴 EL SSO DE CENTURIÓN YA ESTÁ CONSTRUIDO Y MERGEADO — esto cambia la Fase 2
+
+`c7d797a` + `cc7375b`, vivos en `main`. **Lo que el plan estimaba en 2,5–3 días (la tabla `operadores`
+local) probablemente no haya que escribirlo nunca.**
+
+- **`POST /api/auth/centurion`** verifica un JWT HS256 corto (**120 s**, `aud: 'hermes'`) que Centurión
+  firma. `server/src/auth/centurion.ts`, HMAC de `node:crypto`, **cero dependencias nuevas**: Hermes solo
+  **verifica**, nunca firma.
+- 🔴 **El secreto es NUEVO (`CENTURION_SSO_SECRET`), jamás el `JWT_SECRET` del core de Centurión** — y
+  esto **corrige al plan de integración §3.1**, que proponía compartir el del core. El motivo está en
+  `centurion.ts:10-12`: compartirlo *«le daría a Hermes la llave para falsificar cualquier sesión de
+  Centurión, no solo un login»*. **Si tocás el plan de integración, actualizá ese §3.1.**
+- **La identidad vive namespaced: `centurion:<usuario>`** (`vendedoraIdDeCenturion`), para que **nunca**
+  pueda chocar con un username de Cerberus. Es #37 resuelto por construcción: dos formas de nombrar a
+  la misma persona no se desincronizan si una lleva un prefijo que la otra no usa jamás.
+- **Apagado por default**: sin `CENTURION_SSO_SECRET` → **503 `sso_no_configurado`**, y `verificarToken`
+  no valida nada ni por accidente. Nace pensado para el `.env` del entorno de campaña.
+- 🔴 **Sin línea asignada, 403 `sin_linea_asignada`** (`cc7375b`) — y el porqué está **medido**: el
+  catálogo de subservicios de Centurión es **COMPARTIDO y 9 candidaturas ya tienen «mensajería»
+  contratada**. El día que ese catálogo se complete, el botón aparece **para las 9 a la vez**; sin el
+  candado, la primera que hiciera clic vería **la cola entera de la Escuela**. `cola/lineas.ts` es
+  fail-open a propósito para vendedoras de Cerberus (personal interno); una identidad de Centurión es
+  lo opuesto — una persona **ajena** al negocio.
+- ✅ **Y responde la duda que este plan tenía abierta**: `centurion.ts:7-8` dice que es *«el reverso
+  exacto de `service-token.ts` del lado de Centurión, el mecanismo servicio↔servicio que ya existe ahí
+  para `svc/mensajeria`»*. **Centurión ya sabe emitir para un servicio externo.**
+
+**Falta la otra mitad, y es del otro repo**: Centurión firmando el token + el botón del sidebar
+(PR aparte en `Goberna-Lab/centurion`).
+
+> 🔴 **EL BLOQUEO QUE ESTO DESTAPA, Y ES EL PRÓXIMO FRENTE REAL.** El alta de un agente digital son
+> **dos pasos en dos sistemas**: (1) la cuenta en Centurión y (2) **una línea en `numero_vendedora`**,
+> sin la cual el 403 lo rechaza. Y lo **único** que escribe `numero_vendedora` es
+> `PUT /api/admin/numeros/:numero`, cuyo dueño es **Cerberus** — que en el entorno de campaña **no va a
+> existir**. O sea: **en el entorno de campaña, hoy, TODA identidad de Centurión comería 403 y el SSO
+> sería inusable.** Lo que lo destraba es el **CLI gemelo del alta de números** — que el plan tenía
+> como Fase 2 · paso 4, ahí descrito como accesorio, y ahora **es la precondición del login**.
+
+### 5 · Por dónde sigue la sesión nueva
+
+1. **El CLI gemelo de `numero_vendedora`** (Fase 2 · paso 4). Es el bloqueo de arriba: sin él el SSO ya
+   construido no se puede usar en campaña. **Empezar por acá.**
+2. **`GET /foto/:telefono` con `numeroPropio`** (§0.2 «correcto»), + no cachear falso-negativo cuando el
+   transporte no tiene `fotoDePerfil`. Limpia además las 31 filas.
+3. **El test de dependencia motor↔adaptador** (#338, §5 de este plan) — independiente de todo lo demás.
+4. **D5 por escrito** (§0.4). Sigue abierta, y es lo que destraba el trámite de Meta, que es el camino
+   crítico del satélite y **no es código**: *«si no empieza esta semana, el satélite no arranca en
+   noviembre: arranca en enero»* (plan de integración §8).
+5. **La Fase 1** con la forma de D1 (instancia), ya sabiendo que la identidad sale de Centurión.
+
+⚠️ **Y una deuda de tenancy que hoy no muerde y mañana sí**: el token trae `candidatura`, pero
+`centurion.ts:35` dice **«Hoy es solo informativo»**. Con una instancia por candidatura eso está bien
+—el proceso entero *es* el tenant—. **En un proceso compartido sería la frontera**, y es justo lo que
+D1 decidió no hacer.
+
+---
+
 ## 1. El punto de partida, medido
 
 ### 1.1 Lo que hay que mudar es chico. Lo enredado es el runtime
@@ -645,6 +764,10 @@ Sin estos, cada arreglo de arriba dura hasta el próximo sprint.
 ## §7. La ruta, con sus gates
 
 ### Esta semana (antes del 19-ago)
+
+> ⚠️ **Esta tabla se escribió el 12-ago y quedó parcialmente vieja. El orden vigente está en §0.5 · 5**,
+> que suma el frente que este cuadro no podía prever: el **CLI gemelo de `numero_vendedora`**, hoy la
+> precondición del SSO de Centurión que ya está construido.
 
 | # | qué | GATE |
 |---|---|---|
