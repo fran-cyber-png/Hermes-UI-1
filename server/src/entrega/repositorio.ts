@@ -62,18 +62,52 @@ export async function aplicarRecibo(base: typeof Base, recibo: RecibosDeEntrega)
   const crudos = recibo.mensajes.map((m) => m.replace(/^wa:/, '')).filter(Boolean);
   if (crudos.length === 0) return 0;
 
+  /**
+   * 🔴 UN `Date` NO SE PUEDE BINDEAR EN UN TEMPLATE DE DRIZZLE, Y ACÁ COSTÓ
+   * TODOS LOS ✓✓ DE PRODUCCIÓN.
+   *
+   * postgres.js contesta «The "string" argument must be of type string or an
+   * instance of Buffer or ArrayBuffer. Received an instance of Date» y el
+   * `catch` de abajo lo propaga, así que **cada recibo que llegaba moría**: el
+   * webhook escupía «no se pudo aplicar el recibo» una y otra vez y ningún
+   * saliente mostraba tilde. No es un borde raro — es el 100 % de los recibos,
+   * o sea el frente entero de ADR 0021 apagado en silencio desde que se
+   * desplegó.
+   *
+   * Viaja como ISO con su `::timestamptz` explícito, el mismo arreglo que
+   * `estadoAlSalir` en `scripts/campana.ts` (que murió por lo mismo el 5-ago).
+   * Si aparece un tercer caso, la regla es la misma: **ningún `Date` crudo
+   * adentro de un `sql\`\``**.
+   */
+  const cuando = recibo.cuando.toISOString();
+
   try {
     const r = await base.execute(sql`
       UPDATE envios_wa
          SET estado_entrega = ${recibo.estado},
-             estado_entrega_en = ${recibo.cuando}
+             estado_entrega_en = ${cuando}::timestamptz
        WHERE id_externo IN (${sql.join(crudos.map((c) => sql`${c}`), sql`, `)})
          -- NUNCA RETROCEDE: el mismo orden que avanzarEstado, en SQL. Sin
          -- esto, un delivered que llega tarde bajaria un mensaje ya leido.
          -- (Sin acentos ni backticks: esto vive dentro de un template literal.)
          AND ${RANGO} < ${rangoDe(recibo.estado)}
     `);
-    return (r as unknown as { rowCount?: number }).rowCount ?? 0;
+    /**
+     * 🔴 `rowCount` ES DE node-postgres; ACÁ EL DRIVER ES postgres.js, QUE
+     * DEVUELVE `count`.
+     *
+     * Con `rowCount` la expresión daba `undefined ?? 0` — o sea **0 siempre**,
+     * aunque el UPDATE hubiera tocado la fila. Y el que llama usa ese número
+     * para decidir si refrescar la pantalla (`if (filas > 0) emitirRT(...)` en
+     * `whatsapp/wiring.ts`), así que el ✓✓ no aparecía en vivo ni cuando el
+     * resto funcionaba: había que recargar. Medido con una sonda contra la base
+     * el 14-ago-2026: `count: 1 · rowCount: undefined`.
+     *
+     * Se leen los dos por si algún día cambia el driver, pero el que hoy trae
+     * el dato es `count`.
+     */
+    const res = r as unknown as { count?: number; rowCount?: number };
+    return res.count ?? res.rowCount ?? 0;
   } catch (e) {
     if (faltaLaColumna(e)) {
       console.warn('[entrega] `envios_wa.estado_entrega` no existe todavía: el recibo se descarta.');

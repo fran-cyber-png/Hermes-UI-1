@@ -215,6 +215,14 @@ export interface EnvioWaSembrado {
   /** Cuándo salió de verdad. Sin esto, el alta (`creadoAt`). */
   resueltoAt?: Date | null;
   /**
+   * El id que devolvió WhatsApp, CRUDO (sin el `wa:` de Hermes).
+   *
+   * Hace falta para ejercitar `entrega/aplicarRecibo`, que matchea por acá: sin
+   * esto, un test de recibos no puede tocar ninguna fila y pasaría en verde sin
+   * probar nada.
+   */
+  idExterno?: string | null;
+  /**
    * De qué pieza salió (#169). Se arma con los constructores de
    * `procedencia/pieza.ts` — omitirla es sembrar la línea de base, que es lo
    * que corresponde para un envío escrito a mano.
@@ -239,6 +247,7 @@ export async function sembrarEnvioWa(db: DbDePrueba, e: EnvioWaSembrado = {}): P
       estado: e.estado ?? "enviado",
       creadoAt,
       resueltoAt: e.resueltoAt === undefined ? creadoAt : e.resueltoAt,
+      ...(e.idExterno === undefined ? {} : { idExterno: e.idExterno }),
       ...columnasDeProcedencia(e.procedencia ?? A_MANO),
     })
     .returning({ id: enviosWa.id });
