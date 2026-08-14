@@ -132,9 +132,24 @@ export async function autenticarEnCerberus(username: string, password: string): 
     // ⚠️ Lo que NO cambia, que es lo que importa para el login de todos los días:
     // la vendedora con la clave correcta sigue entrando por el 302 de arriba, y
     // la que se equivocó sigue viendo su 401 por el 200 de acá.
-    const juzgoLaClave = r2.status === 200 || (redirige && location.includes('/ingresar'));
+    //
+    // 🔴 Y EL 200 SE MIRA POR DENTRO, NO SOLO POR SU NÚMERO. Un 200 puede ser
+    // Django re-renderizando el formulario —el rechazo de verdad— o puede ser
+    // una página de mantenimiento de nginx, un interstitial de Cloudflare o un
+    // WAF: todas contestan 200 y ninguna juzgó nada. Sin mirar el cuerpo, ese
+    // caso vuelve a ser el defecto que este bloque existe para cerrar, sólo que
+    // entrando por otra puerta. La marca es la misma que el handshake ya exige
+    // arriba (`csrfmiddlewaretoken`): si el formulario volvió, lo contestó
+    // Django; si no volvió, no fue Django.
+    const cuerpoPost = r2.status === 200 ? await r2.text() : '';
+    const volvioElFormulario = cuerpoPost.includes('csrfmiddlewaretoken');
+    const juzgoLaClave = (r2.status === 200 && volvioElFormulario) || (redirige && location.includes('/ingresar'));
     if (!juzgoLaClave) {
-      console.error(`cerberus: el POST de /ingresar/ contestó ${r2.status} — eso no es un juicio sobre la clave`);
+      console.error(
+        `cerberus: el POST de /ingresar/ contestó ${r2.status}` +
+          (r2.status === 200 ? ' sin el formulario de Django' : '') +
+          ' — eso no es un juicio sobre la clave',
+      );
       return { ok: false, motivo: 'Cerberus no responde en este momento.', caido: true };
     }
     return { ok: false, motivo: 'usuario o contraseña incorrectos' };

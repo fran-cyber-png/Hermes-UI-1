@@ -28,7 +28,9 @@ import type { AddressInfo } from 'node:net';
 type ModoPost =
   | { clase: 'rechaza' }
   | { clase: 'acepta' }
-  | { clase: 'estado'; status: number };
+  | { clase: 'estado'; status: number }
+  /** Un 200 que NO lo mandó Django: mantenimiento de nginx, WAF, interstitial. */
+  | { clase: 'doscientos_sin_form' };
 
 let modoPost: ModoPost = { clase: 'rechaza' };
 
@@ -49,8 +51,19 @@ const server: Server = createServer((req, res) => {
     res.writeHead(modoPost.status, { 'content-type': 'text/html' }).end('<html>ups</html>');
     return;
   }
-  // Django re-renderiza el formulario con 200 cuando la clave está mal.
-  res.writeHead(200, { 'content-type': 'text/html' }).end('<form>credenciales incorrectas</form>');
+  if (modoPost.clase === 'doscientos_sin_form') {
+    res
+      .writeHead(200, { 'content-type': 'text/html' })
+      .end('<html><body>Estamos en mantenimiento. Volvé más tarde.</body></html>');
+    return;
+  }
+  // Django re-renderiza EL FORMULARIO con 200 cuando la clave está mal — con su
+  // `csrfmiddlewaretoken` adentro, que es la marca por la que se lo reconoce.
+  // El stub lo tiene que traer o estaría modelando una página que Django no
+  // manda nunca, y el test pasaría por el motivo equivocado.
+  res
+    .writeHead(200, { 'content-type': 'text/html' })
+    .end('<form><input name="csrfmiddlewaretoken" value="xyz">credenciales incorrectas</form>');
 });
 
 await once(server.listen(0, '127.0.0.1'), 'listening');
@@ -103,6 +116,26 @@ test('clave incorrecta: rechazo SIN `caido` — la cascada tiene que poder segui
 });
 
 // ── 🔴 El agujero ───────────────────────────────────────────────────────────
+
+test('🔴 un 200 SIN el formulario de Django es CAÍDO: nadie juzgó la clave', async () => {
+  // El caso que el estado solo no distingue: una página de mantenimiento de
+  // nginx, un interstitial de Cloudflare o un WAF contestan 200 con HTML que
+  // Django no mandó nunca. Mirando solo el número, eso se leía como «clave
+  // mala» y la cascada le mandaba usuario y contraseña a Centurión — el mismo
+  // defecto que el 5xx de acá abajo, entrando por otra puerta.
+  modoPost = { clase: 'doscientos_sin_form' };
+  const { valor, consola } = await conConsolaCapturada(() => autenticarEnCerberus(USUARIO, CLAVE));
+
+  assert.equal(valor.ok, false);
+  assert.equal(
+    valor.ok === false && valor.caido,
+    true,
+    'sin el form de Django nadie juzgó nada: la contraseña no puede salir hacia otro sistema',
+  );
+  assert.equal(valor.ok === false && valor.motivo, 'Cerberus no responde en este momento.');
+  assert.match(consola, /sin el formulario/, 'el log tiene que decir POR QUÉ, no solo el estado');
+  assert.ok(!consola.includes(CLAVE), 'la contraseña no puede aparecer en el log');
+});
 
 test('🔴 el GET anda y el POST contesta 5xx: eso es CAÍDO, no una clave mala', async () => {
   // Los tres que se ven en una caída real: 500 de Django (el MySQL se cayó),
