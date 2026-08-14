@@ -79,8 +79,14 @@ const cerberus = await levantar((req, res) => {
     res.writeHead(502, { 'content-type': 'text/html' }).end('<html>Bad Gateway</html>');
     return;
   }
-  // POST: Django re-renderiza el formulario con 200 cuando la clave está mal.
-  res.writeHead(200, { 'content-type': 'text/html' }).end('<form>credenciales incorrectas</form>');
+  // POST: Django re-renderiza EL FORMULARIO con 200 cuando la clave está mal — con
+  // su `csrfmiddlewaretoken` adentro, que es la marca por la que se lo reconoce.
+  // Sin ella el stub modela una página que Django no manda nunca (un mantenimiento
+  // de nginx, un WAF), y desde el arreglo del 200-sin-formulario eso se lee como
+  // caída — que es lo correcto, y por eso el fixture tiene que ser realista.
+  res
+    .writeHead(200, { 'content-type': 'text/html' })
+    .end('<form><input name="csrfmiddlewaretoken" value="xyz">credenciales incorrectas</form>');
 });
 
 // ── Stub de Centurión ───────────────────────────────────────────────────────
