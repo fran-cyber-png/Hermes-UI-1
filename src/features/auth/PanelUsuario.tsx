@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { AlertTriangle, Check, LogOut, Smartphone, UserRound } from 'lucide-react';
 import { usePopover } from '../../lib/teclado/usePopover';
 import { useLineas } from '../canales/lineas';
+import { tieneSesionDeCerberus } from './identidad';
 import type { Vendedora } from './sesion';
 
 /**
@@ -134,16 +135,27 @@ export function ContenidoUsuario({
 
             {/* LA SESIÓN DE CERBERUS. Solo `false` se denuncia: `null` es «no se
                 sabe» —server viejo o todavía sin respuesta— y pintar eso de rojo
-                sería inventar un problema. */}
+                sería inventar un problema.
+
+                🔴 Y ANTES QUE NADA SE PREGUNTA SI A ESTA IDENTIDAD LE CORRESPONDE
+                UNA. Una identidad de Centurión no tiene sesión de Cerberus ni la
+                va a tener nunca, así que el aviso de arriba le miente en las tres
+                palabras que importan: «perdió» (nunca la tuvo), «no registrar una
+                venta» presentado como transitorio, y «hasta que vuelvas a entrar»
+                (volver a entrar no la produce). Para ella el hecho es permanente,
+                así que se dice como hecho y en gris, no como avería en ámbar.
+                Es el mismo criterio que ya aplica `AvisoCerberus`. */}
             <p
               className={
                 'mt-2.5 flex items-start gap-1.5 rounded-lg px-2 py-1.5 text-[11px] leading-snug ' +
-                (cerberusVivo === false
+                (cerberusVivo === false && tieneSesionDeCerberus(vendedora.id)
                   ? 'bg-warning/10 text-warning-foreground'
                   : 'bg-muted/60 text-muted-foreground')
               }
             >
-              {cerberusVivo === false ? (
+              {!tieneSesionDeCerberus(vendedora.id) ? (
+                <span>Esta cuenta entra con Centurión: no registra ventas en Cerberus.</span>
+              ) : cerberusVivo === false ? (
                 <>
                   <AlertTriangle size={12} className="mt-px shrink-0" />
                   <span>
