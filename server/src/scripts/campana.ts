@@ -100,6 +100,31 @@ const NOMBRE = opcion("plantilla") ?? "promo_3x1_cursos";
 const IMAGEN = opcion("imagen");
 const ENVIAR = bandera("enviar");
 const TOPE = Number(opcion("tope") ?? "0") || Infinity;
+
+/**
+ * OTRAS PIEZAS QUE TAMBIÉN CUENTAN COMO «ya le llegó» (separadas por coma).
+ *
+ * 🔴 **RENOMBRAR LA PLANTILLA APAGA EL CANDADO DEL DOBLE ENVÍO.** La guarda
+ * compara `pieza_ref` contra la plantilla de ESTA corrida, y Meta obliga a crear
+ * una plantilla nueva para cambiarle una letra al texto. O sea que la segunda
+ * campaña del mismo evento —el caso normal— es justo donde la guarda deja de
+ * reconocer a quien recibió la primera.
+ *
+ * Medido el 14-ago-2026: `foro_estado_5_ago` salió a **1.000 personas** el 5 y 6
+ * de agosto, y **360 están en la lista nueva del mismo Foro**. Con la plantilla
+ * v2 y sin esto salían **244 en vez de 104** sobre una tanda de 245 — y el
+ * simulacro habría impreso «1 porque YA recibieron esta campaña». Una guarda que
+ * informa verde porque mira el nombre equivocado es peor que no tenerla.
+ *
+ *   --ya-recibieron foro_estado_5_ago
+ */
+const YA_RECIBIERON = (opcion("ya-recibieron") ?? "")
+  .split(",")
+  .map((t) => t.trim())
+  .filter(Boolean);
+
+/** Las piezas que bloquean el envío: la de esta corrida más las declaradas. */
+const PIEZAS_QUE_BLOQUEAN = [NOMBRE, ...YA_RECIBIERON];
 /**
  * A quién quedan asignadas estas conversaciones.
  *
@@ -321,8 +346,8 @@ async function traerCandidatos(): Promise<Destinatario[]> {
            -- estaba por mandar un segundo mensaje a los 13 de la corrida frenada.
            exists (select 1 from envios_wa w
                     where w.telefono = e.persona_id
-                      and w.pieza_clase = 'hsm' and w.pieza_ref = ${NOMBRE}
-                      and w.estado = 'enviado') as ya_le_llego
+                      and w.pieza_clase = 'hsm' and w.estado = 'enviado'
+                      and w.pieza_ref = ANY(string_to_array(${PIEZAS_QUE_BLOQUEAN.join(",")}, ','))) as ya_le_llego
       from entrantes e
      order by e.ultimo_suyo
   `);
@@ -398,7 +423,8 @@ async function traerDeLista(ruta: string): Promise<{
     `),
     db.execute(sql`
       select distinct telefono from ${enviosWa}
-       where pieza_clase = 'hsm' and pieza_ref = ${NOMBRE} and estado = 'enviado'
+       where pieza_clase = 'hsm' and estado = 'enviado'
+         and pieza_ref = ANY(string_to_array(${PIEZAS_QUE_BLOQUEAN.join(",")}, ','))
          and ${inArray(enviosWa.telefono, telefonos)}
     `),
     /**
@@ -468,7 +494,7 @@ async function traerDeLista(ruta: string): Promise<{
 async function estadoAlSalir(
   telefono: string,
   autorizadoEn: Date,
-  nombrePieza: string,
+  piezas: string[],
 ): Promise<EstadoAlSalir> {
   /**
    * ⚠️ EL INSTANTE VIAJA COMO TEXTO ISO CON SU CAST, NO COMO `Date`.
@@ -500,7 +526,8 @@ async function estadoAlSalir(
                  and coalesce(w.automatico, false) = false)           as le_escribieron,
       exists (select 1 from envios_wa w
                where w.telefono = ${telefono} and w.estado = 'enviado'
-                 and w.pieza_clase = 'hsm' and w.pieza_ref = ${nombrePieza}) as ya_le_llego
+                 and w.pieza_clase = 'hsm'
+                 and w.pieza_ref = ANY(string_to_array(${piezas.join(",")}, ','))) as ya_le_llego
   `);
   const f = (filas as unknown as Record<string, unknown>[])[0] ?? {};
   return {
@@ -892,7 +919,7 @@ async function main() {
      * alguien que escribe «sacame de esta lista» a las 15:00 recibe el flyer a
      * las 17:30. La regla vive pura en `campana/vetoAlSalir.ts`.
      */
-    const estado = await estadoAlSalir(d.telefono, autorizadoEn, plantilla.nombre);
+    const estado = await estadoAlSalir(d.telefono, autorizadoEn, PIEZAS_QUE_BLOQUEAN);
     const veredicto = vetoAlSalir(estado);
     if (!veredicto.sale) {
       cancelados.push(veredicto);
