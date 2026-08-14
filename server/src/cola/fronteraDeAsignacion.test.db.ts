@@ -44,6 +44,20 @@ async function asignar(
   });
 }
 
+/**
+ * La frontera es OPT-IN por vendedora (`HERMES_COLA_AISLADA`). Estos tests la
+ * encienden a mano: sin eso el comportamiento es el de siempre, y el test
+ * pasaría verde sin probar nada.
+ */
+function conColaAislada(t: { after: (fn: () => void) => void }, quienes: string) {
+  const antes = process.env.HERMES_COLA_AISLADA;
+  process.env.HERMES_COLA_AISLADA = quienes;
+  t.after(() => {
+    if (antes === undefined) delete process.env.HERMES_COLA_AISLADA;
+    else process.env.HERMES_COLA_AISLADA = antes;
+  });
+}
+
 async function nombresQueVe(
   db: Awaited<ReturnType<typeof baseDePrueba>>,
   vendedoraId: string | undefined,
@@ -65,6 +79,7 @@ async function sembrarLaMesa(db: Awaited<ReturnType<typeof baseDePrueba>>) {
 
 test("🔴 una vendedora nueva NO ve las conversaciones de otra", async (t) => {
   const db = await baseDePrueba(t);
+  conColaAislada(t, "sindy");
   await sembrarLaMesa(db);
 
   const ve = await nombresQueVe(db, "sindy");
@@ -74,6 +89,7 @@ test("🔴 una vendedora nueva NO ve las conversaciones de otra", async (t) => {
 
 test("lo que NO tiene dueña se sigue viendo: es de quien lo agarre", async (t) => {
   const db = await baseDePrueba(t);
+  conColaAislada(t, "sindy,luz");
   await sembrarLaMesa(db);
 
   for (const quien of ["sindy", "luz"]) {
@@ -90,6 +106,7 @@ test("lo que NO tiene dueña se sigue viendo: es de quien lo agarre", async (t) 
  */
 test("`Sindy` y `sindy` son la misma persona: ve lo suyo", async (t) => {
   const db = await baseDePrueba(t);
+  conColaAislada(t, "Sindy"); // ← declarada con mayúscula, entra en minúscula
   await sembrarLaMesa(db);
 
   const ve = await nombresQueVe(db, "sindy"); // ← entra en minúscula
@@ -100,6 +117,7 @@ test("la supervisora ve todo: es quien reparte lo que todavía no tiene dueña",
   const db = await baseDePrueba(t);
   await sembrarLaMesa(db);
 
+  conColaAislada(t, "jefa");
   const antes = process.env.HERMES_SUPERVISORES;
   process.env.HERMES_SUPERVISORES = "jefa";
   t.after(() => {
@@ -115,8 +133,17 @@ test("la supervisora ve todo: es quien reparte lo que todavía no tiene dueña",
 
 test("sin identidad (un servicio) no se recorta nada", async (t) => {
   const db = await baseDePrueba(t);
+  conColaAislada(t, "sindy,luz");
   await sembrarLaMesa(db);
 
   const ve = await nombresQueVe(db, undefined);
   assert.equal(ve.length, 3, `un servicio ve las tres — vio: ${ve.join(", ")}`);
+});
+
+test("🔴 sin declararla, la frontera NO se aplica: el comportamiento viejo es el probado", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarLaMesa(db); // sin `conColaAislada`
+
+  const ve = await nombresQueVe(db, "sindy");
+  assert.ok(ve.includes("DE_LUZ"), `apagada, ve todo — vio: ${ve.join(", ")}`);
 });

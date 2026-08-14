@@ -176,10 +176,40 @@ export function esMiaSql(vendedoraId: string | undefined): SQL {
 export function fronteraDeAsignacionSql(
   vendedoraId: string | undefined,
   esSupervisora: boolean,
+  env: NodeJS.ProcessEnv = process.env,
 ): SQL | null {
   const limpio = (vendedoraId ?? "").trim().toLowerCase();
   // Sin identidad (un servicio) o siendo supervisora no se recorta: el
   // supervisor es quien reparte, y necesita ver lo que todavía no repartió.
   if (!limpio || esSupervisora) return null;
+  if (!tieneColaAislada(limpio, env)) return null;
   return sql`(${duenoSql} IS NULL OR lower(btrim(${duenoSql})) = ${limpio})`;
+}
+
+/**
+ * 🔴 POR QUÉ ES OPT-IN Y NO PARA TODAS — la parte que más se va a querer «mejorar».
+ *
+ * La frontera contradice decisiones que están tomadas y tienen sus tests:
+ * «quien no está en la rueda ve todo, huérfanas incluidas»
+ * (`consultarCola.mios.test.db.ts`) y «lo ajeno no desaparece, va al fondo»
+ * (`ordenAjenaAlFondo.test.db.ts`, mergeado esta misma tarde). Encenderla para
+ * todas cambiaría de golpe lo que ven las seis personas de la línea, y nadie
+ * pidió eso: lo que se pidió fue que **una vendedora nueva no viera el trabajo
+ * de otra**.
+ *
+ * Con la lista, la frontera se enciende por persona y se apaga sacándola. El
+ * día que se decida que vale para todas, esto se borra y se actualizan aquellos
+ * tests **en el mismo commit** — que es la conversación que hay que tener,
+ * no un efecto colateral de este frente.
+ *
+ * ⚠️ **Vacía = apagada para todas**, y eso es lo correcto: el comportamiento
+ * anterior es el que está probado. Se compara normalizando los dos lados,
+ * porque en prod conviven `Sindy` y `sindy`.
+ */
+export function tieneColaAislada(vendedoraId: string, env: NodeJS.ProcessEnv): boolean {
+  return (env.HERMES_COLA_AISLADA ?? "")
+    .split(",")
+    .map((v) => v.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(vendedoraId.trim().toLowerCase());
 }
