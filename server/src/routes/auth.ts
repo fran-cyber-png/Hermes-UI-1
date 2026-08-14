@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
-import { autenticarEnCerberus } from '../cerberus/auth.js';
-import { guardarSesionCerberus, obtenerSesionCerberus } from '../cerberus/sesionStore.js';
-import { firmarSesion, requiereVendedora } from '../auth/sesion.js';
-import { ssoDeCenturionConfigurado, vendedoraIdDeCenturion, verificarTokenCenturion } from '../auth/centurion.js';
+import { obtenerSesionCerberus } from '../cerberus/sesionStore.js';
+import { requiereVendedora } from '../auth/sesion.js';
+import { ssoDeCenturionConfigurado } from '../auth/centurion.js';
+import { canjearTokenDeCenturion, MENSAJE_SIN_LINEA } from '../auth/sesionCenturion.js';
+import { resolverLogin } from '../auth/loginCascada.js';
 import { lineasDeVendedora } from '../numeros/repositorio.js';
 
 /**
@@ -13,30 +14,28 @@ import { lineasDeVendedora } from '../numeros/repositorio.js';
  */
 export const authRouter = Router();
 
+/**
+ * El único punto del server que ata el canje de Centurión a la base. Las dos
+ * puertas (`/login` y `/centurion`) usan ESTA, no dos closures gemelas: quien
+ * decide de dónde salen las líneas es `numeros/repositorio.ts` y nadie más.
+ */
+const canjear = (token: string) => canjearTokenDeCenturion(token, (id) => lineasDeVendedora(db, id));
+
+/**
+ * La cascada Cerberus → Centurión vive en `auth/loginCascada.ts` y no acá: este
+ * handler no puede tener lógica propia porque `routes/auth.ts` importa el
+ * singleton `db`, o sea que ningún test puro lo puede cargar. La regla que
+ * decide quién entra tiene que ser interrogable sin una Postgres al lado.
+ */
 authRouter.post('/login', async (req, res) => {
   const { username, password } = req.body ?? {};
-  if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
-    res.status(400).json({ ok: false, message: 'Usuario y contraseña son obligatorios.' });
-    return;
-  }
+  const r = await resolverLogin(username, password, { canjear });
 
-  const r = await autenticarEnCerberus(username, password);
   if (!r.ok) {
-    // Son problemas distintos y el front tiene que poder distinguirlos: 401 =
-    // clave mala; 503 tipado = Cerberus no contesta (no es culpa de la vendedora).
-    if (r.caido) {
-      res.status(503).json({ ok: false, type: 'cerberus_caido', message: r.motivo });
-      return;
-    }
-    res.status(401).json({ ok: false, message: r.motivo });
+    res.status(r.estado).json({ ok: false, ...(r.type ? { type: r.type } : {}), message: r.message });
     return;
   }
-
-  // Guardamos la sesión de Cerberus para poder crear ventas como ella (S6b).
-  await guardarSesionCerberus(r.vendedora.id, r.sesion);
-
-  const token = firmarSesion(r.vendedora.id);
-  res.json({ ok: true, token, vendedora: r.vendedora });
+  res.json({ ok: true, token: r.token, vendedora: r.vendedora });
 });
 
 /**
@@ -62,6 +61,10 @@ authRouter.post('/login', async (req, res) => {
  * "mensajería" se habilite para una, se habilita para todas las que lo
  * tengan contratado. Sin este candado, la primera de esas personas que haga
  * clic sin tener línea asignada vería la cola entera de la Escuela.
+ *
+ * ⚠️ **Esa guarda ya no vive en este handler**: se fue a
+ * `auth/sesionCenturion.ts` cuando `/login` estrenó la segunda puerta hacia el
+ * mismo canje. Sigue siendo esta la explicación de POR QUÉ existe.
  */
 authRouter.post('/centurion', async (req, res) => {
   if (!ssoDeCenturionConfigurado()) {
@@ -75,29 +78,17 @@ authRouter.post('/centurion', async (req, res) => {
     return;
   }
 
-  const identidad = verificarTokenCenturion(token);
-  if (!identidad) {
+  const canje = await canjear(token);
+  if (!canje.ok) {
+    if (canje.motivo === 'sin_linea_asignada') {
+      res.status(403).json({ ok: false, type: 'sin_linea_asignada', message: MENSAJE_SIN_LINEA });
+      return;
+    }
     res.status(401).json({ ok: false, message: 'ese token de Centurión no sirve o venció' });
     return;
   }
 
-  const vendedoraId = vendedoraIdDeCenturion(identidad.usuario);
-  const lineas = await lineasDeVendedora(db, vendedoraId);
-  if (lineas.length === 0) {
-    res.status(403).json({
-      ok: false,
-      type: 'sin_linea_asignada',
-      message: 'todavía no tenés una línea de WhatsApp asignada en Hermes — avisá a soporte',
-    });
-    return;
-  }
-
-  const sesion = firmarSesion(vendedoraId);
-  res.json({
-    ok: true,
-    token: sesion,
-    vendedora: { id: vendedoraId, nombre: identidad.nombre ?? identidad.usuario },
-  });
+  res.json({ ok: true, token: canje.token, vendedora: canje.vendedora });
 });
 
 /**
