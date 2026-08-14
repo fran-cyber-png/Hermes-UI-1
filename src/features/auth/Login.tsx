@@ -16,13 +16,28 @@ const CLASE_INPUT =
   'rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25';
 
 /**
- * Tres causas distintas, tres mensajes — y ninguno es el error crudo.
+ * Cuatro causas distintas, cuatro mensajes — y ninguno es el error crudo.
  *
  * Ramificar por status solo (401 vs. "todo lo demás") le echaba a Cerberus la
  * culpa de un 500 de Hermes, del CORS o del wifi de la vendedora, y la mandaba
  * a esperar a que se recupere un sistema que nunca estuvo caído. Por eso el
  * server marca su 503 con `type: 'cerberus_caido'` (`routes/auth.ts`) y acá se
  * lee: sin esta lectura, ese campo no servía para nada.
+ *
+ * 🔴 **Y ESE MISMO AGUJERO SE VOLVIÓ A ABRIR CON EL 403.** Desde el login
+ * directo de Centurión, la cascada puede contestar
+ * `403 { type: 'sin_linea_asignada' }`: la clave estaba BIEN y lo que falta es
+ * una fila en `numero_vendedora`. Sin esta rama caía en el fallback y la
+ * pantalla decía «revisá tu internet» — mandando a reiniciar el router a alguien
+ * que necesita hablar con soporte. **Es alcanzable el día 1**, porque hoy una
+ * cuenta de Centurión recién habilitada puede no tener línea todavía.
+ *
+ * Acá el mensaje **sale del server** (`MENSAJE_SIN_LINEA`, en
+ * `auth/sesionCenturion.ts`) y no se reescribe en el navegador: es la única
+ * pista que recibe alguien que puso bien la clave y aun así no entra, y con dos
+ * redacciones —una por puerta— la que quedara vieja sería la que se lee (#37).
+ * Por eso este `type` viaja: un texto sin `type` no se podría distinguir de un
+ * error cualquiera, y un `type` sin texto no diría qué hacer.
  *
  * Cada mensaje termina en el próximo paso, no en el diagnóstico.
  */
@@ -32,6 +47,9 @@ function mensajeDeError(err: unknown): string {
   }
   if (err instanceof ErrorApi && err.tipo === 'cerberus_caido') {
     return 'Cerberus no responde. Esperá un minuto y probá de nuevo; si sigue, avisá a sistemas.';
+  }
+  if (err instanceof ErrorApi && err.tipo === 'sin_linea_asignada' && err.message) {
+    return err.message;
   }
   return 'No pude conectar con Hermes. Revisá tu internet y probá de nuevo; si sigue, avisá a sistemas.';
 }
