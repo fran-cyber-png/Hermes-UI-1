@@ -78,6 +78,15 @@ export interface MensajeHilo {
    * lectura vive en `cita.ts`, no en el JSX.
    */
   cita?: CitaHilo | null;
+  /**
+   * SI SE EDITÓ: el texto VIGENTE y cuándo cambió por última vez.
+   *
+   * **Opcional, y ausente ≠ no editado a secas**: como `entrega`, un server
+   * viejo no lo manda. Con el campo, la burbuja prefiere `editado.texto` sobre
+   * `texto` (el original) y muestra «Editado» — el mismo trato que le da
+   * WhatsApp: no lo pisa, lo marca.
+   */
+  editado?: { texto: string; editadoEn: string } | null;
 }
 
 /**
@@ -110,6 +119,15 @@ export type EstadoSesionWa = {
   /** Qué hay del otro lado. Ausente en un server viejo. */
   transporte?: 'whatsmeow' | 'cloud-api' | 'falso';
   limitesMedia?: LimitesMediaWa;
+  /**
+   * ¿ESTA LÍNEA PUEDE EDITAR UN MENSAJE YA MANDADO? Feature-detectado del lado
+   * del server (`transporte.editarTexto` presente o no): hoy solo whatsmeow,
+   * porque la Cloud API de Meta no expone ningún PATCH de mensajes.
+   *
+   * Ausente = server viejo → se trata como `false` (no ofrecer el botón), el
+   * mismo criterio conservador que el resto de estas banderas opcionales.
+   */
+  puedeEditar?: boolean;
 } & (
   | { estado: 'sin-vincular'; qr: string | null; codigo: string | null }
   | { estado: 'conectando' }
@@ -325,5 +343,46 @@ export function useConversacionWa(telefono: string | null) {
     onSettled: () => void qc.invalidateQueries({ queryKey: ['wa', 'conversacion', telefono] }),
   });
 
-  return { hilo, enviar, enviarMedia, marcarLeido, reaccionar };
+  /**
+   * EDITAR el texto de un mensaje SALIENTE ya mandado — la corrección de un
+   * error de tipeo.
+   *
+   * Optimista, como reaccionar: la burbuja muestra el texto nuevo al instante
+   * y se corrige sola si el server dice que no (línea sin la capacidad, sesión
+   * caída, WhatsApp lo rechazó por protocolo — el aviso llega igual por
+   * `onError` del componente que la dispara).
+   */
+  const editar = useMutation({
+    mutationFn: (vars: { numeroPropio: string; telefono: string; mensajeId: string; texto: string }) =>
+      api<{ ok: true }>('/api/whatsapp/editar', {
+        method: 'POST',
+        body: JSON.stringify(vars),
+      }),
+    onMutate: async (vars) => {
+      const clave = ['wa', 'conversacion', telefono];
+      await qc.cancelQueries({ queryKey: clave });
+      const antes = qc.getQueryData(clave);
+      const ahora = new Date().toISOString();
+      qc.setQueryData(clave, (viejo: { mensajes: MensajeHilo[] } | undefined) => {
+        if (!viejo) return viejo;
+        return {
+          ...viejo,
+          mensajes: viejo.mensajes.map((m) =>
+            m.external_id === `wa:${vars.mensajeId}` || m.external_id === vars.mensajeId
+              ? { ...m, editado: { texto: vars.texto, editadoEn: ahora } }
+              : m,
+          ),
+        };
+      });
+      return { antes, clave };
+    },
+    onError: (_e, _v, ctx) => {
+      // Se deshace: un texto editado que no salió de verdad es peor que no
+      // haberlo mostrado — el lead nunca vio esa corrección.
+      if (ctx?.antes) qc.setQueryData(ctx.clave, ctx.antes);
+    },
+    onSettled: () => void qc.invalidateQueries({ queryKey: ['wa', 'conversacion', telefono] }),
+  });
+
+  return { hilo, enviar, enviarMedia, marcarLeido, reaccionar, editar };
 }

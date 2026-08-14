@@ -282,6 +282,18 @@ export interface TransporteWhatsapp {
   enviarTexto(telefono: string, texto: string, cita?: CitaSaliente): Promise<ResultadoEnvio>;
 
   /**
+   * EDITAR EL TEXTO de un mensaje YA ENVIADO — la corrección de un error de
+   * tipeo. `mensajeId` es el id CRUDO del mensaje saliente original.
+   *
+   * ── Por qué es OPCIONAL, como `enviarPlantilla?` pero al revés ──
+   * Es un permiso del PROTOCOLO de WhatsApp multi-dispositivo (existe desde
+   * 2023); Meta NO lo expone en la Cloud API — no hay ningún PATCH de
+   * mensajes en la Graph API oficial (verificado 14-ago-2026). Un transporte
+   * que no lo tenga (`cloud-api`) simplemente no ofrece el botón.
+   */
+  editarTexto?(telefono: string, mensajeId: string, textoNuevo: string): Promise<ResultadoEnvio>;
+
+  /**
    * UN adjunto (imagen, video, audio o documento) a UN teléfono. Misma forma
    * anti-masivo que `enviarTexto`: un archivo, un destinatario, una orden.
    */

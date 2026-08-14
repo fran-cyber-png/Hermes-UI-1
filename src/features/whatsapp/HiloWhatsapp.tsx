@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Bot, Check, CheckCheck, Copy, CornerDownRight, CornerUpLeft, CornerUpRight, FileText, SmilePlus, Loader2, Megaphone, Paperclip, Phone, Play, QrCode, Send, Link2, Trash2, WifiOff, X } from 'lucide-react';
+import { AlertTriangle, Bot, Check, CheckCheck, Copy, CornerDownRight, CornerUpLeft, CornerUpRight, FileText, SmilePlus, Loader2, Megaphone, Paperclip, Pencil, Phone, Play, QrCode, Send, Link2, Trash2, WifiOff, X } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
 import { useBlobAutenticado } from '../../lib/datos/blobAutenticado';
 import { formatoTelefono, tempClass } from '../../lib/formato';
@@ -420,6 +420,99 @@ function BotonReenviar({ onReenviar }: { onReenviar: () => void }) {
 }
 
 /**
+ * EDITAR — corrige el mensaje QUE YA SALIÓ, en el propio WhatsApp del lead.
+ *
+ * ── Por qué solo a veces está ─────────────────────────────────────────────
+ * A diferencia de Copiar/Responder/Reenviar (que no mandan nada), esto SÍ le
+ * cambia algo a alguien que ya lo vio — es protocolo, no un truco de la caja.
+ * Y es un permiso de WhatsApp multi-dispositivo que la Cloud API de Meta NO
+ * tiene (no hay PATCH de mensajes en su API oficial): por eso el botón se
+ * feature-detecta con `sesion.puedeEditar` y hoy solo aparece en líneas
+ * whatsmeow, nunca en la del bot (Cloud API). También pide sesión conectada,
+ * como Reaccionar: sin línea viva el pedido no puede salir.
+ */
+function BotonEditar({ onEditar }: { onEditar: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onEditar}
+      title="Editar este mensaje"
+      aria-label="Editar este mensaje"
+      className="flex size-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground opacity-0 shadow-[0_1px_3px_rgba(14,42,82,0.12)] transition-opacity hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 group-hover/burbuja:opacity-100"
+    >
+      <Pencil size={13} />
+    </button>
+  );
+}
+
+/**
+ * EL EDITOR, ADENTRO DE LA MISMA BURBUJA — no un modal aparte: lo que se edita
+ * es ESTE mensaje, y sacarlo de su lugar le haría perder el contexto (con
+ * quién, cuándo, si tenía un adjunto).
+ *
+ * `⌘↵`/Enter guarda, Escape cancela — el mismo acorde que el resto de la app
+ * (revisión, popovers). `e.stopPropagation()` en Escape es best-effort: no
+ * hay ningún listener de captura en esta vista que compita por él (a
+ * diferencia de Ivi/Cabina, HiloWhatsapp no usa `useEscape` sobre el hilo),
+ * así que alcanza con el handler local.
+ */
+function EditorDeMensaje({
+  texto,
+  conMedia,
+  pendiente,
+  onCambiar,
+  onCancelar,
+  onGuardar,
+}: {
+  texto: string;
+  conMedia: boolean;
+  pendiente: boolean;
+  onCambiar: (texto: string) => void;
+  onCancelar: () => void;
+  onGuardar: () => void;
+}) {
+  return (
+    <div className={'flex flex-col gap-1.5' + (conMedia ? ' px-2 pt-1.5 pb-1' : '')} onClick={(e) => e.stopPropagation()}>
+      <textarea
+        autoFocus
+        value={texto}
+        onChange={(e) => onCambiar(e.target.value)}
+        onFocus={(e) => e.currentTarget.setSelectionRange(e.currentTarget.value.length, e.currentTarget.value.length)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.stopPropagation();
+            onCancelar();
+          } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || !e.shiftKey)) {
+            e.preventDefault();
+            onGuardar();
+          }
+        }}
+        rows={Math.min(6, Math.max(2, texto.split('\n').length))}
+        className="w-full resize-none rounded-lg border border-primary/50 bg-card px-2 py-1.5 text-sm text-foreground outline-none focus:border-primary"
+      />
+      <div className="flex items-center justify-end gap-1.5">
+        <button
+          type="button"
+          onClick={onCancelar}
+          className="rounded-md px-2 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          disabled={!texto.trim() || pendiente}
+          onClick={onGuardar}
+          className="flex items-center gap-1 rounded-md bg-navy px-2.5 py-1 text-[11px] font-bold text-white transition-colors hover:bg-navy/90 disabled:opacity-40"
+        >
+          {pendiente && <Loader2 size={11} className="animate-spin" />}
+          Guardar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
  * EL MENSAJE CITADO, ADENTRO DE LA BURBUJA — la tirita gris de WhatsApp.
  *
  * ── Por qué el fondo cambió ─────────────────────────────────────────────────
@@ -678,7 +771,7 @@ export function HiloWhatsapp({
   const telefono = conversacion.persona_id ?? '';
   const numeroPropio = conversacion.numero_propio ?? '';
   const { data: sesion } = useSesionWa(numeroPropio || undefined);
-  const { hilo, enviar, enviarMedia, marcarLeido, reaccionar } = useConversacionWa(telefono);
+  const { hilo, enviar, enviarMedia, marcarLeido, reaccionar, editar } = useConversacionWa(telefono);
   const finRef = useRef<HTMLDivElement>(null);
   // Solo lo NUEVO se anima: ids ya vistos por hilo (se resetea al cambiar de teléfono).
   const vistosRef = useRef<Set<number>>(new Set());
@@ -694,6 +787,15 @@ export function HiloWhatsapp({
    */
   const [citando, setCitando] = useState<CitaHilo | null>(null);
   useEffect(() => setCitando(null), [telefono]);
+
+  /**
+   * EL MENSAJE QUE SE ESTÁ EDITANDO, si hay alguno — mismo molde que `citando`:
+   * vive acá porque el gesto nace en la burbuja, y se apaga al cambiar de
+   * conversación por la misma razón (si no, abrir otro chat lo encontraría con
+   * el editor abierto sobre un mensaje que ese lead nunca vio).
+   */
+  const [editando, setEditando] = useState<{ externalId: string; texto: string } | null>(null);
+  useEffect(() => setEditando(null), [telefono]);
 
   const conectado = sesion?.estado === 'conectado';
   const mensajes = hilo.data?.mensajes ?? [];
@@ -826,8 +928,18 @@ export function HiloWhatsapp({
                   // Responder además se apaga en revisión: ahí se aprueba un
                   // texto preparado, no se compone uno nuevo.
                   const puedeCitar = !sugerencia && sePuedeCitar(m);
+                  // El texto VIGENTE: si se editó, es el nuevo — copiar,
+                  // reenviar y mostrar tienen que leer el mismo dato, o
+                  // reenviar un mensaje editado mandaría el texto viejo.
+                  const textoVigente = m.editado?.texto ?? m.texto;
+                  const editandoEste = editando?.externalId === m.external_id;
+                  // EDITAR: solo lo SALIENTE, solo con texto, y solo si esta
+                  // línea puede (feature-detectado — hoy solo whatsmeow, ver
+                  // `BotonEditar`) y con la sesión viva, como Reaccionar.
+                  const puedeEditarEste =
+                    m.direccion === 'saliente' && Boolean(textoVigente) && !sugerencia && conectado && Boolean(sesion?.puedeEditar);
                   const acciones =
-                    m.texto || puedeCitar || (m.direccion === 'entrante' && conectado) ? (
+                    !editandoEste && (textoVigente || puedeCitar || (m.direccion === 'entrante' && conectado)) ? (
                       <div className="flex shrink-0 items-center gap-1">
                         {m.direccion === 'entrante' && conectado && (
                           <BotonReaccionar
@@ -850,11 +962,14 @@ export function HiloWhatsapp({
                             }
                           />
                         )}
-                        {m.texto && <BotonCopiar texto={m.texto} />}
-                        {m.texto && !sugerencia && (
+                        {textoVigente && <BotonCopiar texto={textoVigente} />}
+                        {textoVigente && !sugerencia && (
                           <BotonReenviar
-                            onReenviar={() => ponerEnComposer({ telefono, texto: m.texto! })}
+                            onReenviar={() => ponerEnComposer({ telefono, texto: textoVigente })}
                           />
+                        )}
+                        {puedeEditarEste && (
+                          <BotonEditar onEditar={() => setEditando({ externalId: m.external_id, texto: textoVigente! })} />
                         )}
                       </div>
                     ) : null;
@@ -893,8 +1008,8 @@ export function HiloWhatsapp({
                         // de un `<button>` que abre el visor, los enlaces abren el
                         // navegador, y la tirita —ahora que es botón— salta.
                         onDoubleClick={(e) => {
-                          if ((e.target as HTMLElement).closest('button, a, video, audio')) return;
-                          if (sugerencia || !sePuedeCitar(m)) return;
+                          if ((e.target as HTMLElement).closest('button, a, video, audio, textarea')) return;
+                          if (editandoEste || sugerencia || !sePuedeCitar(m)) return;
                           setCitando(citaDeMensaje(m));
                           // 🔴 La selección se limpia A PROPÓSITO, y esto es lo que
                           // se pierde: adentro de una burbuja, el doble clic deja de
@@ -945,9 +1060,23 @@ export function HiloWhatsapp({
                           </div>
                         )}
                         {m.media && <MediaEnBurbuja media={m.media} />}
-                        {m.texto ? (
+                        {editandoEste && editando ? (
+                          <EditorDeMensaje
+                            texto={editando.texto}
+                            conMedia={Boolean(m.media)}
+                            pendiente={editar.isPending}
+                            onCambiar={(texto) => setEditando({ externalId: m.external_id, texto })}
+                            onCancelar={() => setEditando(null)}
+                            onGuardar={() => {
+                              const texto = editando.texto.trim();
+                              if (!texto) return;
+                              editar.mutate({ numeroPropio, telefono, mensajeId: m.external_id, texto });
+                              setEditando(null);
+                            }}
+                          />
+                        ) : textoVigente ? (
                           <div className={'whitespace-pre-wrap break-words' + (m.media ? ' px-2 pt-1.5' : '')}>
-                            <TextoWhatsapp texto={m.texto} />
+                            <TextoWhatsapp texto={textoVigente} />
                           </div>
                         ) : m.media ? null : m.origen?.fuente === 'anuncio' ? (
                           <span className="inline-flex items-center gap-1.5 text-navy">
@@ -957,6 +1086,7 @@ export function HiloWhatsapp({
                         ) : (
                           <span className="italic text-muted-foreground">(no es texto — velo en el teléfono)</span>
                         )}
+                        {!editandoEste && (
                         <div
                           className={
                             'mt-0.5 flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground ' +
@@ -1004,10 +1134,20 @@ export function HiloWhatsapp({
                                 <title>Respondieron a este mensaje</title>
                               </CornerDownRight>
                             )}
+                            {/* Igual que WhatsApp: no dice cuál era el texto viejo,
+                                solo que cambió. El detalle («¿qué decía antes?») no
+                                se guarda — es un ESTADO, no un historial (ver
+                                `db/ediciones.ts`). */}
+                            {m.editado && (
+                              <span className="italic" title={`Editado ${new Date(m.editado.editadoEn).toLocaleString('es')}`}>
+                                Editado
+                              </span>
+                            )}
                             {new Date(m.occurred_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
                             {m.entrega && <TildesDeEntrega estado={m.entrega} />}
                           </span>
                         </div>
+                        )}
                       </div>
                       {m.reacciones && (
                         <ReaccionesEnBurbuja

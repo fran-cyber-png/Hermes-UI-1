@@ -438,6 +438,37 @@ dos recetas el JOIN da cero filas en silencio. **Sin migración**: una cita es u
 - Capturas: `docs/evidencia/responder-citando-*.png`. Sin server: `/galeria-composer.html` — sirve los
   tres casos **incluidos los feos**, porque el ideal ya escondió tres defectos una vez.
 
+## Editar un mensaje ya enviado — solo whatsmeow (ADR 0056)
+
+Molde: las reacciones y las citas. Una edición cuelga del mensaje (`ediciones_wa`, migración **0027**,
+PK en el mensaje — es un ESTADO, editar de nuevo REEMPLAZA, no hay historial), nunca pisa
+`interactions.texto` ni `envios_wa.texto` (esa es la AUDITORÍA de qué salió, la que mide piezas de
+#169).
+
+- 🔴 **LA CLOUD API DE META NO TIENE ESTO.** Verificado contra su doc oficial el 14-ago-2026: no existe
+  ningún `PATCH` de mensajes, solo `POST` para mandar uno nuevo. whatsmeow sí (`editMessage`, un método
+  propio del wrapper — sin la trampa de grafía `stanzaID` de las citas). **Y desde el 13-ago Hermes
+  corre con UNA sola línea, y es Cloud API**: el día que se escribió esto, *ninguna* línea viva puede
+  editar. Se construyó igual —decisión del dueño— para el día que vuelva a haber whatsmeow vivo.
+  ⚠️ Antes de asumir que esto anda en producción, verificá qué línea está corriendo hoy.
+- 🔴 **`editarTexto` es OPCIONAL y FEATURE-DETECTADO, nunca un `if transporte==='whatsmeow'`.** El
+  server publica `puedeEditar` en `GET /api/whatsapp/sesion?numeroPropio=`
+  (`Boolean(transporte.editarTexto)`); el botón de la burbuja lee esa bandera. Con dos lugares
+  decidiendo lo mismo, el día que la Cloud API sume esto (o llegue un transporte nuevo) hay que acordarse
+  de tocar los dos — la lección de #37, otra vez.
+- **No pasa por `EnvioControlado`**, mismo argumento que reaccionar: corrige algo que YA le llegó a esa
+  persona, no hay pieza que estampar de nuevo, y contarlo contra el ritmo (20/hora, 60/día) le robaría
+  cupo a los envíos de verdad. Sí conserva la guarda de línea equivocada y el freno por sesión caída o
+  baneada.
+- **El editor vive ADENTRO de la burbuja**, no en el composer (a diferencia de Reenviar, que sí lo usa
+  porque arma un mensaje nuevo): sacarlo de su lugar le haría perder el contexto. Copiar y Reenviar leen
+  el texto VIGENTE (`editado?.texto ?? texto`) — reenviar una edición manda la versión corregida, no la
+  que tenía el error.
+- ⚠️ **Sin historial de versiones, ni siquiera el original en la marca**: «Editado» se ve, como en
+  WhatsApp, sin decir qué decía antes.
+- Sin captura contra whatsmeow real (no hay línea viva): verificado con `TransporteFalso` y mocks.
+  `docs/adr/0056-editar-un-mensaje-enviado.md`.
+
 ## Abrir un chat lo marca leído — y NO lo mueve de lugar
 
 - **El bug**: `POST /api/whatsapp/leido/:telefono` mandaba los ticks azules al lead y **no tocaba

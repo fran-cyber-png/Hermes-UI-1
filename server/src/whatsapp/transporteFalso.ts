@@ -46,6 +46,9 @@ export class TransporteFalso implements TransporteWhatsapp {
   /** Los adjuntos "enviados", con la misma intención de auditoría de prueba. */
   readonly enviadosMedia: { telefono: string; media: MediaSaliente; idExterno: string }[] = [];
 
+  /** Las ediciones "aplicadas", para que los tests verifiquen qué se corrigió. */
+  readonly editados: { telefono: string; mensajeId: string; texto: string }[] = [];
+
   private contador = 0;
 
   constructor(
@@ -161,6 +164,19 @@ export class TransporteFalso implements TransporteWhatsapp {
     });
 
     return { idExterno, ocurridoEn };
+  }
+
+  /**
+   * Implementado acá aunque en producción hoy SOLO lo tiene whatsmeow (la
+   * Cloud API no lo expone — ver `transporte.ts`): el falso es el que permite
+   * probar el frente entero —ruta, dominio, UI— sin depender del binario real.
+   */
+  async editarTexto(telefono: string, mensajeId: string, textoNuevo: string): Promise<ResultadoEnvio> {
+    if (this.sesion.estado !== 'conectado') {
+      throw new Error(`No se puede editar: la sesión está "${this.sesion.estado}", no conectada.`);
+    }
+    this.editados.push({ telefono, mensajeId, texto: textoNuevo });
+    return { idExterno: mensajeId, ocurridoEn: this.reloj() };
   }
 
   async enviarMedia(telefono: string, media: MediaSaliente): Promise<ResultadoEnvio> {

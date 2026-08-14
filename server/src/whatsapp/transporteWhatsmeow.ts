@@ -405,6 +405,21 @@ export class TransporteWhatsmeow implements TransporteWhatsapp {
     return { idExterno: r.id, ocurridoEn: new Date((r.timestamp || Date.now() / 1000) * 1000) };
   }
 
+  /**
+   * `editMessage(chat, id, message)` es un método propio del wrapper —no algo
+   * armado a mano con `sendRawMessage`—, así que a diferencia de las citas
+   * (`cita.ts`) acá no hay que pelearse con la grafía `stanzaID`: el binario de
+   * Go arma el `protocolMessage` de edición él solo.
+   */
+  async editarTexto(telefono: string, mensajeId: string, textoNuevo: string): Promise<ResultadoEnvio> {
+    if (this.sesion.estado !== 'conectado') {
+      throw new Error(`No se puede editar: la sesión está "${this.sesion.estado}".`);
+    }
+    const jid = jidDeTelefono(telefono);
+    const r = await this.client.editMessage(jid, mensajeId, { conversation: textoNuevo });
+    return { idExterno: r.id, ocurridoEn: new Date((r.timestamp || Date.now() / 1000) * 1000) };
+  }
+
   async marcarLeido(telefono: string, idsExternos: string[]): Promise<void> {
     if (!idsExternos.length) return;
     // Ticks azules: se marca al abrir la conversación (decisión de Estephano).

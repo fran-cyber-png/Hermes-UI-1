@@ -24,6 +24,8 @@ import { reaccionesPorMensaje } from '../reacciones/repositorio.js';
 import { estadosPorMensaje } from '../entrega/repositorio.js';
 import { reaccionar } from '../reacciones/enviar.js';
 import { resolverCitados, resolverCitaSaliente } from '../whatsapp/citaRepositorio.js';
+import { edicionesPorMensaje } from '../ediciones/repositorio.js';
+import { editarMensaje } from '../ediciones/editar.js';
 
 /**
  * LA CONVERSACIÓN NATIVA DE WHATSAPP dentro de Hermes: ver el hilo y responder,
@@ -88,6 +90,10 @@ whatsappRouter.get('/sesion', (req, res) => {
       ...linea.transporte.estado(),
       transporte: linea.transporte.nombre,
       limitesMedia: limitesDe(linea.transporte.nombre),
+      // Feature-detectado: hoy solo whatsmeow lo tiene (la Cloud API no lo
+      // expone). El botón de editar en el hilo lee esto para no ofrecer algo
+      // que la línea no puede hacer.
+      puedeEditar: Boolean(linea.transporte.editarTexto),
     });
     return;
   }
@@ -210,7 +216,7 @@ whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
     ),
   ];
 
-  const [porMensaje, estados, citas] = await Promise.all([
+  const [porMensaje, estados, citas, ediciones] = await Promise.all([
     reaccionesPorMensaje(db, ids, numeroPropio),
     // Los ✓✓ solo de los SALIENTES: preguntar por los entrantes sería pedirle a
     // `envios_wa` filas que por definición no tiene.
@@ -219,11 +225,16 @@ whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
       mensajes.filter((m) => (m as { direccion?: string }).direccion === 'saliente').map((m) => String((m as { external_id: string }).external_id)),
     ),
     resolverCitados(db, citados),
+    // LAS EDICIONES, colgadas de su mensaje — mismo criterio que las
+    // reacciones: una consulta para todo el hilo, pegada acá y no adentro de
+    // `hiloDe` (ver el comentario de arriba sobre reacciones).
+    edicionesPorMensaje(db, ids),
   ]);
   const enriquecidos = mensajes.map((m) => {
     const fila = m as Record<string, unknown> & { external_id: string };
     const r = porMensaje.get(fila.external_id);
     const e = estados.get(fila.external_id);
+    const ed = ediciones.get(fila.external_id);
     /**
      * 🔴 SI EL CITADO NO ESTÁ, SE DIBUJA EL HUECO — nunca se descarta el mensaje
      * ni se calla la cita. Que el mensaje al que alguien respondió sea anterior a
@@ -243,6 +254,10 @@ whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
       ...fila,
       ...(r?.length ? { reacciones: r } : {}),
       ...(e ? { entrega: e } : {}),
+      // El texto vigente (después de editar), aparte del `texto` original: la
+      // burbuja lo prefiere y muestra «Editado» — igual que WhatsApp, que no
+      // pisa el mensaje, lo marca.
+      ...(ed ? { editado: { texto: ed.texto, editadoEn: ed.editadoAt } } : {}),
       // Se pisa la clave cruda del payload con la resuelta (o con `null`): lo que
       // el front recibe es siempre la forma de `CitaEnElHilo`, nunca el crudo.
       cita,
@@ -505,6 +520,34 @@ whatsappRouter.post('/reaccionar', requiereVendedora, express.json(), async (req
     return;
   }
   res.json({ ok: true, quitada: r.quitada });
+});
+
+/**
+ * EDITAR el texto de un mensaje SALIENTE ya mandado. Hoy solo whatsmeow puede
+ * (`transporte.editarTexto?`, ausente en Cloud API): `editarMensaje` devuelve
+ * el motivo redactado si esta línea no lo tiene, y la ruta lo pasa tal cual.
+ *
+ * No pasa por `EnvioControlado`, mismo argumento que `/reaccionar`: corrige
+ * algo que ya le llegó a esa persona, no le manda nada a alguien nuevo.
+ */
+whatsappRouter.post('/editar', requiereVendedora, express.json(), async (req, res) => {
+  const { telefono, numeroPropio, mensajeId, texto } = (req.body ?? {}) as Record<string, string>;
+  const linea = gestorWhatsapp().de(String(numeroPropio ?? ''));
+  if (!linea) {
+    res.status(409).json({ ok: false, message: 'esa línea no está corriendo' });
+    return;
+  }
+  const r = await editarMensaje(db, linea.transporte, {
+    numeroPropio: String(numeroPropio ?? ''),
+    telefono: String(telefono ?? '').replace(/\D/g, ''),
+    mensajeId: String(mensajeId ?? '').replace(/^wa:/, ''),
+    textoNuevo: String(texto ?? ''),
+  });
+  if (!r.ok) {
+    res.status(409).json({ ok: false, message: r.motivo });
+    return;
+  }
+  res.json({ ok: true });
 });
 
 /**
