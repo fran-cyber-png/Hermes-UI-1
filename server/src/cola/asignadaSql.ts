@@ -142,3 +142,44 @@ export function esMiaSql(vendedoraId: string | undefined): SQL {
   if (!limpio) return sql`false`;
   return sql`COALESCE(lower(btrim(COALESCE(ca.vendedora_id, cl.vendedora_id))) = ${limpio}, false)`;
 }
+
+/**
+ * LA FRONTERA DE LA COLA — lo de OTRA vendedora no se sirve.
+ *
+ * ══ POR QUÉ ES UNA FRONTERA Y NO UN FILTRO ══════════════════════════════════
+ *
+ * Hasta hoy el reparto era un filtro: `?mios=1` recortaba la vista, pero la cola
+ * seguía sirviendo todo y bastaba un clic para ver el trabajo ajeno. Alcanzó
+ * mientras la línea la atendía una persona.
+ *
+ * 🔴 El 14-ago-2026 entró una vendedora nueva a la línea compartida y **su
+ * primera pantalla fueron las conversaciones de Luz**: 1.158 chats, ninguno
+ * suyo. El pedido del dueño fue explícito — «asegurarnos 100 % que los datos de
+ * una son de ella y los de la otra son de la otra». Un recorte del navegador no
+ * puede prometer eso: los datos ya viajaron. Por eso vive en el `WHERE`.
+ *
+ * Es la **tercera frontera del repo**, con el padrón (ADR 0035) y el Dashboard
+ * (ADR 0036), y sigue el molde del segundo: quien no es supervisora ve lo suyo.
+ *
+ * ══ LO QUE NO TIENE DUEÑA SE SIGUE VIENDO ═══════════════════════════════════
+ *
+ * ⚠️ Una conversación sin asignar es **de quien la agarre**: esconderla dejaría
+ * cientos de chats sin que nadie los vea, que es peor que el problema que esto
+ * resuelve. La frontera separa lo repartido, no inventa dueños donde no hay.
+ *
+ * ⚠️ **No cubre el hilo ni la ficha.** Quien pida una conversación por su clave
+ * la sigue recibiendo: eso es un modelo de permisos, que Hermes no tiene. Lo
+ * que garantiza es que **no aparezca en la cola de quien no la trabaja** —
+ * decir más sería prometer una frontera imaginaria, peor que ninguna porque se
+ * le cree.
+ */
+export function fronteraDeAsignacionSql(
+  vendedoraId: string | undefined,
+  esSupervisora: boolean,
+): SQL | null {
+  const limpio = (vendedoraId ?? "").trim().toLowerCase();
+  // Sin identidad (un servicio) o siendo supervisora no se recorta: el
+  // supervisor es quien reparte, y necesita ver lo que todavía no repartió.
+  if (!limpio || esSupervisora) return null;
+  return sql`(${duenoSql} IS NULL OR lower(btrim(${duenoSql})) = ${limpio})`;
+}

@@ -46,7 +46,14 @@ import {
 } from "./cursoSql.js";
 import { padronCteSql, padronJoinSql, yaComproSql } from "./clienteSql.js";
 import { botCalienteSql, botEscaladaSql, botJoinSql } from "./botSql.js";
-import { asignadaJoinSql, cursoRuteoJoinSql, duenoSql, esMiaSql } from "./asignadaSql.js";
+import {
+  asignadaJoinSql,
+  cursoRuteoJoinSql,
+  duenoSql,
+  esMiaSql,
+  fronteraDeAsignacionSql,
+} from "./asignadaSql.js";
+import { esSupervisor } from "../padron/supervisor.js";
 import { recorteDeLineas, soloSusLineas } from "./lineas.js";
 import { estaEnAlgunaRueda } from "../reparto/asignar.js";
 import { lineasDeVendedoraConProposito } from "../numeros/repositorio.js";
@@ -985,7 +992,25 @@ async function ejecutarCola(
   const soloMias =
     conAsignacion && (opciones.misAsignadas || opciones.enElReparto) && mia ? [mia] : [];
 
-  const condiciones = [...condicionesBase, ...condicionesRecorte, ...soloMias];
+  /**
+   * 🔴 LA FRONTERA VA SIEMPRE, NO CON UN FLAG — esa es la diferencia con «Míos».
+   *
+   * `soloMias` es opcional: la vendedora lo prende y lo apaga. Esto no se apaga,
+   * porque lo que promete es que el trabajo de otra **no se sirve**. Un recorte
+   * que se puede quitar con un clic no es una frontera, y prometerlo así fue lo
+   * que dejó a una vendedora nueva mirando 1.158 chats ajenos.
+   *
+   * Un lead sin cable pasa solo: su dueño es NULL y la frontera deja pasar lo
+   * que no tiene dueña. No hace falta la exención de ADR 0051 acá.
+   */
+  const frontera = conAsignacion ? fronteraDeAsignacionSql(vendedoraId, esSupervisor(vendedoraId ?? "", process.env)) : null;
+
+  const condiciones = [
+    ...condicionesBase,
+    ...condicionesRecorte,
+    ...soloMias,
+    ...(frontera ? [frontera] : []),
+  ];
 
   const donde = (c: SQL[]) => (c.length ? sql`WHERE ${sql.join(c, sql` AND `)}` : sql``);
   const yTodas = (c: SQL[]) => (c.length ? sql.join(c, sql` AND `) : sql`true`);
