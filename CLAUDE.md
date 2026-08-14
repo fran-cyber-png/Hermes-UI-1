@@ -176,6 +176,39 @@ a quien dijo que no**. Nada de eso se negocia en un `if`: vive en `server/src/au
   distingue «Automático» de «Aprobado · ana». **Sigue prohibido**: generar texto libre, iniciar
   conversaciones y cualquier mecanismo cuyo fin sea que el tráfico no se detecte.
 
+### La campaña por plantilla aprobada (`npm run campana`, **ADR 0055**)
+
+Dry-run por default; `--enviar` manda. Dos orígenes de público: `--desde/--hasta` (quien **escribió**
+a la línea: es seguimiento) y **`--lista <csv>`** (un padrón de afuera: **eso es contacto en frío** y
+enmienda ADR 0015 §37 — lo autoriza el dueño, no el hecho de que el modo exista). El encabezado
+imprime **«🧊 CONTACTO EN FRÍO»** para que no haya que deducirlo de los flags.
+
+- 🔴 **RENOMBRAR LA PLANTILLA APAGA EL CANDADO DEL DOBLE ENVÍO.** La guarda compara `pieza_ref`
+  contra la plantilla de ESA corrida, y **Meta obliga a crear una plantilla nueva para cambiarle una
+  letra al texto**: la segunda campaña de un evento —el caso normal— es justo donde deja de
+  reconocer a quien recibió la primera. Medido: con la v2 salían **244 en vez de 104** sobre 245, y
+  el simulacro decía «1 porque YA recibieron esta campaña». Se declara con
+  **`--ya-recibieron <refs>`**, que alimenta las tres preguntas vía `PIEZAS_QUE_BLOQUEAN`.
+- 🔴 **UN TELÉFONO MALFORMADO NO CUESTA UN MENSAJE: CUESTA LA CORRIDA** (el bucle frena ante
+  cualquier error que no sea `131049`), y un número mal leído **le llega a otra persona**.
+  `campana/lista.ts` acepta sólo las dos formas que se leen de UNA manera (9 dígitos con 9, o
+  `51`+eso) y descarta el resto **con su motivo**. No se adivina `512221285857` ni se arregla
+  `5151997604093`.
+- 🔴 **`reasignar()` NO VERIFICA EL DESTINO Y ESTE SCRIPT NO PASA POR `/api/reparto`.** Un dedazo en
+  `--asignar-a` escribía filas válidas con un `vendedora_id` inexistente y esas conversaciones
+  desaparecían de la cola de todos, sin síntoma. Se verifica **antes de leer nada**.
+- ⚠️ Con `--lista` se apagan dos vetos y el simulacro **los nombra**: «llegó por un anuncio» (nunca
+  escribió, no puede tener uno) y «ya compró» (mira `clientes_padron` = «compró ALGO», y un padrón
+  de prospectos son clientes por definición). **Que no compraron ESTE producto se garantiza al
+  generar la lista, contra `icarus.sales`** — el script no te salva de eso.
+- ⚠️ **Un `fetch failed` no es un rechazo de Meta**: cortó una corrida en el 446 de 999 con la línea
+  GREEN. La clasificación vive pura en `campana/reintento.ts`, con 3 reintentos.
+- ⚠️ **Mirá el renglón de «RETENIDO por Meta (pacing)»**: con una plantilla nueva Meta retiene parte
+  de los mensajes y **descarta los que siguen si las señales salen mal**. «Salieron 1.000» puede
+  querer decir «Meta aceptó 1.000 POSTs y soltó 200».
+- **El orden de magnitud, medido**: `foro_estado_5_ago` fueron 1.000 mensajes → **31 respuestas y 1
+  compra**. Y sale por `51984429504`, la **única línea que trae leads**.
+
 ## El navegador vive ADENTRO de la mesa — webview hijo (ADR 0043, enmienda 0040)
 
 La vendedora sale a la web con la **sesión de trabajo**, separada de su Chrome personal, sin salir de
