@@ -18,10 +18,34 @@ export type Proposito = (typeof PROPOSITOS)[number];
 /**
  * El cuerpo del upsert declarativo `PUT /api/admin/numeros/:numero`. Cerberus manda
  * el estado deseado completo; `vendedoras` es el set completo (reemplaza, no suma).
+ *
+ * ══ 🔴 AUSENTE SIGNIFICA «NO LO TOQUES», NO «PONELO EN EL DEFAULT» ═══════════
+ *
+ * `proposito` y `activo` **no llevan `.default()`**, y esa ausencia es el arreglo.
+ *
+ * Los dos son campos que **Hermes inventó y Cerberus no conoce**: `proposito` nació
+ * con la separación de los dos planos del negocio, y `activo` con la baja lógica de
+ * una línea. Cerberus manda su modelo, que no los tiene — así que con un `.default()`
+ * **cada push suyo los reseteaba**, en silencio y sin log.
+ *
+ * Lo que costaba, medido: `cola/lineas.ts:72` deriva `esDeCampana` de
+ * `proposito === 'campana'`. Un push que omitiera el campo bajaba la línea del
+ * candidato a `escuela`, `soloSusLineas` pasaba a `false`, y **el comando de campaña
+ * veía la cola entera de la Escuela** — exactamente la fuga que el SSO y la
+ * separación de entornos existen para tapar, por una puerta que el candado del login
+ * no puede ver: esa persona ya tiene línea y entra bien.
+ *
+ * Es la TERCERA instancia del mismo defecto. El `CLAUDE.md` ya documentaba las otras
+ * dos (`activo` resucitando una línea retirada, `vendedoras: default([])` vaciando el
+ * mapa); ésta no estaba escrita, y es la que rompe el aislamiento entre los planos.
+ *
+ * ⚠️ El default sigue existiendo, pero **sólo para una fila NUEVA** (ver
+ * `upsertNumero`): un número que se crea tiene que tener un valor. Lo que ya no pasa
+ * es que un push posterior lo pise con algo que Cerberus nunca quiso decir.
  */
 export const esquemaUpsert = z.object({
   etiqueta: z.string().trim().min(1, "la etiqueta no puede estar vacía"),
-  proposito: z.enum(["escuela", "campana", "vendedora"]).default("escuela"),
+  proposito: z.enum(["escuela", "campana", "vendedora"]).optional(),
   referencia: z
     .string()
     .nullish()
@@ -29,7 +53,7 @@ export const esquemaUpsert = z.object({
       const t = (v ?? "").trim();
       return t ? t : null;
     }),
-  activo: z.boolean().default(true),
+  activo: z.boolean().optional(),
   vendedoras: z.array(z.string().trim().min(1)).default([]),
 });
 export type DatosUpsert = z.infer<typeof esquemaUpsert>;

@@ -60,6 +60,43 @@ export function requiereServicio(req: Request, res: Response, next: NextFunction
 }
 
 /**
+ * EXIGE UNA IDENTIDAD DE SERVICIO CONCRETA — el candado que hace que `req.servicio`
+ * signifique algo.
+ *
+ * ══ POR QUÉ HACE FALTA ══════════════════════════════════════════════════════
+ *
+ * `/api/admin` se monta con **un solo middleware para el router entero**
+ * (`index.ts`: `app.use("/api/admin", requiereServicio, adminRouter)`), y hasta hoy
+ * **nadie leía `req.servicio`**: se asignaba y nada más. O sea que la identidad no
+ * acotaba nada, y el día que entre un segundo consumidor con su propia credencial
+ * —el directorio de personas es el candidato— hereda de yapa **todo** `/api/admin`,
+ * incluido `?purgar=true`, que es lo único irreversible del frente: recuperar una
+ * sesión purgada exige el teléfono físico y volver a escanear el QR.
+ *
+ * El agujero no es que hoy alguien pueda purgar (hoy hay un solo token, y es de
+ * Cerberus). Es que **sumar una credencial no cuesta nada y concede todo**, y eso no
+ * se ve leyendo la ruta nueva: se ve leyendo un `app.use` de otro archivo.
+ *
+ * Con esto, una operación destructiva **nombra** de quién la acepta. Agregar un
+ * consumidor pasa a ser una decisión explícita —hay que escribirlo en la lista— en
+ * vez de un efecto secundario.
+ */
+export function exigeServicio(...permitidos: string[]) {
+  return function guarda(req: Request, res: Response, next: NextFunction): void {
+    if (!req.servicio || !permitidos.includes(req.servicio)) {
+      res.status(403).json({
+        error: {
+          motivo: "servicio_no_autorizado",
+          mensaje: "esta operación no está habilitada para tu credencial de servicio",
+        },
+      });
+      return;
+    }
+    next();
+  };
+}
+
+/**
  * LA SEGUNDA IDENTIDAD DE SERVICIO — el mecanismo ya existía, la identidad no.
  *
  * `requiereServicio` está clavado a UN consumidor (`req.servicio = "cerberus"`)

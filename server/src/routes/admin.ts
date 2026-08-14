@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { Router, type Request, type Response } from "express";
+import { exigeServicio } from "../auth/servicio.js";
 import { db } from "../db/client.js";
 import { gestorWhatsapp } from "../whatsapp/wiring.js";
 import { vinculador } from "../whatsapp/vinculador.js";
@@ -132,8 +133,17 @@ adminRouter.put("/numeros/:numero", async (req: Request, res: Response) => {
   }
 });
 
-/** Baja lógica. `?purgar=true` borra además la sesión `.db` (destructivo). */
-adminRouter.delete("/numeros/:numero", async (req: Request, res: Response) => {
+/**
+ * Baja lógica. `?purgar=true` borra además la sesión `.db` (destructivo).
+ *
+ * 🔴 Lleva `exigeServicio("cerberus")` aunque hoy sea la única credencial que
+ * existe: es lo ÚNICO irreversible de este router —recuperar una sesión purgada
+ * pide el teléfono físico y volver a escanear el QR— y el router entero se monta
+ * detrás de un solo middleware. Sin esto, el día que entre una segunda credencial
+ * de servicio, hereda el purgado sin que nadie lo haya decidido y sin que se vea
+ * leyendo esta ruta. Ver `auth/servicio.ts`.
+ */
+adminRouter.delete("/numeros/:numero", exigeServicio("cerberus"), async (req: Request, res: Response) => {
   const numero = normalizarNumero(req.params.numero);
   if (!numero) return responderError(res, 400, "entrada_invalida", "número inválido");
   try {

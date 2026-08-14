@@ -19,10 +19,16 @@ test("normalizarNumero: dígitos, mínimo 8, y prefija 51 a un móvil peruano de
   assert.equal(normalizarNumero(""), null);
 });
 
-test("esquemaUpsert: defaults sensatos y etiqueta obligatoria", () => {
+test("🔴 esquemaUpsert: `proposito` y `activo` ausentes quedan AUSENTES, no en un default", () => {
+  // Este test afirmaba lo contrario y por eso fijaba el defecto: con un
+  // `.default()`, un push de Cerberus que omitiera `proposito` bajaba la línea del
+  // candidato de `campana` a `escuela` y el comando de campaña pasaba a ver la cola
+  // entera de la Escuela (`cola/lineas.ts:72` deriva `esDeCampana` de ese campo).
+  // Son campos que Hermes inventó y Cerberus no conoce: ausente significa «no lo
+  // toques», y quien pone el valor inicial es el INSERT de una fila nueva.
   const ok = esquemaUpsert.parse({ etiqueta: "Escuela" });
-  assert.equal(ok.proposito, "escuela");
-  assert.equal(ok.activo, true);
+  assert.equal(ok.proposito, undefined, "un proposito ausente no se inventa");
+  assert.equal(ok.activo, undefined, "un activo ausente no resucita una línea retirada");
   assert.deepEqual(ok.vendedoras, []);
   assert.equal(ok.referencia, null);
 

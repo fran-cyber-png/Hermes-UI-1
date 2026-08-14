@@ -1,7 +1,8 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "../db/schema.js";
 import type { DatosUpsert } from "./dominio.js";
+import { esIdentidadFederada, esIdentidadFederadaSql } from "./origenIdentidad.js";
 
 /**
  * EL REGISTRO DE NÚMEROS PROPIOS — la copia local del mapa que dueña Cerberus.
@@ -114,9 +115,19 @@ export async function obtenerNumero(db: Base, numero: string): Promise<NumeroRow
 }
 
 /**
- * Upsert declarativo: crea o actualiza el número y REEMPLAZA su set completo de
- * vendedoras (agregar/quitar en una sola llamada). Idempotente por la clave
- * `numero`, así el push de Cerberus tolera reintentos.
+ * Upsert declarativo: crea o actualiza el número y REEMPLAZA el set de vendedoras
+ * **que Cerberus puede nombrar**. Idempotente por la clave `numero`, así el push de
+ * Cerberus tolera reintentos.
+ *
+ * ⚠️ Dos cosas que este upsert NO hace, y las dos son arreglos de un defecto medido:
+ *
+ *  1. **No resetea `proposito` ni `activo` cuando vienen ausentes.** Son campos que
+ *     Hermes inventó y Cerberus no conoce; con un default, cada push suyo los pisaba
+ *     en silencio. El porqué completo está en `dominio.ts`. Sobre una fila NUEVA sí
+ *     hay que poner algo, y ahí valen los defaults de la tabla.
+ *  2. **No borra las identidades federadas** (`centurion:…`). Ver `origenIdentidad.ts`:
+ *     el set de Cerberus no las incluye nunca, así que reemplazarlas a ciegas dejaba
+ *     al agente digital sin línea y en 403, sin un solo síntoma.
  */
 export async function upsertNumero(
   db: Base,
@@ -124,31 +135,45 @@ export async function upsertNumero(
   datos: DatosUpsert,
 ): Promise<NumeroRow> {
   await db.transaction(async (tx) => {
+    // Sólo lo que vino se pisa. `undefined` en un `set` de drizzle deja la columna
+    // como estaba, así que la omisión se propaga sola hasta el UPDATE.
+    const declarado = {
+      etiqueta: datos.etiqueta,
+      referencia: datos.referencia,
+      ...(datos.proposito === undefined ? {} : { proposito: datos.proposito }),
+      ...(datos.activo === undefined ? {} : { activo: datos.activo }),
+      actualizadoAt: sql`now()`,
+    };
+
     await tx
       .insert(schema.numerosWa)
       .values({
         numero,
-        etiqueta: datos.etiqueta,
-        proposito: datos.proposito,
-        referencia: datos.referencia,
-        activo: datos.activo,
-        actualizadoAt: sql`now()`,
+        // Una fila nueva sí necesita un valor: acá el default es correcto, porque no
+        // hay nada previo que pisar.
+        proposito: datos.proposito ?? "escuela",
+        activo: datos.activo ?? true,
+        ...declarado,
       })
-      .onConflictDoUpdate({
-        target: schema.numerosWa.numero,
-        set: {
-          etiqueta: datos.etiqueta,
-          proposito: datos.proposito,
-          referencia: datos.referencia,
-          activo: datos.activo,
-          actualizadoAt: sql`now()`,
-        },
-      });
+      .onConflictDoUpdate({ target: schema.numerosWa.numero, set: declarado });
 
-    await tx.delete(schema.numeroVendedora).where(eq(schema.numeroVendedora.numero, numero));
+    // Se borra sólo lo que Cerberus puede nombrar. Lo federado sobrevive su push.
+    await tx
+      .delete(schema.numeroVendedora)
+      .where(and(eq(schema.numeroVendedora.numero, numero), sql`NOT (${esIdentidadFederadaSql})`));
+
+    // Pero lo que SÍ mandó se inserta tal cual, federado o no: si alguien puso una
+    // identidad de otro origen en el cuerpo, es explícito y se honra. Filtrarla acá
+    // sería descartarla en silencio, que es el mismo defecto que este arreglo viene
+    // a cerrar, con el signo cambiado.
     const unicas = [...new Set(datos.vendedoras)];
     if (unicas.length) {
-      await tx.insert(schema.numeroVendedora).values(unicas.map((vendedoraId) => ({ numero, vendedoraId })));
+      await tx
+        .insert(schema.numeroVendedora)
+        .values(unicas.map((vendedoraId) => ({ numero, vendedoraId })))
+        // Una federada que ya estaba sobrevivió al DELETE de arriba: reinsertarla
+        // sería un choque de PK, y no tiene nada que actualizar.
+        .onConflictDoNothing();
     }
   });
 
