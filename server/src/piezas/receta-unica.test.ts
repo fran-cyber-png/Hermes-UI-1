@@ -50,6 +50,7 @@ const HASHES_PERMITIDOS: Record<string, string> = {
   "centurion/credenciales.test.ts": "El test de lo anterior: rehace la firma esperada para verificar que el Bearer no es el secreto.",
   "auth/sesionCenturion.test.ts": "El test del canje: firma tokens de Centurión de prueba con la misma receta que `auth/centurion.ts` verifica.",
   "routes/auth.login.test.db.ts": "El test de cableado de /api/auth/login: su stub de Centurión firma el token de handoff que la ruta va a canjear.",
+  "routes/auth.falloDeBase.test.ts": "El test de que un fallo de la base no tumbe el proceso: firma el token de handoff con el que la ruta llega hasta la consulta.",
   "lazo/evento.ts":
     "Seudonimiza un correo antes de mandarlo al SDK. Hashea una IDENTIDAD para esconderla, no un texto para compararlo.",
   "migraciones/referencia.ts":

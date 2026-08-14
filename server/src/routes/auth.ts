@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import { db } from '../db/client.js';
 import { obtenerSesionCerberus } from '../cerberus/sesionStore.js';
 import { requiereVendedora } from '../auth/sesion.js';
@@ -6,6 +6,7 @@ import { ssoDeCenturionConfigurado } from '../auth/centurion.js';
 import { canjearTokenDeCenturion, MENSAJE_SIN_LINEA } from '../auth/sesionCenturion.js';
 import { resolverLogin } from '../auth/loginCascada.js';
 import { lineasDeVendedora } from '../numeros/repositorio.js';
+import { porQueFallo } from '../lib/porQueFallo.js';
 
 /**
  * El login de las vendedoras. Valida contra Cerberus (la identidad real del
@@ -22,14 +23,51 @@ export const authRouter = Router();
 const canjear = (token: string) => canjearTokenDeCenturion(token, (id) => lineasDeVendedora(db, id));
 
 /**
+ * QUE UN FALLO DE LA BASE NO SE LLEVE EL PROCESO PUESTO.
+ *
+ * 🔴 **Express 4 NO atrapa el rechazo de un handler `async`**: se vuelve un
+ * `unhandledRejection` y el proceso se cae — no es un login fallido, es Hermes
+ * abajo para las cinco. Las dos puertas de este router llegan a `canjear`, que
+ * consulta `numero_vendedora`, así que las dos pueden rechazar: una base caída,
+ * o un `relation does not exist` en la ventana de un deploy a medias.
+ *
+ * El 503 es honesto —la credencial no se pudo juzgar— y **no se puede confundir
+ * con un rechazo**: un 401 mandaría a alguien con la clave correcta a resetear
+ * una clave que funciona.
+ *
+ * Se loguea con `porQueFallo()` y JAMÁS con `err.message`: en una consulta de
+ * drizzle ese campo devuelve el SQL entero y la causa real vive en `err.cause`.
+ */
+function noSePudo(res: Response, donde: string, err: unknown): void {
+  console.error(`auth: ${donde} no se pudo resolver — ${porQueFallo(err)}`);
+  res.status(503).json({
+    ok: false,
+    type: 'hermes_no_pudo',
+    message: 'Hermes no pudo completar el login en este momento. Probá de nuevo; si sigue, avisá a sistemas.',
+  });
+}
+
+/**
  * La cascada Cerberus → Centurión vive en `auth/loginCascada.ts` y no acá: este
  * handler no puede tener lógica propia porque `routes/auth.ts` importa el
  * singleton `db`, o sea que ningún test puro lo puede cargar. La regla que
  * decide quién entra tiene que ser interrogable sin una Postgres al lado.
+ *
+ * ⚠️ **El `try` no es ceremonia**: hasta el login directo, `resolverLogin` era
+ * Cerberus y nada más —y `autenticarEnCerberus` atrapa todo adentro—, así que
+ * este handler no tenía una sola rama capaz de rechazar. Ahora la cascada llega
+ * a `canjear`, que toca la base. El porqué del 503 está en `noSePudo`.
  */
 authRouter.post('/login', async (req, res) => {
   const { username, password } = req.body ?? {};
-  const r = await resolverLogin(username, password, { canjear });
+
+  let r: Awaited<ReturnType<typeof resolverLogin>>;
+  try {
+    r = await resolverLogin(username, password, { canjear });
+  } catch (err) {
+    noSePudo(res, '/login', err);
+    return;
+  }
 
   if (!r.ok) {
     res.status(r.estado).json({ ok: false, ...(r.type ? { type: r.type } : {}), message: r.message });
@@ -78,7 +116,14 @@ authRouter.post('/centurion', async (req, res) => {
     return;
   }
 
-  const canje = await canjear(token);
+  let canje: Awaited<ReturnType<typeof canjear>>;
+  try {
+    canje = await canjear(token);
+  } catch (err) {
+    // La misma grieta que `/login`: la guarda de línea consulta la base.
+    noSePudo(res, '/centurion', err);
+    return;
+  }
   if (!canje.ok) {
     if (canje.motivo === 'sin_linea_asignada') {
       res.status(403).json({ ok: false, type: 'sin_linea_asignada', message: MENSAJE_SIN_LINEA });
