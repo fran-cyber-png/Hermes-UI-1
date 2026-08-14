@@ -161,6 +161,43 @@ const respuestaOkSchema = z.object({
 const respuestaErrorSchema = z.object({ code: z.string() }).partial();
 
 /**
+ * La forma de un código: minúsculas y guiones bajos, corto. Es la forma que
+ * tienen los ocho de `CODIGO_ERROR_CREDENCIALES` y la que tiene cualquier código
+ * que Centurión pueda estrenar.
+ */
+const CODIGO_LEGIBLE = /^[a-z_]{1,40}$/;
+
+/**
+ * 🔴 **EL `code` LO ESCRIBE EL OTRO LADO Y ACÁ TERMINA EN UN LOG: se acota ANTES
+ * de interpolarlo.**
+ *
+ * El schema solo pide `z.string()` —a propósito: no se puede enumerar de antemano
+ * los códigos que Centurión va a estrenar— así que lo que llega es texto
+ * arbitrario de un sistema remoto. Interpolarlo tal cual tiene dos costos, y el
+ * segundo es el que importa:
+ *
+ *   · **Log-forging**: un `code` con saltos de línea escribe renglones enteros en
+ *     journald, que después se leen como si los hubiera escrito Hermes.
+ *   · 🔴 **La contraseña**: una respuesta hostil o rota —`418 { ok: false,
+ *     code: "<la clave que acaba de escribir la vendedora>" }`— la deja escrita
+ *     en el archivo de log. Este módulo promete en su docblock que la clave
+ *     «no se loguea en ninguno de los ocho fallos», y ésta era la grieta.
+ *
+ * Dos guardas y hacen falta las dos: la forma tapa el log-forging y todo lo que
+ * no parece un código, y la comparación contra la contraseña tapa el caso que la
+ * forma no puede ver —una clave corta de puras minúsculas (`cambiame`) pasa el
+ * regex sin problema—. Lo único que sabemos con certeza que no puede ir al log
+ * lo tenemos acá al lado, así que se pregunta.
+ */
+function codigoParaElLog(code: string | undefined, password: string): string {
+  // Ausente y vacío son lo mismo: no hay nada que decir. (Era el comportamiento
+  // de antes, con `code ? … : ''`, y se conserva.)
+  if (!code) return '';
+  const legible = code !== password && CODIGO_LEGIBLE.test(code);
+  return `, code=${legible ? code : '<ilegible>'}`;
+}
+
+/**
  * Le pregunta a Centurión por estas credenciales y devuelve el token corto de
  * handoff. NUNCA devuelve una identidad: eso lo decide `verificarTokenCenturion`
  * sobre el token, que es la única verificación de identidad del frente.
@@ -232,7 +269,7 @@ export async function consultarCredencialesEnCenturion(
     // Incluye el 401 con un `code` que no conocemos: no se adivina cuál de los
     // dos 401 es. Ruidoso, porque no poder clasificar un rechazo es en sí una
     // novedad que alguien tiene que mirar.
-    console.error(`centurion: estado inesperado (${resp.status}${code ? `, code=${code}` : ''})`);
+    console.error(`centurion: estado inesperado (${resp.status}${codigoParaElLog(code, password)})`);
     return { ok: false, codigo: CODIGO_ERROR_CREDENCIALES.HTTP_INESPERADO, estado: resp.status };
   }
 

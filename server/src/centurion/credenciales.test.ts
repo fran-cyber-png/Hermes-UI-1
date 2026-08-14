@@ -181,6 +181,57 @@ test('un 401 con un `code` desconocido NO se adivina: cae en http_inesperado y h
   assert.match(consola, /inesperado/);
 });
 
+// ── El `code` remoto, que termina en un log ─────────────────────────────────
+
+test('🔴 el `code` que no tiene forma de código NO se interpola: se escribe <ilegible>', async () => {
+  // Log-forging: con saltos de línea, el otro lado escribe renglones enteros en
+  // journald que después se leen como si los hubiera escrito Hermes.
+  const hostil = 'ok\ncenturion: todo bien, seguí durmiendo';
+  const espia = espiar(() => json({ ok: false, code: hostil }, 418));
+  const { valor, consola } = await conConsolaCapturada(() =>
+    consultarCredencialesEnCenturion(USUARIO, CLAVE, {
+      fetch: espia.fetch,
+      centurionUrl: URL_CENTURION,
+      secreto: SECRETO,
+    }),
+  );
+
+  assert.equal(valor.ok === false && valor.codigo, CODIGO_ERROR_CREDENCIALES.HTTP_INESPERADO);
+  assert.match(consola, /code=<ilegible>/);
+  assert.ok(!consola.includes('seguí durmiendo'), 'el cuerpo remoto no puede escribir renglones en el log');
+  assert.ok(!consola.includes('\n'), 'un log de varias líneas se lee como varios eventos');
+});
+
+test('🔴 un `code` que ES la contraseña no se loguea, ni aunque tenga forma de código', async () => {
+  // El caso que el regex solo NO puede ver: una clave corta de puras minúsculas
+  // pasa `^[a-z_]{1,40}$` sin despeinarse. Y el `code` lo elige el otro lado.
+  const claveQueParecaCodigo = 'cambiame';
+  const espia = espiar(() => json({ ok: false, code: claveQueParecaCodigo }, 418));
+  const { valor, consola } = await conConsolaCapturada(() =>
+    consultarCredencialesEnCenturion(USUARIO, claveQueParecaCodigo, {
+      fetch: espia.fetch,
+      centurionUrl: URL_CENTURION,
+      secreto: SECRETO,
+    }),
+  );
+
+  assert.equal(valor.ok === false && valor.codigo, CODIGO_ERROR_CREDENCIALES.HTTP_INESPERADO);
+  assert.ok(!consola.includes(claveQueParecaCodigo), `la contraseña se filtró al log: ${consola}`);
+  assert.match(consola, /code=<ilegible>/);
+});
+
+test('un `code` desconocido pero con forma de código SÍ se escribe: es la pista que el operador necesita', async () => {
+  const espia = espiar(() => json({ ok: false, code: 'candidatura_suspendida' }, 418));
+  const { consola } = await conConsolaCapturada(() =>
+    consultarCredencialesEnCenturion(USUARIO, CLAVE, {
+      fetch: espia.fetch,
+      centurionUrl: URL_CENTURION,
+      secreto: SECRETO,
+    }),
+  );
+  assert.match(consola, /code=candidatura_suspendida/, 'acotar no puede volver mudo el log que existe para esto');
+});
+
 test('un 200 con { ok: false } es contrato roto, no un éxito raro', async () => {
   const espia = espiar(() => json({ ok: false, code: 'credenciales_invalidas' }));
   const { valor } = await conConsolaCapturada(() =>
@@ -261,6 +312,12 @@ test('🔴 la contraseña no aparece en NINGÚN log, en ninguna de las ramas', a
     () => json({ ok: false, code: 'servicio_no_autorizado' }, 401),
     () => json({ ok: false, code: 'sso_no_configurado' }, 503),
     () => json({ ok: false, code: 'lo_que_sea' }, 418),
+    // 🔴 El `code` es texto que escribe el otro lado y se interpola en un log:
+    // una respuesta hostil (o un proxy roto) con la clave adentro la dejaba
+    // escrita en el archivo. Es el mismo caso del eco de más abajo, en el único
+    // campo del error que este módulo sí lee.
+    () => json({ ok: false, code: CLAVE }, 418),
+    () => json({ ok: false, code: `${CLAVE}\ncenturion: nada que ver acá` }, 500),
     () => json({ hola: 'mundo' }),
     // Un proxy que devuelve el eco de la petición: el caso que haría que un log
     // del cuerpo crudo escriba la contraseña en el archivo.
