@@ -41,6 +41,14 @@ import { MENSAJE_SIN_LINEA, type ResultadoCanje } from './sesionCenturion.js';
  *
  *   5. **Si Centurión también rechaza, 401 con el mismo mensaje de Cerberus.**
  *
+ * ⚠️ **APAGADO POR DEFAULT, Y NO POR PRUDENCIA GENÉRICA**: hace falta
+ * `CENTURION_URL` **y** `CENTURION_SSO_SECRET`, las mismas dos que gobiernan
+ * `/api/auth/centurion`, y por el mismo motivo escrito allá — el Hermes que
+ * corre hoy sirve Escuela y campaña desde el mismo proceso, así que prender esto
+ * ahí profundiza el cruce que el plan de separación de entorno existe para
+ * cortar. Nace para el `.env` del entorno de campaña separado. Sin las dos
+ * variables, este archivo es Cerberus y nada más.
+ *
  * 🔴 **TODO FALLO DE LA PATA DE CENTURIÓN TERMINA EN EL 401 GENÉRICO, y esa es
  * una decisión con un costo.** Timeout, red caída, credencial de servicio rota,
  * SSO apagado del otro lado: al que está mirando el formulario le llega
