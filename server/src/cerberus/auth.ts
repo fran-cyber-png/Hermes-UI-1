@@ -12,7 +12,13 @@
  *      (Django exige Referer de un origen confiable sobre HTTPS).
  *
  * Éxito = Django REDIRIGE (302) fuera del login y entrega una `sessionid`. Si las
- * credenciales fallan, re-renderiza el formulario con 200. Esa es toda la señal.
+ * credenciales fallan, re-renderiza el formulario con 200.
+ *
+ * 🔴 **Y HAY UN TERCER DESENLACE, que no es ninguno de los dos: que Cerberus no
+ * haya podido juzgar la clave** (5xx, 502 de nginx, 408, 429, un 403 de CSRF).
+ * Ese sale con `caido: true`, y no es cosmético — es lo que corta la cascada de
+ * `auth/loginCascada.ts` antes de que la contraseña salga hacia Centurión. El
+ * detalle está abajo, donde se decide.
  *
  * La contraseña se usa UNA VEZ, para esta validación, y no se guarda en ningún
  * lado — ni en Hermes, ni en logs, ni en el repo (regla dura #1).
@@ -93,14 +99,43 @@ export async function autenticarEnCerberus(username: string, password: string): 
     const location = r2.headers.get('location') ?? '';
     const redirige = r2.status >= 300 && r2.status < 400;
 
-    // Éxito: redirigió fuera del login Y entregó sesión. Cualquier otra cosa
-    // (200 con el form de nuevo) es credenciales inválidas.
+    // Éxito: redirigió fuera del login Y entregó sesión.
     if (redirige && sessionid && !location.includes('/ingresar')) {
       return {
         ok: true,
         vendedora: { id: username, nombre: username },
         sesion: { sessionid, csrftoken: csrfPost },
       };
+    }
+
+    // 🔴 «NO ES ÉXITO» NO ES LO MISMO QUE «LA CLAVE ESTÁ MAL», Y CONFUNDIRLOS
+    // MANDA LA CONTRASEÑA DE UNA VENDEDORA A OTRO SISTEMA.
+    //
+    // `caido` no es un detalle de este módulo: es el candado del paso 2 de
+    // `auth/loginCascada.ts` — con `caido` la cascada responde 503 y NO le
+    // pregunta nada a Centurión; sin `caido` lee el resultado como un rechazo de
+    // la persona y sigue, o sea que le manda usuario y clave al otro sistema.
+    // Hasta acá `caido` solo se prendía si el fetch lanzaba o si el handshake GET
+    // no traía el formulario, y eso deja afuera el escenario MÁS probable de
+    // todos: **el MySQL de Cerberus caído no es un error de red, es un 500 de
+    // Django en el POST** (o un 502 de nginx delante). El GET anda —la página de
+    // login es estática y encima suele venir cacheada— y el POST revienta.
+    //
+    // Por eso el rechazo de credenciales se reconoce por su FORMA, que es una
+    // sola y está documentada arriba: Django re-renderiza el formulario con
+    // **200**. Se acepta además el 302 que vuelve al propio login, que es lo que
+    // hace algún middleware de sesión. Todo lo demás —5xx de Django, 502/504 de
+    // nginx, 408, 429, un 403 de CSRF o de bloqueo por intentos— es
+    // infraestructura o configuración, nunca un juicio sobre la clave, y se
+    // reporta como caída.
+    //
+    // ⚠️ Lo que NO cambia, que es lo que importa para el login de todos los días:
+    // la vendedora con la clave correcta sigue entrando por el 302 de arriba, y
+    // la que se equivocó sigue viendo su 401 por el 200 de acá.
+    const juzgoLaClave = r2.status === 200 || (redirige && location.includes('/ingresar'));
+    if (!juzgoLaClave) {
+      console.error(`cerberus: el POST de /ingresar/ contestó ${r2.status} — eso no es un juicio sobre la clave`);
+      return { ok: false, motivo: 'Cerberus no responde en este momento.', caido: true };
     }
     return { ok: false, motivo: 'usuario o contraseña incorrectos' };
   } catch (err) {

@@ -34,8 +34,19 @@ import express from 'express';
 const SECRETO = 'secreto-de-prueba-del-login-directo';
 const CLAVE = 'la-clave-que-nunca-se-loguea';
 
-/** Qué le pasa hoy a Cerberus. `caido` = contesta, pero no como se espera. */
-let modoCerberus: 'rechaza' | 'caido' = 'rechaza';
+/**
+ * Qué le pasa hoy a Cerberus.
+ *
+ *   `rechaza` ...... anda y dice que la clave está mal (200 con el form de nuevo)
+ *   `caido` ........ contesta, pero sin el formulario: ni siquiera hay handshake
+ *   `502-en-post` .. 🔴 **el que muerde**: el GET anda y el POST revienta. Es la
+ *                    forma que tiene una caída de verdad —el MySQL de Cerberus se
+ *                    cae, Django tira 500 y nginx 502— y no la que este stub
+ *                    modelaba, que era la única que `autenticarEnCerberus` sabía
+ *                    marcar `caido`. Sin eso la cascada lee «clave incorrecta» y
+ *                    le manda usuario y clave de la vendedora a Centurión.
+ */
+let modoCerberus: 'rechaza' | 'caido' | '502-en-post' = 'rechaza';
 /** Qué contesta Centurión, y cuántas veces se le preguntó. */
 let modoCenturion: 'rechaza' | 'acepta' = 'rechaza';
 let consultasACenturion = 0;
@@ -60,6 +71,12 @@ const cerberus = await levantar((req, res) => {
     res
       .writeHead(200, { 'content-type': 'text/html', 'set-cookie': 'csrftoken=abc; Path=/' })
       .end('<form><input name="csrfmiddlewaretoken" value="xyz"></form>');
+    return;
+  }
+  if (modoCerberus === '502-en-post') {
+    // El GET de arriba entregó cookie y token: el handshake se ve impecable. Lo
+    // que revienta es el POST, que es donde vive el juicio sobre la clave.
+    res.writeHead(502, { 'content-type': 'text/html' }).end('<html>Bad Gateway</html>');
     return;
   }
   // POST: Django re-renderiza el formulario con 200 cuando la clave está mal.
@@ -161,6 +178,23 @@ test('🔴 Cerberus CAÍDO: 503 tipado, y a Centurión no se le pregunta nada', 
   assert.equal(consultasACenturion, 0, 'una caída de Cerberus no puede mandar la clave de una vendedora a otro sistema');
 });
 
+test('🔴 el GET de Cerberus anda y el POST tira 502: 503 tipado, y a Centurión no se le pregunta nada', async () => {
+  // El escenario que el stub de arriba no modelaba y que es el MÁS probable de
+  // una caída real. Antes del 13-ago-2026 esto respondía **401** y de paso le
+  // mandaba la contraseña de la vendedora a Centurión.
+  modoCerberus = '502-en-post';
+  prenderCenturion();
+  modoCenturion = 'acepta';
+  consultasACenturion = 0;
+
+  const r = await login({ username: 'luz', password: CLAVE });
+
+  assert.equal(r.status, 503, 'un 502 de nginx sobre el POST de login no es «usuario o contraseña incorrectos»');
+  assert.equal(r.json?.type, 'cerberus_caido');
+  assert.equal(consultasACenturion, 0, 'una caída de Cerberus no puede mandar la clave de una vendedora a otro sistema');
+  assert.ok(!JSON.stringify(r.json).includes(CLAVE));
+});
+
 test('Cerberus rechaza y Centurión también: 401 genérico, sin pistas de qué sistema rechazó', async () => {
   modoCerberus = 'rechaza';
   prenderCenturion();
@@ -180,6 +214,7 @@ test('la contraseña no vuelve en ninguna respuesta de la ruta', async () => {
   for (const [modoC, modoK] of [
     ['rechaza', 'rechaza'],
     ['caido', 'rechaza'],
+    ['502-en-post', 'rechaza'],
   ] as const) {
     modoCerberus = modoC;
     modoCenturion = modoK;
