@@ -15,6 +15,16 @@ import { esIdentidadFederada, esIdentidadFederadaSql } from "./origenIdentidad.j
 /** El `db` inyectable: lo satisfacen el singleton y la base de prueba por igual. */
 type Base = PostgresJsDatabase<typeof schema>;
 
+/**
+ * `lower(btrim(columna)) = lower(btrim(valor))` — el mismo candado medido en
+ * `cola/asignadaSql.ts`: Cerberus empuja una grafía (`Luz`), el login usa otra
+ * (`luz`). Todo cruce contra `numero_vendedora.vendedora_id` compara
+ * normalizando los DOS lados, o «¿ya tenés línea?» lee que no cuando sí.
+ */
+function mismaVendedoraSql(columna: typeof schema.numeroVendedora.vendedoraId, valor: string) {
+  return sql`lower(btrim(${columna})) = lower(btrim(${valor}))`;
+}
+
 export interface NumeroRow {
   numero: string;
   etiqueta: string;
@@ -56,11 +66,19 @@ export async function listarNumeros(db: Base): Promise<NumeroRow[]> {
 /**
  * LAS LÍNEAS DE UNA VENDEDORA — el mapa leído desde el otro lado.
  *
- * Existe para el recorte «Las mías» de la cola (`cola/lineas.ts`). Vive acá,
- * junto a `listarNumeros`/`upsertNumero`, porque el mapa número↔vendedora tiene
- * un solo dueño: si la cola armara su propio `SELECT ... FROM numero_vendedora`,
- * el día que Cerberus agregue una columna de vigencia habría dos lugares que
- * decidir qué cuenta como «suya» (la lección de #37).
+ * Existe para el recorte «Las mías» de la cola (`cola/lineas.ts`) y, desde el
+ * 15-ago-2026, para la auto-vinculación (`routes/miLinea.ts`): «¿ya tenés una
+ * línea?» decide si se puede traer otra. Vive acá, junto a
+ * `listarNumeros`/`upsertNumero`, porque el mapa número↔vendedora tiene un solo
+ * dueño: si la cola armara su propio `SELECT ... FROM numero_vendedora`, el día
+ * que Cerberus agregue una columna de vigencia habría dos lugares que decidir
+ * qué cuenta como «suya» (la lección de #37).
+ *
+ * 🔴 **`lower(btrim(...))` DE LOS DOS LADOS, y no es laxitud.** Es el mismo
+ * defecto medido en `cola/asignadaSql.ts`: Cerberus empuja `Luz`,
+ * `vendedoraId` es lo que se tipeó al entrar (`luz`). Con `eq()` a secas, Luz
+ * con línea asignada leía `[]` acá — y por esta consulta también decide «podés
+ * auto-vincular» — así que hubiera terminado con DOS líneas de WhatsApp.
  *
  * Devolver `[]` no es un error: significa «el mapa no le asigna ninguna», y
  * quién decide qué hacer con eso —fail-open, ver `cola/lineas.ts`— es la regla
@@ -70,7 +88,7 @@ export async function lineasDeVendedora(db: Base, vendedoraId: string): Promise<
   const filas = await db
     .select({ numero: schema.numeroVendedora.numero })
     .from(schema.numeroVendedora)
-    .where(eq(schema.numeroVendedora.vendedoraId, vendedoraId));
+    .where(mismaVendedoraSql(schema.numeroVendedora.vendedoraId, vendedoraId));
   return filas.map((f) => f.numero);
 }
 
@@ -97,7 +115,7 @@ export async function lineasDeVendedoraConProposito(
     })
     .from(schema.numeroVendedora)
     .innerJoin(schema.numerosWa, eq(schema.numerosWa.numero, schema.numeroVendedora.numero))
-    .where(eq(schema.numeroVendedora.vendedoraId, vendedoraId));
+    .where(mismaVendedoraSql(schema.numeroVendedora.vendedoraId, vendedoraId));
 }
 
 export async function obtenerNumero(db: Base, numero: string): Promise<NumeroRow | null> {
