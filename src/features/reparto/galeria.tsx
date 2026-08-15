@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import '../../index.css';
@@ -7,6 +7,7 @@ import { BarraFiltros } from '../canales/BarraFiltros';
 import { FilaConversacion } from '../canales/FilaConversacion';
 import { PanelDerecho } from '../panel/PanelDerecho';
 import { ContenidoUsuario } from '../auth/PanelUsuario';
+import { VincularMiWhatsapp } from '../whatsapp/VincularMiWhatsapp';
 import type { Conversacion } from '../../dominio/conversaciones';
 
 /**
@@ -94,6 +95,7 @@ queryClient.setQueryData(['lineas-whatsapp'], {
 });
 
 function Galeria() {
+  const [vinculandoEnGaleria, setVinculandoEnGaleria] = useState(false);
   return (
     <div className="min-h-screen bg-muted/30 p-8">
       <div className="mx-auto max-w-3xl space-y-8">
@@ -176,8 +178,14 @@ function Galeria() {
                 cerberusVivo={false}
                 mias={[]}
                 onSalir={() => {}}
+                // Wireado de verdad (no un no-op): «Vincular tu WhatsApp» abre el
+                // modal real (`VincularMiWhatsapp`, 15-ago-2026) — evidencia de que
+                // el click de la app llega al mismo lugar que muestra
+                // `galeria-mi-linea.html`, no solo que el botón se dibuja.
+                onVincular={() => setVinculandoEnGaleria(true)}
               />
             </div>
+            {vinculandoEnGaleria && <VincularMiWhatsapp onCerrar={() => setVinculandoEnGaleria(false)} />}
           </div>
 
           <h2 className="pt-4 text-sm font-bold text-foreground">

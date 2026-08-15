@@ -228,6 +228,46 @@ export function gestorWhatsapp(): GestorWhatsapp {
 }
 
 /**
+ * MONTA UNA LÍNEA WHATSMEOW NUEVA EN CALIENTE — sin reiniciar el server.
+ *
+ * Hasta la auto-vinculación, `WHATSAPP_NUMEROS` era la ÚNICA forma de que una
+ * línea recién vinculada empezara a andar: el operador editaba el `.env` de
+ * VPS1 y reiniciaba (`docs`, gotcha «N5 verde no siempre reinicia»). Eso es
+ * aceptable para Cerberus, que vincula de a una y con tiempo — pero rompe el
+ * punto entero de que una vendedora se auto-vincule DESDE LA APP: si la línea
+ * queda vinculada y sigue muda hasta que alguien reinicie el server, el enlace
+ * no sirvió de nada.
+ *
+ * Reusa el MISMO `montar()` que usa `arrancarWhatsapp()` al bootear, así que la
+ * línea nueva queda enganchada a la ingesta, las reacciones, los ✓✓ y
+ * `EnvioControlado` exactamente igual que cualquier otra — no es un camino
+ * aparte, es el mismo camino un rato después.
+ *
+ * 🔴 **ESTO ES SOLO EL PROCESO VIVO — NO SOBREVIVE UN REINICIO.** No toca
+ * `WHATSAPP_NUMEROS`: sigue siendo la ÚNICA lista que `arrancarWhatsapp()` lee
+ * al bootear (`numerosConfigurados()`). Una vendedora que se auto-vincula queda
+ * andando AHORA MISMO, pero si el server reinicia (N5, un crash, un `systemctl
+ * restart`) esa línea no vuelve a montarse sola — `numeros_wa` sigue diciendo
+ * que está vinculada, y nada la levanta hasta que un operador la agregue a mano
+ * al `.env` y reinicie, exactamente como hoy con una línea de Cerberus. Cerrar
+ * esa brecha es sacar el arranque de `WHATSAPP_NUMEROS` y leerlo de
+ * `numeros_wa` — ya está anotado como decisión aparte en `numeros/dominio.ts`
+ * (#194) y no se resuelve acá: la contrapartida (leer `WHATSAPP_NUMEROS` al
+ * bootear) es lo que hoy garantiza que un `.env` sin tocar levanta igual que
+ * ayer, y tocar esa garantía es su propio frente, no un efecto colateral de
+ * este.
+ */
+export function agregarLineaWhatsmeow(numero: string): WhatsappArmado {
+  const g = gestorWhatsapp();
+  if (g.de(numero)) {
+    throw new Error(`La línea ${numero} ya está montada: no se monta dos veces.`);
+  }
+  const armado = montar(numero, 'whatsmeow');
+  g.agregar(armado);
+  return armado;
+}
+
+/**
  * Como `gestorWhatsapp()`, pero `null` en vez de lanzar. Para consumidores que
  * no pueden tumbar el proceso si WhatsApp corre con otro transporte o todavía
  * no arrancó — el webhook de la Cloud API (`webhook/whatsapp.ts`) es el caso:

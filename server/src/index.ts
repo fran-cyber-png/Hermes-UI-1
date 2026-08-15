@@ -55,6 +55,7 @@ import { webhookRouter } from "./webhook/ruta.js";
 import { arrancarWhatsapp } from "./whatsapp/wiring.js";
 import { rutaDevWhatsapp } from "./whatsapp/rutaDev.js";
 import { whatsappRouter } from "./routes/whatsapp.js";
+import { miLineaRouter } from "./routes/miLinea.js";
 import { streamRouter } from "./routes/stream.js";
 import { vincularRouter } from "./routes/vincular.js";
 import { simularRouter } from "./routes/simular.js";
@@ -167,6 +168,7 @@ const gestor = arrancarWhatsapp();
 const hayFalso = gestor.todos().some((l) => l.falso);
 app.use("/api/stream", streamRouter);     // tiempo real: push de cambios (SSE)
 app.use("/api/whatsapp", whatsappRouter); // conversación nativa: hilo + enviar
+app.use("/api/whatsapp/mi-linea", miLineaRouter); // auto-vinculación: una vendedora trae su propio número (15-ago-2026)
 app.use("/api/autorespuesta", autorespuestaRouter); // el interruptor sin deploy de la auto-respuesta (#125)
 app.use("/api/bot", botRouter); // el kill-switch del bot de primera línea: apagar cuesta un click, no un deploy
 // El chat de prueba (#256): corre el MOTOR REAL sin transporte, así que se puede

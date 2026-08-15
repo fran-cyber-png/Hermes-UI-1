@@ -154,10 +154,23 @@ npm install && npm run dev:app                     # la cáscara Tauri (arranca 
   -- <numero>`. ⚠️ **Se vincula por QR, no por código de 8 dígitos** (`vincular.ts:47-56` lo renderiza
   a `$TMPDIR/hermes-wa-qr.png` y lo rota cada ~20 s; el pairCode por número daba 400 en este número).
   La sesión queda en `server/.wa-sessions/` — **gitignored: es la credencial de la cuenta, NUNCA se
-  commitea**. La app de la vendedora **no vincula, solo ve**.
+  commitea**.
   ⚠️ **Y esa credencial no va en una laptop**: el 29-jul se encontró la línea de VENTAS en el checkout
   de desarrollo. El `.gitignore` cubre **el nombre exacto** `.wa-sessions/`, así que renombrar ese
   directorio deja 43 MB de credencial a la vista de git. Para desarrollo va `WHATSAPP_TRANSPORTE=falso`.
+  🔴 **Desde el 15-ago-2026, D13 ya NO es absoluto: la app de la vendedora TAMBIÉN vincula, un caso
+  angosto.** Decisión del dueño: toda vendedora que no es supervisora puede traer su propio número —
+  **solo 1**— escaneando el QR desde adentro de Hermes (`PanelUsuario` → «Vincular tu WhatsApp» →
+  `server/src/routes/miLinea.ts`, `POST /api/whatsapp/mi-linea/vincular`). Reusa el MISMO vinculador
+  global de D13 (uno-a-la-vez en todo el server); lo que cambia es quién lo dispara y que la línea se
+  monta **en caliente** (`whatsapp/wiring.ts:agregarLineaWhatsmeow`, sin `WHATSAPP_NUMEROS` ni reinicio).
+  Cerberus sigue siendo la ÚNICA vía para líneas de Escuela o de campaña; esto es solo `proposito:
+  'vendedora'`, y el número queda atado 1:1 a quien lo trajo (`numeros/autoVinculacion.ts`).
+  ⚠️ **No sobrevive un reinicio.** El montaje en caliente vive solo en el proceso: si el server
+  reinicia (N5, un crash), la línea auto-vinculada no vuelve a montarse sola — sigue siendo
+  `WHATSAPP_NUMEROS` + reinicio manual lo que la trae de vuelta, igual que hoy con una línea de
+  Cerberus. Cerrar esa brecha del todo es sacar el arranque de esa variable y leerlo de `numeros_wa`
+  (anotado como #194 en `numeros/dominio.ts`) — frente aparte, no resuelto acá.
 - **El webview viejo ya no existe**: `PanelWhatsapp.tsx`, `cuentas.ts`, `whatsapp/tipos.ts` y los tres
   preloads de `electron/` se borraron con ADR 0039.
 - **Nada de automatización, con UNA excepción escrita**: no envío masivo, no warmup, **no anti-ban**.
