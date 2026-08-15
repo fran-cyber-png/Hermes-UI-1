@@ -222,9 +222,12 @@ export function useConversaciones(
       ultima.hayMas ? todas.reduce((n, p) => n + p.conversaciones.length, 0) : undefined,
     // El tiempo real lo maneja el SSE (invalida al instante). Esto es la red de
     // seguridad: si el stream se cae, la cola igual se refresca al volver a la app
-    // y cada 25s. Con SSE vivo, esto casi nunca dispara.
+    // y cada ~20-30s. Con SSE vivo, esto casi nunca dispara.
+    // ⚠️ El intervalo lleva jitter (no un número fijo): con ~8 vendedoras conectadas,
+    // un valor clavado las sincroniza y las 8 pestañas repiten la consulta más cara
+    // de la cola en el mismo segundo (medido: load average 16 en un VPS de 8 núcleos).
     refetchOnWindowFocus: true,
-    refetchInterval: 25_000,
+    refetchInterval: () => 20_000 + Math.random() * 10_000,
   });
 
   return {

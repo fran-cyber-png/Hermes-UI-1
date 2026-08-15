@@ -46,7 +46,15 @@ export function useTiempoReal(sesionActiva: boolean, alNoAutorizado?: () => void
 
       if (e.tipo === 'mensaje') {
         // La cola cambió (fila nueva o reordenada) y la frescura también.
-        void qc.invalidateQueries({ queryKey: ['conversaciones'] });
+        // ⚠️ JITTER en la cola, y no en las demás: el SSE empuja el mismo evento a
+        // TODAS las pestañas conectadas en el mismo instante, y sin este delay las
+        // ~8 vendedoras invalidan `['conversaciones']` juntas — la consulta más
+        // cara del sistema, disparada 8 veces en el mismo segundo (medido: load
+        // average 16 en un VPS de 8 núcleos). `frescura`/`dashboard`/el hilo son
+        // baratas y no lo necesitan.
+        setTimeout(() => {
+          if (!control.signal.aborted) void qc.invalidateQueries({ queryKey: ['conversaciones'] });
+        }, Math.random() * 4000);
         void qc.invalidateQueries({ queryKey: ['frescura'] });
         // El radar del dashboard también: un mensaje ES un lead cayendo.
         void qc.invalidateQueries({ queryKey: ['dashboard'] });
