@@ -314,6 +314,15 @@ jobs:
           # antes no existía: `db:push` se corría directo contra producción.
           (cd server && npm run db:migrate)
 
+          # Staging corre `node dist/index.js`, fiel a producción (ver hermes-deploy.sh
+          # para el porqué: sin `tsc -b` porque no admite `--outDir`, build aparte y
+          # swap atómico).
+          (cd server && rm -rf dist.nuevo && npx tsc --outDir dist.nuevo)
+          test -f server/dist.nuevo/index.js
+          rm -rf server/dist.anterior
+          if [ -d server/dist ]; then mv server/dist server/dist.anterior; fi
+          mv server/dist.nuevo server/dist
+
           env VITE_API_URL=http://127.0.0.1:4111 npx vite build --outDir dist.nuevo --emptyOutDir
           test -f dist.nuevo/index.html
           rm -rf dist.anterior

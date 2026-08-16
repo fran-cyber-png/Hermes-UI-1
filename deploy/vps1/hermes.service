@@ -1,0 +1,31 @@
+# Unit de systemd para el server de Hermes en VPS1 (producción, mesa de la vendedora).
+#
+# Se instala desde el repo, no se edita en el servidor — mismo criterio que
+# hermes-deploy.sh: lo que corre a las 2 AM tiene que ser lo que está en git.
+#
+#   sudo install -m 0644 deploy/vps1/hermes.service /etc/systemd/system/hermes.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl restart hermes
+#
+# ExecStart corre el BUILD compilado (`node dist/index.js`), no `npm run dev`
+# (tsx watch): un proceso en vez de cuatro (npm→sh→tsx→node) y sin el file-watcher
+# de tsx, que en producción no observa nada — el único momento en que el código
+# cambia es un restart de este servicio, y ese restart ya lo dispara el deploy.
+# `hermes-deploy.sh` compila el server antes de cada restart (ver ese script para
+# el porqué de compilar sin `tsc -b`). Reinstalar este archivo NO reemplaza eso:
+# si `server/dist/` no existe todavía, correr `cd server && npm run build` una vez
+# a mano antes del primer restart con este unit.
+[Unit]
+Description=Hermes server (mesa de la vendedora)
+After=network.target docker.service
+
+[Service]
+User=deploy
+WorkingDirectory=/srv/hermes/server
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

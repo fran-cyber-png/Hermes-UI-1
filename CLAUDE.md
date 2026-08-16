@@ -1638,6 +1638,32 @@ restart en horario de venta sigue mereciendo un humano mirando. El trabajo lo ha
 **`deploy/vps1/hermes-deploy.sh`** —versionado, no YAML— y es la misma pieza que corre por SSH:
 `ssh … 'sudo hermes-deploy --dry-run | --rollback'`. `tauri-windows.yml` sigue aparte (host Windows).
 
+**El server corre un BUILD compilado, no `tsx watch`** (16-ago-2026). Hasta acá `hermes.service` y
+`hermes-staging.service` arrancaban `npm run dev` en producción — el proceso de DESARROLLO, 24/7:
+cuatro procesos (`npm`→`sh`→`tsx`→`node`) con un file-watcher que ahí no observa nada, porque el único
+momento en que el código cambia es un restart, y ese restart ya lo dispara el deploy. Medido: un solo
+proceso `node dist/index.js` contra los cuatro de antes, con menos RSS total.
+- `hermes-deploy.sh` (N5) y el paso inline de N3 compilan el server **antes** de cada restart, con el
+  mismo patrón que el front: build a un directorio aparte y `mv` atómico, para que un build roto nunca
+  toque el `dist/` que el proceso viejo tiene en memoria. `revertir()` deshace el swap igual que con el
+  front (`server/dist.roto`).
+  ⚠️ **`npm run build` (`tsc -b`) no sirve acá**: no admite `--outDir` (TS5094), así que el deploy
+  compila con `tsc` SIN `-b` — mismo output, verificado a mano contra `tsc -b` (680 archivos
+  idénticos, porque el proyecto no tiene project references). `npm run build`/`npm start` siguen
+  funcionando igual para probar esto en una máquina local.
+- Los unit files viven versionados en **`deploy/vps1/hermes.service`** y
+  **`deploy/vps1/hermes-staging.service`** —mismo criterio que `hermes-deploy.sh`: se instalan desde el
+  repo, no se editan en el servidor (`sudo install -m 0644 deploy/vps1/hermes.service
+  /etc/systemd/system/hermes.service && sudo systemctl daemon-reload`).
+  🔴 **Instalar el `.service` nuevo es un paso MANUAL aparte, y sin él el cambio no hace nada**: el
+  pipeline compila `server/dist/` en cada deploy pase lo que pase, pero si el unit instalado en VPS1
+  sigue diciendo `ExecStart=npm run dev`, ese `dist/` nunca se ejecuta — el servidor sigue en modo
+  desarrollo aunque el deploy salga verde y compile. Verificar qué hay corriendo:
+  `systemctl status hermes` (mirar `Main PID`: `npm run dev` = viejo, `node dist/index.js` = nuevo) o
+  `ps aux | grep tsx` en VPS1 (si aparece, sigue en modo dev).
+- **Desarrollo local no cambia**: `npm run dev` (tsx watch) sigue siendo el comando de
+  `docs/…§Correr en local`. Esto es solo producción/staging.
+
 🔴 **EL CI DE `main` ROJO CON *SOLO* N4 ROJO NO ES UN BUG: ES DRIFT EN `/srv/hermes`.** N4 aplica la regla
 dura #6 y se niega a tocar producción si el checkout tiene cambios locales sin commitear
 (`::error::/srv/hermes tiene cambios locales sin commitear. No toco nada.`), y por el gate del job «Resumen»

@@ -342,6 +342,26 @@ if [ -n "$TRAE_MIGRACION" ] && [ "$MIGRAR" -eq 1 ]; then
     || desandar_checkout "la migración falló. Lo que aplicó, aplicó (drizzle no envuelve el archivo en una transacción); el respaldo está en $DIR_RESPALDOS"
 fi
 
+# El server dejó de correr `tsx watch` en producción (era el proceso de DESARROLLO
+# corriendo 24/7: npm→sh→tsx→node, cuatro procesos con un file-watcher que acá no
+# sirve para nada — el único momento en que el código cambia es ESTE restart). Ahora
+# se compila una vez y `hermes.service` arranca `node dist/index.js`: un proceso.
+#
+# `npm run build` (`tsc -b`) NO admite `--outDir` (TS5094: «Compiler option may not
+# be used with --build»), así que acá se compila SIN `-b` — mismo output, verificado
+# a mano contra `tsc -b` (680 archivos, idénticos) porque este proyecto no tiene
+# project references. Se construye APARTE y se cambia de lugar al final, igual que
+# el front: un build roto nunca toca el `dist/` que el proceso viejo tiene en
+# memoria (no lo vuelve a leer hasta que este mismo script reinicie el servicio).
+decir "build del server"
+como_deploy rm -rf "$RAIZ/server/dist.nuevo"
+como_deploy bash -c "cd '$RAIZ/server' && npx tsc --outDir dist.nuevo" \
+  || desandar_checkout "falló el build del server"
+[ -f "$RAIZ/server/dist.nuevo/index.js" ] || desandar_checkout "el build del server no dejó index.js"
+como_deploy rm -rf "$RAIZ/server/dist.anterior"
+if [ -d "$RAIZ/server/dist" ]; then como_deploy mv "$RAIZ/server/dist" "$RAIZ/server/dist.anterior"; fi
+como_deploy mv "$RAIZ/server/dist.nuevo" "$RAIZ/server/dist"
+
 # El front se construye APARTE y se cambia de lugar al final: `vite build` vacía el
 # directorio de salida antes de escribir, y hacerlo sobre `dist/` dejaría la app
 # sirviendo 404 durante todo el build. Efecto lateral bienvenido: `dist.anterior` es
@@ -376,6 +396,13 @@ revertir() {
     como_deploy rm -rf "$RAIZ/dist.roto"
     como_deploy mv "$RAIZ/dist" "$RAIZ/dist.roto"
     como_deploy mv "$RAIZ/dist.anterior" "$RAIZ/dist"
+  fi
+  # Mismo trato para el dist del server: si llegamos acá, el build nuevo ya se
+  # había cambiado de lugar y es lo que $SERVICIO va a ejecutar al reiniciar.
+  if [ -d "$RAIZ/server/dist.anterior" ]; then
+    como_deploy rm -rf "$RAIZ/server/dist.roto"
+    como_deploy mv "$RAIZ/server/dist" "$RAIZ/server/dist.roto"
+    como_deploy mv "$RAIZ/server/dist.anterior" "$RAIZ/server/dist"
   fi
   systemctl restart "$SERVICIO"
 

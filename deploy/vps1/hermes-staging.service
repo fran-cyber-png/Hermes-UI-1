@@ -1,0 +1,23 @@
+# Unit de systemd para Hermes STAGING en VPS1 (N3, ensayo general — no es lo que
+# usan las vendedoras). Ver deploy/vps1/hermes.service: mismo cambio, mismo motivo
+# (build compilado en vez de `npm run dev`/tsx watch). Staging es fiel a producción
+# a propósito, así que corre exactamente el mismo ExecStart.
+#
+#   sudo install -m 0644 deploy/vps1/hermes-staging.service /etc/systemd/system/hermes-staging.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl restart hermes-staging
+[Unit]
+Description=Hermes STAGING (ensayo general — NO es lo que usan las vendedoras)
+After=network.target docker.service
+
+[Service]
+User=deploy
+WorkingDirectory=/srv/hermes-staging/server
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=5
+# Fiel a producción a propósito: staging tiene que cerrar las rutas de dev igual.
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
