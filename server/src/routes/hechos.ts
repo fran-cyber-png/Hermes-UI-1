@@ -1,13 +1,12 @@
 import { Router } from "express";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { hechos as tabla } from "../db/schema.js";
 import { requiereVendedora } from "../auth/sesion.js";
 import { MOMENTOS_DE_VENTA, momentoDeVenta } from "../sugerencias/estado.js";
 import { estadoDeLaVenta } from "../sugerencias/consultarSugerencias.js";
 import { TOPE_HECHOS, elegirHechos, vistaPreviaPorMomento } from "../hechos/elegir.js";
 import { leerCatalogo, leerCatalogoParaEditar } from "../hechos/repositorio.js";
+import { actualizarHecho, apagarHecho, crearHecho } from "../hechos/editarCatalogo.js";
 
 /**
  * LOS DATOS RECOMENDADOS — `GET /api/hechos?clave=…`.
@@ -101,7 +100,7 @@ hechosRouter.post("/", async (req, res) => {
     return;
   }
   try {
-    const [fila] = await db.insert(tabla).values(p.data).returning();
+    const fila = await crearHecho(db, p.data);
     res.status(201).json({ ok: true, hecho: fila });
   } catch {
     res.status(409).json({ ok: false, message: "ya hay un dato con esa clave, o falta el db:push" });
@@ -115,11 +114,7 @@ hechosRouter.put("/:clave", async (req, res) => {
     return;
   }
   try {
-    const [fila] = await db
-      .update(tabla)
-      .set({ ...p.data, actualizadoAt: new Date() })
-      .where(eq(tabla.clave, req.params.clave))
-      .returning();
+    const fila = await actualizarHecho(db, req.params.clave, p.data);
     if (!fila) {
       res.status(404).json({ ok: false, message: "no existe ese dato" });
       return;
@@ -130,17 +125,10 @@ hechosRouter.put("/:clave", async (req, res) => {
   }
 });
 
-/**
- * Borrar es APAGAR. La frase que dejó de funcionar sirve de historia, y un
- * borrado físico haría que el catálogo no se pueda auditar contra las ventas.
- */
+/** Borrar es APAGAR — el porqué vive con la escritura, en `apagarHecho`. */
 hechosRouter.delete("/:clave", async (req, res) => {
   try {
-    const [fila] = await db
-      .update(tabla)
-      .set({ activo: false, actualizadoAt: new Date() })
-      .where(eq(tabla.clave, req.params.clave))
-      .returning();
+    const fila = await apagarHecho(db, req.params.clave);
     if (!fila) {
       res.status(404).json({ ok: false, message: "no existe ese dato" });
       return;

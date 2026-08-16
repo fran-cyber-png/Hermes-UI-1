@@ -2,12 +2,17 @@ import { existsSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import express, { Router } from 'express';
-import { sql, eq } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { fotosPerfil } from '../db/schema.js';
 import { requiereVendedora } from '../auth/sesion.js';
 import { gestorWhatsapp, whatsapp } from '../whatsapp/wiring.js';
-import { hiloDe, mismaLinea } from '../whatsapp/hilo.js';
+import { hiloDe } from '../whatsapp/hilo.js';
+import {
+  consultarEntrantesParaTildes,
+  consultarOrigenDelLead,
+  guardarFotoDePerfil,
+  leerFotoDePerfilCacheada,
+  type OrigenDelLead,
+} from '../whatsapp/consultasDeWhatsapp.js';
 import { enviarMediaYProyectar, enviarTextoYProyectar } from '../whatsapp/enviarYProyectar.js';
 import { resolverAnuncio } from '../meta/anuncio.js';
 import { RUTA_MEDIA, nombreSeguro } from '../whatsapp/mediaDir.js';
@@ -175,16 +180,7 @@ whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
 
   // La captura del embudo: si algún mensaje trajo el origen (anuncio/landing), se
   // devuelve — enriquecido con el nombre del anuncio y la campaña si vino de Meta.
-  const [fila] = await db.execute<{ origen: { fuente: string; adId?: string; ref?: string } | null }>(sql`
-    SELECT e.payload->'origen' AS origen
-    FROM interactions i JOIN events e ON e.id = i.event_id
-    WHERE i.canal = 'whatsapp' AND i.persona_id = ${telefono}
-      ${mismaLinea(numeroPropio)}
-      AND e.payload->>'origen' IS NOT NULL AND e.payload->>'origen' <> 'null'
-    ORDER BY i.occurred_at ASC LIMIT 1
-  `);
-
-  let origen = fila?.origen ?? null;
+  let origen: OrigenDelLead | null = await consultarOrigenDelLead(db, telefono, numeroPropio);
   if (origen?.fuente === 'anuncio' && origen.adId) {
     const anuncio = await resolverAnuncio(origen.adId);
     origen = { ...origen, ...(anuncio ? { anuncio: anuncio.anuncio, campana: anuncio.campana } : {}) };
@@ -321,12 +317,7 @@ whatsappRouter.post('/leido/:telefono', requiereVendedora, async (req, res) => {
   // vio su cola actualizada. Lo que NO se hace es saltearlos.
   void (async () => {
     try {
-      const filas = await db.execute<{ external_id: string }>(sql`
-        SELECT i.external_id FROM interactions i
-        WHERE i.canal = 'whatsapp' AND i.persona_id = ${telefono} AND i.direccion = 'entrante'
-          ${mismaLinea(numeroPropio)}
-        ORDER BY i.occurred_at DESC LIMIT 50
-      `);
+      const filas = await consultarEntrantesParaTildes(db, telefono, numeroPropio);
       // El external_id se guarda prefijado 'wa:'; el transporte quiere el id crudo.
       const ids = filas.map((f) => f.external_id.replace(/^wa:/, ''));
       // Los tildes tienen que salir POR LA LÍNEA a la que la persona escribió:
@@ -433,7 +424,7 @@ whatsappRouter.get('/foto/:telefono', requiereVendedora, async (req, res) => {
   }
   const numeroPropio = typeof req.query.numeroPropio === 'string' ? req.query.numeroPropio : undefined;
 
-  const [cache] = await db.select().from(fotosPerfil).where(eq(fotosPerfil.telefono, telefono));
+  const cache = await leerFotoDePerfilCacheada(db, telefono);
   const fresca = cache && Date.now() - cache.actualizadoAt.getTime() < FOTO_FRESCA_MS;
 
   if (fresca) {
@@ -470,13 +461,7 @@ whatsappRouter.get('/foto/:telefono', requiereVendedora, async (req, res) => {
   }
 
   const guardar = (fotoId: string | null, archivo: string | null, mime: string | null) =>
-    db
-      .insert(fotosPerfil)
-      .values({ telefono, fotoId, archivo, mime, actualizadoAt: new Date() })
-      .onConflictDoUpdate({
-        target: fotosPerfil.telefono,
-        set: { fotoId, archivo, mime, actualizadoAt: new Date() },
-      });
+    guardarFotoDePerfil(db, telefono, fotoId, archivo, mime);
 
   if (!foto) {
     await guardar(null, null, null); // cachear "no tiene foto"

@@ -15,7 +15,7 @@ import { consultarCola } from "./consultarCola.js";
  * del pushname de WhatsApp, que en producción suele ser «🦋W», «.» o «10 ❤️L».
  *
  * La precedencia entre candidatos NO se testea acá: vive pura en el front
- * (`src/features/canales/curso.ts`, vitest). Acá se fija de dónde sale cada uno.
+ * (`src/dominio/curso.ts`, vitest). Acá se fija de dónde sale cada uno.
  */
 
 type Fila = {

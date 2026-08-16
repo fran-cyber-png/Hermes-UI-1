@@ -860,7 +860,7 @@ async function ejecutarCola(
   }
   /**
    * COMPAT — los dos valores viejos se siguen aceptando aunque el panel ya no
-   * tenga sus chips, igual que `por-vencer` (ver `src/features/canales/cola.ts`):
+   * tenga sus chips, igual que `por-vencer` (ver `src/dominio/cola.ts`):
    * el contrato de la API no se rompe por un cambio de UI, y una app vieja o un
    * link guardado tienen que seguir devolviendo algo razonable.
    *
@@ -870,7 +870,7 @@ async function ejecutarCola(
   if (intencion === "pide-info") condicionesBase.push(sql`pregunto AND NOT respondida`);
   if (intencion === "sin-responder") condicionesBase.push(sql`NOT respondida`);
   // `por-vencer` sigue aceptándose aunque el panel ya no tenga su chip: el
-  // contrato de la API no se rompe por un cambio de UI (ver `src/features/canales/cola.ts`).
+  // contrato de la API no se rompe por un cambio de UI (ver `src/dominio/cola.ts`).
   if (intencion === "por-vencer") condicionesBase.push(sql`ventana_abierta`);
   // «Ya compraron» (#133): 140 conversaciones que valen oro, a un clic. Reusa el
   // predicado de `cola/clienteSql.ts` — la página, el total, el número del chip

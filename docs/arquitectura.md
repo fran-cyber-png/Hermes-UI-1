@@ -1,11 +1,22 @@
 # Arquitectura de Hermes
 
-> Cómo está hecho, por qué, y qué NO hace. Complementa a los otros tres:
-> **`CONTEXT.md`** es el glosario del negocio · **`docs/estado.md`** es la foto de hoy ·
-> **`docs/adr/`** son las decisiones con su fundamento. Este documento es el **mapa**.
+> Cómo está hecho, por qué, y qué NO hace. Complementa a los otros cuatro:
+> **`CONTEXT.md`** es el glosario del negocio · **`docs/mapa.md`** es el **inventario** ·
+> **`docs/estado.md`** es la foto de hoy · **`docs/adr/`** son las decisiones con su fundamento.
 >
-> Verificado contra el código el **2026-07-22**. Cuando algo acá contradiga al código, gana el
-> código — y hay que corregir esto en el mismo PR.
+> 🔴 **ESTE DOCUMENTO YA NO CUENTA NADA, Y ESA ES LA CORRECCIÓN MÁS IMPORTANTE QUE TIENE.**
+> Hasta el 16-ago-2026 se llamaba a sí mismo «el mapa» y traía las cifras a mano: decía que la
+> mitad viva eran ~39 archivos, la heredada ~45, y que había 27 routers. Medido ese día: **680
+> archivos `.ts` en el server y 49 routers**. Nueve días después de escrito, describía un repo
+> **ocho veces más chico** — y nada se puso rojo, porque nada lo miraba.
+>
+> Así que el inventario se mudó a **`docs/mapa.md`, que se GENERA del árbol** (`npm run mapa`) y
+> que el CI verifica en N1: si alguien mueve un archivo y no regenera, la corrida falla. Acá
+> queda **el porqué y la forma** — lo que un generador no puede derivar. Cualquier cosa contable
+> (cuántos módulos, cuánto pesa cada uno, quién importa a quién) se mira allá, no acá.
+>
+> Cuando algo de este documento contradiga al código, gana el código — y hay que corregir esto
+> en el mismo PR.
 
 ---
 
@@ -31,13 +42,19 @@ Hermes se **extrajo de meta-escuela preservando historia git** (ADR 0001). La ex
 árbol entero, así que el repo contiene el CRM que se usa **y** el dashboard de pauta publicitaria del
 que salió. Las dos mitades comparten proceso Express y base de datos.
 
-| | **La mitad viva** (~39 archivos) | **La mitad heredada** (~45 archivos) |
+| | **La mitad viva** | **La mitad heredada** |
 |---|---|---|
 | Qué es | El CRM de conversaciones | El dashboard de pauta de meta-escuela |
-| Módulos | `whatsapp` · `auth` · `cerberus` · `cola` · `realtime` · `db/schema.ts` | `analisis` · `canales` · `decisions` · `pauta` · `ontologia` · `fuentes` · `sdk` |
-| Routers | 13 de 27 | 14 de 27 |
-| Último trabajo | del 21-jul en adelante | 19-jul o antes |
+| Módulos | `whatsapp` · `auth` · `cerberus` · `cola` · `bot` · `realtime` · `db/schema.ts` | `analisis` · `canales` · `decisions` · `pauta` · `ontologia` · `fuentes` · `sdk` · `dominio` · `lazo` |
 | ¿La alcanza la vendedora? | **Sí** | **No. Ninguna acción de la app la toca.** |
+
+> **Cuántos archivos y cuánto pesa cada mitad: `docs/mapa.md`.** Acá no van las cifras — la
+> versión anterior de esta tabla las traía a mano y quedó ocho veces desactualizada en nueve
+> días. En el mapa cada módulo heredado lleva 🪦 en su responsabilidad declarada, así que la
+> lista de arriba se puede verificar sola en vez de creerse.
+>
+> ⚠️ **`server/canales` es de la mitad heredada; `front/canales` es la cola y se usa todos los
+> días.** Mismo nombre, mitades opuestas.
 
 **La mitad heredada no está rota: está desconectada.** Compila, está montada en Express y responde si
 la llamás — pero el front no la llama nunca. Importa no confundirse en ninguna de las dos
@@ -50,9 +67,17 @@ Hermes hace cosas que no hace.
 > necesita» — esa home se podó. Quien lea `index.ts` de arriba a abajo va a creer que 14 routers
 > muertos son el corazón del producto.
 
-**Los 13 routers vivos**: `auth` · `contactos` · `agenda` · `gestiones` · `dashboard` · `correos` ·
-`venta` · `conversaciones` · `responder` · `persona` · `stream` · `whatsapp` · `interactions` (solo
-`/frescura`; sus otros dos endpoints están muertos).
+**Cuáles routers están muertos NO se deduce: se mide**, buscando en todo `src/` las llamadas a su
+path montado. Medido así el 16-ago-2026 sobre los 16 routers que tenían SQL adentro, cuatro no los
+llama nadie — `costoPorLead` (que ni siquiera está montado en `index.ts`), `decisions`, `leads` y
+`overview` — y los otros doce sí. Ésos cuatro son las excepciones declaradas de la regla
+`routersSinSqlInline` en `arquitectura.json`, con la medición escrita al lado.
+
+⚠️ **La versión anterior de este párrafo listaba «los 13 routers vivos» a mano, y esa lista quedó
+corta muy rápido**: no menciona `bot`, `espacios`, `padron`, `routing`, `campana`, `notas`,
+`eventos`, `hechos`, `ivi`, `catalogo`, `autorespuesta` ni `entrenamiento` — todos posteriores al
+21-jul y varios de los más trabajados del repo. Un inventario a mano envejece; si necesitás la
+lista, medila.
 
 **El único puente entre las mitades** es `webhook/ruta.ts`: Cerberus avisa una venta, Hermes la
 espeja, y —si `LAZO_RELOJ` estuviera encendido, que no lo está— se la contaría a Meta.
@@ -63,17 +88,22 @@ espeja, y —si `LAZO_RELOJ` estuviera encendido, que no lo está— se la conta
 
 ### Front (`src/`) — React 19 + Vite 8 + Tailwind 4
 
-**Sin router** (ADR 0002): un espacio con **9 vistas conmutadas por estado** en `App.tsx`
-(Dashboard · Pipeline · Contactos · Mensajes · Correos · Agenda · Entrenar bot · **Libreta** ·
-**Navegador**). El riel vertical izquierdo navega; ⌘1..⌘9 también. Agregar una vista es tocar
-`VISTAS` en `App.tsx` y nada más: **el rango del atajo se DERIVA de ese array**
-(`e.key <= String(VISTAS.length)`), así que el punto de falla silenciosa que este párrafo describía
-—un `'6'` escrito a mano que dejaba a ⌘7 sin hacer nada mientras la Cabina anunciaba el atajo— ya no
-existe.
+**Sin router** (ADR 0002): un espacio con **vistas conmutadas por estado** en `App.tsx` (Dashboard ·
+Pipeline · Contactos · Mensajes · Correos · Agenda · Entrenar bot · Libreta · Navegador · Routing).
+El riel vertical izquierdo navega, y las primeras nueve tienen ⌘1..⌘9. Agregar una vista es tocar
+`VISTAS` y nada más: **el rango del atajo se DERIVA de ese array.**
 
-⚠️ Si alguien vuelve a clavar el número, **el candado tiene que apuntar a la ÚLTIMA vista**: con un
-`'8'` a mano andarían las ocho primeras y solo la novena quedaría muerta, así que un test sobre ⌘8
-seguiría verde. Por eso `App.test.tsx` prueba ⌘9, y hay que moverlo al agregar la décima.
+🔴 **Y con la DÉCIMA se derivaba y estaba mal igual** (ADR 0053). La derivación comparaba **cadenas**
+(`e.key <= String(VISTAS.length)`), y `'2' <= '10'` da **false**: quedaba andando ⌘1 y se rompían las
+ocho del medio. El candado de «probá la ÚLTIMA vista» **no puede ver esto** — la décima no tiene
+tecla, así que ese test ni se puede escribir, y el que se pone rojo es ⌘2. Hoy se compara el NÚMERO,
+con tope `Math.min(vistas.length, TECLAS_DE_VISTA)`, donde `TECLAS_DE_VISTA = 9` es **cuántas teclas
+de dígito hay** y no un tope de diseño; de la décima en adelante el `title` no promete tecla.
+
+⚠️ **Y el riel ya no es igual para todas**: una entrada puede llevar `soloPara`
+(`features/vistas/acceso.ts`), y el riel, los ⌘N y la Cabina leen la MISMA lista filtrada (`vistasDe`)
+— con dos listas, la Cabina anunciaría un número que abre otra vista. Eso es **visibilidad, no una
+frontera**: el recorte de datos va en el `WHERE` de su ruta (ADR 0035/0036).
 
 Qué entra al riel no es un número sino un criterio (**ADR 0034**, que enmienda 0002 y regulariza las
 tres vistas que entraron sin hacerlo): un **LUGAR** donde se está un rato (ADR 0016), con una
@@ -85,6 +115,31 @@ animación direccional según la posición en el riel.
 
 Layout de Mensajes: cola `w-[25rem]` · conversación flexible · `aside w-72` que muestra
 `FichaContacto` (WhatsApp) o `PanelContexto` (resto).
+
+### Las tres capas del front, y por qué existen (16-ago-2026)
+
+```
+src/lib · src/components   capa 0 — no saben de negocio; no pueden importar nada de arriba
+src/dominio                capa 1 — qué ES una conversación; importa `lib` y nada más
+src/features/*             capa 2 — las pantallas
+```
+
+🔴 **Nacieron de una medición, no de un gusto.** Hasta acá el modelo del CRM vivía adentro de
+`features/canales`, que es la vista de la cola: **58 de los 148 imports cruzados entre features
+(39 %) entraban a una feature a buscar el modelo**, y `conversaciones.ts` sola tenía 36 consumidores
+de afuera. El grafo de MÓDULOS del front daba **un solo nudo de 18** —casi todo el front— mientras el
+grafo de ARCHIVOS ya era un DAG. O sea que lo enredado nunca fueron las dependencias: **eran las
+fronteras de las carpetas.** Sacando el modelo a su capa, el nudo se partió en 7 · 3 · 2.
+
+En `dominio/` viven `conversaciones` (el modelo y las queries de la cola), `cola` (la forma de la
+consulta), y las derivaciones puras: `canal` · `curso` · `ventana` · `antiguedad` · `cliente` ·
+`dueno` · `lineas` · `fotoVisible` · `conversacionNueva` · `paletaCategorias` · `desglose`.
+
+⚠️ **`desglose.ts` es el caso que mejor lo explica**: `FilaDesglose` vivía en `vistas/tablero.ts`, así
+que el modelo del front tenía que importar una PANTALLA para tipar la respuesta de su propia
+consulta. Eso es la inversión de capas que la regla ahora prohíbe.
+
+**El candado**: `arquitectura.json` › `capas`, verificado por `npm run mapa:verificar` en N1 del CI.
 
 ### Capa de datos (`src/lib/datos/`) — una sola puerta
 

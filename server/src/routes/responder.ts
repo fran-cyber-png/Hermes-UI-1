@@ -1,7 +1,12 @@
 import { Router } from "express";
-import { eq, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { events, interactions } from "../db/schema.js";
+import {
+  interaccionAResponder,
+  paginaDeLaInteraccion,
+  registrarBorrado,
+  registrarRespuesta,
+  ultimaRespuestaPublicada,
+} from "../responder/repositorioDeRespuestas.js";
 import { MetaGraphClient, MetaGraphError } from "../meta/metaClient.js";
 
 export const responderRouter = Router();
@@ -27,20 +32,6 @@ async function tokenDePagina(token: string, pageId: string): Promise<string | nu
   return pages.find((p) => p.id === pageId)?.access_token ?? null;
 }
 
-/** Guarda lo enviado como evento — queda el registro de qué se dijo y a quién. */
-async function registrar(tipo: string, interactionId: number, payload: unknown) {
-  await db.insert(events).values({
-    source: `respuesta_${tipo}`,
-    externalId: `${interactionId}:${tipo}:${Date.now()}`,
-    occurredAt: new Date(),
-    payload: payload as any,
-  });
-  await db
-    .update(interactions)
-    .set({ status: "contactado" })
-    .where(eq(interactions.id, interactionId));
-}
-
 responderRouter.post("/:id", async (req, res) => {
   const token = process.env.META_ACCESS_TOKEN;
   if (!token) {
@@ -63,18 +54,7 @@ responderRouter.post("/:id", async (req, res) => {
     return;
   }
 
-  const [inter] = await db.execute<{
-    id: number;
-    canal: string;
-    tipo: string;
-    external_id: string;
-    page_id: string;
-    persona_nombre: string | null;
-  }>(sql`
-    SELECT i.id, i.canal, i.tipo, i.page_id, i.persona_nombre, e.external_id
-    FROM interactions i JOIN events e ON e.id = i.event_id
-    WHERE i.id = ${interactionId}
-  `);
+  const inter = await interaccionAResponder(db, interactionId);
 
   if (!inter) {
     res.status(404).json({ type: "not_found", message: "No encontré esa interacción." });
@@ -142,7 +122,11 @@ responderRouter.post("/:id", async (req, res) => {
 
   const algoSalioBien = resultado.publico || resultado.privado;
   if (algoSalioBien) {
-    await registrar("comentario", interactionId, { mensajePublico, mensajePrivado, resultado });
+    await registrarRespuesta(db, "comentario", interactionId, {
+      mensajePublico,
+      mensajePrivado,
+      resultado,
+    });
   }
 
   res.json({
@@ -165,20 +149,14 @@ responderRouter.delete("/:id", async (req, res) => {
   const token = process.env.META_ACCESS_TOKEN;
   const interactionId = Number(req.params.id);
 
-  const [evento] = await db.execute<{ id: number; payload: any }>(sql`
-    SELECT id, payload FROM events
-    WHERE source = 'respuesta_comentario' AND external_id LIKE ${`${interactionId}:%`}
-    ORDER BY occurred_at DESC LIMIT 1
-  `);
+  const evento = await ultimaRespuestaPublicada(db, interactionId);
 
   if (!evento?.payload?.resultado?.publico) {
     res.status(404).json({ type: "not_found", message: "No hay una respuesta publicada para borrar." });
     return;
   }
 
-  const [inter] = await db.execute<{ page_id: string }>(sql`
-    SELECT page_id FROM interactions WHERE id = ${interactionId}
-  `);
+  const inter = await paginaDeLaInteraccion(db, interactionId);
 
   const pageToken = await tokenDePagina(token!, inter.page_id);
   if (!pageToken) {
@@ -191,13 +169,7 @@ responderRouter.delete("/:id", async (req, res) => {
     // El DELETE de la Graph API va como POST con ?method=delete.
     await client.post(evento.payload.resultado.publico, { method: "delete" });
 
-    await db.insert(events).values({
-      source: "respuesta_borrada",
-      externalId: `${interactionId}:borrada:${Date.now()}`,
-      occurredAt: new Date(),
-      payload: { interactionId, comentarioBorrado: evento.payload.resultado.publico },
-    });
-    await db.update(interactions).set({ status: "nuevo" }).where(eq(interactions.id, interactionId));
+    await registrarBorrado(db, interactionId, evento.payload.resultado.publico);
 
     res.json({ type: "borrado" });
   } catch (err) {

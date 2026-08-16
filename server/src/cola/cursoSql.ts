@@ -15,7 +15,7 @@ import { cursoDeLeadSql, sufijoTelefonoSql } from "../gente/leadDeTelefono.js";
  *                             teléfono contra `leads`.
  *
  * La PRECEDENCIA entre las dos (y el anuncio) para el CHIP la decide el front
- * (`src/features/canales/curso.ts`): el server le sirve los candidatos y él
+ * (`src/dominio/curso.ts`): el server le sirve los candidatos y él
  * elige, porque ahí es una decisión de presentación que se testea sin base.
  *
  * Para las consultas que AGRUPAN (el Dashboard por curso, #128) eso no alcanza:

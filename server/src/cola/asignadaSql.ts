@@ -73,7 +73,7 @@ export function asignadaJoinSql(conAsignacion = true): SQL {
  * (fail-open, `reparto/asignar.ts`).
  *
  * El front NO lo lee como «es de nadie, agarrala»: lo lee como «no se sabe» y no
- * dibuja nada (`src/features/canales/dueno.ts`). Una píldora «Sin dueño» en
+ * dibuja nada (`src/dominio/dueno.ts`). Una píldora «Sin dueño» en
  * 1.900 filas sería ruido, no información.
  */
 export const duenoSql: SQL = sql`COALESCE(ca.vendedora_id, cl.vendedora_id)`;

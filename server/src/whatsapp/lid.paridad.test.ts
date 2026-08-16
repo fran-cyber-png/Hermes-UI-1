@@ -21,14 +21,14 @@ import { PREFIJO_LID, esIdentidadDeLid } from './identidadWa.js';
  * es que las dos mitades hablen del mismo prefijo.
  */
 
-const CANAL_FRONT = new URL('../../../src/features/canales/canal.ts', import.meta.url);
+const CANAL_FRONT = new URL('../../../src/dominio/canal.ts', import.meta.url);
 
 describe('paridad del prefijo de identidad sin teléfono', () => {
   const fuente = readFileSync(CANAL_FRONT, 'utf8');
 
   test('el front declara el MISMO prefijo que estampa el server', () => {
     const m = /PREFIJO_LID = '([^']+)'/.exec(fuente);
-    assert.ok(m, 'no encontré PREFIJO_LID en src/features/canales/canal.ts');
+    assert.ok(m, 'no encontré PREFIJO_LID en src/dominio/canal.ts');
     assert.equal(m[1], PREFIJO_LID);
   });
 

@@ -66,7 +66,25 @@
       "activa": true,
       "porQue": "Un router valida, llama a un seam del dominio y serializa. Con SQL adentro, esa consulta no se puede testear sin levantar Express, y la regla que expresa no se puede compartir con el resto — que es como nacieron las dos implementaciones de la urgencia (#37).",
       "aplicaA": "server/src/routes",
-      "excepciones": []
+      "excepciones": [
+        "server/src/routes/costoPorLead.ts",
+        "server/src/routes/decisions.ts",
+        "server/src/routes/leads.ts",
+        "server/src/routes/overview.ts"
+      ],
+      "$porQueLasExcepciones": [
+        "Los cuatro son de la MITAD HEREDADA de meta-escuela (ADR 0001): compilan, y ninguna acción",
+        "de la vendedora los alcanza. No es una suposición — se midió el 16-ago-2026 buscando en todo",
+        "`src/` las llamadas a su path montado: cero para los cuatro, y `costoPorLead` ni siquiera",
+        "está montado en `index.ts`. Los otros doce routers con SQL adentro SÍ los llama el front,",
+        "y ésos se arreglaron.",
+        "",
+        "Reescribir código que nadie ejecuta, para satisfacer una regla, es riesgo sin beneficio: se",
+        "toca SQL que ningún test cubre y que ninguna pantalla vuelve a mirar. La excepción se levanta",
+        "el día que la mitad heredada se archive de verdad — que es un frente propio, con su ADR.",
+        "",
+        "La exclusión NO es silenciosa: el mapa las imprime debajo de la regla."
+      ]
     },
     "docsSinRutasMuertas": {
       "activa": true,
@@ -144,7 +162,13 @@
     "server/scripts": "Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción.",
     "server/migraciones": "Verificar que una migración sea expand-only y que el journal sea monótono.",
 
+    "server/agenda": "Los recordatorios que una vendedora se agendó sobre una conversación.",
     "server/atencion": "Cuánto se tarda en contestar.",
+    "server/contactos": "Lo que se escribe sobre un contacto desde su ficha, empezando por la venta registrada contra Cerberus.",
+    "server/correos": "El correo 1-a-1 y su rastro. Sin listas ni campañas.",
+    "server/entrenamiento": "Las corridas de entrenamiento del bot, sus lecciones y los agujeros que dejan, tal como los lee la pantalla.",
+    "server/interacciones": "Las interacciones crudas de `interactions` como las consulta la app: el listado, los canales y la frescura de la ingesta.",
+    "server/responder": "Responder un comentario de Meta: lo que hay que leer de la base para armar y registrar esa respuesta.",
     "server/atribucion": "Que una venta encuentre su conversación: la llave determinista y la cascada etiquetada de respaldo.",
     "server/auth": "Quién entra: Cerberus, Centurión, el token HMAC y el perímetro cerrado por default.",
     "server/autorespuesta": "El acuse fuera de horario del lado del server: a quién corresponde, con qué plantilla y a qué ritmo. Nunca manda solo.",

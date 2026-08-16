@@ -1,9 +1,15 @@
 import { Router } from "express";
 import { z } from "zod";
-import { desc, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { corridas, corridaRespuestas } from "../db/corridas.js";
-import { lecciones } from "../db/lecciones.js";
+import {
+  crearLeccion,
+  leerCorrida,
+  listarCorridas,
+  listarLecciones,
+  publicarLeccion,
+  respuestasDeCorrida,
+  retirarLeccion,
+} from "../entrenamiento/repositorio.js";
 import { correrCorrida } from "../corridas/correrCorrida.js";
 import { consultarAgujeros } from "../corridas/consultarAgujeros.js";
 import { requiereVendedora } from "../auth/sesion.js";
@@ -254,7 +260,7 @@ entrenamientoRouter.post("/corridas", async (req, res) => {
 
 /** Las Corridas, de la más nueva a la más vieja. */
 entrenamientoRouter.get("/corridas", async (_req, res) => {
-  const filas = await db.select().from(corridas).orderBy(desc(corridas.creadaEn)).limit(30);
+  const filas = await listarCorridas(db);
   res.json({ ok: true, corridas: filas });
 });
 
@@ -266,17 +272,13 @@ entrenamientoRouter.get("/corridas/:id", async (req, res) => {
     return;
   }
 
-  const [corrida] = await db.select().from(corridas).where(eq(corridas.id, id));
+  const corrida = await leerCorrida(db, id);
   if (!corrida) {
     res.status(404).json({ ok: false, message: "esa corrida no existe" });
     return;
   }
 
-  const filas = await db
-    .select()
-    .from(corridaRespuestas)
-    .where(eq(corridaRespuestas.corridaId, id))
-    .orderBy(corridaRespuestas.id);
+  const filas = await respuestasDeCorrida(db, id);
 
   /**
    * Las violaciones se DERIVAN acá, no se guardan (#258).
@@ -324,21 +326,17 @@ entrenamientoRouter.post("/lecciones", async (req, res) => {
     res.status(400).json({ ok: false, message: parsed.error.issues[0]?.message ?? "cuerpo inválido" });
     return;
   }
-  const [fila] = await db
-    .insert(lecciones)
-    .values({
-      texto: parsed.data.texto,
-      motivo: parsed.data.motivo ?? null,
-      numeroPropio: parsed.data.numeroPropio ?? null,
-      estado: "borrador",
-      creadaPor: req.vendedoraId ?? "desconocida",
-    })
-    .returning();
+  const fila = await crearLeccion(db, {
+    texto: parsed.data.texto,
+    motivo: parsed.data.motivo,
+    numeroPropio: parsed.data.numeroPropio,
+    creadaPor: req.vendedoraId ?? "desconocida",
+  });
   res.status(201).json({ ok: true, leccion: fila });
 });
 
 entrenamientoRouter.get("/lecciones", async (_req, res) => {
-  const filas = await db.select().from(lecciones).orderBy(desc(lecciones.id));
+  const filas = await listarLecciones(db);
   res.json({ ok: true, lecciones: filas });
 });
 
@@ -355,15 +353,7 @@ entrenamientoRouter.put("/lecciones/:id/publicar", async (req, res) => {
     res.status(400).json({ ok: false, message: "id inválido" });
     return;
   }
-  const [fila] = await db
-    .update(lecciones)
-    .set({
-      estado: "publicada",
-      publicadaPor: req.vendedoraId ?? "desconocida",
-      publicadaEn: new Date(),
-    })
-    .where(eq(lecciones.id, id))
-    .returning();
+  const fila = await publicarLeccion(db, id, req.vendedoraId ?? "desconocida");
   if (!fila) {
     res.status(404).json({ ok: false, message: "esa lección no existe" });
     return;
@@ -379,11 +369,7 @@ entrenamientoRouter.put("/lecciones/:id/retirar", async (req, res) => {
     res.status(400).json({ ok: false, message: "id inválido" });
     return;
   }
-  const [fila] = await db
-    .update(lecciones)
-    .set({ estado: "retirada" })
-    .where(eq(lecciones.id, id))
-    .returning();
+  const fila = await retirarLeccion(db, id);
   if (!fila) {
     res.status(404).json({ ok: false, message: "esa lección no existe" });
     return;

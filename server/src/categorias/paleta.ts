@@ -11,7 +11,7 @@ import { z } from 'zod';
  *
  * Los HEX viven en `src/index.css` como tokens `--cat-*` (el front pinta); acá
  * solo vive la CLAVE de cada color, que es lo que se guarda y se valida. La
- * misma lista se refleja en `src/features/gestion/paletaCategorias.ts` para el
+ * misma lista se refleja en `src/dominio/paletaCategorias.ts` para el
  * front (paquetes separados: no se puede importar cruzado).
  */
 export const COLORES_CATEGORIA = [

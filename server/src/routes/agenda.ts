@@ -1,32 +1,27 @@
 import { Router } from 'express';
-import { and, asc, desc, eq, gte, or } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { gestiones, recordatorios } from '../db/schema.js';
 import { requiereVendedora } from '../auth/sesion.js';
+import {
+  agendarRecordatorio,
+  borrarRecordatorio,
+  cambiarEstadoDeRecordatorio,
+  consultarAgenda,
+} from '../agenda/recordatorios.js';
 
 /**
  * LA AGENDA — los seguimientos que la vendedora se agendó.
  *
  * Todo va con su identidad (el token): cada una ve y toca SU agenda. Un
  * recordatorio nunca dispara nada — es memoria organizada, no automatización.
+ *
+ * Lo que toca la base vive en `agenda/recordatorios.ts` (el seam, con `db`
+ * inyectado). Acá se valida la entrada y se serializa la respuesta.
  */
 export const agendaRouter = Router();
 agendaRouter.use(requiereVendedora);
 
-/** Los pendientes (todos, vencidos incluidos) + los hechos de los últimos 35 días
- *  (una grilla mensual completa, con margen). */
 agendaRouter.get('/', async (req, res) => {
-  const hace7d = new Date(Date.now() - 35 * 24 * 3600 * 1000);
-  const filas = await db
-    .select()
-    .from(recordatorios)
-    .where(
-      and(
-        eq(recordatorios.vendedoraId, req.vendedoraId!),
-        or(eq(recordatorios.estado, 'pendiente'), gte(recordatorios.cuando, hace7d)),
-      ),
-    )
-    .orderBy(asc(recordatorios.cuando));
+  const filas = await consultarAgenda(db, req.vendedoraId!);
   res.json({ recordatorios: filas });
 });
 
@@ -37,57 +32,24 @@ agendaRouter.post('/', async (req, res) => {
     res.status(400).json({ ok: false, message: 'faltan datos: conversación, nota o fecha inválida' });
     return;
   }
-  const [fila] = await db
-    .insert(recordatorios)
-    .values({
-      vendedoraId: req.vendedoraId!,
-      clave: String(clave),
-      canal: String(canal),
-      personaId: personaId ? String(personaId) : null,
-      personaNombre: personaNombre ? String(personaNombre) : null,
-      numeroPropio: numeroPropio ? String(numeroPropio) : null,
-      nota: String(nota).trim(),
-      cuando: fecha,
-    })
-    .returning();
-
-  // Agendar un seguimiento ES contactar: si el lead seguía en "interesado" (o
-  // sin gestión), pasa a "contactado" solo. La acción humana fue agendar; esto
-  // asienta su consecuencia en el embudo. Los 'general' (sin conversación) no.
-  if (fila.clave !== 'general') {
-    const [ultima] = await db
-      .select({ etapa: gestiones.etapa })
-      .from(gestiones)
-      .where(eq(gestiones.clave, fila.clave))
-      .orderBy(desc(gestiones.creadoAt))
-      .limit(1);
-    const actual = ultima ? (ultima.etapa === 'nuevo' ? 'interesado' : ultima.etapa) : null;
-    if (!actual || actual === 'interesado') {
-      await db.insert(gestiones).values({
-        vendedoraId: req.vendedoraId!,
-        clave: fila.clave,
-        canal: fila.canal,
-        personaId: fila.personaId,
-        personaNombre: fila.personaNombre,
-        numeroPropio: fila.numeroPropio,
-        etapa: 'contactado',
-        notas: `Agendó: ${fila.nota.slice(0, 80)}`,
-      });
-    }
-  }
+  const fila = await agendarRecordatorio(db, {
+    vendedoraId: req.vendedoraId!,
+    clave: String(clave),
+    canal: String(canal),
+    personaId: personaId ? String(personaId) : null,
+    personaNombre: personaNombre ? String(personaNombre) : null,
+    numeroPropio: numeroPropio ? String(numeroPropio) : null,
+    nota: String(nota).trim(),
+    cuando: fecha,
+  });
 
   res.json({ ok: true, recordatorio: fila });
 });
 
-/** Marcar hecho / reabrir. Solo el estado: la promesa no se reescribe. */
 agendaRouter.patch('/:id', async (req, res) => {
   const id = Number(req.params.id);
   const estado = req.body?.estado === 'hecho' ? 'hecho' : 'pendiente';
-  const [fila] = await db
-    .update(recordatorios)
-    .set({ estado })
-    .where(and(eq(recordatorios.id, id), eq(recordatorios.vendedoraId, req.vendedoraId!)))
-    .returning();
+  const fila = await cambiarEstadoDeRecordatorio(db, { id, vendedoraId: req.vendedoraId!, estado });
   if (!fila) {
     res.status(404).json({ ok: false, message: 'no existe o no es tuyo' });
     return;
@@ -97,9 +59,6 @@ agendaRouter.patch('/:id', async (req, res) => {
 
 agendaRouter.delete('/:id', async (req, res) => {
   const id = Number(req.params.id);
-  const borradas = await db
-    .delete(recordatorios)
-    .where(and(eq(recordatorios.id, id), eq(recordatorios.vendedoraId, req.vendedoraId!)))
-    .returning({ id: recordatorios.id });
-  res.json({ ok: true, borrado: borradas.length > 0 });
+  const borrado = await borrarRecordatorio(db, { id, vendedoraId: req.vendedoraId! });
+  res.json({ ok: true, borrado });
 });

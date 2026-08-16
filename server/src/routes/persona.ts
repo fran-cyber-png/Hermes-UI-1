@@ -1,7 +1,14 @@
 import { Router } from "express";
-import { eq, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { interactions } from "../db/schema.js";
+import {
+  datosDelLink,
+  datosDePrivado,
+  guardarPermalink,
+  guardarPuedePrivado,
+  hiloDeLaConversacion,
+  historialDeLaPersona,
+  interaccionPorId,
+} from "../gente/repositorioDePersona.js";
 import { MetaGraphClient, MetaGraphError } from "../meta/metaClient.js";
 
 export const personaRouter = Router();
@@ -30,22 +37,7 @@ export const personaRouter = Router();
 personaRouter.get("/conv/:canal/:personaId", async (req, res) => {
   const { canal, personaId } = req.params;
 
-  const historial = await db.execute<{
-    id: number;
-    tipo: string;
-    direccion: string;
-    autor: string;
-    persona_nombre: string | null;
-    texto: string | null;
-    occurred_at: string;
-    status: string;
-  }>(sql`
-    SELECT id, tipo, direccion, autor, persona_nombre, texto, occurred_at, status
-    FROM interactions
-    WHERE canal = ${canal} AND persona_id = ${personaId}
-    ORDER BY occurred_at ASC
-    LIMIT 100
-  `);
+  const historial = await hiloDeLaConversacion(db, canal, personaId);
 
   const nombre = historial.find((h) => h.persona_nombre)?.persona_nombre ?? null;
   res.json({ historial, canal, nombre, total: historial.length });
@@ -54,12 +46,7 @@ personaRouter.get("/conv/:canal/:personaId", async (req, res) => {
 personaRouter.get("/:interactionId", async (req, res) => {
   const id = Number(req.params.interactionId);
 
-  const [actual] = await db.execute<{
-    id: number;
-    canal: string;
-    persona_id: string | null;
-    persona_nombre: string | null;
-  }>(sql`SELECT id, canal, persona_id, persona_nombre FROM interactions WHERE id = ${id}`);
+  const actual = await interaccionPorId(db, id);
 
   if (!actual) {
     res.status(404).json({ type: "not_found" });
@@ -73,20 +60,7 @@ personaRouter.get("/:interactionId", async (req, res) => {
     return;
   }
 
-  const historial = await db.execute<{
-    id: number;
-    tipo: string;
-    texto: string | null;
-    contexto_texto: string | null;
-    occurred_at: string;
-    status: string;
-  }>(sql`
-    SELECT id, tipo, texto, contexto_texto, occurred_at, status
-    FROM interactions
-    WHERE canal = ${actual.canal} AND persona_id = ${actual.persona_id}
-    ORDER BY occurred_at DESC
-    LIMIT 25
-  `);
+  const historial = await historialDeLaPersona(db, actual.canal, actual.persona_id);
 
   res.json({
     historial,
@@ -119,22 +93,7 @@ personaRouter.get("/:interactionId/puede-privado", async (req, res) => {
   const token = process.env.META_ACCESS_TOKEN;
   const id = Number(req.params.interactionId);
 
-  const [inter] = await db.execute<{
-    canal: string;
-    tipo: string;
-    page_id: string;
-    external_id: string;
-    dias: number;
-    ventana_abierta: boolean;
-    puede_privado: boolean | null;
-  }>(sql`
-    SELECT i.canal, i.tipo, i.page_id, e.external_id,
-           extract(day FROM now() - i.occurred_at)::int          AS dias,
-           (i.occurred_at > now() - interval '7 days')           AS ventana_abierta,
-           i.puede_privado
-    FROM interactions i JOIN events e ON e.id = i.event_id
-    WHERE i.id = ${id}
-  `);
+  const inter = await datosDePrivado(db, id);
 
   if (!inter) {
     res.status(404).json({ type: "not_found" });
@@ -178,10 +137,7 @@ personaRouter.get("/:interactionId/puede-privado", async (req, res) => {
     });
     const puede = Boolean(c.can_reply_privately);
 
-    await db
-      .update(interactions)
-      .set({ puedePrivado: puede, puedePrivadoAt: new Date() })
-      .where(eq(interactions.id, id));
+    await guardarPuedePrivado(db, id, puede);
 
     res.json({ puede, motivo: puede ? null : "privacidad", dias: inter.dias });
   } catch {
@@ -193,18 +149,7 @@ personaRouter.get("/:interactionId/link", async (req, res) => {
   const token = process.env.META_ACCESS_TOKEN;
   const id = Number(req.params.interactionId);
 
-  const [inter] = await db.execute<{
-    id: number;
-    canal: string;
-    page_id: string;
-    permalink: string | null;
-    external_id: string;
-    contexto_id: string | null;
-  }>(sql`
-    SELECT i.id, i.canal, i.page_id, i.permalink, i.contexto_id, e.external_id
-    FROM interactions i JOIN events e ON e.id = i.event_id
-    WHERE i.id = ${id}
-  `);
+  const inter = await datosDelLink(db, id);
 
   if (!inter) {
     res.status(404).json({ type: "not_found" });
@@ -234,7 +179,7 @@ personaRouter.get("/:interactionId/link", async (req, res) => {
     }
 
     if (permalink) {
-      await db.update(interactions).set({ permalink }).where(eq(interactions.id, id));
+      await guardarPermalink(db, id, permalink);
     }
     res.json({ permalink });
   } catch (err) {

@@ -1,12 +1,11 @@
 import { Router } from 'express';
-import { eq } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { notas } from '../db/schema.js';
 import { requiereVendedora } from '../auth/sesion.js';
 import { abrirLink, cortarLink, leerPorToken } from '../espacios/linkRepositorio.js';
 import { configuracionDeLink, puedeEditarPorLink } from '../espacios/linkModelo.js';
 import { espaciosDe } from '../espacios/repositorio.js';
 import { puedeEscribirEn, type QuienPregunta } from '../espacios/visibilidad.js';
+import { consultarNotaPorId } from '../notas/consultarNotaPorId.js';
 import type { NotaFila } from '../notas/notas.js';
 import {
   archivarNota,
@@ -320,7 +319,7 @@ notasRouter.get('/por-link/:token', async (req, res) => {
     res.status(404).json({ ok: false, message: 'ese link no existe o ya no sirve' });
     return;
   }
-  const [nota] = await db.select().from(notas).where(eq(notas.id, link.notaId));
+  const nota = await consultarNotaPorId(db, link.notaId);
   if (!nota) {
     res.status(404).json({ ok: false, message: 'ese link no existe o ya no sirve' });
     return;

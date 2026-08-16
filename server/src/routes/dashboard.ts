@@ -1,17 +1,21 @@
 import { Router } from 'express';
-import { sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { requiereVendedora } from '../auth/sesion.js';
 import { ordenarRadar } from '../cola/radar.js';
 import { consultarRadar } from '../cola/consultarRadar.js';
 import { contarPorEtapaEfectiva } from '../cola/consultarCola.js';
 import { consultarSeriesDashboard } from '../dashboard/series.js';
-import { fuenteLeadSql, productoLeadSql } from '../dashboard/fuenteLead.js';
+import {
+  consultarCursosPedidos,
+  consultarEtapasAsentadas,
+  consultarEtiquetas,
+  consultarLeadsDeFormulario,
+} from '../dashboard/consultasDelDashboard.js';
 import { consultarPorVendedora } from '../dashboard/porVendedora.js';
 import { separarEquipo } from '../dashboard/equipo.js';
 import { consultarNegocio, DIMENSIONES, type Dimension } from '../dashboard/negocio.js';
 import { rangoLibre, resolverRango } from '../dashboard/periodo.js';
-import { recorteDelDashboard, soloMisClavesSql } from '../dashboard/personal.js';
+import { recorteDelDashboard } from '../dashboard/personal.js';
 import { supervisoresConfigurados } from '../padron/supervisor.js';
 import { mismaVendedora } from '../reparto/destino.js';
 
@@ -32,24 +36,6 @@ import { mismaVendedora } from '../reparto/destino.js';
  */
 export const dashboardRouter = Router();
 dashboardRouter.use(requiereVendedora);
-
-/** Un lead de formulario, como lo devuelve Postgres. `type` y no `interface`:
- *  `db.execute<T>` exige la index signature implícita que las interfaces no tienen. */
-type FilaFormulario = {
-  clave: string;
-  fuente: string;
-  canal: string;
-  persona_nombre: string | null;
-  telefono: string | null;
-  correo: string | null;
-  pais_dato: string | null;
-  producto: string | null;
-  campana: string | null;
-  flyer: string | null;
-  es_organico: boolean | null;
-  estado_lead: string;
-  cayo_at: string;
-};
 
 /**
  * EL PANEL DEL NEGOCIO — la segunda lectura del Dashboard (#128, #126).
@@ -117,43 +103,9 @@ dashboardRouter.get('/', async (req, res) => {
   const chatsOrdenados = await consultarRadar(db, ahora, soloAsignadasA);
 
   // ── Lo que cayó por FORMULARIO: Lead Ads de Meta + landings (webhook Bravo).
-  //
-  // ⚠️ CON RECORTE PERSONAL NO VAN. Un lead de formulario no tiene dueño: el
-  // reparto asigna CONVERSACIONES (`conversacion_asignada`, por clave `conv:…`) y
-  // un lead todavía no es una. Servirlos igual sería mezclar «lo mío» con «lo de
-  // todos» adentro de una misma lista que se presenta como propia, y elegir a
-  // cuál de los dos criterios pertenece cada fila quedaría del lado de quien
-  // mira. Se van enteros, y la respuesta lo DICE (`soloMisAsignadas`) para que la
-  // pantalla explique el hueco en vez de mostrar chips en cero sin motivo.
-  const formularios: FilaFormulario[] = soloAsignadasA !== null ? [] : await db.execute<FilaFormulario>(sql`
-    SELECT
-      'lead:' || lead_id AS clave,
-      -- De dónde vino y de qué: las dos reglas viven en dashboard/fuenteLead.ts
-      -- con su test. Acá decía platform = 'landing', que NO MATCHEA NINGUNA
-      -- FILA (icarus escribe 'web'), así que los 25.511 leads de landing se
-      -- mostraban como «Lead Ad» y el chip «Landings» quedaba en cero para
-      -- siempre — el panel decía que el canal muerto traía gente y el vivo no.
-      (${fuenteLeadSql}) AS fuente,
-      COALESCE(platform, 'fb') AS canal,
-      full_name AS persona_nombre,
-      phone AS telefono,
-      email AS correo,
-      country AS pais_dato,
-      -- ⚠️ Acá decía COALESCE(form_name, campaign_name), que elegía EL PEOR de
-      -- los dos: form_name siempre existe para icarus (icarus:landing, un
-      -- placeholder con namespace) y tapaba a campaign_name, que es donde vive
-      -- el nombre del diploma. La fila mostraba un id interno.
-      (${productoLeadSql}) AS producto,
-      campaign_name AS campana,
-      ad_name AS flyer,
-      is_organic AS es_organico,
-      status AS estado_lead,
-      created_time AS cayo_at
-    FROM leads
-    WHERE created_time > now() - interval '14 days'
-    ORDER BY created_time DESC
-    LIMIT 60
-  `);
+  //    El seam decide también si CORRESPONDE traerlos: con recorte personal se
+  //    van enteros, y el porqué vive con la consulta (`consultasDelDashboard.ts`).
+  const formularios = await consultarLeadsDeFormulario(db, soloAsignadasA);
 
   // Los leads de formulario pasan por la MISMA regla: alguien que llenó un
   // formulario levantó la mano igual que quien escribió, y mientras nadie lo haya
@@ -171,12 +123,8 @@ dashboardRouter.get('/', async (req, res) => {
   );
 
   // ── Los mapas de Estado y Etiquetas (una sola pasada cada uno).
-  const etapas = await db.execute<{ clave: string; etapa: string }>(sql`
-    SELECT DISTINCT ON (clave) clave, etapa FROM gestiones ORDER BY clave, creado_at DESC
-  `);
-  const tags = await db.execute<{ clave: string; etiqueta: string }>(sql`
-    SELECT clave, etiqueta FROM etiquetas ORDER BY creado_at
-  `);
+  const etapas = await consultarEtapasAsentadas(db);
+  const tags = await consultarEtiquetas(db);
   const etiquetasPorClave: Record<string, string[]> = {};
   for (const t of tags) (etiquetasPorClave[t.clave] ??= []).push(t.etiqueta);
 
@@ -210,13 +158,7 @@ dashboardRouter.get('/', async (req, res) => {
   const embudo = await contarPorEtapaEfectiva(db, soloAsignadasA);
 
   // ── Qué cursos pide la gente: el ranking de intereses. Señal de negocio pura. ──
-  //    `intereses` se cuelga de la CLAVE de la conversación, así que el recorte
-  //    personal es el mismo de siempre y no hace falta una segunda definición.
-  const cursos = await db.execute<{ curso: string; n: number }>(sql`
-    SELECT curso, count(*)::int AS n FROM intereses
-    WHERE ${soloMisClavesSql(sql`clave`, soloAsignadasA)}
-    GROUP BY curso ORDER BY n DESC, curso LIMIT 6
-  `);
+  const cursos = await consultarCursosPedidos(db, soloAsignadasA);
 
   // ── Las series de 14 días para las gráficas del riel. Siempre 14 puntos:
   //    los días sin datos van en 0 desde acá (el front no inventa continuidad).

@@ -1,8 +1,11 @@
 import { Router } from 'express';
-import { desc } from 'drizzle-orm';
 import nodemailer from 'nodemailer';
 import { db } from '../db/client.js';
-import { correos } from '../db/schema.js';
+import {
+  anotarCorreoEnviado,
+  anotarCorreoFallido,
+  ultimosCorreos,
+} from '../correos/correos.js';
 import { requiereVendedora } from '../auth/sesion.js';
 
 /**
@@ -43,7 +46,7 @@ correosRouter.get('/estado', (_req, res) => {
 
 /** Los últimos enviados (del equipo — coordinación, no secreto). */
 correosRouter.get('/', async (_req, res) => {
-  const filas = await db.select().from(correos).orderBy(desc(correos.creadoAt)).limit(50);
+  const filas = await ultimosCorreos(db);
   res.json({ correos: filas });
 });
 
@@ -79,11 +82,11 @@ correosRouter.post('/enviar', async (req, res) => {
       subject: base.asunto,
       text: base.cuerpo,
     });
-    const [fila] = await db.insert(correos).values({ ...base, estado: 'enviado' }).returning();
+    const fila = await anotarCorreoEnviado(db, base);
     res.json({ ok: true, correo: fila });
   } catch (err) {
     const motivo = (err as Error).message;
-    await db.insert(correos).values({ ...base, estado: 'fallido', motivo });
+    await anotarCorreoFallido(db, base, motivo);
     res.status(502).json({ ok: false, message: `El correo no salió: ${motivo}` });
   }
 });
