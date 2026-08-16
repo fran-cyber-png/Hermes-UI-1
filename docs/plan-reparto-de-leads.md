@@ -90,7 +90,7 @@ server/drizzle/0015_*.sql          ← la migración
 server/src/cola/asignadaSql.ts     ← el dueño en la fila + el predicado de «Míos»
 server/src/routes/reparto.ts       ← GET /rueda · PUT /asignacion
 server/src/scripts/repartoRueda.ts ← `npm run reparto:rueda` (ver · agregar · sacar)
-src/features/canales/dueno.ts      ← qué dice la píldora, PURA
+src/dominio/dueno.ts               ← qué dice la píldora, PURA
 src/features/reparto/              ← «pasar la conversación» + la galería de evidencia
 ```
 
@@ -146,7 +146,7 @@ dio 120 con 20 asignaciones = 20 × 6). Hoy usa `LEFT JOIN` + `GROUP BY`.
       los otros chips** y el desglose: con «Míos» puesto, «Piden info · 12» dice 12 *de las
       mías*. El conteo del propio chip se calcula **con el filtro apagado**, que es cuando se
       lo mira.
-- [x] **El dueño en la fila** (`asignada_a` + `canales/dueno.ts`): «Vos» en navy, el nombre
+- [x] **El dueño en la fila** (`asignada_a` + `dominio/dueno.ts`): «Vos» en navy, el nombre
       de la otra persona en neutro, y **nada** si no tiene dueño.
 - [x] **Cómo se carga la rueda**: `npm run reparto:rueda`. Ver §6 — reemplaza al SQL a mano.
 - [x] **Pasar una conversación a otra persona** desde la UI: `PasarConversacion`, en la
@@ -174,7 +174,7 @@ dio 120 con 20 asignaciones = 20 × 6). Hoy usa `LEFT JOIN` + `GROUP BY`.
    tiene dos grafías vivas** y una conversación asignada como `Luz` era **invisible para su
    propia dueña, para siempre y sin síntoma**. Se corrigió comparando normalizado **de los
    dos lados** —`lower()` en `cola/asignadaSql.ts`, `mismaVendedora` en `reparto/destino.ts`
-   y en `canales/dueno.ts`—, guardando siempre la grafía que vino. Dos tests que afirmaban
+   y en `dominio/dueno.ts`—, guardando siempre la grafía que vino. Dos tests que afirmaban
    lo contrario **se dieron vuelta**: lo que reabre el agujero es normalizar de UN lado, no
    normalizar. El script además avisa si se agregan dos grafías de la misma persona, que
    crearían dos participantes con media parte cada uno.
@@ -382,7 +382,7 @@ git checkout -b feat/reparto-de-leads
 # 2 · al tocar el schema: generar la migración y FIJAR EL `when`
 cd server && npm run db:generate
 cd .. && JOURNAL_FILE=server/drizzle/meta/_journal.json goberna-journal-set-when
-cd server && npx tsx --test src/pruebas/journal.test.ts   # el guard
+npx tsx --test server/src/pruebas/journal.test.ts   # el guard (desde la raíz del repo)
 ```
 
 > 🔴 **El paso del `when` no es opcional.** Drizzle genera un `when` que puede quedar

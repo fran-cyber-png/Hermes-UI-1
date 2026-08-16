@@ -1,5 +1,13 @@
 # T13 · El banco de pruebas — probar el bot entero sin tocar producción
 
+> ⚠️ **Al 16-ago-2026: nada de este plan se construyó.** No existe ningún `banco/` bajo `server/src/`,
+> ni `docker-compose.banco.yml`, ni `server/env.banco.example`, ni los cinco scripts `banco:*` de
+> `server/package.json`, ni el ADR 0029, ni `docs/banco-de-pruebas.md`. Sí quedaron vivos el
+> transporte falso y su inyector `POST /api/whatsapp/_dev/simular` (`server/src/whatsapp/rutaDev.ts`,
+> que sólo se monta si corre una línea falsa), la guardia anti-prod de las bases de test
+> (`server/src/pruebas/base.ts`) y el bot entero (`server/src/bot/`, 56 archivos).
+> **Todo nombre `banco/…` de acá abajo es una propuesta, no un archivo.**
+
 > **Pedido del dueño (29-jul-2026)**: «tiene que ser seguro, tengo que poder probarlo; sería genial
 > que pueda haber un usuario de prueba con un número de prueba enlazado con QR para que podamos
 > probar todo el flujo sin necesidad de romper Cerberus — el flujo de mensajes automáticos, registro
@@ -29,7 +37,7 @@ server/.env             WHATSAPP_TRANSPORTE=whatsmeow
                         DATABASE_URL=…@127.0.0.1:5434/meta_escuela
 server/.wa-sessions/    51986394450.db  (43 MB) · .db-shm con fecha de HOY 11:09
 ps aux                  PID 10606  …/@whatsmeow-node/darwin-arm64/bin/whatsmeow-node
-                        PID 10487  node … tsx … src/index.ts
+                        PID 10487  node … tsx … server/src/index.ts   (cwd server/)
 ```
 
 **La laptop es hoy un dispositivo vinculado vivo de la línea que factura, apuntando al Cerberus de producción.** Cualquier banco de pruebas montado *sobre este checkout tal como está* arranca hablándole a leads reales. El banco vive en **otro checkout**, y eso no es prolijidad: `.wa-sessions/` y `.wa-media/` se derivan de `import.meta.url` (`whatsapp/wiring.ts:60`, `whatsapp/mediaDir.ts:19`, `whatsapp/vincular.ts:38`, `routes/admin.ts:39`) y **no son configurables por env**. Un directorio distinto es el único aislamiento posible de la credencial.
@@ -83,7 +91,8 @@ El diseño es por etapas a propósito: **la etapa A destraba hoy el 80% sin depe
 
 ## T13.0 — La guardia de arranque (va primero, sola, y nada se levanta hasta que esté verde)
 
-`server/src/banco/guardia.ts`. Núcleo **puro** + cáscara impura, como toda la casa.
+Un `banco/guardia.ts` que este plan proponía y **no se construyó**. Núcleo **puro** + cáscara impura,
+como toda la casa.
 
 ```ts
 export interface Violacion { que: string; problema: string }
@@ -122,7 +131,7 @@ Las once negativas, cada una con su violación nombrada:
 10. **`server/.wa-sessions/` no contiene ningún `.db` que no sea `<BANCO_NUMERO>.db`** — la nombra por archivo y aborta. Es la única condición que mira el disco, y es la que atrapa el desastre real: una sesión de producción copiada a mano al worktree.
 11. **`BOT_LINEAS` ⊆ {`BANCO_NUMERO`}**, **`PORT`** ≠ 4110 (prod) ≠ 4111 (staging), y el **cwd** no es `/srv/hermes`, `/srv/hermes-staging` ni `/Users/milaa/goberna/hermes` (el checkout canónico).
 
-**El lanzador** `server/src/banco/servidor.ts` (`npm run banco`) es la **única puerta documentada** para arrancar el banco:
+**El lanzador** propuesto, `banco/servidor.ts` (`npm run banco` — un script que tampoco se creó), es la **única puerta documentada** para arrancar el banco:
 
 ```ts
 import 'dotenv/config';        // 1
@@ -131,13 +140,13 @@ exigirAislamiento();            // 2 — tira acá o no tira más
 await import('../index.js');    // 3 — recién ahora existe el server
 ```
 
-El orden es load-bearing: la guardia corre **entera** antes de que se importe una línea de `src/index.ts`, así que no hay estado a medio aplicar. **El lanzador no SETEA una sola variable: solo lee y valida.**
+El orden es load-bearing: la guardia corre **entera** antes de que se importe una línea de `server/src/index.ts`, así que no hay estado a medio aplicar. **El lanzador no SETEA una sola variable: solo lee y valida.**
 
 ---
 
 ## T13.1 — El Cerberus de mentira
 
-`server/src/banco/cerberusFalso.ts` + `banco/datos.ts` + `banco/ventasDelBanco.ts`. Express mínimo, **bind solo a `127.0.0.1`**, puerto **9910**. Se arranca como proceso aparte (`npm run banco:cerberus`) — **no es un router que se monte en `index.ts`**, así que no hay una línea de montaje que alguien pueda olvidarse de borrar.
+Tres módulos propuestos y no construidos: `banco/cerberusFalso.ts` + `banco/datos.ts` + `banco/ventasDelBanco.ts`. Express mínimo, **bind solo a `127.0.0.1`**, puerto **9910**. Se arranca como proceso aparte (`npm run banco:cerberus`) — **no es un router que se monte en `index.ts`**, así que no hay una línea de montaje que alguien pueda olvidarse de borrar.
 
 Los siete handlers, con las formas **exactas** que el código real parsea (verificadas leyendo cada archivo, no supuestas):
 
@@ -180,7 +189,7 @@ El fixture (`banco/datos.ts`) lleva: el usuario `prueba`, **el celular del dueñ
 
 ## T13.2 — La semilla (sin esto el banco miente por omisión)
 
-`server/src/banco/sembrar.ts` → `npm run banco:sembrar` (dry-run por default, `--aplicar` escribe, como `hechos:sembrar`).
+Un `banco/sembrar.ts` propuesto → `npm run banco:sembrar` (dry-run por default, `--aplicar` escribe, como `hechos:sembrar`). Tampoco se construyó.
 
 Una base recién migrada **no tiene**: fila en `numeros_wa` (el ensayo del 28-jul tuvo que meter tres a mano), catálogo de `hechos`, plantillas, ni `bot_estado`. Con eso, el bot ve **el catálogo que la corrección #7 del plan ya midió: 9 piezas, 4 enviables, y las 4 son acuses de fuera-de-horario** — y el dueño concluye «el bot no sirve» cuando el problema es que no hay piezas.
 
@@ -201,30 +210,33 @@ export async function sembrarBanco(base: typeof db, opts: { numeroPropio: string
 - **`server/env.banco.example`** — solo nombres (regla dura #1). ⚠️ **SIN el punto inicial, y verificado**: `git check-ignore` confirma que `server/.env.banco.example` **quedaría ignorado** por `.gitignore:17` (`.env.*`, cuya única excepción es `!.env.example`). Un archivo que nadie puede commitear no sirve de ejemplo. Existe para que nadie caiga en `cp ../hermes/server/.env server/.env`, que es el desastre exacto descrito arriba. Trae ya fijos: `PORT=4112`, `CERBERUS_BASE_URL=http://127.0.0.1:9910`, `WHATSAPP_TRANSPORTE=falso`, `WHATSAPP_NUMERO=` (vacía, con el porqué en comentario), `AUTO_RESPUESTA=off`, `LAZO_RELOJ=`, `META_ACCESS_TOKEN=`, `META_APP_ID=`, `META_PIXEL_ID=`, `ICARUS_DATABASE_URL=`; y en blanco: `DATABASE_URL`, `BANCO_NUMERO`, `WHATSAPP_NUMEROS`, `WHATSAPP_NUMEROS_FALSOS`, `BOT_LINEAS`, `HERMES_SESSION_SECRET`, `HERMES_ADMIN_SERVICE_TOKEN`, `HERMES_CATALOGO_SERVICE_TOKEN`, `CERBERUS_WEBHOOK_TOKEN`, `ANTHROPIC_API_KEY`, `BANCO_USUARIO`, `BANCO_CLAVE`, `BANCO_TELEFONO_DUENO`.
   Documenta además **`WHATSAPP_NUMEROS` y `WHATSAPP_NUMEROS_FALSOS`, que hoy NO están en `server/.env.example`** (verificado): quien monte el banco leyendo el ejemplo no se entera de que la multi-línea existe.
 - **`.gitignore`**: agregar `server/.banco/`.
-- **`server/package.json`**, cinco scripts:
-  ```json
-  "banco":          "tsx src/banco/servidor.ts",
-  "banco:cerberus": "tsx src/banco/cerberusFalso.ts",
-  "banco:sembrar":  "tsx src/banco/sembrar.ts",
-  "banco:vincular": "tsx src/banco/vincular.ts",
-  "banco:ventas":   "tsx src/banco/imprimirVentas.ts"
+- **`server/package.json`**, cinco scripts (propuestos; hoy no existe ninguno de los cinco, y tampoco
+  los módulos a los que apuntaban):
+  ```text
+  "banco":          "tsx …/banco/servidor.ts",
+  "banco:cerberus": "tsx …/banco/cerberusFalso.ts",
+  "banco:sembrar":  "tsx …/banco/sembrar.ts",
+  "banco:vincular": "tsx …/banco/vincular.ts",
+  "banco:ventas":   "tsx …/banco/imprimirVentas.ts"
   ```
-- **`server/src/banco/vincular.ts`** — envoltorio de `wa:vincular` que **corre `exigirAislamiento()` primero**, imprime la ruta absoluta de la sesión y el número **antes** de mostrar el QR, y —lo importante— **compara el JID conectado contra `BANCO_NUMERO` y borra la `.db` si no coinciden**. Sin eso, escanear con el WhatsApp equivocado deja a Hermes leyendo los chats personales de quien escaneó, y nadie se entera.
+- **`banco/vincular.ts`** (propuesto) — envoltorio de `wa:vincular` que **corre `exigirAislamiento()` primero**, imprime la ruta absoluta de la sesión y el número **antes** de mostrar el QR, y —lo importante— **compara el JID conectado contra `BANCO_NUMERO` y borra la `.db` si no coinciden**. Sin eso, escanear con el WhatsApp equivocado deja a Hermes leyendo los chats personales de quien escaneó, y nadie se entera.
 
 ---
 
 ## T13.4 — Los candados (lo que hace que esto no dependa de que alguien se acuerde)
 
-`server/src/banco/aislamiento.test.ts` — vive en `src/banco/` **a propósito**: el glob de `npm test` es `tsx --test src/**/*.test.ts` bajo `sh`, que sin globstar entra **exactamente dos niveles**, así que `src/banco/*.test.ts` **sí lo corre CI** (y `src/bot/evals/*.test.ts` no — corrección #3 del plan). Dos afirmaciones:
+Un `banco/aislamiento.test.ts` que este plan proponía y no se construyó. Vivía en `banco/` **a propósito**: el glob de `npm test` arranca en `server/src/` y corre bajo `sh`, que sin globstar entra **exactamente dos niveles**, así que un test dentro de `banco/` **sí lo correría CI** (y uno dentro de un `bot/evals/` —tres niveles— no; corrección #3 del plan. Ese `bot/evals/` tampoco existe hoy). Dos afirmaciones:
 
-- **(a)** recorriendo el grafo de imports estáticos desde `server/src/index.ts`, **ningún archivo bajo `src/banco/` es alcanzable**. Ni por transitividad.
-- **(b)** `src/banco/cerberusFalso.ts` existe y está bajo `src/banco/` (si alguien lo mueve, el candado (a) dejaría de cubrir sin fallar).
+- **(a)** recorriendo el grafo de imports estáticos desde `server/src/index.ts`, **ningún archivo bajo `banco/` es alcanzable**. Ni por transitividad.
+- **(b)** el `banco/cerberusFalso.ts` existe y está bajo `banco/` (si alguien lo mueve, el candado (a) dejaría de cubrir sin fallar).
 
 Límite honesto, escrito en el propio test: **lee imports estáticos**. Un `await import(variable)` con path computado se le escapa. Atrapa el caso realista —alguien agrega un `import` «para un debug rápido»— no a un decidido. Mismo espíritu que `piezas/receta-unica.test.ts`.
 
 ---
 
 ## Tests
+
+Los cuatro son propuestas de este plan: ninguno llegó a escribirse.
 
 - **`banco/guardia.test.ts`** (puro, node:test) — **un caso por negativa**: base de prod · base de dev · base de staging · base de test · `hermes_banco` en el puerto equivocado · Cerberus remoto · Cerberus ausente · `META_ACCESS_TOKEN` con valor · `ICARUS_DATABASE_URL` presente · `AUTO_RESPUESTA=on` · secreto de dev · `WHATSAPP_NUMERO` sobreviviente · dos números en `WHATSAPP_NUMEROS` · un número de `LINEAS_DE_PRODUCCION` · **un `.db` intruso en `.wa-sessions/`, y el mensaje lo NOMBRA** · `PORT=4110` · cwd de producción. Más el caso feliz. Y el caso que importa de verdad: **`motivosDeNoAislamiento` con el `.env` real de producción copiado tal cual devuelve ≥4 violaciones.**
 - **`banco/cerberusFalso.test.ts`** — **es el criterio de aceptación del ticket**, no un extra. Levanta el falso en un puerto efímero y corre **contra él las funciones REALES, sin mocks**: `autenticarEnCerberus`, `ficha`, `buscarProductos`, `cargarFormulario` y `crearVenta`.
@@ -242,7 +254,7 @@ Límite honesto, escrito en el propio test: **lee imports estáticos**. Un `awai
 2. **Prohibido montar el banco sobre `/srv/hermes-staging`.** Derogaría el ADR 0022 §«WhatsApp es el transporte falso, sin excepción», y además el job `n3-staging` le hace `git checkout --quiet --force` en **cada push a `main`**: el fin de semana se pisaría solo, a mitad de una prueba.
 3. **Prohibido crear un usuario de prueba en el Cerberus REAL.** Es una credencial permanente con permiso de venta, imposible de revocar por código, y ensucia `tb_venta` para siempre. El usuario de prueba vive **dentro del Django de mentira, en memoria**.
 4. **Prohibido agregar una bandera de «modo prueba» al código de producción** (`CERBERUS_TRANSPORTE=falso`, `HERMES_VENDEDORA_DE_PRUEBA`, cualquier `if (esBanco)`). Una bandera vive en `server/.env`, que es gitignored, no aparece en ningún diff y ningún job de CI verifica. Si se filtrara: las tres vendedoras seguirían trabajando —login OK, cola OK, fichas OK— y **ninguna venta llegaría al ERP, en silencio**, hasta que alguien concilie. La lección ya está escrita en `auth/perimetro.ts:9`: «la auth por-router se olvida; el perímetro no».
-5. **Prohibido tocar una sola línea de `server/src/` fuera de `src/banco/`.** El banco se conecta por variables que **ya existen** (`CERBERUS_BASE_URL`, `DATABASE_URL`, `WHATSAPP_TRANSPORTE`, `WHATSAPP_NUMEROS`). Cero `if` nuevos en el camino de auth, del perímetro, de `EnvioControlado` o del schema. *(El seam inyectable estilo `DepsIvi` sobre los cinco módulos de `cerberus/` es el arreglo correcto y va al ADR como **deuda** — 5-6 h tocando login y venta, días antes de un rollout, no.)*
+5. **Prohibido tocar una sola línea de `server/src/` fuera del `banco/` propuesto.** El banco se conecta por variables que **ya existen** (`CERBERUS_BASE_URL`, `DATABASE_URL`, `WHATSAPP_TRANSPORTE`, `WHATSAPP_NUMEROS`). Cero `if` nuevos en el camino de auth, del perímetro, de `EnvioControlado` o del schema. *(El seam inyectable estilo `DepsIvi` sobre los cinco módulos de `cerberus/` es el arreglo correcto y va al ADR como **deuda** — 5-6 h tocando login y venta, días antes de un rollout, no.)*
 6. **Prohibido correr `npm run wa:vincular` desde el checkout principal** para el número de prueba: la sesión cae en el directorio equivocado. Se usa `npm run banco:vincular`, que valida antes.
 7. **Prohibido vincular el celular personal del dueño.** Él es el **lead**: escribe desde afuera. Vincularlo haría de Hermes un dispositivo enlazado a su WhatsApp personal, leyéndole todos los chats.
 8. **Prohibido `db:push` en la base del banco**: persiste, así que va por migraciones versionadas (ADR 0021). `db:push` sigue siendo correcto solo para las bases efímeras de test.
@@ -261,7 +273,7 @@ Shell **fish**. Rutas absolutas. Puertos del banco: **API 4112 · Postgres 5441 
 ```fish
 ps aux | grep -E 'whatsmeow|tsx watch' | grep -v grep
 # Ctrl-C en la terminal donde corre `npm run dev`; si no la encontrás:
-pkill -f 'tsx watch src/index.ts'; pkill -f 'whatsmeow-node'
+pkill -f 'tsx watch .*index\.ts'; pkill -f 'whatsmeow-node'
 ps aux | grep whatsmeow | grep -v grep      # tiene que NO imprimir nada
 ```
 
@@ -308,7 +320,7 @@ $EDITOR .env
 
 ```fish
 cd /Users/milaa/goberna/banco-hermes/server
-npx tsx --test src/banco/guardia.test.ts src/banco/aislamiento.test.ts
+npx tsx --test …/banco/guardia.test.ts …/banco/aislamiento.test.ts   # (nunca se escribieron)
 npm run banco:sembrar        # dry-run primero
 ```
 
@@ -483,14 +495,14 @@ Lo que se mira acá **no son las tablas**: es el ritmo, el tono y el largo de la
 cd /Users/milaa/goberna/banco-hermes/server
 
 # (a) El banco no conoce la URL de Cerberus.
-grep -rn "app.goberna.us" src/banco/ ; echo "---- vacío arriba = correcto ----"
+grep -rn "app.goberna.us" …/banco/ ; echo "---- vacío arriba = correcto ----"
 grep -n "CERBERUS_BASE_URL" .env      # tiene que decir 127.0.0.1:9910
 
 # (b) EL CANDADO: producción no puede alcanzar el banco, ni por transitividad.
-npx tsx --test src/banco/aislamiento.test.ts
+npx tsx --test …/banco/aislamiento.test.ts
 
 # (c) ¿A quién le habla el proceso del banco? Nada hacia app.goberna.us.
-lsof -nP -p (pgrep -f 'src/banco/servidor.ts') -i | grep ESTABLISHED
+lsof -nP -p (pgrep -f 'banco/servidor.ts') -i | grep ESTABLISHED
 
 # (d) Las ventas del banco están en el 5441 y en un JSONL, no en el ERP.
 npm run banco:ventas
@@ -525,7 +537,7 @@ cd server && npm install && npm run db:migrate
 |---|---|
 | **`banco/cerberusFalso.ts`** | Se despliega como **código muerto**: nada lo importa, `index.ts` no lo monta (es un **proceso**, no un router — no hay línea de montaje que olvidarse de borrar), y `banco/aislamiento.test.ts` falla en **N1** si alguien lo importa. Aun corriéndolo a mano en VPS1: bindea 127.0.0.1, exige `BANCO=si` y **se niega si existe `/srv/hermes`**. |
 | **`CERBERUS_BASE_URL` a loopback** | **No es una bandera nueva**: la variable ya existe y ya se lee en los siete archivos. Si se filtrara al `.env` de prod, el efecto es **nadie puede loguearse y ninguna venta llega al ERP**: caída total, inmediata, ruidosa, cero datos comprometidos. Falla hacia «nadie entra», nunca hacia «cualquiera entra». |
-| **`banco/guardia.ts` + lanzador** | `src/index.ts` no lo importa (candado (a)). Corrido en VPS1 **se niega a arrancar** (el `DATABASE_URL` de prod está en la lista negra). No setea una sola variable: solo lee. Mismo perfil de riesgo que el throw de `auth/servicio.ts:17`. |
+| **`banco/guardia.ts` + lanzador** | `server/src/index.ts` no lo importa (candado (a)). Corrido en VPS1 **se niega a arrancar** (el `DATABASE_URL` de prod está en la lista negra). No setea una sola variable: solo lee. Mismo perfil de riesgo que el throw de `auth/servicio.ts:17`. |
 | **Base `:5441/hermes_banco`** | Exigencia **positiva**, no solo lista negra: si alguien copia el `.env` de prod al banco, el banco no arranca y dice qué marca lo delató, sin imprimir la URL. Al revés no aplica: producción no importa nada del banco, y VPS1 no tiene Postgres en 5441. |
 | **La sesión de WhatsApp** | El aislamiento es por **ausencia**, no por variable: `.wa-sessions/` sale de `import.meta.url` y no es configurable. El worktree nace vacío; la credencial de la línea de ventas **físicamente no está ahí**. |
 | **`WHATSAPP_NUMEROS` del banco** | Si se filtrara a prod: se levantaría una línea cuyo `.db` no existe en VPS1 → queda `sin-vincular`, se ve caída en el semáforo y no manda nada (`wiring.ts` captura el fallo por línea). Inocuo y visible. |

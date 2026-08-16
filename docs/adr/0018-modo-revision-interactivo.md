@@ -1,7 +1,9 @@
 # ADR 0018 — La revisión pasa dentro del chat, y «automática» se retira
 
 **Fecha:** 2026-07-25 · **Estado:** aceptado · **Issues:** #125, #152, #153
-**Reemplaza parcialmente:** ADR 0015 y ADR 0016 · **Archiva:** `src/features/autorespuesta/BandejaRevision.tsx`
+**Reemplaza parcialmente:** ADR 0015 y ADR 0016 · **Archiva:** el componente `BandejaRevision`
+—la hoja de revisión vieja, que vivía en `src/features/autorespuesta/`— y que este ADR borra. La
+lista que hace hoy ese trabajo es `src/features/autorespuesta/ColaRevision.tsx`.
 
 ## Contexto
 

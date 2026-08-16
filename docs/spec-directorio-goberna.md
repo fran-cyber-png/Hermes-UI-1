@@ -91,8 +91,8 @@ identidad con un router abierto por olvido es el peor caso posible.
 
 ### 4.1 Qué se adopta de kanban, y qué NO
 
-`goberna-kanban/backend/src/schema.ts` resolvió este problema el 7-ago-2026 y **su diseño de
-identidades es el punto de partida**:
+El `schema.ts` del backend de **goberna-kanban** (otro repo) resolvió este problema el 7-ago-2026 y
+**su diseño de identidades es el punto de partida**:
 
 ```ts
 // kanban, schema.ts:787-812 — se adopta TAL CUAL
@@ -222,7 +222,7 @@ medido de Cerberus (mina 2 del plan: un solo `OIDC_SHARED_SECRET` HS256 para tod
 **El secreto se usa siempre como FIRMA, nunca como bearer** — el patrón de `CENTURION_SSO_SECRET`, que
 ya funciona entre Hermes y Centurión. Y **se verifica `aud`, `iss` Y `exp`**: un token sin `exp` no
 vence nunca, y `jwt.verify` sólo valida el vencimiento si el claim está presente (defecto real,
-encontrado y arreglado en `centurion/src/lib/hermes-sso.ts` el 14-ago).
+encontrado y arreglado el 14-ago en el repo **Centurión**, `lib/hermes-sso.ts`).
 
 ### 5.2 Los endpoints
 
@@ -366,5 +366,5 @@ federadas (`hermes#372`, 14-ago). Sin eso, el directorio no podía ser un segund
 
 *Verificado el 14-ago-2026: `centurion/server.mjs:7-8` (veto de Bun), VPS1 `node v22.22.2`, puertos
 4130 y 5441 libres, `/srv/ops/new-project.sh` presente, `hermes/server/package.json`
-(express `^4.21.2`, zod `^4.4.3`, drizzle-orm `^0.45.2`), `goberna-kanban/backend/src/schema.ts:78-108`
-(`users`, con `password_hash`) y `:787-812` (`user_identities`).*
+(express `^4.21.2`, zod `^4.4.3`, drizzle-orm `^0.45.2`), y el `schema.ts` del backend de
+**goberna-kanban** en `:78-108` (`users`, con `password_hash`) y `:787-812` (`user_identities`).*

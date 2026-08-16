@@ -1,5 +1,11 @@
 # Mapeo del panel derecho — vista Mensajes
 
+> ⚠️ **Al 16-ago-2026:** esto describe el panel de ANTES del rediseño, y la reescritura entró en el
+> MISMO commit que este documento (`0b3d17b`, 1-ago-2026). Hoy el panel es un timeline: arma en
+> `src/features/panel/timeline.ts` y dibuja con `EncabezadoTimeline.tsx`, `EventoLinea.tsx`,
+> `ZonaPendientes.tsx` y `PieAccionTimeline.tsx`; `BandaEstado`, `TimelineContacto`, `hitos.ts`,
+> `AccionesContacto`, `BloqueInteres` y `PanelCurso` ya no existen en el árbol.
+
 > Documento de trabajo para el rediseño. Mapea cada archivo, sus dependencias, qué dato consume
 > y qué decisión toma. **No propone:** solo describe lo que hay.
 
@@ -44,7 +50,7 @@ Monta TODOS los hooks (6 queries + 3 funciones puras) y distribuye los datos a l
 |---|---|---|---|
 | `estadoDelContacto()` | `estadoContacto.ts` | ficha, padrón, enfriada, errores | `EstadoContacto` (tono, acento, título, compras, detalle) |
 | `fichaDeCliente()` | (inline, privada) | `Ficha \| undefined` | `Ficha \| null` cuando estado='cliente' |
-| `hitosDe()` | `hitos.ts` | ventas[], intereses[] | `Hito[]` mergeados y ordenados |
+| `hitosDe()` | `hitos.ts`, que la reescritura borró — hoy ese armado vive en `src/features/panel/timeline.ts` (`ensamblarTimeline`) | ventas[], intereses[] | `Hito[]` mergeados y ordenados |
 
 ### Estructura del JSX
 ```
@@ -68,7 +74,9 @@ PanelDerecho
 
 ### 3.1 BandaEstado (188 líneas)
 
-**Archivo**: `src/features/panel/BandaEstado.tsx`
+**Archivo**: el componente `BandaEstado`, borrado por la reescritura del timeline (`0b3d17b`,
+1-ago-2026). Lo que hoy encabeza el panel es `src/features/panel/EncabezadoTimeline.tsx`, con
+`src/features/panel/BloqueMeta.tsx` y `src/features/panel/ResumenIa.tsx`.
 
 **Props que recibe**: `conversacion`, `estado` (EstadoContacto), `cerberusId`, `cerberusNombre`, `leadNombre`
 
@@ -88,14 +96,17 @@ PanelDerecho
 - `ACENTO` / `ICONO` mapeos (inline) — traducen `AcentoContacto` a clases Tailwind
 
 **Dependencias externas**:
-- `Avatar`, `BadgeCanal`, `nombreCanal` de `canales/`
+- `Avatar`, `BadgeCanal`, `nombreCanal` — hoy en `src/components/` (`Avatar.tsx`, `BadgeCanal.tsx`);
+  se mudaron desde `features/canales/`
 - `FranjaEtiquetas` de `senales/`
 
 ---
 
 ### 3.2 TimelineContacto (122 líneas)
 
-**Archivo**: `src/features/panel/TimelineContacto.tsx`
+**Archivo**: el componente `TimelineContacto`, borrado por la reescritura del timeline (`0b3d17b`,
+1-ago-2026). Hoy cada renglón lo dibuja `src/features/panel/EventoLinea.tsx` y el armado vive en
+`src/features/panel/timeline.ts`.
 
 **Props**: `hitos` (Hito[]), `cargando` (bool), `error` (bool)
 
@@ -108,7 +119,8 @@ PanelDerecho
 
 **NO tiene queries propias**: recibe todo por props.
 
-**Dependencias puras**: `etiquetaDeFecha()`, `etiquetaDeMonto()` de `hitos.ts`
+**Dependencias puras**: `etiquetaDeFecha()`, `etiquetaDeMonto()` de `hitos.ts` — borrado junto con
+este componente
 
 ---
 
@@ -229,7 +241,9 @@ Un cliente que se enfrió **sigue siendo cliente**.
 
 ### 4.3 hitos.ts (168 líneas)
 
-**Archivo**: `src/features/panel/hitos.ts`
+**Archivo**: `hitos.ts`, borrado por la reescritura del timeline (`0b3d17b`, 1-ago-2026); su test
+quedó archivado en `docs/adr/hitos.test.ts.archivado`. Lo que hoy hace este trabajo es
+`src/features/panel/timeline.ts` (`ensamblarTimeline`).
 
 **Tipos**: `Hito` = `{tipo:'compra', at, folio, estado, monto, moneda}` | `{tipo:'interes', at, curso}`
 
@@ -273,8 +287,8 @@ Un cliente que se enfrió **sigue siendo cliente**.
 | `src/features/sugerencias/DosRespuestas.tsx` | `<DosRespuestas … />` + `useSugerencias` | `PanelDerecho` (línea 147) |
 | `src/features/hechos/BloqueHechos.tsx` | `<BloqueHechos … />` + `useHechos` | `PanelDerecho` (línea 149) |
 | `src/features/whatsapp/puenteComposer.ts` | `ponerEnComposer({texto, telefono, pieza})` | `DosRespuestas`, `BloqueHechos` |
-| `src/features/canales/Avatar.tsx` | `<Avatar … />` | `BandaEstado` |
-| `src/features/canales/BadgeCanal.tsx` | `<BadgeCanal … />`, `nombreCanal()` | `BandaEstado` |
+| `src/components/Avatar.tsx` (venía de `features/canales/`) | `<Avatar … />` | `BandaEstado` |
+| `src/components/BadgeCanal.tsx` (venía de `features/canales/`) | `<BadgeCanal … />`, `nombreCanal()` | `BandaEstado` |
 | `src/features/plantillas/useEnvioSecuencia.ts` | `useEnvioSecuencia(conversacion)` | `DosRespuestas` |
 
 ---
@@ -336,12 +350,16 @@ por queryKey a otro.
 
 Estos archivos existen en el código pero **no se usan** desde el panel actual.
 
+⚠️ Eso era cierto al escribirlo (1-ago-2026). De los cinco, **tres los borró después la reescritura
+del timeline** (`0b3d17b`) y ya no están en el árbol: `AccionesContacto`, `PanelCurso` y
+`BloqueInteres`. `src/features/panel/pestanas.ts` y `src/features/notas/PanelNotas.tsx` sí siguen ahí.
+
 | Archivo | Qué hacía | Por qué se fue |
 |---|---|---|
-| `src/features/panel/AccionesContacto.tsx` (160 líneas) | Pie del panel: "Registrar venta" / "Marcar como interesado" | Dueño pidió quitarlo en el rediseño del 27-jul |
-| `src/features/panel/PanelCurso.tsx` (88 líneas) | Pestaña "Curso": catálogo de diplomas con SKU | Ídem |
+| el componente `AccionesContacto` (160 líneas), borrado por la reescritura del timeline | Pie del panel: "Registrar venta" / "Marcar como interesado" | Dueño pidió quitarlo en el rediseño del 27-jul |
+| el componente `PanelCurso` (88 líneas), borrado por la reescritura del timeline | Pestaña "Curso": catálogo de diplomas con SKU | Ídem |
 | `src/features/panel/pestanas.ts` (60 líneas) | Lógica de las 4 pestañas (Ficha · Enviar · Notas · Curso) | Ídem |
-| `src/features/panel/BloqueInteres.tsx` | Versión standalone de "Le interesa" con icono Target | Reemplazado por `<Intereses>` inline |
+| el componente `BloqueInteres`, borrado por la reescritura del timeline | Versión standalone de "Le interesa" con icono Target | Reemplazado por `<Intereses>` inline |
 | `src/features/notas/PanelNotas.tsx` (438 líneas) | Pestaña "Notas": bloc de notas por conversación | Se fue con las pestañas; sigue usándose en la libreta (tecla `n`) |
 
 ---
@@ -385,6 +403,6 @@ Muestra 5 estados lado a lado ("antes" vs "después"):
 |---|---|
 | `src/features/panel/estadoContacto.test.ts` | `estadoDelContacto()`: todas las ramas (cliente, nuevo, error, padrón, frío) |
 | `src/features/panel/identidad.test.ts` | `nombreDelContacto()`: precedencia, alias, vacíos |
-| `src/features/panel/hitos.test.ts` | `hitosDe()`, `aIso()`, `etiquetaDeFecha()`, `etiquetaDeMonto()` |
+| `hitos.test.ts`, borrado junto con `hitos.ts` por la reescritura del timeline (`0b3d17b`); la copia quedó en `docs/adr/hitos.test.ts.archivado`. Lo que cubre ese trabajo hoy es `src/features/panel/timeline.test.ts` (`ensamblarTimeline`) | `hitosDe()`, `aIso()`, `etiquetaDeFecha()`, `etiquetaDeMonto()` |
 | `src/features/panel/resumenInteres.test.ts` | `resumirIntereses()`: 0, 1, N, fechas |
 | `src/features/panel/pestanas.test.ts` | `pestanasDe()`, `pestanaInicial()` |

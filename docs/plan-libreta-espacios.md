@@ -3,8 +3,9 @@
 > **10-ago-2026.** Pedido del dueño: «se tiene que poder compartir entre usuarios, tener espacios de
 > trabajo compartidos y privados». Decisiones de forma tomadas por él el mismo día (§2).
 >
-> APIs verificadas contra el código instalado, no recordadas: `@blocknote/core@0.52.1`
-> (`types/src/yjs/extensions/index.d.ts`), `server/src/reparto/destino.ts`, `server/src/index.ts:182`,
+> APIs verificadas contra el código instalado, no recordadas: `@blocknote/core@0.52.1` —sus tipos de
+> Yjs (`yjs/extensions/index.d.ts`) son **del paquete npm, no de Hermes**: viven bajo
+> `node_modules/@blocknote/core/types/`—, `server/src/reparto/destino.ts`, `server/src/index.ts:182`,
 > nginx de VPS1 (`/etc/nginx/sites-enabled/*hermes*`).
 
 ---

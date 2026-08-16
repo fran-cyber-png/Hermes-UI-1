@@ -6,7 +6,8 @@
 - **Cierra**: la condición abierta de **ADR 0003** («Electron convive hasta paridad verificada,
   después se archiva») y el pendiente **#5 de `docs/estado.md`**
 - **Archiva**: `electron/main.cjs` · `electron/preload.cjs` · `electron/whatsapp-preload.cjs` ·
-  `src/features/whatsapp/PanelWhatsapp.tsx` · `cuentas.ts` · `whatsapp/tipos.ts`
+  `PanelWhatsapp.tsx` · `cuentas.ts` · `tipos.ts` — los tres últimos vivían en
+  `src/features/whatsapp/` y se borran acá
 
 ## 1 · Por qué ahora
 

@@ -279,9 +279,12 @@ function verificar(a) {
 
   if (R.docsSinRutasMuertas?.activa) {
     for (const [ruta, citada] of rutasCitadasEnDocs()) {
-      if (!existsSync(join(RAIZ, ruta))) {
-        fallas.push({ regla: 'docsSinRutasMuertas', que: `${ruta}  (citada en ${citada})`, detalle: [] })
-      }
+      // Un doc puede citar la ruta relativa al SERVER (`src/pruebas/base.ts` cuando el
+      // comando de al lado es `cd server && …`). Eso no es una ruta muerta: es la misma
+      // ruta escrita desde el otro directorio, y contarla como error entrena a ignorar
+      // la regla. Medido el 16-ago-2026: 10 de las 118 «muertas» eran esto.
+      if (existsSync(join(RAIZ, ruta)) || existsSync(join(RAIZ, 'server', ruta))) continue
+      fallas.push({ regla: 'docsSinRutasMuertas', que: `${ruta}  (citada en ${citada})`, detalle: [] })
     }
   }
 
@@ -296,7 +299,17 @@ function verificar(a) {
   return fallas
 }
 
-const RE_RUTA = /\b((?:server\/src|src-tauri\/src|src|scripts|deploy)\/[A-Za-z0-9_@./-]+\.(?:ts|tsx|rs|sql|mjs|sh))/g
+// ⚠️ **`tsx` VA ANTES QUE `ts` Y NO ES ESTILO.** La alternancia de una regex prueba en
+// orden y se queda con la PRIMERA que entra: con `(?:ts|tsx)`, `Avatar.tsx` matchea como
+// `Avatar.ts` y la `x` queda afuera. El efecto es que la regla reporta como «ruta muerta»
+// cada archivo `.tsx` que un doc cita bien — 60 de las 108 «muertas» del 16-ago-2026 eran
+// esto, y el defecto no se ve leyendo la lista: se ve abriendo el archivo y encontrándolo.
+// ⚠️ **Y el lookbehind tampoco es estilo.** Sin él, `src/` matchea DENTRO de una ruta de
+// dependencia: `node_modules/@blocknote/core/types/src/editor/BlockNoteEditor.d.ts` se
+// reportaba como la ruta muerta `src/editor/BlockNoteEditor.d.ts`, sobre un doc que la
+// tenía escrita perfecta. Fueron 3 el 16-ago-2026, y son el tercer falso positivo de esta
+// misma regla — el patrón se repite: **la regla reporta su propio bug antes que el del repo.**
+const RE_RUTA = /(?<![\w/@.-])((?:server\/src|src-tauri\/src|src|scripts|deploy)\/[A-Za-z0-9_@./-]+\.(?:tsx|ts|rs|sql|mjs|sh))\b/g
 
 let saltadas = 0
 

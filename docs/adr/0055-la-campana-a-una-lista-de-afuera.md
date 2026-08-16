@@ -4,8 +4,9 @@
 **Estado**: aceptado — script suelto, no toca el server ni el front (no necesita N4 ni N5)
 **Enmienda** el ADR 0015 §37 («no inicia conversaciones»): abre **una excepción nombrada**, para una
 campaña por plantilla aprobada y con autorización del dueño. No la deroga.
-**Se apoya en** la campaña por fechas del 4-ago (`scripts/campana.ts`, `campana/publico.ts`,
-`campana/vetoAlSalir.ts`): reusa el veto, la procedencia, la puerta de envío y el freno.
+**Se apoya en** la campaña por fechas del 4-ago (`server/src/scripts/campana.ts`,
+`campana/publico.ts`, `campana/vetoAlSalir.ts`): reusa el veto, la procedencia, la puerta de envío y
+el freno.
 
 ---
 
@@ -14,9 +15,10 @@ campaña por plantilla aprobada y con autorización del dueño. No la deroga.
 Vender las entradas que faltan del **XII Foro de Estado** (29-ago-2026, Hotel Westin Lima, aforo
 200) ofreciéndoselo al padrón de clientes de icarus, no sólo a quien escribió por WhatsApp.
 
-`scripts/campana.ts` sólo sabía armar el público con un `SELECT` sobre `interactions`: gente que le
-**escribió** a la línea entre dos fechas. Medido sobre los 1.000 prospectos filtrados del padrón,
-**963 nunca le habían escrito a Goberna por WhatsApp** — ninguno habría entrado por esa puerta.
+`server/src/scripts/campana.ts` sólo sabía armar el público con un `SELECT` sobre `interactions`:
+gente que le **escribió** a la línea entre dos fechas. Medido sobre los 1.000 prospectos filtrados
+del padrón, **963 nunca le habían escrito a Goberna por WhatsApp** — ninguno habría entrado por esa
+puerta.
 
 ## La decisión
 

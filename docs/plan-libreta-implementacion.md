@@ -2,9 +2,10 @@
 
 > **4-ago-2026.** Ejecuta el diagnóstico de `docs/plan-libreta-que-deberia-tener.md`.
 > Todas las APIs de abajo están **verificadas contra el código instalado**, no recordadas:
-> `@blocknote/core@0.52.1` (`types/src/editor/BlockNoteEditor.d.ts:43` y
-> `types/src/blocks/BlockNoteSchema.d.ts`), `server/src/routes/hechos.ts`,
-> `server/src/db/schema.ts:1233+`.
+> `@blocknote/core@0.52.1` —los dos `.d.ts` que se citan abajo, `BlockNoteEditor.d.ts:43` y
+> `BlockNoteSchema.d.ts`, son **tipos publicados de ese paquete npm, no archivos de Hermes**:
+> viven bajo `node_modules/@blocknote/core/types/`—,
+> `server/src/routes/hechos.ts`, `server/src/db/schema.ts:1233+`.
 
 ## Cómo se corta el trabajo
 
@@ -68,9 +69,9 @@ const { image, video, audio, file, ...bloquesQueSePuedenGuardar } = defaultBlock
 export const ESQUEMA_LIBRETA = BlockNoteSchema.create({ blockSpecs: bloquesQueSePuedenGuardar });
 ```
 
-`BlockNoteSchema.create({ blockSpecs })` verificado en
-`types/src/blocks/BlockNoteSchema.d.ts`; el editor lo recibe por la opción `schema`
-(`BlockNoteEditor.d.ts:170`).
+`BlockNoteSchema.create({ blockSpecs })` verificado en los tipos publicados del paquete
+`@blocknote/core` (`BlockNoteSchema.d.ts`); el editor lo recibe por la opción `schema`
+(`BlockNoteEditor.d.ts:170`, del mismo paquete).
 
 > **Es barato AHORA y caro después**: con 0 filas no hay ni un documento viejo que contenga esos
 > bloques. Cuando los haya, sacarlos del schema los rompe al abrir.
@@ -89,7 +90,8 @@ Verificado: la locale existe y viene completa. **Pero es español peninsular** �
 «Elegí una página»). Van pisadas a mano en un objeto `DICCIONARIO` propio: placeholders y las
 frases del slash menu que usen imperativo.
 
-`dictionary?: Dictionary & Record<string, any>` verificado en `BlockNoteEditor.d.ts:43`.
+`dictionary?: Dictionary & Record<string, any>` verificado en los tipos publicados de
+`@blocknote/core` (`BlockNoteEditor.d.ts:43`).
 
 ## 1.4 · «Deshacer» al archivar
 

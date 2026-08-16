@@ -62,7 +62,7 @@ server/src/webhook/whatsapp.ts:recibirWhatsapp()
 | Archivo | Rol |
 |---|---|
 | `server/src/webhook/whatsapp.ts` | Recibe el POST de Meta, guarda crudo, entrega al transporte, dispara el bot |
-| `server/src/bot/responder.ts` | Cliente de Bedrock: construye el prompt, llama a Claude, devuelve texto |
+| ~~`responder.ts`~~ | El spike lo tenía todo junto: cliente de Bedrock, prompt y llamada. **Se eliminó** (ADR 0033) y hoy son tres: `server/src/bot/clienteBedrock.ts` (`crearClienteBedrock`), `server/src/bot/prompt.ts` (`armarSystemPrompt`) y `server/src/bot/agente.ts` |
 | `server/src/bot/config.ts` | Configuración del bot: `BOT_LINEAS`, topes, modelo (NO usado en el spike) |
 | `server/src/whatsapp/transporteCloudApi.ts` | Envío y recepción por WhatsApp Cloud API |
 | `server/src/whatsapp/wiring.ts` | Monta los transportes (whatsmeow + cloud-api) al arrancar |
@@ -73,8 +73,10 @@ server/src/webhook/whatsapp.ts:recibirWhatsapp()
 
 ## 3. El prompt del bot (Kathy Alva)
 
-El system prompt está en `server/src/bot/responder.ts:SYSTEM_PROMPT`. Fue construido sobre la entrevista
-de 19 secciones con Kathy Alva (doc `Clasificacion-Respuestas-Automaticas-Entrenamiento.docx`).
+El system prompt del spike era una constante `SYSTEM_PROMPT` dentro de aquel `responder.ts`. Hoy se
+arma en **`server/src/bot/prompt.ts`** (`armarSystemPrompt`), que ya no es un texto fijo. Fue
+construido sobre la entrevista de 19 secciones con Kathy Alva (doc
+`Clasificacion-Respuestas-Automaticas-Entrenamiento.docx`).
 
 **Reglas duras:**
 - NUNCA decir que es bot, IA o automático

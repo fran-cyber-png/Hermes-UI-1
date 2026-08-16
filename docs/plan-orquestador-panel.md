@@ -1,5 +1,11 @@
 # Orquestador — Panel funcional completo
 
+> ⚠️ **Al 16-ago-2026:** el panel se corrigió por `docs/plan-correccion-panel-timeline.md` y los
+> nombres de acá quedaron viejos. Lo que este plan llama `BarraMetaContacto` se construyó como
+> `src/features/panel/BloqueMeta.tsx` (definition list, sin card). La **Fase 3 no se hizo**: no
+> existe ninguna hoja de sugerencias, y `src/features/sugerencias/DosRespuestas.tsx` y
+> `src/features/hechos/BloqueHechos.tsx` siguen sin un solo consumidor.
+
 > **Rol:** este documento es el prompt del orquestador. No toca código directamente.
 > Delega cada tarea a un subagente con el contexto preciso, verifica resultados,
 > y coordina las dependencias entre fases.
@@ -22,7 +28,7 @@ ella.
 |---|---|
 | `EncabezadoTimeline` — avatar, nombre, teléfono, estado, Meta bar, chips | ✅ Renderiza con datos reales |
 | `EventoLinea` / `LineaPendiente` — timeline de eventos | ✅ Renderiza con datos reales |
-| `BarraMetaContacto` — barra horizontal icono+dato | ✅ Renderiza, carga skeleton |
+| `BarraMetaContacto` — barra horizontal icono+dato (hoy `src/features/panel/BloqueMeta.tsx`) | ✅ Renderiza, carga skeleton |
 | `estadoDelContacto` / `nombreDelContacto` / `ensamblarTimeline` (puros) | ✅ 45+ tests pasan |
 
 ### Lo que NO funciona (6 issues críticos)
@@ -206,7 +212,8 @@ registre un interés derivado de la campaña del lead.
 ARCHIVOS CLAVE:
 - src/features/panel/PanelDerecho.tsx (línea 131: onAccion actual)
 - src/features/gestion/Intereses.tsx (hook useIntereses + POST /api/gestiones/intereses/derivado)
-- src/features/cursos/precedencia.ts (determina el curso desde la campaña)
+- server/src/cursos/precedencia.ts (determina el curso desde la campaña; la precedencia
+  vive en el SERVER, nunca hubo copia en src/features/cursos/)
 
 LO QUE HAY QUE HACER:
 
@@ -430,7 +437,7 @@ conectado. Conectar los que tienen sentido hoy.
 ARCHIVOS CLAVE:
 - src/features/panel/PanelDerecho.tsx
 - src/features/panel/EncabezadoTimeline.tsx
-- src/features/panel/BarraMetaContacto.tsx
+- src/features/panel/BloqueMeta.tsx (lo que este plan llama BarraMetaContacto)
 
 LO QUE HAY QUE HACER:
 
@@ -478,7 +485,7 @@ VERIFICACIÓN:
 **Archivos a tocar:**
 - `src/features/panel/PanelDerecho.tsx` — disparar useSugerencias
 - `src/App.tsx` — montar la hoja (mismo patrón que Ivi)
-- Nuevo archivo: `src/features/panel/HojaSugerencias.tsx` — wrapper
+- Nuevo archivo: una `HojaSugerencias` que este plan proponía **y no se construyó** — wrapper
 
 **Agente:** `general`
 

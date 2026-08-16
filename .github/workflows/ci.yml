@@ -96,6 +96,19 @@ jobs:
       # la cadena vacía, que es indistinguible de «no hay migraciones nuevas». La guardia
       # salía verde sin haber abierto un solo archivo. Ahora un fallo de git es un fallo
       # del paso; «no hay migraciones» solo lo dice un `git diff` que corrió bien.
+      # El mapa (`docs/mapa.md`) se DERIVA del árbol, y esta guardia hace dos cosas:
+      # falla si hay violaciones de `arquitectura.json`, y falla si el mapa commiteado
+      # no es idéntico al que se generaría hoy.
+      #
+      # Lo segundo es lo que impide repetir la historia de `docs/arquitectura.md`, que se
+      # escribió a mano el 7-ago-2026 y nueve días después describía un repo 8 veces más
+      # chico — sin que nada se pusiera rojo. Un mapa que se escribe envejece en silencio;
+      # este no puede, porque mover un archivo sin regenerar pone el CI en rojo.
+      #
+      # Va temprano y no instala nada: es node puro, sin dependencias.
+      - name: El mapa está al día y la arquitectura no tiene violaciones
+        run: npm run mapa:verificar
+
       - name: Las migraciones nuevas son expand-only
         run: |
           set -uo pipefail

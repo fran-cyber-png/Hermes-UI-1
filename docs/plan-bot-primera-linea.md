@@ -1,5 +1,12 @@
 # El bot de primera línea — plan de ejecución (29-jul → lun 3-ago)
 
+> ⚠️ **Al 16-ago-2026:** el bot se construyó y vive en `server/src/bot/` (56 archivos). T1–T6
+> aterrizaron con estos mismos nombres (`prompt.ts`, `contexto.ts`, `decision.ts`, `tools.ts`,
+> `guardrails.ts`, `agente.ts`, `despachador.ts`), pero el pipeline se partió: hoy `despachador.ts`
+> es el loop y el trabajo pasó a `orquestador.ts` + `claim.ts` + `ejecutar.ts`.
+> **T7 salió con otro nombre** — el `followup` es `reenganche.ts` — y **T8 (simulacro y evals con
+> juez) no se construyó**; lo más cerca que hay es `npm run bot:verificar`.
+
 **Decisión**: ADR 0028. **Objetivo**: un bot atiende a los leads que escriben por WhatsApp
 —responde, califica, junta interés, hace follow-up a los enfriados— para que las vendedoras se
 concentren en los leads más interesados. Híbrido: texto libre del LLM para conversar, **piezas del
@@ -37,7 +44,8 @@ un implementador lee su ticket, no el diff del plan.
    («se puede pagar en 2 cuotas» es un hecho aprobado) y los vectores de evasión de arriba **sí**.
 3. **El glob de tests NO es recursivo.** `npm test` corre `tsx --test src/**/*.test.ts` bajo `sh`,
    que sin globstar trata `**` como un `*`: entra **exactamente `src/<dir>/<archivo>.test.ts`**. Un
-   test en `src/bot/evals/escenarios.test.ts` (tres niveles) **no lo corre nadie y CI sale verde**.
+   test a tres niveles —el `evals/escenarios.test.ts` que T8 propone acá abajo— **no lo corre nadie
+   y CI sale verde**.
    Todo test del bot vive en `server/src/bot/*.test.ts` y en ningún otro lado.
 4. **`drizzle.config.ts` usa un glob (`./src/db/!(client).ts`), no una lista.** `db/bot.ts` entra
    solo: no hay índice que tocar. (La enumeración existió y se cambió a glob justo porque
@@ -232,8 +240,8 @@ reimplementa), `server/src/autorespuesta/rechazo.ts` (huboRechazo/esDespedida �
 **Leer primero**: `server/src/catalogo/` completo (repositorio, armar, código — qué es una Pieza,
 estados `vigente|borrador|retirada`), `server/src/hechos/`, `server/src/sugerencias/estado.ts`
 (momentos de venta), `CONTEXT.md` si existe y `docs/concepto.md` (el negocio),
-`scratchpad Forja src/system-prompt.ts` no está disponible al subagente: la estructura se
-especifica acá abajo, no hace falta el original.
+el `system-prompt.ts` del scratchpad de **Forja** (otro proyecto, fuera de este repo) no está
+disponible al subagente: la estructura se especifica acá abajo, no hace falta el original.
 
 **Hacer**: `server/src/bot/prompt.ts`, puro y determinista:
 1. `armarSystemPrompt(entrada: { contextoNegocio: string; hechos: Hecho[]; piezas: ResumenPieza[]; lecciones: string[] }): string`
@@ -409,9 +417,12 @@ conversación), `docs/adr/0016` (marcado de burbuja).
 - `bot/decision.test.ts` — un caso por motivo de salto + el caso feliz + el orden (el test
   construye hechos con DOS motivos válidos y verifica que gana el primero del orden fijado).
 - `bot/chunker.test.ts`.
-- `bot/despachador.test.db.ts` — con `baseDePrueba(t)`: (a) dos claims concurrentes sobre la
-  misma fila → uno solo gana; (b) entrante nuevo durante el proceso → `cancelada` y re-encolado;
-  (c) sombra escribe `bot_respuestas` y NO llama al transporte (transporte falso espía).
+- el `bot/despachador.test.db.ts` que este ticket pedía se escribió repartido, siguiendo cómo
+  quedó partido el pipeline: `server/src/bot/claim.test.ts` (el claim, puro) y
+  `server/src/bot/orquestador.deps.test.db.ts` (con `baseDePrueba(t)`) — (a) dos claims
+  concurrentes sobre la misma fila → uno solo gana; (b) entrante nuevo durante el proceso →
+  `cancelada` y re-encolado; (c) sombra escribe `bot_respuestas` y NO llama al transporte
+  (transporte falso espía).
 
 **Prohibido**: `setInterval` sin guarda de arranque (leer la guarda de arranque que ya existe en
 el server — memoria del 27-jul: una guarda evitó una caída); mandar sin re-chequeo (b); tocar el
@@ -449,7 +460,8 @@ test puro de que el JOIN no altera el orden (comparar orden con y sin calificaci
 reimplementa), `autorespuesta/rechazo.ts`, el patrón de claims de Forja descrito acá (claim ANTES
 de enviar; si falla el envío, el claim se queda).
 
-**Hacer**: `server/src/bot/followup.ts`:
+**Hacer**: lo que este ticket llama `followup.ts` se construyó como `server/src/bot/reenganche.ts`
+(el disparo por hora vive aparte, en `server/src/bot/correrReenganche.ts`):
 1. `elegirCandidatos(db, ahora, limite)` — SQL de prefiltro + veredicto puro (patrón señales):
    cotizada + sin respuesta del lead + ≥ `SENALES_DIAS_ENFRIAMIENTO` días + el último mensaje del
    hilo es NUESTRO + sin pausa + sin rechazo/despedida (`rechazo.ts` sobre los últimos mensajes) +
@@ -460,12 +472,15 @@ de enviar; si falla el envío, el claim se queda).
    (0 filas → saltar); texto por el agente con un prompt de follow-up acotado («retomá con
    naturalidad lo último, máximo 2 líneas, sin precios, preguntá si quedó alguna duda») +
    `validarSalida`; enviar por el mismo camino de T5 (chunker corto, EnvioControlado, via 'bot').
-3. `cd server && npm run bot:followup:simulacro` — imprime el plan SIN mandar, y **cada renglón
+3. `cd server && npm run bot:followup:simulacro` — salió como **`npm run reenganche:simulacro`**
+   (`server/src/scripts/reengancheSimulacro.ts`): imprime el plan SIN mandar, y **cada renglón
    empieza por la hora local en que escribió la persona por última vez y cuántos días lleva
    fría** (lección #166: el dry-run muestra las variables de la decisión, no solo el resultado).
    Los descartados, de a cinco por motivo, con lo mismo.
 
-**Tests**: `bot/followup.test.db.ts` — siembra con `sembrar.ts`: (a) la cotizada-fría entra;
+**Tests**: lo que acá se llama `bot/followup.test.db.ts` se escribió como
+`server/src/bot/reenganche.test.db.ts` (más `server/src/bot/reenganche.test.ts` para lo puro) —
+siembra con `sembrar.ts`: (a) la cotizada-fría entra;
 (b) la que respondió no; (c) la que se despidió no; (d) claim doble → un solo envío; (e) cap
 diario corta. Puro: la ventana horaria con reloj inyectado.
 **Prohibido**: mandar dos veces (el claim va ANTES del envío); follow-up a quien nunca escribió;
@@ -475,14 +490,22 @@ reimplementar el criterio de enfriamiento.
 
 ## T8 — Simulacro y evals con juez
 
+> ⚠️ **Al 16-ago-2026 este ticket NO se construyó**: no hay `bot:simulacro`, ni `bot:evaluar`, ni
+> escenarios, ni juez. Lo único que existe en esa dirección es **`npm run bot:verificar`**
+> (`server/src/scripts/botVerificar.ts`), read-only, que su propio encabezado se describe como «el
+> reemplazo mínimo del simulacro que el bot todavía no tiene»: contesta qué hechos ve el bot, qué
+> piezas son enviables y si los archivos de esas piezas están en disco. Nada más de lo de acá abajo
+> tiene código detrás.
+
 **Depende de**: T4, T5. **Modelo sugerido**: Opus.
 
 **Leer primero**: `auto:simulacro` de la autorespuesta (el precedente de la casa) y la memoria
 «verificar las variables de la decisión».
 
 **Hacer**:
-1. `cd server && npm run bot:simulacro -- [--clave <k> | --ultimas <n> | --demo]`
-   (`server/src/scripts/botSimulacro.ts`): re-juega conversaciones reales por el agente
+1. `cd server && npm run bot:simulacro -- [--clave <k> | --ultimas <n> | --demo]` — un
+   `botSimulacro` que este plan proponía y **no se construyó**: re-jugaría conversaciones reales
+   por el agente
    **sin mandar nada y sin escribir** (read-only estricto): imprime por conversación el hilo
    entrante, la decisión determinista **con sus variables** (modo, pausa, turnosHoy, repetido…),
    el texto que daría, las acciones, tokens y costo estimado. `--demo` corre sin base y siembra
@@ -496,20 +519,24 @@ reimplementar el criterio de enfriamiento.
       `sin_respuesta_en_catalogo`.
    7. «quiero inscribirme ya» → calificar caliente + escalar `por_cerrar`.
    8. mismo mensaje tres veces → saltar por spam.
-2. `server/src/bot/evals/escenarios.json` + `evals/escenarios.ts` (accessor tipado, patrón
-   Forja): ~20 escenarios `{ id, mensajes, toolEsperada, rubrica }` — los 8 de arriba más
+2. un `evals/escenarios.json` + su accessor tipado `evals/escenarios.ts` (patrón Forja) que este
+   plan proponía y **no se construyeron** — no hay directorio `evals/` bajo el bot: ~20 escenarios
+   `{ id, mensajes, toolEsperada, rubrica }` — los 8 de arriba más
    variantes (precio preguntado de 5 formas, bot preguntado de 4 formas, interés por 3 cursos
    distintos, un lead frustrado, un «gracias» a secas que NO es despedida — regla de
    `rechazo.ts`).
-3. `npm run bot:evaluar` (`scripts/botEvaluar.ts`): corre cada escenario contra el agente REAL
+3. `npm run bot:evaluar` — un `botEvaluar` que este plan proponía y **no se construyó**: correría
+   cada escenario contra el agente REAL
    (necesita `ANTHROPIC_API_KEY`) y un juez (`claude-opus-5`, una llamada por escenario:
    «¿la respuesta cumple esta rúbrica? SI/NO + por qué») imprime el tablero.
    **Umbral para prender automático: 100% en los escenarios marcados `critico: true`** (precio,
    identidad, humano, no-inventar) **y ≥80% en el resto.** El tablero dice explícito si el umbral
    se cumple.
 
-**Tests**: `bot/evals/escenarios.test.ts` — el JSON está bien formado, ids únicos, todo escenario
-crítico tiene rúbrica, los 8 canónicos existen.
+**Tests**: un `evals/escenarios.test.ts` que este plan proponía y no se construyó — el JSON está
+bien formado, ids únicos, todo escenario crítico tiene rúbrica, los 8 canónicos existen. ⚠️ Y si
+alguna vez se escribe, no puede vivir a tres niveles: por la corrección 3 de arriba, el glob de
+`npm test` no lo correría y CI saldría verde igual.
 **Prohibido**: que el simulacro escriba o mande; que `--demo` toque la base.
 
 ---

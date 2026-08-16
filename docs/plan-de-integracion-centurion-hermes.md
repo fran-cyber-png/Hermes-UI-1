@@ -48,8 +48,8 @@ reverificar**: los **16 cruces** (dependen de la partición que define el propio
 **Centurión** (medido contra `goberna_web_dev`, read-only): **69 candidaturas** · 18 subservicios ·
 272 selecciones (178 con `seleccionado = true`) · schemas con tablas: `territorio` 14, `formularios`
 10, `agentes_campo` 7, `path_to_victory` 4. 🔴 **`captacion` no existe ni como schema** — no está en
-`pg_namespace`; no es que esté vacío, es que su migración
-(`src/modules/captacion/migrations/2026_07_03_captacion_schema.sql`) nunca se aplicó.
+`pg_namespace`; no es que esté vacío, es que su migración —en el repo **Centurión**,
+`modules/captacion/migrations/2026_07_03_captacion_schema.sql`— nunca se aplicó.
 `territorio.contacto` tiene **0 filas** con **35 brigadistas** (`territorio.brigadista`, 38 vínculos
 a candidatura). El único módulo con uso real es **`formularios`: 696 respuestas**.
 
@@ -75,7 +75,7 @@ al login/UI. Un CRM de conversaciones cumple **tres de cuatro**.
    ┌──────────────────────────────────────────────────────────────────────────▼──┐
    │  CENTURIÓN (monolito modular, TanStack Start + Kysely + Bun→node)            │
    │   identidad (cookie cn_token, aud='centurion') · entitlement · launcher /app │
-   │   └── módulo UI  src/modules/mensajeria/   ← la mesa: cola · hilo · ficha    │
+   │   └── módulo UI  modules/mensajeria/       ← la mesa: cola · hilo · ficha    │
    └───────────────┬─────────────────────────────────────────────────────────────┘
                    │  service token JWT HS256, aud='svc-mensajeria', lleva id_candidatura
    ┌───────────────▼─────────────────────────────────────────────────────────────┐
@@ -115,7 +115,7 @@ unifican los stacks: se unifica **el contrato**.
 
 | Quién llama | Cómo se autentica | Precedente vivo |
 |---|---|---|
-| **El módulo UI** (operador con sesión) | cookie **`cn_token`** (HS256, `aud='centurion'`, `jti` revocable en `auth.sesion`), resuelta server-side con **`handleCurrentCandidato`** (`src/lib/candidato.handlers.ts:22`) | todos los módulos |
+| **El módulo UI** (operador con sesión) | cookie **`cn_token`** (HS256, `aud='centurion'`, `jti` revocable en `auth.sesion`), resuelta server-side con **`handleCurrentCandidato`** (en el repo **Centurión**, `lib/candidato.handlers.ts:22`) | todos los módulos |
 | **El satélite ↔ el módulo** | **service token JWT** firmado con el **mismo `JWT_SECRET`** del core y **`aud='svc-mensajeria'`** | `territorio/jwt.ts`: `ACCESS_AUDIENCE = 'svc-territorio'` |
 | **Meta** (webhook, sin sesión) | **firma HMAC** del payload + `hub.verify_token` en el GET de verificación | Hermes `webhook/firma.ts` |
 
@@ -173,7 +173,9 @@ cada una.
 ### 3.5 El manifest y el alta
 
 ```ts
-// src/modules/mensajeria/manifest.ts — misma forma que captacion y path-to-victory
+// el `manifest.ts` del módulo `mensajeria` que este plan propone: iría en el repo
+// Centurión, bajo `modules/mensajeria/`, con la misma forma que captacion y
+// path-to-victory. ⚠️ Al 16-ago-2026 ese módulo NO existe — no se construyó.
 export const manifest = {
   codigo: 'mensajeria',
   nombre: '<lo que decide D6>',   // es el rótulo que el candidato LEE en su launcher
@@ -231,16 +233,19 @@ varios webhooks con el mismo `id`, y sin meter el evento en la clave de idempote
 
 ### 3.7 El módulo UI
 
-Espeja `path-to-victory/` (la plantilla viva del repo):
+Espeja `path-to-victory/` (la plantilla viva del repo). ⚠️ **Este árbol es la PROPUESTA y vive en el
+repo Centurión, no en Hermes**; al 16-ago-2026 todavía no existe ninguna de estas piezas — `modules/`
+de Centurión tiene `captacion`, `territorio`, `formularios`, `path-to-victory`, `agentes-campo`,
+`estudio-realidad` y `mapeo-actores`, y ningún `mensajeria`.
 
 ```
-src/modules/mensajeria/
+modules/mensajeria/                      ← en el repo Centurión (PROPUESTA)
 ├── manifest.ts · domain.ts (PURO) · types.ts (client-safe)
 ├── repo.ts                  SERVER-ONLY: pool, schema calificado
 ├── mensajeria.handlers.ts   SERVER-ONLY: sesión + entitlement + llamada al satélite
 ├── mensajeria.fn.ts         createServerFn (dynamic import de handlers)
 ├── queries/ · components/ · migrations/ · README.md
-└── src/routes/_authed/mensajeria.tsx   ← la página + gate en el loader
+└── routes/_authed/mensajeria.tsx   ← la página + gate en el loader
 ```
 
 ⚠️ **Los tres gotchas de Centurión que rompen el build o la hidratación**, y no son estilo:
@@ -472,7 +477,8 @@ los conteos de tablas por schema, las 0 filas de `territorio.contacto` con 35 br
 respuestas de `formularios`, la fila 12 de `fase_3.subservicios` con su precio y sus 9 activas, y el
 reloj (ERM2026 = **4-oct-2026**, 67 candidaturas; las otras 2 son EG2026, que ya votó el 12-abr).
 También confirmó en el código: `MICROSERVICE-CONTRACT.md` §2/§3/§7, `handleCurrentCandidato`
-(`candidato.handlers.ts:22`), `ACCESS_AUDIENCE = 'svc-territorio'`, `src/routes/w.$codigo.ts`, el
+(`candidato.handlers.ts:22`), `ACCESS_AUDIENCE = 'svc-territorio'` y `routes/w.$codigo.ts` —los tres
+en el repo **Centurión**—, el
 `--exclude 'uploads/'` del deploy, `whatsapp/transporteCloudApi.ts` cableado como spike en
 `whatsapp/wiring.ts:75-86`, el `CLAUDE.md` de Hermes que en la línea 88 todavía dice que ese
 transporte no existe, `sugerencias/estado.ts` con `curso`/`cotizada`/`precio`, los ADR 0017 · 0037 ·

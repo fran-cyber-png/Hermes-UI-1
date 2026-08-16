@@ -732,7 +732,7 @@ Sin estos, cada arreglo de arriba dura hasta el próximo sprint.
 
 | qué protege | dónde | por qué |
 |---|---|---|
-| 🔴 **el motor no importa del adaptador** | `server/src/kernel/dependencia.test.ts` | **No existe, y por eso pasó**: en dos días el alcance transitivo del motor hacia el adaptador subió de **9 de 18 módulos a 12 de 18** — `reparto`, `espacios` y `notas`, los tres marcados 🟢 «se lleva», se contaminaron por **un** import (`reparto/asignar.ts → routing/repositorio.ts → cursos/alias.ts`), con CI verde. Nace con la allowlist en **18** (no 16) y contando **cierre transitivo**, no pares directos. **Congela, no arregla** |
+| 🔴 **el motor no importa del adaptador** | un test de dependencia en un `kernel/` del server, que este plan propone y **al 16-ago-2026 no se construyó** (tampoco existe el directorio) | **No existe, y por eso pasó**: en dos días el alcance transitivo del motor hacia el adaptador subió de **9 de 18 módulos a 12 de 18** — `reparto`, `espacios` y `notas`, los tres marcados 🟢 «se lleva», se contaminaron por **un** import (`reparto/asignar.ts → routing/repositorio.ts → cursos/alias.ts`), con CI verde. Nace con la allowlist en **18** (no 16) y contando **cierre transitivo**, no pares directos. **Congela, no arregla** |
 | 🔴 **el estado del bot no toca el embudo** | test que falla si `cola/` importa `bot/estados.ts` | §3.1: la máquina de estados tiene nombres perfectos, está poblada, y avanza cuando hablamos nosotros |
 | **el prompt que se manda ≡ el perfil de la línea** | reescribir `bot/perfiles.test.ts` para que arme el prompt **por el pipeline real** | Hoy está verde con el defecto vivo (§1.2.3) |
 | **la cita es subcadena literal del mensaje** | `perfil/guardas.test.ts` | El guardarraíl del extractor |

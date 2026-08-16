@@ -6,7 +6,7 @@
 
 ## Contexto
 
-`src/features/vistas/VistaTablero.tsx` fue **EL TABLERO** — «los números honestos de la
+El `VistaTablero.tsx` que vivía en `src/features/vistas/` fue **EL TABLERO** — «los números honestos de la
 operación, en lenguaje humano»: la cifra de gente esperando, el estado de captura por
 canal (WhatsApp / Meta) contra `useFrescura()` y `useSesionWa()`, la tabla por canal
 (interacciones · piden info · ventana abierta) y la declaración explícita de los huecos
@@ -31,8 +31,8 @@ esa terna. El Tablero quedó fuera. Este ADR lo cubre.
 
 ## Decisión
 
-**Borrar** `src/features/vistas/VistaTablero.tsx` (regla dura #3: el predecesor se archiva
-al llegar a paridad, con este ADR como acta). La historia queda en git; no se mueve a
+**Borrar** el componente `VistaTablero`, que este ADR archiva (regla dura #3: el predecesor se
+archiva al llegar a paridad, con este ADR como acta). La historia queda en git; no se mueve a
 ninguna carpeta `attic/`.
 
 No hay migración pendiente: el Dashboard ya sirve todo lo que el Tablero mostraba, con

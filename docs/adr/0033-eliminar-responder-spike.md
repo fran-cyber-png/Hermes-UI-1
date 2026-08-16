@@ -2,13 +2,14 @@
 
 **Fecha**: 30-jul-2026  
 **Estado**: aceptado  
-**Reemplaza**: código spike en `server/src/bot/responder.ts`
+**Reemplaza**: el código spike `responder.ts` del bot, que este ADR borra
 
 ## Contexto
 
-El archivo `server/src/bot/responder.ts` fue escrito como spike para probar la calidad
-de respuestas automáticas usando el SDK nativo de Anthropic Bedrock, antes de que
-existiera el pipeline completo del bot (agente, despachador, decision, guardrails, tools).
+El archivo `responder.ts` del bot —vivía en `server/src/bot/`, y este ADR lo borra, así que hoy
+no existe— fue escrito como spike para probar la calidad de respuestas automáticas usando el SDK
+nativo de Anthropic Bedrock, antes de que existiera el pipeline completo del bot (agente,
+despachador, decision, guardrails, tools).
 
 ## Decisión
 

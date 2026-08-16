@@ -38,7 +38,7 @@ decidir en TypeScript costaría el escaneo entero en cada apertura del panel. Lo
 que se separen es **`dashboard/curso.paridad.test.db.ts`**, que corre las dos sobre los mismos
 datos sembrados y falla si difieren — el mismo mecanismo del ADR 0009 para la urgencia.
 
-**Lo que este ADR NO hace**: unificar la copia del front (`src/features/canales/curso.ts`).
+**Lo que este ADR NO hace**: unificar la copia del front (`src/dominio/curso.ts`).
 Hoy coincide, y hacerla compartir código con el server necesita un paquete común que no
 existe. Queda escrito acá para que se sepa que es la tercera copia viva.
 

@@ -1,5 +1,10 @@
 # Lead Orchestrator — Plan de evolución definitivo
 
+> ⚠️ **Al 16-ago-2026:** el bot se construyó —32 archivos en `server/src/bot/`— pero de la Fase 3 en
+> adelante con otros nombres y otro alcance. Los pasos 9 (tools por estado), 13 (scoring) y 16
+> (auditar) del pipeline siguen siendo **stubs** en `server/src/bot/orquestador.ts`, y no hay juez
+> automático. Cada archivo de este plan que no existe queda anotado abajo con quién hace hoy su trabajo.
+
 > **Fecha**: 30-jul-2026 · **Estado**: aprobado por arquitectura · **Versión**: 1.0
 > **Sintetiza**: 4 subagentes de análisis (patrones, frameworks, arquitectura, roadmap).
 > **Orquestador**: Claude Code coordinando 4 subagentes paralelos.
@@ -122,7 +127,7 @@ El LLM decide si un lead es `caliente` sin acceso a datos objetivos.
 |---|---|---|---|
 | **LangGraph** | StateGraph con checkpoint en Postgres | State machine en `bot/estados.ts` | Media |
 | **OpenAI Agents** | Handoffs tipados + guardrails | Escalada como handoff explícito | Baja |
-| **Mastra** | Working memory + evals automáticos | `bot/memoria.ts` + `bot/evaluacion.ts` | Alta |
+| **Mastra** | Working memory + evals automáticos | `bot/memoria.ts` + un `evaluacion` que no se construyó | Alta |
 | **Chatwoot** | Bot como agente más en inbox | Ya existe — el bot participa en hilos | Baja |
 | **Rasa** | NLU pipeline + slots | Clasificación de intención + campos del contexto | Media |
 | **Pydantic AI** | Output tipado + DI + reintento | Tools con resultado estructurado + retry | Media |
@@ -183,25 +188,25 @@ El LLM decide si un lead es `caliente` sin acceso a datos objetivos.
 | **AMPLIAR** | `server/src/bot/contexto.ts` | Fase 2 |
 | **CREAR** | `server/src/bot/memoria.ts` | Fase 2 |
 | **CREAR** | `server/src/bot/recuperador.ts` | Fase 3 |
-| **CREAR** | `server/src/bot/planner.ts` | Fase 3 |
-| **CREAR** | `server/src/bot/precondiciones.ts` | Fase 3 |
-| **CREAR** | `server/src/bot/scoring.ts` | Fase 4 |
-| **CREAR** | `server/src/bot/handoff.ts` | Fase 4 |
-| **CREAR** | `server/src/bot/observabilidad.ts` | Fase 5 |
-| **CREAR** | `server/src/bot/metricas.ts` | Fase 5 |
-| **CREAR** | `server/src/bot/evaluacion.ts` | Fase 6 |
-| **CREAR** | `server/src/bot/procesarMedia.ts` | Fase 6 |
-| **CREAR** | `server/src/bot/auditoria.ts` | Fase 5 |
+| **CREAR** | un `planner` de tools por fase — no se construyó: el paso 9 del pipeline sigue siendo un stub | Fase 3 |
+| **CREAR** | las `precondiciones` no quedaron en un módulo aparte: viven en `server/src/bot/ejecutar.ts` y `server/src/bot/piezaAMandar.ts` | Fase 3 |
+| **CREAR** | un `scoring` determinista — no se construyó: el paso 13 sigue siendo un stub | Fase 4 |
+| **CREAR** | lo que este plan llamaba `handoff.ts` se construyó como `server/src/bot/ejecutar.ts` (la escalada) + `server/src/cola/botSql.ts` (verla en la cola) | Fase 4 |
+| **CREAR** | lo que este plan llamaba `observabilidad.ts` se construyó como `server/src/bot/traza.ts` | Fase 5 |
+| **CREAR** | un `metricas` — no se construyó; los tokens de cada turno quedan en `bot_respuestas` | Fase 5 |
+| **CREAR** | un `evaluacion` (juez automático) — no se construyó; la evaluación se hace por Replay, con una persona, en `server/src/corridas/correrCorrida.ts` | Fase 6 |
+| **CREAR** | un `procesarMedia` — no se construyó; el adjunto se acusa con texto fijo en `server/src/bot/ilegible.ts` | Fase 6 |
+| **CREAR** | un `auditoria` — no se construyó: el paso 16 sigue siendo un stub y no hay tabla `bot_trazas` | Fase 5 |
 | **CREAR** | `server/src/routes/bot.ts` | Fase 5 |
 | **SIMPLIFICAR** | `server/src/bot/agente.ts` | Fase 1-3 |
 | **MODIFICAR** | `server/src/bot/tools.ts` | Fase 2-4 |
 | **MODIFICAR** | `server/src/bot/despachador.ts` | Fase 1 |
 | **MODIFICAR** | `server/src/bot/prompt.ts` | Fase 1-2 |
-| **ELIMINAR** | `server/src/bot/responder.ts` | Fase 0 |
+| **ELIMINAR** | el spike `responder.ts`, que este plan elimina — ya no existe en el árbol | Fase 0 |
 
 ### Principios de diseño
 
-1. **Deterministic First**: `decision.ts`, `estados.ts`, `scoring.ts`, `guardrails.ts`, `recuperador.ts`, `guardrailsEntrada.ts` son puros. Sin DB, sin red. Testeables en milisegundos.
+1. **Deterministic First**: `decision.ts`, `estados.ts`, el `scoring` propuesto, `guardrails.ts`, `recuperador.ts`, `guardrailsEntrada.ts` son puros. Sin DB, sin red. Testeables en milisegundos.
 2. **El LLM escribe, no decide**: scoring, handoff, estado y disponibilidad de tools son deterministas. El LLM elige qué tool llamar y genera el texto.
 3. **Estado explícito**: `bot_estado_conversacion` persiste la fase. Se puede preguntar «¿cuántas conversaciones están en `cotizando`?» sin parsear prompts.
 4. **Separación**: cada paso del pipeline es una función con una responsabilidad. El orquestador las compone.
@@ -261,8 +266,15 @@ El LLM decide si un lead es `caliente` sin acceso a datos objetivos.
 **Objetivo**: cada tool solo está disponible en la fase correcta.
 
 **Componentes nuevos**:
-- `bot/planner.ts` — `toolsParaFase(fase) → Set<string>`
-- `bot/precondiciones.ts` — valida acciones antes de ejecutar (no duplicar interés, no rebajar calificación, no escalar dos veces)
+- un `planner` con `toolsParaFase(fase) → Set<string>` que este plan proponía y **no se construyó**:
+  el paso 9 del pipeline cierra `stub_todas` en `server/src/bot/orquestador.ts` y las cinco tools se
+  ofrecen siempre. Lo que sí varía por turno son las familias válidas y las piezas ya enviadas, que
+  entran como parámetros de `crearTools` en `server/src/bot/tools.ts`
+- las `precondiciones` que este plan pedía —no duplicar interés, no rebajar calificación, no escalar
+  dos veces— **no quedaron en un módulo aparte**: viven donde se ejecuta cada acción. Las tres están
+  en `server/src/bot/ejecutar.ts` (el `unique (clave, curso)` de `intereses`; que solo `por_cerrar`
+  pise la temperatura previa; el `onConflictDoUpdate` de la escalada), y «no repetir una pieza ya
+  enviada» en `server/src/bot/piezaAMandar.ts`
 - `bot/recuperador.ts` — filtra piezas y hechos por relevancia para este turno
 
 **Sin migración**.
@@ -274,8 +286,14 @@ El LLM decide si un lead es `caliente` sin acceso a datos objetivos.
 **Objetivo**: scoring determinista de leads + handoff automático.
 
 **Componentes nuevos**:
-- `bot/scoring.ts` — 5 dimensiones con pesos: engagement (20%), intención (35%), señales (25%), urgencia (10%), fit (10%)
-- `bot/handoff.ts` — score ≥ 80 → handoff inmediato. 60-79 → sugerencia. <60 → sigue el bot
+- un `scoring` de 5 dimensiones con pesos: engagement (20%), intención (35%), señales (25%),
+  urgencia (10%), fit (10%) — que este plan proponía y **no se construyó**: el paso 13 cierra `stub`
+  en `server/src/bot/orquestador.ts` y la tool `calificar` sigue siendo del LLM
+  (`server/src/bot/tools.ts`)
+- lo que este plan llamaba `handoff.ts` se construyó **sin el score**: la escalada escribe la
+  calificación y una ventana de gracia de dos horas en `server/src/bot/ejecutar.ts`, y se ve en la
+  cola por `server/src/cola/botSql.ts` (chips `bot-escalada` y `bot-caliente`). Los umbrales
+  ≥ 80 / 60-79 / <60 no existen
 
 **Cambio crítico**: la tool `calificar` se retira del LLM. El scoring es determinista.
 
@@ -288,9 +306,13 @@ El LLM decide si un lead es `caliente` sin acceso a datos objetivos.
 **Objetivo**: cada decisión del bot es trazable con métricas en tiempo real.
 
 **Componentes nuevos**:
-- `bot/observabilidad.ts` — `traza_id` end-to-end, pasos del pipeline
-- `bot/metricas.ts` — latencia p50/p95/p99, tasa de guardrail, costo, contadores por motivo
-- `bot/auditoria.ts` — `TrazaAuditoria` completa por turno
+- lo que este plan llamaba `observabilidad.ts` se construyó como `server/src/bot/traza.ts`:
+  `traza_id` end-to-end y un tramo por paso del pipeline, que el orquestador imprime en una línea
+- un `metricas` con latencia p50/p95/p99, tasa de guardrail, costo y contadores por motivo — que
+  este plan proponía y **no se construyó**; los tokens de cada turno quedan en `bot_respuestas`
+- una `auditoria` con la `TrazaAuditoria` completa por turno — **no se construyó**: el paso 16
+  cierra `stub` en `server/src/bot/orquestador.ts` y no hay tabla `bot_trazas`. El rastro de hoy es
+  una fila por turno en `bot_respuestas` más la traza de una línea en el log
 - `routes/bot.ts` — `GET /api/bot/metricas`, `GET /api/bot/traza/:id`
 - UI mínima: chip en cabecera con estado del bot
 
@@ -303,9 +325,15 @@ El LLM decide si un lead es `caliente` sin acceso a datos objetivos.
 **Objetivo**: el bot se evalúa automáticamente y procesa audio/imágenes.
 
 **Componentes nuevos**:
-- `bot/evaluacion.ts` — juez automático (claude-sonnet), 5 criterios
-- `bot/simulacro.ts` — 20 escenarios canónicos con rúbricas
-- `bot/procesarMedia.ts` — transcripción de audio, descripción de imagen
+- un `evaluacion` (juez automático con claude-sonnet, 5 criterios) que este plan proponía y **no se
+  construyó**. Lo que sí se construyó es evaluación con una persona en el medio: el Replay de
+  `server/src/corridas/correrCorrida.ts` (corre el bot de HOY sobre conversaciones que ya pasaron),
+  los agujeros del catálogo de `server/src/corridas/consultarAgujeros.ts` y las Lecciones de
+  `server/src/bot/lecciones.ts`
+- un `simulacro` de 20 escenarios canónicos con rúbricas — tampoco se construyó
+- un `procesarMedia` con transcripción de audio y descripción de imagen — **no se construyó**, y hoy
+  se hace lo contrario a propósito: `server/src/bot/ilegible.ts` acusa el adjunto con un texto fijo
+  por clase, porque el modelo no puede verlo y cualquier cosa que redactara sería una invención
 
 **Migración**: columna `revision_detalle JSONB` en `bot_respuestas`.
 

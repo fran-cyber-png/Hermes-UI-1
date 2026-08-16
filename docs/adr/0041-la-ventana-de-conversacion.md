@@ -102,7 +102,7 @@ tenue, como las demás señales automáticas.
 - **`ventanaDiasSql` NO se toca.** Es el contrato del nivel 2 (`EXPIRA`), vale solo para comentarios
   y tiene su propio test de paridad. Se comparte la **constante** (`VENTANA_META_DIAS`), no la
   expresión: son dos preguntas distintas que coinciden en un número.
-- **`src/features/canales/ventana.ts`** — la lectura, pura: `null` cuando la ventana está cerrada,
+- **`src/dominio/ventana.ts`** — la lectura, pura: `null` cuando la ventana está cerrada,
   cuando no aplica, y cuando el server todavía no manda el campo. Redondea para **abajo**: con 6 h
   50 min dice «6 h», porque el error que importa acá es el que llega tarde.
 - El front lee `ventana_cierra` como **opcional** y conserva la marca vieja como respaldo: N4
@@ -165,7 +165,7 @@ Entra por dos lados, y hacen falta los dos:
 - **La píldora en la tarjeta, en TODAS las columnas.** El chip solo existe en Contactados, y el caso
   más valioso del tablero es un **Cotizado con la ventana abierta**: sabe el precio *y* se le puede
   escribir gratis ahora. Esa columna no tiene recorte, así que sin la píldora ese caso seguía
-  invisible. Misma lectura que la fila de la cola (`canales/ventana.ts`), así que «6 h» significa lo
+  invisible. Misma lectura que la fila de la cola (`dominio/ventana.ts`), así que «6 h» significa lo
   mismo en las dos pantallas.
 
 ⚠️ **`precio` y `ventana` no se derivan una de la otra**, y el test lo fija: de las 611 con precio,

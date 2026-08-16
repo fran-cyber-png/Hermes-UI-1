@@ -1,5 +1,11 @@
 # Plan de ejecución — Asesor Comercial IA (MVP)
 
+> ⚠️ **Al 16-ago-2026:** el bot se construyó (56 archivos en `server/src/bot/`), pero **§C.2 ya no
+> describe lo que corre**: el monolito `procesarClaim()` del despachador se partió en un pipeline
+> de 16 pasos en `server/src/bot/orquestador.ts`, con el claim atómico en `claim.ts` y los efectos
+> en `ejecutar.ts`. `despachador.ts` quedó como el loop que llama a eso y al reenganche.
+> El spike `responder.ts` que varios tickets mandan leer ya no existe: lo borró **ADR 0033**.
+
 > **Base**: `docs/arquitectura-bot-comercial.md` (leer primero)  
 > **Decisión**: ADR 0028, ADR 0029–0032  
 > **Deadline MVP**: domingo 3-ago a las 23:59  
@@ -108,7 +114,10 @@ otro agente, lo documenta y sigue. El orquestador resuelve dependencias al merge
    - `botRespuestas` — `id` bigserial PK, `clave` text, `numeroPropio` text, `texto` text, `textoCompleto` text, `acciones` jsonb, `estado` text, `motivo` text, `modelo` text, `tokensEntrada` int, `tokensSalida` int, `tokensCacheEscritura` int, `tokensCacheLectura` int, `revision` text, `creadoEn` timestamp. Índices por `(estado, creadoEn)` y `(clave, creadoEn)`.
    - `botPausas` — `clave` text PK, `motivo` text, `hasta` timestamp, `creadoEn` timestamp
    - `botCalificaciones` — `clave` text PK, `temperatura` text, `motivo` text, `escalada` boolean, `actualizadoEn` timestamp
-2. Exportar las tablas desde `server/src/db/index.ts` (si hay barrel).
+2. Exportar las tablas desde un barrel `db/index.ts` (si hay barrel). ⚠️ **No lo hay ni lo hubo**:
+   `drizzle.config.ts` toma `./src/db/!(client).ts` por glob, así que `db/bot.ts` entra solo y no
+   hay índice que tocar. El cliente vive en `server/src/db/client.ts`, que es de donde todo el bot
+   importa `db`.
 3. Generar migración:
    ```bash
    cd server && npm run db:generate
@@ -372,7 +381,9 @@ Cada tool:
 ### B.5 — System prompt y contexto (`prompt.ts` + `contexto.ts`)
 
 **Leer primero**: 
-- `server/src/bot/responder.ts` (el prompt actual de Kathy Alva, para no perder lo bueno)
+- el spike `responder.ts` del bot (el prompt actual de Kathy Alva, para no perder lo bueno)
+  — **borrado por ADR 0033**, así que ya no se puede leer: lo que se rescató de ese prompt vive
+  hoy en `server/src/bot/prompt.ts`
 - `docs/concepto.md` (el negocio)
 - `server/src/hechos/catalogo.ts` (los hechos aprobados)
 - `server/src/catalogo/` (las piezas)
@@ -740,7 +751,9 @@ Responsabilidades:
         - `automatico`: re-chequeo → chunker → `EnvioControlado` → estado `'enviada'`.
       - Ejecutar acciones (calificar → upsert `bot_calificaciones`, escalar → pausa + flag, etc.).
 
-**Tests**: `server/src/bot/despachador.test.db.ts`
+**Tests**: el `despachador.test.db.ts` que este plan pedía no se escribió con ese nombre — lo que
+cubre estas tres garantías hoy es `server/src/bot/claim.test.ts` (el claim, puro) y
+`server/src/bot/orquestador.deps.test.db.ts` (el pipeline contra base, sin transporte).
 - Dos claims concurrentes sobre la misma fila → uno solo gana.
 - Entrante nuevo durante el proceso → `enProcesoDesde` se resetea y vuelve a encolar.
 - Modo sombra: escribe `bot_respuestas` con estado `'sombra'` y NO llama al transporte.
@@ -840,7 +853,7 @@ if (cfgBot.lineas.length > 0) {
 | Hora | Qué | Quién |
 |---|---|---|
 | **09:00** | Integrar `EnvioControlado` al despachador (modo automático) | Subagente Integración |
-| **10:00** | `despachador.test.db.ts` | Subagente Integración |
+| **10:00** | el `despachador.test.db.ts` de C.2 (salió como `claim.test.ts` + `orquestador.deps.test.db.ts`) | Subagente Integración |
 | **11:00** | Simulacro `--demo`: 8 casos canónicos | Orquestador |
 | **12:00** | Deploy staging. Modo automático en línea de prueba | Orquestador |
 | **13:00** | **Sanity check**: mandar 8 mensajes de prueba, verificar respuestas | Orquestador |

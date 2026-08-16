@@ -1,5 +1,10 @@
 # Hermes — la mesa del vendedor
 
+> ⚠️ **Al 16-ago-2026:** esto es la foto del **21-jul-2026** y varias de sus piezas se construyeron
+> distinto. WhatsApp ya no se lee por DOM ni vive en un panel a la derecha: entra por la interfaz
+> `TransporteWhatsapp` (`server/src/whatsapp/transporte.ts`) y la sesión se vincula server-side en
+> VPS1. El mapa vivo es `docs/arquitectura.md` y la foto de hoy, `docs/estado.md`.
+
 > **Reemplaza a** `goberna-crm-wsp/plan-implementacion.md` (2026-07-20), cuyo alcance era una extensión
 > de Chrome solo para WhatsApp. Ese plan asumía que Cerberus no tenía API y que los canales de Meta
 > estaban por construirse. Las dos cosas resultaron falsas al revisar el código.
@@ -66,8 +71,8 @@ Andreecito**: su dedup de la consolidación asume teléfono.
 ## 5. Sesiones de WhatsApp
 
 > ⚠️ **Esta sección describe el diseño VIEJO y ya no aplica** (D13 + ADR 0039). Las particiones de
-> Electron por cuenta (`persist:wa:<id>`, `src/features/whatsapp/cuentas.ts`) se borraron con la
-> cáscara. Hoy la sesión vive **server-side, en VPS1**: un `.db` por número en
+> Electron por cuenta (`persist:wa:<id>`, el `cuentas.ts` que vivía en `src/features/whatsapp/`) se
+> borraron con la cáscara. Hoy la sesión vive **server-side, en VPS1**: un `.db` por número en
 > `server/.wa-sessions/`, vinculado con `npm run wa:vincular` — **la app de la vendedora no vincula,
 > solo ve**. Lo que sigue en pie de este párrafo es la última frase.
 

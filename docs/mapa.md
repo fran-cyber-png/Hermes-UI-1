@@ -180,70 +180,11 @@ No significa que estén muertos —pueden ser puntos de entrada o scripts—, pe
 
 **No se revisan** (el porqué está en `arquitectura.json`): `server/src/routes/costoPorLead.ts` · `server/src/routes/decisions.ts` · `server/src/routes/leads.ts` · `server/src/routes/overview.ts`
 
-### 🔴 `docsSinRutasMuertas` — 58 violaciónes
+### ✅ `docsSinRutasMuertas` — sin violaciones
 
 > Medido el 16-ago-2026: 68 de 221 rutas de archivo citadas en los docs no existían (31 %), 18 de ellas de `bot/`. Una ruta muerta en un doc no se ve como error: se lee como que el archivo está en otro lado.
 
 **No se revisan** (el porqué está en `arquitectura.json`): `docs/mapa.md` · `docs/heredado-meta-escuela` · `docs/claude-md-2026-08-09-completo.md`
-
-- scripts/backfillContextos.ts  (citada en docs/plan-panel-contexto.md)
-- scripts/botEvaluar.ts  (citada en docs/plan-bot-primera-linea.md)
-- scripts/campana.ts  (citada en docs/adr/0055-la-campana-a-una-lista-de-afuera.md)
-- server/src/banco/aislamiento.test.ts  (citada en docs/plan-banco-de-pruebas.md)
-- server/src/banco/cerberusFalso.ts  (citada en docs/plan-banco-de-pruebas.md)
-- server/src/banco/guardia.ts  (citada en docs/plan-banco-de-pruebas.md)
-- server/src/banco/sembrar.ts  (citada en docs/plan-banco-de-pruebas.md)
-- server/src/banco/servidor.ts  (citada en docs/plan-banco-de-pruebas.md)
-- server/src/banco/vincular.ts  (citada en docs/plan-banco-de-pruebas.md)
-- server/src/bot/auditoria.ts  (citada en docs/plan-lead-orchestrator.md)
-- server/src/bot/despachador.test.db.ts  (citada en docs/plan-ejecucion-bot-mvp.md)
-- server/src/bot/evaluacion.ts  (citada en docs/plan-lead-orchestrator.md)
-- server/src/bot/followup.ts  (citada en docs/bot-levantamiento-vendedora.md)
-- server/src/bot/handoff.ts  (citada en docs/plan-lead-orchestrator.md)
-- server/src/bot/metricas.ts  (citada en docs/plan-lead-orchestrator.md)
-- server/src/bot/observabilidad.ts  (citada en docs/plan-lead-orchestrator.md)
-- server/src/bot/planner.ts  (citada en docs/plan-lead-orchestrator.md)
-- server/src/bot/precondiciones.ts  (citada en docs/plan-lead-orchestrator.md)
-- server/src/bot/procesarMedia.ts  (citada en docs/plan-lead-orchestrator.md)
-- server/src/bot/responder.ts  (citada en docs/adr/0033-eliminar-responder-spike.md)
-- server/src/bot/scoring.ts  (citada en docs/plan-lead-orchestrator.md)
-- server/src/campana/candidatos.ts  (citada en docs/plan-campanas-en-hermes.md)
-- server/src/campana/config.ts  (citada en docs/plan-campanas-en-hermes.md)
-- server/src/campana/despachador.ts  (citada en docs/plan-campanas-en-hermes.md)
-- server/src/campana/verificarContraMeta.ts  (citada en docs/plan-campanas-en-hermes.md)
-- server/src/db/index.ts  (citada en docs/plan-ejecucion-bot-mvp.md)
-- server/src/kernel/dependencia.test.ts  (citada en docs/plan-implementacion-hermes-campana.md)
-- server/src/pauta/curso.ts  (citada en docs/adr/0001-extraccion-desde-meta-escuela.md)
-- server/src/ritmo/ocupacion.ts  (citada en docs/plan-campanas-en-hermes.md)
-- server/src/scripts/botSimulacro.ts  (citada en docs/plan-bot-primera-linea.md)
-- server/src/whatsapp/estadosEntrega.ts  (citada en docs/plan-campanas-en-hermes.md)
-- src/banco/aislamiento.test.ts  (citada en docs/plan-banco-de-pruebas.md)
-- src/banco/cerberusFalso.ts  (citada en docs/plan-banco-de-pruebas.md)
-- src/banco/guardia.test.ts  (citada en docs/plan-banco-de-pruebas.md)
-- src/banco/imprimirVentas.ts  (citada en docs/plan-banco-de-pruebas.md)
-- src/banco/sembrar.ts  (citada en docs/plan-banco-de-pruebas.md)
-- src/banco/servidor.ts  (citada en docs/plan-banco-de-pruebas.md)
-- src/banco/vincular.ts  (citada en docs/plan-banco-de-pruebas.md)
-- src/blocks/BlockNoteSchema.d.ts  (citada en docs/plan-libreta-implementacion.md)
-- src/bot/evals/escenarios.test.ts  (citada en docs/plan-bot-primera-linea.md)
-- src/editor/BlockNoteEditor.d.ts  (citada en docs/plan-libreta-implementacion.md)
-- src/features/campana/ChipCampana.tsx  (citada en docs/plan-campanas-en-hermes.md)
-- src/features/cursos/precedencia.ts  (citada en docs/plan-orquestador-panel.md)
-- src/features/panel/AccionesContacto.tsx  (citada en docs/mapeo-panel-derecho.md)
-- src/features/panel/BarraMetaContacto.tsx  (citada en docs/plan-correccion-panel-timeline.md)
-- src/features/panel/BloqueInteres.tsx  (citada en docs/mapeo-panel-derecho.md)
-- src/features/panel/HojaSugerencias.tsx  (citada en docs/plan-orquestador-panel.md)
-- src/features/panel/PanelCurso.tsx  (citada en docs/mapeo-panel-derecho.md)
-- src/features/panel/hitos.test.ts  (citada en docs/mapeo-panel-derecho.md)
-- src/features/whatsapp/cuentas.ts  (citada en docs/concepto.md)
-- src/lib/candidato.handlers.ts  (citada en docs/plan-de-integracion-centurion-hermes.md)
-- src/lib/hermes-sso.ts  (citada en docs/spec-directorio-goberna.md)
-- src/modules/captacion/migrations/2026_07_03_captacion_schema.sql  (citada en docs/plan-de-integracion-centurion-hermes.md)
-- src/modules/mensajeria/manifest.ts  (citada en docs/plan-de-integracion-centurion-hermes.md)
-- src/routes/_authed/mensajeria.tsx  (citada en docs/plan-de-integracion-centurion-hermes.md)
-- src/schema.ts  (citada en docs/plan-directorio-goberna.md)
-- src/system-prompt.ts  (citada en docs/plan-bot-primera-linea.md)
-- src/yjs/extensions/index.d.ts  (citada en docs/plan-libreta-espacios.md)
 
 ### ✅ `moduloDeclarado` — sin violaciones
 

@@ -4,6 +4,9 @@
 > `BarraMetaContacto.tsx` + `EventoLinea.tsx` + `PieAccionTimeline.tsx` +
 > `timeline.ts`, según la design review (2026-07-31).
 >
+> ⚠️ `BarraMetaContacto` es el nombre de ENTONCES: **este mismo plan lo reemplaza en V2-4** y hoy
+> ese trabajo vive en `src/features/panel/BloqueMeta.tsx`. Donde diga `BarraMetaContacto`, leé ahí.
+>
 > **Cero cambios en el server.** El working tree tiene WIP de bot en
 > `server/src/bot/` — ese frente queda fuera de este plan por completo.
 
@@ -108,7 +111,7 @@ desktop + 360 px.
 
 ### MVP-5 · Foco único (sacar el ring duplicado)
 
-- **Archivos**: `src/features/panel/BarraMetaContacto.tsx`.
+- **Archivos**: el `BarraMetaContacto.tsx` de entonces — hoy `src/features/panel/BloqueMeta.tsx`.
 - **Por qué**: `index.css:276-279` define el outline global de foco; la línea 52
   agrega `focus-visible:ring-2 focus-visible:ring-primary/40` encima → dos
   indicadores, y el débil (40% de opacidad) tapa al fuerte.

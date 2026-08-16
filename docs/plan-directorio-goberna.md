@@ -100,8 +100,8 @@ nombrar.
 
 ### 2.3 🔴 El prior art: esto ya está empezado, en `goberna-kanban`
 
-El diseño que hace falta **ya existe** en `goberna-kanban` (= `gestion.goberna.us`), construido el
-7-ago-2026. `backend/src/schema.ts`:
+El diseño que hace falta **ya existe** en `goberna-kanban` (= `gestion.goberna.us`, otro repo),
+construido el 7-ago-2026, en el `schema.ts` de su backend:
 
 - **`users.id` uuid es el ancla y nunca cambia.**
 - `user_identities (user_id, provider, external_id, email, verified)` con

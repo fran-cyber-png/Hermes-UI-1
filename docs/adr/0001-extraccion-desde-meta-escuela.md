@@ -60,7 +60,10 @@ el próximo que lea `git log` encuentre el porqué.
   lockfile, y **sin CI/CD**. Hay que resolverlo antes de que esto lo use un vendedor real.
 - Por ahora **las dos apps leen la misma base** (`meta_escuela`, Postgres 5434). Es deliberado: el
   event store es uno solo. Cuando Hermes se despliegue habrá que decidir si se separan.
-- `server/src/pauta/curso.ts`, `snapshot.ts` y `ventanas.ts` **nunca se commitearon** en meta-escuela.
-  El clon trajo solo lo versionado, y por eso `routes/pautaMaestro.ts` no compilaba. Se podó. Si
-  meta-escuela los necesita, siguen en su working tree local — **conviene commitearlos allá**.
+- Los módulos `curso.ts`, `snapshot.ts` y `ventanas.ts` de `pauta` **nunca se commitearon** en
+  meta-escuela. El clon trajo solo lo versionado, y por eso `routes/pautaMaestro.ts` no compilaba. Se
+  podó. Si meta-escuela los necesita, siguen en su working tree local — **conviene commitearlos
+  allá**. (Al 16-ago-2026, `snapshot.ts` y `ventanas.ts` se volvieron a escribir en Hermes y viven en
+  `server/src/pauta/`; el `curso.ts` de `pauta` sigue sin existir acá, y `routes/pautaMaestro.ts`
+  tampoco volvió.)
 - El front quedó sin router: Hermes tiene una sola pantalla.

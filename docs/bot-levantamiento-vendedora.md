@@ -168,7 +168,7 @@ Mapeo de cada bloque a dónde vive en el código, para que llenar `server/src/bo
 | 9-10. Señales sí/no | Prompt: criterio de la tool `calificar` (`caliente`/`tibio`/`frio` + `motivo`) — necesita frases concretas para los ejemplos del prompt |
 | 11. Casos que cambian el trato | `<reglas_duras>` adicionales + posible `motivo` nuevo de `pausar_conversacion` o `escalar` si no está cubierto por los ya definidos |
 | 12. Cuándo pasa a un humano | Motivos de `escalar` (`pidio_humano`, `por_cerrar`, `sin_respuesta_en_catalogo`, `frustrado`) — verificar si faltó alguno en la lista fijada en T3 |
-| 13. Seguimiento | `server/src/bot/followup.ts` (T13 del plan): tono del mensaje de follow-up, y contrasta con el umbral ya fijado `SENALES_DIAS_ENFRIAMIENTO` (default 3 días) — si ella dice otro número, hay que decidir a conciencia cuál gana |
+| 13. Seguimiento | lo que el plan llamaba `followup.ts` se construyó como `server/src/bot/reenganche.ts` (con `server/src/bot/correrReenganche.ts` y el dry-run `npm run reenganche:simulacro`): tono del mensaje de follow-up, y contrasta con el umbral ya fijado `SENALES_DIAS_ENFRIAMIENTO` (default 3 días) — si ella dice otro número, hay que decidir a conciencia cuál gana |
 | 14. Errores a evitar | Candidatos directos a nuevas `<reglas_duras>` numeradas en `bot/prompt.ts` |
 | 15. Conversación ideal | Escenario base del harness de evals (patrón Forja: 20 escenarios tipados con rúbrica en lenguaje llano) |
 

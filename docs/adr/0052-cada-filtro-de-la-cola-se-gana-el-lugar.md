@@ -81,7 +81,7 @@ De seis chips, **dos mentían y uno era la mesa entera con otro nombre**.
 
 ### 1. El criterio, primero — qué tiene que cumplir un chip para estar en la barra
 
-Vive escrito en el docblock de `FILTROS_SEC` (`src/features/canales/cola.ts`):
+Vive escrito en el docblock de `FILTROS_SEC` (`src/dominio/cola.ts`):
 
 1. **Es trabajo, no un estado.** Si la fila ya está atendida, no entra — salvo que «atendida» no
    signifique terminada, y entonces hay que poder decir por qué.
@@ -213,7 +213,7 @@ este frente: **«📣 Vino del anuncio»**.
 | `server/src/cola/pregunta.paridad.test.db.ts` | **SQL ≡ TS** sobre un corpus de 50 textos, más un control de que el corpus discrimine |
 | `server/src/cola/consultarCola.pregunta.test.db.ts` | Las dos decisiones de producto: el chip de precio no mira `respondida`, «Te escribieron» corta a 7 días. Y que el número del chip sea **exactamente** lo que su filtro devuelve (#37) |
 | `src/lib/preview.test.ts` | El paso 0, y que **ausente** se comporte como antes del frente |
-| `src/features/canales/cola.test.ts` | Los rótulos y la migración de `localStorage` |
+| `src/dominio/cola.test.ts` | Los rótulos y la migración de `localStorage` |
 
 ---
 

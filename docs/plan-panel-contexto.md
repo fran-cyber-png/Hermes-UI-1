@@ -1,5 +1,11 @@
 # Panel de contexto — diseño técnico (slices S8-S11)
 
+> ⚠️ **Al 16-ago-2026:** de este diseño se construyó **solo la mitad del front, en versión 0** —
+> `src/features/canales/PanelContexto.tsx` y `src/features/canales/HiloMessenger.tsx`, que sirve el
+> hilo por `GET /api/persona/conv/:canal/:personaId` y no por la ruta que propone S8f. El modelo
+> del server **nunca se hizo**: no existe la tabla `contexts`, ni el módulo `contexto/` del server,
+> ni el backfill, ni `GET /api/contexto/…`. S8a-S8d siguen siendo diseño, no código.
+
 > **Fecha:** 2026-07-21 · **Estado:** diseño aprobado; es el paso 2 del horizonte H1 de
 > `plan-crm-definitivo.md`. Continúa la numeración de slices (S8+) y tests (T15+) de
 > `plan-hermes-mvp.md` §6-7. Alcance decidido: **S8a-S8f en el MVP; Ivi solo F1**
@@ -77,7 +83,8 @@ inferencia, el bloque curso NO se muestra**:
 | 4 | Nada | `null` | (silencio honesto) |
 
 Reglas:
-- **`cursoDeCampana()` se porta** de meta-escuela (`server/src/pauta/curso.ts`, uncommitted allá)
+- **`cursoDeCampana()` se porta** del repo **meta-escuela** (`pauta/curso.ts`, uncommitted allá —
+  no es una ruta de Hermes)
   con sus reglas EN ORDEN: seminario → consultoría → consultor → dipcpol|diplomado → libros.
   "Otro" (64% de campañas) **no infiere** — cae a la fuente siguiente.
 - **Fuzzy honesto** (`matchProducto.ts`): normalizar (minúsculas, sin tildes), match por nombre
@@ -154,7 +161,7 @@ todavía" / "la API falló"**. Jamás "no figura" cuando en realidad no se pidi�
 | Slice | Entrega | Tamaño | Test rojo | Gate |
 |---|---|---|---|---|
 | **S8a** Ingesta ampliada + `contexts` | Tabla en `schema.ts` (+`db:push`) · `fields=` ampliados en los 3 pulls · `proyectarContexto()` pura · upsert desde el ingestor | Mediano | **T15** post completo → fila con texto entero+permalink+imagen; sin imagen → `capturadoAt` presente e imagen null; IG VIDEO → thumbnail; `media_product_type=AD` → marca anuncio | `ingest:interactions` real muestra `contexts` pobladas; doble corrida idempotente; tests+typecheck verdes |
-| **S8b** Backfill histórico | `scripts/backfillContextos.ts` (+npm script): candidatos = contextos recientes sin fila; evento nuevo + upsert; tolera borrados | Chico | **T16** elige solo faltantes en ventana; re-corrida → vacío | Backfill real reporta cobertura N/M (+K con error); re-correr = 0 trabajo |
+| **S8b** Backfill histórico | un script de backfill de contextos que este plan proponía **y no se construyó** (+npm script): candidatos = contextos recientes sin fila; evento nuevo + upsert; tolera borrados | Chico | **T16** elige solo faltantes en ventana; re-corrida → vacío | Backfill real reporta cobertura N/M (+K con error); re-correr = 0 trabajo |
 | **S8c** Inferencia de curso | `contexto/{curso,matchProducto,atribuirAnuncio,inferirCurso}.ts` + `cerberus/productos.ts` extraída; persistido en `contexts` | Mediano | **T17** reglas+orden de `cursoDeCampana` ("Diplomado Consultor"→Consultor; "Otro"→null) · **T18** fuzzy con/sin tildes; empate→null · **T19** mensaje>anuncio>post; salida siempre con `fuente`; sin datos→null | Script dev sobre N contextos reales reporta % inferido por fuente (~30-40% esperado, honesto) |
 | **S8d** API del panel | `routes/contexto.ts`: `GET /api/contexto/:interactionId` + `/conv/:canal/:personaId` → `{publicacion, curso\|null, historial}`; `GET /api/messenger/conversacion/:personaId`; composición pura `armarContexto()` | Chico | **T20** sin fila → `capturado:false` (jamás "sin imagen"); con curso → fuente obligatoria | `curl` contra dev con un comentario real: JSON completo y honesto |
 | **S8e** UI panel + des-modalizar | `ResponderPanel` a columna central · `features/contexto/PanelContexto.tsx` (+Bloques) · `PanelDerecho` en `App.tsx` | Grande | (gate visual) | Screenshots Playwright desktop+angosto: comentario con imagen+texto+curso con fuente; comentario sin inferencia (sin chip, sin mentir) |

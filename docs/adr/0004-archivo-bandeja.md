@@ -23,8 +23,9 @@ chequeo de frescura que impide decir «estás al día» cuando la captura está 
 1. **Migrar el vacío honesto** a `ColaUnificada` (hecho en este cambio): `useFrescura()`
    + `vacioPorAtraso` renderizan «No hay nada acá, pero no es porque estés al día…»
    ANTES de cualquier vacío de filtro. Con eso la paridad queda completa.
-2. **Borrar** `src/features/canales/Bandeja.tsx`, `FilaInteraccion.tsx` y `useBandeja.ts`
-   (regla dura #3: el predecesor se archiva al llegar a paridad, con este ADR como acta).
+2. **Borrar** los tres componentes de la bandeja vieja —`Bandeja.tsx`, `FilaInteraccion.tsx` y
+   `useBandeja.ts`, que vivían en `src/features/canales/`— (regla dura #3: el predecesor se
+   archiva al llegar a paridad, con este ADR como acta).
    La historia queda en git; no se mueve a ninguna carpeta `attic/`.
 
 ## Qué reemplaza
