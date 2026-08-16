@@ -1150,6 +1150,28 @@ async function ejecutarCola(
     // recorte. El `FILTER` es lo que evita una consulta por chip.
     // Cada chip cuenta DENTRO de «Míos» cuando está puesto: si no, con el recorte
     // activo la barra diría «Piden info · 311» sobre una cola de 14 filas.
+    // 🔴 LA FRONTERA VA EN LOS CUATRO, Y ÉSE ERA EL DEFECTO (#390). `frontera` entraba
+    // sólo a `condiciones`, que es la consulta de la PÁGINA — así que la vendedora con
+    // la frontera encendida veía UNA tarjeta bajo un encabezado que decía 7, y el mismo
+    // hueco en cada chip y en cada columna del Pipeline. Medido contra la base de test:
+    // 1 fila servida, `total` 7, todos los `conteosFiltro` en 7.
+    //
+    // Se lee como «la app perdió mis conversaciones» —el síntoma que `sinLineasPropias`
+    // y `sinPadron` existen para evitar— y además es una fuga de agregados: el número le
+    // dice a esa vendedora cuánto trabajo tiene la otra.
+    //
+    // ⚠️ **Lo correcto sería que entrara a `conTodo(...)`**, que es donde ya viven las
+    // otras dos cosas que definen el UNIVERSO (`lineas` y `canal`, ver el docblock de
+    // `desglosarEmbudo`). No se hizo acá porque `fronteraDeAsignacionSql` nombra `ca`, y
+    // ese join vive AFUERA de `conTodo`: meterla adentro obliga a mudar el join a la
+    // tabla temporal, que es la pieza de la que cuelga el 4.797 → 1.632 ms de #361. Es un
+    // frente propio. Mientras tanto, el candado es `fronteraDeAsignacion.test.db.ts`, que
+    // ahora sí afirma `total`, `conteos` y `conteosFiltro` — antes sólo miraba las filas.
+    // ⚠️ `conMias` NO lleva la frontera, y no hace falta: la frontera entra al `WHERE`
+    // de ESTA consulta (abajo), así que los `FILTER` ya cuentan sobre filas recortadas.
+    // Sumarla también acá sería redundante — y una redundancia que el test no puede
+    // distinguir de la pieza que carga es peor que no tenerla: la próxima persona no
+    // sabe cuál de las dos puede sacar.
     const conMias = (pred: SQL): SQL =>
       soloMias.length ? sql`(${pred}) AND (${soloMias[0]!})` : pred;
     const [r] = await base.execute<{
@@ -1167,7 +1189,7 @@ async function ejecutarCola(
       ventas AS (${ventaPosteriorCteSql}),
       cats AS (${categoriasCteSql}),
       padron AS (${padronCteSql(conPadron)})
-      SELECT count(*) FILTER (WHERE ${yTodas([...condicionesBase, ...soloMias])})::int AS n,
+      SELECT count(*) FILTER (WHERE ${yTodas([...condicionesBase, ...soloMias, ...(frontera ? [frontera] : [])])})::int AS n,
              -- Cada conteo usa EL MISMO predicado que su filtro de arriba: el
              -- chip no puede prometer un número y la cola devolver otro.
              count(*) FILTER (WHERE ${conMias(sql`pregunto_precio`)})::int   AS pregunto_precio,
@@ -1192,7 +1214,7 @@ async function ejecutarCola(
       ${botJoinSql(conBot)}
       ${asignadaJoinSql(conAsignacion)}
     ${cursoRuteoJoinSql(conCursos)}
-      ${donde(condicionesRecorte)}
+      ${donde([...condicionesRecorte, ...(frontera ? [frontera] : [])])}
     `);
     total = r?.n;
     conteosFiltro = {
@@ -1210,8 +1232,9 @@ async function ejecutarCola(
       filtroCanal,
       // «Míos» entra al desglose como entra la línea: define el universo de la
       // foto. Sin esto, con la cola en «Míos» la banda seguiría contando las
-      // conversaciones de los otros cinco.
-      [...condicionesBase, ...soloMias],
+      // conversaciones de los otros cinco. Y la frontera por lo mismo (#390): sin
+      // ella, cada columna del Pipeline contaba el trabajo de la otra vendedora.
+      [...condicionesBase, ...soloMias, ...(frontera ? [frontera] : [])],
       conPadron,
       conBot,
       conAsignacion,

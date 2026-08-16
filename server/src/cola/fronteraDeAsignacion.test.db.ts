@@ -77,6 +77,81 @@ async function sembrarLaMesa(db: Awaited<ReturnType<typeof baseDePrueba>>) {
   await asignar(db, "51900000002", SINDY);
 }
 
+/**
+ * 🔴 LOS NÚMEROS, NO SÓLO LAS FILAS (#390).
+ *
+ * Los seis tests de este archivo miraban **únicamente** `r.conversaciones`, y por eso
+ * convivieron en verde con el defecto: `frontera` entraba sólo a la consulta de la
+ * PÁGINA, así que la vendedora aislada veía UNA tarjeta bajo un encabezado que decía
+ * 7, con el mismo hueco en cada chip y en cada columna del Pipeline.
+ *
+ * Se lee como «la app perdió mis conversaciones» —el síntoma que `sinLineasPropias` y
+ * `sinPadron` existen para evitar— y encima es una fuga de agregados: el número le
+ * dice a esa vendedora cuánto trabajo tiene la otra.
+ *
+ * Verificado por mutación: sacándole `frontera` a cualquiera de los cuatro puntos de
+ * `consultarCola.ts`, este test se pone rojo.
+ */
+async function loQueVeEntero(
+  db: Awaited<ReturnType<typeof baseDePrueba>>,
+  vendedoraId: string | undefined,
+) {
+  return (await consultarCola(db, { vendedoraId, limite: 50 } as never)) as {
+    conversaciones?: { persona_nombre: string | null }[];
+    total?: number;
+    conteos?: Record<string, number>;
+    conteosFiltro?: Record<string, number>;
+    desglose?: { n: number }[];
+  };
+}
+
+test("🔴 el TOTAL, los CHIPS y el DESGLOSE cuentan lo mismo que la cola sirve", async (t) => {
+  const db = await baseDePrueba(t);
+  conColaAislada(t, "sindy");
+  await sembrarLaMesa(db);
+
+  const r = await loQueVeEntero(db, "sindy");
+  const filas = (r.conversaciones ?? []).length;
+
+  // Sindy tiene lo suyo + lo huérfano: dos. Lo de Luz, no.
+  assert.equal(filas, 2, `sirvió ${filas} filas — cambió la siembra o la frontera`);
+
+  assert.equal(
+    r.total,
+    filas,
+    `la cabecera dice ${r.total} y la cola sirve ${filas}: el total cuenta el trabajo de la otra`,
+  );
+
+  for (const [chip, n] of Object.entries(r.conteosFiltro ?? {})) {
+    assert.ok(
+      n <= filas,
+      `el chip «${chip}» promete ${n} sobre una cola de ${filas}: no lleva la frontera`,
+    );
+  }
+
+  for (const [etapa, n] of Object.entries(r.conteos ?? {})) {
+    assert.ok(n <= filas, `la etapa «${etapa}» cuenta ${n} sobre una cola de ${filas}`);
+  }
+
+  const enElDesglose = (r.desglose ?? []).reduce((s, f) => s + f.n, 0);
+  assert.ok(
+    enElDesglose <= filas,
+    `el desglose suma ${enElDesglose} sobre una cola de ${filas}: el Pipeline cuenta lo ajeno`,
+  );
+});
+
+test("con la frontera APAGADA los números siguen siendo los de siempre", async (t) => {
+  // El control: sin declarar a nadie, nada se recorta y el total es la mesa entera.
+  // Sin esto, un `frontera` que recortara de MÁS pasaría el test de arriba.
+  const db = await baseDePrueba(t);
+  conColaAislada(t, "");
+  await sembrarLaMesa(db);
+
+  const r = await loQueVeEntero(db, "sindy");
+  assert.equal((r.conversaciones ?? []).length, 3, "apagada, ve las tres");
+  assert.equal(r.total, 3, "y el total dice tres");
+});
+
 test("🔴 una vendedora nueva NO ve las conversaciones de otra", async (t) => {
   const db = await baseDePrueba(t);
   conColaAislada(t, "sindy");
