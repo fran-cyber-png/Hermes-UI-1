@@ -14,8 +14,15 @@ concepto en `docs/concepto.md`.
 > que es este archivo entero antes del recorte. **Si agregás un frente, escribí el ADR y dejá acá solo
 > los 🔴.** El 🔴 es para lo que YA mordió o muerde en silencio; no lo repartas.
 
-Los cuatro documentos: `CONTEXT.md` glosario del negocio · **`docs/arquitectura.md` el mapa (leelo
-antes de tocar arquitectura)** · `docs/estado.md` la foto de hoy · `docs/adr/` las decisiones.
+Los cinco documentos: `CONTEXT.md` glosario del negocio · **`docs/mapa.md` el inventario, GENERADO
+(`npm run mapa`)** · `docs/arquitectura.md` la forma y el porqué · `docs/estado.md` la foto de hoy ·
+`docs/adr/` las decisiones.
+
+> 🔴 **`docs/arquitectura.md` YA NO CUENTA NADA, y ésa es la corrección** (ADR 0057). Hasta el
+> 16-ago-2026 se llamaba a sí mismo «el mapa» y traía las cifras a mano: decía ~39 archivos vivos y
+> 27 routers cuando había **680 y 49**. Nueve días después de escrito describía un repo **ocho veces
+> más chico**, y nada se puso rojo porque nada lo miraba. **Lo contable se mira en `docs/mapa.md`,
+> que se genera del árbol**; en `arquitectura.md` queda lo que un generador no puede derivar.
 
 > ⚠️ **Este repo tiene DOS MITADES.** La extracción se trajo el árbol entero de meta-escuela, así que
 > conviven el CRM que se usa (~39 archivos: `whatsapp` `auth` `cerberus` `cola` `realtime`, 13 de 27
@@ -23,6 +30,38 @@ antes de tocar arquitectura)** · `docs/estado.md` la foto de hoy · `docs/adr/`
 > `pauta` `ontologia` `fuentes` `sdk`, 14 routers). **Ninguna acción de la vendedora alcanza la
 > segunda mitad.** No está rota, está desconectada — y los comentarios de `server/src/index.ts`
 > describen la arquitectura vieja, así que engañan. Ver `docs/arquitectura.md` §2.
+
+## El mapa y sus candados (**ADR 0057**)
+
+`npm run mapa` regenera `docs/mapa.md` · `npm run mapa:verificar` es lo que corre en **N1 del CI**.
+Lo único escrito a mano es **`arquitectura.json`**: cinco reglas con su porqué medido, y **la
+responsabilidad declarada de cada módulo** — la línea que decide si un archivo nuevo va ahí o no.
+
+- 🔴 **`mapa:verificar` falla si el mapa quedó VIEJO, no sólo si hay violaciones.** Compara
+  `docs/mapa.md` byte a byte contra el que se generaría hoy: mover un archivo sin regenerar pone el
+  CI rojo. Es lo único que impide repetir `arquitectura.md`. ⚠️ **Corolario**: el generador no puede
+  imprimir fechas ni contadores de corrida — cualquier dato que cambie solo rompe la comparación.
+- ⚠️ **Si agregás un módulo, escribí su responsabilidad en `arquitectura.json` o el CI no pasa**
+  (`moduloDeclarado`). Es a propósito: un módulo sin responsabilidad es uno del que nadie puede
+  decir qué le corresponde.
+- 🔴 **`sinCiclosDeArchivo` NO es «cero ciclos entre módulos», y confundirlos cuesta un trimestre.**
+  Medido: el grafo de MÓDULOS daba un nudo de 18 (casi todo el front) y otro de 22; el de ARCHIVOS,
+  **tres pares**. El código ya era un DAG — lo enredado eran las fronteras de las carpetas. Los
+  nudos de módulos se **reportan** como termómetro y bajan solos al sacar lo compartido a su capa.
+  **Antes de proponer un reordenamiento por ciclos, medí a nivel de ARCHIVO.**
+- 🔴 **Los cuatro routers exentos de `routersSinSqlInline` se MIDIERON, no se dedujeron**:
+  `costoPorLead` (ni montado en `index.ts`), `decisions`, `leads`, `overview` — cero llamadas desde
+  `src/`. Reescribir código que nadie ejecuta para satisfacer una regla es riesgo sin beneficio.
+- 🔴 **UNA REGLA NUEVA REPORTA SU PROPIO BUG ANTES QUE EL DEL REPO.** `docsSinRutasMuertas` dio 226
+  violaciones y las dos causas grandes eran defectos míos: la alternancia `(?:ts|tsx)` matcheaba
+  `Avatar.tsx` como `Avatar.ts` (**60 falsos positivos** — va `tsx` primero), y el mapa **se citaba
+  a sí mismo** al listar las rutas muertas (**123 más**). Antes de mandar a arreglar N cosas, abrí
+  diez y comprobá que están mal de verdad.
+- 🔴 **LOS TESTS-CANDADO QUE LEEN EL ÁRBOL NO LOS ALCANZA EL COMPILADOR.**
+  `whatsapp/lid.paridad.test.ts` abre un archivo del FRONT con `new URL(...)`. Moverlo fue un
+  **ENOENT en ejecución** con el typecheck de las dos mitades en verde. Al mudar un archivo que
+  algún test cruza por ruta, `grep -rn` de la ruta vieja en `src` y `server/src` **antes** de
+  darlo por bueno.
 
 ## Stack
 
@@ -47,6 +86,16 @@ antes de tocar arquitectura)** · `docs/estado.md` la foto de hoy · `docs/adr/`
   Marca en `src/index.css` (azul + dorado, Montserrat; **el dorado significa tiempo que se acaba**,
   nada más). Norte de producto: `docs/plan-crm-definitivo.md`. El **caché de consultas se persiste en
   IndexedDB** y se restaura antes del primer render (ADR 0007, `src/lib/datos/`).
+  **TRES CAPAS, y el CI las verifica** (ADR 0057): `lib` · `components` (capa 0, no saben de
+  negocio) → **`src/dominio/`** (capa 1: qué ES una conversación — `conversaciones`, `cola`, `canal`,
+  `curso`, `ventana`, `antiguedad`, `cliente`, `dueno`, `lineas`, `fotoVisible`,
+  `conversacionNueva`, `paletaCategorias`, `desglose`; importa `lib` y nada más) → `features/*`.
+  🔴 **`dominio/` nació de una medición**: el modelo vivía adentro de `features/canales` —que es la
+  VISTA de la cola— así que **58 de los 148 imports cruzados del front (39 %) entraban a una feature
+  a buscar el modelo**, y `conversaciones.ts` sola tenía 36 consumidores de afuera. Sacarlo partió
+  el nudo de 18 módulos en 7 · 3 · 2. ⚠️ El caso que lo explica es `desglose.ts`: `FilaDesglose`
+  vivía en `vistas/tablero.ts`, o sea que el modelo importaba una PANTALLA para tipar la respuesta
+  de su propia consulta.
 - **Escritorio** (`src-tauri/`): **Tauri v2** — la cáscara solo abre `https://hermes-api.goberna.us`
   (OTA; fallback al dist local). Windows se compila en Actions (`tauri-windows.yml`), no cross-compila.
   **Electron se archivó el 7-ago-2026 (ADR 0039)**. `dev:app` es `tauri dev`, `empaquetar:mac` es
@@ -299,6 +348,46 @@ Medido capa por capa en VPS1 el 7-ago-2026: token **VIVO** de system user (no ex
   `https://hermes-api.goberna.us/webhook/meta` para `page` e `instagram` en el dashboard de la app, y
   después `cd server && npm run meta:suscribir` (dry-run por default, `-- --aplicar`). Sin lo primero, el
   script dice ✅ y no llega nada. **Verificá contando filas en `events`, nunca por un 200.**
+
+## El bot de primera línea (**ADR 0028**)
+
+> 🔴 **Este archivo no lo mencionaba, y es el SEGUNDO módulo más grande del server**: 32 archivos de
+> código y ~8.000 líneas en `server/src/bot/` (13.119 con tests). Se agrega acá el 16-ago-2026 al
+> encontrarlo con `docs/mapa.md`. El fundamento vive en su ADR y en los docblocks del módulo, que
+> son de los mejor escritos del repo — **leelos antes de tocar nada acá**.
+
+El bot contesta el primer turno con texto libre de un LLM, en las líneas que diga `BOT_LINEAS`.
+Entra por el webhook, decide, y si manda, manda por la misma puerta que todo lo demás.
+
+- **TRES MODOS y el vocabulario vive UNA vez** (`bot/modo.ts`): `apagado` · `sombra` · `automatico`.
+  🔴 **Nació de un bug mudo**: `decision.ts` sabía de tres y `config.ts` tipaba dos con un `as` sobre
+  el entorno, así que **`BOT_MODO=automatiko` pasaba el cast** y el bot quedaba ni apagado ni
+  automático — pensaba y no mandaba, sin un aviso.
+- 🔴 **`guardrails.ts` es lo ÚLTIMO que mira el texto antes de que lo lea una persona**, y sus tres
+  prohibiciones no son estilo: **precio** (el bot no cotiza — lo comercial sale como pieza del
+  catálogo, tal cual), **automatismo** (regla del dueño del 27-jul: el lead todavía no puede saber
+  que hay una máquina) e **identidad**. Cada una revierte una decisión del dueño o una regla dura.
+- 🔴 **SALTAR NO ES DESCARTAR** (`decision.ts`). De los nueve motivos de salto, **tres son
+  transitorios** (el transporte vuelve, el tope de la hora se reinicia, alguien suelta el freno).
+  El pipeline borraba el pendiente ante CUALQUIERA, así que el mensaje de un lead se perdía **para
+  siempre** por una condición que dura minutos, y el lead nunca se enteraba de que escribió al vacío.
+- 🔴 **DOS FRENOS ESTABAN MUERTOS Y EL TEST DEL MOTOR PASABA EN VERDE** (`frenos.ts`). `decision.ts`
+  evalúa nueve motivos y está testeado hasta el hueso, pero `armarHechos()` le pasaba
+  `huboSalienteHumanoDespuesDe: null` y `entranteEsRepetido: false` **fijos**: `vendedora_activa` y
+  `spam` no se podían disparar nunca. **Es la forma más cara de un bug** — el motor decide bien
+  sobre hechos que nadie recolecta. Al agregar un motivo, verificá que ALGUIEN lo alimente.
+- **La identidad del lead tiene precedencia** (`identidad.ts`): lo dicho en el chat gana, después lo
+  verificado de Cerberus, y último el nombre del perfil de WhatsApp. ⚠️ Para el PAÍS el último
+  recurso es el prefijo del teléfono, que es **una probabilidad, no un dato**: se etiqueta «del
+  prefijo del teléfono» y **no se persiste**.
+- **`orquestador.ts` es un pipeline de 16 pasos**, uno por responsabilidad, que reemplazó al
+  monolito `procesarClaim()` de `despachador.ts`. ⚠️ Algunos pasos son **stubs honestos** que pasan
+  los datos sin tocarlos: el docblock dice cuáles.
+- Se entrena y se mira desde la app (vista **Entrenar bot**), con sus corridas y lecciones
+  (`server/src/corridas/`, `server/src/entrenamiento/`). Verificar sin mandar nada:
+  `cd server && npm run bot:verificar` y `npm run reenganche:simulacro`.
+- ⚠️ **`BOT_LINEAS` es aparte de `WHATSAPP_NUMEROS`**: si se olvida al retirar una línea, el bot
+  queda habilitado sobre una línea muerta y **contestaría el día que se re-vincule**.
 
 ## Adjuntos: el tope es de la LÍNEA, y un video que no entra se achica acá
 
