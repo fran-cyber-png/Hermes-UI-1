@@ -10,6 +10,8 @@
     "build": "tsc -b && vite build",
     "empaquetar:mac": "tauri build --bundles dmg",
     "lint": "oxlint",
+    "mapa": "node scripts/mapa.mjs",
+    "mapa:verificar": "node scripts/mapa.mjs --verificar",
     "test": "vitest run",
     "preview": "vite preview"
   },

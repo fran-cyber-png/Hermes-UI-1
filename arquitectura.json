@@ -1,0 +1,201 @@
+{
+  "$comentario": [
+    "Las reglas de arquitectura de Hermes, y la responsabilidad declarada de cada módulo.",
+    "",
+    "Este archivo es la ÚNICA parte del mapa que se escribe a mano. Todo lo demás",
+    "(tamaños, quién importa a quién, ciclos) se DERIVA del árbol con `npm run mapa`,",
+    "porque un mapa escrito a mano envejece: `docs/arquitectura.md` se escribió el",
+    "7-ago-2026 y nueve días después describía un repo 8 veces más chico.",
+    "",
+    "El candado vive en `scripts/mapa.mjs --verificar`, que corre en N1 del CI y hace",
+    "DOS cosas: falla si hay violaciones, y falla si `docs/mapa.md` no es idéntico al",
+    "que se generaría hoy. O sea que el mapa no puede quedar viejo sin poner el CI rojo."
+  ],
+
+  "zonas": {
+    "front": {
+      "raiz": "src",
+      "modulos": {
+        "app": { "rutas": ["src/App.tsx", "src/main.tsx"] },
+        "lib": {
+          "$porQue": "`config.ts` e `index.css` van acá y NO con App.tsx: son hojas que importa medio árbol (`canales/Avatar` pide `../../config`). Puestas junto a App.tsx —que importa todas las vistas— inventaban un ciclo que se tragaba el front entero y tapaba los reales.",
+          "rutas": ["src/lib", "src/config.ts", "src/index.css"]
+        },
+        "componentes": { "rutas": ["src/components"] },
+        "pruebas": { "rutas": ["src/pruebas"] },
+        "dominio": { "rutas": ["src/dominio"] }
+      },
+      "modulosPorCarpeta": "src/features"
+    },
+    "server": {
+      "raiz": "server/src",
+      "modulos": {
+        "index": { "rutas": ["server/src/index.ts"] }
+      },
+      "modulosPorCarpeta": "server/src"
+    }
+  },
+
+  "capas": {
+    "$comentario": [
+      "Un módulo de una capa no puede importar de una capa MÁS ALTA.",
+      "El número es el nivel: 0 no depende de nadie, 3 puede depender de 0, 1 y 2.",
+      "Lo que esto impide es que el núcleo compartido dependa de una pantalla."
+    ],
+    "front/lib": 0,
+    "front/componentes": 0,
+    "front/dominio": 1,
+    "front/app": 3
+  },
+
+  "reglas": {
+    "sinCiclosDeArchivo": {
+      "activa": true,
+      "porQue": "Dos archivos que se importan mutuamente no tienen un orden en que leerse, y en ESM uno de los dos ve el módulo del otro a medio inicializar — un `undefined` que no aparece al compilar sino al ejecutar, y sólo a veces. Medido el 16-ago-2026 sobre 641 archivos: TRES, todos de dos archivos. Por eso el candado puede ser duro desde el día uno.",
+      "$noConfundirCon": [
+        "La regla NO es «cero ciclos entre módulos». Medido el mismo día, el grafo de MÓDULOS daba un",
+        "nudo de 18 (casi todo el front) y otro de 22 (medio server) — y el de ARCHIVOS, tres pares.",
+        "O sea que el código ya es un DAG y lo que se enreda es cómo están agrupadas las carpetas.",
+        "Exigir cero entre módulos obligaría a mudar 18 features para arreglar algo que el código no",
+        "tiene. Los nudos de módulos se REPORTAN en el mapa como termómetro de si las fronteras están",
+        "bien dibujadas, y bajan solos al sacar el núcleo compartido a su capa (58 de los 148 imports",
+        "cruzados del front —el 39 %— apuntan hoy a archivos que viven adentro de `canales`)."
+      ]
+    },
+    "routersSinSqlInline": {
+      "activa": true,
+      "porQue": "Un router valida, llama a un seam del dominio y serializa. Con SQL adentro, esa consulta no se puede testear sin levantar Express, y la regla que expresa no se puede compartir con el resto — que es como nacieron las dos implementaciones de la urgencia (#37).",
+      "aplicaA": "server/src/routes",
+      "excepciones": []
+    },
+    "docsSinRutasMuertas": {
+      "activa": true,
+      "porQue": "Medido el 16-ago-2026: 68 de 221 rutas de archivo citadas en los docs no existían (31 %), 18 de ellas de `bot/`. Una ruta muerta en un doc no se ve como error: se lee como que el archivo está en otro lado.",
+      "aplicaA": ["CLAUDE.md", "docs"],
+      "excepciones": [
+        "docs/mapa.md",
+        "docs/heredado-meta-escuela",
+        "docs/claude-md-2026-08-09-completo.md"
+      ],
+      "$porQueLasExcepciones": [
+        "`docs/mapa.md` se cita a sí mismo: LISTA las rutas muertas como violaciones, y sin",
+        "excluirlo el chequeo las vuelve a encontrar ahí. Se contaban 123 de más.",
+        "",
+        "Las otras dos son ARCHIVO HISTÓRICO: los docs de meta-escuela anteriores a la extracción,",
+        "y la foto del CLAUDE.md previa al recorte del ADR 0045. Pedirle a un archivo histórico que",
+        "sus rutas existan hoy sería pedirle que reescriba lo que pasó. Aportaban 72.",
+        "",
+        "La exclusión NO es silenciosa: el mapa imprime cuántas rutas se saltearon y por qué."
+      ]
+    },
+    "moduloDeclarado": {
+      "activa": true,
+      "porQue": "Un módulo sin responsabilidad escrita es un módulo del que nadie puede decir si un archivo nuevo le corresponde. Es la pregunta que decide dónde va cada cosa."
+    }
+  },
+
+  "responsabilidades": {
+    "$comentario": [
+      "Una línea por módulo: DE QUÉ es responsable, en presente y sin listar sus archivos.",
+      "La prueba de que está bien escrita: sirve para decidir si un archivo nuevo va acá o no.",
+      "El 🪦 marca la mitad heredada de meta-escuela (ADR 0001): compila, está montada en Express",
+      "y ninguna acción de la vendedora la alcanza. No es código muerto — es código desconectado."
+    ],
+
+    "front/app": "El armazón: qué vista está abierta, los ⌘N y qué capa se monta encima de la mesa. Compone features; no tiene regla de negocio propia.",
+    "front/lib": "Lo que no sabe de negocio: el cliente HTTP con su caché en IndexedDB, el SSE, el teclado, formato y notificaciones. Capa 0 — no puede importar ninguna feature.",
+    "front/componentes": "Átomos visuales que usa medio árbol y no son de ninguna feature: la marca, los gráficos, el avatar y la píldora de canal. Capa 0 — no puede importar una feature ni el dominio.",
+    "front/dominio": "El vocabulario del CRM que más de una vista necesita: qué ES una conversación, las queries que la traen, y las derivaciones puras sobre ella — canal, curso, ventana, antigüedad, cliente, dueño, líneas, la paleta de categorías y el desglose del embudo. Capa 1: importa `lib` y nada más. 🔴 Nació sacando esto de adentro de `features/canales`, donde 58 de los 148 imports cruzados del front entraban a una feature para pedirle el modelo.",
+    "front/pruebas": "El andamio de los tests con DOM: `montar`, `teclear`, `reposar`.",
+
+    "front/agenda": "Los seguimientos que una vendedora se agendó: cuándo vuelve a tocar a quién.",
+    "front/auth": "Entrar y salir: login contra Cerberus, el SSO de Centurión, y el token que el cliente cree antes de preguntar.",
+    "front/autorespuesta": "El acuse fuera de horario visto desde la app: el interruptor, la cola de revisión y el modo supervisado.",
+    "front/campana": "Armar y mirar una campaña por plantilla aprobada de Meta: listas, corridas e historial.",
+    "front/canales": "La cola unificada, y sólo eso: la lista de conversaciones, su fila, la barra de filtros y el panel de contexto. El modelo que dibuja NO vive acá — vive en `dominio/`.",
+    "front/cerberus": "La ficha del contacto: la que trae el ERP y la que dejó el formulario de landing.",
+    "front/correos": "El correo 1-a-1, auditado. Sin listas ni campañas.",
+    "front/dashboard": "Los números en pantalla: el radar, el embudo y qué recorte ve quien mira.",
+    "front/entrenamiento": "Entrenar el bot: sus corridas, sus lecciones y los agujeros que deja.",
+    "front/eventos": "Registrar lo que la vendedora ESCUCHÓ, tipado, en el timeline del contacto.",
+    "front/gestion": "Lo que la vendedora asienta sobre una conversación: etapa, categorías, intereses y sus herramientas.",
+    "front/hechos": "Los datos recomendados — la munición de una línea. Tocar uno lo pone en el composer; no envía.",
+    "front/identidad": "«Es la misma persona que…»: buscar contactos y unificar fichas.",
+    "front/ivi": "La consulta al cerebro RAG y cómo se presenta lo que contesta: los tres tipos y los ocho errores.",
+    "front/leads": "Qué tan caliente está un lead.",
+    "front/navegador": "El navegador embebido: qué peldaño de la escalera corre esta máquina y a dónde se puede ir.",
+    "front/notas": "La Libreta: páginas, espacios compartidos, autoguardado y el link público.",
+    "front/padron": "Los contactos que nunca escribieron: filtrarlos por facetas y repartirlos.",
+    "front/panel": "La ficha al costado del chat, en el orden de las preguntas que decide una venta: quién es, qué quiere, qué mandarle, qué hacer.",
+    "front/plantillas": "Las secuencias de venta: editarlas, aprobar una propuesta y mandarlas paso a paso.",
+    "front/reparto": "De quién es cada conversación, visto desde la app.",
+    "front/routing": "Qué campaña de Meta le cae a qué vendedora.",
+    "front/senales": "Las etiquetas derivadas —cotizado, se enfrió— que no se guardan en ningún lado.",
+    "front/sugerencias": "Las dos respuestas listas del panel derecho.",
+    "front/venta": "Registrar la venta contra Cerberus sin salir del chat.",
+    "front/vistas": "El Pipeline: el tablero por etapas, sus tarjetas y las compuertas para mover una.",
+    "front/whatsapp": "La conversación nativa: el hilo, el composer, los adjuntos, las citas y la compresión de video.",
+
+    "server/index": "El pegamento: monta los routers y arranca los relojes. ⚠️ Sus comentarios describen la arquitectura de meta-escuela y engañan (ver `docs/arquitectura.md` §2).",
+    "server/db": "El schema y la conexión. Capa base del server: no conoce ninguna regla de negocio.",
+    "server/routes": "La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL.",
+    "server/lib": "Utilidades sin dominio: hora de Lima, rangos y por qué falló una consulta.",
+    "server/pruebas": "El andamio de los tests: base efímera, sembrado y humo end-to-end.",
+    "server/scripts": "Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción.",
+    "server/migraciones": "Verificar que una migración sea expand-only y que el journal sea monótono.",
+
+    "server/atencion": "Cuánto se tarda en contestar.",
+    "server/atribucion": "Que una venta encuentre su conversación: la llave determinista y la cascada etiquetada de respaldo.",
+    "server/auth": "Quién entra: Cerberus, Centurión, el token HMAC y el perímetro cerrado por default.",
+    "server/autorespuesta": "El acuse fuera de horario del lado del server: a quién corresponde, con qué plantilla y a qué ritmo. Nunca manda solo.",
+    "server/bot": "El bot de primera línea que atiende solo: su agente, sus guardrails, sus frenos y el reenganche.",
+    "server/campana": "Mandar una campaña por plantilla aprobada de Meta: el público, los vetos, el ritmo y los reintentos.",
+    "server/catalogo": "El catálogo de piezas que Ivi lee para ELEGIR sin inventar. Solo lectura, y nunca sirve medio catálogo.",
+    "server/categorias": "Las categorías con color que cada vendedora se arma.",
+    "server/centurion": "Las credenciales del SSO de Centurión.",
+    "server/cerberus": "Hablarle al ERP: login, ficha, productos, ventas — y el latin1 que revienta con emojis.",
+    "server/clientes": "Quién ya compró, en copia local, con su nivel congelado en la tabla.",
+    "server/cola": "La consulta que ordena la deuda: a quién se atiende primero y por qué. Cada regla vive pura y con su gemelo SQL.",
+    "server/corridas": "Las corridas de entrenamiento del bot y los agujeros que dejan.",
+    "server/cursos": "Traducir el texto con el que llegó una persona a una familia de curso.",
+    "server/dashboard": "Los números: radar, embudo, series, y el recorte según quién los pide. Es una frontera.",
+    "server/ediciones": "Editar un mensaje ya enviado. Sólo donde el transporte lo permite.",
+    "server/entrega": "Los ✓✓: la escala monótona de un recibo y su avance, arbitrado por la base.",
+    "server/eventos": "Los eventos tipados del timeline y el interés que asientan de paso.",
+    "server/espacios": "Dónde vive cada página de la Libreta y quién la puede ver o escribir. Es una frontera, no un filtro.",
+    "server/gente": "La persona canónica del grafo y cómo se la encuentra por teléfono.",
+    "server/gestiones": "La bitácora comercial: lo que una persona AFIRMA sobre una conversación.",
+    "server/hechos": "El catálogo de datos recomendados y cuáles llegan a verse en cada momento de venta.",
+    "server/icarus": "Leer la base de icarus, siempre read-only.",
+    "server/identidad": "El puente clave-de-conversación ↔ persona: enlazar, revocar, unificar.",
+    "server/ivi": "El proxy al cerebro RAG: traduce su dialecto y falla ruidoso — nunca disfraza una caída de «no encontró datos».",
+    "server/meta": "Traer de Meta lo que pasó —interacciones, leads, anuncios— por los dos caminos (polling y webhook), que escriben igual.",
+    "server/negocio": "Las líneas de negocio y el embudo de consultoría.",
+    "server/notas": "Las páginas de la Libreta y su texto plano.",
+    "server/numeros": "Los números de WhatsApp de Goberna: su estado de vinculación y de quién es cada uno.",
+    "server/padron": "Los contactos de icarus que nunca escribieron: el WHERE que los recorta, sus facetas, y a quién se le habilitan. Es una frontera.",
+    "server/piezas": "Cómo se direcciona una pieza y cómo se calcula su versión. Un solo lugar — con dos recetas, el join da cero filas en silencio.",
+    "server/plantillas": "Las secuencias de venta: catálogo, expansión de `{variables}` y aprobación de una propuesta minada.",
+    "server/procedencia": "De qué pieza salió cada envío, estampado en la ORDEN de envío y no en un update posterior.",
+    "server/reacciones": "El 👍 al flyer: una señal que cuelga de un mensaje, en los dos dialectos y con una sola forma.",
+    "server/realtime": "El bus que empuja los cambios a la app por SSE.",
+    "server/reparto": "De quién es cada conversación cuando varias comparten una línea. Round-robin por carga, fail-open.",
+    "server/resultados": "Qué pasó DESPUÉS de mandar una pieza. Deriva el veredicto; los nombres no prometen causa.",
+    "server/routing": "Qué campaña de Meta le cae a qué vendedora, y resolver el anuncio contra la Graph API.",
+    "server/senales": "«Cotizado» y «se enfrió»: se derivan en cada consulta, nunca se guardan.",
+    "server/sugerencias": "En qué momento de la venta está y qué dos respuestas corresponden. El vocabulario que comparten el panel y la auto-respuesta.",
+    "server/telefono": "Partir y comparar un teléfono E.164. La llave canónica del repo: vive una sola vez.",
+    "server/webhook": "Todo lo que entra de afuera: Meta, WhatsApp, Cerberus y las landings. Ack primero, firma siempre.",
+    "server/whatsapp": "La costura con WhatsApp: la interfaz de transporte y sus implementaciones, el hilo, y la única puerta por la que sale un envío.",
+
+    "server/analisis": "🪦 Heredado de meta-escuela — los análisis del dashboard de pauta (ROAS, cartera, geo).",
+    "server/canales": "🪦 Heredado de meta-escuela — las consultas de salud y tesorería del dashboard de pauta. ⚠️ No confundir con `front/canales`, que es la cola y sí se usa.",
+    "server/decisions": "🪦 Heredado de meta-escuela — el feed de «qué requiere atención» del dashboard de pauta.",
+    "server/dominio": "🪦 Heredado de meta-escuela — la máquina de estados de venta.",
+    "server/fuentes": "🪦 Heredado de meta-escuela — los volcados de origen del dashboard de pauta.",
+    "server/lazo": "🪦 Heredado de meta-escuela — el outbox que le contaría las conversiones a Meta por CAPI. Apagado (`LAZO_RELOJ`).",
+    "server/ontologia": "🪦 Heredado de meta-escuela — las proyecciones ontológicas. ⚠️ `ontologia.conversiones` NO está muerto: `lazo/worker.ts` lo consulta.",
+    "server/pauta": "🪦 Heredado de meta-escuela — recolectar gasto, fatiga y engagement de la pauta publicitaria.",
+    "server/sdk": "🪦 Heredado de meta-escuela — el SDK de consulta del dashboard de pauta."
+  }
+}
