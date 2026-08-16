@@ -14,7 +14,11 @@ import { EventEmitter } from 'node:events';
  * push, no polling: el delay es de milisegundos, no de segundos.
  */
 export type EventoRT =
-  | { tipo: 'mensaje'; canal: string; telefono: string | null }
+  // `direccion` es OPCIONAL a propósito: reacciones y recibos reusan este mismo
+  // tipo para pedir un refresco de la cola sin ser un mensaje nuevo, y omitirla
+  // ahí (en vez de inventar una) es lo que evita que la campanita de un mensaje
+  // entrante suene por un 👍 o un ✓✓ (ver `notificaciones/decidir.ts` del front).
+  | { tipo: 'mensaje'; canal: string; telefono: string | null; direccion?: 'entrante' | 'saliente' }
   | { tipo: 'estado' };
 
 const emisor = new EventEmitter();

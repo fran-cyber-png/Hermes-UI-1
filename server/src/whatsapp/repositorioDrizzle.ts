@@ -55,7 +55,14 @@ export const repositorioDrizzle: RepositorioInteracciones = {
     // Push de tiempo real: CUALQUIER mensaje nuevo (entrante, saliente, simulado)
     // pasa por acá, así que este es el único punto donde avisar "algo cambió".
     // La cola y la conversación de esta persona se invalidan al instante en el front.
-    emitirRT({ tipo: 'mensaje', canal: interaccion.canal, telefono: interaccion.personaId });
+    // `direccion` viaja para que el front pueda sonar SOLO con lo entrante — sin
+    // ella, la campanita sonaría también cuando la vendedora manda un mensaje.
+    emitirRT({
+      tipo: 'mensaje',
+      canal: interaccion.canal,
+      telefono: interaccion.personaId,
+      direccion: interaccion.direccion,
+    });
 
     return true;
   },

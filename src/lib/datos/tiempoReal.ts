@@ -3,6 +3,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { API_URL } from '../../config';
 import { consumirStream } from './streamAutenticado';
 import { tokenGuardado } from './token';
+import { esMensajeEntrante } from '../notificaciones/decidir';
+import { reproducirSonidoMensaje } from '../notificaciones/sonido';
+import { notificarEscritorio, pedirPermisoDeNotificacion } from '../notificaciones/escritorio';
+import { formatoTelefono } from '../formato';
 
 /**
  * TIEMPO REAL — el frontend escucha lo que el server empuja.
@@ -25,6 +29,13 @@ import { tokenGuardado } from './token';
  * muerto no lo revive — se dispara `alNoAutorizado` (App pasa la re-validación
  * de sesión, el mismo camino de `/api/auth/yo` que echa y limpia si
  * corresponde). Y solo se conecta con sesión iniciada.
+ *
+ * ── La campanita ──
+ * Un mensaje `entrante` (nunca lo que mandamos nosotros) suena y, si la
+ * pestaña no está a la vista, además dispara un `Notification` — ver
+ * `lib/notificaciones/`. El permiso se pide al iniciar sesión, no al primer
+ * mensaje: pedirlo desde un tab en segundo plano (el caso en que más se
+ * necesita) suele ser justo cuando el navegador lo deniega solo.
  */
 const REINTENTO_MS = 3000;
 
@@ -32,16 +43,28 @@ export function useTiempoReal(sesionActiva: boolean, alNoAutorizado?: () => void
   const qc = useQueryClient();
 
   useEffect(() => {
+    if (sesionActiva) pedirPermisoDeNotificacion();
+  }, [sesionActiva]);
+
+  useEffect(() => {
     if (!sesionActiva) return;
     const control = new AbortController();
     let reintento: ReturnType<typeof setTimeout> | undefined;
 
     const manejar = (data: string) => {
-      let e: { tipo?: string; telefono?: string | null };
+      let e: { tipo?: string; telefono?: string | null; direccion?: string };
       try {
         e = JSON.parse(data);
       } catch {
         return;
+      }
+
+      if (esMensajeEntrante(e)) {
+        // La campanita: nos escribieron. Nunca por lo que mandamos nosotros
+        // (`esMensajeEntrante` filtra por `direccion`), ni por una reacción o
+        // un recibo (el server no manda `direccion` en esos casos).
+        reproducirSonidoMensaje();
+        if (e.telefono) notificarEscritorio('Hermes', `Nuevo mensaje de ${formatoTelefono(e.telefono)}`);
       }
 
       if (e.tipo === 'mensaje') {
