@@ -49,13 +49,42 @@ import { correrLazo } from "./worker.js";
  */
 const CADA_HORAS = 6;
 
+/**
+ * QUÉ GOBIERNA DE VERDAD EL ENVÍO POR EL WEBHOOK — que no es `LAZO_RELOJ`.
+ *
+ * `capiDesdeEnv()` **tira** si falta `META_PIXEL_ID` o `META_ACCESS_TOKEN`, así que la
+ * ausencia de esas dos es el único apagado real de ese camino. Y `META_TEST_EVENT_CODE`
+ * no lo apaga: lo desvía a Test Events, que no afecta la optimización pero sí sale.
+ *
+ * Se dice en el arranque porque es el único momento en que alguien lo lee: al mirar el
+ * log para decidir si se puede tocar la pauta.
+ */
+function porQueElWebhookManda(): string {
+  if (!process.env.META_PIXEL_ID || !(process.env.META_ACCESS_TOKEN ?? process.env.META_TOKEN)) {
+    return "Hoy NO sale nada por ahí: falta META_PIXEL_ID o META_ACCESS_TOKEN y el envío tira antes de salir.";
+  }
+  return process.env.META_TEST_EVENT_CODE
+    ? "Hoy SALE, a Test Events (META_TEST_EVENT_CODE está puesto): no afecta la optimización, pero se envía."
+    : "Hoy SALE, y es REAL: entra al modelo de entrega de Meta y no se puede retractar.";
+}
+
 export function arrancarRelojDelLazo(): void {
   const modo = process.env.LAZO_RELOJ;
 
   if (modo !== "on" && modo !== "simulacion") {
     console.log(
-      "[lazo] reloj APAGADO. Meta no se entera de ninguna venta nueva hasta que alguien corra " +
-        "`npm run lazo` a mano. Para encenderlo: LAZO_RELOJ=simulacion (seguro) o LAZO_RELOJ=on.",
+      "[lazo] reloj APAGADO: el barrido cada 6 h no corre. Para encenderlo: " +
+        "LAZO_RELOJ=simulacion (seguro) o LAZO_RELOJ=on.",
+    );
+    // 🔴 Y ACÁ VA LA MITAD QUE FALTABA. Hasta el 16-ago-2026 esta línea decía «Meta
+    // no se entera de ninguna venta nueva», y era FALSO: `LAZO_RELOJ` sólo gobierna
+    // el barrido, no el webhook. Cada venta que Cerberus avisa pasa por
+    // `webhook/ruta.ts`, que llama a `capiDesdeEnv()` (:192) y hace
+    // `await capi.enviar(...)` (:217) sin mirar esta variable. O sea que el cartel
+    // que alguien lee antes de tocar la pauta decía lo contrario de lo que pasa.
+    // Ver issue #385.
+    console.log(
+      `[lazo] ⚠️ pero el WEBHOOK de ventas sí le manda \`Purchase\` a Meta, y no mira LAZO_RELOJ. ${porQueElWebhookManda()}`,
     );
     return;
   }
