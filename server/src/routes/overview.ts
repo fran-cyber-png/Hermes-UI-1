@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db/client.js";
+import { ruta } from "../lib/ruta.js";
 import { detectar } from "../decisions/detectors.js";
 import { ultimoSnapshot } from "../pauta/snapshot.js";
 import { estadoDeCanales } from "../canales/consultas.js";
@@ -63,7 +64,7 @@ function desdeDe(rango: Rango): string | null {
   return new Date(Date.now() - dias * 86_400_000).toISOString();
 }
 
-overviewRouter.get("/", async (req, res) => {
+overviewRouter.get("/", ruta(async (req, res) => {
   const rango = rangoDe(req.query.rango);
 
   // Todo a Postgres, todo en paralelo. Cero llamadas a Meta.
@@ -136,7 +137,7 @@ overviewRouter.get("/", async (req, res) => {
         }
       : null,
   });
-});
+}));
 
 /** Las últimas que se pueden trabajar: dentro de ventana y sin atender. */
 async function bandejaDe() {
@@ -165,18 +166,18 @@ async function bandejaDe() {
  * Esto lo da vuelta: lo más viejo arriba, con el reloj corriendo al lado.
  * Solo LEE el espejo. La confirmación sigue ocurriendo en Cerberus, donde debe.
  */
-overviewRouter.get("/tesoreria", async (_req, res) => {
+overviewRouter.get("/tesoreria", ruta(async (_req, res) => {
   res.json(await relojDeTesoreria());
-});
+}));
 
 
 /**
  * El detalle del lazo — para monitorear el envío. Muestra por qué cada venta va o no va, si el
  * último envío fue de prueba o real, y las que Meta rechazó con el error a la vista.
  */
-overviewRouter.get("/lazo", async (_req, res) => {
+overviewRouter.get("/lazo", ruta(async (_req, res) => {
   res.json(await lazoDetalle());
-});
+}));
 
 
 /**
@@ -184,9 +185,9 @@ overviewRouter.get("/lazo", async (_req, res) => {
  * del sistema sin saber nada. Cada pieza con su semáforo y su edad; "lo que sigue" sale de los
  * gaps abiertos, no inventado.
  */
-overviewRouter.get("/salud", async (_req, res) => {
+overviewRouter.get("/salud", ruta(async (_req, res) => {
   res.json(await salud());
-});
+}));
 
 
 /**
@@ -194,18 +195,18 @@ overviewRouter.get("/salud", async (_req, res) => {
  * (el eje del tiempo que no teníamos), la latencia de Tesorería (lo que saca ventas de la ventana de
  * Meta), el mix de producto (qué se vende de verdad) y el embudo de estados (cuánto se reembolsa).
  */
-overviewRouter.get("/comercial", async (_req, res) => {
+overviewRouter.get("/comercial", ruta(async (_req, res) => {
   res.json(await comercial());
-});
+}));
 
 
 /**
  * La cartera y el cliente: la cobranza viva (que nadie medía), los medios de pago y su tasa de
  * rechazo, y los segmentos de valor — la semilla de las audiencias lookalike de Meta.
  */
-overviewRouter.get("/cartera", async (_req, res) => {
+overviewRouter.get("/cartera", ruta(async (_req, res) => {
   res.json(await cartera());
-});
+}));
 
 
 /**
@@ -219,6 +220,6 @@ overviewRouter.get("/cartera", async (_req, res) => {
  * Ahora es un adaptador de una línea sobre `governa.atribucion.roasPorPais`. Se mantiene la ruta
  * porque Ivi la consume hoy; cuando migre al catálogo (iteración 2), esto se puede borrar.
  */
-overviewRouter.get("/atribucion", async (_req, res) => {
+overviewRouter.get("/atribucion", ruta(async (_req, res) => {
   res.json(await atribucionPorPais("90d", await ultimoSnapshot("90d")));
-});
+}));

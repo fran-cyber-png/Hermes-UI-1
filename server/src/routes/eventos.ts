@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/client.js";
 import { requiereVendedora } from "../auth/sesion.js";
+import { ruta } from "../lib/ruta.js";
 import { buscarProductos } from "../cerberus/productos.js";
 import { CATALOGO_EVENTOS, TIPOS_EVENTO, TOPE_CURSO, TOPE_NOTA, validarEvento } from "../eventos/catalogo.js";
 import {
@@ -41,14 +42,14 @@ eventosRouter.get("/vocabulario", (_req, res) => {
 });
 
 /** Los eventos vivos de una conversación — de TODO el equipo, con su autora. */
-eventosRouter.get("/", async (req, res) => {
+eventosRouter.get("/", ruta(async (req, res) => {
   const clave = String(req.query.clave ?? "").trim();
   if (!clave) {
     res.status(400).json({ ok: false, message: "falta la conversación" });
     return;
   }
   res.json({ eventos: await consultarEventos(db, clave) });
-});
+}));
 
 /**
  * Registrar un evento.
@@ -58,7 +59,7 @@ eventosRouter.get("/", async (req, res) => {
  * que poder decir «anotado, pero sin precio» en vez de fingir que quedó
  * cotizable — la misma honestidad que `POST /api/gestiones/intereses`.
  */
-eventosRouter.post("/", async (req, res) => {
+eventosRouter.post("/", ruta(async (req, res) => {
   const clave = String(req.body?.clave ?? "").trim();
   if (!clave) {
     res.status(400).json({ ok: false, message: "falta la conversación" });
@@ -78,7 +79,7 @@ eventosRouter.post("/", async (req, res) => {
     catalogo: () => buscarProductos(),
   });
   res.json({ ok: true, ...r });
-});
+}));
 
 /**
  * Corregir el comentario (y el curso, si el evento ya tenía uno). El `tipo` no
@@ -88,7 +89,7 @@ eventosRouter.post("/", async (req, res) => {
  * perímetro (el token es válido y la conversación es del equipo), es que esa
  * fila tiene dueña. El mensaje la nombra, para poder ir a pedirle que lo corrija.
  */
-eventosRouter.patch("/:id", async (req, res) => {
+eventosRouter.patch("/:id", ruta(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
     res.status(400).json({ ok: false, message: "id inválido" });
@@ -104,10 +105,10 @@ eventosRouter.patch("/:id", async (req, res) => {
     return;
   }
   res.json({ ok: true, evento: r.evento });
-});
+}));
 
 /** Borrar = archivar. No hay DELETE físico (ver el seam). */
-eventosRouter.delete("/:id", async (req, res) => {
+eventosRouter.delete("/:id", ruta(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
     res.status(400).json({ ok: false, message: "id inválido" });
@@ -120,4 +121,4 @@ eventosRouter.delete("/:id", async (req, res) => {
     return;
   }
   res.json({ ok: true, evento: r.evento });
-});
+}));

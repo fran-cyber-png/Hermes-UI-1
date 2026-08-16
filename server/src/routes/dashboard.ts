@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
 import { requiereVendedora } from '../auth/sesion.js';
+import { ruta } from '../lib/ruta.js';
 import { ordenarRadar } from '../cola/radar.js';
 import { consultarRadar } from '../cola/consultarRadar.js';
 import { contarPorEtapaEfectiva } from '../cola/consultarCola.js';
@@ -51,7 +52,7 @@ dashboardRouter.use(requiereVendedora);
  * silencioso «te muestro otra cosa»: la pantalla nunca enseña un período que
  * nadie pidió.
  */
-dashboardRouter.get('/negocio', async (req, res) => {
+dashboardRouter.get('/negocio', ruta(async (req, res) => {
   // 🔴 SOLO EL SUPERVISOR. «El negocio» es la facturación por curso y por
   // anuncio de toda la Escuela: es la lectura del que pone la plata, no la de
   // quien atiende. Va con el mismo motivo y la misma forma que `/api/padron`
@@ -86,9 +87,9 @@ dashboardRouter.get('/negocio', async (req, res) => {
   });
 
   res.json({ ...negocio, periodo: rango.clave });
-});
+}));
 
-dashboardRouter.get('/', async (req, res) => {
+dashboardRouter.get('/', ruta(async (req, res) => {
   // ── DE QUIÉN ES ESTE DASHBOARD (5-ago-2026). El supervisor ve todo; quien no,
   //    ve SOLO sus conversaciones asignadas — y eso recorta las cinco consultas
   //    de abajo, no una. La decisión, su costo y por qué es una frontera y no un
@@ -186,4 +187,4 @@ dashboardRouter.get('/', async (req, res) => {
     // decirlo o se lee como que el reparto se comió todo (igual que en el padrón).
     ...(supervisoresConfigurados(process.env).length === 0 ? { sinSupervisores: true } : {}),
   });
-});
+}));

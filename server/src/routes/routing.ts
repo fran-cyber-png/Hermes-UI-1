@@ -25,6 +25,8 @@ import {
 } from "../routing/repositorio.js";
 import { lineaDeCloudApi } from "../routing/linea.js";
 import { esTablaAusente } from "../cola/estadoSql.js";
+import { porQueFallo } from "../lib/porQueFallo.js";
+import { ruta } from "../lib/ruta.js";
 import { nombreDeProducto } from "../routing/producto.js";
 import { aliasesActivos } from "../cursos/repositorio.js";
 
@@ -71,7 +73,7 @@ function sinLinea(res: Parameters<Parameters<typeof routingRouter.get>[1]>[1]) {
  * pantalla que ofrece un nombre que el server después rechaza con 409 es peor
  * que no ofrecerlo.
  */
-routingRouter.get("/", async (_req, res) => {
+routingRouter.get("/", ruta(async (_req, res) => {
   const linea = lineaDeCloudApi();
   if (!linea) return sinLinea(res);
 
@@ -115,9 +117,10 @@ routingRouter.get("/", async (_req, res) => {
       destinos: destinosPosibles({ rueda: enLaRueda, mapa: numero?.vendedoras ?? [] }),
     });
   } catch (e) {
-    res.status(500).json({ ok: false, message: (e as Error).message });
+    console.error(`GET /api/routing falló — ${porQueFallo(e)}`);
+    res.status(500).json({ ok: false, message: "No se pudo completar la operación." });
   }
-});
+}));
 
 const cablesSchema = z.object({
   /** El conjunto COMPLETO de conectadas. `[]` corta todos los cables. */
@@ -137,7 +140,7 @@ const cablesSchema = z.object({
  * leads de esa campaña le caerían a alguien que no existe** — peor que el
  * round-robin, que al menos les encontraba dueño. El 409 enumera a quién sí.
  */
-routingRouter.put("/campanas/:campanaId", async (req, res) => {
+routingRouter.put("/campanas/:campanaId", ruta(async (req, res) => {
   const linea = lineaDeCloudApi();
   if (!linea) return sinLinea(res);
 
@@ -179,9 +182,10 @@ routingRouter.put("/campanas/:campanaId", async (req, res) => {
     await ponerCables(db, linea, campanaId, pedidas, req.vendedoraId ?? "");
     res.json({ ok: true, campanaId, vendedoras: pedidas });
   } catch (e) {
-    res.status(500).json({ ok: false, message: (e as Error).message });
+    console.error(`PUT /api/routing/campanas/${campanaId} falló — ${porQueFallo(e)}`);
+    res.status(500).json({ ok: false, message: "No se pudo completar la operación." });
   }
-});
+}));
 
 /**
  * DEJAR LOS CABLES DE UN CURSO DE FORMULARIO.
@@ -194,7 +198,7 @@ routingRouter.put("/campanas/:campanaId", async (req, res) => {
  * campañas: un dedazo mandaría todos los leads de ese curso a alguien que no
  * existe, y ahí no hay round-robin que los rescate.
  */
-routingRouter.put("/cursos", async (req, res) => {
+routingRouter.put("/cursos", ruta(async (req, res) => {
   const parsed = z
     .object({ curso: z.string().min(1), vendedoras: z.array(z.string().min(1)).max(20) })
     .safeParse(req.body);
@@ -229,9 +233,10 @@ routingRouter.put("/cursos", async (req, res) => {
     await ponerCablesDeCurso(db, curso, pedidas, req.vendedoraId ?? "");
     res.json({ ok: true, curso, vendedoras: pedidas });
   } catch (e) {
-    res.status(500).json({ ok: false, message: (e as Error).message });
+    console.error(`PUT /api/routing/cursos («${curso}») falló — ${porQueFallo(e)}`);
+    res.status(500).json({ ok: false, message: "No se pudo completar la operación." });
   }
-});
+}));
 
 /**
  * LOS ANUNCIOS DE UNA CAMPAÑA — el nivel de adentro del lienzo.
@@ -240,7 +245,7 @@ routingRouter.put("/cursos", async (req, res) => {
  * `ad_id → campaña → vendedoras` y no existe una regla por anuncio. Sirve para
  * entender de dónde vino el volumen, no para cambiarlo.
  */
-routingRouter.get("/campanas/:campanaId/anuncios", async (req, res) => {
+routingRouter.get("/campanas/:campanaId/anuncios", ruta(async (req, res) => {
   const campanaId = String(req.params.campanaId ?? "").trim();
   if (!campanaId) {
     res.status(400).json({ ok: false, message: "falta la campaña" });
@@ -249,9 +254,10 @@ routingRouter.get("/campanas/:campanaId/anuncios", async (req, res) => {
   try {
     res.json({ anuncios: await anunciosDeCampana(db, campanaId) });
   } catch (e) {
-    res.status(500).json({ ok: false, message: (e as Error).message });
+    console.error(`GET /api/routing/campanas/${campanaId}/anuncios falló — ${porQueFallo(e)}`);
+    res.status(500).json({ ok: false, message: "No se pudo completar la operación." });
   }
-});
+}));
 
 /**
  * CABLEAR UN PRODUCTO ENTERO — la acción masiva.
@@ -269,7 +275,7 @@ routingRouter.get("/campanas/:campanaId/anuncios", async (req, res) => {
  * renglones es indistinguible de «listo» sobre 0 (el caso de un producto cuyas
  * campañas dejaron de mandar a esta línea).
  */
-routingRouter.put("/productos", async (req, res) => {
+routingRouter.put("/productos", ruta(async (req, res) => {
   const parsed = z
     .object({
       familia: z.string().min(1),
@@ -317,9 +323,10 @@ routingRouter.put("/productos", async (req, res) => {
     );
     res.json({ ok: true, familia, vendedoras: pedidas, modo: parsed.data.modo, ...tocados });
   } catch (e) {
-    res.status(500).json({ ok: false, message: (e as Error).message });
+    console.error(`PUT /api/routing/productos («${familia}») falló — ${porQueFallo(e)}`);
+    res.status(500).json({ ok: false, message: "No se pudo completar la operación." });
   }
-});
+}));
 
 /**
  * PREGUNTARLE A META DE QUÉ CAMPAÑA ES CADA ANUNCIO NUEVO.
@@ -334,7 +341,7 @@ routingRouter.put("/productos", async (req, res) => {
  * lo que refresca el ESTADO (una campaña que se pausó ayer sigue diciendo
  * «activa» hasta que alguien vuelva a preguntar).
  */
-routingRouter.post("/refrescar", async (req, res) => {
+routingRouter.post("/refrescar", ruta(async (req, res) => {
   const linea = lineaDeCloudApi();
   if (!linea) return sinLinea(res);
 
@@ -392,6 +399,11 @@ routingRouter.post("/refrescar", async (req, res) => {
       });
       return;
     }
-    res.status(502).json({ ok: false, motivo: "meta_no_contesto", message: (e as Error).message });
+    console.error(`POST /api/routing/refrescar falló — ${porQueFallo(e)}`);
+    res.status(502).json({
+      ok: false,
+      motivo: "meta_no_contesto",
+      message: "No se pudo completar la operación.",
+    });
   }
-});
+}));

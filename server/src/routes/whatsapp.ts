@@ -31,6 +31,8 @@ import { reaccionar } from '../reacciones/enviar.js';
 import { resolverCitados, resolverCitaSaliente } from '../whatsapp/citaRepositorio.js';
 import { edicionesPorMensaje } from '../ediciones/repositorio.js';
 import { editarMensaje } from '../ediciones/editar.js';
+import { ruta } from '../lib/ruta.js';
+import { porQueFallo } from '../lib/porQueFallo.js';
 
 /**
  * LA CONVERSACIÓN NATIVA DE WHATSAPP dentro de Hermes: ver el hilo y responder,
@@ -129,7 +131,7 @@ whatsappRouter.get('/sesion', (req, res) => {
  * `mias` queda en `false` en todas y la opción desaparece, o sea que la
  * vendedora ve TODO. Fail-open también acá.
  */
-whatsappRouter.get('/lineas', async (req, res) => {
+whatsappRouter.get('/lineas', ruta(async (req, res) => {
   const vivas = gestorWhatsapp().todos();
 
   let etiquetas = new Map<string, string>();
@@ -167,10 +169,10 @@ whatsappRouter.get('/lineas', async (req, res) => {
       mias: mias.has(l.numero),
     })),
   });
-});
+}));
 
 /** El hilo completo de una conversación, en orden cronológico + de dónde vino el lead. */
-whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
+whatsappRouter.get('/conversacion/:telefono', ruta(async (req, res) => {
   const telefono = identidadDeParametro(req.params.telefono);
   // Con varias líneas vivas, la MISMA persona puede tener dos conversaciones que
   // para ella son dos chats distintos. Sin este scope las dos se ven como una, y
@@ -261,7 +263,7 @@ whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
   });
 
   res.json({ telefono, mensajes: enriquecidos, origen });
-});
+}));
 
 /**
  * Marcar leído al abrir — y son DOS cosas, no una.
@@ -286,7 +288,7 @@ whatsappRouter.get('/conversacion/:telefono', async (req, res) => {
  * igual y el cursor no se toca (en vez de avanzar el de una conversación
  * adivinada).
  */
-whatsappRouter.post('/leido/:telefono', requiereVendedora, async (req, res) => {
+whatsappRouter.post('/leido/:telefono', requiereVendedora, ruta(async (req, res) => {
   const telefono = identidadDeParametro(req.params.telefono);
   const numeroPropio = typeof req.query.numeroPropio === 'string' ? req.query.numeroPropio : undefined;
 
@@ -304,7 +306,7 @@ whatsappRouter.post('/leido/:telefono', requiereVendedora, async (req, res) => {
       });
       cursor = true;
     } catch (e) {
-      console.warn('[leido] no se pudo avanzar el cursor de lectura:', (e as Error).message);
+      console.warn(`[leido] no se pudo avanzar el cursor de lectura: ${porQueFallo(e)}`);
     }
   }
 
@@ -330,13 +332,13 @@ whatsappRouter.post('/leido/:telefono', requiereVendedora, async (req, res) => {
       // hay una respuesta que arruinar.
     }
   })();
-});
+}));
 
 /**
  * Responder. La ÚNICA vía de salida: pasa por `EnvioControlado`, que exige la
  * vendedora (del token), audita, y frena si la sesión está baneada.
  */
-whatsappRouter.post('/enviar', requiereVendedora, async (req, res) => {
+whatsappRouter.post('/enviar', requiereVendedora, ruta(async (req, res) => {
   const { numeroPropio, telefono, texto, referencia, citaDe } = req.body ?? {};
 
   // Mandar y persistir el saliente van juntos (`enviarYProyectar.ts`): un envío
@@ -372,7 +374,7 @@ whatsappRouter.post('/enviar', requiereVendedora, async (req, res) => {
   await cancelarPorRespuestaHumana(db, String(referencia ?? ''));
 
   res.json({ ok: true, idExterno: r.idExterno });
-});
+}));
 
 /**
  * Servir un adjunto ya descargado. El nombre se valida contra una lista blanca
@@ -416,7 +418,7 @@ whatsappRouter.get('/media/:archivo', (req, res) => {
  */
 const FOTO_FRESCA_MS = 7 * 24 * 60 * 60 * 1000;
 
-whatsappRouter.get('/foto/:telefono', requiereVendedora, async (req, res) => {
+whatsappRouter.get('/foto/:telefono', requiereVendedora, ruta(async (req, res) => {
   const telefono = normalizarTelefono(req.params.telefono);
   if (!telefono) {
     res.status(400).json({ ok: false, message: 'teléfono inválido' });
@@ -476,7 +478,7 @@ whatsappRouter.get('/foto/:telefono', requiereVendedora, async (req, res) => {
   res.setHeader('content-type', foto.mime);
   res.setHeader('cache-control', 'private, max-age=3600');
   res.send(foto.bytes);
-});
+}));
 
 /**
  * REACCIONAR a un mensaje del lead. Emoji vacío = quitar.
@@ -487,7 +489,7 @@ whatsappRouter.get('/foto/:telefono', requiereVendedora, async (req, res) => {
  * Lo que sí conserva es la guarda de sesión: con la línea caída o baneada, no
  * sale.
  */
-whatsappRouter.post('/reaccionar', requiereVendedora, express.json(), async (req, res) => {
+whatsappRouter.post('/reaccionar', requiereVendedora, express.json(), ruta(async (req, res) => {
   const { telefono, numeroPropio, mensajeId, emoji } = (req.body ?? {}) as Record<string, string>;
   const linea = gestorWhatsapp().de(String(numeroPropio ?? ''));
   if (!linea) {
@@ -505,7 +507,7 @@ whatsappRouter.post('/reaccionar', requiereVendedora, express.json(), async (req
     return;
   }
   res.json({ ok: true, quitada: r.quitada });
-});
+}));
 
 /**
  * EDITAR el texto de un mensaje SALIENTE ya mandado. Hoy solo whatsmeow puede
@@ -515,7 +517,7 @@ whatsappRouter.post('/reaccionar', requiereVendedora, express.json(), async (req
  * No pasa por `EnvioControlado`, mismo argumento que `/reaccionar`: corrige
  * algo que ya le llegó a esa persona, no le manda nada a alguien nuevo.
  */
-whatsappRouter.post('/editar', requiereVendedora, express.json(), async (req, res) => {
+whatsappRouter.post('/editar', requiereVendedora, express.json(), ruta(async (req, res) => {
   const { telefono, numeroPropio, mensajeId, texto } = (req.body ?? {}) as Record<string, string>;
   const linea = gestorWhatsapp().de(String(numeroPropio ?? ''));
   if (!linea) {
@@ -533,7 +535,7 @@ whatsappRouter.post('/editar', requiereVendedora, express.json(), async (req, re
     return;
   }
   res.json({ ok: true });
-});
+}));
 
 /**
  * Enviar un adjunto (imagen, video, audio o documento). El cuerpo es el archivo
@@ -544,7 +546,7 @@ whatsappRouter.post(
   '/enviar-media',
   requiereVendedora,
   express.raw({ type: () => true, limit: '64mb' }),
-  async (req, res) => {
+  ruta(async (req, res) => {
     const { telefono, numeroPropio, referencia, caption, nombre } = req.query as Record<string, string | undefined>;
     const mime = req.headers['content-type'] ?? 'application/octet-stream';
     const bytes = req.body as Buffer;
@@ -600,5 +602,5 @@ whatsappRouter.post(
     await cancelarPorRespuestaHumana(db, String(referencia ?? ''));
 
     res.json({ ok: true, idExterno: r.idExterno });
-  },
+  }),
 );

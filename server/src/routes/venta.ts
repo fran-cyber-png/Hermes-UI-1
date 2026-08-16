@@ -11,6 +11,8 @@ import {
 } from '../cerberus/venta.js';
 import { buscarProductos } from '../cerberus/productos.js';
 import { aLatin1 } from '../cerberus/latin1.js';
+import { porQueFallo } from '../lib/porQueFallo.js';
+import { ruta } from '../lib/ruta.js';
 
 /**
  * REGISTRAR VENTA — el formulario de venta, dentro de Hermes.
@@ -22,7 +24,7 @@ import { aLatin1 } from '../cerberus/latin1.js';
 export const ventaRouter = Router();
 
 /** Las opciones del formulario (monedas, países) + los choices de medio/origen. */
-ventaRouter.get('/formulario', requiereVendedora, async (req, res) => {
+ventaRouter.get('/formulario', requiereVendedora, ruta(async (req, res) => {
   // El try tiene DUEÑO a propósito (#223): Express 4 NO captura el rechazo de un
   // handler async, y acá adentro hay un fetch a Cerberus con timeout de 15 s.
   // Sin esto, un Cerberus lento era un unhandled rejection que tumbaba el
@@ -36,9 +38,10 @@ ventaRouter.get('/formulario', requiereVendedora, async (req, res) => {
     }
     res.json(f);
   } catch (err) {
-    res.status(502).json({ ok: false, message: `Cerberus no respondió el formulario: ${(err as Error).message}` });
+    console.error(`GET /api/venta/formulario falló — ${porQueFallo(err)}`);
+    res.status(502).json({ ok: false, message: 'Cerberus no respondió el formulario.' });
   }
-});
+}));
 
 /**
  * Los locales de UN país — porque el local tiene que pertenecer al país elegido
@@ -49,7 +52,7 @@ ventaRouter.get('/formulario', requiereVendedora, async (req, res) => {
  * formulario. Un 502 acá dejaría el select vacío y la venta imposible por un hipo
  * de una lista auxiliar.
  */
-ventaRouter.get('/locales', requiereVendedora, async (req, res) => {
+ventaRouter.get('/locales', requiereVendedora, ruta(async (req, res) => {
   const pais = typeof req.query.pais === 'string' ? req.query.pais : '';
   if (!/^\d+$/.test(pais)) {
     res.status(400).json({ ok: false, message: 'Falta el país.' });
@@ -62,10 +65,10 @@ ventaRouter.get('/locales', requiereVendedora, async (req, res) => {
   } catch {
     res.json({ locales: null });
   }
-});
+}));
 
 /** Buscador de cursos (API pública de Cerberus, solo lectura). */
-ventaRouter.get('/productos', requiereVendedora, async (req, res) => {
+ventaRouter.get('/productos', requiereVendedora, ruta(async (req, res) => {
   // Saneado aunque sea solo lectura: es un borde saliente hacia Cerberus (#108),
   // y un emoji en el buscador no encuentra nada de todos modos.
   const q = aLatin1(typeof req.query.q === 'string' ? req.query.q : '');
@@ -75,12 +78,13 @@ ventaRouter.get('/productos', requiereVendedora, async (req, res) => {
     // (#102), que pregunta por el MISMO catálogo.
     res.json({ productos: await buscarProductos(q) });
   } catch (err) {
-    res.status(502).json({ ok: false, message: (err as Error).message });
+    console.error(`GET /api/venta/productos falló — ${porQueFallo(err)}`);
+    res.status(502).json({ ok: false, message: 'No se pudo completar la operación.' });
   }
-});
+}));
 
 /** Crea la venta (o cotización) en Cerberus con la sesión de la vendedora. */
-ventaRouter.post('/crear', requiereVendedora, async (req, res) => {
+ventaRouter.post('/crear', requiereVendedora, ruta(async (req, res) => {
   const b = req.body ?? {};
   const orden: OrdenVenta = {
     clienteId: Number(b.clienteId),
@@ -139,8 +143,8 @@ ventaRouter.post('/crear', requiereVendedora, async (req, res) => {
         .filter(Boolean),
     });
   } catch (err) {
-    console.error('[venta] no se pudo asentar en el embudo:', (err as Error).message);
+    console.error(`[venta] no se pudo asentar en el embudo: ${porQueFallo(err)}`);
   }
 
   res.json({ ok: true, folio: r.folio, mensaje: r.mensaje });
-});
+}));

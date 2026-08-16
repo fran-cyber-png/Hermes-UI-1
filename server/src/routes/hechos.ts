@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
 import { requiereVendedora } from "../auth/sesion.js";
+import { ruta } from "../lib/ruta.js";
 import { MOMENTOS_DE_VENTA, momentoDeVenta } from "../sugerencias/estado.js";
 import { estadoDeLaVenta } from "../sugerencias/consultarSugerencias.js";
 import { TOPE_HECHOS, elegirHechos, vistaPreviaPorMomento } from "../hechos/elegir.js";
@@ -56,7 +57,7 @@ const Hecho = z.object({
  * El recorte se corre sobre los ACTIVOS: un dato apagado no compite por el
  * lugar, y mostrarlo compitiendo sería mentir sobre lo que pasaría al prenderlo.
  */
-hechosRouter.get("/catalogo", async (_req, res) => {
+hechosRouter.get("/catalogo", ruta(async (_req, res) => {
   const c = await leerCatalogoParaEditar(db);
   res.json({
     ...c,
@@ -66,10 +67,10 @@ hechosRouter.get("/catalogo", async (_req, res) => {
       TOPE_HECHOS,
     ),
   });
-});
+}));
 
 /** Los que corresponden a ESTA conversación, ya filtrados por el momento de la venta. */
-hechosRouter.get("/", async (req, res) => {
+hechosRouter.get("/", ruta(async (req, res) => {
   const clave = typeof req.query.clave === "string" ? req.query.clave : "";
   if (!clave.startsWith("conv:")) {
     res
@@ -91,9 +92,9 @@ hechosRouter.get("/", async (req, res) => {
     editable: catalogo.editable,
     origen: catalogo.origen,
   });
-});
+}));
 
-hechosRouter.post("/", async (req, res) => {
+hechosRouter.post("/", ruta(async (req, res) => {
   const p = Hecho.safeParse(req.body);
   if (!p.success) {
     res.status(400).json({ ok: false, errores: p.error.issues.map((i) => i.message) });
@@ -105,9 +106,9 @@ hechosRouter.post("/", async (req, res) => {
   } catch {
     res.status(409).json({ ok: false, message: "ya hay un dato con esa clave, o falta el db:push" });
   }
-});
+}));
 
-hechosRouter.put("/:clave", async (req, res) => {
+hechosRouter.put("/:clave", ruta(async (req, res) => {
   const p = Hecho.partial().safeParse(req.body);
   if (!p.success) {
     res.status(400).json({ ok: false, errores: p.error.issues.map((i) => i.message) });
@@ -123,10 +124,10 @@ hechosRouter.put("/:clave", async (req, res) => {
   } catch {
     res.status(503).json({ ok: false, message: "la tabla de datos recomendados no está: falta el db:push" });
   }
-});
+}));
 
 /** Borrar es APAGAR — el porqué vive con la escritura, en `apagarHecho`. */
-hechosRouter.delete("/:clave", async (req, res) => {
+hechosRouter.delete("/:clave", ruta(async (req, res) => {
   try {
     const fila = await apagarHecho(db, req.params.clave);
     if (!fila) {
@@ -137,4 +138,4 @@ hechosRouter.delete("/:clave", async (req, res) => {
   } catch {
     res.status(503).json({ ok: false, message: "la tabla de datos recomendados no está: falta el db:push" });
   }
-});
+}));

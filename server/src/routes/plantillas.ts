@@ -5,6 +5,8 @@ import express, { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
 import { requiereVendedora } from "../auth/sesion.js";
+import { ruta } from "../lib/ruta.js";
+import { porQueFallo } from "../lib/porQueFallo.js";
 import { ficha } from "../cerberus/ficha.js";
 import { RUTA_MEDIA, archivoSeguro, nombreSeguro } from "../whatsapp/mediaDir.js";
 import { enviarMediaYProyectar, enviarTextoYProyectar } from "../whatsapp/enviarYProyectar.js";
@@ -101,7 +103,7 @@ function pasosValidos(pasos: PasoPlantilla[]): boolean {
 //
 // UNA fila por diploma con su última edición (#129), no cinco «Diploma de
 // Especializaci…» truncadas e indistinguibles.
-plantillasRouter.get("/cursos", async (_req, res) => {
+plantillasRouter.get("/cursos", ruta(async (_req, res) => {
   try {
     const productos = await catalogoActivo();
     res.json({
@@ -113,9 +115,10 @@ plantillasRouter.get("/cursos", async (_req, res) => {
       })),
     });
   } catch (err) {
-    res.status(502).json({ ok: false, message: (err as Error).message });
+    console.error(`GET /api/plantillas/cursos — no se pudo leer el catálogo: ${porQueFallo(err)}`);
+    res.status(502).json({ ok: false, message: "No se pudo leer el catálogo de cursos." });
   }
-});
+}));
 
 /**
  * SUBIR EL ARCHIVO DE UN PASO (el flyer, el temario en PDF).
@@ -130,7 +133,7 @@ plantillasRouter.get("/cursos", async (_req, res) => {
 plantillasRouter.post(
   "/media",
   express.raw({ type: () => true, limit: "32mb" }),
-  async (req, res) => {
+  ruta(async (req, res) => {
     const bytes = req.body as Buffer;
     const mime = req.headers["content-type"] ?? "application/octet-stream";
     const nombre = typeof req.query.nombre === "string" ? req.query.nombre : "archivo";
@@ -152,14 +155,14 @@ plantillasRouter.post(
     await writeFile(join(RUTA_MEDIA, archivo), bytes);
 
     res.status(201).json({ ok: true, media: { archivo, mime, clase, nombre } });
-  },
+  }),
 );
 
-plantillasRouter.get("/", async (req, res) => {
+plantillasRouter.get("/", ruta(async (req, res) => {
   res.json({ plantillas: await listarPlantillas(db, req.vendedoraId!) });
-});
+}));
 
-plantillasRouter.post("/", async (req, res) => {
+plantillasRouter.post("/", ruta(async (req, res) => {
   const parsed = plantillaSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ ok: false, message: "plantilla inválida (nombre o pasos)" });
@@ -184,9 +187,9 @@ plantillasRouter.post("/", async (req, res) => {
     pasos,
   });
   res.status(201).json({ ok: true, plantilla });
-});
+}));
 
-plantillasRouter.patch("/:id", async (req, res) => {
+plantillasRouter.patch("/:id", ruta(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     res.status(400).json({ ok: false, message: "id inválido" });
@@ -213,7 +216,7 @@ plantillasRouter.patch("/:id", async (req, res) => {
     return;
   }
   res.json({ ok: true, plantilla });
-});
+}));
 
 /**
  * APROBAR una propuesta minada: el acto humano que la vuelve enviable.
@@ -232,7 +235,7 @@ const aprobarSchema = z.object({
   familiaCurso: z.string().max(40).nullable().optional(),
 });
 
-plantillasRouter.post("/:id/aprobar", async (req, res) => {
+plantillasRouter.post("/:id/aprobar", ruta(async (req, res) => {
   const id = Number(req.params.id);
   const parsed = aprobarSchema.safeParse(req.body ?? {});
   if (!Number.isInteger(id) || !parsed.success) {
@@ -254,7 +257,7 @@ plantillasRouter.post("/:id/aprobar", async (req, res) => {
 
   const plantilla = await aprobarPlantilla(db, req.vendedoraId!, id, decision.familiaCurso);
   res.json({ ok: true, plantilla });
-});
+}));
 
 /**
  * COMPARTIR CON EL EQUIPO — `PUT /api/plantillas/:id/alcance {alcance}`.
@@ -267,7 +270,7 @@ plantillasRouter.post("/:id/aprobar", async (req, res) => {
  * desconocido es 400 y no un default silencioso: caer a `personal` ante un typo
  * escondería la plantilla de las otras cuatro sin que nadie lo pidiera.
  */
-plantillasRouter.put("/:id/alcance", async (req, res) => {
+plantillasRouter.put("/:id/alcance", ruta(async (req, res) => {
   const id = Number(req.params.id);
   const alcance = (req.body as { alcance?: unknown })?.alcance;
   if (!Number.isInteger(id)) {
@@ -284,9 +287,9 @@ plantillasRouter.put("/:id/alcance", async (req, res) => {
     return;
   }
   res.json({ ok: true, alcance });
-});
+}));
 
-plantillasRouter.delete("/:id", async (req, res) => {
+plantillasRouter.delete("/:id", ruta(async (req, res) => {
   const id = Number(req.params.id);
   const ok = Number.isInteger(id) ? await archivarPlantilla(db, req.vendedoraId!, id) : false;
   if (!ok) {
@@ -294,7 +297,7 @@ plantillasRouter.delete("/:id", async (req, res) => {
     return;
   }
   res.json({ ok: true });
-});
+}));
 
 /**
  * PREPARAR: la vista previa de lo que va a salir, con las variables ya resueltas.
@@ -308,7 +311,7 @@ const prepararSchema = z.object({
   personaNombre: z.string().max(120).nullable().optional(),
 });
 
-plantillasRouter.post("/:id/preparar", async (req, res) => {
+plantillasRouter.post("/:id/preparar", ruta(async (req, res) => {
   const id = Number(req.params.id);
   const parsed = prepararSchema.safeParse(req.body);
   if (!Number.isInteger(id) || !parsed.success) {
@@ -353,7 +356,7 @@ plantillasRouter.post("/:id/preparar", async (req, res) => {
     total: pasos.length,
     enviable: plantilla.estado === "aprobada" && pasos.every((p) => !p.mediaPendiente),
   });
-});
+}));
 
 /**
  * ENVIAR **UN** PASO. Una llamada = un mensaje = una fila de auditoría.
@@ -382,7 +385,7 @@ const enviarPasoSchema = z.object({
   via: z.enum(["panel-sugerencia", "panel-secuencias"]).default("panel-secuencias"),
 });
 
-plantillasRouter.post("/:id/enviar-paso", async (req, res) => {
+plantillasRouter.post("/:id/enviar-paso", ruta(async (req, res) => {
   const id = Number(req.params.id);
   const parsed = enviarPasoSchema.safeParse(req.body);
   if (!Number.isInteger(id) || !parsed.success) {
@@ -490,4 +493,4 @@ plantillasRouter.post("/:id/enviar-paso", async (req, res) => {
   if (parsed.data.ultimo) await sumarUso(db, plantilla.id);
 
   res.json({ ok: true, idExterno: r.idExterno, orden: paso.orden, faltantes });
-});
+}));

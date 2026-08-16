@@ -7,6 +7,8 @@ import {
   registrarRespuesta,
   ultimaRespuestaPublicada,
 } from "../responder/repositorioDeRespuestas.js";
+import { porQueFallo } from "../lib/porQueFallo.js";
+import { ruta } from "../lib/ruta.js";
 import { MetaGraphClient, MetaGraphError } from "../meta/metaClient.js";
 
 export const responderRouter = Router();
@@ -32,7 +34,7 @@ async function tokenDePagina(token: string, pageId: string): Promise<string | nu
   return pages.find((p) => p.id === pageId)?.access_token ?? null;
 }
 
-responderRouter.post("/:id", async (req, res) => {
+responderRouter.post("/:id", ruta(async (req, res) => {
   const token = process.env.META_ACCESS_TOKEN;
   if (!token) {
     res.status(500).json({ type: "config_error", message: "META_ACCESS_TOKEN no está configurado." });
@@ -94,7 +96,10 @@ responderRouter.post("/:id", async (req, res) => {
       const r = await client.post(`${commentId}/private_replies`, { message: mensajePrivado });
       resultado.privado = r.id;
     } catch (err) {
-      const e = err instanceof MetaGraphError ? err.message : (err as Error).message;
+      console.error(`POST /api/responder/:id (privado) falló — ${porQueFallo(err)}`);
+      // Lo que dice Meta al rechazar SÍ sale: es lo que le explica a la persona
+      // por qué no salió el privado. Lo demás no: ahí el mensaje es el SQL.
+      const e = err instanceof MetaGraphError ? err.message : "No se pudo completar la operación.";
       resultado.errores.push(`Mensaje privado: ${e}`);
     }
   }
@@ -115,7 +120,9 @@ responderRouter.post("/:id", async (req, res) => {
       const r = await client.post(`${commentId}/comments`, { message: mensajePublico });
       resultado.publico = r.id;
     } catch (err) {
-      const e = err instanceof MetaGraphError ? err.message : (err as Error).message;
+      console.error(`POST /api/responder/:id (público) falló — ${porQueFallo(err)}`);
+      // Igual que arriba: el rechazo de Meta se muestra, el error crudo no.
+      const e = err instanceof MetaGraphError ? err.message : "No se pudo completar la operación.";
       resultado.errores.push(`Respuesta pública: ${e}`);
     }
   }
@@ -133,7 +140,7 @@ responderRouter.post("/:id", async (req, res) => {
     type: algoSalioBien ? "enviado" : "error",
     ...resultado,
   });
-});
+}));
 
 /**
  * Borrar una respuesta que publicamos.
@@ -145,7 +152,7 @@ responderRouter.post("/:id", async (req, res) => {
  * Solo borra respuestas NUESTRAS (las que están registradas en el event store).
  * Nunca borra el comentario de la persona: eso sería censurar a un cliente.
  */
-responderRouter.delete("/:id", async (req, res) => {
+responderRouter.delete("/:id", ruta(async (req, res) => {
   const token = process.env.META_ACCESS_TOKEN;
   const interactionId = Number(req.params.id);
 
@@ -173,7 +180,10 @@ responderRouter.delete("/:id", async (req, res) => {
 
     res.json({ type: "borrado" });
   } catch (err) {
-    const message = err instanceof MetaGraphError ? err.message : (err as Error).message;
+    console.error(`DELETE /api/responder/:id falló — ${porQueFallo(err)}`);
+    // El rechazo de Meta se muestra (explica por qué no se pudo borrar); el
+    // error crudo de cualquier otra cosa, no.
+    const message = err instanceof MetaGraphError ? err.message : "No se pudo completar la operación.";
     res.status(502).json({ type: "api_error", message });
   }
-});
+}));

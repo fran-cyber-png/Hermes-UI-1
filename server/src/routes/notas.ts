@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
 import { requiereVendedora } from '../auth/sesion.js';
+import { ruta } from '../lib/ruta.js';
 import { abrirLink, cortarLink, leerPorToken } from '../espacios/linkRepositorio.js';
 import { configuracionDeLink, puedeEditarPorLink } from '../espacios/linkModelo.js';
 import { espaciosDe } from '../espacios/repositorio.js';
@@ -97,7 +98,7 @@ notasRouter.use(requiereVendedora);
  * GET /api/notas?q=<texto>                  → búsqueda sobre TODO lo visible
  *                                             (mi libreta + mis espacios).
  */
-notasRouter.get('/', async (req, res) => {
+notasRouter.get('/', ruta(async (req, res) => {
   const quien = await quienPregunta(req.vendedoraId!);
 
   const q = typeof req.query.q === 'string' ? req.query.q : '';
@@ -131,9 +132,9 @@ notasRouter.get('/', async (req, res) => {
   // Ya viene con `origen` — listarNotas mezcla lo editable con lo histórico de gestiones.
   const notas = await listarNotas(db, { clave, vendedoraId: req.vendedoraId!, espacioId });
   res.json({ notas });
-});
+}));
 
-notasRouter.post('/', async (req, res) => {
+notasRouter.post('/', ruta(async (req, res) => {
   const clave = typeof req.body?.clave === 'string' ? req.body.clave.trim() : '';
   if (!clave) {
     res.status(400).json({ ok: false, message: 'falta la clave (conversación, o "general" para la libreta)' });
@@ -175,9 +176,9 @@ notasRouter.post('/', async (req, res) => {
     ...(req.body?.doc !== undefined ? { doc: req.body.doc } : {}),
   });
   res.json({ ok: true, nota: conOrigenNota(nota) });
-});
+}));
 
-notasRouter.patch('/:id', async (req, res) => {
+notasRouter.patch('/:id', ruta(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     res.status(400).json({ ok: false, message: 'id inválido' });
@@ -198,7 +199,7 @@ notasRouter.patch('/:id', async (req, res) => {
     return;
   }
   res.json({ ok: true, nota: conOrigenNota(r.nota) });
-});
+}));
 
 /**
  * MOVER UNA PÁGINA DE LUGAR. `espacioId: null` = traerla a mi libreta privada.
@@ -209,7 +210,7 @@ notasRouter.patch('/:id', async (req, res) => {
  * body mal armado movería páginas a la libreta privada de quien lo mandó — o sea
  * que un bug del cliente **se las sacaría al equipo en silencio**.
  */
-notasRouter.patch('/:id/mover', async (req, res) => {
+notasRouter.patch('/:id/mover', ruta(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     res.status(400).json({ ok: false, message: 'id inválido' });
@@ -241,7 +242,7 @@ notasRouter.patch('/:id/mover', async (req, res) => {
     return;
   }
   res.json({ ok: true, nota: conOrigenNota(r.nota) });
-});
+}));
 
 /**
  * EL LINK PÚBLICO de una página (ADR 0047).
@@ -254,7 +255,7 @@ notasRouter.patch('/:id/mover', async (req, res) => {
  * armarlo acá con una env sería un lugar más donde puede quedar mal. La pantalla
  * lo compone con su propio origen.
  */
-notasRouter.post('/:id/link', async (req, res) => {
+notasRouter.post('/:id/link', ruta(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     res.status(400).json({ ok: false, message: 'id inválido' });
@@ -277,9 +278,9 @@ notasRouter.post('/:id/link', async (req, res) => {
     return;
   }
   res.json({ ok: true, token: r.token });
-});
+}));
 
-notasRouter.delete('/:id/link', async (req, res) => {
+notasRouter.delete('/:id/link', ruta(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     res.status(400).json({ ok: false, message: 'id inválido' });
@@ -295,7 +296,7 @@ notasRouter.delete('/:id/link', async (req, res) => {
     return;
   }
   res.json({ ok: true, token: null });
-});
+}));
 
 /**
  * ABRIR UNA PÁGINA POR SU LINK, DESDE ADENTRO DE LA APP (ADR 0048).
@@ -313,7 +314,7 @@ notasRouter.delete('/:id/link', async (req, res) => {
  * sesión ya podía verlo por `/n/`. Lo que NO da lo mismo es `puedeEditar`, que
  * exige las dos cosas (permiso del link Y sesión).
  */
-notasRouter.get('/por-link/:token', async (req, res) => {
+notasRouter.get('/por-link/:token', ruta(async (req, res) => {
   const link = await leerPorToken(db, req.params.token);
   if (!link) {
     res.status(404).json({ ok: false, message: 'ese link no existe o ya no sirve' });
@@ -331,9 +332,9 @@ notasRouter.get('/por-link/:token', async (req, res) => {
     // porque el router entero está detrás de `requiereVendedora`.
     puedeEditar: puedeEditarPorLink(link, true),
   });
-});
+}));
 
-notasRouter.patch('/:id/archivar', async (req, res) => {
+notasRouter.patch('/:id/archivar', ruta(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     res.status(400).json({ ok: false, message: 'id inválido' });
@@ -349,14 +350,14 @@ notasRouter.patch('/:id/archivar', async (req, res) => {
     return;
   }
   res.json({ ok: true, nota: conOrigenNota(r.nota) });
-});
+}));
 
 /**
  * DESHACER un archivado — el camino de vuelta que le faltaba al «un clic y
  * desaparece» (review de código del PR #47). Lo llama el toast «Nota archivada
  * — Deshacer» del front, apenas después de archivar.
  */
-notasRouter.patch('/:id/desarchivar', async (req, res) => {
+notasRouter.patch('/:id/desarchivar', ruta(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     res.status(400).json({ ok: false, message: 'id inválido' });
@@ -372,4 +373,4 @@ notasRouter.patch('/:id/desarchivar', async (req, res) => {
     return;
   }
   res.json({ ok: true, nota: conOrigenNota(r.nota) });
-});
+}));

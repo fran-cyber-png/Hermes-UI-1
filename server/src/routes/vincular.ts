@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { vinculador } from '../whatsapp/vinculador.js';
+import { ruta } from '../lib/ruta.js';
 
 /**
  * LA CONSOLA DE VINCULACIÓN (D13). Una página local donde el operador enlaza un
@@ -22,10 +23,10 @@ vincularRouter.get('/estado', (_req, res) => {
   res.json(vinculador.estado());
 });
 
-vincularRouter.post('/cerrar', async (_req, res) => {
+vincularRouter.post('/cerrar', ruta(async (_req, res) => {
   await vinculador.cerrar();
   res.json({ ok: true });
-});
+}));
 
 vincularRouter.get('/', (_req, res) => {
   res.type('html').send(PAGINA);

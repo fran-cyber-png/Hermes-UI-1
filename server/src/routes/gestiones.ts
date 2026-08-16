@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
 import { requiereVendedora } from '../auth/sesion.js';
+import { ruta } from '../lib/ruta.js';
 import {
   ACCIONES,
   ETAPAS,
@@ -46,7 +47,7 @@ gestionesRouter.use(requiereVendedora);
 export { ACCIONES, ETAPAS };
 
 /** Registrar una gestión. Las compuertas del embudo viven en el seam. */
-gestionesRouter.post('/', async (req, res) => {
+gestionesRouter.post('/', ruta(async (req, res) => {
   const { clave, canal, personaId, personaNombre, numeroPropio, proximaAccion, proximaFecha, notas } =
     req.body ?? {};
   const etapa = normalizarEtapa(String(req.body?.etapa ?? ''));
@@ -83,28 +84,28 @@ gestionesRouter.post('/', async (req, res) => {
     return;
   }
   res.json({ ok: true, gestion: r.gestion });
-});
+}));
 
 /** El historial de gestiones de UNA conversación (la etapa actual es la primera). */
-gestionesRouter.get('/de/:clave', async (req, res) => {
+gestionesRouter.get('/de/:clave', ruta(async (req, res) => {
   res.json(await historialDeGestiones(db, req.params.clave));
-});
+}));
 
 /** El mapa clave → etapa actual (normalizada), para el Embudo viejo. */
-gestionesRouter.get('/etapas', async (_req, res) => {
+gestionesRouter.get('/etapas', ruta(async (_req, res) => {
   res.json({ etapas: await mapaDeEtapasActuales(db) });
-});
+}));
 
 // ── Intereses: qué curso(s) quiere. La compuerta de "cotizado". ────────────
 
-gestionesRouter.get('/intereses', async (req, res) => {
+gestionesRouter.get('/intereses', ruta(async (req, res) => {
   const claves = String(req.query.claves ?? '')
     .split(',')
     .filter(Boolean);
   // El orden cronológico y la forma con fecha viven en el seam (#57): la ruta
   // solo parsea las claves. Devuelve `intereses` (retrocompat) + `interesesDetalle`.
   res.json(await consultarIntereses(db, claves));
-});
+}));
 
 /**
  * Registrar un interés a mano.
@@ -118,7 +119,7 @@ gestionesRouter.get('/intereses', async (req, res) => {
  * Responde `vinculado` SIEMPRE: si se pidió atar y no se pudo, la UI tiene que
  * poder decir «anotado, pero sin precio» en vez de fingir que quedó cotizable.
  */
-gestionesRouter.post('/intereses', async (req, res) => {
+gestionesRouter.post('/intereses', ruta(async (req, res) => {
   const { clave, curso, productoId } = req.body ?? {};
   const limpio = String(curso ?? '').trim().slice(0, 120);
   if (!clave || !limpio) {
@@ -133,7 +134,7 @@ gestionesRouter.post('/intereses', async (req, res) => {
     catalogo: () => buscarProductos(),
   });
   res.json({ ok: true, ...r });
-});
+}));
 
 /**
  * CONFIRMAR EL INTERÉS DERIVADO (#102) — un clic humano, no una automatización.
@@ -144,7 +145,7 @@ gestionesRouter.post('/intereses', async (req, res) => {
  * Cerberus no contestó, 409 si no hay nada que confirmar — nunca un «listo» que
  * no registró nada.
  */
-gestionesRouter.post('/intereses/derivado', async (req, res) => {
+gestionesRouter.post('/intereses/derivado', ruta(async (req, res) => {
   const clave = String(req.body?.clave ?? '').trim();
   if (!clave) {
     res.status(400).json({ ok: false, message: 'falta la conversación' });
@@ -160,24 +161,24 @@ gestionesRouter.post('/intereses/derivado', async (req, res) => {
     return;
   }
   res.json(r);
-});
+}));
 
-gestionesRouter.delete('/intereses', async (req, res) => {
+gestionesRouter.delete('/intereses', ruta(async (req, res) => {
   const { clave, curso } = req.body ?? {};
   await quitarInteres(db, { clave: String(clave ?? ''), curso: String(curso ?? '') });
   res.json({ ok: true });
-});
+}));
 
 // ── Etiquetas (compartidas por el equipo) ──────────────────────────────────
 
-gestionesRouter.get('/etiquetas', async (req, res) => {
+gestionesRouter.get('/etiquetas', ruta(async (req, res) => {
   const claves = String(req.query.claves ?? '')
     .split(',')
     .filter(Boolean);
   res.json({ etiquetas: await etiquetasPorClave(db, claves) });
-});
+}));
 
-gestionesRouter.post('/etiquetas', async (req, res) => {
+gestionesRouter.post('/etiquetas', ruta(async (req, res) => {
   const { clave, etiqueta } = req.body ?? {};
   const limpia = String(etiqueta ?? '').trim().toLowerCase().slice(0, 30);
   if (!clave || !limpia) {
@@ -190,13 +191,13 @@ gestionesRouter.post('/etiquetas', async (req, res) => {
     vendedoraId: req.vendedoraId!,
   });
   res.json({ ok: true });
-});
+}));
 
-gestionesRouter.delete('/etiquetas', async (req, res) => {
+gestionesRouter.delete('/etiquetas', ruta(async (req, res) => {
   const { clave, etiqueta } = req.body ?? {};
   await quitarEtiqueta(db, { clave: String(clave ?? ''), etiqueta: String(etiqueta ?? '') });
   res.json({ ok: true });
-});
+}));
 
 /**
  * LA VENTA MUEVE EL EMBUDO SOLA (lo llama la ruta de venta, no la UI):

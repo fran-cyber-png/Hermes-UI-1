@@ -2,6 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
 import { esTablaAusente } from "../cola/estadoSql.js";
+import { porQueFallo } from "../lib/porQueFallo.js";
+import { ruta } from "../lib/ruta.js";
 import { normalizarTelefono } from "../whatsapp/identidadWa.js";
 import { obtenerNumero } from "../numeros/repositorio.js";
 import { comoVaElReparto, reasignar, vendedorasDeLaRueda } from "../reparto/asignar.js";
@@ -53,7 +55,7 @@ function esFaltaDeMigracion(e: unknown): boolean {
  * el que más y el que menos nunca hay más de 1— se verifica MIRANDO esto, así que
  * el número viaja siempre, no solo cuando alguien lo pide.
  */
-repartoRouter.get("/rueda", async (req, res) => {
+repartoRouter.get("/rueda", ruta(async (req, res) => {
   const linea = lineaDe(req.query.linea);
   if (!linea) {
     res.status(400).json({ ok: false, message: "falta `linea` (se espera un teléfono)" });
@@ -81,9 +83,10 @@ repartoRouter.get("/rueda", async (req, res) => {
       });
       return;
     }
-    res.status(500).json({ ok: false, message: (e as Error).message });
+    console.error(`la rueda del reparto no se pudo leer — ${porQueFallo(e)}`);
+    res.status(500).json({ ok: false, message: "No se pudo completar la operación." });
   }
-});
+}));
 
 const asignacionSchema = z.object({
   clave: z.string().min(1),
@@ -104,7 +107,7 @@ const asignacionSchema = z.object({
  * El error enumera a quién SÍ se puede — un 409 que no dice la salida obliga a
  * adivinar dos veces.
  */
-repartoRouter.put("/asignacion", async (req, res) => {
+repartoRouter.put("/asignacion", ruta(async (req, res) => {
   const parsed = asignacionSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ ok: false, message: "asignación inválida (clave, numeroPropio, vendedoraId)" });
@@ -150,6 +153,7 @@ repartoRouter.put("/asignacion", async (req, res) => {
       });
       return;
     }
-    res.status(500).json({ ok: false, message: (e as Error).message });
+    console.error(`la conversación no se pudo reasignar — ${porQueFallo(e)}`);
+    res.status(500).json({ ok: false, message: "No se pudo completar la operación." });
   }
-});
+}));

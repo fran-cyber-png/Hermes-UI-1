@@ -12,6 +12,8 @@ import { icarus, IcarusNoConfigurado } from "../padron/conexion.js";
 import { consultarPadron } from "../padron/consultarPadron.js";
 import { filtrosSchema } from "../padron/filtros.js";
 import { hayQuePreocuparse } from "../campana/corridas.js";
+import { ruta } from "../lib/ruta.js";
+import { porQueFallo } from "../lib/porQueFallo.js";
 
 /**
  * LAS PLANTILLAS DE WHATSAPP — solo lectura, y solo para el supervisor.
@@ -79,7 +81,7 @@ function seRindio(res: Parameters<Parameters<Router["get"]>[1]>[1], e: unknown) 
  * su calidad. Los tres datos que decide una persona antes de armar una campaña:
  * ¿existe? ¿la puedo usar? ¿está sana?
  */
-campanaRouter.get("/plantillas", async (req, res) => {
+campanaRouter.get("/plantillas", ruta(async (req, res) => {
   if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
     res.status(403).json({
       ok: false,
@@ -108,7 +110,7 @@ campanaRouter.get("/plantillas", async (req, res) => {
   } catch (e) {
     seRindio(res, e);
   }
-});
+}));
 
 /**
  * CÓMO VAN LAS CAMPAÑAS — lo que la pantalla dibuja.
@@ -124,7 +126,7 @@ campanaRouter.get("/plantillas", async (req, res) => {
  * navegador: es el mismo criterio que decide si la pantalla grita, y con dos
  * cabezas una podría decir «todo bien» sobre una plantilla pausada.
  */
-campanaRouter.get("/corridas", async (req, res) => {
+campanaRouter.get("/corridas", ruta(async (req, res) => {
   if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
     res.status(403).json({
       ok: false,
@@ -139,7 +141,7 @@ campanaRouter.get("/corridas", async (req, res) => {
   res.json({
     corridas: corridas.map((c) => ({ ...c, aviso: hayQuePreocuparse(c) })),
   });
-});
+}));
 
 /**
  * QUIÉN CONTESTÓ Y NADIE ATENDIÓ — la lista de tareas de la campaña.
@@ -148,14 +150,14 @@ campanaRouter.get("/corridas", async (req, res) => {
  * «Quiero el paquete» y «ok» no valen lo mismo, y sin el texto la lista es una
  * columna de teléfonos que hay que abrir de a uno para saber cuál urge.
  */
-campanaRouter.get("/corridas/:pieza/esperando", async (req, res) => {
+campanaRouter.get("/corridas/:pieza/esperando", ruta(async (req, res) => {
   if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
     return;
   }
   const esperando = await consultarEsperando(db, req.params.pieza);
   res.json({ esperando });
-});
+}));
 
 // ══════════════════════════════════════════════════════════════════════════
 //  PLANTILLAS — crear una nueva en Meta
@@ -198,7 +200,7 @@ campanaRouter.post("/plantillas/revisar", (req, res) => {
  * idioma cuenta como una), y por eso `cupo_lleno` se distingue de «tu texto está
  * mal»: piden acciones distintas.
  */
-campanaRouter.post("/plantillas", async (req, res) => {
+campanaRouter.post("/plantillas", ruta(async (req, res) => {
   const quien = req.vendedoraId ?? "";
   if (!esSupervisor(quien, process.env)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
@@ -227,13 +229,13 @@ campanaRouter.post("/plantillas", async (req, res) => {
     }
     throw e;
   }
-});
+}));
 
 // ══════════════════════════════════════════════════════════════════════════
 //  LISTAS — recortes del padrón, guardados con nombre
 // ══════════════════════════════════════════════════════════════════════════
 
-campanaRouter.get("/listas", async (req, res) => {
+campanaRouter.get("/listas", ruta(async (req, res) => {
   if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
     return;
@@ -249,9 +251,9 @@ campanaRouter.get("/listas", async (req, res) => {
     }
     throw e;
   }
-});
+}));
 
-campanaRouter.post("/listas", async (req, res) => {
+campanaRouter.post("/listas", ruta(async (req, res) => {
   const quien = req.vendedoraId ?? "";
   if (!esSupervisor(quien, process.env)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
@@ -275,9 +277,9 @@ campanaRouter.post("/listas", async (req, res) => {
   });
   console.log(`[campana] LISTA CREADA ${lista.id} «${lista.nombre}» por=${quien}`);
   res.status(201).json(lista);
-});
+}));
 
-campanaRouter.delete("/listas/:id", async (req, res) => {
+campanaRouter.delete("/listas/:id", ruta(async (req, res) => {
   const quien = req.vendedoraId ?? "";
   if (!esSupervisor(quien, process.env)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
@@ -286,7 +288,7 @@ campanaRouter.delete("/listas/:id", async (req, res) => {
   const archivada = await archivarLista(db, Number(req.params.id));
   console.log(`[campana] LISTA ARCHIVADA ${req.params.id} por=${quien} (${archivada ? "ok" : "no estaba viva"})`);
   res.json({ archivada });
-});
+}));
 
 // ══════════════════════════════════════════════════════════════════════════
 //  CORRIDAS — la firma, y el freno
@@ -299,7 +301,7 @@ campanaRouter.delete("/listas/:id", async (req, res) => {
  * por la que esto es una tabla y no un log: un log no se puede consultar seis
  * meses después.
  */
-campanaRouter.get("/historial", async (req, res) => {
+campanaRouter.get("/historial", ruta(async (req, res) => {
   if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
     return;
@@ -313,10 +315,10 @@ campanaRouter.get("/historial", async (req, res) => {
     }
     throw e;
   }
-});
+}));
 
 /** Qué está saliendo AHORA. Es lo que dibuja el chip y habilita el freno. */
-campanaRouter.get("/vivas", async (req, res) => {
+campanaRouter.get("/vivas", ruta(async (req, res) => {
   if (!req.vendedoraId) {
     res.status(401).json({ ok: false });
     return;
@@ -338,10 +340,10 @@ campanaRouter.get("/vivas", async (req, res) => {
     }
     throw e;
   }
-});
+}));
 
 /** FRENAR. Cualquier vendedora puede, y queda escrito quién fue. */
-campanaRouter.post("/corridas/:id/frenar", async (req, res) => {
+campanaRouter.post("/corridas/:id/frenar", ruta(async (req, res) => {
   const quien = req.vendedoraId;
   if (!quien) {
     res.status(401).json({ ok: false });
@@ -349,7 +351,7 @@ campanaRouter.post("/corridas/:id/frenar", async (req, res) => {
   }
   const paro = await frenarCorrida(db, Number(req.params.id), quien, "frenada a mano");
   res.json({ frenada: paro });
-});
+}));
 
 /**
  * CUÁNTOS ENTRAN EN UN FILTRO — el conteo en vivo de una lista.
@@ -365,7 +367,7 @@ campanaRouter.post("/corridas/:id/frenar", async (req, res) => {
  * NUNCA `0`.** Un cero se lee como «esta lista está vacía» y llevaría a borrar
  * una lista buena, o peor: a armar una campaña creyendo que no le llega a nadie.
  */
-campanaRouter.post("/cuantos", async (req, res) => {
+campanaRouter.post("/cuantos", ruta(async (req, res) => {
   if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
     return;
@@ -405,8 +407,8 @@ campanaRouter.post("/cuantos", async (req, res) => {
     res.json({ cuantos: total });
   } catch (e) {
     const sinConfig = e instanceof IcarusNoConfigurado;
-    console.error("[campana] no se pudo contar el filtro:", (e as Error).message);
+    console.error(`[campana] no se pudo contar el filtro: ${porQueFallo(e)}`);
     // `null`, no 0. Ver la cabecera: un cero manda a borrar una lista buena.
     res.json({ cuantos: null, motivo: sinConfig ? "sin_icarus" : "icarus_no_respondio" });
   }
-});
+}));

@@ -15,6 +15,7 @@ import {
   type ModoAutoRespuesta,
 } from '../autorespuesta/modo.js';
 import { faltaEsquema, repositorioDrizzle, type PendienteVista } from '../autorespuesta/repositorio.js';
+import { ruta } from '../lib/ruta.js';
 
 /**
  * EL INTERRUPTOR, LA BANDEJA Y EL OK — la superficie de la auto-respuesta
@@ -73,7 +74,7 @@ const cuerpoDescartar = z
 const SIN_TABLAS = 'faltan las tablas de la auto-respuesta: corré `npm run db:push` en el server (ADR 0015/0016).';
 
 /** El estado completo: las dos llaves, los límites y lo que hay en cola hoy. */
-autorespuestaRouter.get('/', requiereVendedora, async (_req, res) => {
+autorespuestaRouter.get('/', requiereVendedora, ruta(async (_req, res) => {
   const cfg = configDesdeEnv();
   const repo = repositorioDrizzle(db);
   const dia = diaLocal(new Date(), cfg.zona);
@@ -112,7 +113,7 @@ autorespuestaRouter.get('/', requiereVendedora, async (_req, res) => {
     // de reventar — y de paso dice exactamente qué falta.
     res.json({ habilitadaEnEntorno: cfg.habilitada, activa: false, sinTablas: true, mensaje: SIN_TABLAS });
   }
-});
+}));
 
 /**
  * LA BANDEJA DE REVISIÓN — lo que espera el OK, con lo mínimo para decidir en
@@ -124,7 +125,7 @@ autorespuestaRouter.get('/', requiereVendedora, async (_req, res) => {
  * vendedora aprobar algo que el despachador va a tirar sería mentirle. El
  * veredicto lo da la misma función pura (`caducidad.ts`).
  */
-autorespuestaRouter.get('/bandeja', requiereVendedora, async (_req, res) => {
+autorespuestaRouter.get('/bandeja', requiereVendedora, ruta(async (_req, res) => {
   const cfg = configDesdeEnv();
   const ahora = new Date();
 
@@ -145,14 +146,14 @@ autorespuestaRouter.get('/bandeja', requiereVendedora, async (_req, res) => {
     if (!faltaEsquema(e)) throw e;
     res.json({ modo: 'apagada', total: 0, grupos: [], sinTablas: true, mensaje: SIN_TABLAS });
   }
-});
+}));
 
 /**
  * EL OK — de a uno o en lote. Lo aprobado NO sale junto: se le vuelve a repartir
  * la hora con el ritmo de siempre (`aprobar.ts`), y lo que no entra vuelve con
  * su motivo en vez de apretarse.
  */
-autorespuestaRouter.post('/aprobar', requiereVendedora, async (req, res) => {
+autorespuestaRouter.post('/aprobar', requiereVendedora, ruta(async (req, res) => {
   const parseo = cuerpoAprobar.safeParse(req.body);
   if (!parseo.success) {
     res.status(400).json({ ok: false, message: 'mandá `{ ids: number[], textos?: { [id]: string } }`' });
@@ -219,10 +220,10 @@ autorespuestaRouter.post('/aprobar', requiereVendedora, async (req, res) => {
     if (!faltaEsquema(e)) throw e;
     res.status(503).json({ ok: false, message: SIN_TABLAS });
   }
-});
+}));
 
 /** «Esta no va» — de a una o todas. Es una decisión humana y queda con su nombre. */
-autorespuestaRouter.post('/descartar', requiereVendedora, async (req, res) => {
+autorespuestaRouter.post('/descartar', requiereVendedora, ruta(async (req, res) => {
   const parseo = cuerpoDescartar.safeParse(req.body);
   if (!parseo.success) {
     res.status(400).json({ ok: false, message: 'mandá `{ ids: number[] }` o `{ todas: true }`' });
@@ -242,7 +243,7 @@ autorespuestaRouter.post('/descartar', requiereVendedora, async (req, res) => {
     if (!faltaEsquema(e)) throw e;
     res.status(503).json({ ok: false, message: SIN_TABLAS });
   }
-});
+}));
 
 /**
  * Cambiar de modo: apagada · supervisada. **Automática ya no** (ADR 0018).
@@ -252,7 +253,7 @@ autorespuestaRouter.post('/descartar', requiereVendedora, async (req, res) => {
  * que se lee como un typo. La puerta se cierra abajo, contra `MODOS_ELEGIBLES`,
  * que es una lista blanca con su test — no un `if` que el primer atajo borra.
  */
-autorespuestaRouter.put('/modo', requiereVendedora, async (req, res) => {
+autorespuestaRouter.put('/modo', requiereVendedora, ruta(async (req, res) => {
   const parseo = cuerpoModo.safeParse(req.body);
   if (!parseo.success) {
     res.status(400).json({ ok: false, message: 'mandá `{ modo: "apagada" | "supervisada" }`' });
@@ -265,7 +266,7 @@ autorespuestaRouter.put('/modo', requiereVendedora, async (req, res) => {
     return;
   }
   await fijar(req.vendedoraId!, parseo.data.modo, parseo.data.motivo, res);
-});
+}));
 
 /**
  * La ruta de ADR 0015, intacta por fuera: `{ encendida: boolean }`. Sigue viva
@@ -277,14 +278,14 @@ autorespuestaRouter.put('/modo', requiereVendedora, async (req, res) => {
  * vendedora dejaba prod mandando sola sin que la UI lo ofreciera jamás—. Apagar,
  * que es para lo que esta ruta existe, no cambia ni un carácter.
  */
-autorespuestaRouter.put('/interruptor', requiereVendedora, async (req, res) => {
+autorespuestaRouter.put('/interruptor', requiereVendedora, ruta(async (req, res) => {
   const parseo = cuerpoInterruptor.safeParse(req.body);
   if (!parseo.success) {
     res.status(400).json({ ok: false, message: 'mandá `{ encendida: boolean, motivo?: string }`' });
     return;
   }
   await fijar(req.vendedoraId!, modoDelBooleano(parseo.data.encendida), parseo.data.motivo, res);
-});
+}));
 
 async function fijar(
   quien: string,

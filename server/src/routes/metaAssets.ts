@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { MetaGraphClient, MetaGraphError } from "../meta/metaClient.js";
+import { porQueFallo } from "../lib/porQueFallo.js";
+import { ruta } from "../lib/ruta.js";
 
 export const metaAssetsRouter = Router();
 
@@ -18,7 +20,7 @@ function token(res: any): string | null {
  * Instagram le da presencia en IG (donde vino el 59% de los leads), y el
  * formulario es donde la persona deja los datos.
  */
-metaAssetsRouter.get("/pages", async (_req, res) => {
+metaAssetsRouter.get("/pages", ruta(async (_req, res) => {
   const t = token(res);
   if (!t) return;
 
@@ -56,13 +58,19 @@ metaAssetsRouter.get("/pages", async (_req, res) => {
 
     res.json({ pages: enriched.sort((a, b) => b.leadForms.length - a.leadForms.length) });
   } catch (err) {
-    const message = err instanceof MetaGraphError ? err.message : (err as Error).message;
+    // El mensaje de un `MetaGraphError` SÍ se muestra: es el diagnóstico que dio
+    // Meta y es lo único que explica por qué no se pudo listar. Cualquier otro
+    // error sale genérico y se loguea — su texto crudo puede ser el SQL.
+    if (!(err instanceof MetaGraphError)) {
+      console.error(`las Páginas de Meta no se pudieron listar — ${porQueFallo(err)}`);
+    }
+    const message = err instanceof MetaGraphError ? err.message : "No se pudo completar la operación.";
     res.status(502).json({ type: "api_error", message });
   }
-});
+}));
 
 /** Imágenes ya subidas a la cuenta — para no obligar a subir una nueva. */
-metaAssetsRouter.get("/ad-images", async (req, res) => {
+metaAssetsRouter.get("/ad-images", ruta(async (req, res) => {
   const t = token(res);
   if (!t) return;
 
@@ -88,7 +96,11 @@ metaAssetsRouter.get("/ad-images", async (req, res) => {
       })),
     });
   } catch (err) {
-    const message = err instanceof MetaGraphError ? err.message : (err as Error).message;
+    // Mismo criterio que arriba: el diagnóstico de Meta se muestra, el resto no.
+    if (!(err instanceof MetaGraphError)) {
+      console.error(`las imágenes de la cuenta no se pudieron listar — ${porQueFallo(err)}`);
+    }
+    const message = err instanceof MetaGraphError ? err.message : "No se pudo completar la operación.";
     res.status(502).json({ type: "api_error", message });
   }
-});
+}));

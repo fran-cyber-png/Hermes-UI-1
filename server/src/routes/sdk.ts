@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { catalogo, invocar, listar } from "../sdk/index.js";
+import { ruta } from "../lib/ruta.js";
 
 /**
  * EL SDK, POR RED.
@@ -50,7 +51,7 @@ sdkRouter.get("/herramientas", (_req, res) => {
  * El código HTTP sale del motivo, no de un try/catch: el registro nunca lanza, devuelve un
  * `Resultado` discriminado. Un fracaso es un hecho del sistema y se reporta como tal.
  */
-sdkRouter.post("/invocar/:nombre", async (req, res) => {
+sdkRouter.post("/invocar/:nombre", ruta(async (req, res) => {
   const r = await invocar(req.params.nombre, req.body);
 
   if (r.ok) {
@@ -60,4 +61,4 @@ sdkRouter.post("/invocar/:nombre", async (req, res) => {
 
   const codigo = { no_existe: 404, entrada_invalida: 400, fallo_ejecucion: 500 }[r.motivo];
   res.status(codigo).json({ ok: false, motivo: r.motivo, detalle: r.detalle, ms: r.ms });
-});
+}));

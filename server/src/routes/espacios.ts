@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
 import { requiereVendedora } from '../auth/sesion.js';
+import { ruta } from '../lib/ruta.js';
 import { esDestinoValido } from '../reparto/destino.js';
 import { puedeAdministrar } from '../espacios/visibilidad.js';
 import {
@@ -45,18 +46,18 @@ function nombreValido(valor: unknown): { ok: true; nombre: string } | { ok: fals
  * «¿existe Fulana?» convertiría el padrón en algo que se puede enumerar a fuerza
  * de preguntas, y encima la pantalla necesita la lista igual para ofrecerla.
  */
-espaciosRouter.get('/padron', async (_req, res) => {
+espaciosRouter.get('/padron', ruta(async (_req, res) => {
   const personas = await padronDePersonas(db);
   res.json({ personas });
-});
+}));
 
 /** Los espacios vivos de los que soy miembro. La libreta privada NO está acá: es implícita. */
-espaciosRouter.get('/', async (req, res) => {
+espaciosRouter.get('/', ruta(async (req, res) => {
   const espacios = await listarEspaciosDe(db, req.vendedoraId!);
   res.json({ espacios });
-});
+}));
 
-espaciosRouter.post('/', async (req, res) => {
+espaciosRouter.post('/', ruta(async (req, res) => {
   const v = nombreValido(req.body?.nombre);
   if (!v.ok) {
     res.status(400).json({ ok: false, message: v.motivo });
@@ -90,7 +91,7 @@ espaciosRouter.post('/', async (req, res) => {
     miembros: pedidos,
   });
   res.json({ ok: true, espacio });
-});
+}));
 
 /**
  * LA GUARDA DE ADMINISTRACIÓN, en un solo lugar.
@@ -115,7 +116,7 @@ async function conPermisoDeAdmin(
   return { ok: true, espacio };
 }
 
-espaciosRouter.post('/:id/miembros', async (req, res) => {
+espaciosRouter.post('/:id/miembros', ruta(async (req, res) => {
   const permiso = await conPermisoDeAdmin(Number(req.params.id), req.vendedoraId!);
   if (!permiso.ok) {
     res.status(permiso.estado).json({ ok: false, message: permiso.motivo });
@@ -135,9 +136,9 @@ espaciosRouter.post('/:id/miembros', async (req, res) => {
     agregadoPor: req.vendedoraId!,
   });
   res.json({ ok: true, espacio: await leerEspacio(db, permiso.espacio!.id) });
-});
+}));
 
-espaciosRouter.delete('/:id/miembros/:vendedoraId', async (req, res) => {
+espaciosRouter.delete('/:id/miembros/:vendedoraId', ruta(async (req, res) => {
   const permiso = await conPermisoDeAdmin(Number(req.params.id), req.vendedoraId!);
   if (!permiso.ok) {
     res.status(permiso.estado).json({ ok: false, message: permiso.motivo });
@@ -159,13 +160,13 @@ espaciosRouter.delete('/:id/miembros/:vendedoraId', async (req, res) => {
 
   await sacarMiembro(db, { espacioId: permiso.espacio!.id, vendedoraId: saliente });
   res.json({ ok: true, espacio: await leerEspacio(db, permiso.espacio!.id) });
-});
+}));
 
 /**
  * RENOMBRAR. Sin esto, un nombre mal puesto no tenía arreglo desde la app: había
  * que archivar el espacio y rehacerlo, moviendo las páginas a mano.
  */
-espaciosRouter.patch('/:id', async (req, res) => {
+espaciosRouter.patch('/:id', ruta(async (req, res) => {
   const permiso = await conPermisoDeAdmin(Number(req.params.id), req.vendedoraId!);
   if (!permiso.ok) {
     res.status(permiso.estado).json({ ok: false, message: permiso.motivo });
@@ -178,10 +179,10 @@ espaciosRouter.patch('/:id', async (req, res) => {
   }
   await renombrarEspacio(db, permiso.espacio!.id, v.nombre);
   res.json({ ok: true, espacio: await leerEspacio(db, permiso.espacio!.id) });
-});
+}));
 
 /** Archivar el espacio. Las páginas NO se tocan: se archiva el lugar, no lo escrito. */
-espaciosRouter.patch('/:id/archivar', async (req, res) => {
+espaciosRouter.patch('/:id/archivar', ruta(async (req, res) => {
   const permiso = await conPermisoDeAdmin(Number(req.params.id), req.vendedoraId!);
   if (!permiso.ok) {
     res.status(permiso.estado).json({ ok: false, message: permiso.motivo });
@@ -189,4 +190,4 @@ espaciosRouter.patch('/:id/archivar', async (req, res) => {
   }
   await archivarEspacio(db, permiso.espacio!.id, new Date());
   res.json({ ok: true });
-});
+}));

@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import { Router, type Request, type Response } from "express";
 import { exigeServicio } from "../auth/servicio.js";
 import { db } from "../db/client.js";
+import { porQueFallo } from "../lib/porQueFallo.js";
+import { ruta } from "../lib/ruta.js";
 import { gestorWhatsapp } from "../whatsapp/wiring.js";
 import { vinculador } from "../whatsapp/vinculador.js";
 import {
@@ -96,42 +98,54 @@ adminRouter.get("/ping", (_req: Request, res: Response) => {
   res.json({ servicio: "cerberus", ok: true });
 });
 
-adminRouter.get("/numeros", async (_req: Request, res: Response) => {
-  try {
-    const filas = await listarNumeros(db);
-    res.json({ numeros: filas.map(aNumeroContrato) });
-  } catch (err) {
-    responderError(res, 500, "fallo_interno", (err as Error).message);
-  }
-});
+adminRouter.get(
+  "/numeros",
+  ruta(async (_req: Request, res: Response) => {
+    try {
+      const filas = await listarNumeros(db);
+      res.json({ numeros: filas.map(aNumeroContrato) });
+    } catch (err) {
+      console.error(`GET /api/admin/numeros falló — ${porQueFallo(err)}`);
+      responderError(res, 500, "fallo_interno", "no se pudo completar la operación");
+    }
+  }),
+);
 
-adminRouter.get("/numeros/:numero", async (req: Request, res: Response) => {
-  const numero = normalizarNumero(req.params.numero);
-  if (!numero) return responderError(res, 400, "entrada_invalida", "número inválido");
-  try {
-    const fila = await obtenerNumero(db, numero);
-    if (!fila) return responderError(res, 404, "no_existe", `el número ${numero} no está registrado`);
-    res.json({ numero: aNumeroContrato(fila) });
-  } catch (err) {
-    responderError(res, 500, "fallo_interno", (err as Error).message);
-  }
-});
+adminRouter.get(
+  "/numeros/:numero",
+  ruta(async (req: Request, res: Response) => {
+    const numero = normalizarNumero(req.params.numero);
+    if (!numero) return responderError(res, 400, "entrada_invalida", "número inválido");
+    try {
+      const fila = await obtenerNumero(db, numero);
+      if (!fila) return responderError(res, 404, "no_existe", `el número ${numero} no está registrado`);
+      res.json({ numero: aNumeroContrato(fila) });
+    } catch (err) {
+      console.error(`GET /api/admin/numeros/${numero} falló — ${porQueFallo(err)}`);
+      responderError(res, 500, "fallo_interno", "no se pudo completar la operación");
+    }
+  }),
+);
 
 /** Upsert declarativo: Cerberus empuja el estado deseado completo. Idempotente. */
-adminRouter.put("/numeros/:numero", async (req: Request, res: Response) => {
-  const numero = normalizarNumero(req.params.numero);
-  if (!numero) return responderError(res, 400, "entrada_invalida", "número inválido");
-  const parsed = esquemaUpsert.safeParse(req.body);
-  if (!parsed.success) {
-    return responderError(res, 400, "entrada_invalida", parsed.error.issues.map((i) => i.message).join("; "));
-  }
-  try {
-    const fila = await upsertNumero(db, numero, parsed.data);
-    res.json({ numero: aNumeroContrato(fila) });
-  } catch (err) {
-    responderError(res, 500, "fallo_interno", (err as Error).message);
-  }
-});
+adminRouter.put(
+  "/numeros/:numero",
+  ruta(async (req: Request, res: Response) => {
+    const numero = normalizarNumero(req.params.numero);
+    if (!numero) return responderError(res, 400, "entrada_invalida", "número inválido");
+    const parsed = esquemaUpsert.safeParse(req.body);
+    if (!parsed.success) {
+      return responderError(res, 400, "entrada_invalida", parsed.error.issues.map((i) => i.message).join("; "));
+    }
+    try {
+      const fila = await upsertNumero(db, numero, parsed.data);
+      res.json({ numero: aNumeroContrato(fila) });
+    } catch (err) {
+      console.error(`PUT /api/admin/numeros/${numero} falló — ${porQueFallo(err)}`);
+      responderError(res, 500, "fallo_interno", "no se pudo completar la operación");
+    }
+  }),
+);
 
 /**
  * Baja lógica. `?purgar=true` borra además la sesión `.db` (destructivo).
@@ -143,22 +157,27 @@ adminRouter.put("/numeros/:numero", async (req: Request, res: Response) => {
  * de servicio, hereda el purgado sin que nadie lo haya decidido y sin que se vea
  * leyendo esta ruta. Ver `auth/servicio.ts`.
  */
-adminRouter.delete("/numeros/:numero", exigeServicio("cerberus"), async (req: Request, res: Response) => {
-  const numero = normalizarNumero(req.params.numero);
-  if (!numero) return responderError(res, 400, "entrada_invalida", "número inválido");
-  try {
-    const existia = await desactivarNumero(db, numero);
-    if (!existia) return responderError(res, 404, "no_existe", `el número ${numero} no está registrado`);
-    if (req.query.purgar === "true") {
-      for (const suf of ["", "-wal", "-shm"]) {
-        await rm(`${DIR_SESIONES}${numero}.db${suf}`, { force: true }).catch(() => {});
+adminRouter.delete(
+  "/numeros/:numero",
+  exigeServicio("cerberus"),
+  ruta(async (req: Request, res: Response) => {
+    const numero = normalizarNumero(req.params.numero);
+    if (!numero) return responderError(res, 400, "entrada_invalida", "número inválido");
+    try {
+      const existia = await desactivarNumero(db, numero);
+      if (!existia) return responderError(res, 404, "no_existe", `el número ${numero} no está registrado`);
+      if (req.query.purgar === "true") {
+        for (const suf of ["", "-wal", "-shm"]) {
+          await rm(`${DIR_SESIONES}${numero}.db${suf}`, { force: true }).catch(() => {});
+        }
       }
+      res.json({ ok: true });
+    } catch (err) {
+      console.error(`DELETE /api/admin/numeros/${numero} falló — ${porQueFallo(err)}`);
+      responderError(res, 500, "fallo_interno", "no se pudo completar la operación");
     }
-    res.json({ ok: true });
-  } catch (err) {
-    responderError(res, 500, "fallo_interno", (err as Error).message);
-  }
-});
+  }),
+);
 
 /**
  * Arranca la vinculación. El vinculador es global uno-a-la-vez (SQLite no admite
@@ -212,31 +231,34 @@ adminRouter.post("/numeros/:numero/vincular", (req: Request, res: Response) => {
  * `cancelada: false`. Cancelar la vinculación de OTRO número es 409, no un
  * silencio: quien la pidió tiene que saber que apagó algo ajeno.
  */
-adminRouter.delete("/numeros/:numero/vincular", async (req: Request, res: Response) => {
-  const numero = normalizarNumero(req.params.numero);
-  if (!numero) return responderError(res, 400, "entrada_invalida", "número inválido");
+adminRouter.delete(
+  "/numeros/:numero/vincular",
+  ruta(async (req: Request, res: Response) => {
+    const numero = normalizarNumero(req.params.numero);
+    if (!numero) return responderError(res, 400, "entrada_invalida", "número inválido");
 
-  // Si no hay nada EN VUELO, no hay nada que soltar: un `conectado` terminal ya no
-  // toma el candado, así que cancelarlo no destraba nada que estuviera trabado.
-  const enCurso = vinculador.estado();
-  if (!esPareoEnVuelo(enCurso)) {
-    res.json({ estado: "inactivo", cancelada: false });
-    return;
-  }
-  if ("numero" in enCurso && enCurso.numero !== numero) {
-    res.status(409).json({
-      error: {
-        motivo: "vinculacion_en_curso",
-        mensaje: `la vinculación en curso es de ${enCurso.numero}, no de ${numero}`,
-        numero_en_curso: enCurso.numero,
-      },
-    });
-    return;
-  }
+    // Si no hay nada EN VUELO, no hay nada que soltar: un `conectado` terminal ya no
+    // toma el candado, así que cancelarlo no destraba nada que estuviera trabado.
+    const enCurso = vinculador.estado();
+    if (!esPareoEnVuelo(enCurso)) {
+      res.json({ estado: "inactivo", cancelada: false });
+      return;
+    }
+    if ("numero" in enCurso && enCurso.numero !== numero) {
+      res.status(409).json({
+        error: {
+          motivo: "vinculacion_en_curso",
+          mensaje: `la vinculación en curso es de ${enCurso.numero}, no de ${numero}`,
+          numero_en_curso: enCurso.numero,
+        },
+      });
+      return;
+    }
 
-  await vinculador.cancelar();
-  res.json({ estado: "inactivo", cancelada: true });
-});
+    await vinculador.cancelar();
+    res.json({ estado: "inactivo", cancelada: true });
+  }),
+);
 
 /** Polling del pareo. Al conectar, libera la sesión `.db` y marca vinculado. */
 adminRouter.get("/numeros/:numero/vincular/estado", (req: Request, res: Response) => {

@@ -3,6 +3,7 @@ import { db } from '../db/client.js';
 import { CABECERAS_PUBLICAS } from '../espacios/link.js';
 import { NO_EXISTE, paginaHtml, paginaPuente } from '../espacios/paginaPublica.js';
 import { leerPorToken } from '../espacios/linkRepositorio.js';
+import { ruta } from '../lib/ruta.js';
 
 /**
  * LA PÁGINA PÚBLICA DE UNA NOTA — `/n/<token>` (ADR 0047).
@@ -31,7 +32,7 @@ export const publicoRouter = Router();
  * porque del otro lado hay una compañera de trabajo que necesita entender qué
  * pasó.
  */
-publicoRouter.get('/:token', async (req, res) => {
+publicoRouter.get('/:token', ruta(async (req, res) => {
   const pagina = await leerPorToken(db, req.params.token);
   res.set(CABECERAS_PUBLICAS);
   res.type('html');
@@ -51,4 +52,4 @@ publicoRouter.get('/:token', async (req, res) => {
   }
 
   res.send(paginaHtml(pagina.titulo, pagina.texto));
-});
+}));

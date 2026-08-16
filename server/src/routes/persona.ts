@@ -9,6 +9,8 @@ import {
   historialDeLaPersona,
   interaccionPorId,
 } from "../gente/repositorioDePersona.js";
+import { porQueFallo } from "../lib/porQueFallo.js";
+import { ruta } from "../lib/ruta.js";
 import { MetaGraphClient, MetaGraphError } from "../meta/metaClient.js";
 
 export const personaRouter = Router();
@@ -34,42 +36,48 @@ export const personaRouter = Router();
  * alcanza para abrirlos. Mismos datos, otra llave. Va ANTES de `/:interactionId`
  * para que "conv" no caiga en el Number() de esa ruta.
  */
-personaRouter.get("/conv/:canal/:personaId", async (req, res) => {
-  const { canal, personaId } = req.params;
+personaRouter.get(
+  "/conv/:canal/:personaId",
+  ruta(async (req, res) => {
+    const { canal, personaId } = req.params;
 
-  const historial = await hiloDeLaConversacion(db, canal, personaId);
+    const historial = await hiloDeLaConversacion(db, canal, personaId);
 
-  const nombre = historial.find((h) => h.persona_nombre)?.persona_nombre ?? null;
-  res.json({ historial, canal, nombre, total: historial.length });
-});
+    const nombre = historial.find((h) => h.persona_nombre)?.persona_nombre ?? null;
+    res.json({ historial, canal, nombre, total: historial.length });
+  }),
+);
 
-personaRouter.get("/:interactionId", async (req, res) => {
-  const id = Number(req.params.interactionId);
+personaRouter.get(
+  "/:interactionId",
+  ruta(async (req, res) => {
+    const id = Number(req.params.interactionId);
 
-  const actual = await interaccionPorId(db, id);
+    const actual = await interaccionPorId(db, id);
 
-  if (!actual) {
-    res.status(404).json({ type: "not_found" });
-    return;
-  }
+    if (!actual) {
+      res.status(404).json({ type: "not_found" });
+      return;
+    }
 
-  // Sin identidad no hay historial que juntar. Pasa en el 99% de los
-  // comentarios de Facebook: Meta oculta quién comentó.
-  if (!actual.persona_id) {
-    res.json({ historial: [], anonima: true, canal: actual.canal });
-    return;
-  }
+    // Sin identidad no hay historial que juntar. Pasa en el 99% de los
+    // comentarios de Facebook: Meta oculta quién comentó.
+    if (!actual.persona_id) {
+      res.json({ historial: [], anonima: true, canal: actual.canal });
+      return;
+    }
 
-  const historial = await historialDeLaPersona(db, actual.canal, actual.persona_id);
+    const historial = await historialDeLaPersona(db, actual.canal, actual.persona_id);
 
-  res.json({
-    historial,
-    anonima: false,
-    canal: actual.canal,
-    nombre: actual.persona_nombre,
-    total: historial.length,
-  });
-});
+    res.json({
+      historial,
+      anonima: false,
+      canal: actual.canal,
+      nombre: actual.persona_nombre,
+      total: historial.length,
+    });
+  }),
+);
 
 /**
  * El link para ir a verlo en Facebook/Instagram.
@@ -89,7 +97,7 @@ personaRouter.get("/:interactionId", async (req, res) => {
  * Por eso hay que preguntarlo ANTES de escribir: no tiene sentido redactar un
  * mensaje privado que Meta no va a dejar entregar.
  */
-personaRouter.get("/:interactionId/puede-privado", async (req, res) => {
+personaRouter.get("/:interactionId/puede-privado", ruta(async (req, res) => {
   const token = process.env.META_ACCESS_TOKEN;
   const id = Number(req.params.interactionId);
 
@@ -143,9 +151,9 @@ personaRouter.get("/:interactionId/puede-privado", async (req, res) => {
   } catch {
     res.json({ puede: false, motivo: "error", dias: inter.dias });
   }
-});
+}));
 
-personaRouter.get("/:interactionId/link", async (req, res) => {
+personaRouter.get("/:interactionId/link", ruta(async (req, res) => {
   const token = process.env.META_ACCESS_TOKEN;
   const id = Number(req.params.interactionId);
 
@@ -183,7 +191,10 @@ personaRouter.get("/:interactionId/link", async (req, res) => {
     }
     res.json({ permalink });
   } catch (err) {
-    const message = err instanceof MetaGraphError ? err.message : (err as Error).message;
+    console.error(`GET /api/persona/:interactionId/link falló — ${porQueFallo(err)}`);
+    // Lo que dice Meta al rechazar SÍ sale: explica por qué no hay link. Lo que
+    // no sale es el error crudo de cualquier otra cosa — ahí `message` es el SQL.
+    const message = err instanceof MetaGraphError ? err.message : "No se pudo completar la operación.";
     res.status(502).json({ type: "api_error", message });
   }
-});
+}));

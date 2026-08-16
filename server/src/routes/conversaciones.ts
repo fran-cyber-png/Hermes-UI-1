@@ -4,6 +4,8 @@ import { db } from "../db/client.js";
 import { consultarCola } from "../cola/consultarCola.js";
 import { PinLleno, upsertEstado } from "../cola/estado.js";
 import { ETAPAS_CONSULTABLES } from "../cola/etapaEfectivaSql.js";
+import { porQueFallo } from "../lib/porQueFallo.js";
+import { ruta } from "../lib/ruta.js";
 import { normalizarTelefono } from "../whatsapp/identidadWa.js";
 
 /**
@@ -55,7 +57,7 @@ import { normalizarTelefono } from "../whatsapp/identidadWa.js";
  */
 export const conversacionesRouter = Router();
 
-conversacionesRouter.get("/", async (req, res) => {
+conversacionesRouter.get("/", ruta(async (req, res) => {
   const etapa = typeof req.query.etapa === "string" ? req.query.etapa : "";
   // ⚠️ Se valida contra las CONSULTABLES, no contra las declarables: `sin_respuesta`
   // se deriva y no se declara, pero el tablero tiene que poder pedir su columna.
@@ -112,9 +114,10 @@ conversacionesRouter.get("/", async (req, res) => {
     });
     res.json(r);
   } catch (err) {
-    res.status(500).json({ ok: false, message: (err as Error).message });
+    console.error(`la cola de conversaciones falló — ${porQueFallo(err)}`);
+    res.status(500).json({ ok: false, message: "No se pudo completar la operación." });
   }
-});
+}));
 
 /**
  * El estado personal de una conversación (pin / favorita / leído). Upsert por
@@ -133,7 +136,7 @@ const estadoSchema = z
     message: "no hay nada que cambiar (fijada, favorita o leido)",
   });
 
-conversacionesRouter.put("/estado", async (req, res) => {
+conversacionesRouter.put("/estado", ruta(async (req, res) => {
   const parsed = estadoSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ ok: false, message: "cambio de estado inválido" });
@@ -147,6 +150,7 @@ conversacionesRouter.put("/estado", async (req, res) => {
       res.status(409).json({ ok: false, message: e.message });
       return;
     }
-    res.status(500).json({ ok: false, message: (e as Error).message });
+    console.error(`el estado de la conversación no se pudo guardar — ${porQueFallo(e)}`);
+    res.status(500).json({ ok: false, message: "No se pudo completar la operación." });
   }
-});
+}));

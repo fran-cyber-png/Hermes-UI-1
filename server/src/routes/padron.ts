@@ -18,6 +18,7 @@ import {
   quitar,
 } from "../padron/habilitados.js";
 import { esSupervisor, supervisoresConfigurados } from "../padron/supervisor.js";
+import { ruta } from "../lib/ruta.js";
 
 /**
  * EL PADRÓN DE CONTACTOS — los 72.923 de icarus que NUNCA escribieron, y quién
@@ -172,7 +173,7 @@ function filtrosDe(
  * Quién es quién lo decide el TOKEN (`req.vendedoraId`), nunca un parámetro:
  * un `?supervisor=1` sería la frontera entera a un clic de curl.
  */
-padronRouter.get("/contactos", async (req, res) => {
+padronRouter.get("/contactos", ruta(async (req, res) => {
   const filtros = filtrosDe(req.query, res);
   if (!filtros) return;
 
@@ -199,7 +200,7 @@ padronRouter.get("/contactos", async (req, res) => {
   } catch (e) {
     fallaDeIcarus(res, e);
   }
-});
+}));
 
 /**
  * QUÉ SE PUEDE ELEGIR, con cuántos contactos cada valor.
@@ -209,7 +210,7 @@ padronRouter.get("/contactos", async (req, res) => {
  * cinco `GROUP BY` sobre 72.923 filas. El front la pide con los mismos filtros
  * pero sin `pagina`, y react-query la cachea sola.
  */
-padronRouter.get("/facetas", async (req, res) => {
+padronRouter.get("/facetas", ruta(async (req, res) => {
   const filtros = filtrosDe(req.query, res);
   if (!filtros) return;
 
@@ -223,7 +224,7 @@ padronRouter.get("/facetas", async (req, res) => {
   } catch (e) {
     fallaDeIcarus(res, e);
   }
-});
+}));
 
 /**
  * CÓMO VA EL REPARTO — a quién se le puede habilitar y cuánto tiene cada una.
@@ -231,7 +232,7 @@ padronRouter.get("/facetas", async (req, res) => {
  * Solo el supervisor: la carga de las demás no es asunto de la mesa de trabajo, y
  * la lista de destinos es justamente lo que hace falta para repartir.
  */
-padronRouter.get("/reparto", async (req, res) => {
+padronRouter.get("/reparto", ruta(async (req, res) => {
   if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor", message: "no tenés el padrón" });
     return;
@@ -246,10 +247,10 @@ padronRouter.get("/reparto", async (req, res) => {
     }
     throw e;
   }
-});
+}));
 
 /** REPARTIR un lote. Solo el supervisor, y el destino se VERIFICA. */
-padronRouter.post("/habilitar", async (req, res) => {
+padronRouter.post("/habilitar", ruta(async (req, res) => {
   const yo = req.vendedoraId ?? "";
   if (!esSupervisor(yo, process.env)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor", message: "no repartís el padrón" });
@@ -290,7 +291,7 @@ padronRouter.post("/habilitar", async (req, res) => {
     }
     throw e;
   }
-});
+}));
 
 /**
  * REPARTIR TODO EL RECORTE.
@@ -301,7 +302,7 @@ padronRouter.post("/habilitar", async (req, res) => {
  * verdad** y la pantalla muestra ESE número — repetir la cifra vieja es cómo una
  * diferencia se vuelve invisible.
  */
-padronRouter.post("/habilitar-recorte", async (req, res) => {
+padronRouter.post("/habilitar-recorte", ruta(async (req, res) => {
   const yo = req.vendedoraId ?? "";
   if (!esSupervisor(yo, process.env)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor", message: "no repartís el padrón" });
@@ -362,10 +363,10 @@ padronRouter.post("/habilitar-recorte", async (req, res) => {
     }
     fallaDeIcarus(res, e);
   }
-});
+}));
 
 /** DEVOLVER contactos al pozo común. */
-padronRouter.post("/quitar", async (req, res) => {
+padronRouter.post("/quitar", ruta(async (req, res) => {
   if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor", message: "no repartís el padrón" });
     return;
@@ -385,7 +386,7 @@ padronRouter.post("/quitar", async (req, res) => {
     }
     throw e;
   }
-});
+}));
 
 /** El tope de página, publicado para que el front no lo adivine. */
 export const PADRON_POR_PAGINA_MAX = POR_PAGINA_MAX;

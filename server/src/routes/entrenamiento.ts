@@ -13,6 +13,8 @@ import {
 import { correrCorrida } from "../corridas/correrCorrida.js";
 import { consultarAgujeros } from "../corridas/consultarAgujeros.js";
 import { requiereVendedora } from "../auth/sesion.js";
+import { ruta } from "../lib/ruta.js";
+import { porQueFallo } from "../lib/porQueFallo.js";
 import { configDesdeEnv } from "../bot/config.js";
 import { crearClienteBedrock } from "../bot/clienteBedrock.js";
 import { contarViolaciones, evaluarReglas } from "../bot/reglas.js";
@@ -99,7 +101,7 @@ export interface RespuestaDePrueba {
   tokensSalida: number | null;
 }
 
-entrenamientoRouter.post("/probar", async (req, res) => {
+entrenamientoRouter.post("/probar", ruta(async (req, res) => {
   const parsed = Cuerpo.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ ok: false, message: parsed.error.issues[0]?.message ?? "cuerpo inválido" });
@@ -160,10 +162,11 @@ entrenamientoRouter.post("/probar", async (req, res) => {
       },
     );
   } catch (err) {
+    console.error(`[entrenamiento] el motor falló al probar (${numeroPropio}): ${porQueFallo(err)}`);
     res.status(502).json({
       ok: false,
       codigo: "motor_fallo",
-      message: (err as Error).message,
+      message: "el motor del bot no pudo procesar el mensaje",
     });
     return;
   }
@@ -199,7 +202,7 @@ entrenamientoRouter.post("/probar", async (req, res) => {
       tokensSalida: ultima.tokensSalida,
     } satisfies RespuestaDePrueba,
   });
-});
+}));
 
 // ── LAS CORRIDAS (#257) ──────────────────────────────────────────────────────
 
@@ -222,7 +225,7 @@ const CuerpoCorrida = z.object({
  * quien la lanzó sin saber si corrió. La Corrida nace `corriendo` y se consulta;
  * ese estado existe en la tabla justamente para esto.
  */
-entrenamientoRouter.post("/corridas", async (req, res) => {
+entrenamientoRouter.post("/corridas", ruta(async (req, res) => {
   const parsed = CuerpoCorrida.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ ok: false, message: parsed.error.issues[0]?.message ?? "cuerpo inválido" });
@@ -252,20 +255,20 @@ entrenamientoRouter.post("/corridas", async (req, res) => {
     numeroPropio,
     limite,
   }).catch((err) => {
-    console.error("[corrida] falló:", (err as Error).message);
+    console.error("[corrida] falló:", porQueFallo(err));
   });
 
   res.status(202).json({ ok: true, lanzada: true, rotulo, limite });
-});
+}));
 
 /** Las Corridas, de la más nueva a la más vieja. */
-entrenamientoRouter.get("/corridas", async (_req, res) => {
+entrenamientoRouter.get("/corridas", ruta(async (_req, res) => {
   const filas = await listarCorridas(db);
   res.json({ ok: true, corridas: filas });
-});
+}));
 
 /** El detalle de una Corrida: cada conversación con sus dos mitades del diff. */
-entrenamientoRouter.get("/corridas/:id", async (req, res) => {
+entrenamientoRouter.get("/corridas/:id", ruta(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     res.status(400).json({ ok: false, message: "id inválido" });
@@ -308,7 +311,7 @@ entrenamientoRouter.get("/corridas/:id", async (req, res) => {
       ahora: contarViolaciones(filas.map((f) => f.texto)),
     },
   });
-});
+}));
 
 // ── LAS LECCIONES (#259) ─────────────────────────────────────────────────────
 
@@ -320,7 +323,7 @@ const CuerpoLeccion = z.object({
 });
 
 /** Escribe una Lección. Nace en BORRADOR: el bot vivo no la ve. */
-entrenamientoRouter.post("/lecciones", async (req, res) => {
+entrenamientoRouter.post("/lecciones", ruta(async (req, res) => {
   const parsed = CuerpoLeccion.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ ok: false, message: parsed.error.issues[0]?.message ?? "cuerpo inválido" });
@@ -333,12 +336,12 @@ entrenamientoRouter.post("/lecciones", async (req, res) => {
     creadaPor: req.vendedoraId ?? "desconocida",
   });
   res.status(201).json({ ok: true, leccion: fila });
-});
+}));
 
-entrenamientoRouter.get("/lecciones", async (_req, res) => {
+entrenamientoRouter.get("/lecciones", ruta(async (_req, res) => {
   const filas = await listarLecciones(db);
   res.json({ ok: true, lecciones: filas });
-});
+}));
 
 /**
  * Publicar: el acto de hacerse cargo.
@@ -347,7 +350,7 @@ entrenamientoRouter.get("/lecciones", async (_req, res) => {
  * no es editar un campo — es la única acción de esta pantalla con consecuencia
  * sobre personas reales. Queda firmada con quién y cuándo (ADR 0019).
  */
-entrenamientoRouter.put("/lecciones/:id/publicar", async (req, res) => {
+entrenamientoRouter.put("/lecciones/:id/publicar", ruta(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     res.status(400).json({ ok: false, message: "id inválido" });
@@ -360,10 +363,10 @@ entrenamientoRouter.put("/lecciones/:id/publicar", async (req, res) => {
   }
   console.warn(`[lecciones] publicada #${id} por ${req.vendedoraId ?? "desconocida"}`);
   res.json({ ok: true, leccion: fila });
-});
+}));
 
 /** Retirar: deja de aplicarse, pero NO se borra — el historial explica el bot de ayer. */
-entrenamientoRouter.put("/lecciones/:id/retirar", async (req, res) => {
+entrenamientoRouter.put("/lecciones/:id/retirar", ruta(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     res.status(400).json({ ok: false, message: "id inválido" });
@@ -375,7 +378,7 @@ entrenamientoRouter.put("/lecciones/:id/retirar", async (req, res) => {
     return;
   }
   res.json({ ok: true, leccion: fila });
-});
+}));
 
 // ── LOS AGUJEROS DEL CATÁLOGO (#261) ─────────────────────────────────────────
 
@@ -386,7 +389,7 @@ entrenamientoRouter.put("/lecciones/:id/retirar", async (req, res) => {
  * que el bot detectó y que nadie miraba. Se sirve con la pregunta al lado
  * porque «faltó un dato» no dice cuál.
  */
-entrenamientoRouter.get("/agujeros", async (req, res) => {
+entrenamientoRouter.get("/agujeros", ruta(async (req, res) => {
   const numeroPropio = typeof req.query.numero === "string" ? req.query.numero : "";
   if (!numeroPropio) {
     res.status(400).json({ ok: false, message: "hace falta ?numero=<línea>" });
@@ -394,4 +397,4 @@ entrenamientoRouter.get("/agujeros", async (req, res) => {
   }
   const agujeros = await consultarAgujeros(db, numeroPropio);
   res.json({ ok: true, agujeros });
-});
+}));

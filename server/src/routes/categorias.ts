@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '../db/client.js';
 import { requiereVendedora } from '../auth/sesion.js';
 import { colorCategoria, normalizarNombre } from '../categorias/paleta.js';
+import { ruta } from '../lib/ruta.js';
 import {
   borrarCategoria,
   crearCategoria,
@@ -32,13 +33,16 @@ const editarSchema = z.object({
 });
 
 /** El catálogo de la vendedora + el conteo por categoría (para el modo Listas, #49). */
-categoriasRouter.get('/', async (req, res) => {
-  const categorias = await listarCategorias(db, req.vendedoraId!);
-  res.json({ categorias });
-});
+categoriasRouter.get(
+  '/',
+  ruta(async (req, res) => {
+    const categorias = await listarCategorias(db, req.vendedoraId!);
+    res.json({ categorias });
+  }),
+);
 
 /** Crear. Valida el color contra la paleta (Zod) y capa el nombre. 409 si ya existe. */
-categoriasRouter.post('/', async (req, res) => {
+categoriasRouter.post('/', ruta(async (req, res) => {
   const parsed = crearSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ ok: false, message: 'nombre o color inválido (el color sale de la paleta, sin oro)' });
@@ -58,10 +62,10 @@ categoriasRouter.post('/', async (req, res) => {
     }
     throw e;
   }
-});
+}));
 
 /** Editar SOLO la propia (el seam filtra por `vendedora_id`). 404 si no es suya. */
-categoriasRouter.patch('/:id', async (req, res) => {
+categoriasRouter.patch('/:id', ruta(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     res.status(400).json({ ok: false, message: 'id inválido' });
@@ -86,19 +90,22 @@ categoriasRouter.patch('/:id', async (req, res) => {
     }
     throw e;
   }
-});
+}));
 
 /** Borrar la entrada del catálogo. Las asignaciones (`etiquetas`) quedan intactas. */
-categoriasRouter.delete('/:id', async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ ok: false, message: 'id inválido' });
-    return;
-  }
-  const borro = await borrarCategoria(db, req.vendedoraId!, id);
-  if (!borro) {
-    res.status(404).json({ ok: false, message: 'esa categoría no existe o no es tuya' });
-    return;
-  }
-  res.json({ ok: true });
-});
+categoriasRouter.delete(
+  '/:id',
+  ruta(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ ok: false, message: 'id inválido' });
+      return;
+    }
+    const borro = await borrarCategoria(db, req.vendedoraId!, id);
+    if (!borro) {
+      res.status(404).json({ ok: false, message: 'esa categoría no existe o no es tuya' });
+      return;
+    }
+    res.json({ ok: true });
+  }),
+);

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
 import { requiereVendedora } from "../auth/sesion.js";
+import { ruta } from "../lib/ruta.js";
 import { configDesdeEnv } from "../bot/config.js";
 import {
   fijarFrenoLinea,
@@ -75,7 +76,7 @@ function lineaDe(param: string | undefined): { numero: string } | { error: strin
  * sin explicar por qué está en ese modo, que es justo lo que se pregunta a las
  * 2 de la mañana.
  */
-botRouter.get("/estado", requiereVendedora, async (req, res) => {
+botRouter.get("/estado", requiereVendedora, ruta(async (req, res) => {
   const linea = lineaDe(req.query.numero as string | undefined);
   if ("error" in linea) return res.status(400).json({ error: linea.error });
 
@@ -93,9 +94,9 @@ botRouter.get("/estado", requiereVendedora, async (req, res) => {
     frenadoMotivo: estado.frenadoMotivo,
     modos: MODOS_BOT.map((m) => ({ modo: m, descripcion: DESCRIPCION_MODO[m] })),
   });
-});
+}));
 
-botRouter.put("/modo", requiereVendedora, async (req, res) => {
+botRouter.put("/modo", requiereVendedora, ruta(async (req, res) => {
   const parseo = cuerpoModo.safeParse(req.body);
   if (!parseo.success) {
     return res.status(400).json({ error: "modo_invalido", validos: MODOS_BOT });
@@ -118,9 +119,9 @@ botRouter.put("/modo", requiereVendedora, async (req, res) => {
 
   console.warn(`[bot] modo de ${linea.numero} → ${modo} (por ${quien})`);
   res.json({ numero: linea.numero, modo, descripcion: DESCRIPCION_MODO[modo] });
-});
+}));
 
-botRouter.put("/freno", requiereVendedora, async (req, res) => {
+botRouter.put("/freno", requiereVendedora, ruta(async (req, res) => {
   const parseo = cuerpoFreno.safeParse(req.body);
   if (!parseo.success) return res.status(400).json({ error: "cuerpo_invalido" });
 
@@ -144,4 +145,4 @@ botRouter.put("/freno", requiereVendedora, async (req, res) => {
     `[bot] ${linea.numero} ${motivo ? `FRENADO: ${motivo}` : "sin freno"} (por ${quien})`,
   );
   res.json({ numero: linea.numero, frenado: motivo !== null, motivo });
-});
+}));

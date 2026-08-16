@@ -4,6 +4,8 @@ import { sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { events } from "../db/schema.js";
 import { detectar } from "../decisions/detectors.js";
+import { porQueFallo } from "../lib/porQueFallo.js";
+import { ruta } from "../lib/ruta.js";
 import { MetaGraphClient, MetaGraphError } from "../meta/metaClient.js";
 import { refrescarPauta, ultimoSnapshot } from "../pauta/snapshot.js";
 
@@ -39,37 +41,40 @@ function rangoDe(q: unknown): string {
  *
  * La card deja de mentir: en vez de fingir que está "en vivo", dice su edad — "revisado hace 2 h".
  */
-decisionsRouter.get("/", async (req, res) => {
-  const rango = rangoDe(req.query.rango ?? req.query.datePreset);
-  const snap = await ultimoSnapshot(rango);
+decisionsRouter.get(
+  "/",
+  ruta(async (req, res) => {
+    const rango = rangoDe(req.query.rango ?? req.query.datePreset);
+    const snap = await ultimoSnapshot(rango);
 
-  if (!snap) {
-    // Ninguna revisión LIMPIA para este rango todavía (nunca se corrió, o todas fallaron).
-    // No es un error: es que falta una revisión que termine bien.
+    if (!snap) {
+      // Ninguna revisión LIMPIA para este rango todavía (nunca se corrió, o todas fallaron).
+      // No es un error: es que falta una revisión que termine bien.
+      res.json({
+        decisiones: [],
+        campanasAnalizadas: 0,
+        errores: [],
+        modo: MODO,
+        snapshot: null,
+      });
+      return;
+    }
+
+    // Las tasas del negocio: sin ellas no se puede comparar plata entre cuentas de monedas distintas.
+    const tasas = await tasasDeCambio();
     res.json({
-      decisiones: [],
-      campanasAnalizadas: 0,
-      errores: [],
+      decisiones: detectar(snap.campanas, tasas),
+      campanasAnalizadas: snap.campanas.length,
+      errores: snap.errores,
       modo: MODO,
-      snapshot: null,
+      snapshot: {
+        creadoAt: snap.creadoAt,
+        edadMinutos: snap.edadMinutos,
+        cuentas: snap.cuentas.length,
+      },
     });
-    return;
-  }
-
-  // Las tasas del negocio: sin ellas no se puede comparar plata entre cuentas de monedas distintas.
-  const tasas = await tasasDeCambio();
-  res.json({
-    decisiones: detectar(snap.campanas, tasas),
-    campanasAnalizadas: snap.campanas.length,
-    errores: snap.errores,
-    modo: MODO,
-    snapshot: {
-      creadoAt: snap.creadoAt,
-      edadMinutos: snap.edadMinutos,
-      cuentas: snap.cuentas.length,
-    },
-  });
-});
+  }),
+);
 
 /**
  * "Revisar ahora". Dispara la recolección contra Meta y espera el resultado.
@@ -77,7 +82,7 @@ decisionsRouter.get("/", async (req, res) => {
  * Es el ÚNICO endpoint de esta ruta que habla con Meta, y solo cuando alguien lo pide
  * explícitamente. Nunca al cargar una pantalla.
  */
-decisionsRouter.post("/refrescar", async (req, res) => {
+decisionsRouter.post("/refrescar", ruta(async (req, res) => {
   const rango = rangoDe(req.body?.rango ?? req.query.rango);
   try {
     const snap = await refrescarPauta(rango);
@@ -97,9 +102,10 @@ decisionsRouter.post("/refrescar", async (req, res) => {
       snapshot: { creadoAt: snap.creadoAt, edadMinutos: 0, cuentas: snap.cuentas.length },
     });
   } catch (err) {
-    res.status(502).json({ type: "meta_error", message: (err as Error).message });
+    console.error(`POST /api/decisions/refrescar falló — ${porQueFallo(err)}`);
+    res.status(502).json({ type: "meta_error", message: "No se pudo completar la operación." });
   }
-});
+}));
 
 /**
  * Aplicar una decisión.
@@ -108,7 +114,7 @@ decisionsRouter.post("/refrescar", async (req, res) => {
  * En EJECUCIÓN escribe, y guarda el estado anterior en el event store para
  * poder deshacer y auditar quién cambió qué.
  */
-decisionsRouter.post("/aplicar", async (req, res) => {
+decisionsRouter.post("/aplicar", ruta(async (req, res) => {
   const token = process.env.META_ACCESS_TOKEN;
   const { decisionId, accion } = req.body ?? {};
 
@@ -154,17 +160,24 @@ decisionsRouter.post("/aplicar", async (req, res) => {
 
     res.json({ type: "aplicado", objetivos: accion.objetivos });
   } catch (err) {
-    const message = err instanceof MetaGraphError ? err.message : (err as Error).message;
+    console.error(`POST /api/decisions/aplicar falló — ${porQueFallo(err)}`);
+    // Lo que dice Meta al rechazar SÍ sale: es la explicación de por qué no se
+    // pudo pausar, y la pantalla la muestra. Lo que no sale es el error crudo de
+    // cualquier otra cosa — ahí `message` es el SQL, no la causa.
+    const message = err instanceof MetaGraphError ? err.message : "No se pudo completar la operación.";
     res.status(502).json({ type: "api_error", message });
   }
-});
+}));
 
 /** Historial de lo aplicado — para poder auditar y deshacer. */
-decisionsRouter.get("/historial", async (_req, res) => {
-  const rows = await db.execute<{ id: number; occurred_at: string; payload: unknown }>(sql`
+decisionsRouter.get(
+  "/historial",
+  ruta(async (_req, res) => {
+    const rows = await db.execute<{ id: number; occurred_at: string; payload: unknown }>(sql`
     SELECT id, occurred_at, payload FROM events
     WHERE source = 'decision_applied'
     ORDER BY occurred_at DESC LIMIT 50
   `);
-  res.json({ historial: rows });
-});
+    res.json({ historial: rows });
+  }),
+);

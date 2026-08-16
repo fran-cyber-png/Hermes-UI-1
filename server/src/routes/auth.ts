@@ -7,6 +7,7 @@ import { canjearTokenDeCenturion, MENSAJE_SIN_LINEA } from '../auth/sesionCentur
 import { resolverLogin } from '../auth/loginCascada.js';
 import { lineasDeVendedora } from '../numeros/repositorio.js';
 import { porQueFallo } from '../lib/porQueFallo.js';
+import { ruta } from '../lib/ruta.js';
 
 /**
  * El login de las vendedoras. Valida contra Cerberus (la identidad real del
@@ -58,7 +59,7 @@ function noSePudo(res: Response, donde: string, err: unknown): void {
  * este handler no tenía una sola rama capaz de rechazar. Ahora la cascada llega
  * a `canjear`, que toca la base. El porqué del 503 está en `noSePudo`.
  */
-authRouter.post('/login', async (req, res) => {
+authRouter.post('/login', ruta(async (req, res) => {
   const { username, password } = req.body ?? {};
 
   let r: Awaited<ReturnType<typeof resolverLogin>>;
@@ -74,7 +75,7 @@ authRouter.post('/login', async (req, res) => {
     return;
   }
   res.json({ ok: true, token: r.token, vendedora: r.vendedora });
-});
+}));
 
 /**
  * El login de Centurión (Betto y compañía): canjea el token corto que
@@ -104,7 +105,7 @@ authRouter.post('/login', async (req, res) => {
  * `auth/sesionCenturion.ts` cuando `/login` estrenó la segunda puerta hacia el
  * mismo canje. Sigue siendo esta la explicación de POR QUÉ existe.
  */
-authRouter.post('/centurion', async (req, res) => {
+authRouter.post('/centurion', ruta(async (req, res) => {
   if (!ssoDeCenturionConfigurado()) {
     res.status(503).json({ ok: false, type: 'sso_no_configurado', message: 'el login de Centurión no está habilitado acá' });
     return;
@@ -134,7 +135,7 @@ authRouter.post('/centurion', async (req, res) => {
   }
 
   res.json({ ok: true, token: canje.token, vendedora: canje.vendedora });
-});
+}));
 
 /**
  * Quién soy: valida el token y devuelve la vendedora. Sirve de "¿sigo logueada?".
@@ -147,10 +148,10 @@ authRouter.post('/centurion', async (req, res) => {
  * venció o nunca existió, y la app puede avisarle ANTES de que el 409 le
  * aparezca al registrar una venta.
  */
-authRouter.get('/yo', requiereVendedora, async (req, res) => {
+authRouter.get('/yo', requiereVendedora, ruta(async (req, res) => {
   res.json({
     ok: true,
     vendedora: { id: req.vendedoraId, nombre: req.vendedoraId },
     cerberus: Boolean(await obtenerSesionCerberus(req.vendedoraId!)),
   });
-});
+}));

@@ -1,5 +1,6 @@
 import { Router, type Response } from "express";
 import { requiereServicioDeCatalogo } from "../auth/servicio.js";
+import { ruta } from "../lib/ruta.js";
 import { leerPiezas } from "../catalogo/repositorio.js";
 import { CLASES_DE_PIEZA, type ClasePieza, type Pieza } from "../catalogo/pieza.js";
 import { vocabularioPublicado } from "../catalogo/vocabulario.js";
@@ -70,7 +71,7 @@ export function catalogoRouter(leer: LeerPiezas = leerDelSingleton): Router {
     res.json(vocabularioPublicado());
   });
 
-  router.get("/piezas", async (req, res) => {
+  router.get("/piezas", ruta(async (req, res) => {
     const claseCruda = typeof req.query.clase === "string" ? req.query.clase : "";
     if (claseCruda && !esClase(claseCruda)) {
       // Una clase que no existe se dice, no se devuelve vacía: un filtro con un
@@ -128,7 +129,7 @@ export function catalogoRouter(leer: LeerPiezas = leerDelSingleton): Router {
       total: filtradas.length,
       piezas: filtradas,
     });
-  });
+  }));
 
   return router;
 }

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
 import { requiereVendedora } from '../auth/sesion.js';
+import { ruta } from '../lib/ruta.js';
 import {
   agendarRecordatorio,
   borrarRecordatorio,
@@ -20,12 +21,12 @@ import {
 export const agendaRouter = Router();
 agendaRouter.use(requiereVendedora);
 
-agendaRouter.get('/', async (req, res) => {
+agendaRouter.get('/', ruta(async (req, res) => {
   const filas = await consultarAgenda(db, req.vendedoraId!);
   res.json({ recordatorios: filas });
-});
+}));
 
-agendaRouter.post('/', async (req, res) => {
+agendaRouter.post('/', ruta(async (req, res) => {
   const { clave, canal, personaId, personaNombre, numeroPropio, nota, cuando } = req.body ?? {};
   const fecha = new Date(cuando);
   if (!clave || !canal || !String(nota ?? '').trim() || Number.isNaN(fecha.getTime())) {
@@ -44,9 +45,9 @@ agendaRouter.post('/', async (req, res) => {
   });
 
   res.json({ ok: true, recordatorio: fila });
-});
+}));
 
-agendaRouter.patch('/:id', async (req, res) => {
+agendaRouter.patch('/:id', ruta(async (req, res) => {
   const id = Number(req.params.id);
   const estado = req.body?.estado === 'hecho' ? 'hecho' : 'pendiente';
   const fila = await cambiarEstadoDeRecordatorio(db, { id, vendedoraId: req.vendedoraId!, estado });
@@ -55,10 +56,10 @@ agendaRouter.patch('/:id', async (req, res) => {
     return;
   }
   res.json({ ok: true, recordatorio: fila });
-});
+}));
 
-agendaRouter.delete('/:id', async (req, res) => {
+agendaRouter.delete('/:id', ruta(async (req, res) => {
   const id = Number(req.params.id);
   const borrado = await borrarRecordatorio(db, { id, vendedoraId: req.vendedoraId! });
   res.json({ ok: true, borrado });
-});
+}));

@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { cuentasConfiguradas, guardarCuentas, refrescarPauta } from "../pauta/snapshot.js";
+import { porQueFallo } from "../lib/porQueFallo.js";
+import { ruta } from "../lib/ruta.js";
 
 export const configRouter = Router();
 
@@ -13,11 +15,11 @@ export const configRouter = Router();
  * Es configuración compartida del equipo, no una preferencia de UI. Va a la base.
  */
 
-configRouter.get("/cuentas-pauta", async (_req, res) => {
+configRouter.get("/cuentas-pauta", ruta(async (_req, res) => {
   res.json({ cuentas: await cuentasConfiguradas() });
-});
+}));
 
-configRouter.put("/cuentas-pauta", async (req, res) => {
+configRouter.put("/cuentas-pauta", ruta(async (req, res) => {
   const ids = Array.isArray(req.body?.cuentas) ? req.body.cuentas.map(String) : null;
   if (!ids) {
     res.status(400).json({ type: "validation_error", message: "Falta el arreglo `cuentas`." });
@@ -32,9 +34,9 @@ configRouter.put("/cuentas-pauta", async (req, res) => {
   const cambio = antes.length !== ids.length || antes.some((c) => !ids.includes(c));
   if (cambio) {
     void refrescarPauta("90d").catch((err) => {
-      console.error("[pauta] falló el refresco tras cambiar cuentas:", (err as Error).message);
+      console.error(`[pauta] falló el refresco tras cambiar cuentas: ${porQueFallo(err)}`);
     });
   }
 
   res.json({ cuentas: ids, refrescando: cambio });
-});
+}));

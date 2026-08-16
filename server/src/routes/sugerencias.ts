@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/client.js";
 import { requiereVendedora } from "../auth/sesion.js";
+import { ruta } from "../lib/ruta.js";
 import { ficha } from "../cerberus/ficha.js";
 import { consultarSugerencias } from "../sugerencias/consultarSugerencias.js";
 import { resolverCurso } from "../plantillas/catalogo.js";
@@ -20,7 +21,7 @@ import { expandirCuerpo } from "../plantillas/expandir.js";
 export const sugerenciasRouter = Router();
 sugerenciasRouter.use(requiereVendedora);
 
-sugerenciasRouter.get("/", async (req, res) => {
+sugerenciasRouter.get("/", ruta(async (req, res) => {
   const clave = typeof req.query.clave === "string" ? req.query.clave : "";
   if (!clave.startsWith("conv:")) {
     res
@@ -65,4 +66,4 @@ sugerenciasRouter.get("/", async (req, res) => {
   }
 
   res.json({ sugerencias: salida, estado });
-});
+}));

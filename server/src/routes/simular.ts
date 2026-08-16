@@ -3,6 +3,7 @@ import { detectarOrigen } from '../whatsapp/origen.js';
 import { resolverAnuncio } from '../meta/anuncio.js';
 import { proyectarMensaje } from '../whatsapp/proyectar.js';
 import { repositorioDrizzle } from '../whatsapp/repositorioDrizzle.js';
+import { ruta } from '../lib/ruta.js';
 import type { MensajeWhatsapp } from '../whatsapp/transporte.js';
 
 /**
@@ -28,7 +29,7 @@ async function persistir(m: MensajeWhatsapp): Promise<void> {
 }
 
 /** Simula un lead que vino de un ANUNCIO (Click-to-WhatsApp). */
-simularRouter.post('/anuncio', async (req, res) => {
+simularRouter.post('/anuncio', ruta(async (req, res) => {
   const { telefono, texto, adId, ctwaClid, nombre } = req.body ?? {};
   if (!telefono || !texto || !adId) {
     res.status(400).json({ ok: false, message: 'faltan telefono, texto o adId' });
@@ -69,10 +70,10 @@ simularRouter.post('/anuncio', async (req, res) => {
   });
 
   res.json({ ok: true, origen, anuncio });
-});
+}));
 
 /** Simula un lead que vino de una LANDING (código entre corchetes en el texto). */
-simularRouter.post('/landing', async (req, res) => {
+simularRouter.post('/landing', ruta(async (req, res) => {
   const { telefono, texto, nombre } = req.body ?? {};
   if (!telefono || !texto) {
     res.status(400).json({ ok: false, message: 'faltan telefono o texto' });
@@ -95,4 +96,4 @@ simularRouter.post('/landing', async (req, res) => {
   });
 
   res.json({ ok: true, origen });
-});
+}));

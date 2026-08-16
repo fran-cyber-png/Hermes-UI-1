@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
 import { requiereVendedora } from '../auth/sesion.js';
+import { ruta } from '../lib/ruta.js';
 import { ficha } from '../cerberus/ficha.js';
 import { leadDeTelefono } from '../gente/leadDeTelefono.js';
 import { registrarVenta } from '../contactos/registrarVenta.js';
@@ -11,14 +12,14 @@ import { registrarVenta } from '../contactos/registrarVenta.js';
  */
 export const contactosRouter = Router();
 
-contactosRouter.get('/ficha', requiereVendedora, async (req, res) => {
+contactosRouter.get('/ficha', requiereVendedora, ruta(async (req, res) => {
   const telefono = typeof req.query.telefono === 'string' ? req.query.telefono : '';
   if (!telefono) {
     res.status(400).json({ estado: 'error', motivo: 'falta el teléfono' });
     return;
   }
   res.json(await ficha(telefono));
-});
+}));
 
 /**
  * EL LEAD-FORM DEL CONTACTO — el enriquecimiento automático (#113).
@@ -29,7 +30,7 @@ contactosRouter.get('/ficha', requiereVendedora, async (req, res) => {
  * PII. `{ lead: null }` cuando el teléfono no matchea ningún lead: la ficha
  * simplemente no muestra el bloque (nunca un placeholder).
  */
-contactosRouter.get('/lead', requiereVendedora, async (req, res) => {
+contactosRouter.get('/lead', requiereVendedora, ruta(async (req, res) => {
   const telefono = typeof req.query.telefono === 'string' ? req.query.telefono : '';
   if (!telefono) {
     res.status(400).json({ estado: 'error', motivo: 'falta el teléfono' });
@@ -37,7 +38,7 @@ contactosRouter.get('/lead', requiereVendedora, async (req, res) => {
   }
   const mapa = await leadDeTelefono(db, [telefono]);
   res.json({ lead: mapa[telefono] ?? null });
-});
+}));
 
 /**
  * REGISTRAR VENTA — captura la conversión y abre el formulario real de Cerberus.
@@ -48,7 +49,7 @@ contactosRouter.get('/lead', requiereVendedora, async (req, res) => {
  * convirtió a quién, desde qué origen (el anuncio o la landing), y cuándo. Ese es
  * el dato que Ivi va a leer para "cuánto convierte WhatsApp".
  */
-contactosRouter.post('/registrar-venta', requiereVendedora, async (req, res) => {
+contactosRouter.post('/registrar-venta', requiereVendedora, ruta(async (req, res) => {
   const tel = String(req.body?.telefono ?? '').replace(/\D/g, '');
   if (!tel) {
     res.status(400).json({ ok: false, message: 'falta el teléfono' });
@@ -62,4 +63,4 @@ contactosRouter.post('/registrar-venta', requiereVendedora, async (req, res) => 
   });
 
   res.json({ ok: true, cerberusUrl, clienteId });
-});
+}));

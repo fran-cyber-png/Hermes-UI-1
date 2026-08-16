@@ -4,6 +4,7 @@ import { requiereVendedora } from "../auth/sesion.js";
 import { consultarSenales } from "../senales/consultarSenales.js";
 import { umbralDeEnv } from "../senales/enfriamiento.js";
 import { etiquetasDeSenal, type EtiquetaAutomatica } from "../senales/etiquetasAutomaticas.js";
+import { ruta } from "../lib/ruta.js";
 
 /**
  * LAS SEÑALES AUTOMÁTICAS de un puñado de conversaciones: ¿se cotizó? ¿se enfrió?
@@ -22,7 +23,7 @@ senalesRouter.use(requiereVendedora);
 /** El tope del lote. Más que esto no es una pantalla: es un reporte, y va por otro lado. */
 const MAX_CLAVES = 200;
 
-senalesRouter.get("/", async (req, res) => {
+senalesRouter.get("/", ruta(async (req, res) => {
   const crudo = typeof req.query.claves === "string" ? req.query.claves : "";
   const claves = crudo
     .split(",")
@@ -54,4 +55,4 @@ senalesRouter.get("/", async (req, res) => {
   }
 
   res.json({ senales: conEtiquetas, umbralDias });
-});
+}));

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/client.js";
 import { requiereVendedora } from "../auth/sesion.js";
+import { ruta } from "../lib/ruta.js";
 import { enlazarClaves, revocarEnlace } from "../identidad/enlazar.js";
 import { buscarContactos, resumenUnificado } from "../identidad/unificado.js";
 
@@ -19,20 +20,20 @@ export const enlacesRouter = Router();
 enlacesRouter.use(requiereVendedora);
 
 /** El buscador del «Es la misma persona que…»: contactos por nombre o por teléfono. */
-enlacesRouter.get("/buscar", async (req, res) => {
+enlacesRouter.get("/buscar", ruta(async (req, res) => {
   const q = String(req.query.q ?? "");
   res.json({ contactos: await buscarContactos(db, q) });
-});
+}));
 
 /** El grupo unificado de una conversación. No escribe nada: leer no enlaza. */
-enlacesRouter.get("/", async (req, res) => {
+enlacesRouter.get("/", ruta(async (req, res) => {
   const clave = String(req.query.clave ?? "");
   if (!clave) {
     res.status(400).json({ type: "validation_error", motivo: "falta la clave" });
     return;
   }
   res.json(await resumenUnificado(db, clave));
-});
+}));
 
 /**
  * Crear el enlace. Idempotente: repetirlo devuelve `yaEstaban: true` y no escribe.
@@ -41,7 +42,7 @@ enlacesRouter.get("/", async (req, res) => {
  * poder leer por qué Hermes no la dejó (se enlazó consigo misma, el grupo ya es demasiado
  * grande, la identidad está vetada).
  */
-enlacesRouter.post("/", async (req, res) => {
+enlacesRouter.post("/", ruta(async (req, res) => {
   const claveA = String(req.body?.claveA ?? "");
   const claveB = String(req.body?.claveB ?? "");
   if (!claveA || !claveB) {
@@ -56,10 +57,10 @@ enlacesRouter.post("/", async (req, res) => {
     return;
   }
   res.json({ ok: true, personaId: r.personaId, yaEstaban: r.yaEstaban });
-});
+}));
 
 /** Deshacer: saca esa conversación del grupo. Revoca, no borra — el rastro queda. */
-enlacesRouter.delete("/", async (req, res) => {
+enlacesRouter.delete("/", ruta(async (req, res) => {
   const clave = String(req.query.clave ?? "");
   if (!clave) {
     res.status(400).json({ type: "validation_error", motivo: "falta la clave" });
@@ -72,4 +73,4 @@ enlacesRouter.delete("/", async (req, res) => {
     return;
   }
   res.json({ ok: true, revocadas: r.revocadas });
-});
+}));

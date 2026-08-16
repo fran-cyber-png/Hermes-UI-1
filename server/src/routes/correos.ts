@@ -7,6 +7,8 @@ import {
   ultimosCorreos,
 } from '../correos/correos.js';
 import { requiereVendedora } from '../auth/sesion.js';
+import { porQueFallo } from '../lib/porQueFallo.js';
+import { ruta } from '../lib/ruta.js';
 
 /**
  * CORREOS — enviar emails desde Hermes, con la filosofía de la casa.
@@ -45,12 +47,12 @@ correosRouter.get('/estado', (_req, res) => {
 });
 
 /** Los últimos enviados (del equipo — coordinación, no secreto). */
-correosRouter.get('/', async (_req, res) => {
+correosRouter.get('/', ruta(async (_req, res) => {
   const filas = await ultimosCorreos(db);
   res.json({ correos: filas });
-});
+}));
 
-correosRouter.post('/enviar', async (req, res) => {
+correosRouter.post('/enviar', ruta(async (req, res) => {
   const { para, asunto, cuerpo, clave } = req.body ?? {};
   const destinatario = String(para ?? '').trim();
   if (!/.+@.+\..+/.test(destinatario) || !String(asunto ?? '').trim() || !String(cuerpo ?? '').trim()) {
@@ -85,8 +87,12 @@ correosRouter.post('/enviar', async (req, res) => {
     const fila = await anotarCorreoEnviado(db, base);
     res.json({ ok: true, correo: fila });
   } catch (err) {
-    const motivo = (err as Error).message;
+    // El motivo crudo queda en la auditoría (`correos`) y en el log; a la pantalla
+    // va un texto genérico — el crudo puede traer el diálogo del SMTP o, si lo que
+    // falló fue la consulta, el SQL entero.
+    const motivo = porQueFallo(err);
+    console.error(`el correo a ${destinatario} no salió — ${motivo}`);
     await anotarCorreoFallido(db, base, motivo);
-    res.status(502).json({ ok: false, message: `El correo no salió: ${motivo}` });
+    res.status(502).json({ ok: false, message: 'El correo no salió. Volvé a intentar en un momento.' });
   }
-});
+}));

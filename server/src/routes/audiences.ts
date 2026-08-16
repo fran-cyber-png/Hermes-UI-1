@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { MetaGraphClient, MetaGraphError } from "../meta/metaClient.js";
+import { porQueFallo } from "../lib/porQueFallo.js";
+import { ruta } from "../lib/ruta.js";
 
 export const audiencesRouter = Router();
 
@@ -30,45 +32,53 @@ const SUBTYPE_LABEL: Record<string, string> = {
 // Nombres que Goberna usa para marcar un público como "de exclusión".
 const PISTA_EXCLUSION = /excluir|exclude|excluded/i;
 
-audiencesRouter.get("/", async (req, res) => {
-  const token = process.env.META_ACCESS_TOKEN;
-  if (!token) {
-    res.status(500).json({ type: "config_error", message: "META_ACCESS_TOKEN no está configurado." });
-    return;
-  }
+audiencesRouter.get(
+  "/",
+  ruta(async (req, res) => {
+    const token = process.env.META_ACCESS_TOKEN;
+    if (!token) {
+      res.status(500).json({ type: "config_error", message: "META_ACCESS_TOKEN no está configurado." });
+      return;
+    }
 
-  const accountId = String(req.query.accountId ?? "").replace(/^act_/, "");
-  if (!accountId) {
-    res.status(400).json({ type: "validation_error", errors: ["Falta la cuenta publicitaria."] });
-    return;
-  }
+    const accountId = String(req.query.accountId ?? "").replace(/^act_/, "");
+    if (!accountId) {
+      res.status(400).json({ type: "validation_error", errors: ["Falta la cuenta publicitaria."] });
+      return;
+    }
 
-  const client = new MetaGraphClient(token);
-  try {
-    const rows = await client.getAll(`act_${accountId}/customaudiences`, {
-      fields: "id,name,subtype,approximate_count_lower_bound,operation_status,time_created",
-      limit: "500",
-    });
+    const client = new MetaGraphClient(token);
+    try {
+      const rows = await client.getAll(`act_${accountId}/customaudiences`, {
+        fields: "id,name,subtype,approximate_count_lower_bound,operation_status,time_created",
+        limit: "500",
+      });
 
-    const audiences = rows
-      .map((a) => ({
-        id: a.id,
-        name: a.name,
-        subtype: a.subtype,
-        grupo: SUBTYPE_LABEL[a.subtype] ?? a.subtype,
-        size: a.approximate_count_lower_bound ?? null,
-        listo: a.operation_status?.code === 200,
-        // Heurística sobre el nombre: Goberna marca los públicos de exclusión
-        // en el propio nombre. Es una sugerencia, no una regla — el usuario
-        // decide igual dónde va cada uno.
-        sugeridoParaExcluir: PISTA_EXCLUSION.test(a.name ?? ""),
-        creado: a.time_created,
-      }))
-      .sort((a, b) => (b.size ?? 0) - (a.size ?? 0));
+      const audiences = rows
+        .map((a) => ({
+          id: a.id,
+          name: a.name,
+          subtype: a.subtype,
+          grupo: SUBTYPE_LABEL[a.subtype] ?? a.subtype,
+          size: a.approximate_count_lower_bound ?? null,
+          listo: a.operation_status?.code === 200,
+          // Heurística sobre el nombre: Goberna marca los públicos de exclusión
+          // en el propio nombre. Es una sugerencia, no una regla — el usuario
+          // decide igual dónde va cada uno.
+          sugeridoParaExcluir: PISTA_EXCLUSION.test(a.name ?? ""),
+          creado: a.time_created,
+        }))
+        .sort((a, b) => (b.size ?? 0) - (a.size ?? 0));
 
-    res.json({ audiences, total: audiences.length });
-  } catch (err) {
-    const message = err instanceof MetaGraphError ? err.message : (err as Error).message;
-    res.status(502).json({ type: "api_error", message });
-  }
-});
+      res.json({ audiences, total: audiences.length });
+    } catch (err) {
+      // El diagnóstico de Meta se muestra (explica por qué no se pudo listar);
+      // cualquier otro error sale genérico y se loguea — su crudo puede ser el SQL.
+      if (!(err instanceof MetaGraphError)) {
+        console.error(`los públicos de la cuenta no se pudieron listar — ${porQueFallo(err)}`);
+      }
+      const message = err instanceof MetaGraphError ? err.message : "No se pudo completar la operación.";
+      res.status(502).json({ type: "api_error", message });
+    }
+  }),
+);

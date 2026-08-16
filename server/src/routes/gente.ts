@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { buscarPersonas, persona360 } from "../canales/persona360.js";
+import { ruta } from "../lib/ruta.js";
 
 /**
  * LA GENTE — la persona canónica del grafo (no la interacción suelta de Meta).
@@ -9,16 +10,16 @@ import { buscarPersonas, persona360 } from "../canales/persona360.js";
  */
 export const genteRouter = Router();
 
-genteRouter.get("/buscar", async (req, res) => {
+genteRouter.get("/buscar", ruta(async (req, res) => {
   const q = String(req.query.q ?? "").trim();
   if (q.length < 2) {
     res.json({ personas: [] });
     return;
   }
   res.json({ personas: await buscarPersonas(q) });
-});
+}));
 
-genteRouter.get("/:id", async (req, res) => {
+genteRouter.get("/:id", ruta(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     res.status(400).json({ type: "validation_error" });
@@ -30,4 +31,4 @@ genteRouter.get("/:id", async (req, res) => {
     return;
   }
   res.json(p);
-});
+}));

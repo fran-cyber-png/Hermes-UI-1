@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "../db/client.js";
+import { ruta } from "../lib/ruta.js";
 import {
   consultarEstadoDeCanales,
   consultarFrescura,
@@ -15,7 +16,7 @@ import {
  */
 export const interactionsRouter = Router();
 
-interactionsRouter.get("/", async (req, res) => {
+interactionsRouter.get("/", ruta(async (req, res) => {
   const canal = typeof req.query.canal === "string" ? req.query.canal : "";
   const intencion = typeof req.query.intencion === "string" ? req.query.intencion : "";
   const limit = Math.min(Number(req.query.limit) || 40, 100);
@@ -36,7 +37,7 @@ interactionsRouter.get("/", async (req, res) => {
   });
 
   res.json({ interacciones: filas, total, hayMas: filas.length === limit });
-});
+}));
 
 /**
  * El estado de todos los canales, en una sola consulta.
@@ -45,14 +46,14 @@ interactionsRouter.get("/", async (req, res) => {
  * entre un formulario y un comentario que dice "más información" es de formato,
  * no de intención.
  */
-interactionsRouter.get("/canales", async (req, res) => {
+interactionsRouter.get("/canales", ruta(async (req, res) => {
   const { interacciones, formularios, porDia } = await consultarEstadoDeCanales(
     db,
     req.query.rango,
   );
 
   res.json({ interacciones, formularios, porDia });
-});
+}));
 
 /**
  * ¿Qué tan viejo es lo que estamos mostrando?
@@ -69,7 +70,7 @@ interactionsRouter.get("/canales", async (req, res) => {
  * Un estado vacío indistinguible de un pipeline muerto es peor que un error: el
  * error te hace mirar, la calma falsa te hace irte tranquilo.
  */
-interactionsRouter.get("/frescura", async (_req, res) => {
+interactionsRouter.get("/frescura", ruta(async (_req, res) => {
   const r = await consultarFrescura(db);
 
   // 6h es el umbral. La ingesta hoy es manual, pero el compromiso con el vendedor
@@ -82,4 +83,4 @@ interactionsRouter.get("/frescura", async (_req, res) => {
     total: r?.total ?? 0,
     fresca: horas != null && horas < 6,
   });
-});
+}));

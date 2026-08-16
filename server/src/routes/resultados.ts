@@ -8,6 +8,7 @@ import {
   VENTANA_VENTA_DIAS_POR_DEFECTO,
 } from "../resultados/loQuePaso.js";
 import { MUESTRA_MINIMA } from "../resultados/medicion.js";
+import { ruta } from "../lib/ruta.js";
 
 /**
  * QUÉ PIEZA CIERRA VENTAS Y CUÁL SOLO GASTA MENSAJES — `GET /api/resultados/piezas`.
@@ -47,7 +48,7 @@ const consulta = z.object({
   diasVenta: z.coerce.number().int().min(1).max(180).default(VENTANA_VENTA_DIAS_POR_DEFECTO),
 });
 
-resultadosRouter.get("/piezas", async (req, res) => {
+resultadosRouter.get("/piezas", ruta(async (req, res) => {
   const parsed = consulta.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({ ok: false, message: "parámetros inválidos", detalle: parsed.error.issues });
@@ -81,4 +82,4 @@ resultadosRouter.get("/piezas", async (req, res) => {
             "depende del PR #165). «¿compró?» viene en null, que NO es cero.",
         }),
   });
-});
+}));
