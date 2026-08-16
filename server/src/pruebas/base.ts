@@ -9,7 +9,8 @@ import * as schema from "../db/schema.js";
  *
  * Los tests puros (`*.test.ts`) no tocan la base y no cubren NADA del SQL: la
  * cola, el radar, las proyecciones. Estos (`*.test.db.ts`) sí, contra una
- * Postgres efímera en el puerto 5439 (ver `docker-compose.test.yml` y ADR 0008).
+ * Postgres efímera en el puerto 5442 (ver `docker-compose.test.yml` y ADR 0008;
+ * era 5439 hasta que otro proyecto de VPS1 se instaló ahí sin saberlo — 16-ago-2026).
  *
  * CÓMO se aísla: se monta un `template` UNA vez (`montarBase.ts`) con la
  * extensión `vector` y el schema aplicado; cada test crea su propia base con
@@ -29,7 +30,7 @@ import * as schema from "../db/schema.js";
  */
 export const URL_ADMIN =
   process.env.TEST_DATABASE_URL ??
-  "postgresql://hermes_test:hermes_test@127.0.0.1:5439/hermes_test";
+  "postgresql://hermes_test:hermes_test@127.0.0.1:5442/hermes_test";
 
 /** La base plantilla: se monta una vez con extensión + schema; nadie escribe en ella. */
 export const TEMPLATE = "hermes_test_template";
@@ -38,11 +39,17 @@ export const TEMPLATE = "hermes_test_template";
  * Marcas que delatan que una URL apunta a algo que NO es la base de tests:
  * dev (5434), producción (5438) o staging (5440). Staging también está prohibido:
  * persiste entre corridas, así que un `DROP DATABASE` ahí borra el ensayo general.
+ *
+ * `:5439` también está acá desde el 16-ago-2026, aunque ya no sea el puerto de
+ * test: es el de `pse-postgres`, producción de OTRO proyecto en la misma VPS1.
+ * Sin esta marca, una URL vieja apuntando ahí caería en el genérico «tiene que
+ * ser 5442» — este mensaje dice de quién es, para que a nadie se le ocurra tocar.
  */
 const PROHIBIDOS = [
   ":5438",
   ":5434",
   ":5440",
+  ":5439",
   "meta_escuela",
   "hermes_db",
   "hermes_staging",
@@ -54,7 +61,7 @@ const PROHIBIDOS = [
  * El runner de CI es el de VPS1, la MISMA máquina donde vive la base de
  * producción (`meta_escuela` en 5438). Un test que por error apunte ahí y haga
  * `DROP DATABASE` es catastrófico. Esta función aborta antes de tocar nada si la
- * URL menciona el puerto o el nombre de dev/prod, o si no es explícitamente 5439.
+ * URL menciona el puerto o el nombre de dev/prod, o si no es explícitamente 5442.
  */
 export function guardarAntiProd(url: string): void {
   for (const marca of PROHIBIDOS) {
@@ -65,7 +72,7 @@ export function guardarAntiProd(url: string): void {
       );
     }
   }
-  if (!url.includes(":5439")) {
+  if (!url.includes(":5442")) {
     // Se muestra host:puerto/base y NUNCA la URL entera: esta guardia salta justo
     // cuando alguien apuntó los tests a otra base, o sea cuando la URL que iría al log
     // de CI lleva la contraseña de esa otra base (regla dura #1).
@@ -77,7 +84,7 @@ export function guardarAntiProd(url: string): void {
       /* si ni siquiera es una URL, el mensaje de arriba alcanza */
     }
     throw new Error(
-      `GUARDIA anti-prod: la URL de test tiene que apuntar al puerto 5439 (la base de test ` +
+      `GUARDIA anti-prod: la URL de test tiene que apuntar al puerto 5442 (la base de test ` +
         `corre SOLO ahí). Recibí: ${donde}`,
     );
   }

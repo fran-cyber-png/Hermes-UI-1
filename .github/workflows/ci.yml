@@ -240,19 +240,20 @@ jobs:
     needs: n1-rapido
     runs-on: [self-hosted, vps1-hermes]
     env:
-      TEST_DATABASE_URL: postgresql://hermes_test:hermes_test@127.0.0.1:5439/hermes_test
+      TEST_DATABASE_URL: postgresql://hermes_test:hermes_test@127.0.0.1:5442/hermes_test
       # El singleton de `db/client.ts` revienta AL IMPORTARSE si `DATABASE_URL` falta —
       # no hace falta usarlo, alcanza con que algún *.test.db.ts lo arrastre en su
       # cadena de imports (ej. reenganche.test.db.ts → correrReenganche.ts →
       # enviarYProyectar.ts). Apunta a la MISMA Postgres efímera de arriba: no se
       # usa de verdad, solo evita el throw al cargar el módulo.
-      DATABASE_URL: postgresql://hermes_test:hermes_test@127.0.0.1:5439/hermes_test
+      DATABASE_URL: postgresql://hermes_test:hermes_test@127.0.0.1:5442/hermes_test
     steps:
       - uses: actions/checkout@v4
 
-      # Postgres efímera en 5439 (tmpfs). La guardia anti-prod de `src/pruebas/base.ts`
+      # Postgres efímera en 5442 (tmpfs). La guardia anti-prod de `src/pruebas/base.ts`
       # aborta si la URL menciona 5438 (prod), 5434 (dev) o 5440 (staging): el runner
-      # vive en la MISMA máquina que las tres. Ver ADR 0008.
+      # vive en la MISMA máquina que las tres — y desde el 16-ago-2026 también 5439
+      # (`pse-postgres`, producción de OTRO proyecto que se instaló ahí). Ver ADR 0008.
       - name: Levantar Postgres de test
         run: docker compose -f docker-compose.test.yml up -d --wait
 

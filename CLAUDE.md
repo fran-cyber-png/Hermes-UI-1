@@ -83,7 +83,8 @@ npm install && npm run dev:app                     # la cáscara Tauri (arranca 
   `cd server && npm run test:db`. Archivo `*.test.db.ts` (el glob puro no lo toma), `const db = await
   baseDePrueba(t)` (`src/pruebas/base.ts`), sembrás con `src/pruebas/sembrar.ts` y le pasás **ese
   `db`** al seam (`consultarRadar(db)`…), nunca al singleton. Ejemplo: `src/pruebas/humo.test.db.ts`.
-  Guardia hard-fail anti-prod (5439, nunca 5438/5434).
+  Guardia hard-fail anti-prod (5442, nunca 5438/5434/5439 — este último es de OTRO proyecto
+  desde el 16-ago-2026, ver ADR 0008).
 - **Refrescar datos de Meta**: `cd server && npm run ingest:interactions` (polling manual, read-only).
   ⚠️ **Desde el 7-ago-2026 NO es el camino principal** (lo es el webhook): queda como red de seguridad
   y como lo único que puede traer lo VIEJO.

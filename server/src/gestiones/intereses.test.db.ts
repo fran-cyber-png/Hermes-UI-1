@@ -9,7 +9,7 @@ import { consultarIntereses } from "./intereses.js";
  * y la forma con fecha salgan bien end-to-end. La lógica de ordenamiento en sí ya
  * la cubre el test puro hermano; esto confirma el cableado con Postgres.
  *
- * Corre con `npm run test:db` contra la Postgres efímera en 5439 (local, tras
+ * Corre con `npm run test:db` contra la Postgres efímera en 5442 (local, tras
  * `docker compose -f docker-compose.test.yml up -d --wait`, o en CI). El glob puro
  * (`npm test`) NO lo toma. Ver CLAUDE.md §Tests con base.
  */

@@ -65,3 +65,20 @@ plan; el dueño la confirmó el 2026-07-22.)
   local, que para cambios de consulta es más fuerte que un mock. Esto es para que deje de depender de
   que alguien se acuerde de medir.
 - Cómo escribir uno: `CLAUDE.md` §«Tests con base».
+
+## Enmienda 2026-08-16 — el puerto se mueve a 5442
+
+**5439 dejó de ser un puerto exclusivo de Hermes.** Otro proyecto de VPS1 (`pse-postgres`, el
+simulador de guerra de un curso de la Escuela) se instaló ahí ese mismo día sin saber que Hermes
+lo tenía reservado — no hay ningún registro central de puertos en VPS1 que lo hubiera evitado.
+`pse-postgres` es producción real, con una cohorte arrancando al día siguiente y ya con un
+historial de caídas durante su propio corte de infraestructura esa misma noche; el test de
+Hermes es efímero (`tmpfs`, muere con cada corrida) y no le importa a nadie más. Se movió Hermes.
+
+**Nuevo puerto: 5442** (verificado libre en VPS1 y no reservado por ningún plan de Hermes — a
+diferencia de 5441, que ya estaba tomado en los planes de `docker-compose.banco.yml` y del
+directorio de personas). Cambian: `docker-compose.test.yml`, `docker-compose.staging.yml`
+(comentario), `server/src/pruebas/base.ts` (`URL_ADMIN`, `PROHIBIDOS` ahora incluye `:5439` para
+que apuntar ahí por error dé un mensaje explícito, y el mensaje de la guardia), `ci.yml`, y dos
+comentarios en `*.test.db.ts`. El resto de la decisión de este ADR no cambia — nada de la
+arquitectura del harness dependía del NÚMERO del puerto.

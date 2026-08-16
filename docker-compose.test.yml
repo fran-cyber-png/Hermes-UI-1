@@ -1,9 +1,14 @@
 # Postgres SOLO para los tests con base (SQL de la cola, el radar, las proyecciones).
 #
 # Aparte del dev (`docker-compose.yml`, meta_escuela en 5434) y ABISMO aparte de
-# producción (VPS1: meta_escuela en 5438). Acá el puerto es 5439 y el nombre
+# producción (VPS1: meta_escuela en 5438). Acá el puerto es 5442 y el nombre
 # `hermes_test` — la guardia hard-fail de `server/src/pruebas/base.ts` aborta si
 # la URL de test llega a mencionar 5438/5434/meta_escuela/hermes_db.
+#
+# ⚠️ Era 5439 hasta el 16-ago-2026 (ADR 0008): otro proyecto de VPS1 (`pse-postgres`,
+# el simulador de la Escuela) se instaló en ese puerto sin saber que Hermes lo tenía
+# reservado. Se movió Hermes, no PSE — PSE es producción con una cohorte en vivo al
+# día siguiente; el test de Hermes es efímero y no le importa a nadie más.
 #
 # `tmpfs` en el datadir: la base vive en RAM y muere con el contenedor. No hay
 # volumen, no hay estado que sobreviva, no hay basura que quede en el runner de
@@ -19,8 +24,8 @@ services:
       POSTGRES_PASSWORD: hermes_test
       POSTGRES_DB: hermes_test
     ports:
-      # Solo loopback y en 5439 — nunca 5438 (prod) ni 5434 (dev).
-      - "127.0.0.1:5439:5432"
+      # Solo loopback y en 5442 — nunca 5438 (prod) ni 5434 (dev).
+      - "127.0.0.1:5442:5432"
     tmpfs:
       # El datadir en RAM: efímero por diseño. Sin volumen = sin estado.
       - /var/lib/postgresql/data

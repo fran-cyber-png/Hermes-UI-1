@@ -26,7 +26,7 @@ import { PREFIJO_REFERENCIA } from "./referencia.js";
  * interna que se le parece.
  *
  * ⚠️ CORRELO CON `npm run test:db`, no con `tsx --test` a secas. La base plantilla vive
- * en un contenedor COMPARTIDO (5439) y la monta `montarBase.ts` desde el `schema.ts` de
+ * en un contenedor COMPARTIDO (5442) y la monta `montarBase.ts` desde el `schema.ts` de
  * quien la corrió último. Con dos worktrees trabajando en paralelo, la plantilla puede
  * ser de la otra rama — y entonces la PARIDAD falla contra un schema que no es el tuyo.
  * `npm run test:db` la remonta antes de cada corrida, así que ahí no pasa.
