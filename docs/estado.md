@@ -5,6 +5,13 @@
 > es **`plan-crm-definitivo.md`**; la bitácora de cómo se llegó acá:
 > **`sesion-2026-07-21-crm-definitivo.md`** (14 features en un día, con sus commits).
 
+> 📐 **Desde el 16-ago-2026, para «cuánto hay» no leas este documento ni `arquitectura.md`: leé
+> `docs/mapa.md`** (ADR 0057). Se genera del árbol con `npm run mapa` y el CI lo verifica byte a
+> byte en N1, así que es lo único de este repo que no puede quedar viejo. Acá queda la foto del
+> **negocio** —qué corre en producción, qué línea está viva, qué medición dio qué—, que es lo que un
+> generador no puede saber. La cicatriz que lo motivó: `arquitectura.md` se llamaba «el mapa» y a
+> los nueve días describía un repo ocho veces más chico.
+
 ## Qué es Hermes (1 frase)
 
 El **CRM de la Escuela de Goberna**: la vendedora atiende todos los canales (WhatsApp, comentarios
