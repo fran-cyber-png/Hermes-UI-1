@@ -62,6 +62,20 @@
         "cruzados del front —el 39 %— apuntan hoy a archivos que viven adentro de `canales`)."
       ]
     },
+    "handlersEnvueltos": {
+      "activa": true,
+      "porQue": "Express 4 NO atrapa el rechazo de un handler `async`: se vuelve `unhandledRejection` y el proceso se cae — no un 500, el server abajo. Ya ocurrió (`routes/auth.falloDeBase.test.ts`: dejó a las cinco vendedoras sin Hermes). Todo handler async de `server/src/routes/` tiene que estar envuelto en `ruta()` (`server/src/lib/ruta.ts`), que atrapa, loguea con `porQueFallo` y contesta un 500 genérico.",
+      "aplicaA": "server/src/routes",
+      "$noConfundirCon": [
+        "La regla NO es «tiene un try/catch». Medido el 16-ago-2026 en `routes/venta.ts`: `POST /crear`",
+        "abre su `try` en la línea 129 y el `await crearVenta(...)` de la 120 queda AFUERA — se escapa",
+        "igual. «Tiene un try en alguna parte» no se puede verificar; «está envuelto» sí, con un grep.",
+        "",
+        "Por eso se envuelven TAMBIÉN los handlers que ya manejan sus errores: `ruta()` es transparente",
+        "—sólo atrapa lo que se escapa— y el invariante sólo sirve si es total. Un invariante parcial no",
+        "es verificable, y lo que no se verifica envejece (ADR 0057)."
+      ]
+    },
     "routersSinSqlInline": {
       "activa": true,
       "porQue": "Un router valida, llama a un seam del dominio y serializa. Con SQL adentro, esa consulta no se puede testear sin levantar Express, y la regla que expresa no se puede compartir con el resto — que es como nacieron las dos implementaciones de la urgencia (#37).",

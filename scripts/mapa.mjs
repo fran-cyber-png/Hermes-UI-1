@@ -262,6 +262,36 @@ function verificar(a) {
     }
   }
 
+  if (R.handlersEnvueltos?.activa) {
+    // Un handler es `<algo>Router.<verbo>(…, async (`. Se mira sólo la CABECERA —los
+    // primeros 250 caracteres desde el `.get(`— porque ahí está todo lo que decide:
+    // los middlewares que van antes y si la función async viene envuelta en `ruta(`.
+    // Leer el cuerpo entero traería el `async` de cualquier callback de adentro.
+    const dir = join(RAIZ, R.handlersEnvueltos.aplicaA)
+    for (const f of archivosDe(dir)) {
+      if (esTest(f)) continue
+      const txt = leer(f)
+      const re = /\w*[Rr]outer\s*\.\s*(get|post|put|patch|delete|use)\s*\(/g
+      const posiciones = []
+      let m
+      while ((m = re.exec(txt))) posiciones.push(m.index)
+      let sueltos = 0
+      for (let i = 0; i < posiciones.length; i++) {
+        const hasta = i + 1 < posiciones.length ? posiciones[i + 1] : txt.length
+        const cabecera = txt.slice(posiciones[i], Math.min(hasta, posiciones[i] + 250))
+        if (!/async\s*\(/.test(cabecera)) continue // handler sincrónico: no aplica
+        if (!/\bruta\(/.test(cabecera)) sueltos++
+      }
+      if (sueltos > 0) {
+        fallas.push({
+          regla: 'handlersEnvueltos',
+          que: `${relative(RAIZ, f)} — ${sueltos} handler(s) async sin ruta()`,
+          detalle: [],
+        })
+      }
+    }
+  }
+
   if (R.routersSinSqlInline?.activa) {
     const dir = join(RAIZ, R.routersSinSqlInline.aplicaA)
     for (const f of archivosDe(dir)) {
