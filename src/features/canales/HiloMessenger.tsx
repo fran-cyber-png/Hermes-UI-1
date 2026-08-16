@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ExternalLink, Lock } from 'lucide-react';
 import { api } from '../../lib/datos/cliente';
 import { agruparPorDia, SeparadorDia, SkeletonHilo, tintaSeparador } from '../whatsapp/HiloWhatsapp';
-import type { Conversacion } from './conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 
 /**
  * EL HILO DE MESSENGER — leer la conversación completa, con las dos mitades.

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../../lib/datos/cliente';
+import { api } from '../lib/datos/cliente';
 
 /**
  * LAS LÍNEAS DE WHATSAPP QUE ESTÁN CORRIENDO (#50) — para poder recortar la cola

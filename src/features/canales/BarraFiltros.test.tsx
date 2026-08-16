@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { montar, type Montado } from '../../pruebas/dom';
 import { BarraFiltros } from './BarraFiltros';
-import { LINEA_MIAS } from './cola';
+import { LINEA_MIAS } from '../../dominio/cola';
 
 /**
  * LO QUE ESTE TEST CUIDA, Y POR QUÉ NO ALCANZABA UN TEST PURO.

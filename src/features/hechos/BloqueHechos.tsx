@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Check, Copy, Lightbulb, ServerCrash } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
 import { sectionLabel } from '../../lib/styles';
-import type { Conversacion } from '../canales/conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 import { ponerEnComposer } from '../whatsapp/puenteComposer';
 import { PORQUE_DEL_MOMENTO, useHechos, type HechoRecomendado } from './hechos';
 

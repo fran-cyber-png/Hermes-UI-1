@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { montar, reposar, tocar, type Montado } from '../../pruebas/dom';
 import { HiloWhatsapp } from './HiloWhatsapp';
-import type { Conversacion } from '../canales/conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 
 /**
  * COPIAR UN MENSAJE DEL HILO.

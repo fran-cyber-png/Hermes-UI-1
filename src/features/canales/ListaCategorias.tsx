@@ -1,6 +1,6 @@
 import { ChevronRight, Settings2, Tag } from 'lucide-react';
 import { useCategorias } from '../gestion/categorias';
-import { CLASE_FONDO, esColorCategoria } from '../gestion/paletaCategorias';
+import { CLASE_FONDO, esColorCategoria } from '../../dominio/paletaCategorias';
 
 /**
  * EL MODO LISTAS — la lista de la izquierda se convierte en LA LISTA DE

@@ -13,7 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { sectionLabel } from '../../lib/styles';
-import type { Conversacion } from '../canales/conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 import {
   useArchivarPlantilla,
   useCompartirPlantilla,

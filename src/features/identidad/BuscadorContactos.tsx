@@ -2,7 +2,7 @@ import { useDeferredValue, useState } from 'react';
 import { ArrowRight, Link2, Loader2, Search, X } from 'lucide-react';
 import { useEscape } from '../../lib/teclado/useEscape';
 import { fechaCorta } from '../../lib/formato';
-import { BadgeCanal, nombreCanal } from '../canales/BadgeCanal';
+import { BadgeCanal, nombreCanal } from '../../components/BadgeCanal';
 import { etiquetaDeOrigen } from './etiquetaOrigen';
 import { MOTIVO_ENLACE, useBuscarContactos, useEnlazar, type ContactoBuscado } from './enlaces';
 

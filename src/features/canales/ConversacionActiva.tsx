@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { MessageSquareText } from 'lucide-react';
-import { useEstadoConversacion, type Conversacion } from './conversaciones';
+import { useEstadoConversacion, type Conversacion } from '../../dominio/conversaciones';
 import { HiloWhatsapp, type SugerenciaEnComposer } from '../whatsapp/HiloWhatsapp';
 import { HiloMessenger } from './HiloMessenger';
 import ResponderPanel from './ResponderPanel';

@@ -11,17 +11,17 @@ import {
   CLASE_FONDO_TENUE,
   CLASE_TEXTO,
   resolverColor,
-} from '../gestion/paletaCategorias';
-import { cursoDeFila, detalleDeCurso } from './curso';
-import { marcaDeCliente, type NivelCliente } from './cliente';
+} from '../../dominio/paletaCategorias';
+import { cursoDeFila, detalleDeCurso } from '../../dominio/curso';
+import { marcaDeCliente, type NivelCliente } from '../../dominio/cliente';
 import { marcaDelBot, type TonoBot } from './bot';
-import { marcaDeDueno, type TonoDueno } from './dueno';
-import { BadgeCanal } from './BadgeCanal';
-import { Avatar } from './Avatar';
+import { marcaDeDueno, type TonoDueno } from '../../dominio/dueno';
+import { BadgeCanal } from '../../components/BadgeCanal';
+import { Avatar } from '../../components/Avatar';
 import { VENTANA_DIAS } from './types';
-import { lecturaDeVentana } from './ventana';
-import type { Conversacion } from './conversaciones';
-import { esPrioritaria, quiereFoto, siguienteConFoto } from './fotoVisible';
+import { lecturaDeVentana } from '../../dominio/ventana';
+import type { Conversacion } from '../../dominio/conversaciones';
+import { esPrioritaria, quiereFoto, siguienteConFoto } from '../../dominio/fotoVisible';
 
 /**
  * Prende `conFoto` con el propio IntersectionObserver de la fila (guardarraíl

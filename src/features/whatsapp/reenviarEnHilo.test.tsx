@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { montar, reposar, tocar, type Montado } from '../../pruebas/dom';
 import { HiloWhatsapp } from './HiloWhatsapp';
 import { leerBorrador } from './borradorComposer';
-import type { Conversacion } from '../canales/conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 
 /**
  * REENVIAR UN MENSAJE — deja el texto en la caja, NO lo manda.

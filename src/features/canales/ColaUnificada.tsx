@@ -20,17 +20,17 @@ import {
   migrarFiltroViejo,
   type FiltroSec,
   type Tab,
-} from './cola';
+} from '../../dominio/cola';
 import { lineaEfectiva, opcionesDeLinea } from './alcance';
 import { BarraFiltros } from './BarraFiltros';
-import { useConversaciones, useEstadoConversacion, type Conversacion } from './conversaciones';
-import { useLineas } from './lineas';
+import { useConversaciones, useEstadoConversacion, type Conversacion } from '../../dominio/conversaciones';
+import { useLineas } from '../../dominio/lineas';
 import { FilaConversacion } from './FilaConversacion';
 import { AvisoFilaQueBajo } from './AvisoFilaQueBajo';
 import { avisoDeFilaQueSeFue } from './filaQueSeFue';
 import { MenuFila } from './MenuFila';
 import { ListaCategorias } from './ListaCategorias';
-import { nombreCanal } from './BadgeCanal';
+import { nombreCanal } from '../../components/BadgeCanal';
 
 /** Solo anima lo que llegó AHORA (SSE): lo viejo que entra por «Ver más» no. */
 const RECIEN_LLEGADA_MS = 10 * 60_000;

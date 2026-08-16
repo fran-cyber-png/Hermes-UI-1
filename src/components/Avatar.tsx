@@ -1,6 +1,6 @@
-import { API_URL } from '../../config';
-import { iniciales } from '../../lib/iniciales';
-import { useBlobAutenticado } from '../../lib/datos/blobAutenticado';
+import { API_URL } from '../config';
+import { iniciales } from '../lib/iniciales';
+import { useBlobAutenticado } from '../lib/datos/blobAutenticado';
 
 /**
  * EL AVATAR de un contacto: su foto de WhatsApp si la hay, las iniciales si no.

@@ -12,7 +12,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
-import { useConversaciones, type Conversacion } from '../canales/conversaciones';
+import { useConversaciones, type Conversacion } from '../../dominio/conversaciones';
 import { ETAPA_ROTULO, type Etapa } from '../../lib/etapas';
 import { decidirDrop, decidirRebote, reintentoTrasInteres } from './compuertas';
 import { ModalInteresCotizado, ModalVentaCierre } from './ModalesCompuerta';

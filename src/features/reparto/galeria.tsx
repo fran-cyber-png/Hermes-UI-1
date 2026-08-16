@@ -7,7 +7,7 @@ import { BarraFiltros } from '../canales/BarraFiltros';
 import { FilaConversacion } from '../canales/FilaConversacion';
 import { PanelDerecho } from '../panel/PanelDerecho';
 import { ContenidoUsuario } from '../auth/PanelUsuario';
-import type { Conversacion } from '../canales/conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 
 /**
  * LA GALERÍA DEL REPARTO DE LEADS — la evidencia, sin nada vivo detrás.

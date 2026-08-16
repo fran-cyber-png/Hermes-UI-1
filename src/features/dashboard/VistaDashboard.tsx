@@ -12,11 +12,11 @@ import { ETAPAS, ETAPA_CHIP, colorSegmento, rotuloEtapa } from '../../lib/etapas
 import { Columnas } from '../../components/graficos/Columnas';
 import { BarraSegmentada } from '../../components/graficos/BarraSegmentada';
 import { Chispa } from '../../components/graficos/Chispa';
-import { BadgeCanal, nombreCanal } from '../canales/BadgeCanal';
+import { BadgeCanal, nombreCanal } from '../../components/BadgeCanal';
 import { HojaContacto } from '../panel/HojaContacto';
-import type { Conversacion } from '../canales/conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 import { conversacionDeRecordatorio, useAgenda, type Recordatorio } from '../agenda/agenda';
-import { conversacionDeTelefono } from '../canales/conversacionNueva';
+import { conversacionDeTelefono } from '../../dominio/conversacionNueva';
 import { useSesionWa } from '../whatsapp/conversacionWa';
 import {
   conversacionDeChat,

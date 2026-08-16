@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, UserRound } from 'lucide-react';
 import { usePopover } from '../../lib/teclado/usePopover';
 import { ErrorApi } from '../../lib/datos/cliente';
-import { marcaDeDueno, nombreCorto } from '../canales/dueno';
+import { marcaDeDueno, nombreCorto } from '../../dominio/dueno';
 import { useRueda, usePasarConversacion } from './reparto';
-import type { Conversacion } from '../canales/conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 
 /**
  * «PASÁSELA A OTRA PERSONA» — de quién es esta conversación, y cómo cambiarlo.

@@ -22,7 +22,7 @@ import {
   esColorCategoria,
   normalizarNombre,
   type ColorCategoria,
-} from './paletaCategorias';
+} from '../../dominio/paletaCategorias';
 
 /**
  * GESTOR DE CATEGORÍAS — la pantalla del `···` › «Etiquetas» (#48).

@@ -12,7 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { fechaCorta, formatoTelefono } from '../../lib/formato';
-import { conversacionDeTelefono } from '../canales/conversacionNueva';
+import { conversacionDeTelefono } from '../../dominio/conversacionNueva';
 import { HojaContacto } from '../panel/HojaContacto';
 import { useSesionWa } from '../whatsapp/conversacionWa';
 import { BarraReparto } from './BarraReparto';

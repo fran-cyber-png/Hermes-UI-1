@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { montar, reposar, type Montado } from '../../pruebas/dom';
 import { HiloWhatsapp } from './HiloWhatsapp';
-import type { Conversacion } from '../canales/conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 
 /**
  * LAS REACCIONES, DIBUJADAS — y sobre todo, NO dibujadas como un mensaje.

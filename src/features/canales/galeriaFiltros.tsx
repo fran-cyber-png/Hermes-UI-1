@@ -6,8 +6,8 @@ import { queryClient } from '../../lib/datos/cliente';
 import { AvisoFilaQueBajo } from './AvisoFilaQueBajo';
 import { BarraFiltros } from './BarraFiltros';
 import { FilaConversacion } from './FilaConversacion';
-import type { FiltroSec } from './cola';
-import type { Conversacion } from './conversaciones';
+import type { FiltroSec } from '../../dominio/cola';
+import type { Conversacion } from '../../dominio/conversaciones';
 
 /**
  * LA GALERÍA DE LOS FILTROS DE LA COLA — la evidencia, sin server ni base.

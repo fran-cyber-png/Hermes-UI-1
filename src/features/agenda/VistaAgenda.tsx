@@ -10,8 +10,8 @@ import {
   Undo2,
   X,
 } from 'lucide-react';
-import type { Conversacion } from '../canales/conversaciones';
-import { BadgeCanal } from '../canales/BadgeCanal';
+import type { Conversacion } from '../../dominio/conversaciones';
+import { BadgeCanal } from '../../components/BadgeCanal';
 import { formatoTelefono } from '../../lib/formato';
 import { useSesionWa } from '../whatsapp/conversacionWa';
 import { conversacionDeRecordatorio, opcionesRapidas, useAgenda, type Recordatorio } from './agenda';

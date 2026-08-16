@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../lib/datos/cliente';
-import type { ColorCategoria } from '../gestion/paletaCategorias';
+import type { ColorCategoria } from '../../dominio/paletaCategorias';
 
 /**
  * LAS ETIQUETAS AUTOMÁTICAS — «Cotizado» y «Se enfrió», calculadas por el server.

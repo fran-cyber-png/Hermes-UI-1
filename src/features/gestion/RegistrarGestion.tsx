@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, ClipboardList, Loader2, X } from 'lucide-react';
 import { api } from '../../lib/datos/cliente';
 import { sectionLabel } from '../../lib/styles';
-import type { Conversacion } from '../canales/conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 import { opcionesRapidas } from '../agenda/agenda';
 import { useNotas } from '../notas/notas';
 import { rotuloEtapa } from '../../lib/etapas';

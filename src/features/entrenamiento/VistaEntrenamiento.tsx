@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Bot, CornerDownLeft, RotateCcw, ShieldCheck, User } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
-import { useLineas } from '../canales/lineas';
+import { useLineas } from '../../dominio/lineas';
 import { PanelCorridas } from './PanelCorridas';
 import { PanelLecciones } from './PanelLecciones';
 import { PanelAgujeros } from './PanelAgujeros';

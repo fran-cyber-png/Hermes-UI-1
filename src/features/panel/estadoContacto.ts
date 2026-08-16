@@ -1,5 +1,5 @@
 import { resumenCompras, type Ficha, type ResumenCompras } from '../cerberus/ficha';
-import type { NivelCliente } from '../canales/cliente';
+import type { NivelCliente } from '../../dominio/cliente';
 
 /**
  * QUIÉN ES ESTA PERSONA — la primera pregunta del panel, resuelta sin DOM.

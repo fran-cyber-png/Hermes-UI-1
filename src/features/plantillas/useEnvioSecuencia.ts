@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, ErrorApi } from '../../lib/datos/cliente';
-import type { Conversacion } from '../canales/conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 import {
   avanzar,
   ESPERA_ENTRE_PASOS_MS,

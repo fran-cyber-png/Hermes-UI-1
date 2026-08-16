@@ -1,6 +1,6 @@
 import { IdCard, X } from 'lucide-react';
 import { useEscape } from '../../lib/teclado/useEscape';
-import type { Conversacion } from '../canales/conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 import { PanelDerecho } from './PanelDerecho';
 
 /**

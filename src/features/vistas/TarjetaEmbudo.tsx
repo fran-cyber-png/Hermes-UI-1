@@ -12,14 +12,14 @@ import {
   Megaphone,
   MessageSquareText,
 } from 'lucide-react';
-import type { Conversacion } from '../canales/conversaciones';
-import { Avatar } from '../canales/Avatar';
-import { BadgeCanal } from '../canales/BadgeCanal';
-import { detalleDeCurso } from '../canales/curso';
-import { esPrioritaria, quiereFoto, siguienteConFoto } from '../canales/fotoVisible';
+import type { Conversacion } from '../../dominio/conversaciones';
+import { Avatar } from '../../components/Avatar';
+import { BadgeCanal } from '../../components/BadgeCanal';
+import { detalleDeCurso } from '../../dominio/curso';
+import { esPrioritaria, quiereFoto, siguienteConFoto } from '../../dominio/fotoVisible';
 import { hace } from '../../lib/datos/frescura';
-import { lecturaDeVentana } from '../canales/ventana';
-import { lecturaDeAntiguedad } from '../canales/antiguedad';
+import { lecturaDeVentana } from '../../dominio/ventana';
+import { lecturaDeAntiguedad } from '../../dominio/antiguedad';
 import { etiquetaDeMedia } from '../../lib/etiquetaMedia';
 import { tempBorde, tempClass } from '../../lib/formato';
 import { cotizarEnUnClic, cursoDeTarjeta, haceCorto, nombreDeTarjeta, turnoDeTarjeta } from './tarjeta';

@@ -23,8 +23,8 @@ import { PantallaHechos } from '../hechos/PantallaHechos';
 import { textoDelBoton } from '../autorespuesta/revision';
 import { TextoWhatsapp } from './TextoWhatsapp';
 import { citaDeMensaje, clavesDelHilo, respondidos, rotuloDeCita, sePuedeCitar, type CitaHilo } from './cita';
-import { Avatar } from '../canales/Avatar';
-import type { Conversacion } from '../canales/conversaciones';
+import { Avatar } from '../../components/Avatar';
+import type { Conversacion } from '../../dominio/conversaciones';
 import {
   urlMedia,
   useConversacionWa,

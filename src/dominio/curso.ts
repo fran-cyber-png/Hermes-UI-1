@@ -1,5 +1,5 @@
-import { familiaDeProducto } from '../../lib/producto';
-import { COLORES, type ColorCategoria } from '../gestion/paletaCategorias';
+import { familiaDeProducto } from '../lib/producto';
+import { COLORES, type ColorCategoria } from './paletaCategorias';
 
 /**
  * EL CURSO DE UNA FILA DE LA COLA (#72) — qué quiere esta persona, en un chip.

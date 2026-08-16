@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { escribir, montar, pegar, reposar, objectUrlsRevocados, type Montado } from '../../pruebas/dom';
 import { HiloWhatsapp } from './HiloWhatsapp';
-import type { Conversacion } from '../canales/conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 
 /**
  * ⌘V EN EL COMPOSER — el CABLEADO, que es lo que ningún test puro ve.

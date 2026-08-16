@@ -1,7 +1,7 @@
 import { AlertTriangle, Image as Icono, Loader2, Pencil, Send, ServerCrash } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
 import { sectionLabel } from '../../lib/styles';
-import type { Conversacion } from '../canales/conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 import { useEnvioSecuencia } from '../plantillas/useEnvioSecuencia';
 import { enviados, estaCorriendo, rotulo } from '../plantillas/secuencia';
 import { ponerEnComposer } from '../whatsapp/puenteComposer';

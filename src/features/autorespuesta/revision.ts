@@ -1,4 +1,4 @@
-import type { Conversacion } from '../canales/conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 import type { GrupoBandeja, MensajeBandeja } from './bandeja';
 
 /**

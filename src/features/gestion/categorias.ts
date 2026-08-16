@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/datos/cliente';
-import type { ColorCategoria } from './paletaCategorias';
+import type { ColorCategoria } from '../../dominio/paletaCategorias';
 
 /**
  * LOS DATOS DE CATEGORÍAS — el catálogo con color, por vendedora (#48).

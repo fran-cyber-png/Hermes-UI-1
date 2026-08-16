@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Smartphone, Tags, X } from 'lucide-react';
-import type { LineaWhatsapp } from './lineas';
+import type { LineaWhatsapp } from '../../dominio/lineas';
 import {
   CLASE_BORDE,
   CLASE_FONDO,
   CLASE_FONDO_SUAVE,
   CLASE_TEXTO,
   esColorCategoria,
-} from '../gestion/paletaCategorias';
-import { categoriasDeLaBarra, FILTROS_SEC, type CategoriaEnBarra, type FiltroSec } from './cola';
+} from '../../dominio/paletaCategorias';
+import { categoriasDeLaBarra, FILTROS_SEC, type CategoriaEnBarra, type FiltroSec } from '../../dominio/cola';
 import { opcionesDeLinea, seDibujaElSelector } from './alcance';
 
 /**

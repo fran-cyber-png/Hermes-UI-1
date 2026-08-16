@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { arrastrar, montar, reposar, tocar, type Montado } from '../../pruebas/dom';
-import type { Conversacion } from '../canales/conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 import { TarjetaEmbudo } from './TarjetaEmbudo';
 import { ETAPA_ROTULO } from '../../lib/etapas';
 

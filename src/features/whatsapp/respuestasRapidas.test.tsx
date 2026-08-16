@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { escribir, montar, reposar, teclear, type Montado } from '../../pruebas/dom';
 import { HiloWhatsapp } from './HiloWhatsapp';
-import type { Conversacion } from '../canales/conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 import { limpiarPiezas } from './procedenciaComposer';
 
 /**

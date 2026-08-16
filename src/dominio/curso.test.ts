@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { COLORES } from '../gestion/paletaCategorias';
+import { COLORES } from './paletaCategorias';
 import { colorDeCurso, cursoDeFila, PALETA_CURSO } from './curso';
 
 /**

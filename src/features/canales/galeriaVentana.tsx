@@ -5,7 +5,7 @@ import '../../index.css';
 import { queryClient } from '../../lib/datos/cliente';
 import { BarraFiltros } from './BarraFiltros';
 import { FilaConversacion } from './FilaConversacion';
-import type { Conversacion } from './conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 
 /**
  * LA GALERÍA DE LA VENTANA DE CONVERSACIÓN — la evidencia, sin server ni base.

@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { AlertTriangle, Check, LogOut, Smartphone, UserRound } from 'lucide-react';
 import { usePopover } from '../../lib/teclado/usePopover';
-import { useLineas } from '../canales/lineas';
+import { useLineas } from '../../dominio/lineas';
 import { tieneSesionDeCerberus } from './identidad';
 import type { Vendedora } from './sesion';
 

@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../lib/datos/cliente';
+import { api } from '../lib/datos/cliente';
 import { esFiltroSec, parametrosDeCola, type EstadoCola } from './cola';
-import type { FilaDesglose } from '../vistas/tablero';
+import type { FilaDesglose } from './desglose';
 
 /**
  * Una fila de la cola unificada: o un comentario suelto (FB/IG) o una

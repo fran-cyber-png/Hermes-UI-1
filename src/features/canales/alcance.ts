@@ -1,5 +1,5 @@
-import { LINEA_MIAS } from './cola';
-import type { LineaWhatsapp } from './lineas';
+import { LINEA_MIAS } from '../../dominio/cola';
+import type { LineaWhatsapp } from '../../dominio/lineas';
 
 /**
  * QUÉ LÍNEAS OFRECE EL SELECTOR — la regla, pura.

@@ -2,15 +2,15 @@ import { useEffect, useState } from 'react';
 import { ExternalLink, FileText, Search } from 'lucide-react';
 import { api } from '../../lib/datos/cliente';
 import { kicker, sectionLabel } from '../../lib/styles';
-import type { Conversacion } from './conversaciones';
-import { BadgeCanal, nombreCanal } from './BadgeCanal';
+import type { Conversacion } from '../../dominio/conversaciones';
+import { BadgeCanal, nombreCanal } from '../../components/BadgeCanal';
 import HistorialPersona from './HistorialPersona';
-import { Avatar } from './Avatar';
+import { Avatar } from '../../components/Avatar';
 import { RegistrarGestion } from '../gestion/RegistrarGestion';
 import { Intereses } from '../gestion/Intereses';
 import { PanelNotas } from '../notas/PanelNotas';
 import { BloqueLeadForm } from '../cerberus/BloqueLeadForm';
-import { personaEsTelefono, telefonoDe } from './canal';
+import { personaEsTelefono, telefonoDe } from '../../dominio/canal';
 import { PersonaUnificada } from '../identidad/PersonaUnificada';
 
 /**

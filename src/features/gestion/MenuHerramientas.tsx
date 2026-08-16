@@ -3,7 +3,7 @@ import { MoreVertical, X } from 'lucide-react';
 import { usePopover } from '../../lib/teclado/usePopover';
 import { armarItemsMenu } from './itemsHerramientas';
 import { GestorCategorias } from './GestorCategorias';
-import type { Conversacion } from '../canales/conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 import { PanelPlantillas } from '../plantillas/PanelPlantillas';
 import { PantallaHechos } from '../hechos/PantallaHechos';
 

@@ -4,7 +4,7 @@ import { AlarmClock, Check, Loader2, Plus, Tag, X } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { usePopover } from '../../lib/teclado/usePopover';
 import { rotuloEtapa } from '../../lib/etapas';
-import type { Conversacion } from '../canales/conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 import { opcionesRapidas, useAgenda } from '../agenda/agenda';
 import { PasarConversacion } from '../reparto/PasarConversacion';
 import { RegistrarEvento } from '../eventos/RegistrarEvento';
@@ -21,7 +21,7 @@ import {
   normalizarNombre,
   resolverColor,
   type ColorCategoria,
-} from './paletaCategorias';
+} from '../../dominio/paletaCategorias';
 
 /**
  * LA BARRA DE GESTIÓN — el embudo entero manejable DESDE el chat.

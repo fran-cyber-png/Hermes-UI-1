@@ -20,8 +20,8 @@ import {
 import { Escudo } from './components/Marca';
 import { ColaUnificada } from './features/canales/ColaUnificada';
 import { ConversacionActiva } from './features/canales/ConversacionActiva';
-import type { Conversacion } from './features/canales/conversaciones';
-import { conversacionDeTelefono } from './features/canales/conversacionNueva';
+import type { Conversacion } from './dominio/conversaciones';
+import { conversacionDeTelefono } from './dominio/conversacionNueva';
 import BarraFrescura from './features/canales/BarraFrescura';
 import { EstadoWhatsapp } from './features/whatsapp/EstadoWhatsapp';
 import { InterruptorAutoRespuesta } from './features/autorespuesta/InterruptorAutoRespuesta';

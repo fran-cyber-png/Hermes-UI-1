@@ -1,5 +1,5 @@
 import { formatoTelefono } from '../../lib/formato';
-import { cursoDeFila, type CursoDeFila, type EntradaCurso } from '../canales/curso';
+import { cursoDeFila, type CursoDeFila, type EntradaCurso } from '../../dominio/curso';
 
 /**
  * QUÉ DICE UNA TARJETA DEL PIPELINE — la política, sin DOM.

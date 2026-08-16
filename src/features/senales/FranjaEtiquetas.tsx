@@ -6,7 +6,7 @@ import {
   CLASE_FONDO_TENUE,
   CLASE_TEXTO,
   resolverColor,
-} from '../gestion/paletaCategorias';
+} from '../../dominio/paletaCategorias';
 import { useSenales } from './senales';
 
 /**

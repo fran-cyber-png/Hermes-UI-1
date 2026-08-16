@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { lineaEfectiva, opcionesDeLinea, seDibujaElSelector } from './alcance';
-import { LINEA_MIAS } from './cola';
-import type { LineaWhatsapp } from './lineas';
+import { LINEA_MIAS } from '../../dominio/cola';
+import type { LineaWhatsapp } from '../../dominio/lineas';
 
 /**
  * QUÉ LÍNEAS OFRECE EL SELECTOR.
