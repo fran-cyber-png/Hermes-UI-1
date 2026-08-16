@@ -4,7 +4,7 @@ import { notaLink } from '../db/links.js';
 import { gestiones, notas } from '../db/schema.js';
 import { planearMovimiento } from '../espacios/mover.js';
 import { puedeEditar, type QuienPregunta } from '../espacios/visibilidad.js';
-import { visibleParaSql } from '../espacios/visibilidadSql.js';
+import { miLibretaPrivadaSql, mismaVendedoraEnSql, visibleParaSql } from '../espacios/visibilidadSql.js';
 import { aTextoPlano } from './textoPlano.js';
 
 /**
@@ -187,7 +187,10 @@ async function listarNotasHistoricas(
   const filas = await base
     .select({ id: gestiones.id, vendedoraId: gestiones.vendedoraId, texto: gestiones.notas, creadoAt: gestiones.creadoAt })
     .from(gestiones)
-    .where(and(eq(gestiones.clave, opciones.clave), eq(gestiones.vendedoraId, opciones.vendedoraId), isNotNull(gestiones.notas)));
+    // Misma normalización que la libreta nueva (#386): `gestiones.vendedora_id`
+    // también lo escribe Cerberus con SU grafía, así que un `eq()` pelado le
+    // escondía a Luz sus propias notas históricas.
+    .where(and(eq(gestiones.clave, opciones.clave), mismaVendedoraEnSql(gestiones.vendedoraId, opciones.vendedoraId), isNotNull(gestiones.notas)));
 
   return filas
     .filter((f): f is typeof f & { texto: string } => Boolean(f.texto && f.texto.trim()))
@@ -251,8 +254,12 @@ export async function listarNotas(
         and(
           eq(notas.clave, opciones.clave),
           isNull(notas.archivadoAt),
+          // 🔴 `miLibretaPrivadaSql` y NO un `eq()` a mano: normaliza los dos lados.
+          // Acá vivía el defecto de #386 — Cerberus guarda `Luz` y ella entra como
+          // `luz`, así que la comparación exacta le devolvía CERO páginas mientras
+          // `buscarNotas` (que sí usa la regla canónica) encontraba las mismas.
           espacioId === null
-            ? and(isNull(notas.espacioId), eq(notas.vendedoraId, opciones.vendedoraId))
+            ? miLibretaPrivadaSql(opciones.vendedoraId)
             : eq(notas.espacioId, espacioId),
         ),
       ),

@@ -44,15 +44,44 @@ import type { QuienPregunta } from "./visibilidad.js";
  * justamente para que esto no cueste un seq scan.
  */
 export function visibleParaSql(quien: QuienPregunta): SQL {
-  const yo = (quien.vendedoraId ?? "").trim().toLowerCase();
-
-  const miLibretaPrivada: SQL = yo
-    ? (and(isNull(notas.espacioId), sql`lower(btrim(${notas.vendedoraId})) = ${yo}`) as SQL)
-    : sql`false`;
+  const miLibretaPrivada = miLibretaPrivadaSql(quien.vendedoraId);
 
   const misEspacios: SQL = quien.espacios.length
     ? (inArray(notas.espacioId, [...quien.espacios]) as SQL)
     : sql`false`;
 
   return or(miLibretaPrivada, misEspacios) as SQL;
+}
+
+/**
+ * 🔴 «MI LIBRETA PRIVADA», EN UN SOLO LUGAR — `espacio_id IS NULL AND vendedora_id = yo`,
+ * con `lower(btrim(...))` de los DOS lados.
+ *
+ * **Está exportada porque el caso más obvio se la salteó.** `listarNotas` escribía
+ * su propia versión con un `eq()` pelado, y `buscarNotas` usaba `visibleParaSql`,
+ * que sí normaliza. Resultado medido (issue #386): para **Luz** —que Cerberus
+ * guarda como `Luz` y que entra tipeando `luz`— **la lista daba cero páginas y el
+ * buscador encontraba esas mismas páginas**. No hay error ni log: hay una libreta
+ * vacía, que se lee como «no escribí nada todavía».
+ *
+ * Es exactamente el agujero que el comentario de arriba dice que normalizar de un
+ * solo lado reabre — sólo que el que normalizaba de un lado era el llamador. Por
+ * eso ahora la expresión no se puede volver a escribir a mano: se pide acá.
+ */
+export function miLibretaPrivadaSql(vendedoraId: string | null | undefined): SQL {
+  const yo = (vendedoraId ?? "").trim().toLowerCase();
+  // Sin `vendedoraId` no hay libreta privada que mostrar — fail-closed, como arriba.
+  if (!yo) return sql`false`;
+  return and(isNull(notas.espacioId), sql`lower(btrim(${notas.vendedoraId})) = ${yo}`) as SQL;
+}
+
+/**
+ * La misma normalización, para las notas HISTÓRICAS de `gestiones` (solo lectura,
+ * anteriores a #47). Tabla distinta, misma trampa: `gestiones.vendedora_id` también
+ * lo escribe Cerberus con su grafía.
+ */
+export function mismaVendedoraEnSql(columna: SQL | { name: string }, vendedoraId: string | null | undefined): SQL {
+  const yo = (vendedoraId ?? "").trim().toLowerCase();
+  if (!yo) return sql`false`;
+  return sql`lower(btrim(${columna})) = ${yo}`;
 }
