@@ -12,8 +12,8 @@
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
 | front | 32 | 345 | 46,000 | 13,969 |
-| server | 65 | 692 | 71,717 | 42,305 |
-| **total** | **97** | **1,037** | **117,717** | **56,274** |
+| server | 65 | 695 | 72,088 | 42,649 |
+| **total** | **97** | **1,040** | **118,088** | **56,618** |
 
 ## Front — `src/`
 
@@ -56,10 +56,10 @@
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
-| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. | 57 | 8,647 | 8 | 2 | 47 |
+| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. | 57 | 8,854 | 8 | 2 | 47 |
 | `bot` | El bot de primera línea que atiende solo: su agente, sus guardrails, sus frenos y el reenganche. | 56 | 7,997 | 24 | 7 | 13 |
 | `scripts` | Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción. | 31 | 5,050 | 0 | 0 | 30 |
-| `cola` | La consulta que ordena la deuda: a quién se atiende primero y por qué. Cada regla vive pura y con su gemelo SQL. | 51 | 4,409 | 33 | 8 | 7 |
+| `cola` | La consulta que ordena la deuda: a quién se atiende primero y por qué. Cada regla vive pura y con su gemelo SQL. | 51 | 4,432 | 33 | 8 | 7 |
 | `whatsapp` | La costura con WhatsApp: la interfaz de transporte y sus implementaciones, el hilo, y la única puerta por la que sale un envío. | 49 | 4,156 | 23 | 13 | 10 |
 | `db` | El schema y la conexión. Capa base del server: no conoce ninguna regla de negocio. | 19 | 3,437 | 1 | 51 | 0 |
 | `autorespuesta` | El acuse fuera de horario del lado del server: a quién corresponde, con qué plantilla y a qué ritmo. Nunca manda solo. | 30 | 2,993 | 13 | 7 | 5 |
@@ -74,15 +74,15 @@
 | `cerberus` | Hablarle al ERP: login, ficha, productos, ventas — y el latin1 que revienta con emojis. | 12 | 1,125 | 6 | 9 | 3 |
 | `cursos` | Traducir el texto con el que llegó una persona a una familia de curso. | 15 | 1,051 | 7 | 8 | 3 |
 | `ontologia` | 🪦 Heredado de meta-escuela — las proyecciones ontológicas. ⚠️ `ontologia.conversiones` NO está muerto: `lazo/worker.ts` lo consulta. | 7 | 1,040 | 2 | 2 | 4 |
+| `espacios` | Dónde vive cada página de la Libreta y quién la puede ver o escribir. Es una frontera, no un filtro. | 14 | 1,030 | 6 | 2 | 2 |
 | `canales` | 🪦 Heredado de meta-escuela — las consultas de salud y tesorería del dashboard de pauta. ⚠️ No confundir con `front/canales`, que es la cola y sí se usa. | 6 | 1,021 | 0 | 2 | 4 |
-| `espacios` | Dónde vive cada página de la Libreta y quién la puede ver o escribir. Es una frontera, no un filtro. | 14 | 1,001 | 6 | 2 | 2 |
 | `atribucion` | Que una venta encuentre su conversación: la llave determinista y la cascada etiquetada de respaldo. | 10 | 996 | 4 | 4 | 5 |
 | `padron` | Los contactos de icarus que nunca escribieron: el WHERE que los recorta, sus facetas, y a quién se le habilitan. Es una frontera. | 15 | 989 | 6 | 4 | 2 |
 | `meta` | Traer de Meta lo que pasó —interacciones, leads, anuncios— por los dos caminos (polling y webhook), que escriben igual. | 8 | 843 | 2 | 5 | 1 |
 | `resultados` | Qué pasó DESPUÉS de mandar una pieza. Deriva el veredicto; los nombres no prometen causa. | 9 | 840 | 4 | 2 | 5 |
+| `lazo` | 🪦 Heredado de meta-escuela — el outbox que le contaría las conversiones a Meta por CAPI. Apagado (`LAZO_RELOJ`). | 7 | 747 | 2 | 6 | 3 |
+| `notas` | Las páginas de la Libreta y su texto plano. | 8 | 743 | 5 | 1 | 2 |
 | `identidad` | El puente clave-de-conversación ↔ persona: enlazar, revocar, unificar. | 7 | 736 | 3 | 2 | 1 |
-| `notas` | Las páginas de la Libreta y su texto plano. | 7 | 736 | 4 | 1 | 2 |
-| `lazo` | 🪦 Heredado de meta-escuela — el outbox que le contaría las conversiones a Meta por CAPI. Apagado (`LAZO_RELOJ`). | 7 | 718 | 2 | 6 | 3 |
 | `catalogo` | El catálogo de piezas que Ivi lee para ELEGIR sin inventar. Solo lectura, y nunca sirve medio catálogo. | 9 | 650 | 4 | 3 | 4 |
 | `senales` | «Cotizado» y «se enfrió»: se derivan en cada consulta, nunca se guardan. | 8 | 642 | 4 | 4 | 2 |
 | `procedencia` | De qué pieza salió cada envío, estampado en la ORDEN de envío y no en un update posterior. | 6 | 625 | 3 | 6 | 3 |
@@ -106,11 +106,11 @@
 | `centurion` | Las credenciales del SSO de Centurión. | 2 | 288 | 1 | 1 | 1 |
 | `entrega` | Los ✓✓: la escala monótona de un recibo y su avance, arbitrado por la base. | 5 | 259 | 3 | 3 | 1 |
 | `categorias` | Las categorías con color que cada vendedora se arma. | 4 | 247 | 2 | 3 | 1 |
+| `lib` | Utilidades sin dominio: hora de Lima, rangos y por qué falló una consulta. | 9 | 246 | 3 | 7 | 0 |
 | `index` | El pegamento: monta los routers y arranca los relojes. ⚠️ Sus comentarios describen la arquitectura de meta-escuela y engañan (ver `docs/arquitectura.md` §2). | 1 | 237 | 0 | 0 | 10 |
 | `interacciones` | Las interacciones crudas de `interactions` como las consulta la app: el listado, los canales y la frescura de la ingesta. | 1 | 224 | 0 | 1 | 3 |
 | `icarus` | Leer la base de icarus, siempre read-only. | 4 | 223 | 2 | 1 | 1 |
 | `negocio` | Las líneas de negocio y el embudo de consultoría. | 4 | 186 | 2 | 2 | 0 |
-| `lib` | Utilidades sin dominio: hora de Lima, rangos y por qué falló una consulta. | 7 | 170 | 2 | 7 | 0 |
 | `ediciones` | Editar un mensaje ya enviado. Sólo donde el transporte lo permite. | 4 | 164 | 2 | 1 | 3 |
 | `atencion` | Cuánto se tarda en contestar. | 2 | 161 | 1 | 1 | 0 |
 | `responder` | Responder un comentario de Meta: lo que hay que leer de la base para armar y registrar esa respuesta. | 1 | 136 | 0 | 1 | 1 |
@@ -173,6 +173,10 @@ No significa que estén muertos —pueden ser puntos de entrada o scripts—, pe
 ### ✅ `sinCiclosDeArchivo` — sin violaciones
 
 > Dos archivos que se importan mutuamente no tienen un orden en que leerse, y en ESM uno de los dos ve el módulo del otro a medio inicializar — un `undefined` que no aparece al compilar sino al ejecutar, y sólo a veces. Medido el 16-ago-2026 sobre 641 archivos: TRES, todos de dos archivos. Por eso el candado puede ser duro desde el día uno.
+
+### ✅ `handlersEnvueltos` — sin violaciones
+
+> Express 4 NO atrapa el rechazo de un handler `async`: se vuelve `unhandledRejection` y el proceso se cae — no un 500, el server abajo. Ya ocurrió (`routes/auth.falloDeBase.test.ts`: dejó a las cinco vendedoras sin Hermes). Todo handler async de `server/src/routes/` tiene que estar envuelto en `ruta()` (`server/src/lib/ruta.ts`), que atrapa, loguea con `porQueFallo` y contesta un 500 genérico.
 
 ### ✅ `routersSinSqlInline` — sin violaciones
 
