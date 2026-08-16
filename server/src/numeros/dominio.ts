@@ -1,16 +1,34 @@
 import { z } from "zod";
 import { normalizarTelefono } from "../whatsapp/identidadWa.js";
 import type { EstadoSesion } from "../whatsapp/transporte.js";
-import type { EstadoVinculacion } from "../whatsapp/vinculador.js";
 
 /**
  * LO PURO DE LOS NÚMEROS PROPIOS.
  *
  * Validación del cuerpo que empuja Cerberus, normalización del número, y la
  * traducción de los estados internos (`EstadoSesion` del transporte,
- * `EstadoVinculacion` del vinculador) a la forma del contrato `/api/admin`. Sin
- * base y sin whatsmeow: los tipos entran con `import type` (se borran al compilar).
+ * `EstadoVinculacion`) a la forma del contrato `/api/admin`. Sin base y sin
+ * whatsmeow: los tipos entran con `import type` (se borran al compilar).
  */
+
+/**
+ * EN QUÉ ANDA UN PAREO. **Vive acá y no en `whatsapp/vinculador.ts`**, aunque el
+ * vinculador sea quien lo produce: este módulo es el que RAZONA sobre el estado
+ * —`estadoVinculacionVigente`, `esPareoEnVuelo`, `estadoVinculacionAContrato`—, o
+ * sea que el vocabulario es suyo y el motor es el que lo consume.
+ *
+ * Al revés cerraba un ciclo: el vinculador importaba la regla pura de acá y este
+ * archivo importaba el tipo de allá. En ESM eso deja a uno de los dos viendo al
+ * otro a medio inicializar — un `undefined` que no aparece al compilar sino al
+ * ejecutar, y sólo a veces. Ver `arquitectura.json` › `sinCiclosDeArchivo`.
+ */
+export type EstadoVinculacion =
+  | { estado: 'inactivo' }
+  | { estado: 'esperando'; numero: string }
+  | { estado: 'qr'; numero: string; qr: string }
+  | { estado: 'conectado'; numero: string; jid: string }
+  | { estado: 'baneado'; numero: string; codigo: string; expira: string }
+  | { estado: 'error'; numero: string; motivo: string };
 
 export const PROPOSITOS = ["escuela", "campana", "vendedora"] as const;
 export type Proposito = (typeof PROPOSITOS)[number];

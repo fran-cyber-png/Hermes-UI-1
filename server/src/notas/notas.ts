@@ -1,6 +1,7 @@
 import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { db as DbSingleton } from '../db/client.js';
-import { gestiones, notaLink, notas } from '../db/schema.js';
+import { notaLink } from '../db/links.js';
+import { gestiones, notas } from '../db/schema.js';
 import { planearMovimiento } from '../espacios/mover.js';
 import { puedeEditar, type QuienPregunta } from '../espacios/visibilidad.js';
 import { visibleParaSql } from '../espacios/visibilidadSql.js';

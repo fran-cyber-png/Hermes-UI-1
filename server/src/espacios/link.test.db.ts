@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { eq } from 'drizzle-orm';
-import { notaLink, notas } from '../db/schema.js';
+import { notaLink } from '../db/links.js';
+import { notas } from '../db/schema.js';
 import { baseDePrueba } from '../pruebas/base.js';
 import { sembrarEspacio, sembrarNota } from '../pruebas/sembrar.js';
 import { archivarNota, listarNotas, moverNota } from '../notas/notas.js';

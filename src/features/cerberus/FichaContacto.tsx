@@ -1,15 +1,14 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ExternalLink, Mail, RefreshCw, ShoppingBag, UserPlus } from 'lucide-react';
-import { api } from '../../lib/datos/cliente';
 import { fechaCorta } from '../../lib/formato';
 import { sectionLabel } from '../../lib/styles';
-import type { Conversacion } from '../canales/conversaciones';
-import { Avatar } from '../canales/Avatar';
+import type { Conversacion } from '../../dominio/conversaciones';
+import { Avatar } from '../../components/Avatar';
 import { BloqueLeadForm, useLeadForm } from './BloqueLeadForm';
-import { personaEsTelefono } from '../canales/canal';
-import { quiereFoto } from '../canales/fotoVisible';
+import { personaEsTelefono } from '../../dominio/canal';
+import { quiereFoto } from '../../dominio/fotoVisible';
 import { PersonaUnificada } from '../identidad/PersonaUnificada';
-import type { Ficha } from './ficha';
+import { useFicha } from './useFicha';
 
 /**
  * LA FICHA DEL CONTACTO — el DETALLE de Cerberus, dentro de su pestaña.
@@ -38,29 +37,6 @@ import type { Ficha } from './ficha';
 
 export type { Ficha, VentaFicha } from './ficha';
 
-/**
- * Exportado para el modal de Cierre del Pipeline (#60): misma query, mismo caché.
- *
- * **Con techo de espera, y no es un detalle.** La ficha viaja a Cerberus (Django,
- * sin API REST) y Cerberus a veces no cuelga la llamada: la deja abierta. Sin
- * techo, el panel se queda en «Buscando en Cerberus…» para siempre —verificado
- * en producción el 25-jul— y la vendedora nunca ve la acción primaria ni el
- * aviso de que algo falló. A los 12 s se corta y el estado pasa a «No se pudo
- * saber», que es la verdad y además ofrece salida. `retry: false` porque un
- * reintento duplica la espera antes de decirlo.
- */
-export function useFicha(telefono: string | null, activo: boolean) {
-  return useQuery({
-    queryKey: ['ficha', telefono],
-    queryFn: ({ signal }) =>
-      api<Ficha>(`/api/contactos/ficha?telefono=${encodeURIComponent(telefono ?? '')}`, {
-        signal: AbortSignal.any([signal, AbortSignal.timeout(12_000)]),
-      }),
-    enabled: activo && Boolean(telefono),
-    staleTime: 60_000,
-    retry: false,
-  });
-}
 
 const CERBERUS = import.meta.env.VITE_CERBERUS_URL ?? 'https://app.goberna.us';
 

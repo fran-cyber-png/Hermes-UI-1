@@ -1,8 +1,8 @@
 import { AlertTriangle, ShoppingCart, UserPlus, X } from 'lucide-react';
 import { useEscape } from '../../lib/teclado/useEscape';
-import { useFicha } from '../cerberus/FichaContacto';
+import { useFicha } from '../cerberus/useFicha';
 import { FormularioVenta } from './FormularioVenta';
-import type { Conversacion } from '../canales/conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 
 /**
  * REGISTRAR LA VENTA DESDE EL PANEL DERECHO — el destino del botón que estaba

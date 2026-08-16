@@ -1515,4 +1515,9 @@ export { espacios, espacioMiembro } from "./espacios.js";
 
 // El link público de una página (ADR 0047): la PRIMERA puerta anónima del repo.
 // Cortar es BORRAR la fila, y hay un solo link por página — ver `db/links.ts`.
-export { notaLink } from "./links.js";
+//
+// ⚠️ **`notaLink` NO se re-exporta acá: se importa de `db/links.js`.** Al revés de
+// `espacios.js`, esa tabla necesita `notas` de ESTE archivo, así que el re-export
+// cerraba un ciclo entre los dos. En ESM eso deja a uno viendo al otro a medio
+// inicializar: un `undefined` que no aparece al compilar sino al ejecutar, y sólo
+// a veces. Ver `arquitectura.json` › `sinCiclosDeArchivo`.

@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { db as DbSingleton } from "../db/client.js";
-import { notaLink, notas } from "../db/schema.js";
+import { notaLink } from "../db/links.js";
+import { notas } from "../db/schema.js";
 import { type LinkPublico, nuevoToken, pareceToken } from "./link.js";
 import { type Alcance, type ConfiguracionDeLink, estaVigente, type Permiso } from "./linkModelo.js";
 import { puedeEditar, type QuienPregunta } from "./visibilidad.js";

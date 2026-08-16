@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createClient, type WhatsmeowClient } from '@whatsmeow-node/whatsmeow-node';
 import QRCode from 'qrcode';
-import { estadoVinculacionVigente } from '../numeros/dominio.js';
+import { estadoVinculacionVigente, type EstadoVinculacion } from '../numeros/dominio.js';
 
 /**
  * EL VINCULADOR — el motor de la consola de operador (D13).
@@ -18,13 +18,10 @@ import { estadoVinculacionVigente } from '../numeros/dominio.js';
  * de operador, no un servicio concurrente.
  */
 
-export type EstadoVinculacion =
-  | { estado: 'inactivo' }
-  | { estado: 'esperando'; numero: string }
-  | { estado: 'qr'; numero: string; qr: string }
-  | { estado: 'conectado'; numero: string; jid: string }
-  | { estado: 'baneado'; numero: string; codigo: string; expira: string }
-  | { estado: 'error'; numero: string; motivo: string };
+// `EstadoVinculacion` vive en `numeros/dominio.ts`, que es el módulo que RAZONA
+// sobre el estado; acá sólo se produce. Se re-exporta para no romperle el import
+// a nadie que ya lo pedía de este archivo.
+export type { EstadoVinculacion };
 
 class Vinculador {
   private client: WhatsmeowClient | null = null;

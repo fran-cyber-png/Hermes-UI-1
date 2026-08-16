@@ -1,6 +1,7 @@
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type { db as DbSingleton } from "../db/client.js";
-import { espacioMiembro, espacios, notaLink, numeroVendedora, repartoRueda } from "../db/schema.js";
+import { notaLink } from "../db/links.js";
+import { espacioMiembro, espacios, numeroVendedora, repartoRueda } from "../db/schema.js";
 import { destinosPosibles } from "../reparto/destino.js";
 
 /**

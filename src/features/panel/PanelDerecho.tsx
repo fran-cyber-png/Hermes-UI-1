@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import type { Conversacion } from '../canales/conversaciones';
-import { marcaDeCliente } from '../canales/cliente';
-import { useFicha } from '../cerberus/FichaContacto';
+import type { Conversacion } from '../../dominio/conversaciones';
+import { marcaDeCliente } from '../../dominio/cliente';
+import { useFicha } from '../cerberus/useFicha';
 import type { Ficha } from '../cerberus/ficha';
 import { useLeadForm } from '../cerberus/BloqueLeadForm';
 import { useIntereses } from '../gestion/Intereses';
@@ -18,7 +18,7 @@ import { ZonaPendientes } from './ZonaPendientes';
 import { FichaContacto } from '../cerberus/FichaContacto';
 import { VentaDesdeElPanel } from '../venta/VentaDesdeElPanel';
 import { origenDeLead } from '../cerberus/leadForm';
-import { personaEsTelefono } from '../canales/canal';
+import { personaEsTelefono } from '../../dominio/canal';
 
 function fichaDeCliente(f: Ficha | undefined): Extract<Ficha, { estado: 'cliente' }> | null {
   return f?.estado === 'cliente' ? f : null;

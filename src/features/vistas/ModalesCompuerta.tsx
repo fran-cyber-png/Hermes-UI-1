@@ -9,12 +9,12 @@ import {
   UserPlus,
   X,
 } from 'lucide-react';
-import type { Conversacion } from '../canales/conversaciones';
+import type { Conversacion } from '../../dominio/conversaciones';
 import { api } from '../../lib/datos/cliente';
 import { useEscape } from '../../lib/teclado/useEscape';
 import { Intereses } from '../gestion/Intereses';
 import { FormularioVenta } from '../venta/FormularioVenta';
-import { useFicha } from '../cerberus/FichaContacto';
+import { useFicha } from '../cerberus/useFicha';
 import { cotizarEnUnClic, nombreDeTarjeta } from './tarjeta';
 
 /**
