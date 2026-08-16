@@ -1,5 +1,10 @@
 # Plan 2026-08 — Escuela primero, y los servidores en orden
 
+> ⚠️ **§2 (Plan SERVIDORES) se mudó a [`goberna-infra`](https://github.com/Goberna-Lab/goberna-infra/blob/main/docs/plan-2026-08-escuela-y-servidores.md)**
+> junto con el censo — ver [ADR 0057](adr/0057-el-censo-de-servidores-se-muda-a-goberna-infra.md).
+> Esa copia es la viva; ésta queda como estaba el 27-jul, de contexto histórico para §1. **§1
+> (Plan ESCUELA) sigue siendo de acá** — es producto, no infraestructura.
+
 > **Decisión de foco del dueño (27-jul-2026)**: ahora el frente es **Goberna
 > escuela/eventos/ventas** — terminar esas herramientas e integrarlas (geografo/Ivi, Flux/Studio)
 > **para Goberna como empresa primero**; los candidatos (plano B de
