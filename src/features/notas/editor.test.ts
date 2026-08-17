@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BLOQUES_RETIRADOS, DICCIONARIO_LIBRETA, ESQUEMA_LIBRETA } from './editor';
+import { BLOQUES_RETIRADOS, DICCIONARIO_LIBRETA, ESQUEMA_LIBRETA, soloBloquesConocidos } from './editor';
 
 /**
  * LO QUE EL EDITOR OFRECE Y EN QUÉ IDIOMA.
@@ -29,6 +29,49 @@ describe('los bloques que el editor ofrece', () => {
 
   it('la tabla se queda: `aTextoPlano` sabe aplanar filas y celdas', () => {
     expect(Object.keys(ESQUEMA_LIBRETA.blockSchema)).toContain('table');
+  });
+
+  it('🔴 el dibujo NO es un bloque: la capa de anotaciones vive fuera del `doc`', () => {
+    // Un bloque de dibujo sería el mismo agujero que image/video/audio/file con
+    // otro nombre. Las anotaciones van en `notas.anotaciones`, en una capa
+    // transparente sobre el documento — ver `dibujo/figuras.ts`.
+    expect(Object.keys(ESQUEMA_LIBRETA.blockSchema)).not.toContain('dibujo');
+  });
+});
+
+/**
+ * EL FILTRO DE SANEADO. Existe para que un bloque desconocido no tumbe la app
+ * entera al abrir una página — pero cuando la lista de conocidos se queda vieja,
+ * el que protege es el que destruye.
+ */
+describe('soloBloquesConocidos', () => {
+  it('conserva los bloques que el esquema sí tiene', () => {
+    const bloques = [
+      { type: 'paragraph', content: [] },
+      { type: 'heading', props: { level: 2 }, content: [] },
+      { type: 'table', content: { type: 'tableContent', rows: [] } },
+    ];
+    expect(soloBloquesConocidos(bloques)).toEqual(bloques);
+  });
+
+  it('saca lo que el esquema no conoce', () => {
+    const imagen = { type: 'image', props: { url: 'https://…' }, children: [] };
+    const parrafo = { type: 'paragraph', content: [] };
+    expect(soloBloquesConocidos([parrafo, imagen])).toEqual([parrafo]);
+  });
+
+  it('⚠️ la lista de conocidos sale del ESQUEMA, no de una copia a mano', () => {
+    // Con una lista escrita aparte, agregar un bloque y olvidarse de esta línea
+    // hace que el filtro que protege sea el que destruye: el bloque se guarda,
+    // desaparece al reabrir, y el autoguardado graba la versión sin él.
+    for (const tipo of Object.keys(ESQUEMA_LIBRETA.blockSchema)) {
+      expect(soloBloquesConocidos([{ type: tipo }]), `«${tipo}» se estaría descartando`).toHaveLength(1);
+    }
+  });
+
+  it('un bloque sin `type` pasa: BlockNote asume `paragraph`, que sí existe', () => {
+    const suelto = { content: [] };
+    expect(soloBloquesConocidos([suelto])).toEqual([suelto]);
   });
 });
 

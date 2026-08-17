@@ -153,7 +153,7 @@ export function PantallaDividida({
               <DiagramaPerezoso
                 key={divididaId !== null ? `div-${divididaId}` : 'div-nueva-diagrama'}
                 contenidoInicial={notaLista?.diagrama ?? undefined}
-                onCambio={(v) => alCambiar(v)}
+                onCambio={(v) => alCambiar({ diagrama: v })}
               />
             )
           : (fase === 'creando' || notaLista) && (
@@ -162,7 +162,7 @@ export function PantallaDividida({
                   key={divididaId !== null ? `div-${divididaId}` : 'div-nueva'}
                   contenidoInicial={notaLista ? docParaEditor(notaLista) : undefined}
                   soloLectura={false}
-                  onCambio={alCambiar}
+                  onCambio={(doc) => alCambiar({ doc })}
                 />
               </div>
             )}

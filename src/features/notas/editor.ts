@@ -46,6 +46,17 @@ const {
 /** Los cuatro que se sacaron, para que el test los pueda nombrar sin adivinar. */
 export const BLOQUES_RETIRADOS = ['image', 'video', 'audio', 'file'] as const;
 
+/**
+ * ══ Y EL DIBUJO NO ES UN BLOQUE, JUSTAMENTE POR ESTO ════════════════════════
+ *
+ * Las anotaciones a mano (`dibujo/`) podrían haber sido un bloque más, y sería
+ * el mismo agujero de arriba con otro nombre: contenido que vive en `props`, que
+ * el aplanador no ve, y una página que no se guarda sin decir por qué.
+ *
+ * No lo son. Viven en una COLUMNA APARTE (`notas.anotaciones`) y se pintan en
+ * una capa transparente sobre el documento, no adentro de él. El esquema del
+ * editor queda como estaba: solo bloques de texto.
+ */
 export const ESQUEMA_LIBRETA = BlockNoteSchema.create({
   blockSpecs: BLOQUES_QUE_SE_PUEDEN_GUARDAR,
   // `fuente` y `tamano` son NUESTROS: no vienen en el paquete. Lo que implican
@@ -77,7 +88,15 @@ export const ESQUEMA_LIBRETA = BlockNoteSchema.create({
  * y el server nunca la indexó, así que no hay nada que rescatar sin inventar.
  * Lo que había alrededor —que es lo que la vendedora escribió— se conserva.
  */
-const TIPOS_CONOCIDOS = new Set(Object.keys(BLOQUES_QUE_SE_PUEDEN_GUARDAR));
+/**
+ * ⚠️ Sale del ESQUEMA, no de `BLOQUES_QUE_SE_PUEDEN_GUARDAR`. Con la lista de
+ * antes, `dibujo` no figuraba entre los conocidos y este filtro —que existe para
+ * proteger— **borraba todos los dibujos al abrir la página**: se guardaban bien,
+ * desaparecían al volver, y el autoguardado grababa la versión sin ellos 800 ms
+ * después. Leer del esquema hace que agregar un bloque no requiera acordarse de
+ * tocar esta línea.
+ */
+const TIPOS_CONOCIDOS = new Set(Object.keys(ESQUEMA_LIBRETA.blockSchema));
 
 export function soloBloquesConocidos(doc: unknown[]): unknown[] {
   return doc.filter((b) => {

@@ -45,6 +45,12 @@ export interface Nota {
    * Libreta, y en TODA histórica de `gestiones` — que se pintan desde `texto`.
    */
   doc: unknown;
+  /**
+   * LA CAPA DE ANOTACIONES a mano que va ENCIMA del texto (`dibujo/figuras.ts`).
+   * `null` en toda página que nunca se anotó — que son todas las que existen
+   * antes de esta función, y toda histórica de `gestiones`.
+   */
+  anotaciones?: unknown;
   fijada: boolean;
   creadoAt: string;
   /** null = nunca editada. */
@@ -183,7 +189,7 @@ export function useMutacionesNotas(clave: string, espacioId: number | null = nul
   const invalidar = () => qc.invalidateQueries({ queryKey: ['notas', clave, espacioId] });
 
   const crear = useMutation({
-    mutationFn: (v: string | { texto?: string; doc?: unknown }) => {
+    mutationFn: (v: string | { texto?: string; doc?: unknown; anotaciones?: unknown }) => {
       const cuerpo = typeof v === 'string' ? { texto: v } : v;
       // `espacioId` viaja SIEMPRE: una página nueva nace donde la vendedora está
       // parada. Sin esto, escribir adentro de un espacio creaba la página en la
@@ -197,10 +203,10 @@ export function useMutacionesNotas(clave: string, espacioId: number | null = nul
   });
 
   const editar = useMutation({
-    mutationFn: (v: { id: number; texto?: string; doc?: unknown; fijada?: boolean }) =>
+    mutationFn: (v: { id: number; texto?: string; doc?: unknown; anotaciones?: unknown; fijada?: boolean }) =>
       api<{ ok: true; nota: Nota }>(`/api/notas/${v.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ texto: v.texto, doc: v.doc, fijada: v.fijada }),
+        body: JSON.stringify({ texto: v.texto, doc: v.doc, anotaciones: v.anotaciones, fijada: v.fijada }),
       }),
     onSuccess: invalidar,
   });
@@ -214,8 +220,14 @@ export function useMutacionesNotas(clave: string, espacioId: number | null = nul
    * tampoco lo resetearía, solo cuesta.
    */
   const autoguardar = useMutation({
-    mutationFn: (v: { id: number; doc: unknown }) =>
-      api<{ ok: true; nota: Nota }>(`/api/notas/${v.id}`, { method: 'PATCH', body: JSON.stringify({ doc: v.doc }) }),
+    // ⚠️ Se manda SOLO lo que cambió: `JSON.stringify` omite los `undefined` y
+    // el server trata la ausencia como «no lo toques». Mandar siempre los dos
+    // haría que dibujar reescriba el texto (y al revés) sin motivo.
+    mutationFn: (v: { id: number; doc?: unknown; anotaciones?: unknown }) =>
+      api<{ ok: true; nota: Nota }>(`/api/notas/${v.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ doc: v.doc, anotaciones: v.anotaciones }),
+      }),
     onSuccess: (r) => {
       qc.setQueryData<{ notas: Nota[] }>(['notas', clave, espacioId], (prev) =>
         prev ? { notas: prev.notas.map((n) => (n.id === r.nota.id && n.origen === 'nota' ? { ...n, ...r.nota } : n)) } : prev,

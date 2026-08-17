@@ -39,6 +39,7 @@ const PAGINA: Nota = {
   vendedoraId: 'luz',
   texto: 'Precios México',
   doc: null,
+  anotaciones: null,
   fijada: false,
   creadoAt: '2026-08-10T00:00:00Z',
   editadoAt: null,

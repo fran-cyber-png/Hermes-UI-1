@@ -1,6 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ChevronLeft, Link2, Notebook, Pin, PinOff, Plus, Search, Trash2, Undo2 } from 'lucide-react';
 import { TAB_POR_DEFECTO, type TabRibbon } from './ribbon/tabs';
+import { BarraDeDibujo, GROSORES, PALETA, type Herramienta } from './dibujo/BarraDeDibujo';
+import { CapaDeAnotaciones } from './dibujo/CapaDeAnotaciones';
+import { useAnotaciones } from './dibujo/useAnotaciones';
+import { CAPA_BASE, paraGuardar, type Figura } from './dibujo/figuras';
+import { CAPAS_INICIALES, agregarCapa, borrarCapa, cambiarCapa, capasNecesarias, type Capa } from './dibujo/capas';
+import { PanelDeCapas } from './dibujo/PanelDeCapas';
+import { agregarReciente, leerRecientes } from './dibujo/coloresRecientes';
 import { AccionesDePagina } from './AccionesDePagina';
 import { DiagramaPerezoso, EditorPerezoso, precargarDiagrama, precargarEditor } from './perezosos';
 import { PantallaDividida } from './PantallaDividida';
@@ -8,7 +15,7 @@ import { mismoUsuario, nombreCorto, useEspacios, type DondeEstoy } from './espac
 import { SelectorDeEspacio } from './SelectorDeEspacio';
 import { tokenDeLaUrl, usePaginaPorLink } from './porLink';
 import { renglonDeEstado } from './guardado';
-import { useAutoguardado } from './useAutoguardado';
+import { useAutoguardado, type ContenidoDePagina } from './useAutoguardado';
 import {
   type Nota,
   docParaEditor,
@@ -84,6 +91,247 @@ function mismaSeleccion(a: Seleccion, b: Seleccion): boolean {
  */
 function ColumnaDeEscritura({ children }: { children: React.ReactNode }) {
   return <div className="pb-8">{children}</div>;
+}
+
+/**
+ * LA HOJA: el documento con su capa de anotaciones encima.
+ *
+ * ══ POR QUÉ ESTE ENVOLTORIO EXISTE ══════════════════════════════════════════
+ *
+ * Es el `relative` que le da a la capa su sistema de coordenadas. `absolute
+ * inset-0` adentro de acá mide **exactamente el alto del contenido** —no el de
+ * la ventana—, y es lo que hace que las anotaciones scrolleen pegadas al texto
+ * sin una línea de código de scroll (ver `CapaDeAnotaciones`).
+ *
+ * También es el punto donde el texto y el dibujo se juntan y siguen separados:
+ * el editor no sabe que hay una capa encima, y la capa no sabe qué dice el
+ * texto. Lo único que comparten es este rectángulo.
+ */
+function Hoja({
+  children,
+  anotaciones,
+  herramienta,
+  color,
+  grosor,
+  opacidad,
+  capaActiva,
+  capas,
+  pedirImagen,
+  onSubiendo,
+  onSalirDelDibujo,
+}: {
+  children: React.ReactNode;
+  anotaciones: ReturnType<typeof useAnotaciones> | null;
+  herramienta: Herramienta;
+  color: string;
+  grosor: number;
+  opacidad: number;
+  capaActiva: string;
+  capas: Capa[];
+  pedirImagen(abrir: (() => void) | null): void;
+  onSubiendo(subiendo: boolean): void;
+  onSalirDelDibujo(): void;
+}) {
+  return (
+    <div className="relative mx-auto max-w-3xl px-6 py-8">
+      {children}
+      {anotaciones && (
+        <CapaDeAnotaciones
+          anotaciones={anotaciones}
+          herramienta={herramienta}
+          color={color}
+          grosor={grosor}
+          opacidad={opacidad}
+          capaId={capaActiva}
+          capas={capas}
+          pedirImagen={pedirImagen}
+          onSubiendo={onSubiendo}
+          onSalirDelDibujo={onSalirDelDibujo}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * LA ZONA DE TRABAJO: el documento que scrollea + la barra de la derecha.
+ *
+ * ══ POR QUÉ ES UN COMPONENTE APARTE Y VA CON `key` ══════════════════════════
+ *
+ * Porque acá viven las anotaciones de la página abierta, y **cambiar de página
+ * tiene que empezarlas de cero**. Con la `key` puesta afuera, React remonta esto
+ * al saltar de nota y el hook se resiembra solo — la misma técnica que ya usa
+ * `EditorDePagina`, y por el mismo motivo: sin remontar, la capa seguiría
+ * mostrando los círculos de la página anterior sobre el texto de la nueva, y el
+ * primer trazo los guardaría todos en la página equivocada.
+ *
+ * También es lo que junta al documento con la barra sin que el editor sepa que
+ * la barra existe: acá adentro son dos hermanos en una fila.
+ */
+function ZonaDeTrabajo({
+  hoja,
+  onGuardarAnotaciones,
+  children,
+}: {
+  /**
+   * La página abierta, o `null` cuando lo que se muestra no es un documento
+   * (la bienvenida, «elegí una página», un link roto). Con `null` esto es un
+   * contenedor con scroll y nada más: ni capa, ni barra.
+   */
+  hoja: { anotacionesIniciales: unknown; soloLectura: boolean } | null;
+  onGuardarAnotaciones(figuras: Figura[]): void;
+  children: React.ReactNode;
+}) {
+  const [herramienta, setHerramienta] = useState<Herramienta>('puntero');
+  const [color, setColor] = useState<string>(PALETA[0]);
+  const [grosor, setGrosor] = useState<number>(GROSORES[1]);
+  const [opacidad, setOpacidad] = useState(1);
+  const [capaActiva, setCapaActiva] = useState(CAPA_BASE);
+  const [capas, setCapas] = useState<Capa[]>(CAPAS_INICIALES);
+  const [panelDeCapas, setPanelDeCapas] = useState(false);
+  const [recientes, setRecientes] = useState<string[]>(leerRecientes);
+  const [subiendo, setSubiendo] = useState(false);
+  /**
+   * El abridor del buscador de archivos, que vive en la CAPA (ahí está el
+   * `<input type="file">`, porque ahí se sabe dónde soltar la imagen) y lo
+   * dispara un botón de la BARRA. Esto es el cable entre los dos hermanos.
+   */
+  const [abrirArchivo, setAbrirArchivo] = useState<{ abrir: () => void } | null>(null);
+  /**
+   * 🔴 `useCallback` y no una flecha suelta. La capa registra el abridor desde un
+   * efecto que depende de esta función; con una identidad nueva en cada render,
+   * el efecto vuelve a correr, vuelve a llamar a este `setState` con un objeto
+   * NUEVO, y eso dispara otro render — un bucle infinito que cuelga la pestaña.
+   */
+  const registrarAbridor = useCallback(
+    (abrir: (() => void) | null) => setAbrirArchivo(abrir ? { abrir } : null),
+    [],
+  );
+
+  const anotaciones = useAnotaciones({
+    iniciales: hoja?.anotacionesIniciales,
+    onGuardar: onGuardarAnotaciones,
+  });
+
+  /**
+   * ELEGIR UN COLOR HACE DOS COSAS DISTINTAS, y cuál depende de si hay algo
+   * seleccionado. Es la convención de todo editor de dibujo:
+   *
+   *  · **Con figuras elegidas** las REPINTA — es lo que uno espera al marcar un
+   *    trazo y tocar el rojo. Va como un solo paso de deshacer.
+   *  · **Sin nada elegido** queda como el color del próximo trazo.
+   *
+   * En los dos casos el color pasa a «recientes»: la lista es de lo que se USÓ,
+   * y usarlo para repintar cuenta igual que usarlo para dibujar.
+   */
+  /**
+   * Las capas que la página necesita: las declaradas más una por cada `capaId`
+   * huérfano de las figuras. Sin esto, una página guardada con figuras en una
+   * capa que ya no existe las dejaría invisibles e inalcanzables.
+   */
+  const capasVivas = capasNecesarias(capas, anotaciones.figuras);
+
+  const cuantasPorCapa = anotaciones.figuras.reduce<Record<string, number>>((acc, f) => {
+    acc[f.capaId] = (acc[f.capaId] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  const elegirColor = (c: string) => {
+    setColor(c);
+    setRecientes(agregarReciente(c));
+    anotaciones.pintarSeleccion(c);
+  };
+
+  /**
+   * ⚠️ Sobre una página de SOLO LECTURA las anotaciones **se ven pero no se
+   * tocan**: la herramienta queda clavada en `puntero` y la barra no se dibuja.
+   * Dejar la barra ahí sería ofrecer dibujar sobre una histórica de `gestiones`
+   * — el trazo saldría en pantalla y no se guardaría nunca.
+   */
+  const puedeDibujar = hoja !== null && !hoja.soloLectura;
+  const herramientaEfectiva: Herramienta = puedeDibujar ? herramienta : 'puntero';
+
+  return (
+    <div className="flex min-h-0 flex-1">
+      {/* EL SCROLL ES DE ESTA COLUMNA, no de la fila: la barra tiene que quedarse
+          quieta mientras la página se desplaza debajo. */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {hoja ? (
+          <Hoja
+            anotaciones={anotaciones}
+            herramienta={herramientaEfectiva}
+            opacidad={opacidad}
+            capaActiva={capaActiva}
+            capas={capasVivas}
+            color={color}
+            grosor={grosor}
+            pedirImagen={registrarAbridor}
+            onSubiendo={setSubiendo}
+            onSalirDelDibujo={() => setHerramienta('puntero')}
+          >
+            {children}
+          </Hoja>
+        ) : (
+          children
+        )}
+      </div>
+
+      {/*
+        EL PANEL DE CAPAS, a la izquierda de la barra: es donde hay lugar. Se
+        monta acá y no adentro de la barra para que su ancho no pelee con los
+        48 px de la columna de botones.
+      */}
+      {puedeDibujar && panelDeCapas && (
+        <div className="relative">
+          <div className="absolute bottom-2 right-2 z-30">
+            <PanelDeCapas
+              capas={capasVivas}
+              capaActiva={capaActiva}
+              haySeleccion={anotaciones.seleccionadas.length > 0}
+              cuantasPorCapa={cuantasPorCapa}
+              onCapaActiva={setCapaActiva}
+              onCambiarCapa={(id, cambios) => setCapas((cs) => cambiarCapa(capasNecesarias(cs, anotaciones.figuras), id, cambios))}
+              onAgregar={() => setCapas((cs) => agregarCapa(capasNecesarias(cs, anotaciones.figuras)))}
+              onBorrar={(id) => {
+                const r = borrarCapa(capasVivas, id);
+                if (!r) return;
+                // Lo que tenía se muda; borrar una capa por error no puede
+                // llevarse el trabajo de una hora.
+                anotaciones.mudarDeCapa(id, r.mudarA);
+                setCapas(r.capas);
+                if (capaActiva === id) setCapaActiva(r.mudarA);
+              }}
+              onOrdenar={anotaciones.ordenarSeleccion}
+            />
+          </div>
+        </div>
+      )}
+
+      {puedeDibujar && (
+        <BarraDeDibujo
+          herramienta={herramienta}
+          color={color}
+          grosor={grosor}
+          opacidad={opacidad}
+          recientes={recientes}
+          capasAbiertas={panelDeCapas}
+          puedeDeshacer={anotaciones.puedeDeshacer}
+          puedeRehacer={anotaciones.puedeRehacer}
+          hayAlgo={anotaciones.hayAlgo}
+          hayImagenSubiendo={subiendo}
+          onHerramienta={setHerramienta}
+          onColor={elegirColor}
+          onGrosor={setGrosor}
+          onOpacidad={setOpacidad}
+          onCapas={() => setPanelDeCapas((v) => !v)}
+          onImagen={() => abrirArchivo?.abrir()}
+          onDeshacer={anotaciones.deshacer}
+          onRehacer={anotaciones.rehacer}
+          onLimpiar={anotaciones.limpiar}
+        />
+      )}
+    </div>
+  );
 }
 
 /** Un renglón de la lista de páginas. */
@@ -325,6 +573,7 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
     alCrear: (id) => setSeleccion({ tipo: 'nota', id, origen: 'nota' }),
   });
 
+
   /**
    * La página que vino por link se abre SOLA y por encima de la lista: quien
    * hizo clic en un link quería ESA página, no la Libreta.
@@ -334,6 +583,86 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
    * mover el selector ahí mostraría una lista que el server va a negar con 403.
    */
   const deLink = porLink.data?.nota ?? null;
+
+  /**
+   * QUÉ PÁGINA ESTÁ EN LA HOJA. Es la `key` de la zona de trabajo —remonta las
+   * anotaciones al saltar de nota— y la misma que ya usa cada `EditorDePagina`.
+   */
+  const claveDePagina = deLink
+    ? `link-${deLink.id}`
+    : seleccion === null
+      ? 'ninguna'
+      : seleccion.tipo === 'nueva'
+        ? 'nueva'
+        : `${seleccion.origen}-${seleccion.id}`;
+
+  /**
+   * LA HOJA ABIERTA, o `null` cuando lo que se muestra no es un documento.
+   *
+   * Decide tres cosas de una sola vez: si hay capa de anotaciones, si hay barra
+   * a la derecha, y con qué se siembra la capa. Tenerlo en UN lugar es lo que
+   * impide que «se ve la barra» y «se puede guardar» se contesten distinto —
+   * ofrecer dibujar sobre algo que no se guarda es la peor de las dos.
+   */
+  const hoja: { anotacionesIniciales: unknown; soloLectura: boolean } | null = deLink
+    ? { anotacionesIniciales: deLink.anotaciones, soloLectura: !porLink.data?.puedeEditar }
+    : seleccion?.tipo === 'nueva'
+      ? { anotacionesIniciales: null, soloLectura: false }
+      : paginaAbierta
+        ? {
+            anotacionesIniciales: paginaAbierta.anotaciones,
+            // Una histórica de `gestiones` se lee y no se edita — tampoco se anota.
+            soloLectura: paginaAbierta.origen === 'gestion',
+          }
+        : null;
+
+  /**
+   * LO ÚLTIMO QUE SE SABE DE LA PÁGINA ABIERTA — el documento y la capa.
+   *
+   * ══ POR QUÉ HACE FALTA ESTE PAR DE REFERENCIAS ══════════════════════════════
+   *
+   * El texto y el dibujo cambian por caminos distintos (el editor y la capa) y
+   * ninguno de los dos conoce al otro, pero el guardado es UNO. Sin esto, el
+   * PATCH que sale al dibujar llevaría solo `anotaciones` y el que sale al
+   * teclear solo `doc`; funciona —el server trata la ausencia como «no lo
+   * toques»— **hasta la página nueva**: ahí el primer guardado es un POST, y si
+   * el primer gesto fue dibujar, la página nacería sin el texto que ya se había
+   * escrito en el mismo segundo.
+   *
+   * ⚠️ Se vacían al CAMBIAR DE PÁGINA, en el render y no en un efecto: un efecto
+   * corre después de pintar, y un trazo hecho en ese hueco mandaría el `doc` de
+   * la página anterior sobre la nueva. Es la misma técnica que `useAutoguardado`
+   * usa para resetear su estado.
+   */
+  const contenido = useRef<ContenidoDePagina>({});
+  const clavePreviaDeHoja = useRef(claveDePagina);
+  if (clavePreviaDeHoja.current !== claveDePagina) {
+    clavePreviaDeHoja.current = claveDePagina;
+    contenido.current = {};
+  }
+
+  const alCambiarDoc = (doc: unknown) => {
+    contenido.current.doc = doc;
+    alCambiar({ ...contenido.current });
+  };
+
+  /**
+   * EL DIAGRAMA va por su propia clave del sobre y NO por `doc`: una página de
+   * diagrama no tiene BlockNote, y mandarlo como `doc` haría que `aTextoPlano`
+   * lo lea como `""` y `validarTexto` rechace el guardado entero. Ver el
+   * docblock de `notas.diagrama` en el schema.
+   */
+  const alCambiarDiagrama = (diagrama: unknown) => {
+    contenido.current.diagrama = diagrama;
+    alCambiar({ ...contenido.current });
+  };
+
+  const alCambiarAnotaciones = (figuras: Figura[]) => {
+    // `paraGuardar` redondea las coordenadas: es lo que baja el JSON a la mitad
+    // y decide si una página muy anotada entra en el tope.
+    contenido.current.anotaciones = paraGuardar(figuras);
+    alCambiar({ ...contenido.current });
+  };
 
   const cargando = termino ? encontradas.isPending : lista.isPending;
   const fallo = termino ? encontradas.isError : lista.isError;
@@ -391,6 +720,7 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
             className="h-8 w-full rounded-lg border border-input bg-card pl-8 pr-2 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
           />
         </div>
+
 
         {/* EL RENGLÓN DE ESTADO. Quién decide qué dice es una función pura
             (`renglonDeEstado`), porque el defecto no estaba en el `catch` sino
@@ -534,8 +864,8 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
 
         {/* EL EDITOR */}
         <main
-          className={`min-h-0 flex-1 overflow-y-auto md:block ${
-            seleccion === null && !enBienvenida ? 'hidden' : 'block'
+          className={`flex min-h-0 flex-1 flex-col md:flex ${
+            seleccion === null && !enBienvenida ? 'hidden' : 'flex'
           }`}
         >
           {/* La vuelta a la lista, solo en teléfono: en desktop la lista nunca se fue. */}
@@ -543,13 +873,22 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
             <button
               type="button"
               onClick={() => setSeleccion(null)}
-              className="flex items-center gap-1 px-4 pt-3 text-sm text-muted-foreground hover:text-foreground md:hidden"
+              className="flex shrink-0 items-center gap-1 px-4 pt-3 text-sm text-muted-foreground hover:text-foreground md:hidden"
             >
               <ChevronLeft className="size-4" />
               Tus páginas
             </button>
           )}
 
+          {/*
+            LA ZONA DE TRABAJO envuelve TODAS las ramas y no solo las del editor:
+            se excluyen solas (cada una tiene su condición) y así la capa y la
+            barra se montan en un único lugar. Con un envoltorio por rama, las
+            tres tendrían que acordarse de pasarle lo mismo.
+
+            La `key` es lo que remonta las anotaciones al cambiar de página.
+          */}
+          <ZonaDeTrabajo key={claveDePagina} hoja={hoja} onGuardarAnotaciones={alCambiarAnotaciones}>
           {/*
             LA PRIMERA VEZ ENSEÑA QUÉ PONER.
 
@@ -576,7 +915,7 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
                 key={`link-${deLink.id}`}
                 contenidoInicial={docParaEditor(deLink)}
                 soloLectura={!porLink.data?.puedeEditar}
-                onCambio={alCambiar}
+                onCambio={alCambiarDoc}
                 ribbon={{ tab: tabRibbon, onTab: setTabRibbon, vista }}
               />
             </ColumnaDeEscritura>
@@ -646,7 +985,7 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
                 key="nueva"
                 contenidoInicial={undefined}
                 soloLectura={false}
-                onCambio={alCambiar}
+                onCambio={alCambiarDoc}
                 ribbon={{ tab: tabRibbon, onTab: setTabRibbon, vista }}
               />
             </ColumnaDeEscritura>
@@ -712,14 +1051,14 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
                       <DiagramaPerezoso
                         key={`${paginaAbierta.origen}-${paginaAbierta.id}`}
                         contenidoInicial={paginaAbierta.diagrama ?? undefined}
-                        onCambio={(v) => alCambiar(v)}
+                        onCambio={alCambiarDiagrama}
                       />
                     ) : (
                       <EditorPerezoso
                         key={`${paginaAbierta.origen}-${paginaAbierta.id}`}
                         contenidoInicial={docParaEditor(paginaAbierta)}
                         soloLectura={paginaAbierta.origen === 'gestion'}
-                        onCambio={alCambiar}
+                        onCambio={alCambiarDoc}
                         ribbon={{ tab: tabRibbon, onTab: setTabRibbon, vista }}
                       />
                     )}
@@ -741,6 +1080,7 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
               </div>
             );
           })()}
+          </ZonaDeTrabajo>
         </main>
       </div>
     </section>

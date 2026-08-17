@@ -15,16 +15,40 @@ export const ESPERA_AUTOGUARDADO_MS = 800;
  */
 export type DestinoDeGuardado = { tipo: 'nueva' } | { tipo: 'nota'; id: number } | null;
 
+/**
+ * LO QUE SE GUARDA DE UNA PÁGINA: el documento y la capa de anotaciones.
+ *
+ * Los dos son OPCIONALES y viajan juntos a propósito. Cada uno cambia por su
+ * lado —el texto al teclear, la capa al dibujar— pero el guardado es uno solo:
+ * con dos autoguardados independientes, escribir y dibujar en la misma página
+ * dispararía dos PATCH en la misma ventana de 800 ms sobre la misma fila.
+ *
+ * Un campo `undefined` **no viaja** (`JSON.stringify` lo omite), y el server
+ * trata la ausencia como «no lo toques»: dibujar sobre una página no reescribe
+ * su texto, y escribir no borra lo dibujado.
+ */
+export interface ContenidoDePagina {
+  doc?: unknown;
+  anotaciones?: unknown;
+  /**
+   * EL DIAGRAMA de una página `tipo = 'diagrama'`. Va en el MISMO sobre que
+   * `doc` y `anotaciones` por el mismo motivo que ellos: un guardado que sólo
+   * trae una de las tres no puede pisar las otras dos. Una página es un diagrama
+   * O un documento, nunca las dos, pero las anotaciones cruzan a las dos.
+   */
+  diagrama?: unknown;
+}
+
 /** Lo que el hook necesita del mundo. Inyectado para poder testearlo sin server. */
 export interface PuertasDeGuardado {
-  actualizar(v: { id: number; doc: unknown }): Promise<unknown>;
-  crear(v: { doc: unknown }): Promise<{ nota: Nota }>;
+  actualizar(v: { id: number } & ContenidoDePagina): Promise<unknown>;
+  crear(v: ContenidoDePagina): Promise<{ nota: Nota }>;
 }
 
 export interface Autoguardado {
   estado: EstadoGuardado;
-  /** Lo llama el editor en cada cambio. Agenda el guardado y lo agrupa. */
-  alCambiar(doc: unknown): void;
+  /** Lo llaman el editor y la capa en cada cambio. Agenda el guardado y lo agrupa. */
+  alCambiar(contenido: ContenidoDePagina): void;
 }
 
 /**
@@ -52,8 +76,8 @@ export interface Autoguardado {
  * espera además el refetch de la lista, así que contra VPS1 pasa de los 800 ms
  * sin esfuerzo — y garantizado en el primer request después de un restart.
  * Lo que se teclee mientras tanto **no se puede crear otra vez** (serían dos
- * páginas), pero tampoco se puede descartar: se guarda como `ultimoDoc` y se
- * manda apenas se sabe el id.
+ * páginas), pero tampoco se puede descartar: se guarda como `ultimoContenido` y
+ * se manda apenas se sabe el id.
  *
  * Descartarlo en silencio era el mismo falso «Guardado» que este archivo
  * existe para matar, entrando por una puerta más chica.
@@ -76,10 +100,10 @@ export function useAutoguardado({
   /**
    * LA CREACIÓN EN VUELO. `null` = no hay ninguna.
    *
-   * `ultimoDoc` es lo que se tecleó mientras el POST viajaba: se manda apenas
-   * vuelve el id, con un `PATCH`. Sin esto se perdía sin aviso.
+   * `ultimoContenido` es lo que se tecleó —o dibujó— mientras el POST viajaba:
+   * se manda apenas vuelve el id, con un `PATCH`. Sin esto se perdía sin aviso.
    */
-  const creacion = useRef<{ ultimoDoc: unknown; huboMas: boolean } | null>(null);
+  const creacion = useRef<{ ultimoContenido: ContenidoDePagina; huboMas: boolean } | null>(null);
 
   /**
    * EL ID QUE LE TOCÓ A LA PÁGINA NUEVA QUE SE ESTÁ EDITANDO.
@@ -142,7 +166,7 @@ export function useAutoguardado({
     [],
   );
 
-  function alCambiar(doc: unknown) {
+  function alCambiar(contenido: ContenidoDePagina) {
     // EL DESTINO, AHORA. Lo que se escriba va a donde se está escribiendo,
     // aunque la vendedora cambie de página antes de que venza la espera.
     const aDonde = destinoRef.current;
@@ -155,7 +179,7 @@ export function useAutoguardado({
       pendiente.current = null;
       try {
         if (aDonde.tipo === 'nota') {
-          await puertasRef.current.actualizar({ id: aDonde.id, doc });
+          await puertasRef.current.actualizar({ id: aDonde.id, ...contenido });
           setEstado({ tipo: 'guardado' });
           return;
         }
@@ -163,26 +187,26 @@ export function useAutoguardado({
         // ── Página nueva ──
         // Ya se creó y este guardado venía agendado de antes: va como update.
         if (ultimaCreada.current !== null && !creacion.current) {
-          await puertasRef.current.actualizar({ id: ultimaCreada.current, doc });
+          await puertasRef.current.actualizar({ id: ultimaCreada.current, ...contenido });
           setEstado({ tipo: 'guardado' });
           return;
         }
         if (creacion.current) {
           // Ya hay un POST viajando: esto no puede crear otra página, pero
           // tampoco se tira. Se manda apenas se sepa el id.
-          creacion.current.ultimoDoc = doc;
+          creacion.current.ultimoContenido = contenido;
           creacion.current.huboMas = true;
           return;
         }
 
-        creacion.current = { ultimoDoc: doc, huboMas: false };
+        creacion.current = { ultimoContenido: contenido, huboMas: false };
         try {
-          const r = await puertasRef.current.crear({ doc });
+          const r = await puertasRef.current.crear(contenido);
           ultimaCreada.current = r.nota.id;
           alCrearRef.current(r.nota.id);
           // Lo que se tecleó mientras el POST viajaba, ahora que hay id.
           if (creacion.current?.huboMas) {
-            await puertasRef.current.actualizar({ id: r.nota.id, doc: creacion.current.ultimoDoc });
+            await puertasRef.current.actualizar({ id: r.nota.id, ...creacion.current.ultimoContenido });
           }
         } finally {
           creacion.current = null;

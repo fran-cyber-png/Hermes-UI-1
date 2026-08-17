@@ -58,7 +58,7 @@ function Anfitrion({ puertas, idInicial = null }: { puertas: PuertasDeGuardado; 
   const r = renglonDeEstado(estado, false);
   return (
     <div>
-      <button type="button" onClick={() => alCambiar({ escrito: true })}>
+      <button type="button" onClick={() => alCambiar({ doc: { escrito: true } })}>
         escribir
       </button>
       <p data-estado>{estado.tipo}</p>
@@ -78,7 +78,7 @@ function AnfitrionConCambioDePagina({ puertas }: { puertas: PuertasDeGuardado })
   });
   return (
     <div>
-      <button type="button" onClick={() => alCambiar({ escrito: true })}>
+      <button type="button" onClick={() => alCambiar({ doc: { escrito: true } })}>
         escribir
       </button>
       <button type="button" data-nueva onClick={() => setId(null)}>
@@ -315,7 +315,7 @@ function AnfitrionConDestinos({
   const { estado, alCambiar } = useAutoguardado({ destino, puertas, alCrear: () => {} });
   return (
     <div>
-      <button type="button" onClick={() => alCambiar({ escrito: true })}>
+      <button type="button" onClick={() => alCambiar({ doc: { escrito: true } })}>
         escribir
       </button>
       <button type="button" data-ir-b onClick={() => setDestino({ tipo: 'nota', id: 9 })}>

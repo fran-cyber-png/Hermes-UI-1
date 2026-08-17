@@ -13,6 +13,7 @@ function nota(p: Partial<Nota>): Nota {
     vendedoraId: 'ana',
     texto: 'x',
     doc: null,
+    anotaciones: null,
     fijada: false,
     creadoAt: '2026-07-01T00:00:00Z',
     editadoAt: null,
