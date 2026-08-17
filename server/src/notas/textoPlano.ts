@@ -143,6 +143,46 @@ function esNodo(valor: unknown): valor is Nodo {
 }
 
 /**
+ * ══ LAS ANOTACIONES NO ENTRAN AL `texto`, Y ES A PROPÓSITO ══════════════════
+ *
+ * La capa de anotaciones (los círculos y flechas que se dibujan ENCIMA del
+ * texto) vive en su propia columna, `notas.anotaciones`, y **no toca el aplanado
+ * de arriba**: `texto` sigue siendo `aTextoPlano(doc)` y nada más. La regla de
+ * oro del archivo —se leen `text` y `content`, props nunca— queda intacta.
+ *
+ * La tentación era indexar los rótulos que se escriben sobre el dibujo, para que
+ * una página se pueda encontrar por lo anotado a mano. **No se hace, y el motivo
+ * es un defecto concreto, no purismo:** un `PATCH` que trae SOLO anotaciones
+ * —que es exactamente lo que manda mover un círculo— tendría que rederivar
+ * `texto`, y sin el `doc` en el body eso lo dejaría VACÍO. Mover una flecha
+ * borraría el texto de la página, en silencio y sin que nadie lo pida.
+ *
+ * Rederivarlo leyendo el `doc` de la fila existente es posible, pero parte en
+ * dos la costura única que este archivo defiende: hoy `texto` se calcula en un
+ * solo lugar, a partir de un solo campo. Es un cambio que se puede hacer el día
+ * que la búsqueda de anotaciones se pida de verdad; hasta entonces, el precio es
+ * que un rótulo dibujado no aparece en la búsqueda, y se dice de frente.
+ *
+ * Lo único que el aplanado necesita saber de las anotaciones es si HAY —para no
+ * rechazar por «vacía» una página que está anotada—, y eso es `hayAnotaciones`.
+ */
+
+/**
+ * ¿LA PÁGINA TIENE ALGO DIBUJADO ENCIMA?
+ *
+ * Lo usa `prepararContenido` para no rechazar por vacía una página cuyo
+ * contenido es la capa de anotaciones. Pide **al menos una figura**: una capa
+ * vacía (`[]`, que es lo que queda al borrar todo) no vuelve guardable a una
+ * página que no tiene nada.
+ *
+ * Defensivo como todo lo de acá: la entrada es una columna `jsonb` o un body de
+ * request, así que cualquier forma inesperada vale «no hay», nunca una excepción.
+ */
+export function hayAnotaciones(anotaciones: unknown): boolean {
+  return Array.isArray(anotaciones) && anotaciones.some((f) => esNodo(f) && typeof f.clase === "string");
+}
+
+/**
  * UN NODO INLINE → su texto.
  *
  * El orden de las ramas ES la regla del separador, y no se puede reordenar:

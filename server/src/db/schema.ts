@@ -1187,6 +1187,28 @@ export const notas = pgTable(
      * diagrama ni pasa por esa validación ni la rompe.
      */
     diagrama: jsonb("diagrama"),
+    /**
+     * LAS ANOTACIONES A MANO — la capa transparente que se dibuja ENCIMA del
+     * texto (círculos alrededor de una palabra, flechas, subrayados).
+     *
+     * ══ POR QUÉ ES UNA COLUMNA Y NO UN BLOQUE MÁS DEL `doc` ═════════════════
+     *
+     * Porque no son contenido del documento: son una capa **sobre** él. Meterlas
+     * adentro del `doc` las volvería un bloque que la vendedora puede borrar sin
+     * verlo —un ⌘A + Suprimir, un Backspace al final de la página— y perder las
+     * anotaciones en silencio. Acá viven en su propio lugar y solo desaparecen
+     * si se borran a propósito.
+     *
+     * Es un array de figuras (`src/features/notas/dibujo/figuras.ts`) en
+     * coordenadas de píxel del área del documento. NULLABLE y sin default: una
+     * página sin anotar tiene `null`, que es lo que ya tienen las 100 % de las
+     * filas existentes — la migración es expand-only y no toca ninguna.
+     *
+     * ⚠️ NO viaja en la respuesta del link público: esa lleva `titulo`+`texto`+
+     * `doc` y nada más (hay un test que compara las claves), y la página pública
+     * se pinta desde `texto`. Un dibujo compartido por link no se ve.
+     */
+    anotaciones: jsonb("anotaciones"),
     /** Sube la nota al tope de su ancla. */
     fijada: boolean("fijada").notNull().default(false),
     creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),

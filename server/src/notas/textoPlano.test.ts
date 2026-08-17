@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SEPARADOR_CELDA, aTextoPlano } from "./textoPlano.js";
+import { SEPARADOR_CELDA, aTextoPlano, hayAnotaciones } from "./textoPlano.js";
 
 /**
  * Puro, sin IO: el aplanador de BlockNote. Los fixtures son documentos CON SU
@@ -273,4 +273,40 @@ test("un doc con un ciclo termina, no cuelga el request", () => {
 test("el trim es del bloque entero, no de las corridas de adentro", () => {
   const doc = [bloque("paragraph", [corrida("  Pagó la cuota el "), corrida("viernes  ")])];
   assert.equal(aTextoPlano(doc), "Pagó la cuota el viernes");
+});
+
+/**
+ * ══ LA CAPA DE ANOTACIONES ══════════════════════════════════════════════════
+ *
+ * Vive en su propia columna, NO en el `doc`. Lo único que el aplanado necesita
+ * saber de ella es si hay algo dibujado — para no rechazar por «vacía» una
+ * página anotada. Nada de la capa entra al texto indexado: ver el docblock de
+ * `textoPlano.ts` para el porqué (un PATCH que trae solo anotaciones tendría
+ * que rederivar `texto` sin el `doc`, y lo dejaría vacío).
+ */
+
+const TRAZO = { clase: "trazo", color: "#ef4444", grosor: 3, puntos: [[10, 10], [20, 25]] };
+const ROTULO = { clase: "rotulo", color: "#111827", tamano: 24, en: [30, 40], texto: "Ojo con esto" };
+
+test("hayAnotaciones distingue una capa dibujada de una vacía", () => {
+  assert.equal(hayAnotaciones([TRAZO]), true);
+  assert.equal(hayAnotaciones([TRAZO, ROTULO]), true);
+  assert.equal(hayAnotaciones([]), false, "borrar todo deja la capa vacía, y eso no es contenido");
+  assert.equal(hayAnotaciones(null), false, "una página que nunca se anotó");
+  assert.equal(hayAnotaciones(undefined), false);
+});
+
+test("hayAnotaciones no se cree cualquier cosa que sea un array", () => {
+  // Sale de un `jsonb` o de un body: lo que no tenga forma de figura no cuenta.
+  assert.equal(hayAnotaciones("[]"), false, "un string no es una capa");
+  assert.equal(hayAnotaciones({ clase: "trazo" }), false, "un objeto suelto tampoco");
+  assert.equal(hayAnotaciones([1, "dos", null]), false);
+  assert.equal(hayAnotaciones([{ sinClase: true }]), false);
+});
+
+test("🔴 el aplanado del `doc` NO cambió por existir la capa", () => {
+  // La regla de oro sigue en pie: se leen `text` y `content`, props nunca. Si
+  // algún día alguien mete los rótulos acá, este test es el que lo frena.
+  const doc = [bloque("paragraph", [corrida("Cómo llegar al local")])];
+  assert.equal(aTextoPlano(doc), "Cómo llegar al local");
 });

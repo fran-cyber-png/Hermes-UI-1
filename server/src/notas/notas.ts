@@ -5,7 +5,7 @@ import { gestiones, notas } from '../db/schema.js';
 import { planearMovimiento } from '../espacios/mover.js';
 import { puedeEditar, puedeVer, type QuienPregunta } from '../espacios/visibilidad.js';
 import { miLibretaPrivadaSql, mismaVendedoraEnSql, visibleParaSql } from '../espacios/visibilidadSql.js';
-import { aTextoPlano } from './textoPlano.js';
+import { aTextoPlano, hayAnotaciones } from './textoPlano.js';
 
 /**
  * LA LÓGICA DE NOTAS — extraída del router para poder testearla contra una base
@@ -90,8 +90,74 @@ export function validarTexto(valor: unknown): ResultadoValidacion {
  * Sin `doc` se valida el `texto` tal cual: es el camino de las notas de siempre,
  * y el que sigue andando para toda fila con `doc IS NULL`.
  */
-export function prepararContenido(entrada: { texto?: unknown; doc?: unknown }): ResultadoValidacion {
-  return validarTexto(entrada.doc !== undefined ? aTextoPlano(entrada.doc) : entrada.texto);
+export function prepararContenido(entrada: {
+  texto?: unknown;
+  doc?: unknown;
+  anotaciones?: unknown;
+}): ResultadoValidacion {
+  const texto = entrada.doc !== undefined ? aTextoPlano(entrada.doc) : entrada.texto;
+
+  /**
+   * 🔴 UNA PÁGINA QUE ES SOLO UN DIBUJO NO ESTÁ VACÍA.
+   *
+   * `validarTexto` rechaza el texto en blanco, y tenía razón para todo lo que
+   * existía antes: un documento sin una letra no tenía nada adentro. Con la capa
+   * de anotaciones eso dejó de ser cierto — una página donde alguien dibujó un
+   * diagrama a mano y no escribió nada **es contenido**, hecho con trabajo
+   * encima.
+   *
+   * Sin esta rama, dibujar sin escribir termina en el 400 «el texto de la nota
+   * no puede estar vacío» sobre una pantalla que muestra el dibujo entero: el
+   * mismo fallo mudo que `editor.ts` documenta para los bloques de archivo, que
+   * es justamente lo que este frente vino a no repetir.
+   *
+   * Se guarda con `texto = ''` y **no con un `'[dibujo]'` inventado**: la regla
+   * de `aTextoPlano` es que nunca se inventa un placeholder, y meterlo acá lo
+   * haría igual —solo que desde el otro lado— y ensuciaría el índice de todas
+   * las notas con una palabra que nadie escribió. La consecuencia se acepta de
+   * frente: una página solo dibujada figura como «Sin título» y no la encuentra
+   * la búsqueda. Para que la encuentre, se escribe una línea de texto.
+   */
+  if (String(texto ?? '').trim() === '' && hayAnotaciones(entrada.anotaciones)) return { ok: true, texto: '' };
+
+  return validarTexto(texto);
+}
+
+/**
+ * CUÁNTO PUEDE PESAR LA CAPA DE ANOTACIONES — 64 KB del JSON.
+ *
+ * Mismo número que el tope del front (`figuras.ts`), y el candado que los cruza
+ * es `dibujo.paridad.test.ts`. No es un límite de producto: es el freno para que
+ * un dibujo no se coma el presupuesto del request, que son 100 KB
+ * (`express.json()` sin `limit`) compartidos con el `doc` y el texto.
+ */
+export const LIMITE_ANOTACIONES_BYTES = 64 * 1024;
+
+export type ResultadoAnotaciones = { ok: true; anotaciones: unknown[] } | { ok: false; motivo: string };
+
+/**
+ * LA CAPA DE ANOTACIONES QUE LLEGA EN UN BODY.
+ *
+ * Se valida la FORMA de afuera —que sea un array y que quepa— y **no cada
+ * figura**: el que pinta ya descarta defensivamente lo que no entiende
+ * (`figuras.ts: parsear`), así que una figura rara acá no rompe nada y
+ * rechazar la página entera por una sola sería peor que ignorarla.
+ *
+ * Lo que sí se rechaza es lo que NO es una capa: un objeto, un string, un
+ * número. Sin eso, un `anotaciones: "hola"` se guardaría en el `jsonb` y la
+ * próxima apertura de la página tendría que adivinar qué es.
+ */
+export function validarAnotaciones(valor: unknown): ResultadoAnotaciones {
+  if (!Array.isArray(valor)) return { ok: false, motivo: 'las anotaciones tienen que ser una lista de figuras' };
+
+  const bytes = Buffer.byteLength(JSON.stringify(valor) ?? '', 'utf8');
+  if (bytes > LIMITE_ANOTACIONES_BYTES) {
+    return {
+      ok: false,
+      motivo: `el dibujo pesa ${Math.round(bytes / 1024)} KB y el tope es ${LIMITE_ANOTACIONES_BYTES / 1024} KB`,
+    };
+  }
+  return { ok: true, anotaciones: valor };
 }
 
 export interface Diagrama {
@@ -130,6 +196,8 @@ export interface CambiosEdicion {
   texto?: string;
   /** Solo se incluye si el PATCH lo trajo: omitirlo NO borra el `doc` que había. */
   doc?: unknown;
+  /** Misma regla que `doc`: omitirlo no borra la capa que ya estaba dibujada. */
+  anotaciones?: unknown;
   fijada?: boolean;
   /** Solo se incluye si el PATCH lo trajo: omitirlo NO borra el diagrama que había. */
   diagrama?: Diagrama;
@@ -151,7 +219,7 @@ export type ResultadoEdicion = { ok: true; cambios: CambiosEdicion } | { ok: fal
  * `tipo = 'diagrama'`.
  */
 export function prepararEdicion(
-  cambios: { texto?: unknown; doc?: unknown; fijada?: unknown; diagrama?: unknown },
+  cambios: { texto?: unknown; doc?: unknown; anotaciones?: unknown; fijada?: unknown; diagrama?: unknown },
   ahora: Date,
 ): ResultadoEdicion {
   const resultado: CambiosEdicion = { editadoAt: ahora };
@@ -165,6 +233,18 @@ export function prepararEdicion(
     if (cambios.doc !== undefined) resultado.doc = cambios.doc;
   }
 
+  /**
+   * ⚠️ LAS ANOTACIONES NO TOCAN `texto`. Un PATCH que trae solo la capa —mover
+   * un círculo, borrar una flecha— no entra a la rama de arriba, así que el
+   * texto de la página queda exactamente como estaba. Ver el docblock de
+   * `textoPlano.ts`: rederivarlo acá, sin el `doc` en el body, lo vaciaría.
+   */
+  if (cambios.anotaciones !== undefined) {
+    const v = validarAnotaciones(cambios.anotaciones);
+    if (!v.ok) return { ok: false, motivo: v.motivo };
+    resultado.anotaciones = v.anotaciones;
+  }
+
   if (cambios.fijada !== undefined) {
     resultado.fijada = Boolean(cambios.fijada);
   }
@@ -175,8 +255,13 @@ export function prepararEdicion(
     resultado.diagrama = v.diagrama;
   }
 
-  if (resultado.texto === undefined && resultado.fijada === undefined && resultado.diagrama === undefined) {
-    return { ok: false, motivo: 'no hay nada que editar (mandá texto, doc, fijada y/o diagrama)' };
+  if (
+    resultado.texto === undefined &&
+    resultado.fijada === undefined &&
+    resultado.anotaciones === undefined &&
+    resultado.diagrama === undefined
+  ) {
+    return { ok: false, motivo: 'no hay nada que editar (mandá texto, doc, anotaciones, fijada y/o diagrama)' };
   }
   return { ok: true, cambios: resultado };
 }
@@ -438,6 +523,7 @@ export async function crearNota(
     vendedoraId: string;
     texto: string;
     doc?: unknown;
+    anotaciones?: unknown;
     espacioId?: number | null;
     /** `'diagrama'` cuando viene con `diagrama`; ausente/`'texto'` es el default de siempre. */
     tipo?: 'texto' | 'diagrama';
@@ -449,12 +535,19 @@ export async function crearNota(
   // no la ausencia de uno. Por eso no se omite como `doc`: omitirlo lo dejaría al
   // default de la columna, que hoy es null y mañana podría no serlo.
   const espacioId = datos.espacioId ?? null;
-  const valores =
-    datos.doc === undefined
-      ? { clave, vendedoraId, texto: datos.texto, espacioId }
-      : { clave, vendedoraId, texto: aTextoPlano(datos.doc), doc: datos.doc, espacioId };
+  const valores = {
+    clave,
+    vendedoraId,
+    espacioId,
+    ...(datos.doc === undefined
+      ? { texto: datos.texto }
+      : { texto: aTextoPlano(datos.doc), doc: datos.doc }),
+    // Se omite si no vino: una página que nace sin dibujar deja la columna en
+    // `null`, que es «nunca se anotó» y no «se anotó y quedó vacío».
+    ...(datos.anotaciones === undefined ? {} : { anotaciones: datos.anotaciones }),
+  };
   // `tipo`/`diagrama` van APARTE de la rama de arriba: un diagrama nunca trae
-  // `doc` (no hay BlockNote de por medio), así que mezclarlos en el ternario
+  // `doc` (no hay BlockNote de por medio), así que mezclarlos en el spread
   // habría hecho que un diagrama caiga en la rama de `doc === undefined` y
   // listo — correcto por accidente, no por diseño. Explícito es más claro.
   if (datos.tipo === 'diagrama') {
