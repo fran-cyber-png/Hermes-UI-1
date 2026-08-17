@@ -173,6 +173,25 @@ export interface NotaListada {
    * En una histórica de `gestiones` es SIEMPRE null: esas no se pueden compartir.
    */
   token?: string | null;
+  /**
+   * CÓMO ESTÁ CONFIGURADO ese link (ADR 0048), o `null` si no hay link.
+   *
+   * 🔴 **Faltaban, y la pantalla de compartir mentía en silencio.** El LEFT JOIN
+   * traía sólo el token, así que `AccionesDePagina` leía `nota.alcance ?? 'publico'`
+   * sobre un campo que **nunca llegaba**: un link de alcance `goberna` con permiso
+   * de editar se abría mostrando «Cualquiera con el link · solo lectura», y el
+   * botón «Guardar cambios» —que compara contra ese valor— no aparecía nunca.
+   * Nadie lo vio porque la pantalla se ve perfecta: dice algo falso con la forma
+   * exacta de la verdad.
+   *
+   * ⚠️ Cuestan cero: es el MISMO LEFT JOIN por el índice UNIQUE de `nota_id` que
+   * ya se estaba haciendo para el token.
+   */
+  alcance?: string | null;
+  permiso?: string | null;
+  venceAt?: Date | null;
+  /** La última vez que alguien abrió el link. `null` = nunca lo abrió nadie. */
+  ultimoAccesoAt?: Date | null;
 }
 
 /**
@@ -247,7 +266,17 @@ export async function listarNotas(
       // acción sin inventario — se abre un link, pasan dos semanas, y no hay
       // ninguna pantalla que conteste «¿qué tengo publicado?». Es un LEFT JOIN
       // por un índice UNIQUE sobre `nota_id`, así que cuesta nada.
-      .select({ nota: notas, token: notaLink.token })
+      .select({
+        nota: notas,
+        token: notaLink.token,
+        // Los cuatro de abajo viajan por el MISMO join: sin ellos, la pantalla de
+        // compartir arranca siempre en «público / solo ver» aunque el link sea
+        // otra cosa. Ver `NotaListada`.
+        alcance: notaLink.alcance,
+        permiso: notaLink.permiso,
+        venceAt: notaLink.venceAt,
+        ultimoAccesoAt: notaLink.ultimoAccesoAt,
+      })
       .from(notas)
       .leftJoin(notaLink, eq(notaLink.notaId, notas.id))
       .where(
@@ -267,7 +296,15 @@ export async function listarNotas(
   ]);
 
   const combinadas: NotaListada[] = [
-    ...nuevas.map((f) => ({ ...f.nota, origen: 'nota' as const, token: f.token })),
+    ...nuevas.map((f) => ({
+      ...f.nota,
+      origen: 'nota' as const,
+      token: f.token,
+      alcance: f.alcance,
+      permiso: f.permiso,
+      venceAt: f.venceAt,
+      ultimoAccesoAt: f.ultimoAccesoAt,
+    })),
     ...historicas,
   ];
 
