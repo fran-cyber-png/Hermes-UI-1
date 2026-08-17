@@ -25,6 +25,7 @@ import { conversacionDeTelefono } from './dominio/conversacionNueva';
 import BarraFrescura from './features/canales/BarraFrescura';
 import { EstadoWhatsapp } from './features/whatsapp/EstadoWhatsapp';
 import { InterruptorAutoRespuesta } from './features/autorespuesta/InterruptorAutoRespuesta';
+import { InterruptorBot } from './features/bot/InterruptorBot';
 import { ColaRevision } from './features/autorespuesta/ColaRevision';
 import { PorQueEstaSugerencia } from './features/autorespuesta/PorQueEstaSugerencia';
 import { useModoRevision } from './features/autorespuesta/useModoRevision';
@@ -589,6 +590,14 @@ export default function App() {
                 del estado del canal. Que la máquina esté contestando sola es
                 parte de la misma pregunta que «¿el número está vivo?» (#125). */}
             <InterruptorAutoRespuesta onRevisar={revision.entrar} />
+            {/* Y pegado a él, el del BOT. Son la misma pregunta —«¿qué máquina
+                le está escribiendo a mis leads ahora mismo?»— y hasta acá esta
+                mitad no se podía ni mirar: `/api/bot` estaba montada y el front
+                no la llamaba desde ningún lado, así que apagar el bot costaba un
+                `PUT` a mano con un Bearer. Va DESPUÉS de la auto-respuesta
+                porque el bot contesta en el acto: es el que puede estar mandando
+                mientras leés esto. */}
+            <InterruptorBot />
             <EstadoWhatsapp />
           </div>
         </header>

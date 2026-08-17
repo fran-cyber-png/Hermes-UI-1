@@ -237,7 +237,13 @@ export function verBot(datos: RespuestaBotApi | undefined, ctx: Contexto = {}): 
   const queHace = descripcionesDe(datos);
   const fuente = deDondeSaleElModo(datos);
   const frenadoMotivo = datos.frenadoMotivo?.trim() || null;
-  const frenado = Boolean(datos.frenado ?? frenadoMotivo);
+  // `frenado || hay motivo`, NUNCA `frenado ?? motivo`: este server los emite
+  // coherentes (`frenado` es `motivo !== null`), pero si alguna vez llegan
+  // contradictorios la única dirección segura es la de MÁS freno. Con el `??`,
+  // un `frenado: false` con motivo puesto se dibujaba como línea suelta —o sea,
+  // la vendedora leería «está mandando» sobre algo frenado, o peor, al revés el
+  // día que el contrato cambie. En un kill-switch se sobre-reporta la parada.
+  const frenado = Boolean(datos.frenado) || frenadoMotivo !== null;
   const numero = datos.numero ?? null;
   const comun = { frenado, frenadoMotivo, numero, fuente, queHace };
 
@@ -254,7 +260,11 @@ export function verBot(datos: RespuestaBotApi | undefined, ctx: Contexto = {}): 
       aviso: 'modo raro',
       detalle:
         `el server informa el modo «${String(datos.modoEfectivo)}», que esta app no conoce. ` +
-        'No se puede afirmar si el bot está mandando o no. Mirá el server antes de tocar nada.',
+        'No se puede afirmar si el bot está mandando o no. Mirá el server antes de tocar nada.' +
+        // El freno se nombra igual aunque gane la rama del modo raro: es un hecho
+        // que se sabe con certeza justo cuando el modo no se entiende, y es lo
+        // único de esta pantalla que se suelta a mano (`puertaDelFreno` lo ofrece).
+        (frenado ? ` Además, la línea está FRENADA${frenadoMotivo ? `: ${frenadoMotivo}` : ' a mano'}: no manda nada.` : ''),
       // Se PUEDE cambiar igual, y esto es lo importante de la rama: el kill-switch
       // tiene que servir sobre todo cuando el estado no se entiende. El control
       // queda sin ningún segmento puesto —`modo: null`— porque dónde estás no se
@@ -278,6 +288,10 @@ export function verBot(datos: RespuestaBotApi | undefined, ctx: Contexto = {}): 
       clase: 'frenado',
       modo,
       etiqueta: 'bot FRENADO',
+      // El rótulo ruidoso es OBLIGATORIO acá y no decorativo: el selector va a
+      // mostrar el modo puesto —`automatico`, quizá— y por sí solo eso se lee
+      // como «está mandando». Lo que corrige la lectura es esta palabra arriba.
+      aviso: 'frenado',
       // El modo se nombra igual: al soltar el freno la línea vuelve a ESE modo, y
       // que sea `automatico` es justo lo que hay que saber ANTES de soltarlo.
       detalle:
@@ -307,6 +321,10 @@ export function verBot(datos: RespuestaBotApi | undefined, ctx: Contexto = {}): 
     clase: modo,
     modo,
     etiqueta: `bot ${NOMBRE_MODO[modo].toLowerCase()}`,
+    // El caso normal no grita: el segmento puesto ya dice todo lo que hay que
+    // decir. Un rótulo permanente arriba de un estado sano es ruido, y el ruido
+    // se paga el día que haga falta gritar de verdad.
+    aviso: null,
     detalle: `${queHace[modo]} ${fuente}.`,
     puedeCambiar: true,
   };
@@ -355,4 +373,27 @@ export function puertaDelFreno(vista: VistaBot): PuertaDelFreno {
     return { abre: true, texto: `${vista.frenadoMotivo ?? 'frenado a mano'} · soltar` };
   }
   return { abre: false, texto: vista.fuente };
+}
+
+/**
+ * POR QUÉ NO SE PUDO CAMBIAR — leído del ESTADO HTTP, y no del cuerpo, a la fuerza.
+ *
+ * ⚠️ `bot.ts` nombra sus fallos con cuidado (`sin_tabla`, `sin_lineas_habilitadas`,
+ * `hay_varias_lineas_indica_cual`) y los manda en la clave **`error`** del cuerpo.
+ * `ErrorApi` (`lib/datos/cliente.ts`) conserva `message`, `type`, `codigo` y
+ * `reintentable` — **`error` no está en esa lista**, así que acá llega un status
+ * pelado y un `message` que dice literalmente «Error 503». Mostrar eso en el chip
+ * sería no decir nada. Hasta que el server hable el vocabulario de `codigo` (otro
+ * frente, y cambia un contrato), la lectura se hace por status y se nombra la
+ * causa MÁS PROBABLE sin afirmar que es la única.
+ *
+ * Lo que ninguna de estas lecturas puede decir es «ya está apagado»: el server
+ * contesta 503 en vez de 200 justamente para no dar un OK falso sobre un
+ * interruptor, y este texto tiene que conservar esa honestidad.
+ */
+export function porQueNoSeGuardo(status: number | null): string {
+  if (status === 503) return 'NO se guardó: falta `bot_estado` en el server (migración)';
+  if (status === 400) return 'NO se guardó: el server no sabe sobre qué línea operar';
+  if (status === 401 || status === 403) return 'NO se guardó: la sesión venció, volvé a entrar';
+  return 'NO se guardó: el server no aceptó el cambio';
 }

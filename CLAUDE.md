@@ -34,8 +34,30 @@ Los cinco documentos: `CONTEXT.md` glosario del negocio · **`docs/mapa.md` el i
 ## El mapa y sus candados (**ADR 0057**)
 
 `npm run mapa` regenera `docs/mapa.md` · `npm run mapa:verificar` es lo que corre en **N1 del CI**.
-Lo único escrito a mano es **`arquitectura.json`**: cinco reglas con su porqué medido, y **la
+Lo único escrito a mano es **`arquitectura.json`**: seis reglas con su porqué medido, y **la
 responsabilidad declarada de cada módulo** — la línea que decide si un archivo nuevo va ahí o no.
+
+- 🔴 **`handlersEnvueltos` — todo handler async de `routes/` va adentro de `ruta()`**
+  (`server/src/lib/ruta.ts`). Express 4 **no atrapa el rechazo de un handler `async`**: se vuelve
+  `unhandledRejection` y **el proceso se cae**. Ya dejó a las cinco vendedoras sin Hermes
+  (`routes/auth.falloDeBase.test.ts`).
+  ⚠️ **La regla dice «está envuelto», NO «tiene un try/catch»**, y la diferencia es todo: en
+  `venta.ts POST /crear` el `try` abre en la 129 y el `await crearVenta(...)` de la 120 queda
+  AFUERA; y en `autorespuesta.ts` los cuatro handlers hacían `catch (e) { if (!faltaEsquema(e))
+  throw e; … }`, o sea que el try era el mecanismo que **garantizaba** el escape. «Tiene un try» no
+  se puede chequear con un grep; «está envuelto», sí.
+  ⚠️ `ruta()` **no reemplaza a los errores TIPADOS** (`no_es_supervisor`, `adjunto_muy_pesado`, los
+  ocho de Ivi): ésos son respuestas deliberadas que la pantalla ramifica. Y **nada devuelve
+  `err.message` al cliente**: con drizzle ese mensaje es el SQL — se loguea con `porQueFallo`.
+- **El server también tiene capas declaradas** (#388): `db`·`lib`·`telefono` (0) → negocio (2, por
+  `capaPorDefecto`) → `routes`·`webhook`·`scripts` (3) → `index` (4). No hubo que construirla:
+  **259 de 260 aristas ya la respetaban**.
+  🔴 **Al server NO se le inventa una capa `dominio` como la del front**: medido, arrancaría con 6 a
+  18 violaciones. Allá 58 de 148 imports cruzados apuntaban a UN módulo (`canales`); acá el archivo
+  más pedido concentra 7 de 129 (5,4 %). El piso de negocio del server es plano de verdad.
+- ⚠️ **Las 15 galerías (`features/*/galeria*.tsx`) NO entran al grafo**, como los tests: ninguna la
+  importa la app —cada una se sirve por su `galeria-*.html`— y estaban inflando el termómetro (el
+  nudo de 7 del front era de 3). La exclusión se imprime en el mapa: no es silenciosa.
 
 - 🔴 **`mapa:verificar` falla si el mapa quedó VIEJO, no sólo si hay violaciones.** Compara
   `docs/mapa.md` byte a byte contra el que se generaría hoy: mover un archivo sin regenerar pone el

@@ -207,6 +207,39 @@ identidad + OFFSET 0 ×3      0,3  ms plan /     33,5 ms exec  (plan   3 KB)
 **Lección general**: un test de paridad prueba que dos escrituras dicen lo mismo, **no que las dos
 se puedan pagar**. Al mover una llave a una consulta caliente, medí el plan además del resultado.
 
+### 2026-08-17 · A2 · 🔴 NO SE PUDO REPRODUCIR EL ARREGLO — por eso #387 NO se mergeó
+
+Se intentó verificar la valla antes de mergear y **la medición no confirmó el número de arriba**:
+
+- con una cascada **simplificada a mano** (3 países), la valla salió **peor**: 224 ms con
+  `OFFSET 0` contra 170 ms sin ella;
+- con las **funciones reales** importadas del repo (26 países), sobre 2.000 conversaciones ×
+  20.000 leads, **la medición no terminó en 4 minutos** y hubo que cortarla — sin llegar a saber
+  cuál de las tres formas era la lenta.
+
+⚠️ **Lo segundo no refuta el hallazgo: lo hace más creíble.** El propio docblock de
+`identidadSql.ts` cuenta que la primera versión del módulo generaba 2,58 MB de SQL y que **«el
+planner de Postgres tardaba 14 min en 3 filas»** — o sea que este archivo ya tiene antecedentes de
+ser imposible de planificar. Que una medición de 20.000 filas no termine en 4 minutos es
+consistente con eso.
+
+**Qué falta para desbloquear A2**, y es concreto:
+1. Una medición que corra hasta el final, **con las funciones reales del repo** (no una copia a
+   mano: la copia no es la misma consulta y su resultado no vale).
+2. Que distinga cuál de las tres formas es la lenta — con `statement_timeout` para que una no se
+   coma la corrida.
+3. Y contra el **volumen real**: 20.000 leads sembrados no son los 25.511 de producción con su
+   distribución de países.
+
+**Mientras tanto, el cableado NO se mergea.** Es la consulta más caliente del repo (`consultarCola`
+y su tabla temporal, el 4.797 → 1.632 ms de #361), y meter ahí un cambio que puede ser 1.000× sin
+una reproducción es exactamente lo que este repo tiene escrito como no hacer.
+
+El trabajo hecho está guardado y no se perdió: los tres call sites cableados, el test nuevo
+`cola/identidadDelTelefono.test.db.ts` (7 casos, verificado por mutación) y los tres `OFFSET 0`
+quedaron en un `git stash` de la rama `fix/los-tres-que-quedaban` con el mensaje
+`387-llave-telefono`. Quien tome A2 arranca de ahí, no de cero.
+
 ### 2026-08-17 · A2 · `dashboard/negocio.ts` bloquea migrar la llave del CTE `lead_curso`
 
 Engancha `lc.sufijo = sufijoTelefonoSql(b.persona_id)` adentro de un agregado: dejar dos filas por
