@@ -150,15 +150,15 @@ agente = un worktree = una rama. Al terminar, `Estado` → `listo` y escribí ab
 |---|---|---|---|---|---|---|
 | **A1** | — | Rescatar el plan a git | — | ✅ listo | — | `fix/los-tres-que-quedaban` |
 | **A2** | — | #387: los tres `OFFSET 0` en `telefono/identidadSql.ts` + re-verificar el costo | **opus** | 🔴 medida · NO MERGEA | claude-opus5 (2026-08-17) | `chore/a2-medir-llave-telefono` — 2 commits, verde, sin PR a propósito |
-| **A3** | 3.1 | La cláusula de línea en la frontera (contra `numero_vendedora`, no `numeros_wa`) | **opus** | 🟢 PR abierto, CI verde | claude-opus5 (2026-08-17) | PR #395 · rebasado sobre B1 |
-| **A4** | 4 | Auto-vinculación: los 7 defectos | **opus** | 🟢 PR abierto | claude-opus5 (2026-08-17) | PR #396 · ⚠️ lista pero **no se puede prender** (#194 + transporte `falso`) |
+| **A3** | 3.1 | La cláusula de línea en la frontera (contra `numero_vendedora`, no `numeros_wa`) | **opus** | ✅ **MERGEADA** | claude-opus5 (2026-08-17) | PR #395 · `fdb2d32` |
+| **A4** | 4 | Auto-vinculación: los 7 defectos | **opus** | ✅ **MERGEADA** | claude-opus5 (2026-08-17) | PR #396 · ⚠️ mergeada ≠ prendida: #194 + transporte `falso` |
 | **A5** | 1 | Reasignar las 24+20 conversaciones · sacar a Tracy de la rueda | humano | 🔒 bloqueado por P1/P2 | — | |
 | **B1** | 5 | Tabla de roles + `cargarRol` + los 17 call sites (migración) | **opus** | ✅ **MERGEADA** en `main` | claude-opus5 (2026-08-17) | PR #394 · `5c8aa53` · migración 0028 aplicada en staging por N3 |
 | **C1** | 6 | Cerrar `/api/routing` | barato | 🟢 **LIBRE** (B1 cerró) | — |  |
 | **C2** | 7 | `/api/equipo` + vista Equipo | barato | 🟢 **LIBRE** (B1 cerró) | — |  |
 | **C3** | 8 | Líneas y rueda desde el panel (migración) | **opus** | 🟢 **LIBRE** (B1 cerró) · serie con C6 | — |  |
-| **C4** | 9 | El cartel (N4) — **va ANTES de C5** | barato | 🟡 en curso — va junto con C5 | claude-opus5 (2026-08-17) | `feat/c4-c5-frontera-por-rol` · `.claude/worktrees/C5` |
-| **C5** | 10 | La frontera pasa a ser propiedad del rol | **opus** | 🟡 en curso — va junto con C4 | claude-opus5 (2026-08-17) | `feat/c4-c5-frontera-por-rol` · stack B1→A3→C5 |
+| **C4** | 9 | El cartel (N4) — **va ANTES de C5** | barato | 🟢 PR abierto | claude-opus5 (2026-08-17) | PR #397 · junto con C5 |
+| **C5** | 10 | La frontera pasa a ser propiedad del rol | **opus** | 🟢 PR abierto | claude-opus5 (2026-08-17) | PR #397 · junto con C4 |
 | **C6** | 11 | Fusión de grafías (migración) | **opus** | 🟢 **LIBRE** (B1 cerró) · serie con C3 | — |  |
 | **C7** | 12 | Apagar los CSV del `.env` | barato | 🔒 espera B1 y C5 | — | |
 
@@ -545,3 +545,51 @@ verde, **2.315** tests puros y **715** con base.
 # El ensayo en seco que dice si dos ramas chocan, antes de gastar una corrida del runner:
 git merge-tree --write-tree --name-only rama-a rama-b | tail -n +2
 ```
+
+### 2026-08-17 · cadena · Las tres en `main`, y lo que la ejecución en paralelo enseñó
+
+`main` = **`f99f246`**. B1 (#394) · A3 (#395) · A4 (#396) mergeadas con **rebase**, sin borrar rama.
+C4+C5 abierto en **#397**. A2 sin PR, por su propio veredicto.
+
+**🔴 LA MIGRACIÓN 0028 SE VERIFICÓ CONTANDO FILAS, NO POR EL VERDE DE N3.** Contra la base de
+staging, sólo lectura:
+
+```bash
+ssh deploy@161.132.39.165 'cd /srv/hermes-staging/server && U=$(grep -oP "(?<=^DATABASE_URL=).*" .env | tr -d "\"") && psql "$U" -tAc "SELECT (SELECT count(*) FROM information_schema.tables WHERE table_name LIKE '"'"'equipo%'"'"'), (SELECT count(*) FROM equipo), (SELECT count(*) FROM equipo_grafia)"'
+# → 3 tablas · 10 personas · 13 grafías · admin=2 vendedora=8
+```
+
+Las **13 grafías contra 10 personas** son exactamente las tres partidas que el plan §5.5 había
+medido (`luz`/`Luz`, `usuario1`/`Usuario1`, `usuario2`/`Usuario2`), y los 2 admin son D6. O sea que
+la siembra al arranque hace lo que dice, y el `equipo_id_canonico_ck` no la rechazó.
+
+**LO QUE LA EJECUCIÓN EN PARALELO ENSEÑÓ, y es lo reutilizable:**
+
+⚠️ **Cuatro frentes tocaron los mismos archivos y NINGUNO chocó semánticamente.** Todos los
+conflictos de los cuatro rebases fueron `docs/mapa.md` (generado) y **una línea** de
+`server/package.json`. `CLAUDE.md` y `server/src/index.ts` **auto-mergearon** las tres veces. El
+reparto de archivos por unidad —y el arbitraje de `consultarCola.ts:1006`, que se le dio a A3— fue
+lo que lo hizo posible.
+
+⚠️ **Y se puede saber ANTES de gastar una corrida del runner**, que es lo que R1 hace caro:
+
+```bash
+git merge-tree --write-tree --name-only rama-a rama-b | tail -n +2   # vacío = limpio
+```
+Predijo exacto los tres pares.
+
+⚠️ **`git rebase` descarta solo lo ya mergeado, por patch-id.** El rebase de C5 —que era un stack
+B1→A3→C5— pasó de **12 commits a 4** sin un conflicto cuando B1 y A3 ya estaban en `main`. No hace
+falta desarmar un stack a mano.
+
+🔴 **EN UN `git worktree`, EL ESTADO DEL REBASE NO VIVE EN `.git/`.** Vive en
+`.git/worktrees/<nombre>/rebase-merge`. Un bucle que chequea `[ -d .git/rebase-merge ]` **sale sin
+hacer nada y parece que resolvió todo** — no tocó un solo conflicto. La forma correcta:
+
+```bash
+[ -d "$(git rev-parse --git-path rebase-merge)" ]
+```
+
+⚠️ **El PR del plan (#392) estaba rojo y NO era código**: `N1` falló en «Set up job», antes de correr
+un chequeo, porque `actions/checkout@v4` no se pudo bajar (502 y después **429** de
+`codeload.github.com`). Antes de diagnosticar un N1 rojo, mirá si llegó a arrancar.
