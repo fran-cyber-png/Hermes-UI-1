@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlarmClockCheck,
   CalendarPlus,
@@ -469,8 +469,10 @@ export function VistaAgenda({
     ? foco.toLocaleDateString('es', { month: 'long', year: 'numeric' })
     : foco.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' });
 
+  const containerRef = useRef<HTMLDivElement>(null);
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-background">
+    <div ref={containerRef} className="flex min-h-0 flex-1 flex-col bg-background transition-colors duration-300">
       {/* ── Toolbar superior con CalendarHeader ── */}
       <CalendarHeader
         title={titleFormat}
@@ -481,6 +483,7 @@ export function VistaAgenda({
         onNext={() => mover(1)}
         onModoChange={setModo}
         onCreateClick={() => abrirCrear(null)}
+        containerRef={containerRef}
       />
 
       {/* ── Contenedor principal con minicalendario ── */}

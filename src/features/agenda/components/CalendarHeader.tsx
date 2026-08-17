@@ -10,6 +10,7 @@ interface CalendarHeaderProps {
   onNext: () => void;
   onModoChange: (modo: 'mes' | 'semana' | 'dia') => void;
   onCreateClick: () => void;
+  containerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 export function CalendarHeader({
@@ -21,6 +22,7 @@ export function CalendarHeader({
   onNext,
   onModoChange,
   onCreateClick,
+  containerRef,
 }: CalendarHeaderProps) {
   const MODOS = ['mes', 'semana', 'dia'] as const;
   const MODO_LABELS: Record<typeof MODOS[number], string> = {
@@ -85,7 +87,7 @@ export function CalendarHeader({
             </button>
           ))}
         </div>
-        <DarkModeToggle />
+        <DarkModeToggle containerRef={containerRef} />
         <button
           onClick={onCreateClick}
           className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground transition-all duration-150 hover:bg-primary/90 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"

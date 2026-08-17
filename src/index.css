@@ -455,3 +455,25 @@
 .bn-container .bn-editor.bn-default-styles[data-ancho='completo'] {
   max-width: none;
 }
+
+/* ── DARK MODE PARA AGENDA SOLO ────────────────────────────────────────── */
+.agenda-dark-mode {
+  --background: #0F1419;
+  --foreground: #F1F5F9;
+  --card: #1A2332;
+  --card-foreground: #F1F5F9;
+  --popover: #1A2332;
+  --popover-foreground: #F1F5F9;
+  --primary: #3B82F6;
+  --primary-hover: #60A5FA;
+  --primary-foreground: #F1F5F9;
+  --secondary: #1E293B;
+  --secondary-foreground: #CBD5E1;
+  --muted: #334155;
+  --muted-foreground: #94A3B8;
+  --accent: #1E293B;
+  --accent-foreground: #CBD5E1;
+  --border: #2D3A4A;
+  --input: #2D3A4A;
+  --navy-muted: #334155;
+}
