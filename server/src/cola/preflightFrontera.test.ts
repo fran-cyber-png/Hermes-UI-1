@@ -89,6 +89,26 @@ test("con una sola vendedora, «todas ven lo mismo» no dispara", () => {
   assert.equal(v.ok, true, v.problemas.join(" · "));
 });
 
+/**
+ * 🔴 EL FALSO POSITIVO QUE ENCONTRÓ CORRER EL SCRIPT, NO UN TEST.
+ *
+ * Dos personas con una conversación propia cada una ven «1» las dos, y no hay
+ * absolutamente nada mal: nadie está viendo trabajo ajeno. La primera versión de
+ * la regla frenaba el deploy ahí. Por eso además de la coincidencia se pide que
+ * ALGUIEN vea algo que no es suyo — con la frontera apagada eso se cumple solo,
+ * porque lo ajeno que se cuela cuenta como «huérfanas».
+ */
+test("si todas ven lo mismo pero NADIE ve nada ajeno, no dispara", () => {
+  const v = veredictoDelPreflight(
+    [
+      sana({ vendedoraId: "luz", total: 1, propias: 1, huerfanas: 0 }),
+      sana({ vendedoraId: "sindy", total: 1, propias: 1, huerfanas: 0 }),
+    ],
+    UMBRALES,
+  );
+  assert.equal(v.ok, true, v.problemas.join(" · "));
+});
+
 test("sin filas el preflight FALLA: no verificó nada", () => {
   const v = veredictoDelPreflight([], UMBRALES);
   assert.equal(v.ok, false);

@@ -88,9 +88,16 @@ export function veredictoDelPreflight(
   // el reparto vivo, dos personas distintas no pueden ver el mismo número salvo
   // que el recorte no se esté aplicando. Se dice aparte porque cada fila, por sí
   // sola, se ve razonable.
+  //
+  // ⚠️ **Y pide que ALGUIEN vea algo que no es suyo**, porque sin eso da un falso
+  // positivo obvio: dos personas con una conversación propia cada una ven «1» las
+  // dos y no hay nada mal. Lo encontró correr el script contra una mesa sembrada,
+  // no un test. Con la frontera apagada la condición se cumple sola: lo ajeno que
+  // se cuela cuenta acá como «huérfanas», así que el número no puede ser cero.
   const vendedoras = filas.filter((f) => !f.esSupervisora);
   const totales = new Set(vendedoras.map((f) => f.total));
-  if (vendedoras.length > 1 && totales.size === 1) {
+  const alguienVeAjeno = vendedoras.some((f) => f.huerfanas > 0);
+  if (vendedoras.length > 1 && totales.size === 1 && alguienVeAjeno) {
     problemas.push(
       `las ${vendedoras.length} vendedoras ven EXACTAMENTE lo mismo (${[...totales][0]}): ` +
         `eso es lo que se ve cuando la frontera no se aplica.`,

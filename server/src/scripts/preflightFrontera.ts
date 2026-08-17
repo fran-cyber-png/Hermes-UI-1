@@ -59,7 +59,14 @@ function flag(nombre: string): string | null {
   return valor && !valor.startsWith("--") ? valor : "";
 }
 
+/**
+ * 🔴 `Number(null)` ES 0, Y `Number("")` TAMBIÉN — y acá eso no es un default
+ * feo, es un veredicto falso: sin el flag, el techo quedaba en **0** y el
+ * preflight fallaba por «huérfanas» contra cualquier mesa. Lo encontró correrlo,
+ * no el typecheck. Se exige una cadena con dígitos.
+ */
 function entero(crudo: string | null, porDefecto: number): number {
+  if (crudo === null || crudo.trim() === "") return porDefecto;
   const n = Number(crudo);
   return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : porDefecto;
 }
