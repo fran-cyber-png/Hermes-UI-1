@@ -12,8 +12,8 @@
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
 | front | 32 | 345 | 46,000 | 13,969 |
-| server | 66 | 707 | 73,191 | 43,442 |
-| **total** | **98** | **1,052** | **119,191** | **57,411** |
+| server | 66 | 707 | 73,198 | 43,442 |
+| **total** | **98** | **1,052** | **119,198** | **57,411** |
 
 ## Front — `src/`
 
@@ -58,7 +58,7 @@
 |---|---|--:|--:|--:|--:|--:|
 | `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. | 57 | 8,872 | 8 | 2 | 48 |
 | `bot` | El bot de primera línea que atiende solo: su agente, sus guardrails, sus frenos y el reenganche. | 56 | 7,997 | 24 | 7 | 13 |
-| `scripts` | Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción. | 32 | 5,204 | 0 | 0 | 32 |
+| `scripts` | Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción. | 32 | 5,211 | 0 | 0 | 32 |
 | `cola` | La consulta que ordena la deuda: a quién se atiende primero y por qué. Cada regla vive pura y con su gemelo SQL. | 51 | 4,432 | 33 | 9 | 7 |
 | `whatsapp` | La costura con WhatsApp: la interfaz de transporte y sus implementaciones, el hilo, y la única puerta por la que sale un envío. | 49 | 4,156 | 23 | 13 | 10 |
 | `db` | El schema y la conexión. Capa base del server: no conoce ninguna regla de negocio. | 20 | 3,596 | 1 | 52 | 0 |
