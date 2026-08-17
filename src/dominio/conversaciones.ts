@@ -173,8 +173,25 @@ type Pagina = {
   sinLineasPropias?: boolean;
   /** El server sirvió la cola SIN dueño: falta la migración del reparto. */
   sinAsignacion?: boolean;
-  /** Quien pregunta está en una rueda: esta cola YA es solo lo suyo. */
+  /**
+   * Se pidió «Míos» (`?mios=1`), así que esta cola YA es solo lo suyo.
+   *
+   * ⚠️ **Antes también se prendía sola**, al estar en una rueda del reparto, y era
+   * lo que decidía el rótulo de la cabecera. Ese recorte automático murió: quién
+   * ve qué es propiedad del ROL, y lo que hay que leer para el rótulo es
+   * `colaRecortada`. Se conserva en el tipo porque el server lo sigue mandando —
+   * hoy ninguna pantalla manda `?mios=1`, así que en la práctica nunca llega.
+   */
   enElReparto?: boolean;
+  /**
+   * EL SERVER APLICÓ LA FRONTERA DEL ROL: esta cola trae lo de quien pregunta más
+   * lo huérfano de sus líneas, y el trabajo repartido a otra persona **no viajó**.
+   *
+   * ⚠️ **Opcional, y ausente NO es «no hay recorte»**: un server viejo no lo manda
+   * y una página rehidratada del caché de IndexedDB (ADR 0007) tampoco. Es «no se
+   * sabe», y de eso no se afirma nada — ver `RotuloDeLaCola`.
+   */
+  colaRecortada?: boolean;
   /** La misma foto abierta por «ya le hablamos» × precio × viva × ventana. Solo primera página. */
   desglose?: FilaDesglose[];
 };
@@ -270,12 +287,20 @@ export function useConversaciones(
      */
     sinAsignacion: q.data?.pages[0]?.sinAsignacion === true,
     /**
-     * Quien pregunta participa del reparto, así que **esta cola ya es solo lo
-     * suyo** — lo decide el server, no una preferencia local. La pantalla lo usa
-     * para DECIRLO: sin la píldora «Vos» (retirada por ser la misma marca en
-     * todas las filas), una cola propia se ve idéntica a la de todos.
+     * EL SERVER APLICÓ LA FRONTERA DEL ROL: esta cola es lo de quien pregunta más
+     * lo huérfano de sus líneas. La pantalla lo usa para DECIRLO — sin la píldora
+     * «Vos» (retirada por ser la misma marca en todas las filas), una cola propia
+     * se ve idéntica a la de todos, y el número de la cabecera cae sin explicación.
+     *
+     * ⚠️ **`=== true` y no `?? false`, y la diferencia importa acá**: lo que se
+     * quiere distinguir es «el server dijo que recortó» de «el server no dijo
+     * nada» (server viejo, o caché rehidratado). Ausente cae en `false` y el
+     * rótulo no afirma nada, que es lo correcto.
+     *
+     * ⚠️ Reemplaza a `enElReparto` en este lugar: aquél respondía «¿está en una
+     * rueda?», que dejó de gobernar lo que se ve.
      */
-    enElReparto: q.data?.pages[0]?.enElReparto === true,
+    colaRecortada: q.data?.pages[0]?.colaRecortada === true,
   };
 }
 

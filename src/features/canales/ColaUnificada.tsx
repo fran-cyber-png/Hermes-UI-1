@@ -23,6 +23,7 @@ import {
 } from '../../dominio/cola';
 import { lineaEfectiva, opcionesDeLinea } from './alcance';
 import { BarraFiltros } from './BarraFiltros';
+import { RotuloDeLaCola } from './RotuloDeLaCola';
 import { useConversaciones, useEstadoConversacion, type Conversacion } from '../../dominio/conversaciones';
 import { useLineas } from '../../dominio/lineas';
 import { FilaConversacion } from './FilaConversacion';
@@ -144,7 +145,7 @@ export function ColaUnificada({
     actualizando,
     sinEstado,
     sinLineasPropias,
-    enElReparto,
+    colaRecortada,
   } = useConversaciones({
     tab,
     filtroSec,
@@ -502,23 +503,16 @@ export function ColaUnificada({
             !cargando &&
             total > 0 &&
             !hayFiltroActivo && (
-              /* «TUYOS» Y NO «EN COLA» CUANDO LA COLA YA ES LA SUYA.
+              /* «PARA VOS» Y NO «EN COLA» CUANDO LA COLA YA ES LA SUYA.
                  Al sacar la píldora «Vos» —que en una cola propia sería la misma
                  marca en todas las filas— quedó una pantalla sin UN SOLO indicio
                  de que lo que se ve es lo asignado a quien mira. 18 filas sin
                  dueño visible se leen exactamente igual que la cola de todos, y
-                 así se leyeron: «sigo viendo todos». El dato ya estaba del lado
-                 del server (`enElReparto`); lo que faltaba era decirlo. */
-              <span
-                title={
-                  enElReparto
-                    ? 'El reparto te asignó estas conversaciones. Nadie más las tiene.'
-                    : undefined
-                }
-                className="pr-1 font-mono text-[11px] tabular-nums text-muted-foreground"
-              >
-                {total.toLocaleString('es')} {enElReparto ? 'tuyos' : 'en cola'}
-              </span>
+                 así se leyeron: «sigo viendo todos».
+                 ⚠️ Lo decidía `enElReparto` («¿está en una rueda?»); ahora lo
+                 decide `colaRecortada`, que es el HECHO de que el server haya
+                 aplicado la frontera. El porqué de cada palabra, en el componente. */
+              <RotuloDeLaCola total={total} recortada={colaRecortada} />
             )
           )}
         </div>
