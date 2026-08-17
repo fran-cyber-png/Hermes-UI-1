@@ -150,16 +150,16 @@ agente = un worktree = una rama. Al terminar, `Estado` → `listo` y escribí ab
 |---|---|---|---|---|---|---|
 | **A1** | — | Rescatar el plan a git | — | ✅ listo | — | `fix/los-tres-que-quedaban` |
 | **A2** | — | #387: los tres `OFFSET 0` en `telefono/identidadSql.ts` + re-verificar el costo | **opus** | 🔴 medida · NO MERGEA | claude-opus5 (2026-08-17) | `chore/a2-medir-llave-telefono` — 2 commits, verde, sin PR a propósito |
-| **A3** | 3.1 | La cláusula de línea en la frontera (contra `numero_vendedora`, no `numeros_wa`) | **opus** | ✅ listo | claude-opus5 (2026-08-17) | `fix/a3-frontera-clausula-de-linea` — 3 commits, sin PR |
-| **A4** | 4 | Auto-vinculación: los 7 defectos | **opus** | ✅ listo | claude-opus5 (2026-08-17) | `feat/auto-vinculacion-whatsapp` — 6 commits, sin PR · ⚠️ bloqueada por #194 para PRENDERSE |
+| **A3** | 3.1 | La cláusula de línea en la frontera (contra `numero_vendedora`, no `numeros_wa`) | **opus** | 🟢 PR abierto, CI verde | claude-opus5 (2026-08-17) | PR #395 · rebasado sobre B1 |
+| **A4** | 4 | Auto-vinculación: los 7 defectos | **opus** | 🟢 PR abierto | claude-opus5 (2026-08-17) | PR #396 · ⚠️ lista pero **no se puede prender** (#194 + transporte `falso`) |
 | **A5** | 1 | Reasignar las 24+20 conversaciones · sacar a Tracy de la rueda | humano | 🔒 bloqueado por P1/P2 | — | |
-| **B1** | 5 | Tabla de roles + `cargarRol` + los 17 call sites (migración) | **opus** | ✅ listo · **DESBLOQUEA C1·C2·C4** | claude-opus5 (2026-08-17) | `feat/b1-tabla-de-roles` — 5 commits, migración 0028, sin PR |
-| **C1** | 6 | Cerrar `/api/routing` | barato | 🔒 espera B1 | — | |
-| **C2** | 7 | `/api/equipo` + vista Equipo | barato | 🔒 espera B1 | — | |
-| **C3** | 8 | Líneas y rueda desde el panel (migración) | **opus** | 🔒 espera B1 · serie con C6 | — | |
-| **C4** | 9 | El cartel (N4) — **va ANTES de C5** | barato | 🔒 espera B1 | — | |
-| **C5** | 10 | La frontera pasa a ser propiedad del rol | **opus** | 🔒 espera B1 y C4 | — | |
-| **C6** | 11 | Fusión de grafías (migración) | **opus** | 🔒 espera B1 · serie con C3 | — | |
+| **B1** | 5 | Tabla de roles + `cargarRol` + los 17 call sites (migración) | **opus** | ✅ **MERGEADA** en `main` | claude-opus5 (2026-08-17) | PR #394 · `5c8aa53` · migración 0028 aplicada en staging por N3 |
+| **C1** | 6 | Cerrar `/api/routing` | barato | 🟢 **LIBRE** (B1 cerró) | — |  |
+| **C2** | 7 | `/api/equipo` + vista Equipo | barato | 🟢 **LIBRE** (B1 cerró) | — |  |
+| **C3** | 8 | Líneas y rueda desde el panel (migración) | **opus** | 🟢 **LIBRE** (B1 cerró) · serie con C6 | — |  |
+| **C4** | 9 | El cartel (N4) — **va ANTES de C5** | barato | 🟡 en curso — va junto con C5 | claude-opus5 (2026-08-17) | `feat/c4-c5-frontera-por-rol` · `.claude/worktrees/C5` |
+| **C5** | 10 | La frontera pasa a ser propiedad del rol | **opus** | 🟡 en curso — va junto con C4 | claude-opus5 (2026-08-17) | `feat/c4-c5-frontera-por-rol` · stack B1→A3→C5 |
+| **C6** | 11 | Fusión de grafías (migración) | **opus** | 🟢 **LIBRE** (B1 cerró) · serie con C3 | — |  |
 | **C7** | 12 | Apagar los CSV del `.env` | barato | 🔒 espera B1 y C5 | — | |
 
 **Cuántos a la vez, en la práctica**: hoy se pueden correr **A2 · A3 · A4 · B1** en paralelo — cuatro
@@ -517,3 +517,31 @@ no en el que agrega el módulo.**
 ⚠️ Y **las cuatro unidades regeneraron `docs/mapa.md`**, así que el primer merge deja a las otras tres
 en conflicto. Es generado: quien mergee segundo corre `npm run mapa`, **no resuelve el conflicto a
 mano**.
+
+### 2026-08-17 · cadena · B1 mergeada — y lo que el rebase demostró
+
+`main` = **`5c8aa53`**, con los cinco commits de B1 preservados (merge **con rebase**, no squash).
+Seis pasos dejan de estar trabados: **C1, C2, C3, C4 y C6 quedan libres.**
+
+⚠️ **`goberna-merge-pr` NO sirve para una cadena de PRs**, y conviene saberlo antes de necesitarlo:
+hace `gh pr merge --squash --delete-branch`. Las dos mitades están mal acá — el **squash**
+contradice el CLAUDE.md de Hermes (*«el merge va con rebase, historia lineal, se preservan los
+commits del PR»*) y **`--delete-branch` cierra el PR siguiente** de la cadena, que GitHub después no
+deja reabrir. Además exige ≥1 review `APPROVED` y busca un check-run llamado `ci`; Hermes tiene
+`N1`/`N2`/`N2b`/`Resumen`. Para una cadena: `gh pr merge <N> --rebase`, **sin** borrar rama.
+
+⚠️ **Y el gate no es el color de los niveles: es el job `Resumen`.** Con N1, N2 y N2b los tres en
+verde, `mergeStateStatus` seguía diciendo **`UNSTABLE`** porque `Resumen` estaba en `QUEUED`. Mirá
+ese job, no los tres de arriba.
+
+**Lo que el rebase de A3 sobre B1 demostró, y es información que no había**: las dos ramas
+**componen sin conflicto semántico**. Los únicos choques fueron **mecánicos** y los dos previstos:
+`docs/mapa.md` (generado — se resuelve con `npm run mapa`, **nunca** a mano) y **una línea** de
+`server/package.json`, donde cada frente agrega su script (`equipo:sembrar` y `frontera:preflight`):
+se quedan los dos. Sobre la base combinada: typecheck limpio en las dos mitades, `mapa:verificar`
+verde, **2.315** tests puros y **715** con base.
+
+```bash
+# El ensayo en seco que dice si dos ramas chocan, antes de gastar una corrida del runner:
+git merge-tree --write-tree --name-only rama-a rama-b | tail -n +2
+```
