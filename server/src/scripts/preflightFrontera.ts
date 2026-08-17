@@ -44,7 +44,12 @@ import {
  *
  *   cd server && npm run frontera:preflight
  *   npm run frontera:preflight -- --max-huerfanas 300
- *   npm run frontera:preflight -- --dias 30
+ *
+ * ⚠️ **No hay `--dias`, y no es un olvido**: la ventana la fija `ventanaCola` (30
+ * días) y es parte de la definición de la cola, no un parámetro de esta medición
+ * — moverla acá mediría una mesa que la app nunca sirve. Estuvo anunciado en este
+ * mismo bloque y el script nunca lo leyó: una promesa que se ignora en silencio,
+ * en el archivo donde ya se arregló el otro default mudo (`Number(null) === 0`).
  *
  * ⚠️ **No lo corras contra producción desde una máquina cualquiera**: es sólo
  * lectura, pero apunta a donde apunte `DATABASE_URL` y `consultarCola` es la

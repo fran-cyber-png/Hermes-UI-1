@@ -463,10 +463,16 @@ export interface OpcionesCola {
    * Lo resuelve `consultarCola` con `estaEnAlgunaRueda`, igual que resuelve
    * `misLineas` contra `numero_vendedora`: la ruta no lo manda.
    *
-   * ⚠️ **Sigue sin ser un permiso** (ver `cola/asignadaSql.ts`). Y quien NO está
-   * en ninguna rueda ve todo — Luz, que quedó afuera a propósito, y quien
-   * supervisa: ése es el fail-open que hace que una conversación sin asignar o
-   * mal asignada le aparezca a alguien en vez de desaparecer.
+   * ⚠️ **Sigue sin ser un permiso** (ver `cola/asignadaSql.ts`).
+   *
+   * 🔴 **Y «quien NO está en ninguna rueda ve todo» YA NO ES CIERTO** — lo era
+   * hasta que la frontera dejó de ser opt-in, en este mismo PR. Hoy quien está
+   * fuera de la rueda ve **lo suyo más lo huérfano de su alcance de línea**, y
+   * eso incluye a Luz, que quedó afuera a propósito. El fail-open no murió, se
+   * corrió de lugar: lo que no tiene dueña le sigue apareciendo a alguien en vez
+   * de desaparecer, sólo que ahora acotado por línea. Quien ve todo sin recorte
+   * es **el rol supervisor**, no el estar fuera de la rueda.
+   * El candado: `cola/consultarCola.mios.test.db.ts`.
    */
   enElReparto?: boolean;
   limit?: number;

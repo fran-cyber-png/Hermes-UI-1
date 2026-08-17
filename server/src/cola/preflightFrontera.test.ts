@@ -120,3 +120,37 @@ test("el techo de huérfanas se puede bajar, y entonces sí dispara", () => {
   assert.equal(veredictoDelPreflight(filas, { maxHuerfanas: 500 }).ok, true);
   assert.equal(veredictoDelPreflight(filas, { maxHuerfanas: 10 }).ok, false);
 });
+
+/**
+ * 🔴 EL CASO QUE HABRÍA ROJO AL PREFLIGHT CONTRA PRODUCCIÓN, POR UN MOTIVO FALSO.
+ *
+ * Para una supervisora `huerfanas = total - propias` es la mesa entera POR
+ * DEFINICIÓN —ve todo, que es lo que la frontera le concede—, así que con la
+ * mesa real (~5.492 en la ventana de 30 días) rompe sola cualquier techo. Sin la
+ * guarda, el script salía en 1 diciendo «la cláusula de línea no está acotando —
+ * revisá `numero_vendedora`»: un diagnóstico falso que manda a mirar la tabla
+ * equivocada justo antes de un N5.
+ *
+ * ⚠️ Y el techo tiene que seguir disparando para una VENDEDORA en la misma
+ * corrida, o la guarda estaría apagando el chequeo en vez de acotarlo.
+ */
+test("una supervisora no rompe el techo de huérfanas — ve todo por definición", () => {
+  const jefa = sana({
+    vendedoraId: "jefa",
+    esSupervisora: true,
+    total: 5492,
+    propias: 12,
+    huerfanas: 5480,
+  });
+  assert.equal(veredictoDelPreflight([jefa, sana()], UMBRALES).ok, true);
+
+  // La misma corrida, con una VENDEDORA arrastrando lo mismo: eso sí es el bug
+  // que el chequeo existe para ver.
+  const v = veredictoDelPreflight(
+    [jefa, sana({ vendedoraId: "sindy", total: 5492, propias: 12, huerfanas: 5480 })],
+    UMBRALES,
+  );
+  assert.equal(v.ok, false);
+  assert.match(v.problemas.join(" "), /sindy arrastra 5480 huérfanas/);
+  assert.doesNotMatch(v.problemas.join(" "), /jefa arrastra/);
+});

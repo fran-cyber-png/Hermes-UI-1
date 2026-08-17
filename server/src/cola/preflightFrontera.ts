@@ -76,7 +76,16 @@ export function veredictoDelPreflight(
           `Se lee como «la app perdió mis conversaciones», no como «no te asignaron nada».`,
       );
     }
-    if (f.huerfanas > umbrales.maxHuerfanas) {
+    // 🔴 EL TECHO DE HUÉRFANAS NO SE LE APLICA A UNA SUPERVISORA, Y NO ES UNA
+    // EXCEPCIÓN DE CORTESÍA: para ella `huerfanas = total - propias` es la mesa
+    // entera POR DEFINICIÓN, porque ve todo — eso es justo lo que la frontera le
+    // concede. Sin esta guarda, cualquier supervisora configurada rompe el techo
+    // sola y el script sale en 1 diciendo «la cláusula de línea no está acotando
+    // — revisá `numero_vendedora`», que es un diagnóstico FALSO y manda a mirar
+    // la tabla equivocada justo antes de un N5. Un preflight que grita en verde
+    // se aprende a ignorar, y ahí «falla por los dos lados» deja de ser garantía.
+    // (Es la misma exclusión que el detector de «frontera apagada» de acá abajo.)
+    if (!f.esSupervisora && f.huerfanas > umbrales.maxHuerfanas) {
       problemas.push(
         `${f.vendedoraId} arrastra ${f.huerfanas} huérfanas (techo ${umbrales.maxHuerfanas}): ` +
           `la cláusula de línea no está acotando — revisá \`numero_vendedora\` antes de desplegar.`,
