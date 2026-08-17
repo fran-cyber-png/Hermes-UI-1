@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { estadoDeCloudApi } from "../entrega/dominio.js";
+import { motivoDeCloudApi } from "../entrega/motivo.js";
 import { aplicarRecibo } from "../entrega/repositorio.js";
 import { db } from "../db/client.js";
 import { events } from "../db/schema.js";
@@ -119,6 +120,15 @@ export async function recibirWhatsapp(req: Request, res: Response): Promise<void
             mensajes: [`wa:${st.id}`],
             estado,
             cuando: st.timestamp ? new Date(Number(st.timestamp) * 1000) : new Date(),
+            /**
+             * 🔴 EL POR QUÉ VIENE ACÁ Y SE TIRABA. `errors[]` es lo único que
+             * explica un `failed`, y sin él el triángulo rojo de la burbuja no
+             * podía decir nada: la vendedora leía «no se mandó» cuando lo que
+             * había pasado era que el mensaje SALIÓ y WhatsApp lo rechazó.
+             * Medido el 17-ago-2026: los dos únicos fallos manuales de dos
+             * semanas eran la ventana de 24 h, y no quedó rastro de ninguno.
+             */
+            motivo: motivoDeCloudApi(st?.errors),
           }).catch((err: unknown) => {
             // Un recibo perdido no puede tumbar el webhook: lo que viene
             // después son mensajes de verdad, con una persona esperando.

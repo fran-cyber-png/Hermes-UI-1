@@ -291,9 +291,40 @@ export const enviosWa = pgTable(
     estadoEntrega: text("estado_entrega"),
     /** Cuándo se supo el estado actual. Sirve para «entregado hace 2 h». */
     estadoEntregaEn: timestamp("estado_entrega_en", { withTimezone: true }),
+    /**
+     * POR QUÉ NO SE ENTREGÓ — el código de Meta (`'131047'`), cuando lo manda.
+     *
+     * 🔴 **Sin esto el triángulo rojo era MUDO por construcción**: el recibo de
+     * la Cloud API trae `errors[]` y el webhook nunca lo leía, así que la fila
+     * quedaba marcada `fallido` sin una sola pista de por qué. Medido el
+     * 17-ago-2026 sobre los dos únicos fallos manuales de dos semanas: `motivo`
+     * vacío en las dos y nada en `journalctl`. Los dos eran la ventana de 24 h.
+     *
+     * **Es el CÓDIGO y no la frase** porque es identidad: el diccionario que lo
+     * traduce vive en el front (`whatsapp/motivoEntrega.ts`) y se puede reescribir
+     * sin tocar una fila. Guardar la redacción congelaría el texto de hoy en la
+     * historia. Va en columna propia y no adentro de `motivo` para no tener que
+     * parsear de vuelta lo que ya viene separado.
+     *
+     * ⚠️ **NO es «falló el envío»**: eso es `estado = 'fallido'`, que pasa antes
+     * de que Meta acepte nada y llena `motivo`. Esto es lo contrario — el mensaje
+     * SALIÓ (hay `id_externo`) y el rechazo llegó después, por webhook.
+     */
+    estadoEntregaCodigo: text("estado_entrega_codigo"),
     /** El id que devolvió el transporte cuando el envío salió (null si falló). */
     idExterno: text("id_externo"),
-    /** El motivo cuando falló o quedó bloqueado. */
+    /**
+     * El motivo cuando falló o quedó bloqueado, en prosa.
+     *
+     * Dos escritores con dos vocabularios, y no chocan porque los casos son
+     * disjuntos: el ENVÍO que no salió lo escribe `envioControlado.ts` en
+     * castellano (`estado = 'fallido'`, sin `id_externo`), y la ENTREGA que Meta
+     * rechazó lo escribe `entrega/repositorio.ts` con el inglés crudo de Meta
+     * (`estado = 'enviado'`, con `estado_entrega = 'fallido'`).
+     *
+     * ⚠️ **Lo de Meta es para auditar, no para la pantalla**: la vendedora lee la
+     * traducción del código, nunca esto.
+     */
     motivo: text("motivo"),
     creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().default(sql`now()`),
     resueltoAt: timestamp("resuelto_at", { withTimezone: true }),

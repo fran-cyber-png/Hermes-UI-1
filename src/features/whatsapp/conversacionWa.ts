@@ -66,6 +66,15 @@ export interface MensajeHilo {
    */
   entrega?: EstadoEntregaWa;
   /**
+   * POR QUÉ NO SE ENTREGÓ — el código de Meta (`'131047'`), solo con `fallido`.
+   *
+   * Lo traduce `motivoEntrega.ts`. **Ausente es lo normal y no significa nada
+   * malo**: un server viejo, un hilo rehidratado del caché (ADR 0007) o un fallo
+   * anterior a la migración 0028. Sin él la burbuja dibuja el triángulo pelado,
+   * exactamente como antes de este frente.
+   */
+  entregaMotivo?: string;
+  /**
    * A QUÉ MENSAJE RESPONDE ESTE — la tirita gris de WhatsApp.
    *
    * **Opcional y `null`-able**: opcional porque un server viejo no la manda (el

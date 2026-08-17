@@ -19,6 +19,8 @@
  * hayan pasado antes.
  */
 
+import type { MotivoDeEntrega } from './motivo.js';
+
 export type EstadoEntrega = 'enviado' | 'entregado' | 'leido' | 'fallido';
 
 /** El orden de la escala. `fallido` no está: se trata aparte. */
@@ -105,4 +107,12 @@ export interface RecibosDeEntrega {
   mensajes: string[];
   estado: EstadoEntrega;
   cuando: Date;
+  /**
+   * POR QUÉ NO SE ENTREGÓ, cuando Meta lo dice — lo extrae `entrega/motivo.ts`.
+   *
+   * **Opcional a propósito**: los recibos de whatsmeow no traen nada parecido y
+   * un `entregado` no tiene motivo que guardar. Ausente significa «nadie explicó
+   * nada», que no es lo mismo que «no falló».
+   */
+  motivo?: MotivoDeEntrega | null;
 }

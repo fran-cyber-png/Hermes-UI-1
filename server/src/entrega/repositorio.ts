@@ -81,17 +81,53 @@ export async function aplicarRecibo(base: typeof Base, recibo: RecibosDeEntrega)
    */
   const cuando = recibo.cuando.toISOString();
 
-  try {
-    const r = await base.execute(sql`
+  /**
+   * EL MOTIVO VIAJA EN EL MISMO `UPDATE` QUE EL ESTADO, no en una escritura
+   * aparte: es el mismo hecho («Meta lo rechazó, y dijo por qué») y separarlo
+   * dejaría filas `fallido` sin motivo cada vez que la segunda escritura fallara.
+   *
+   * ⚠️ **Solo entra al `SET` cuando hay algo que escribir.** Ponerlo siempre
+   * pisaría con `NULL` el motivo ya guardado en cuanto llegara un reintento del
+   * webhook sin `errors[]` — y los reintentos son la norma, no el borde.
+   *
+   * No choca con el motivo que escribe `envioControlado.ts`: aquel es de un envío
+   * que NO salió, o sea **sin `id_externo`**, y este `UPDATE` matchea justo por
+   * ahí. Los dos vocabularios no se pueden encontrar en la misma fila.
+   */
+  const motivo = recibo.motivo ?? null;
+
+  const correr = (conMotivo: boolean) =>
+    base.execute(sql`
       UPDATE envios_wa
          SET estado_entrega = ${recibo.estado},
              estado_entrega_en = ${cuando}::timestamptz
+             ${
+               conMotivo && motivo
+                 ? sql`, estado_entrega_codigo = ${motivo.codigo}, motivo = ${motivo.detalle}`
+                 : sql``
+             }
        WHERE id_externo IN (${sql.join(crudos.map((c) => sql`${c}`), sql`, `)})
          -- NUNCA RETROCEDE: el mismo orden que avanzarEstado, en SQL. Sin
          -- esto, un delivered que llega tarde bajaria un mensaje ya leido.
          -- (Sin acentos ni backticks: esto vive dentro de un template literal.)
          AND ${RANGO} < ${rangoDe(recibo.estado)}
     `);
+
+  try {
+    let r;
+    try {
+      r = await correr(true);
+    } catch (e) {
+      /**
+       * Sin la migración 0028 la columna del motivo no existe todavía. Se
+       * reintenta SIN ella en vez de perder el recibo entero: el tilde es lo que
+       * la vendedora mira y el motivo es el detalle. Degradar hacia MENOS, nunca
+       * hacia nada.
+       */
+      if (!faltaLaColumna(e) || !motivo) throw e;
+      console.warn('[entrega] `envios_wa.estado_entrega_codigo` no existe todavía: va sin motivo.');
+      r = await correr(false);
+    }
     /**
      * 🔴 `rowCount` ES DE node-postgres; ACÁ EL DRIVER ES postgres.js, QUE
      * DEVUELVE `count`.
@@ -117,24 +153,57 @@ export async function aplicarRecibo(base: typeof Base, recibo: RecibosDeEntrega)
   }
 }
 
+/**
+ * El estado de un saliente, más el POR QUÉ cuando lo hay.
+ *
+ * `codigo` viaja solo con `fallido`, y **opcional**: un mensaje anterior a la
+ * migración 0028 falló sin que nadie le preguntara a Meta por qué, y un motivo
+ * inventado sería peor que el hueco.
+ */
+export interface EntregaDeMensaje {
+  estado: EstadoEntrega;
+  codigo?: string;
+}
+
 /** El estado de cada saliente, indexado por `external_id` de Hermes. */
 export async function estadosPorMensaje(
   base: typeof Base,
   externalIds: string[],
-): Promise<Map<string, EstadoEntrega>> {
-  const mapa = new Map<string, EstadoEntrega>();
+): Promise<Map<string, EntregaDeMensaje>> {
+  const mapa = new Map<string, EntregaDeMensaje>();
   const crudos = externalIds.map((m) => m.replace(/^wa:/, '')).filter(Boolean);
   if (crudos.length === 0) return mapa;
 
-  try {
-    const filas = await base.execute<{ id_externo: string; estado_entrega: string | null }>(sql`
-      SELECT id_externo, estado_entrega
+  /**
+   * ⚠️ **El `detalle` NO se sirve.** Es prosa en inglés de Meta y existe para
+   * auditar desde la base; mandarlo a la pantalla terminaría con la vendedora
+   * leyendo «Re-engagement message» en medio de un chat en castellano. Lo que
+   * viaja es el código, que el front traduce (`whatsapp/motivoEntrega.ts`).
+   */
+  const consultar = (conCodigo: boolean) =>
+    base.execute<{ id_externo: string; estado_entrega: string | null; estado_entrega_codigo?: string | null }>(sql`
+      SELECT id_externo, estado_entrega${conCodigo ? sql`, estado_entrega_codigo` : sql``}
         FROM envios_wa
        WHERE estado_entrega IS NOT NULL
          AND id_externo IN (${sql.join(crudos.map((c) => sql`${c}`), sql`, `)})
     `);
+
+  try {
+    let filas;
+    try {
+      filas = await consultar(true);
+    } catch (e) {
+      // Sin la migración 0028: el hilo con ✓✓ y sin motivo sigue siendo el hilo.
+      if (!faltaLaColumna(e)) throw e;
+      filas = await consultar(false);
+    }
     for (const f of filas) {
-      if (f.estado_entrega) mapa.set(`wa:${f.id_externo}`, f.estado_entrega as EstadoEntrega);
+      if (!f.estado_entrega) continue;
+      const codigo = f.estado_entrega_codigo;
+      mapa.set(`wa:${f.id_externo}`, {
+        estado: f.estado_entrega as EstadoEntrega,
+        ...(codigo ? { codigo } : {}),
+      });
     }
     return mapa;
   } catch (e) {

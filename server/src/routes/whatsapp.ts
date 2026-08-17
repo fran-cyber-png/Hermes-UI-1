@@ -261,7 +261,21 @@ whatsappRouter.get('/conversacion/:telefono', ruta(async (req, res) => {
     return {
       ...fila,
       ...(r?.length ? { reacciones: r } : {}),
-      ...(e ? { entrega: e } : {}),
+      /**
+       * 🔴 `entrega` SIGUE SIENDO LA CADENA, y el motivo viaja al lado.
+       *
+       * Convertirla en un objeto habría roto los hilos que el front rehidrata
+       * desde IndexedDB (ADR 0007): esas respuestas guardadas dicen
+       * `entrega: 'fallido'`, y el componente que las lee como cadena habría
+       * empezado a dibujar un tilde a partir de un objeto — sin error, sin
+       * petición de red que lo delate y hasta que alguien limpie el caché.
+       *
+       * `entregaMotivo` va **opcional**: ausente es un server viejo, una
+       * respuesta cacheada, o un fallo anterior a la migración 0028. En los tres
+       * casos la burbuja se comporta como antes de este frente.
+       */
+      ...(e ? { entrega: e.estado } : {}),
+      ...(e?.codigo ? { entregaMotivo: e.codigo } : {}),
       // El texto vigente (después de editar), aparte del `texto` original: la
       // burbuja lo prefiere y muestra «Editado» — igual que WhatsApp, que no
       // pisa el mensaje, lo marca.

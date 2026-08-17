@@ -66,7 +66,7 @@ async function abrir(): Promise<Montado> {
   return m;
 }
 
-const saliente = (id: number, texto: string, entrega?: string) => ({
+const saliente = (id: number, texto: string, entrega?: string, entregaMotivo?: string) => ({
   id,
   direccion: 'saliente',
   autor: 'luz',
@@ -74,7 +74,11 @@ const saliente = (id: number, texto: string, entrega?: string) => ({
   occurred_at: AHORA,
   external_id: `wa:${id}`,
   ...(entrega ? { entrega } : {}),
+  ...(entregaMotivo ? { entregaMotivo } : {}),
 });
+
+/** El hover del triángulo cuando el fallo llegó sin código (o de antes de 0028). */
+const SIN_MOTIVO = 'WhatsApp rechazó la entrega y no dijo por qué';
 
 function tildes(m: Montado, titulo: string): number {
   return m.contenedor.querySelectorAll(`[title="${titulo}"]`).length;
@@ -92,7 +96,56 @@ describe('los cuatro estados', () => {
     expect(tildes(m, 'Salió de Hermes')).toBe(1);
     expect(tildes(m, 'Le llegó')).toBe(1);
     expect(tildes(m, 'Lo leyó')).toBe(1);
-    expect(tildes(m, 'No se pudo entregar')).toBe(1);
+    expect(tildes(m, SIN_MOTIVO)).toBe(1);
+  });
+});
+
+/**
+ * EL PORQUÉ DEL TRIÁNGULO (17-ago-2026).
+ *
+ * El triángulo pelado se leía como «no se mandó», y lo que había pasado era lo
+ * contrario: el mensaje SALIÓ y WhatsApp lo rechazó. Lo que estos tests fijan es
+ * que el motivo esté **escrito**, no colgado de un hover que nadie visita.
+ */
+describe('por qué no se entregó', () => {
+  test('🔴 la ventana de 24 h se dice con todas las letras', async () => {
+    // El caso medido: los dos únicos fallos manuales de dos semanas eran este
+    // código, y uno se pasó por media hora. Si esto no se lee en la burbuja, la
+    // vendedora vuelve a escribir lo mismo y vuelve a rebotar.
+    conMensajes([saliente(1, '¿Aún te interesa?', 'fallido', '131047')]);
+    const m = await abrir();
+    expect(m.contenedor.textContent).toContain('No se entregó');
+    expect(m.contenedor.textContent).toContain('más de 24 h');
+    // Y dice qué hacer, no solo qué pasó.
+    expect(m.contenedor.textContent).toContain('plantilla aprobada');
+  });
+
+  test('🔴 un código DESCONOCIDO no inventa una explicación', async () => {
+    // Adivinar «probablemente la ventana» es peor que callarse: la vendedora
+    // dejaría de escribirle a alguien que sí podía recibir. El código crudo va al
+    // hover, que es donde alguien lo puede leer para agregarlo al diccionario.
+    conMensajes([saliente(1, 'Hola', 'fallido', '999999')]);
+    const m = await abrir();
+    expect(m.contenedor.textContent).toContain('No se entregó');
+    expect(m.contenedor.textContent).not.toContain('24 h');
+    expect(tildes(m, 'WhatsApp rechazó la entrega (código 999999, sin lectura todavía)')).toBe(1);
+  });
+
+  test('sin motivo se comporta como antes del frente: triángulo y línea neutra', async () => {
+    // Es el caso mayoritario al principio — todo lo anterior a la migración 0028
+    // y todo hilo rehidratado del caché de IndexedDB.
+    conMensajes([saliente(1, 'Hola', 'fallido')]);
+    const m = await abrir();
+    expect(m.contenedor.textContent).toContain('No se entregó');
+    expect(tildes(m, SIN_MOTIVO)).toBe(1);
+  });
+
+  test('🔴 un mensaje que SÍ se entregó no escribe ningún renglón rojo', async () => {
+    // El renglón es la única cosa del hilo que pide una acción. Si apareciera en
+    // los entregados, dejaría de significar nada.
+    conMensajes([saliente(1, 'Llegó', 'entregado', '131047')]);
+    const m = await abrir();
+    expect(m.contenedor.textContent).not.toContain('No se entregó');
   });
 });
 
@@ -103,7 +156,7 @@ describe('lo que NO se dibuja', () => {
     // nadie confirmó — y no hay backfill posible.
     conMensajes([saliente(1, 'Mensaje viejo')]);
     const m = await abrir();
-    for (const t of ['Salió de Hermes', 'Le llegó', 'Lo leyó', 'No se pudo entregar']) {
+    for (const t of ['Salió de Hermes', 'Le llegó', 'Lo leyó', SIN_MOTIVO]) {
       expect(tildes(m, t)).toBe(0);
     }
     expect(m.contenedor.textContent).toContain('Mensaje viejo');
