@@ -79,8 +79,56 @@ corta muy rápido**: no menciona `bot`, `espacios`, `padron`, `routing`, `campan
 21-jul y varios de los más trabajados del repo. Un inventario a mano envejece; si necesitás la
 lista, medila.
 
-**El único puente entre las mitades** es `webhook/ruta.ts`: Cerberus avisa una venta, Hermes la
-espeja, y —si `LAZO_RELOJ` estuviera encendido, que no lo está— se la contaría a Meta.
+### Los puentes entre las mitades son SEIS, no uno
+
+🔴 **Acá decía «el único puente entre las mitades es `webhook/ruta.ts`», y era falso.** Importa
+porque es la frase que alguien va a usar para calcular cuánto cuesta archivar la mitad heredada: con
+un puente, archivar es cortar un hilo; con seis, es un frente.
+
+Medido el 16-ago-2026 con grep de imports sobre `server/src`, en las **dos** direcciones. Un puente
+es cualquier archivo de una mitad que importa a la otra. Contando así, **seis archivos de la mitad
+viva importan a la heredada** — sin contar los tres routers que el párrafo de arriba ya mide muertos
+(`routes/overview.ts`, `routes/decisions.ts`, `routes/leads.ts`) ni los dos scripts que sólo corren
+cuando alguien los escribe a mano (`server/src/scripts/cerberus.ts`,
+`server/src/scripts/backfill.ts`):
+
+| # | Puente | Dirección | Qué pasa por ahí |
+|---|---|---|---|
+| 1 | `index.ts` → `pauta/reloj.ts` | viva → heredada | `arrancarReloj()` adentro del `app.listen`. **Prendido por default** (se apaga con `PAUTA_RELOJ=off`): cada 6 h el proceso de producción le pide insights a Meta. |
+| 2 | `index.ts` → `lazo/reloj.ts` | viva → heredada | `arrancarRelojDelLazo()`, en el mismo `app.listen`. Apagado por default, y ver el ⚠️ de abajo sobre qué gobierna de verdad. |
+| 3 | `webhook/ruta.ts` → `lazo/evento.ts` + `lazo/capi.ts` | viva → heredada | **El que ya estaba escrito, y sigue siendo el más caro**: Cerberus avisa una venta, Hermes la espeja en `ontologia.conversiones` y le manda el `Purchase` a Meta por CAPI. |
+| 4 | `webhook/cerberus.ts` → `lazo/normalizar.ts` | viva → heredada | Sólo el tipo `Pais` (`import type`, se borra al compilar). Es el puente más barato de los seis y **no por eso deja de romper el typecheck** al archivar. |
+| 5 | `routes/config.ts` → `pauta/snapshot.ts` · `routes/gente.ts` → `canales/persona360.ts` · `routes/sdk.ts` → `sdk/index.ts` | viva → heredada | Tres routers **montados en Express y que nadie del front llama** (`grep` de `/api/config`, `/api/gente`, `/api/sdk` en `src/`: cero). No entran en la medición de «routers muertos» de arriba porque ésa sólo miró los 16 que tienen SQL adentro. |
+| 6 | `canales/consultas.ts` → `cola/pregunta.ts` | **heredada → viva** | La única arista que va para el otro lado sin pasar por infraestructura: la mitad heredada importa el predicado de «preguntó algo» de la cola (ADR 0052). |
+
+⚠️ **Lo que la tabla NO cuenta, y también es acoplamiento**: las dos mitades comparten `db/` entero
+(cliente, `db/ontologia.ts`, `db/operacion.ts`, `db/canonico.ts`), `lib/` y `meta/metaClient.ts` —
+seis archivos de `pauta/` salen a Meta por ese cliente. Eso es infraestructura compartida, no un
+puente de negocio, y por eso va aparte.
+
+🔴 **Y hay DOS TABLAS que las dos mitades escriben.** Son el puente que un grep de imports no ve:
+
+- **`ontologia.conversiones`**: la escribe `webhook/ruta.ts` (viva, en el acto de la venta) y la lee
+  `lazo/worker.ts` (heredada) como outbox para no mandar dos veces el mismo `Purchase`.
+- **`ontologia.vinculos_identidad`**: la escribe `identidad/enlazar.ts` (viva — «es la misma persona
+  que…», ADR 0017) y la reescribe `ontologia/poblarIdentidad.ts` (heredada). Ese rebuild borraba los
+  enlaces manuales hasta que se acotó a `WHERE regla <> 'manual'`; el candado es
+  `poblarIdentidad.test.db.ts`, que vive del lado heredado y prueba una promesa de la mitad viva.
+
+**Qué cambia con el número honesto**: archivar la mitad heredada no es borrar carpetas. Hay que
+decidir qué pasa con dos relojes que hoy arrancan con el proceso —uno de ellos prendido—, con el
+camino de la venta hacia Meta, con tres routers montados, con dos tablas que la mitad viva escribe y
+con un predicado de la cola que la heredada importa. **No es una propuesta de archivar**: es el
+precio, escrito, para que la decisión se tome sabiéndolo. Sería un frente propio, con su ADR.
+
+⚠️ **`LAZO_RELOJ` NO gobierna el webhook** (issue #385, arreglado el 16-ago-2026). La versión
+anterior de este párrafo decía «si `LAZO_RELOJ` estuviera encendido, que no lo está, se la contaría a
+Meta», y era al revés: esa variable sólo gobierna el **barrido cada 6 h** de `lazo/reloj.ts`. El
+webhook llama a `capiDesdeEnv()` y hace `capi.enviar(...)` **sin mirarla**, así que cada venta que
+Cerberus avisa le llega a Meta con el reloj apagado. Lo único que apaga ese camino es que falte
+`META_PIXEL_ID` o `META_ACCESS_TOKEN` —`capiDesdeEnv()` tira antes de salir—, y
+`META_TEST_EVENT_CODE` **no lo apaga**: lo desvía a Test Events, que igual sale. Hoy `lazo/reloj.ts`
+lo dice en el arranque, en el mismo log donde antes afirmaba lo contrario.
 
 ---
 
