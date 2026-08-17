@@ -149,11 +149,11 @@ agente = un worktree = una rama. Al terminar, `Estado` → `listo` y escribí ab
 | ID | Paso | Qué | Modelo | Estado | Dueño | Rama / worktree |
 |---|---|---|---|---|---|---|
 | **A1** | — | Rescatar el plan a git | — | ✅ listo | — | `fix/los-tres-que-quedaban` |
-| **A2** | — | #387: los tres `OFFSET 0` en `telefono/identidadSql.ts` + re-verificar el costo | **opus** | 🔴 bloqueante | — | |
-| **A3** | 3.1 | La cláusula de línea en la frontera (contra `numero_vendedora`, no `numeros_wa`) | **opus** | libre | — | |
-| **A4** | 4 | Auto-vinculación: los 7 defectos | **opus** | libre | — | |
+| **A2** | — | #387: los tres `OFFSET 0` en `telefono/identidadSql.ts` + re-verificar el costo | **opus** | 🟡 en curso | claude-opus5 (2026-08-17) | `chore/a2-medir-llave-telefono` · `.claude/worktrees/A2` |
+| **A3** | 3.1 | La cláusula de línea en la frontera (contra `numero_vendedora`, no `numeros_wa`) | **opus** | 🟡 en curso | claude-opus5 (2026-08-17) | `fix/a3-frontera-clausula-de-linea` · `.claude/worktrees/A3` |
+| **A4** | 4 | Auto-vinculación: los 7 defectos | **opus** | 🟡 en curso | claude-opus5 (2026-08-17) | `feat/auto-vinculacion-whatsapp` · `.claude/worktrees/auto-vinculacion-whatsapp` |
 | **A5** | 1 | Reasignar las 24+20 conversaciones · sacar a Tracy de la rueda | humano | 🔒 bloqueado por P1/P2 | — | |
-| **B1** | 5 | Tabla de roles + `cargarRol` + los 17 call sites (migración) | **opus** | libre · **LA LLAVE** | — | |
+| **B1** | 5 | Tabla de roles + `cargarRol` + los 17 call sites (migración) | **opus** | 🟡 en curso | claude-opus5 (2026-08-17) | `feat/b1-tabla-de-roles` · `.claude/worktrees/B1` |
 | **C1** | 6 | Cerrar `/api/routing` | barato | 🔒 espera B1 | — | |
 | **C2** | 7 | `/api/equipo` + vista Equipo | barato | 🔒 espera B1 | — | |
 | **C3** | 8 | Líneas y rueda desde el panel (migración) | **opus** | 🔒 espera B1 · serie con C6 | — | |
@@ -336,3 +336,45 @@ El `DISTINCT ON` de `leadsCte` **no puede** usar `mismaIdentidadSql`: el país `
 comodín **no es transitivo**. Se agrupa por `local`. Y el descarte contra `interactions` pasó de
 `NOT IN` a `NOT EXISTS`, porque con dos columnas y país nullable **un solo NULL vuelve el predicado
 UNKNOWN y el brazo entero se queda sin una fila, mudo**.
+
+### 2026-08-17 · setup · Tres cosas del plan que ya envejecieron, medidas al montar los worktrees
+
+El plan mide sobre `origin/main = 073834c`. **Hoy `origin/main` es `1cd22b3`, 17 commits después.**
+Los números de línea del plan ya no ubican: **buscá por símbolo, no por línea.** Lo que sí sigue
+exacto, verificado con grep contra el `main` de hoy: los **17 call sites** de `esSupervisor`
+(campana 10 · padron 5 · dashboard/personal 1 · consultarCola 1), los **4** de
+`supervisoresConfigurados` y los **2** de `recorteDelDashboard`.
+
+🔴 **LA MIGRACIÓN DE B1 ES LA 0028, NO LA 0027.** El plan §5.1 dice «la siguiente libre es la 0027
+(la última es `0026_lame_zarda`, idx 26)» y **eso ya no es cierto**: `0027_gorgeous_surge`
+(`ediciones_wa`, ADR 0056) está en `origin/main` con `idx: 27` y `when: 1787314368155`. Generar una
+0027 nueva es exactamente el caso que R2 describe — el `when` queda por debajo del máximo aplicado y
+drizzle **saltea la migración sin un solo error**, con el deploy en verde y la tabla sin crear.
+
+```bash
+git show origin/main:server/drizzle/meta/_journal.json | python3 -c \
+  "import json,sys; j=json.load(sys.stdin); print(max(e['when'] for e in j['entries']))"
+# → 1787314368155   (el when nuevo tiene que ser MAYOR)
+```
+
+🔴 **LA BASE DE TEST NO SE PUEDE PARALELIZAR, Y NO ES PEREZA.** El §5.1 sugiere «levantá otro
+contenedor en otro puerto» — **no se puede**: `guardarAntiProd` (`server/src/pruebas/base.ts:66`)
+aborta si la URL no contiene `:5442` **literal**. Darle un puerto propio a cada worktree exige tocar
+la red anti-prod, que es lo único que separa un `DROP DATABASE` de la producción de VPS1. Entonces la
+base es UNA y los `test:db` se serializan con un candado de archivo. Vale también para
+`montarBase.ts`, que **rehace el template**: remontarlo mientras otra unidad hace
+`CREATE DATABASE ... TEMPLATE` falla, y el error se lee como un bug del código que estabas escribiendo.
+
+⚠️ **A3 y B1 chocan en UNA línea, y el grafo de §2 no lo marca.** `consultarCola.ts:1006` es
+`fronteraDeAsignacionSql(vendedoraId, esSupervisor(vendedoraId ?? "", process.env))`: A3 le cambia el
+predicado (y tiene que sacar de ahí la lectura de `process.env`) y B1 le cambiaría la fuente del rol.
+**Reparto decidido: la línea es de A3.** B1 toca los **16** call sites restantes y deja ése anotado —
+la fuente del rol de la frontera se mueve en el paso 10 (C5), que es donde el plan ya la pone.
+
+⚠️ **El worktree de A4 estaba 17 commits atrás y se rebasó sobre `origin/main`.** Tres conflictos, los
+tres de import y del mismo movimiento de módulos de `main`: `features/canales/lineas` →
+`dominio/lineas` y `features/canales/conversaciones` → `dominio/conversaciones`. Resueltos con la ruta
+nueva + el import que agrega A4. Verificado después: `tsc --noEmit` en verde **en las dos mitades**.
+
+⚠️ **Un worktree nuevo no sirve sin `server/.env`** (gitignored, §5.1 ya lo dice) **ni sin los dos
+`node_modules`** — raíz y `server/`, ~560 MB por worktree.
