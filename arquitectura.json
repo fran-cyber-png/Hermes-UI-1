@@ -29,6 +29,17 @@
     },
     "server": {
       "raiz": "server/src",
+      "$porQueCapaPorDefecto": [
+        "El piso de negocio del server son ~45 módulos y declararlos uno por uno sería una lista",
+        "que envejece con cada carpeta nueva. `capaPorDefecto` dice: todo módulo del server que no",
+        "tenga nivel escrito está en el piso 2. Sin esto la regla NO MUERDE — un módulo sin nivel",
+        "declarado queda sin restricción, así que declarar sólo los extremos (0 y 3) vigilaría 8 de",
+        "las 260 aristas del server y daría 0 violaciones para siempre.",
+        "",
+        "⚠️ `server/pruebas` no se declara y no hace falta: sus archivos ya salen del grafo por",
+        "`esTest` (que incluye `/pruebas/`), así que no emite una sola arista."
+      ],
+      "capaPorDefecto": 2,
       "modulos": {
         "index": { "rutas": ["server/src/index.ts"] }
       },
@@ -40,12 +51,38 @@
     "$comentario": [
       "Un módulo de una capa no puede importar de una capa MÁS ALTA.",
       "El número es el nivel: 0 no depende de nadie, 3 puede depender de 0, 1 y 2.",
-      "Lo que esto impide es que el núcleo compartido dependa de una pantalla."
+      "Lo que esto impide es que el núcleo compartido dependa de una pantalla.",
+      "",
+      "El server se declara ENTERO, no por los extremos: los pisos 0 y 3 acá abajo, y el piso de",
+      "negocio por `capaPorDefecto: 2` en la zona. No hubo que construir nada — se midió el",
+      "16-ago-2026 y de las 260 aristas entre módulos del server, 259 ya respetaban la",
+      "estratificación. La única violación era `routes/costoPorLead.ts`, y no era un problema de",
+      "capas sino de ubicación: no exportaba ningún router (ver `routersSinSqlInline`).",
+      "",
+      "── DOS COSAS QUE SE MIDIERON Y NO HAY QUE INTENTAR ──",
+      "",
+      "1. NO inventarle al server una capa `dominio` como la del front. Arrancaría con entre 6 y 18",
+      "   violaciones, y la razón es que no hay un núcleo que sacar: en el front 58 de los 148",
+      "   imports cruzados apuntaban a UN módulo (`canales`), y en el server el archivo más pedido",
+      "   concentra 7 de 129 (5,4 %). El piso de negocio del server es genuinamente PLANO — sacarle",
+      "   un `dominio` sería mudar carpetas para satisfacer una analogía con el front.",
+      "",
+      "2. NO copiar el patrón del front de declarar sólo los extremos. Acá eso deja ~45 módulos sin",
+      "   nivel, o sea sin restricción: la regla vigilaría 8 de 260 aristas y daría 0 violaciones",
+      "   pasara lo que pasara. Una regla que no puede ponerse roja no es un candado, es un adorno."
     ],
     "front/lib": 0,
     "front/componentes": 0,
     "front/dominio": 1,
-    "front/app": 3
+    "front/app": 3,
+
+    "server/db": 0,
+    "server/lib": 0,
+    "server/telefono": 0,
+    "server/routes": 3,
+    "server/webhook": 3,
+    "server/scripts": 3,
+    "server/index": 4
   },
 
   "reglas": {
@@ -81,17 +118,25 @@
       "porQue": "Un router valida, llama a un seam del dominio y serializa. Con SQL adentro, esa consulta no se puede testear sin levantar Express, y la regla que expresa no se puede compartir con el resto — que es como nacieron las dos implementaciones de la urgencia (#37).",
       "aplicaA": "server/src/routes",
       "excepciones": [
-        "server/src/routes/costoPorLead.ts",
         "server/src/routes/decisions.ts",
         "server/src/routes/leads.ts",
         "server/src/routes/overview.ts"
       ],
       "$porQueLasExcepciones": [
-        "Los cuatro son de la MITAD HEREDADA de meta-escuela (ADR 0001): compilan, y ninguna acción",
+        "Los tres son de la MITAD HEREDADA de meta-escuela (ADR 0001): compilan, y ninguna acción",
         "de la vendedora los alcanza. No es una suposición — se midió el 16-ago-2026 buscando en todo",
-        "`src/` las llamadas a su path montado: cero para los cuatro, y `costoPorLead` ni siquiera",
-        "está montado en `index.ts`. Los otros doce routers con SQL adentro SÍ los llama el front,",
-        "y ésos se arreglaron.",
+        "`src/` las llamadas a su path montado: cero para los tres. Los otros doce routers con SQL",
+        "adentro SÍ los llama el front, y ésos se arreglaron.",
+        "",
+        "⚠️ **Eran CUATRO, y el cuarto no era un router.** `routes/costoPorLead.ts` estaba exceptuado",
+        "«por heredado» cuando el motivo real era otro: 178 líneas que no exportan ningún router, no",
+        "estaban montadas en `index.ts` (por eso la medición le daba cero: no tenía path que buscar)",
+        "y las importaban `pauta/snapshot.ts` y `routes/leads.ts` como un seam de dominio cualquiera.",
+        "O sea que la regla no se estaba relajando: se estaba aplicando al archivo equivocado. Vive",
+        "en `server/src/pauta/costoPorLead.ts` desde el 16-ago-2026, y era la ÚNICA violación de",
+        "`capas` del server (`routes` es piso 3: nadie lo importa).",
+        "Una excepción que tapa una clasificación mal hecha es peor que ninguna — se lee como que la",
+        "regla no aplica ahí, cuando lo que pasaba es que el archivo no era lo que decía su carpeta.",
         "",
         "Reescribir código que nadie ejecuta, para satisfacer una regla, es riesgo sin beneficio: se",
         "toca SQL que ningún test cubre y que ninguna pantalla vuelve a mirar. La excepción se levanta",
@@ -140,6 +185,7 @@
     "front/dominio": "El vocabulario del CRM que más de una vista necesita: qué ES una conversación, las queries que la traen, y las derivaciones puras sobre ella — canal, curso, ventana, antigüedad, cliente, dueño, líneas, la paleta de categorías y el desglose del embudo. Capa 1: importa `lib` y nada más. 🔴 Nació sacando esto de adentro de `features/canales`, donde 58 de los 148 imports cruzados del front entraban a una feature para pedirle el modelo.",
     "front/pruebas": "El andamio de los tests con DOM: `montar`, `teclear`, `reposar`.",
 
+    "front/bot": "El interruptor del bot de primera línea visto desde la app: en qué modo está, de dónde sale ese modo (la base o el entorno) y cómo apagarlo sin un deploy.",
     "front/agenda": "Los seguimientos que una vendedora se agendó: cuándo vuelve a tocar a quién.",
     "front/auth": "Entrar y salir: login contra Cerberus, el SSO de Centurión, y el token que el cliente cree antes de preguntar.",
     "front/autorespuesta": "El acuse fuera de horario visto desde la app: el interruptor, la cola de revisión y el modo supervisado.",
@@ -169,11 +215,11 @@
     "front/whatsapp": "La conversación nativa: el hilo, el composer, los adjuntos, las citas y la compresión de video.",
 
     "server/index": "El pegamento: monta los routers y arranca los relojes. ⚠️ Sus comentarios describen la arquitectura de meta-escuela y engañan (ver `docs/arquitectura.md` §2).",
-    "server/db": "El schema y la conexión. Capa base del server: no conoce ninguna regla de negocio.",
-    "server/routes": "La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL.",
-    "server/lib": "Utilidades sin dominio: hora de Lima, rangos y por qué falló una consulta.",
+    "server/db": "El schema y la conexión. Capa 0: no conoce ninguna regla de negocio y no puede importar a nadie.",
+    "server/routes": "La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. Capa 3 — nadie la importa: un archivo que otro módulo necesita no es un router y no va acá (fue el caso de `costoPorLead`).",
+    "server/lib": "Utilidades sin dominio: hora de Lima, rangos y por qué falló una consulta. Capa 0.",
     "server/pruebas": "El andamio de los tests: base efímera, sembrado y humo end-to-end.",
-    "server/scripts": "Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción.",
+    "server/scripts": "Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción. Capa 3.",
     "server/migraciones": "Verificar que una migración sea expand-only y que el journal sea monótono.",
 
     "server/agenda": "Los recordatorios que una vendedora se agendó sobre una conversación.",
@@ -223,8 +269,8 @@
     "server/routing": "Qué campaña de Meta le cae a qué vendedora, y resolver el anuncio contra la Graph API.",
     "server/senales": "«Cotizado» y «se enfrió»: se derivan en cada consulta, nunca se guardan.",
     "server/sugerencias": "En qué momento de la venta está y qué dos respuestas corresponden. El vocabulario que comparten el panel y la auto-respuesta.",
-    "server/telefono": "Partir y comparar un teléfono E.164. La llave canónica del repo: vive una sola vez.",
-    "server/webhook": "Todo lo que entra de afuera: Meta, WhatsApp, Cerberus y las landings. Ack primero, firma siempre.",
+    "server/telefono": "Partir y comparar un teléfono E.164. La llave canónica del repo: vive una sola vez. Capa 0.",
+    "server/webhook": "Todo lo que entra de afuera: Meta, WhatsApp, Cerberus y las landings. Ack primero, firma siempre. Capa 3 — es una entrada, nadie lo importa.",
     "server/whatsapp": "La costura con WhatsApp: la interfaz de transporte y sus implementaciones, el hilo, y la única puerta por la que sale un envío.",
 
     "server/analisis": "🪦 Heredado de meta-escuela — los análisis del dashboard de pauta (ROAS, cartera, geo).",
@@ -234,7 +280,7 @@
     "server/fuentes": "🪦 Heredado de meta-escuela — los volcados de origen del dashboard de pauta.",
     "server/lazo": "🪦 Heredado de meta-escuela — el outbox que le contaría las conversiones a Meta por CAPI. Apagado (`LAZO_RELOJ`).",
     "server/ontologia": "🪦 Heredado de meta-escuela — las proyecciones ontológicas. ⚠️ `ontologia.conversiones` NO está muerto: `lazo/worker.ts` lo consulta.",
-    "server/pauta": "🪦 Heredado de meta-escuela — recolectar gasto, fatiga y engagement de la pauta publicitaria.",
+    "server/pauta": "🪦 Heredado de meta-escuela — recolectar gasto, fatiga y engagement de la pauta publicitaria, y el costo REAL por lead (leads capturados contra lo que Meta dice que costó traerlos, todo en dólares).",
     "server/sdk": "🪦 Heredado de meta-escuela — el SDK de consulta del dashboard de pauta."
   }
 }

@@ -5,7 +5,7 @@ import { leads } from "../db/schema.js";
 import { porQueFallo } from "../lib/porQueFallo.js";
 import { rangoDe } from "../lib/rangos.js";
 import { ruta } from "../lib/ruta.js";
-import { costoPorLead } from "./costoPorLead.js";
+import { costoPorLead } from "../pauta/costoPorLead.js";
 
 export const leadsRouter = Router();
 

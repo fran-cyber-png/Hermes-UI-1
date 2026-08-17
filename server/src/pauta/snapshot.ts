@@ -9,7 +9,7 @@ import { adjuntarFatiga } from "./fatiga.js";
 import { gastoPorPais } from "./geoGasto.js";
 import { tasasDeCambio } from "../analisis/tasas.js";
 import type { GastoPais } from "../analisis/geo.js";
-import { costoPorLead } from "../routes/costoPorLead.js";
+import { costoPorLead } from "./costoPorLead.js";
 
 /**
  * El snapshot de pauta: Meta se consulta por detrás, la pantalla lee Postgres.

@@ -23,6 +23,15 @@ import { diasDe, type Rango } from "../lib/rangos.js";
  * costo por lead PÉSIMO aparecía como la más barata del ranking por puro tipo de cambio, y la frase
  * «este anuncio trae leads 3,5× más baratos» podía ser, literalmente, la tasa de conversión de la
  * moneda. Alguien mueve presupuesto real detrás de eso.
+ *
+ * ── POR QUÉ VIVE ACÁ Y NO EN `routes/` (16-ago-2026, issue #388) ──
+ * Vivió hasta hoy en `server/src/routes/costoPorLead.ts` sin exportar un solo router y sin estar
+ * montado en `index.ts`: era un seam de dominio guardado en la carpeta de la capa HTTP, y lo
+ * importaban `pauta/snapshot.ts` y `routes/leads.ts`. Eso lo hacía la ÚNICA de las 260 aristas
+ * entre módulos del server que rompía la estratificación declarada en `arquitectura.json`
+ * (`routes` es piso 3 justamente porque nadie lo importa), y de yapa se llevaba una excepción de
+ * `routersSinSqlInline` que decía «heredado» cuando el motivo real era que no es un router.
+ * Está en `pauta/` porque de eso habla: gasto de Meta cruzado con los leads que trajo.
  */
 export interface CostoPorLead {
   campaignId: string;

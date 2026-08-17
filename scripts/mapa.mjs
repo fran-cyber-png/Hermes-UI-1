@@ -50,6 +50,19 @@ function archivosDe(dir, acc = []) {
 
 const esTest = (p) => /\.test\.|\.test$|\/pruebas\//.test(p) || p.includes('.test.')
 
+// Las galerías (`src/features/<x>/galeria*.tsx`) son ARTEFACTOS DE EVIDENCIA, la misma
+// categoría que los tests: cada una se sirve por su propio `galeria-*.html` y NINGUNA la
+// importa la app. Se excluyen del grafo por el mismo motivo que los tests — una galería
+// mira a cualquiera a propósito (sirve los casos feos de tres features para poder
+// fotografiarlos), así que contarla inventa dependencias entre features que el producto
+// no tiene. Medido el 16-ago-2026: son 15 archivos, y sacarlas baja el nudo de módulos
+// del front de 7 a 3. O sea que más de la mitad de ese nudo eran pantallas de demo.
+// ⚠️ Siguen contando en `lineas`: no son tests, son código del módulo. Lo que se excluye
+//    son las ARISTAS, no el módulo.
+const esGaleria = (p) => /\/src\/features\/[^/]+\/galeria[^/]*\.tsx$/.test(p)
+
+const fueraDelGrafo = (p) => esTest(p) || esGaleria(p)
+
 function lineasDe(p) {
   return leer(p).split('\n').length
 }
@@ -167,12 +180,14 @@ function analizar() {
     if (id) modulos.get(id).archivos.push(f)
   }
 
-  // 2. las aristas del grafo, ignorando los imports de los tests: un test PUEDE
-  //    mirar a cualquiera (los candados leen el árbol entero a propósito), y
-  //    contarlos haría que todo el repo pareciera un solo ciclo gigante.
+  // 2. las aristas del grafo, ignorando los imports de los tests y de las galerías:
+  //    los dos PUEDEN mirar a cualquiera (los candados leen el árbol entero a
+  //    propósito, y una galería sirve los casos feos de varias features para poder
+  //    fotografiarlos), y contarlos haría que todo el repo pareciera un solo ciclo
+  //    gigante. Ver `fueraDelGrafo`.
   const detalle = new Map() // "a→b" -> Set(spec)
   for (const f of unicos) {
-    if (esTest(f)) continue
+    if (fueraDelGrafo(f)) continue
     const de = duenoDe(f, prefijos)
     if (!de) continue
     const txt = leer(f)
@@ -196,7 +211,7 @@ function analizar() {
   //     cómo están agrupadas las carpetas. Exigir cero ciclos de archivo es
   //     alcanzable hoy; exigir cero entre módulos obligaría a mudar 18 features
   //     para arreglar algo que el código no tiene.
-  const grafoArchivo = new Map(unicos.filter((f) => !esTest(f)).map((f) => [f, []]))
+  const grafoArchivo = new Map(unicos.filter((f) => !fueraDelGrafo(f)).map((f) => [f, []]))
   const specArchivo = new Map()
   for (const f of grafoArchivo.keys()) {
     for (const m of leer(f).matchAll(RE_IMPORT)) {
@@ -229,7 +244,12 @@ function analizar() {
     }))
   )
 
-  return { modulos, vivos, aristas, detalle, prefijos, unicos, ciclosArchivo }
+  // Lo excluido del grafo se CUENTA para poder decirlo en el mapa: una exclusión
+  // silenciosa es indistinguible de un bug del que la aplica (cicatriz de
+  // `docsSinRutasMuertas`, que reportó su propio defecto antes que el del repo).
+  const galerias = unicos.filter(esGaleria).map((f) => relative(RAIZ, f))
+
+  return { modulos, vivos, aristas, detalle, prefijos, unicos, ciclosArchivo, galerias }
 }
 
 // ────────────────────────────────────────────────────────────────── las reglas
@@ -249,7 +269,16 @@ function verificar(a) {
   }
 
   if (CONFIG.capas) {
-    const nivel = (id) => CONFIG.capas[id]
+    // ⚠️ **Un módulo sin nivel queda SIN RESTRICCIÓN, y eso es lo que hace falta honrar
+    // `capaPorDefecto`.** Declarar sólo los extremos —como hace el front, donde el piso de
+    // negocio son las features y no tiene nivel— alcanza cuando lo que se quiere vigilar es
+    // que el núcleo no dependa de una pantalla. En el server no: con ~45 módulos de negocio
+    // sin nivel, la regla miraría 8 de las 260 aristas y daría 0 violaciones pasara lo que
+    // pasara. La zona declara su piso (`zonas.server.capaPorDefecto`) y entonces la regla
+    // muerde: un módulo de negocio que importe de `routes/` o del `index` se pone rojo.
+    // El `??` no colapsa el 0: `CONFIG.capas['server/db']` es 0 y 0 no es nullish.
+    const porDefecto = (id) => CONFIG.zonas[id.split('/')[0]]?.capaPorDefecto
+    const nivel = (id) => CONFIG.capas[id] ?? porDefecto(id)
     for (const m of a.vivos) {
       const n = nivel(m.id)
       if (n === undefined) continue
@@ -453,6 +482,13 @@ function generar(a, fallas) {
   L.push('agrupados bajo un módulo que en realidad pertenecen a otra capa. Es el termómetro de si')
   L.push('los módulos están bien dibujados, y baja sacando el núcleo compartido a su propia capa.')
   L.push('')
+  L.push(`**Qué queda afuera del grafo** (acá y en «Quién depende de quién»): los tests, y las`)
+  L.push(`**${n(a.galerias.length)} galerías** \`src/features/*/galeria*.tsx\`. Las dos cosas por el mismo`)
+  L.push('motivo: miran a cualquiera a propósito y ninguna la importa la app — cada galería se sirve por')
+  L.push('su propio `galeria-*.html` y existe para poder fotografiar los casos feos. Contarlas inventaba')
+  L.push('dependencias entre features que el producto no tiene: sacarlas bajó este nudo de 7 a 3.')
+  L.push('Siguen contando en `Líneas`: no son tests, son código del módulo.')
+  L.push('')
   if (!nudos.length) L.push('✅ ninguno.')
   for (const g of nudos) {
     L.push(`- **${g.length} módulos**: ${g.map((x) => `\`${x}\``).join(' ↔ ')}`)
@@ -473,7 +509,26 @@ function generar(a, fallas) {
   L.push('')
   const porRegla = new Map()
   for (const f of fallas) porRegla.set(f.regla, [...(porRegla.get(f.regla) ?? []), f])
-  const nombres = { ...CONFIG.reglas, capas: { porQue: 'Un módulo no puede importar de una capa más alta que la suya: el núcleo compartido no puede depender de una pantalla.' } }
+  const capasDeclaradas = Object.entries(CONFIG.capas)
+    .filter(([k]) => !k.startsWith('$'))
+    .map(([k, v]) => `\`${k}\`=${v}`)
+    .join(' · ')
+  const porDefectoDeZona = Object.entries(CONFIG.zonas)
+    .filter(([, z]) => z.capaPorDefecto !== undefined)
+    .map(([z, cfg]) => `\`${z}\`=${cfg.capaPorDefecto}`)
+    .join(' · ')
+  const nombres = {
+    ...CONFIG.reglas,
+    capas: {
+      porQue:
+        'Un módulo no puede importar de una capa más alta que la suya: el núcleo compartido no puede depender de una pantalla. ' +
+        `Declaradas: ${capasDeclaradas}.` +
+        (porDefectoDeZona
+          ? ` Y por zona, el piso de lo no declarado: ${porDefectoDeZona} — sin eso un módulo sin nivel queda sin restricción, ` +
+            'y la regla vigilaría los extremos sin poder ponerse roja nunca.'
+          : ''),
+    },
+  }
   for (const [regla, cfg] of Object.entries(nombres)) {
     const f = porRegla.get(regla) ?? []
     L.push(`### ${f.length === 0 ? '✅' : '🔴'} \`${regla}\` — ${f.length === 0 ? 'sin violaciones' : `${f.length} violación${f.length > 1 ? 'es' : ''}`}`)
