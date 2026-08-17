@@ -128,17 +128,20 @@ test("GET /negocio: una vendedora que no está en la lista tampoco entra por par
 });
 
 /**
- * 🔴 EL CONTROL, y sin él los tres de arriba no prueban nada: una puerta que
- * rechaza a TODOS también los pone en verde.
+ * 🔴 EL CONTROL DEL 403 NO SE PUEDE ESCRIBIR ACÁ, Y ESO SE MIDIÓ.
  *
- * Acá lo único que se mira es que **no sea 403**: quien manda pasa la puerta.
- * Lo que venga después toca la base por el singleton, que en este harness no
- * tiene el schema del Dashboard — así que un 500 es un resultado perfectamente
- * bueno para este test, y el camino positivo completo sigue estando donde dice
- * el docblock de arriba.
+ * Sin un caso que PASE la puerta, los tres de arriba no distinguen «la regla
+ * anda» de «la puerta rechaza a todos». El control obvio —pedir con un
+ * supervisor y exigir que no sea 403— **cuelga la corrida entera**: apenas se
+ * pasa la puerta, el handler consulta el singleton `db`, que es justo lo que
+ * este harness nunca conecta (`baseDePrueba` clona un template y devuelve SOLO
+ * su `db`). Medido el 17-ago-2026: `npm run test:db` quedó parado en este
+ * archivo, sin summary y sin timeout — y un archivo que cuelga en N2b es peor
+ * que un test flojo, porque bloquea el runner de VPS1, que es uno solo.
+ *
+ * Dónde vive el control entonces: en `routes/campana.test.ts`, que tiene la
+ * MISMA puerta (`mandaEnElEquipo`) y sí puede probar el caso positivo porque su
+ * camino de después sale por Meta y no por la base — «la grafía no importa»
+ * termina en un `assert.notEqual(estado, 403)`. Es la misma regla, con un
+ * consumidor que se puede cortar sin colgar nada.
  */
-test("GET /negocio: quien SÍ manda pasa la puerta — el control del 403", async () => {
-  const r = await pedir(SUPERVISOR, SUPERVISOR);
-
-  assert.notEqual(r.status, 403, "si esto es 403, la puerta rechaza a todos y los otros tres mienten");
-});
