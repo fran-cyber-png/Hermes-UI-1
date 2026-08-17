@@ -1,7 +1,7 @@
 import { Router, type Response } from 'express';
 import { db } from '../db/client.js';
 import { obtenerSesionCerberus } from '../cerberus/sesionStore.js';
-import { requiereVendedora } from '../auth/sesion.js';
+import { requiereVendedora, firmarSesion } from '../auth/sesion.js';
 import { ssoDeCenturionConfigurado } from '../auth/centurion.js';
 import { canjearTokenDeCenturion, MENSAJE_SIN_LINEA } from '../auth/sesionCenturion.js';
 import { resolverLogin } from '../auth/loginCascada.js';
@@ -62,6 +62,36 @@ function noSePudo(res: Response, donde: string, err: unknown): void {
  * este handler no tenía una sola rama capaz de rechazar. Ahora la cascada llega
  * a `canjear`, que toca la base. El porqué del 503 está en `noSePudo`.
  */
+/**
+ * LOGIN DE DESARROLLO (sin Cerberus).
+ *
+ * Solo disponible si NODE_ENV=development. Permite cualquier usuario:contraseña.
+ * Útil para desarrollo local sin acceso a Cerberus.
+ */
+if (process.env.NODE_ENV === 'development') {
+  authRouter.post('/dev/login', ruta(async (req, res) => {
+    const { username } = req.body ?? {};
+
+    if (!username) {
+      res.status(400).json({ ok: false, message: 'falta el usuario' });
+      return;
+    }
+
+    try {
+      // En desarrollo, generamos un token sin validar contra Cerberus
+      const token = firmarSesion(username);
+
+      res.json({
+        ok: true,
+        token,
+        vendedora: { id: username, nombre: username },
+      });
+    } catch (err) {
+      noSePudo(res, '/dev/login', err);
+    }
+  }));
+}
+
 authRouter.post('/login', ruta(async (req, res) => {
   const { username, password } = req.body ?? {};
 

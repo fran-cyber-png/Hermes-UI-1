@@ -11,35 +11,41 @@ interface DarkModeToggleProps {
  */
 export function DarkModeToggle({ containerRef }: DarkModeToggleProps) {
   const [isDark, setIsDark] = useState(false);
-  const [mounted, setMounted] = useState(false);
 
   // Cargar preferencia al montar
   useEffect(() => {
     const saved = localStorage.getItem('agenda-dark-mode');
     const shouldBeDark = saved === 'true';
     setIsDark(shouldBeDark);
-    applyTheme(shouldBeDark);
-    setMounted(true);
-  }, []);
 
-  const applyTheme = (dark: boolean) => {
+    // Aplicar tema inmediatamente
     if (containerRef?.current) {
-      if (dark) {
+      if (shouldBeDark) {
+        containerRef.current.classList.add('agenda-dark-mode');
+      } else {
+        containerRef.current.classList.remove('agenda-dark-mode');
+      }
+    }
+  }, [containerRef]);
+
+  const toggleTheme = () => {
+    const newIsDark = !isDark;
+
+    // Actualizar estado
+    setIsDark(newIsDark);
+
+    // Guardar preferencia
+    localStorage.setItem('agenda-dark-mode', String(newIsDark));
+
+    // Aplicar clase al contenedor
+    if (containerRef?.current) {
+      if (newIsDark) {
         containerRef.current.classList.add('agenda-dark-mode');
       } else {
         containerRef.current.classList.remove('agenda-dark-mode');
       }
     }
   };
-
-  const toggleTheme = () => {
-    const newIsDark = !isDark;
-    setIsDark(newIsDark);
-    applyTheme(newIsDark);
-    localStorage.setItem('agenda-dark-mode', String(newIsDark));
-  };
-
-  if (!mounted) return null;
 
   return (
     <button

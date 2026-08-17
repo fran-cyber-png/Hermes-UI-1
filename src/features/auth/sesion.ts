@@ -153,7 +153,13 @@ export function useSesion() {
   const entrar = useCallback(async (username: string, password: string) => {
     // Si entra OTRA vendedora, lo guardado no es suyo: se va antes de que ella vea nada.
     if (username !== localStorage.getItem(CLAVE_ULTIMO_USUARIO)) await olvidarCacheDeHermes();
-    const r = await api<{ token: string; vendedora: Vendedora }>('/api/auth/login', {
+
+    // En desarrollo, intenta usar el endpoint de desarrollo primero
+    const apiUrl = import.meta.env.VITE_API_URL || '';
+    const esDevelopment = apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1');
+    const endpoint = esDevelopment ? '/api/auth/dev/login' : '/api/auth/login';
+
+    const r = await api<{ token: string; vendedora: Vendedora }>(endpoint, {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     });
