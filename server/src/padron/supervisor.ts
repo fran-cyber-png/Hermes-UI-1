@@ -47,6 +47,27 @@ import { mismaVendedora } from "../reparto/destino.js";
  * blanco se lee «se perdieron los contactos», no «falta configurar esto».
  */
 
+/**
+ * ⚠️ **DESDE LA TABLA `equipo`, ESTE MÓDULO ES EL RESPALDO, NO LA FUENTE.**
+ *
+ * El docblock de arriba anticipó el día: «el día que sean cinco supervisores y
+ * cambien seguido, esto se muda a tabla sin tocar a quien lo llama». Ese día
+ * llegó (decisión del dueño del 15-ago-2026: se agrega el rol `admin` y los roles
+ * salen del `.env`). Quién manda se pregunta ahora con `mandaEnElEquipo(req)`
+ * (`equipo/cargarRol.ts`), y `supervisoresConfigurados` quedó como **el CSV al que
+ * la cascada cae** mientras la migración no esté aplicada o la persona no tenga
+ * fila (`equipo/cascada.ts`).
+ *
+ * Lo que sigue vivo de acá:
+ * - `supervisoresConfigurados`, que la cascada usa para las DOS listas del `.env`.
+ * - `esSupervisor`, con **un solo llamador**: la frontera de `cola/consultarCola.ts`,
+ *   que se mueve al rol en un paso posterior y en otra rama.
+ *
+ * Apagar los CSV —y borrar esto— es el último paso del plan, no éste: si se
+ * apagaran junto con la migración, el despliegue en que la tabla todavía no está
+ * dejaría a todo el mundo sin rol.
+ */
+
 /** El nombre de la variable, en un solo lugar (regla dura #1: se referencia, no se pega). */
 export const ENV_SUPERVISORES = "HERMES_SUPERVISORES";
 
@@ -58,8 +79,17 @@ export const ENV_SUPERVISORES = "HERMES_SUPERVISORES";
  * y reescribir la grafía rompería el cruce con todo lo que ya tiene filas
  * (`gestiones`, `estado_conversacion`, `conversacion_asignada`).
  */
-export function supervisoresConfigurados(env: NodeJS.ProcessEnv): string[] {
-  const crudo = env[ENV_SUPERVISORES];
+export function supervisoresConfigurados(
+  env: NodeJS.ProcessEnv,
+  /**
+   * Qué variable leer. El default es la de siempre; `equipo/cascada.ts` le pasa
+   * `HERMES_ADMINS` porque es **el mismo formato leído igual** —un CSV de ids con
+   * la grafía intacta— y dos parsers para el mismo formato divergen (#37): el que
+   * se olvide de recortar los espacios deja a alguien afuera sin un solo síntoma.
+   */
+  nombre: string = ENV_SUPERVISORES,
+): string[] {
+  const crudo = env[nombre];
   if (typeof crudo !== "string") return [];
   return crudo
     .split(",")

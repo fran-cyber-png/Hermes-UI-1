@@ -720,6 +720,44 @@ En el cliente, la sesión **se cree el token antes de preguntar** (ADR 0007): si
 venció, la app se pinta ya y `/api/auth/yo` valida por detrás. La firma la verifica el server en cada
 request igual, y un 401 real echa y borra el caché.
 
+### Los roles viven en la tabla `equipo` (migración **0028**)
+
+Tres roles y son una **escalera**, no tres cajones (`server/src/equipo/roles.ts`): `vendedora` <
+`supervisor` < `admin`. El permiso se pregunta con `alcanzaRol`/`puedeSupervisar`, nunca con
+`rol === 'supervisor'` — con la comparación exacta el **admin** se queda afuera del padrón y de «El
+negocio». Reemplaza a `HERMES_SUPERVISORES`, que queda como **respaldo** hasta que se apague. La
+tercera lista de roles —`VEN_ROUTING` en el FRONT (`src/features/vistas/acceso.ts`)— sigue viva.
+
+- 🔴 **`cargarRol` RESUELVE EL BEARER POR SU CUENTA; no puede leer `req.vendedoraId`.** `'/api/auth'`
+  está en `PREFIJOS_ABIERTOS` y `routes/auth.ts` monta `requiereVendedora` como handler **del propio
+  `/yo`**, o sea después de todo `app.use`. Leyendo el request, el rol quedaría `undefined` justo en
+  `/api/auth/yo`, que es el ÚNICO canal por el que baja al front: **el panel invisible para todos,
+  incluido el admin, sin 403 y sin log**. Usa `verificarSesion` (puro), **nunca responde 401** —solo
+  anota— y con `if (!id) return next()` los tokens de servicio (`/api/admin`, `/api/catalogo`) no
+  pagan la consulta. Candado: `equipo/cargarRol.test.ts`.
+- 🔴 **«LA TABLA NO ESTÁ» Y «LA CONSULTA FALLÓ» NO SON LO MISMO, y colapsarlos abre la cola.** Tabla
+  ausente → cascada al `.env`, `sinTablaDeEquipo`, frontera **APAGADA** (como hoy). Blip de Postgres →
+  `vendedora`, `rolNoResuelto`, frontera **ENCENDIDA**. Tratar el blip como falta de migración apagaría
+  la frontera en cada hipo de la base — con los CSV ya apagados, eso es la cola entera servida a
+  cualquier token por unos segundos. Dos banderas, dos ramas, y `equipo/cascada.test.ts` se pone rojo
+  si alguien las unifica.
+- 🔴 **`persona_id` es CANÓNICO y lo garantiza la BASE** (`equipo_id_canonico_ck`): la fila `Luz` no
+  entra. Las grafías crudas viven en `equipo_grafia`. Las tres partidas de producción son `luz`/`Luz`,
+  `usuario1`/`Usuario1` y `usuario2`/`Usuario2` — **`alan` tiene una sola**.
+- **`HERMES_ADMINS` es el martillo detrás del vidrio**: entra como `admin` **antes** de mirar la base,
+  porque una salida de emergencia que depende de la base no es una salida. Marca `porBreakGlass`.
+- **La siembra corre al ARRANQUE** (molde de `sembrarAliasCurso`), es idempotente y **no pisa lo
+  editado a mano**: con un upsert, cada restart le devolvería su rol de fábrica a quien el admin acaba
+  de cambiar. ⚠️ **Y no siembra a quien el `.env` hace supervisor con un rol menor** (`revisarSemilla`):
+  una fila activa le gana al CSV, así que eso le sacaría el padrón en el próximo restart sin un error.
+  · 🔴 **La lista sale de la BASE, no de la cabeza de nadie.** El censo encontró **once** personas
+    donde el análisis nombraba cinco, y la que faltaba —`Tracy`— está activa en la rueda con 10
+    conversaciones. `npm run equipo:sembrar` (dry-run por default) rehace el censo contra la base viva
+    y **dice quién apareció que la semilla no tiene**. Las cadenas de servicio (`campana`,
+    `goberna-admin`, `bot`) no son personas, y `centurion:` se excluye **por prefijo**.
+- ⚠️ **`ventas10@grupogoberna.com` no está en la semilla a propósito**: su rol es una pregunta sin
+  decidir, y sin fila conserva exactamente lo que el `.env` le da hoy.
+
 ## Ivi — el puente al cerebro RAG (proxy)
 
 > Fundamento: **ADR 0021** (la costura) y **ADR 0024** (la superficie).
@@ -1249,9 +1287,11 @@ vista **Contactos**, primera solapa (`src/features/padron/`, `server/src/padron/
   **La vendedora no ve el padrón, ve lo que le habilitaron.** Por eso el recorte está en el `WHERE` de la
   ruta y **no** en un `if` del navegador: un recorte dibujado en el front no existe, los datos ya viajaron.
   Lo que NO cambia: el resto de Hermes sigue sin modelo de permisos.
-- **Quién es supervisor sale de `HERMES_SUPERVISORES`** (CSV de `vendedora_id`), no de una tabla.
-  **Fail-closed**, y la pantalla lo **dice** (`sinSupervisores`) en vez de mostrar una lista vacía. Se
-  compara normalizando los dos lados. **No se edita desde la app**, igual que la rueda del reparto.
+- **Quién manda sale de la tabla `equipo`** (§Los roles, migración 0028), con `HERMES_SUPERVISORES`
+  todavía de respaldo. Un **admin** entra igual que un supervisor: se pregunta `mandaEnElEquipo(req)`,
+  nunca `rol === 'supervisor'`. **Fail-closed**, y la pantalla lo **dice** (`sinSupervisores`, que se
+  resuelve con `hayQuienMande` — la MISMA cascada que el rol, o el copy contradice al 403) en vez de
+  mostrar una lista vacía. Se compara normalizando los dos lados.
 - **El reparto se guarda en Hermes** (`contacto_habilitado`, migración `0017`), nunca en icarus: la
   conexión fuerza `default_transaction_read_only=on` y **icarus sirve a un cliente real de consultoría**.
   ⚠️ `icarus.contacts.assigned_to` **parece** esto y no lo es: sus valores son **números de línea**.
@@ -1311,7 +1351,9 @@ vendedora veía el trabajo de las otras cuatro mezclado con el suyo. Server en
 
 - **Quien NO es supervisor ve SOLO sus conversaciones asignadas**, y el recorte baja a las **cinco**
   consultas (radar · embudo · series · «qué piden» · Equipo). Recortar la lista y dejar el riel global
-  daría dos respuestas a la misma pregunta en la misma pantalla. Supervisor sale de `HERMES_SUPERVISORES`.
+  daría dos respuestas a la misma pregunta en la misma pantalla. ⚠️ **`recorteDelDashboard` ya no lee
+  el entorno**: recibe el ROL que `cargarRol` resolvió (§Los roles), y un `admin` ve todo igual que un
+  supervisor.
 - 🔴 **Es una frontera, y hay que decir DE QUÉ**: la del **Dashboard**, no la del dato. El hilo, la ficha y
   el envío siguen sirviendo cualquier conversación a cualquier token. Es la **segunda** frontera del repo;
   el resto sigue siendo **filtro, no permiso**.
@@ -1814,7 +1856,9 @@ Solo en `server/.env` (gitignored). **Se referencian por nombre, jamás se pegan
 `AUTO_RESPUESTA_*`), `ICARUS_DATABASE_URL` (read-only al Postgres de icarus: el padrón de #133 **y** los
 72.923 contactos de ADR 0035), `HERMES_SUPERVISORES` (quién ve el padrón entero **y el Dashboard entero** —
 **no es un secreto, es una lista de `vendedora_id`**, pero fail-closed: sin ella nadie es supervisor y
-**todas ven solo lo suyo**). Ver `server/.env.example` (solo nombres).
+**todas ven solo lo suyo**; desde la tabla `equipo` es el **respaldo**, no la fuente) y **`HERMES_ADMINS`**
+(el break-glass: entra como `admin` aunque la base no conteste — tampoco es un secreto, y vacía = nadie).
+Ver `server/.env.example` (solo nombres).
 
 ## Reglas duras (Goberna)
 

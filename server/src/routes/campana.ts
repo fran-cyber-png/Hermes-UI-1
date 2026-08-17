@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/client.js";
-import { esSupervisor, supervisoresConfigurados } from "../padron/supervisor.js";
+import { mandaEnElEquipo } from "../equipo/cargarRol.js";
+import { hayQuienMande } from "../equipo/repositorio.js";
 import { ErrorDeMeta, traerPlantillasDeMeta } from "../campana/metaPlantillas.js";
 import { consultarCorridas, consultarEsperando } from "../campana/consultarCorridas.js";
 import { crearPlantilla, ErrorAlCrear } from "../campana/crearPlantilla.js";
@@ -22,12 +23,14 @@ import { porQueFallo } from "../lib/porQueFallo.js";
  *
  * Una campaña le escribe a mil personas desde el número del negocio. Quién puede
  * armar una es la misma clase de decisión que quién ve los 72.923 contactos, y
- * por eso reusa `esSupervisor` en vez de inventar un segundo rol: dos listas de
- * permisos divergen, y la que se olvide de actualizar es la que abre el agujero.
+ * por eso pregunta el MISMO rol (`mandaEnElEquipo` — supervisor o admin) en vez
+ * de inventar un segundo permiso: dos listas divergen, y la que se olvide de
+ * actualizar es la que abre el agujero. ⚠️ Desde la tabla `equipo` ese rol lo
+ * resolvió `cargarRol` una vez para todo el request; acá no se lee el entorno.
  *
- * **Fail-closed**, igual que el padrón: sin `HERMES_SUPERVISORES` nadie entra, y
- * la respuesta lo DICE (`sinSupervisores`) en vez de devolver una lista vacía.
- * Una pantalla en blanco se lee «no hay plantillas», no «falta configurar esto».
+ * **Fail-closed**, igual que el padrón: si nadie manda, nadie entra, y la
+ * respuesta lo DICE (`sinSupervisores`) en vez de devolver una lista vacía. Una
+ * pantalla en blanco se lee «no hay plantillas», no «falta configurar esto».
  *
  * ══ POR QUÉ NO HAY UNA TABLA DE PLANTILLAS ══════════════════════════════════
  *
@@ -82,11 +85,11 @@ function seRindio(res: Parameters<Parameters<Router["get"]>[1]>[1], e: unknown) 
  * ¿existe? ¿la puedo usar? ¿está sana?
  */
 campanaRouter.get("/plantillas", ruta(async (req, res) => {
-  if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
+  if (!mandaEnElEquipo(req)) {
     res.status(403).json({
       ok: false,
       motivo: "no_es_supervisor",
-      sinSupervisores: supervisoresConfigurados(process.env).length === 0,
+      sinSupervisores: !(await hayQuienMande(db, process.env)),
       message: "las campañas las arma un supervisor",
     });
     return;
@@ -127,11 +130,11 @@ campanaRouter.get("/plantillas", ruta(async (req, res) => {
  * cabezas una podría decir «todo bien» sobre una plantilla pausada.
  */
 campanaRouter.get("/corridas", ruta(async (req, res) => {
-  if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
+  if (!mandaEnElEquipo(req)) {
     res.status(403).json({
       ok: false,
       motivo: "no_es_supervisor",
-      sinSupervisores: supervisoresConfigurados(process.env).length === 0,
+      sinSupervisores: !(await hayQuienMande(db, process.env)),
       message: "las campañas las mira un supervisor",
     });
     return;
@@ -151,7 +154,7 @@ campanaRouter.get("/corridas", ruta(async (req, res) => {
  * columna de teléfonos que hay que abrir de a uno para saber cuál urge.
  */
 campanaRouter.get("/corridas/:pieza/esperando", ruta(async (req, res) => {
-  if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
+  if (!mandaEnElEquipo(req)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
     return;
   }
@@ -171,7 +174,7 @@ campanaRouter.get("/corridas/:pieza/esperando", ruta(async (req, res) => {
  * siguiente como un enum pelado.
  */
 campanaRouter.post("/plantillas/revisar", (req, res) => {
-  if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
+  if (!mandaEnElEquipo(req)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
     return;
   }
@@ -202,7 +205,7 @@ campanaRouter.post("/plantillas/revisar", (req, res) => {
  */
 campanaRouter.post("/plantillas", ruta(async (req, res) => {
   const quien = req.vendedoraId ?? "";
-  if (!esSupervisor(quien, process.env)) {
+  if (!mandaEnElEquipo(req)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
     return;
   }
@@ -236,7 +239,7 @@ campanaRouter.post("/plantillas", ruta(async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════
 
 campanaRouter.get("/listas", ruta(async (req, res) => {
-  if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
+  if (!mandaEnElEquipo(req)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
     return;
   }
@@ -255,7 +258,7 @@ campanaRouter.get("/listas", ruta(async (req, res) => {
 
 campanaRouter.post("/listas", ruta(async (req, res) => {
   const quien = req.vendedoraId ?? "";
-  if (!esSupervisor(quien, process.env)) {
+  if (!mandaEnElEquipo(req)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
     return;
   }
@@ -281,7 +284,7 @@ campanaRouter.post("/listas", ruta(async (req, res) => {
 
 campanaRouter.delete("/listas/:id", ruta(async (req, res) => {
   const quien = req.vendedoraId ?? "";
-  if (!esSupervisor(quien, process.env)) {
+  if (!mandaEnElEquipo(req)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
     return;
   }
@@ -302,7 +305,7 @@ campanaRouter.delete("/listas/:id", ruta(async (req, res) => {
  * meses después.
  */
 campanaRouter.get("/historial", ruta(async (req, res) => {
-  if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
+  if (!mandaEnElEquipo(req)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
     return;
   }
@@ -368,7 +371,7 @@ campanaRouter.post("/corridas/:id/frenar", ruta(async (req, res) => {
  * una lista buena, o peor: a armar una campaña creyendo que no le llega a nadie.
  */
 campanaRouter.post("/cuantos", ruta(async (req, res) => {
-  if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
+  if (!mandaEnElEquipo(req)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor" });
     return;
   }

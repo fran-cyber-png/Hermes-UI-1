@@ -4,6 +4,7 @@ import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 import express from "express";
 import { firmarSesion } from "../auth/sesion.js";
+import { cargarRol } from "../equipo/cargarRol.js";
 import { dashboardRouter } from "./dashboard.js";
 
 /**
@@ -59,6 +60,14 @@ async function pedir(vendedoraId: string, supervisores: string | null): Promise<
 
   const app = express();
   app.use(express.json());
+  /**
+   * ⚠️ **El rol lo anota `cargarRol`, no lo lee el handler.** Se monta con un
+   * lector que dice «la tabla no está» —el estado real de producción hasta que
+   * la migración de `equipo` se aplique—, y en ese estado la cascada cae al CSV,
+   * que es lo que estos tests manipulan. Sin este middleware el router no vería
+   * ningún rol y los 403 saldrían por omisión: verdes que no significan nada.
+   */
+  app.use(cargarRol(async () => ({ estado: "sin_tabla", fila: null }), process.env));
   app.use("/api/dashboard", dashboardRouter);
 
   const server = app.listen(0, "127.0.0.1");
@@ -116,4 +125,20 @@ test("GET /negocio: una vendedora que no está en la lista tampoco entra por par
   const r = await pedir("ventas1@grupogoberna.com", SUPERVISOR);
 
   assert.equal(r.status, 403);
+});
+
+/**
+ * 🔴 EL CONTROL, y sin él los tres de arriba no prueban nada: una puerta que
+ * rechaza a TODOS también los pone en verde.
+ *
+ * Acá lo único que se mira es que **no sea 403**: quien manda pasa la puerta.
+ * Lo que venga después toca la base por el singleton, que en este harness no
+ * tiene el schema del Dashboard — así que un 500 es un resultado perfectamente
+ * bueno para este test, y el camino positivo completo sigue estando donde dice
+ * el docblock de arriba.
+ */
+test("GET /negocio: quien SÍ manda pasa la puerta — el control del 403", async () => {
+  const r = await pedir(SUPERVISOR, SUPERVISOR);
+
+  assert.notEqual(r.status, 403, "si esto es 403, la puerta rechaza a todos y los otros tres mienten");
 });

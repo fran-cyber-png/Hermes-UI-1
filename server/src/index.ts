@@ -64,6 +64,9 @@ import { adminRouter } from "./routes/admin.js";
 import { requiereServicio } from "./auth/servicio.js";
 import { db } from "./db/client.js";
 import { sembrarAliasCurso } from "./cursos/repositorio.js";
+import { cargarRol } from "./equipo/cargarRol.js";
+import { leerPersona, sembrarEquipo } from "./equipo/repositorio.js";
+import { EQUIPO_SEMILLA, revisarSemilla } from "./equipo/semilla.js";
 import { arrancarDespachador } from "./bot/despachador.js";
 import { configDesdeEnv, anunciarConfig } from "./bot/config.js";
 import { crearClienteBedrock } from "./bot/clienteBedrock.js";
@@ -80,6 +83,14 @@ app.use(cors());
 // gastarle un parseo de JSON (el perímetro decide por path + header, jamás lee
 // el body — hay un test que lo fija).
 app.use(perimetroApi);
+// EL ROL DE QUIEN PIDE, anotado una vez por request (tabla `equipo`, con el CSV
+// del `.env` de respaldo mientras dure la mudanza). Va DESPUÉS del perímetro
+// —así un anónimo se rebota antes de pagar una consulta— y **resuelve el Bearer
+// por su cuenta**: `/api/auth` es un prefijo abierto y `/yo` valida el suyo
+// adentro, o sea después de todo `app.use`. Leyendo `req.vendedoraId` el rol
+// quedaría `undefined` justo en la ruta por la que baja al front. Ver el
+// docblock de `equipo/cargarRol.ts`; hay test.
+app.use(cargarRol((id) => leerPersona(db, id)));
 // El `verify` guarda el body CRUDO de /webhook/*: la firma HMAC del webhook de
 // la Cloud API se calcula sobre los bytes exactos, no sobre el JSON re-serializado.
 app.use(express.json({ verify: capturarCuerpoCrudo }));
@@ -211,6 +222,37 @@ app.listen(port, () => {
         `[cursos] no se pudo sembrar la tabla de alias (¿falta \`npm run db:push\`?): ${(err as Error).message}`,
       ),
     );
+
+  // EL EQUIPO nace sembrado, mismo molde que los alias de curso: sin filas, la
+  // cascada le da `vendedora` a todo el mundo y el panel no tendría a quién
+  // mostrar. Es idempotente y **no pisa lo editado a mano** — con un upsert,
+  // cada restart le devolvería su rol de fábrica a quien el admin acaba de
+  // cambiar, y el síntoma aparecería horas después atado a un deploy que nadie
+  // relaciona. Sin la migración avisa y sigue.
+  //
+  // ⚠️ Va acá y no adentro de un handler a propósito: una escritura dentro de un
+  // GET es la forma que ya quemó al repo dos veces.
+  // 🔴 Y NO SIEMBRA a quien el `.env` de este server hace supervisor con un rol
+  // más bajo: una fila activa le gana al CSV, así que eso le sacaría el padrón y
+  // las campañas en el próximo restart, sin un error. Se nombra en el log.
+  const semilla = revisarSemilla(EQUIPO_SEMILLA, process.env);
+  if (semilla.degradarian.length > 0) {
+    console.warn(
+      `[equipo] NO se siembran ${semilla.degradarian.join(", ")}: el .env les da supervisor y la ` +
+        `semilla les daría menos. Decidí su rol y sembralos con \`npm run equipo:sembrar\`.`,
+    );
+  }
+  sembrarEquipo(db, semilla.aSembrar)
+    .then((r) => {
+      if (r.sinTabla) {
+        console.warn("[equipo] falta la migración de `equipo`: los roles salen del .env por ahora");
+        return;
+      }
+      if (r.personas > 0 || r.grafias > 0) {
+        console.log(`[equipo] ${r.personas} personas y ${r.grafias} grafías sembradas`);
+      }
+    })
+    .catch((err) => console.error(`[equipo] no se pudo sembrar el equipo: ${(err as Error).message}`));
 
   // EL BOT ASESOR COMERCIAL — loop de despacho con debounce, modo sombra.
   // Sin credenciales de AWS, el despachador arranca pero sin LLM:

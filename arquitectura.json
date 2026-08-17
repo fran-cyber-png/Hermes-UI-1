@@ -199,6 +199,7 @@
     "server/dashboard": "Los números: radar, embudo, series, y el recorte según quién los pide. Es una frontera.",
     "server/ediciones": "Editar un mensaje ya enviado. Sólo donde el transporte lo permite.",
     "server/entrega": "Los ✓✓: la escala monótona de un recibo y su avance, arbitrado por la base.",
+    "server/equipo": "Quién es quién: los tres roles, de dónde sale el de quien pide, y con qué degrada cuando la tabla no está o la base no contesta.",
     "server/eventos": "Los eventos tipados del timeline y el interés que asientan de paso.",
     "server/espacios": "Dónde vive cada página de la Libreta y quién la puede ver o escribir. Es una frontera, no un filtro.",
     "server/gente": "La persona canónica del grafo y cómo se la encuentra por teléfono.",
