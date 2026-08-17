@@ -8,9 +8,41 @@
 > que no comparten memoria de proceso. Un archivo en git es lo único que las dos pueden leer y
 > escribir. **Si tu herramienta no puede editar este archivo, no podés tomar una unidad de trabajo.**
 
+## 0 · Cómo se reparten herdr y este archivo
+
+**[herdr](https://herdr.dev) es el sustrato, no el orquestador**, y esa distinción decide qué va
+dónde. Es un multiplexor de terminal que sabe de agentes: detecta Claude Code y OpenCode solos, les
+rastrea el estado **idle / working / blocked** y lo sube a las pestañas.
+
+| Lo contesta **herdr** | Lo contesta **este archivo** |
+|---|---|
+| ¿Quién está corriendo ahora? | ¿Quién *tomó* qué unidad? |
+| ¿Cuál está **blocked**? | ¿Qué la bloquea, y hasta cuándo? |
+| ¿Qué escribió? (replay del pane) | ¿Qué **midió**, con qué comando? |
+| — | ¿Qué no se puede empezar todavía, y por qué? |
+
+**Convención que hace que las dos vistas se lean juntas**: nombrá cada pane con el ID de su unidad.
+
+```bash
+herdr agent rename B1     # el pane pasa a llamarse como la fila del tablero
+herdr agent attach B1     # y así se llega a él sin buscarlo
+```
+
+Con eso, la pestaña que herdr te muestre en rojo tiene el mismo nombre que la fila que hay que
+mirar acá.
+
+⚠️ **Lo que herdr NO hace, y por eso este archivo no sobra**: no conoce el grafo de dependencias, no
+sabe de ramas ni de migraciones, y no comparte lo que un agente *midió* con el siguiente. Su
+`blocked` dice «este proceso está esperando algo»; la columna `Estado` de acá dice «esta unidad no
+se puede empezar hasta que B1 aterrice». Son dos cosas distintas y las dos hacen falta.
+
+⚠️ **Y no salva de R4**: el pane sobrevive a que te desconectes, no a que la máquina se duerma ni a
+que se acabe la sesión del modelo. Lo que sí da es el **replay**: cuando una corrida muera, el
+transcript sigue en el pane — hoy se perdieron dos y hubo que reconstruirlas mirando el disco.
+
 ---
 
-## 0 · Las tres restricciones que mandan, medidas el 16-ago-2026
+## 1 · Las tres restricciones que mandan, medidas el 16-ago-2026
 
 Antes de repartir nada, esto es lo que limita el paralelismo de verdad. No es la cantidad de
 agentes: es la infraestructura.
@@ -58,7 +90,7 @@ que nadie reportó.
 
 ---
 
-## 1 · Qué modelo para qué
+## 2 · Qué modelo para qué
 
 No hace falta Opus para todo. La regla, y sale de las cicatrices de este repo:
 
@@ -81,7 +113,7 @@ envolver no lo era** — la métrica intuitiva («¿tiene un try?») estaba mal 
 
 ---
 
-## 2 · El grafo de dependencias
+## 3 · El grafo de dependencias
 
 ```
 A1 rescatar el plan ─────────────── (hecho)
@@ -108,7 +140,7 @@ frentes, no por éste.
 
 ---
 
-## 3 · Las unidades de trabajo
+## 4 · Las unidades de trabajo
 
 **Protocolo**: para tomar una, poné tu nombre en `Dueño` y la fecha en `Desde`. Una unidad = un
 agente = un worktree = una rama. Al terminar, `Estado` → `listo` y escribí abajo en la bitácora.
@@ -136,7 +168,7 @@ C3/C6 **de a uno** por R2.
 
 ---
 
-## 4 · Antes de tomar cualquier unidad
+## 5 · Antes de tomar cualquier unidad
 
 1. **Re-medí.** Las cifras del plan son del 15-ago: 24 conversaciones, Tracy con 10, 2.564
    huérfanas. Pasaron dos días y varios deploys. El propio plan pone el candado: *«si toca 34 o 44,
@@ -147,7 +179,7 @@ C3/C6 **de a uno** por R2.
 
 ---
 
-## 5 · Bitácora — sólo se AGREGA, no se edita
+## 6 · Bitácora — sólo se AGREGA, no se edita
 
 Acá va lo que otro agente necesita saber y no está en el plan. Formato: fecha · unidad · hallazgo.
 Si medís algo, **poné el comando**.
