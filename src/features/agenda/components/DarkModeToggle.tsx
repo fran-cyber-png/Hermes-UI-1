@@ -10,46 +10,32 @@ interface DarkModeToggleProps {
  * Solo aplica dentro del contenedor VistaAgenda
  */
 export function DarkModeToggle({ containerRef }: DarkModeToggleProps) {
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(() => {
+    // Inicializar desde localStorage
+    return localStorage.getItem('agenda-dark-mode') === 'true';
+  });
 
-  // Cargar preferencia al montar
+  // Aplicar tema cuando isDark cambia
   useEffect(() => {
-    const saved = localStorage.getItem('agenda-dark-mode');
-    const shouldBeDark = saved === 'true';
-    setIsDark(shouldBeDark);
+    const container = containerRef?.current;
+    if (!container) return;
 
-    // Aplicar tema inmediatamente
-    if (containerRef?.current) {
-      if (shouldBeDark) {
-        containerRef.current.classList.add('agenda-dark-mode');
-      } else {
-        containerRef.current.classList.remove('agenda-dark-mode');
-      }
+    if (isDark) {
+      container.classList.add('agenda-dark-mode');
+    } else {
+      container.classList.remove('agenda-dark-mode');
     }
-  }, [containerRef]);
 
-  const toggleTheme = () => {
-    const newIsDark = !isDark;
+    localStorage.setItem('agenda-dark-mode', String(isDark));
+  }, [isDark, containerRef]);
 
-    // Actualizar estado
-    setIsDark(newIsDark);
-
-    // Guardar preferencia
-    localStorage.setItem('agenda-dark-mode', String(newIsDark));
-
-    // Aplicar clase al contenedor
-    if (containerRef?.current) {
-      if (newIsDark) {
-        containerRef.current.classList.add('agenda-dark-mode');
-      } else {
-        containerRef.current.classList.remove('agenda-dark-mode');
-      }
-    }
+  const handleToggle = () => {
+    setIsDark(!isDark);
   };
 
   return (
     <button
-      onClick={toggleTheme}
+      onClick={handleToggle}
       className="rounded-lg border border-border p-2 text-muted-foreground transition-all duration-150 hover:bg-secondary/30 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
       aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
       title={isDark ? 'Modo claro' : 'Modo oscuro'}
