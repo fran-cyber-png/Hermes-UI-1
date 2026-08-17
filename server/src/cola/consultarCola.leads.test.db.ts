@@ -172,10 +172,15 @@ test("🔴 el reparto NO puede esconder los formularios: quien está en la rueda
    * ahí y **nunca puede tener una fila**: el recorte del reparto no lo filtra,
    * lo elimina.
    *
-   * Con `ventas10@grupogoberna.com` (está en la rueda, así que `enElReparto` se
-   * prende sola) «Te esperan» devolvía **1 tarjeta y CERO formularios**, contra
-   * las 522 que ve alguien fuera de la rueda. El frente entero era invisible
-   * justo para las cinco personas que venden.
+   * Con `ventas10@grupogoberna.com` «Te esperan» devolvía **1 tarjeta y CERO
+   * formularios**, contra las 522 que ve alguien sin el recorte. El frente
+   * entero era invisible justo para las cinco personas que venden.
+   *
+   * ⚠️ **Ese día el recorte se prendía SOLO** —estar en la rueda lo encendía— y
+   * eso murió con la frontera por rol. Por eso este test pasa `misAsignadas`
+   * EXPLÍCITO: hoy el único camino a `soloMias` es el chip «Míos». La medición
+   * sigue valiendo y lo que fija el test también — el chip vive, y sin la
+   * exención por fila borraría los formularios igual que en agosto.
    *
    * ⚠️ Lo que este test NO dice: que esté bien que las cinco vean la misma pila.
    * Está escrito en `consultarCola.ts` que se acepta a ojos abiertos hasta que

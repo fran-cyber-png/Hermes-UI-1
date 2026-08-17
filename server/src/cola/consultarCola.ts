@@ -1044,10 +1044,17 @@ async function ejecutarCola(
    * por ahí y nunca puede tener una fila: el predicado no lo filtra, lo elimina.
    *
    * Medido en local contra una copia de producción (11-ago-2026): con
-   * `ventas10@grupogoberna.com` —que está en la rueda, así que `enElReparto` se
-   * prende sola— «Te esperan» devolvía **1 tarjeta y CERO formularios**, contra
-   * las 531 (154 de ellas formularios) que ve alguien fuera de la rueda. El
-   * frente entero era invisible **justo para las cinco personas que venden**.
+   * `ventas10@grupogoberna.com` «Te esperan» devolvía **1 tarjeta y CERO
+   * formularios**, contra las 531 (154 de ellas formularios) que ve alguien sin
+   * el recorte. El frente entero era invisible **justo para las cinco personas
+   * que venden**.
+   *
+   * ⚠️ **Ese día el recorte se prendía SOLO** —estar en la rueda lo encendía— y
+   * eso murió con la frontera por rol: hoy `soloMias` sale únicamente del chip
+   * «Míos», que la vendedora aprieta a mano. **La medición sigue valiendo y la
+   * exención sigue haciendo falta**: el chip vive, y sin esta rama por fila
+   * borraría los formularios igual que antes. Lo que cambió es que ahora hace
+   * falta un clic para llegar acá.
    *
    * Por eso la exención es POR FILA y no apagando el recorte: las 377
    * conversaciones tienen que seguir recortándose (para eso existe el reparto),
