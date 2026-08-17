@@ -161,55 +161,109 @@ export function esMiaSql(vendedoraId: string | undefined): SQL {
  * Es la **tercera frontera del repo**, con el padrón (ADR 0035) y el Dashboard
  * (ADR 0036), y sigue el molde del segundo: quien no es supervisora ve lo suyo.
  *
- * ══ LO QUE NO TIENE DUEÑA SE SIGUE VIENDO ═══════════════════════════════════
+ * ══ LO QUE NO TIENE DUEÑA SE SIGUE VIENDO — PERO SOLO EN SU LÍNEA ═══════════
  *
  * ⚠️ Una conversación sin asignar es **de quien la agarre**: esconderla dejaría
  * cientos de chats sin que nadie los vea, que es peor que el problema que esto
  * resuelve. La frontera separa lo repartido, no inventa dueños donde no hay.
+ *
+ * 🔴 Pero «huérfana» no alcanza como criterio, y el número lo dice: de las 2.875
+ * conversaciones sin dueña de la ventana de 30 días (medición del plan,
+ * 15-ago-2026), **2.875 · 99,1 % son historia de dos líneas MUERTAS** —
+ * `51986394450` sin un entrante desde el 28-jul y `51941654039` desde el 5-ago—
+ * y en la línea que hoy recibe hay **cero**. Sin cláusula de línea, la frontera
+ * separa el trabajo repartido y después le vuelca a cada vendedora el archivo
+ * entero de dos líneas que ya no atiende nadie.
+ *
+ * Por eso lo huérfano se sirve **acotado a la línea**:
+ *
+ *   · `numero_propio IS NULL`      → no entró por ninguna línea nuestra (los
+ *     comentarios de FB/IG y los leads de formulario). ⚠️ **Esta rama no se
+ *     toca**: sin ella se caen los comentarios el día que se enchufe ese
+ *     webhook, que es justo el día en que nadie va a estar mirando la frontera.
+ *   · la línea es MÍA               → `numero_vendedora` me la declara.
+ *   · la línea no tiene dueña       → nadie la declaró, así que es de todos:
+ *     es lo que mantiene visible el archivo de las líneas retiradas mientras
+ *     alguien decida qué hacer con él.
+ *
+ * 🔴 **SE PREGUNTA CONTRA `numero_vendedora`, NUNCA CONTRA `numeros_wa.activo`.**
+ * Las 5 filas de `numeros_wa` tienen `activo = true`, incluidas las tres líneas
+ * retiradas el 11-ago-2026: esa columna **no distingue nada** (tampoco tiene
+ * lectores, ver CLAUDE.md §Administración de números). El mapa de dueñas sí.
  *
  * ⚠️ **No cubre el hilo ni la ficha.** Quien pida una conversación por su clave
  * la sigue recibiendo: eso es un modelo de permisos, que Hermes no tiene. Lo
  * que garantiza es que **no aparezca en la cola de quien no la trabaja** —
  * decir más sería prometer una frontera imaginaria, peor que ninguna porque se
  * le cree.
+ *
+ * ══ POR QUÉ YA NO ES OPT-IN ═════════════════════════════════════════════════
+ *
+ * Nació con una lista (`HERMES_COLA_AISLADA`) para encenderla de a una persona,
+ * porque contradecía dos decisiones que tenían sus tests. **D4 del plan de roles
+ * las revierte a propósito**: la frontera es propiedad del ROL — toda vendedora
+ * ve lo suyo más lo huérfano de sus líneas, y supervisor/admin ven todo. Los dos
+ * tests que afirmaban lo contrario (`consultarCola.mios.test.db.ts`,
+ * `ordenAjenaAlFondo.test.db.ts`) se reescribieron en este mismo commit, que es
+ * la conversación que había que tener y no un efecto colateral.
+ *
+ * ⚠️ **`HERMES_COLA_AISLADA` deja de leerse.** Si quedó en el `.env` de VPS1 no
+ * hace nada; sacarla es higiene, no un paso del deploy.
  */
 export function fronteraDeAsignacionSql(
   vendedoraId: string | undefined,
   esSupervisora: boolean,
-  env: NodeJS.ProcessEnv = process.env,
 ): SQL | null {
   const limpio = (vendedoraId ?? "").trim().toLowerCase();
   // Sin identidad (un servicio) o siendo supervisora no se recorta: el
   // supervisor es quien reparte, y necesita ver lo que todavía no repartió.
   if (!limpio || esSupervisora) return null;
-  if (!tieneColaAislada(limpio, env)) return null;
-  return sql`(${duenoSql} IS NULL OR lower(btrim(${duenoSql})) = ${limpio})`;
+  return sql`(
+    lower(btrim(${duenoSql})) = ${limpio}
+    OR (${duenoSql} IS NULL AND ${lineaAlcanzableSql(limpio)})
+  )`;
 }
 
 /**
- * 🔴 POR QUÉ ES OPT-IN Y NO PARA TODAS — la parte que más se va a querer «mejorar».
+ * ¿LA LÍNEA DE ESTA FILA ES ALCANZABLE PARA ESTA VENDEDORA? — la mitad nueva de
+ * la frontera, y la única que mira `numero_vendedora`.
  *
- * La frontera contradice decisiones que están tomadas y tienen sus tests:
- * «quien no está en la rueda ve todo, huérfanas incluidas»
- * (`consultarCola.mios.test.db.ts`) y «lo ajeno no desaparece, va al fondo»
- * (`ordenAjenaAlFondo.test.db.ts`, mergeado esta misma tarde). Encenderla para
- * todas cambiaría de golpe lo que ven las seis personas de la línea, y nadie
- * pidió eso: lo que se pidió fue que **una vendedora nueva no viera el trabajo
- * de otra**.
+ * 🔴 **Se resuelve en SQL y no con dos listas leídas antes, por la grafía.**
+ * `lineasDeVendedoraConProposito` (`numeros/repositorio.ts`) compara el
+ * `vendedora_id` con `eq()` **exacto**, y en producción el mismo humano tiene
+ * dos grafías vivas: Cerberus empuja `Luz` a `numero_vendedora` y ella entra al
+ * login como `luz`. Con una lista traída por esa consulta, la dueña de una línea
+ * **no reconocería su propia línea** y perdería justo lo huérfano que le toca —
+ * sin un solo síntoma, que es la forma exacta en que esta cicatriz muerde cada
+ * vez (`cola/asignadaSql.ts` §esMiaSql, `reparto/destino.ts` §mismaVendedora).
+ * Acá se normaliza de los DOS lados, en la base.
  *
- * Con la lista, la frontera se enciende por persona y se apaga sacándola. El
- * día que se decida que vale para todas, esto se borra y se actualizan aquellos
- * tests **en el mismo commit** — que es la conversación que hay que tener,
- * no un efecto colateral de este frente.
+ * ⚠️ **Es la segunda lectura de `numero_vendedora` fuera de `numeros/`**, y hay
+ * que decirlo: el docblock de `lineasDeVendedora` reclama ser el único dueño del
+ * mapa. La diferencia es que aquélla responde «¿cuáles son las suyas?» y ésta
+ * «¿esta línea tiene dueña?», que esa función no sabe contestar. El día que el
+ * mapa gane una columna de vigencia, **éste es el segundo lugar que hay que
+ * tocar**.
  *
- * ⚠️ **Vacía = apagada para todas**, y eso es lo correcto: el comportamiento
- * anterior es el que está probado. Se compara normalizando los dos lados,
- * porque en prod conviven `Sindy` y `sindy`.
+ * ⚠️ **Se nombra `todo.numero_propio` calificado, no pelado.** El predicado se
+ * evalúa en tres consultas distintas y en dos de ellas hay joins encima; un
+ * `numero_propio` a secas ya reventó una vez con `42702` (ver `asignadaJoinSql`).
+ *
+ * ⚠️ **Si `numero_vendedora` faltara, esto no degrada solo**: el error cae en el
+ * loop de `consultarCola`, que termina apagando `conAsignacion` y con eso la
+ * frontera entera — o sea, fail-open hacia el comportamiento de antes. Es lo
+ * correcto: una frontera que no se puede evaluar no puede esconder la cola.
  */
-export function tieneColaAislada(vendedoraId: string, env: NodeJS.ProcessEnv): boolean {
-  return (env.HERMES_COLA_AISLADA ?? "")
-    .split(",")
-    .map((v) => v.trim().toLowerCase())
-    .filter(Boolean)
-    .includes(vendedoraId.trim().toLowerCase());
+function lineaAlcanzableSql(vendedoraIdNormalizado: string): SQL {
+  return sql`(
+    todo.numero_propio IS NULL
+    OR EXISTS (
+      SELECT 1 FROM numero_vendedora nv
+       WHERE nv.numero = todo.numero_propio
+         AND lower(btrim(nv.vendedora_id)) = ${vendedoraIdNormalizado}
+    )
+    OR NOT EXISTS (
+      SELECT 1 FROM numero_vendedora nv WHERE nv.numero = todo.numero_propio
+    )
+  )`;
 }

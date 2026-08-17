@@ -69,29 +69,43 @@ test("quien está en la rueda ve SOLO lo suyo, sin pedirlo", async (t) => {
 });
 
 /**
- * EL FAIL-OPEN, y es lo que evita que un lead desaparezca del mundo. Quien NO
- * está en ninguna rueda —Luz, que quedó afuera a propósito, y quien supervisa—
- * ve todo, huérfanas incluidas. Sin esto, una conversación sin asignar no
- * aparecería en la cola de NADIE.
+ * 🔴 ESTE TEST CAMBIÓ DE SIGNO CON LA FRONTERA (D4 del plan de roles).
+ *
+ * Se llamaba «quien NO está en la rueda ve todo, huérfanas incluidas» y era el
+ * fail-open del reparto: estar afuera de la rueda te devolvía la mesa entera.
+ * **Ya no.** La frontera (`cola/asignadaSql.ts`) es propiedad del ROL y no de la
+ * rueda: una vendedora fuera de la rueda sigue sin ver el trabajo repartido a
+ * otra. Quien ve todo es supervisor/admin.
+ *
+ * Lo que SÍ sobrevive del fail-open, y es la mitad que importaba: **una
+ * conversación sin asignar le aparece a alguien en vez de desaparecer del
+ * mundo**. Esa mitad se prueba acá, y con la cláusula de línea encima en
+ * `lineaApagadaNoVaciaLaCola.test.db.ts`.
  */
-test("quien NO está en la rueda ve todo, huérfanas incluidas", async (t) => {
+test("quien NO está en la rueda ve lo huérfano — pero ya no lo repartido a otra", async (t) => {
   const db = await baseDePrueba(t);
   await sembrarRueda(db);
   await llegaUnLead(db, "51900000001", "Repartida");
   await sembrarMensaje(db, { personaId: "51900000002", personaNombre: "Huerfana", numeroPropio: BOT });
 
   const { conversaciones, enElReparto } = await consultarCola(db, { vendedoraId: "luz" });
-  assert.equal(enElReparto, undefined);
+  assert.equal(enElReparto, undefined, "sigue fuera de la rueda: el recorte del reparto no se aplica");
   const porNombre = new Map((conversaciones as Fila[]).map((c) => [c.persona_nombre, c.asignada_a]));
-  assert.equal(porNombre.size, 2);
-  assert.equal(porNombre.get("Repartida"), "ana");
+  assert.equal(porNombre.size, 1, `vio: ${[...porNombre.keys()].join(", ")}`);
+  assert.ok(!porNombre.has("Repartida"), "la de `ana` es de `ana`");
+  assert.ok(porNombre.has("Huerfana"), "y la huérfana no puede desaparecer del mundo");
   // `null` y no `''`: «no se sabe de quién es» tiene que ser distinguible de un
   // dueño con nombre vacío, porque el front decide NO dibujar nada con el primero.
   assert.equal(porNombre.get("Huerfana"), null);
 });
 
-/** Sacar a alguien de la rueda le devuelve la cola entera: deja de recortarse. */
-test("una vendedora INACTIVA en la rueda vuelve a ver todo", async (t) => {
+/**
+ * Sacar a alguien de la rueda le apaga el recorte del REPARTO —vuelve a ver lo
+ * huérfano sin pedir nada— pero **no le abre la cola de las demás**: eso lo
+ * decide la frontera, y la frontera mira el rol. Antes este test se llamaba
+ * «vuelve a ver todo» y esperaba 2; con D4, `DeBeto` es de Beto.
+ */
+test("una vendedora INACTIVA en la rueda deja de recortarse por reparto, no por rol", async (t) => {
   const db = await baseDePrueba(t);
   await sembrarRueda(db);
   await llegaUnLead(db, "51900000001", "DeAna");
@@ -99,7 +113,11 @@ test("una vendedora INACTIVA en la rueda vuelve a ver todo", async (t) => {
   await db.update(repartoRueda).set({ activa: "no" }).where(eq(repartoRueda.vendedoraId, "ana"));
 
   const { conversaciones } = await consultarCola(db, { vendedoraId: "ana" });
-  assert.equal(conversaciones.length, 2);
+  assert.deepEqual(
+    (conversaciones as Fila[]).map((c) => c.persona_nombre),
+    ["DeAna"],
+    "lo suyo sí; lo de Beto, no",
+  );
 });
 
 test("«míos» recorta a las asignadas a quien pregunta", async (t) => {
@@ -156,7 +174,18 @@ test("el conteo de «míos» se cuenta con el filtro APAGADO", async (t) => {
     await llegaUnLead(db, `5190000${String(i).padStart(4, "0")}`, `Lead ${i}`);
   }
 
-  // Desde afuera de la rueda se ve el reparto entero y cuánto le tocó a cada uno.
+  // ⚠️ **Quien mira el reparto ENTERO es quien supervisa, no quien está fuera de
+  // la rueda.** Antes acá alcanzaba con `luz`; con la frontera (D4) una vendedora
+  // fuera de la rueda ve lo huérfano y nada más, así que este medio test dejó de
+  // poder hacerse desde ahí. La pregunta que fija sigue siendo la misma: que el
+  // chip de «Míos» diga su número aunque el filtro esté apagado.
+  const antes = process.env.HERMES_SUPERVISORES;
+  process.env.HERMES_SUPERVISORES = "luz";
+  t.after(() => {
+    if (antes === undefined) delete process.env.HERMES_SUPERVISORES;
+    else process.env.HERMES_SUPERVISORES = antes;
+  });
+
   const deAfuera = await consultarCola(db, { vendedoraId: "luz" });
   assert.equal(deAfuera.conversaciones.length, 12);
   assert.equal(deAfuera.conteosFiltro?.mios, 0, "luz no está en la rueda: no le tocó ninguna");

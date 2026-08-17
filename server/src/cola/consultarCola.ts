@@ -642,6 +642,26 @@ export async function consultarCola(
     opciones.misAsignadas === true || (await estaEnAlgunaRueda(base, opciones.vendedoraId));
 
   /**
+   * ¿VE TODO? — se resuelve UNA vez y baja como booleano, por lo mismo que las
+   * dos de arriba: no depende de qué tabla degradó, y sobre todo **no es asunto
+   * del armador de SQL**. Antes vivía adentro de `ejecutarCola` como
+   * `esSupervisor(vendedoraId, process.env)`.
+   *
+   * ⚠️ **La fuente sigue siendo el `.env`, a propósito.** `HERMES_SUPERVISORES`
+   * es la verdad hasta que exista la tabla `equipo`; mudar la fuente es un paso
+   * aparte del plan de roles (el 10), y hacerlo acá de paso mezclaría dos
+   * cambios que se revierten distinto. Lo que este PR fija es la FORMA: quien
+   * llame a `ejecutarCola` decide el rol, no la consulta.
+   *
+   * 🔴 **Fail-closed hereda de `esSupervisor`**: sin la variable, NADIE es
+   * supervisor y todas quedan detrás de la frontera. Eso es correcto como
+   * default de permisos y es peligroso como default de deploy — por eso este
+   * frente trae `npm run frontera:preflight`, que imprime a cuánto queda cada
+   * identidad ANTES de reiniciar.
+   */
+  const esSupervisora = esSupervisor(opciones.vendedoraId ?? "", process.env);
+
+  /**
    * 🔴 EL TOPE SE DERIVA, NO SE ESCRIBE A MANO. Decía «cuatro degradaciones ⇒
    * cinco intentos» y quedó corto al agregar la quinta (`conCursos`): con las
    * cinco tablas ausentes el loop se quedaba sin reintentos y **tiraba 500**, o
@@ -667,7 +687,7 @@ export async function consultarCola(
       const r = await base.transaction((tx) =>
         ejecutarCola(
           tx,
-          { ...opciones, enElReparto },
+          { ...opciones, enElReparto, esSupervisora },
           lineas,
           conEstado,
           conPadron,
@@ -792,9 +812,26 @@ function esElSqlDeDrizzle(mensaje: string): boolean {
  */
 type Ejecutor = Pick<typeof db, "execute">;
 
+/**
+ * LO QUE `consultarCola` RESUELVE POR SU CUENTA Y `ejecutarCola` SOLO CONSUME.
+ *
+ * 🔴 **`esSupervisora` NO está en `OpcionesCola`, y la omisión es la garantía.**
+ * `OpcionesCola` es lo que arma la ruta a partir del query string; un campo
+ * booleano ahí sería «no me recortes» a un `?esSupervisora=1` de distancia — la
+ * frontera imaginaria contra la que este repo escribe en todos lados. `enElReparto`
+ * sí vive en `OpcionesCola` y no es una incoherencia: aquél recorta de MÁS, así
+ * que mentirlo se castiga solo.
+ *
+ * ⚠️ La fuente del rol sigue siendo `esSupervisor(id, process.env)` **a propósito**:
+ * es la verdad hasta que aterrice la tabla `equipo`, y mudarla es el paso 10 del
+ * plan de roles, no éste. Lo que cambió acá es que se resuelve **una vez, arriba**,
+ * en vez de adentro del armador de SQL.
+ */
+type OpcionesResueltas = OpcionesCola & { esSupervisora: boolean };
+
 async function ejecutarCola(
   base: Ejecutor,
-  opciones: OpcionesCola,
+  opciones: OpcionesResueltas,
   lineas: readonly string[],
   conEstado: boolean,
   conPadron: boolean,
@@ -1000,10 +1037,20 @@ async function ejecutarCola(
    * que se puede quitar con un clic no es una frontera, y prometerlo así fue lo
    * que dejó a una vendedora nueva mirando 1.158 chats ajenos.
    *
-   * Un lead sin cable pasa solo: su dueño es NULL y la frontera deja pasar lo
-   * que no tiene dueña. No hace falta la exención de ADR 0051 acá.
+   * Un lead sin cable pasa solo: su dueño es NULL y su `numero_propio` es NULL,
+   * así que entra por la rama de «no llegó por ninguna línea nuestra». No hace
+   * falta la exención de ADR 0051 acá.
+   *
+   * ⚠️ **EL ROL LLEGA RESUELTO, ESTA FUNCIÓN NO LEE EL ENTORNO.** Hasta hoy acá
+   * adentro había un `esSupervisor(vendedoraId, process.env)`: una decisión de
+   * permisos tomada en el armador de SQL, imposible de fijar en un test sin
+   * manosear `process.env` con un `t.after` — que es exactamente lo que hacía
+   * `fronteraDeAsignacion.test.db.ts`. Ahora se resuelve una vez en
+   * `consultarCola` y baja como booleano.
    */
-  const frontera = conAsignacion ? fronteraDeAsignacionSql(vendedoraId, esSupervisor(vendedoraId ?? "", process.env)) : null;
+  const frontera = conAsignacion
+    ? fronteraDeAsignacionSql(vendedoraId, opciones.esSupervisora === true)
+    : null;
 
   const condiciones = [
     ...condicionesBase,

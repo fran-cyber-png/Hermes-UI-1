@@ -35,6 +35,7 @@
     "hechos:sembrar": "tsx src/scripts/sembrarHechos.ts",
     "reparto:rueda": "tsx src/scripts/repartoRueda.ts",
     "equipo:sembrar": "tsx src/scripts/sembrarEquipo.ts",
+    "frontera:preflight": "tsx src/scripts/preflightFrontera.ts",
     "wa:vincular": "tsx src/whatsapp/vincular.ts",
     "wa:cloud-api:probar": "tsx src/scripts/probarCloudApi.ts",
     "wa:cloud-api:limites": "tsx src/scripts/probarLimiteMedia.ts",

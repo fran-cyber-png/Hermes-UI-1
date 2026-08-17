@@ -48,20 +48,60 @@ test("con líneas asignadas, «las mías» recorta a esas — y son varias, no u
   assert.equal(sinLineasPropias, undefined);
 });
 
-test("SIN líneas asignadas, «las mías» sirve TODO y lo dice", async (t) => {
+/**
+ * 🔴 EL FAIL-OPEN DE «LAS MÍAS» SIGUE INTACTO — Y LA FRONTERA LE PASA POR ENCIMA.
+ *
+ * Los dos leen el MISMO mapa (`numero_vendedora`) y lo usan al revés, y eso hay
+ * que tenerlo escrito porque se lee como una contradicción y no lo es:
+ *
+ *   · **`misLineas` es FAIL-OPEN**: un mapa incompleto degrada en «ves de más»,
+ *     porque una cola vacía se lee como «se perdieron las conversaciones».
+ *     Sigue siendo cierto, y es lo que dice `sinLineasPropias`.
+ *   · **La cláusula de línea de la frontera es FAIL-CLOSED**: lo huérfano de una
+ *     línea que tiene dueña declarada **no** es «de quien lo agarre». Si fuera
+ *     fail-open, la vendedora nueva —que es justo la que todavía no está en el
+ *     mapa— volvería a ver el archivo de todas las líneas del equipo, que es el
+ *     caso del 14-ago-2026 que la frontera existe para impedir.
+ *
+ * Consecuencia medida acá: Sindy, que no está en el mapa, ve **2 de 3**. Pierde
+ * a Marta —huérfana en la línea que el mapa le declara a `luz`— y conserva a
+ * Jorge y a Luis, que están en líneas que no tienen dueña. **El recorte lo hace
+ * la frontera, no `misLineas`**, y el tercer assert lo demuestra: la misma
+ * consulta con rol de supervisora devuelve las tres.
+ *
+ * ⚠️ En producción esto se paga poco por una razón que puede cambiar: la línea
+ * viva no tiene huérfanas (0 medidas el 15-ago-2026, cifra del plan) y las que
+ * las tienen no tienen dueña declarada. **Si alguien le declara dueña a una
+ * línea retirada, su archivo desaparece para las demás** — eso es lo que el
+ * preflight (`npm run frontera:preflight`) mira antes del deploy.
+ */
+test("SIN líneas asignadas, «las mías» sirve TODO y lo dice — la que recorta es la FRONTERA", async (t) => {
   const db = await baseDePrueba(t);
   await sembrarLasTresLineas(db);
   await sembrarLineaDeVendedora(db, ESCUELA, ["luz"]);
 
-  // Sindy todavía no está en el mapa. Fail-open: ve las tres, y la respuesta
-  // trae `sinLineasPropias` para que la pantalla lo pueda decir en vez de
-  // mostrar la cola entera fingiendo que el filtro se aplicó.
+  // Sindy todavía no está en el mapa. `misLineas` no recorta nada y lo dice con
+  // `sinLineasPropias`, en vez de mostrar una cola vacía fingiendo que el filtro
+  // se aplicó.
   const { conversaciones, sinLineasPropias } = await consultarCola(db, {
     misLineas: true,
     vendedoraId: "sindy",
   });
-  assert.equal(conversaciones.length, 3);
   assert.equal(sinLineasPropias, true);
+  const nombres = (conversaciones as Fila[]).map((c) => c.persona_nombre).sort();
+  assert.deepEqual(nombres, ["Jorge", "Luis"], "Marta está en la línea que el mapa le da a `luz`");
+
+  // El control que separa a los dos recortes: con rol de supervisora, la MISMA
+  // consulta devuelve las tres. O sea que `misLineas` no filtró nada.
+  const antes = process.env.HERMES_SUPERVISORES;
+  process.env.HERMES_SUPERVISORES = "sindy";
+  t.after(() => {
+    if (antes === undefined) delete process.env.HERMES_SUPERVISORES;
+    else process.env.HERMES_SUPERVISORES = antes;
+  });
+  const comoSupervisora = await consultarCola(db, { misLineas: true, vendedoraId: "sindy" });
+  assert.equal(comoSupervisora.conversaciones.length, 3);
+  assert.equal(comoSupervisora.sinLineasPropias, true);
 });
 
 test("«las mías» sin token no recorta: sin vendedora no hay mapa que leer", async (t) => {

@@ -1,12 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { sql } from "drizzle-orm";
 import { baseDePrueba } from "../pruebas/base.js";
-import { sembrarMensaje } from "../pruebas/sembrar.js";
+import { sembrarLineaDeVendedora, sembrarMensaje } from "../pruebas/sembrar.js";
 import { conversacionAsignada } from "../db/reparto.js";
 import { consultarCola } from "./consultarCola.js";
 
 /**
- * LA FRONTERA: LO DE OTRA VENDEDORA NO SE SIRVE.
+ * LA FRONTERA: LO DE OTRA VENDEDORA NO SE SIRVE, Y LO HUÉRFANO SOLO EN SU LÍNEA.
  *
  * ── Lo que pasó el 14-ago-2026 ──────────────────────────────────────────────
  *
@@ -18,6 +19,18 @@ import { consultarCola } from "./consultarCola.js";
  * El pedido del dueño fue «asegurarnos 100 % que no se crucen los datos», y a
  * eso un recorte del navegador no puede contestar que sí: los datos ya
  * viajaron. Estos tests fijan que el recorte viva en el `WHERE`.
+ *
+ * ── Qué cambió respecto de la primera versión de este archivo ───────────────
+ *
+ * 🔴 **La frontera dejó de ser opt-in** (D4 del plan de roles): es propiedad del
+ * ROL, no de una lista en el `.env`. Estos tests ya no encienden nada — si
+ * mañana alguien volviera a poner un `HERMES_COLA_AISLADA` en el camino, se
+ * pondrían rojos, que es exactamente lo que se quiere.
+ *
+ * 🔴 **Y lo huérfano se acotó a la línea.** Sin esa cláusula la frontera separa
+ * el trabajo repartido y después le vuelca a cada vendedora el archivo de las
+ * dos líneas retiradas el 11-ago (2.875 conversaciones sin dueña, el 99,1 % de
+ * ellas de líneas muertas — cifra del plan del 15-ago-2026, **no re-medida acá**).
  *
  * ── Lo que NO prueban, y hay que tenerlo claro ──────────────────────────────
  *
@@ -45,16 +58,20 @@ async function asignar(
 }
 
 /**
- * La frontera es OPT-IN por vendedora (`HERMES_COLA_AISLADA`). Estos tests la
- * encienden a mano: sin eso el comportamiento es el de siempre, y el test
- * pasaría verde sin probar nada.
+ * ⚠️ **LO ÚNICO QUE QUEDA DEL ENTORNO EN ESTE ARCHIVO, Y ES TRANSITORIO.**
+ *
+ * Quién es supervisora todavía sale de `HERMES_SUPERVISORES`
+ * (`padron/supervisor.ts`), y `consultarCola` lo resuelve UNA vez y lo baja como
+ * booleano — ya no lo lee el armador de SQL. Mudar la fuente a la tabla `equipo`
+ * es un paso aparte del plan de roles; el día que aterrice, este helper se borra
+ * y el test pasa a sembrar una fila.
  */
-function conColaAislada(t: { after: (fn: () => void) => void }, quienes: string) {
-  const antes = process.env.HERMES_COLA_AISLADA;
-  process.env.HERMES_COLA_AISLADA = quienes;
+function conSupervisores(t: { after: (fn: () => void) => void }, quienes: string) {
+  const antes = process.env.HERMES_SUPERVISORES;
+  process.env.HERMES_SUPERVISORES = quienes;
   t.after(() => {
-    if (antes === undefined) delete process.env.HERMES_COLA_AISLADA;
-    else process.env.HERMES_COLA_AISLADA = antes;
+    if (antes === undefined) delete process.env.HERMES_SUPERVISORES;
+    else process.env.HERMES_SUPERVISORES = antes;
   });
 }
 
@@ -62,13 +79,15 @@ async function nombresQueVe(
   db: Awaited<ReturnType<typeof baseDePrueba>>,
   vendedoraId: string | undefined,
 ) {
-  const r = (await consultarCola(db, { vendedoraId, limite: 50 } as never)) as {
-    conversaciones?: { persona_nombre: string | null }[];
-  };
-  return (r.conversaciones ?? []).map((c) => c.persona_nombre);
+  const r = await consultarCola(db, { vendedoraId, limit: 50 });
+  return (r.conversaciones as { persona_nombre: string | null }[]).map((c) => c.persona_nombre);
 }
 
-/** Tres conversaciones: una de Luz, una de Sindy, una sin dueña. */
+/**
+ * Tres conversaciones en la MISMA línea: una de Luz, una de Sindy, una sin
+ * dueña. La línea **no** tiene dueña declarada en `numero_vendedora`, así que lo
+ * huérfano lo ven las dos — es el caso de las líneas retiradas el 11-ago.
+ */
 async function sembrarLaMesa(db: Awaited<ReturnType<typeof baseDePrueba>>) {
   await sembrarMensaje(db, { personaId: "51900000001", personaNombre: "DE_LUZ", numeroPropio: LINEA });
   await sembrarMensaje(db, { personaId: "51900000002", personaNombre: "DE_SINDY", numeroPropio: LINEA });
@@ -77,84 +96,8 @@ async function sembrarLaMesa(db: Awaited<ReturnType<typeof baseDePrueba>>) {
   await asignar(db, "51900000002", SINDY);
 }
 
-/**
- * 🔴 LOS NÚMEROS, NO SÓLO LAS FILAS (#390).
- *
- * Los seis tests de este archivo miraban **únicamente** `r.conversaciones`, y por eso
- * convivieron en verde con el defecto: `frontera` entraba sólo a la consulta de la
- * PÁGINA, así que la vendedora aislada veía UNA tarjeta bajo un encabezado que decía
- * 7, con el mismo hueco en cada chip y en cada columna del Pipeline.
- *
- * Se lee como «la app perdió mis conversaciones» —el síntoma que `sinLineasPropias` y
- * `sinPadron` existen para evitar— y encima es una fuga de agregados: el número le
- * dice a esa vendedora cuánto trabajo tiene la otra.
- *
- * Verificado por mutación: sacándole `frontera` a cualquiera de los cuatro puntos de
- * `consultarCola.ts`, este test se pone rojo.
- */
-async function loQueVeEntero(
-  db: Awaited<ReturnType<typeof baseDePrueba>>,
-  vendedoraId: string | undefined,
-) {
-  return (await consultarCola(db, { vendedoraId, limite: 50 } as never)) as {
-    conversaciones?: { persona_nombre: string | null }[];
-    total?: number;
-    conteos?: Record<string, number>;
-    conteosFiltro?: Record<string, number>;
-    desglose?: { n: number }[];
-  };
-}
-
-test("🔴 el TOTAL, los CHIPS y el DESGLOSE cuentan lo mismo que la cola sirve", async (t) => {
+test("🔴 una vendedora NO ve las conversaciones de otra — y no hay nada que encender", async (t) => {
   const db = await baseDePrueba(t);
-  conColaAislada(t, "sindy");
-  await sembrarLaMesa(db);
-
-  const r = await loQueVeEntero(db, "sindy");
-  const filas = (r.conversaciones ?? []).length;
-
-  // Sindy tiene lo suyo + lo huérfano: dos. Lo de Luz, no.
-  assert.equal(filas, 2, `sirvió ${filas} filas — cambió la siembra o la frontera`);
-
-  assert.equal(
-    r.total,
-    filas,
-    `la cabecera dice ${r.total} y la cola sirve ${filas}: el total cuenta el trabajo de la otra`,
-  );
-
-  for (const [chip, n] of Object.entries(r.conteosFiltro ?? {})) {
-    assert.ok(
-      n <= filas,
-      `el chip «${chip}» promete ${n} sobre una cola de ${filas}: no lleva la frontera`,
-    );
-  }
-
-  for (const [etapa, n] of Object.entries(r.conteos ?? {})) {
-    assert.ok(n <= filas, `la etapa «${etapa}» cuenta ${n} sobre una cola de ${filas}`);
-  }
-
-  const enElDesglose = (r.desglose ?? []).reduce((s, f) => s + f.n, 0);
-  assert.ok(
-    enElDesglose <= filas,
-    `el desglose suma ${enElDesglose} sobre una cola de ${filas}: el Pipeline cuenta lo ajeno`,
-  );
-});
-
-test("con la frontera APAGADA los números siguen siendo los de siempre", async (t) => {
-  // El control: sin declarar a nadie, nada se recorta y el total es la mesa entera.
-  // Sin esto, un `frontera` que recortara de MÁS pasaría el test de arriba.
-  const db = await baseDePrueba(t);
-  conColaAislada(t, "");
-  await sembrarLaMesa(db);
-
-  const r = await loQueVeEntero(db, "sindy");
-  assert.equal((r.conversaciones ?? []).length, 3, "apagada, ve las tres");
-  assert.equal(r.total, 3, "y el total dice tres");
-});
-
-test("🔴 una vendedora nueva NO ve las conversaciones de otra", async (t) => {
-  const db = await baseDePrueba(t);
-  conColaAislada(t, "sindy");
   await sembrarLaMesa(db);
 
   const ve = await nombresQueVe(db, "sindy");
@@ -162,9 +105,8 @@ test("🔴 una vendedora nueva NO ve las conversaciones de otra", async (t) => {
   assert.ok(ve.includes("DE_SINDY"), "tiene que ver lo suyo");
 });
 
-test("lo que NO tiene dueña se sigue viendo: es de quien lo agarre", async (t) => {
+test("lo que NO tiene dueña, en una línea que tampoco la tiene, es de quien lo agarre", async (t) => {
   const db = await baseDePrueba(t);
-  conColaAislada(t, "sindy,luz");
   await sembrarLaMesa(db);
 
   for (const quien of ["sindy", "luz"]) {
@@ -181,24 +123,16 @@ test("lo que NO tiene dueña se sigue viendo: es de quien lo agarre", async (t) 
  */
 test("`Sindy` y `sindy` son la misma persona: ve lo suyo", async (t) => {
   const db = await baseDePrueba(t);
-  conColaAislada(t, "Sindy"); // ← declarada con mayúscula, entra en minúscula
   await sembrarLaMesa(db);
 
-  const ve = await nombresQueVe(db, "sindy"); // ← entra en minúscula
+  const ve = await nombresQueVe(db, "sindy"); // ← asignada como `Sindy`, entra en minúscula
   assert.ok(ve.includes("DE_SINDY"), `se compara normalizando — vio: ${ve.join(", ")}`);
 });
 
 test("la supervisora ve todo: es quien reparte lo que todavía no tiene dueña", async (t) => {
   const db = await baseDePrueba(t);
   await sembrarLaMesa(db);
-
-  conColaAislada(t, "jefa");
-  const antes = process.env.HERMES_SUPERVISORES;
-  process.env.HERMES_SUPERVISORES = "jefa";
-  t.after(() => {
-    if (antes === undefined) delete process.env.HERMES_SUPERVISORES;
-    else process.env.HERMES_SUPERVISORES = antes;
-  });
+  conSupervisores(t, "jefa");
 
   const ve = await nombresQueVe(db, "jefa");
   for (const n of ["DE_LUZ", "DE_SINDY", "SIN_DUENA"]) {
@@ -206,19 +140,100 @@ test("la supervisora ve todo: es quien reparte lo que todavía no tiene dueña",
   }
 });
 
+/**
+ * 🔴 EL CONTROL DEL TEST DE ARRIBA, Y SIN ÉL AQUÉL NO PRUEBA NADA. «La
+ * supervisora ve todo» se cumple trivialmente si la frontera no recorta nunca.
+ * Misma persona, misma siembra; el único cambio es que no está en la lista.
+ */
+test("y la MISMA persona, fuera de la lista de supervisoras, queda recortada", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarLaMesa(db);
+  conSupervisores(t, "otra");
+
+  const ve = await nombresQueVe(db, "jefa");
+  assert.ok(!ve.includes("DE_LUZ"), `sin ser supervisora no ve lo de Luz — vio: ${ve.join(", ")}`);
+  assert.ok(!ve.includes("DE_SINDY"), `ni lo de Sindy — vio: ${ve.join(", ")}`);
+  assert.ok(ve.includes("SIN_DUENA"), "lo huérfano sí, que es de quien lo agarre");
+});
+
 test("sin identidad (un servicio) no se recorta nada", async (t) => {
   const db = await baseDePrueba(t);
-  conColaAislada(t, "sindy,luz");
   await sembrarLaMesa(db);
 
   const ve = await nombresQueVe(db, undefined);
   assert.equal(ve.length, 3, `un servicio ve las tres — vio: ${ve.join(", ")}`);
 });
 
-test("🔴 sin declararla, la frontera NO se aplica: el comportamiento viejo es el probado", async (t) => {
+/**
+ * 🔴 LA DEGRADACIÓN, Y ES FAIL-OPEN A PROPÓSITO.
+ *
+ * Sin `conversacion_asignada` no hay dueño que comparar, así que no hay frontera
+ * posible: se sirve la cola entera y la respuesta lo dice con `sinAsignacion`.
+ * Recortar por una columna que no existe daría cero filas, y eso se lee como
+ * «la app perdió mis conversaciones» — el síntoma que `sinLineasPropias` y
+ * `sinPadron` existen para evitar.
+ */
+test("sin la tabla del reparto la frontera se apaga entera, y lo dice", async (t) => {
   const db = await baseDePrueba(t);
-  await sembrarLaMesa(db); // sin `conColaAislada`
+  await sembrarLaMesa(db);
+  await db.execute(sql`DROP TABLE conversacion_asignada`);
 
-  const ve = await nombresQueVe(db, "sindy");
-  assert.ok(ve.includes("DE_LUZ"), `apagada, ve todo — vio: ${ve.join(", ")}`);
+  const r = await consultarCola(db, { vendedoraId: "sindy", limit: 50 });
+  assert.equal(r.sinAsignacion, true, "la respuesta tiene que decir que le falta la tabla");
+  assert.equal(r.conversaciones.length, 3, "y sirve las tres: nunca una cola vacía sin explicar");
+});
+
+/**
+ * ⚠️ **LA FRONTERA NO ES «MÍOS» CON OTRO NOMBRE.** Sin pedir nada, la vendedora
+ * ve lo suyo MÁS lo huérfano de su alcance; con `?mios=1` ve solo lo suyo. Si
+ * algún día colapsaran, lo huérfano dejaría de tener quien lo agarre y la cola
+ * no diría una palabra.
+ */
+test("la frontera deja pasar lo huérfano; «Míos» no", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarLaMesa(db);
+
+  const conFrontera = await nombresQueVe(db, "sindy");
+  assert.deepEqual([...conFrontera].sort(), ["DE_SINDY", "SIN_DUENA"]);
+
+  const r = await consultarCola(db, { vendedoraId: "sindy", misAsignadas: true, limit: 50 });
+  const soloMios = (r.conversaciones as { persona_nombre: string | null }[]).map(
+    (c) => c.persona_nombre,
+  );
+  assert.deepEqual(soloMios, ["DE_SINDY"]);
+});
+
+/**
+ * 🔴 EL RECORTE ES POR LÍNEA TAMBIÉN, NO SOLO POR DUEÑO — la mitad que este PR
+ * agrega.
+ *
+ * Una conversación huérfana en una línea que `numero_vendedora` le declara a
+ * OTRA persona no es «de quien la agarre»: es trabajo de esa línea. Sin esta
+ * mitad, cada vendedora ve las huérfanas de todas las líneas del equipo.
+ *
+ * El test cruza además las dos grafías (`Luz` en el mapa, `luz` en el token),
+ * porque ese es el modo en que esta cláusula puede fallar sin síntoma: la dueña
+ * de la línea deja de reconocer su propia línea y pierde justo lo que le toca.
+ */
+test("lo huérfano de la línea de OTRA no se sirve, y su dueña sí lo ve", async (t) => {
+  const db = await baseDePrueba(t);
+  const LINEA_DE_LUZ = "51963139984";
+  await sembrarLineaDeVendedora(db, LINEA_DE_LUZ, ["Luz"]);
+  await sembrarMensaje(db, {
+    personaId: "51900000007",
+    personaNombre: "HUERFANA_DE_LUZ",
+    numeroPropio: LINEA_DE_LUZ,
+  });
+
+  const deSindy = await nombresQueVe(db, "sindy");
+  assert.ok(
+    !deSindy.includes("HUERFANA_DE_LUZ"),
+    `la línea tiene dueña declarada: no es de quien la agarre — vio: ${deSindy.join(", ")}`,
+  );
+
+  const deLuz = await nombresQueVe(db, "luz");
+  assert.ok(
+    deLuz.includes("HUERFANA_DE_LUZ"),
+    `la dueña de la línea la tiene que ver — vio: ${deLuz.join(", ")}`,
+  );
 });
