@@ -174,15 +174,41 @@ app.use("/api/bot", botRouter); // el kill-switch del bot de primera línea: apa
 // El chat de prueba (#256): corre el MOTOR REAL sin transporte, así que se puede
 // mirar trabajar al bot sin gastar un solo lead de la pauta.
 app.use("/api/entrenamiento", entrenamientoRouter);
-// ⚠ /vincular queda FUERA del perímetro /api y sigue abierto: la consola del
-// operador no tiene auth propia todavía (su HTML no manda Bearer). Contenerlo
-// es decisión aparte (auth de operador, o bloquear /vincular en nginx) — ver #36.
-app.use("/vincular", vincularRouter);     // consola de operador: enlazar un número (D13)
 app.use("/api/admin", requiereServicio, adminRouter); // administración de números desde Cerberus (#50/#95)
-// Las dos rutas de dev solo se montan fuera de producción; y su exención en el
-// perímetro (auth/perimetro.ts) también es solo-dev — en prod no hay agujero
-// que recordar, aunque alguien las montara igual.
+/**
+ * 🔴 LO SOLO-DEV NO SE MONTA EN PRODUCCIÓN — «en prod no hay agujero que
+ * recordar», que es la única forma de que no haya que acordarse.
+ *
+ * ── Por qué `/vincular` se mudó acá (17-ago-2026) ──
+ *
+ * La consola de operador (D13) queda **fuera del perímetro** —no empieza en
+ * `/api`, así que `esRutaAbierta` ni la mira— y **no tiene auth propia**: su
+ * HTML no manda Bearer. Servía `GET /vincular/estado` **sin credencial**, y eso
+ * publica el **data-URI del QR del pareo en vuelo** más el número y el JID.
+ * Quien lea ese QR antes que la vendedora **se queda con su sesión de WhatsApp**,
+ * y recuperarla exige el teléfono físico.
+ *
+ * ⚠️ Y no era teórico desde que existe la auto-vinculación: `routes/vincular.ts`,
+ * `routes/admin.ts` y `numeros/miLineaCableado.ts` importan **el MISMO singleton**
+ * `vinculador`, así que un pareo iniciado desde la app se leía entero por esta
+ * puerta vieja — derrotando la guarda de dueño de `routes/miLinea.ts`, cuyo
+ * propio docblock ya advertía «si Ana inicia un pareo y Bea consulta
+ * /vincular/estado, Bea vería el QR de Ana».
+ *
+ * 🔴 **Estaba tapada por nginx (403 desde internet) y esa regla NO está
+ * versionada en este repo.** Medido el 17-ago: 403 por el dominio y **200 desde
+ * `127.0.0.1:4110`**, o sea alcanzable por cualquiera de los contenedores que
+ * comparten VPS1. Una protección que no se ve leyendo el código no protege al
+ * próximo que despliegue.
+ *
+ * No se BORRA porque en local sigue siendo la herramienta de trabajo. Lo que se
+ * pierde en producción no deja a nadie sin camino: `POST /api/admin/numeros/:n/vincular`
+ * (credencial de servicio, la usa Cerberus), `npm run wa:vincular` por SSH, y la
+ * auto-vinculación de la vendedora en `/api/whatsapp/mi-linea` — las tres detrás
+ * de una puerta. Auditoría: `docs/auditoria-aislamiento-de-chats-2026-08-17.md`.
+ */
 if (process.env.NODE_ENV !== "production") {
+  app.use("/vincular", vincularRouter); // consola de operador: enlazar un número (D13)
   app.use("/api/whatsapp/_sim", simularRouter); // simular detección de origen (dev)
   if (hayFalso) app.use("/api/whatsapp/_dev", rutaDevWhatsapp(gestor));
 }

@@ -12,8 +12,8 @@
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
 | front | 32 | 353 | 46,668 | 14,273 |
-| server | 66 | 722 | 74,430 | 44,912 |
-| **total** | **98** | **1,075** | **121,098** | **59,185** |
+| server | 66 | 723 | 74,456 | 45,011 |
+| **total** | **98** | **1,076** | **121,124** | **59,284** |
 
 ## Front — `src/`
 
@@ -56,7 +56,7 @@
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
-| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. | 59 | 9,250 | 9 | 3 | 48 |
+| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. | 60 | 9,250 | 10 | 3 | 48 |
 | `bot` | El bot de primera línea que atiende solo: su agente, sus guardrails, sus frenos y el reenganche. | 56 | 7,997 | 24 | 7 | 13 |
 | `scripts` | Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción. | 33 | 5,389 | 0 | 0 | 32 |
 | `cola` | La consulta que ordena la deuda: a quién se atiende primero y por qué. Cada regla vive pura y con su gemelo SQL. | 56 | 4,815 | 37 | 9 | 6 |
@@ -104,8 +104,8 @@
 | `reacciones` | El 👍 al flyer: una señal que cuelga de un mensaje, en los dos dialectos y con una sola forma. | 5 | 336 | 2 | 3 | 2 |
 | `migraciones` | Verificar que una migración sea expand-only y que el journal sea monótono. | 4 | 321 | 2 | 1 | 0 |
 | `corridas` | Las corridas de entrenamiento del bot y los agujeros que dejan. | 4 | 319 | 2 | 1 | 3 |
+| `index` | El pegamento: monta los routers y arranca los relojes. ⚠️ Sus comentarios describen la arquitectura de meta-escuela y engañan (ver `docs/arquitectura.md` §2). | 1 | 307 | 0 | 0 | 12 |
 | `centurion` | Las credenciales del SSO de Centurión. | 2 | 288 | 1 | 1 | 1 |
-| `index` | El pegamento: monta los routers y arranca los relojes. ⚠️ Sus comentarios describen la arquitectura de meta-escuela y engañan (ver `docs/arquitectura.md` §2). | 1 | 281 | 0 | 0 | 12 |
 | `entrega` | Los ✓✓: la escala monótona de un recibo y su avance, arbitrado por la base. | 5 | 259 | 3 | 3 | 1 |
 | `categorias` | Las categorías con color que cada vendedora se arma. | 4 | 247 | 2 | 3 | 1 |
 | `lib` | Utilidades sin dominio: hora de Lima, rangos y por qué falló una consulta. | 9 | 246 | 3 | 8 | 0 |
