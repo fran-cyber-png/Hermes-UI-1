@@ -157,8 +157,14 @@ describe('VincularMiWhatsapp — el cableado', () => {
     expect(polls()).toHaveLength(0);
     expect(montado.contenedor.textContent).not.toContain('se cortó');
 
+    // El CONTROL, y va con reintentos a propósito: lo que se fija arriba es que
+    // el poll NO salga antes (exacto, sin margen); acá sólo hace falta que salga
+    // en algún momento, y cuántos turnos del event loop tarda TanStack en pasar
+    // de `isPending` a `isSuccess` depende de la carga de la máquina. Con un
+    // solo `reposar()` este control falla ~1 de cada 5 corridas de la suite
+    // entera y no dice nada sobre el defecto.
     enElAire.soltar?.(json({ estado: 'vinculando' }));
-    await reposar();
+    for (let i = 0; i < 20 && polls().length === 0; i++) await reposar();
     expect(polls().length).toBeGreaterThan(0);
   });
 
