@@ -16,6 +16,13 @@ import type { Nota } from './notas';
  *      nadie espera.
  *   2. **El link no pide contraseña del otro lado.** Si la pantalla no lo dice,
  *      la vendedora lo manda creyendo que es como compartir adentro de Hermes.
+ *
+ * ⚠️ **Desde el 17-ago-2026 lo del link se configura en un MODAL centrado**
+ * (`ModalDeLink`), no en el panel que se desplegaba dentro del editor. Estos
+ * tests se reescribieron contra la superficie nueva **sin aflojar una sola
+ * afirmación**: lo que se prueba es lo mismo, dicho donde ahora se dice. El
+ * cableado fino del modal (qué `venceAt` sale de cada plazo, el interruptor) vive
+ * en `ModalDeLink.test.tsx`.
  */
 
 const ESPACIO: Espacio = {
@@ -139,7 +146,7 @@ test('mover HACIA un espacio no pregunta nada: no le saca nada a nadie', async (
   expect(movido).toEqual([7]);
 });
 
-test('🔴 el panel del link DICE que se abre sin entrar a Hermes', async () => {
+test('🔴 el modal del link DICE que se abre sin entrar a Hermes', async () => {
   montado = montar(
     <AccionesDePagina
       nota={{ ...PAGINA, token: 'a'.repeat(32) }}
@@ -159,7 +166,7 @@ test('🔴 el panel del link DICE que se abre sin entrar a Hermes', async () => 
   expect(document.body.textContent).toContain('sin entrar a Hermes');
   expect(document.body.textContent).toContain('Se lee, no se edita');
   // La URL se compone con el origen del navegador, no la manda el server.
-  const campo = document.querySelector<HTMLInputElement>('input[aria-label="Link público de la página"]');
+  const campo = document.querySelector<HTMLInputElement>('input[aria-label="Link de la página"]');
   expect(campo?.value).toBe(`${window.location.origin}/n/${'a'.repeat(32)}`);
 });
 
@@ -184,9 +191,9 @@ test('una página SIN link muestra las opciones ANTES de crearlo', async () => {
   // se configurara después, habría una ventana en la que el link ya se repartió
   // con reglas que no son las que la vendedora quería.
   expect(document.body.textContent).toContain('Quién lo abre');
-  expect(botonQueDice('Cualquiera con el link')).toBeTruthy();
-  expect(botonQueDice('Solo gente de Goberna')).toBeTruthy();
-  expect(botonQueDice('Crear el link')).toBeTruthy();
+  const alcance = document.querySelectorAll('select')[1] as HTMLSelectElement;
+  expect([...alcance.options].map((o) => o.value)).toEqual(['publico', 'goberna']);
+  expect(botonQueDice('Generar el link')).toBeTruthy();
 });
 
 test('🔴 elegir «cualquiera con el link» APAGA el permiso de editar', async () => {
@@ -207,13 +214,19 @@ test('🔴 elegir «cualquiera con el link» APAGA el permiso de editar', async 
 
   botonQueDice('Compartida con link')?.click();
   await reposar();
-  expect(botonQueDice('Ver y editar')?.getAttribute('aria-pressed')).toBe('true');
 
-  botonQueDice('Cualquiera con el link')?.click();
+  const interruptor = document.querySelector('[role="switch"]') as HTMLButtonElement;
+  expect(interruptor.getAttribute('aria-checked')).toBe('true');
+
+  const alcance = document.querySelectorAll('select')[1] as HTMLSelectElement;
+  alcance.value = 'publico';
+  alcance.dispatchEvent(new Event('change', { bubbles: true }));
   await reposar();
 
-  // El selector de permiso ya no está: con público no hay nada que elegir.
-  expect(botonQueDice('Ver y editar')).toBeFalsy();
+  // El permiso se apaga Y no se puede volver a prender: con público no hay nada
+  // que elegir, y la pantalla dice por qué en vez de dejar un control muerto.
+  expect(interruptor.getAttribute('aria-checked')).toBe('false');
+  expect(interruptor.disabled).toBe(true);
   expect(document.body.textContent).toContain('Se lee, no se edita');
 });
 

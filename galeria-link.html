@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hermes — el link de una página y su registro (galería de evidencia)</title>
+    <!--
+      Entry APARTE de la app. `vite build` compila solo `index.html`, así que esto NO entra
+      al bundle que usan las vendedoras: se abre a mano con `npx vite` para producir las
+      capturas de `docs/evidencia/`. Sin server, sin base, sin red.
+          npx vite --port 5199  →  http://localhost:5199/galeria-link.html
+
+      Las cinco vistas (la última es la que importa):
+          ?vista=modal            el modal sobre un link ya repartido (default)
+          ?vista=modal-nuevo      una página que todavía no compartió nada
+          ?vista=registro         el Audit Log con datos
+          ?vista=registro-vacio   el link existe y no lo abrió nadie
+          ?vista=registro-sin     falta la migración 0029: «no se pudo saber»
+    -->
+  </head>
+  <body>
+    <div id="galeria"></div>
+    <script type="module" src="/src/features/notas/galeriaLink.tsx"></script>
+  </body>
+</html>
