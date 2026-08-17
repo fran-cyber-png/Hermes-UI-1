@@ -4,6 +4,8 @@ import { notaLink } from "../db/links.js";
 import { notas } from "../db/schema.js";
 import { type LinkPublico, nuevoToken, pareceToken } from "./link.js";
 import { type Alcance, type ConfiguracionDeLink, estaVigente, type Permiso } from "./linkModelo.js";
+import { etiquetaDeToken } from "./auditoriaLink.js";
+import { anotar } from "./auditoriaLinkRepositorio.js";
 import { puedeEditar, type QuienPregunta } from "./visibilidad.js";
 
 /**
@@ -36,6 +38,17 @@ export async function leerPorToken(
   base: typeof DbSingleton,
   token: string,
   ahora: Date = new Date(),
+  /**
+   * QUIÉN LO ESTÁ ABRIENDO, para el registro de auditoría.
+   *
+   * 🔴 **Default `null`, y el default es el caso importante.** El llamador que no
+   * sabe quién es (la ruta anónima `/n/<token>`) no tiene que acordarse de nada:
+   * omite el parámetro y el registro anota una apertura sin identidad, que es la
+   * verdad. El único que lo pasa es `/api/notas/por-link`, donde hay Bearer. Al
+   * revés —un default que asumiera identidad— el registro le atribuiría a alguien
+   * las aperturas de desconocidos.
+   */
+  quien: string | null = null,
 ): Promise<LinkPublico | null> {
   if (!pareceToken(token)) return null;
 
@@ -66,6 +79,22 @@ export async function leerPorToken(
     .set({ ultimoAccesoAt: ahora })
     .where(eq(notaLink.token, token))
     .catch(() => {});
+
+  // Y la apertura entra al REGISTRO, con la misma política: sin `await`, y sin
+  // poder tumbar la lectura (`anotar` nunca lanza).
+  //
+  // ⚠️ **`ultimo_acceso_at` no se retira aunque el registro lo pueda derivar.**
+  // Es lo único que sobrevive a que falte la migración `0029`, y lo lee la lista
+  // de páginas sin pagar una consulta más. Que dos lugares tengan la última
+  // apertura es aceptable acá —y no es #37— porque **el registro no la reescribe
+  // nunca**: los dos se escriben del mismo evento, en la misma línea de código.
+  void anotar(base, {
+    notaId: fila.notaId,
+    etiqueta: etiquetaDeToken(token),
+    evento: "usado",
+    quien,
+    at: ahora,
+  });
 
   const titulo = fila.texto.split("\n").find((l) => l.trim() !== "")?.trim() ?? "";
   return {
@@ -102,7 +131,7 @@ export async function linkDe(base: typeof DbSingleton, notaId: number): Promise<
  */
 export async function abrirLink(
   base: typeof DbSingleton,
-  opciones: { notaId: number; quien: QuienPregunta; config: ConfiguracionDeLink },
+  opciones: { notaId: number; quien: QuienPregunta; config: ConfiguracionDeLink; ahora?: Date },
 ): Promise<ResultadoLink> {
   const [pagina] = await base
     .select({ vendedoraId: notas.vendedoraId, espacioId: notas.espacioId, archivadoAt: notas.archivadoAt })
@@ -117,6 +146,7 @@ export async function abrirLink(
   // efecto sobre el link que la gente ya tiene. Crear uno nuevo dejaría el viejo
   // vivo con las reglas viejas — que es justo lo que alguien intenta arreglar
   // cuando toca esto.
+  const ahora = opciones.ahora ?? new Date();
   const yaTiene = await linkDe(base, opciones.notaId);
   if (yaTiene) {
     await base
@@ -127,6 +157,21 @@ export async function abrirLink(
         venceAt: opciones.config.venceAt ?? null,
       })
       .where(eq(notaLink.token, yaTiene));
+    // 🔴 **Reconfigurar es un evento propio, no un `creado` repetido.** El token
+    // repartido no cambia, así que lo único que queda de «esto estuvo público tres
+    // días y después se cerró a Goberna» es esta línea. Sin ella, el registro
+    // muestra la configuración de HOY con la fecha de creación, que es la forma
+    // más limpia de que una auditoría diga algo falso sin mentir en ningún campo.
+    await anotar(base, {
+      notaId: opciones.notaId,
+      etiqueta: etiquetaDeToken(yaTiene),
+      evento: "reconfigurado",
+      quien: opciones.quien.vendedoraId,
+      alcance: opciones.config.alcance,
+      permiso: opciones.config.permiso,
+      venceAt: opciones.config.venceAt ?? null,
+      at: ahora,
+    });
     return { ok: true, token: yaTiene };
   }
 
@@ -138,6 +183,16 @@ export async function abrirLink(
     alcance: opciones.config.alcance,
     permiso: opciones.config.permiso,
     venceAt: opciones.config.venceAt ?? null,
+  });
+  await anotar(base, {
+    notaId: opciones.notaId,
+    etiqueta: etiquetaDeToken(token),
+    evento: "creado",
+    quien: opciones.quien.vendedoraId,
+    alcance: opciones.config.alcance,
+    permiso: opciones.config.permiso,
+    venceAt: opciones.config.venceAt ?? null,
+    at: ahora,
   });
   return { ok: true, token };
 }
@@ -151,7 +206,7 @@ export async function abrirLink(
  */
 export async function cortarLink(
   base: typeof DbSingleton,
-  opciones: { notaId: number; quien: QuienPregunta },
+  opciones: { notaId: number; quien: QuienPregunta; ahora?: Date },
 ): Promise<ResultadoLink> {
   const [pagina] = await base
     .select({ vendedoraId: notas.vendedoraId, espacioId: notas.espacioId })
@@ -164,6 +219,24 @@ export async function cortarLink(
   if (!pagina) return { ok: false, motivo: "no-encontrada" };
   if (!puedeEditar(pagina, opciones.quien)) return { ok: false, motivo: "prohibido" };
 
-  await base.delete(notaLink).where(eq(notaLink.notaId, opciones.notaId));
+  // ⚠️ **El `returning` no es cosmético: es la única chance de saber CUÁL link se
+  // cortó.** Después del DELETE la fila no existe, así que su etiqueta no se puede
+  // reconstruir — y sin etiqueta, el corte no se puede pegar al link que le
+  // corresponde en una página que tuvo varios. Que devuelva vacío es el caso
+  // idempotente (no había link), y ahí no hay nada que anotar.
+  const [cortado] = await base
+    .delete(notaLink)
+    .where(eq(notaLink.notaId, opciones.notaId))
+    .returning({ token: notaLink.token });
+
+  if (cortado) {
+    await anotar(base, {
+      notaId: opciones.notaId,
+      etiqueta: etiquetaDeToken(cortado.token),
+      evento: "cortado",
+      quien: opciones.quien.vendedoraId,
+      at: opciones.ahora ?? new Date(),
+    });
+  }
   return { ok: true, token: null };
 }

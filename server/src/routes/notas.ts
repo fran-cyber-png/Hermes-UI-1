@@ -4,8 +4,10 @@ import { requiereVendedora } from '../auth/sesion.js';
 import { ruta } from '../lib/ruta.js';
 import { abrirLink, cortarLink, leerPorToken } from '../espacios/linkRepositorio.js';
 import { configuracionDeLink, puedeEditarPorLink } from '../espacios/linkModelo.js';
+import { personasDelRegistro, resumirPorLink } from '../espacios/auditoriaLink.js';
+import { historialDe } from '../espacios/auditoriaLinkRepositorio.js';
 import { espaciosDe } from '../espacios/repositorio.js';
-import { puedeEscribirEn, type QuienPregunta } from '../espacios/visibilidad.js';
+import { puedeEditar, puedeEscribirEn, type QuienPregunta } from '../espacios/visibilidad.js';
 import { consultarNotaPorId } from '../notas/consultarNotaPorId.js';
 import type { NotaFila } from '../notas/notas.js';
 import {
@@ -299,6 +301,61 @@ notasRouter.delete('/:id/link', ruta(async (req, res) => {
 }));
 
 /**
+ * EL REGISTRO DE AUDITORÍA del link de una página (17-ago-2026).
+ *
+ * Contesta las tres preguntas que el estado actual de `nota_link` no puede
+ * contestar nunca: **quién abrió esta puerta**, **cuánto se usó** y **con qué
+ * permisos estuvo abierta** — incluidos los links que ya se cortaron, que son de
+ * los que más se pregunta.
+ *
+ * 🔴 **Detrás del MISMO permiso que compartir, no de uno nuevo.** Se pide
+ * `puedeEditar` sobre la página, que es lo que ya se exige para abrir y cortar el
+ * link (ADR 0047). Un registro de auditoría legible por quien no puede tocar la
+ * página diría quién de Goberna leyó qué a alguien que no tiene nada que ver — y
+ * uno reservado a la autora dejaría una página del equipo cuyo historial una sola
+ * persona puede mirar.
+ *
+ * ⚠️ **El resumen se calcula ACÁ, no en el navegador** (`resumirPorLink`): con
+ * dos implementaciones, la pantalla afirmaría «12 aperturas» sobre un server que
+ * cuenta otra cosa. Es #37 en la forma más cara, porque acá el número ES el
+ * producto.
+ */
+notasRouter.get('/:id/link/historial', ruta(async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ ok: false, message: 'id inválido' });
+    return;
+  }
+
+  const nota = await consultarNotaPorId(db, id);
+  if (!nota) {
+    res.status(404).json({ ok: false, message: 'la nota no existe' });
+    return;
+  }
+  // La misma regla que compartir, preguntada con la MISMA función que usan
+  // `abrirLink` y `cortarLink` (`puedeEditar`): quien puede abrir la puerta puede
+  // ver quién entró por ella. Escribir el predicado a mano acá daría dos reglas
+  // para la misma pregunta, y la que se olvidaría de actualizar es siempre ésta.
+  const quien = await quienPregunta(req.vendedoraId!);
+  if (!puedeEditar({ vendedoraId: nota.vendedoraId, espacioId: nota.espacioId }, quien)) {
+    res.status(403).json({ ok: false, message: 'no podés ver el registro de esa página' });
+    return;
+  }
+
+  const { eventos, sinTabla } = await historialDe(db, id);
+  res.json({
+    ok: true,
+    eventos,
+    links: resumirPorLink(eventos),
+    personas: personasDelRegistro(eventos),
+    // 🔴 Viaja SIEMPRE, y la pantalla lo dice: sin este campo, una migración sin
+    // aplicar se ve idéntica a un link que nadie abrió nunca. En una superficie de
+    // auditoría eso no es degradar, es afirmar que no pasó nada.
+    sinRegistro: sinTabla,
+  });
+}));
+
+/**
  * ABRIR UNA PÁGINA POR SU LINK, DESDE ADENTRO DE LA APP (ADR 0048).
  *
  * 🔴 **Esta ruta existe porque una navegación del navegador NO lleva el token de
@@ -315,7 +372,11 @@ notasRouter.delete('/:id/link', ruta(async (req, res) => {
  * exige las dos cosas (permiso del link Y sesión).
  */
 notasRouter.get('/por-link/:token', ruta(async (req, res) => {
-  const link = await leerPorToken(db, req.params.token);
+  // ⚠️ **El `vendedoraId` va al registro, y ésta es la ÚNICA puerta que lo sabe.**
+  // Del otro lado de `/n/<token>` no hay sesión, así que aquellas aperturas se
+  // anotan sin identidad. Que las dos rutas anoten distinto no es una
+  // inconsistencia: es la diferencia real entre abrir con cuenta y sin cuenta.
+  const link = await leerPorToken(db, req.params.token, new Date(), req.vendedoraId ?? null);
   if (!link) {
     res.status(404).json({ ok: false, message: 'ese link no existe o ya no sirve' });
     return;

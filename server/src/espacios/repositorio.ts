@@ -2,6 +2,8 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type { db as DbSingleton } from "../db/client.js";
 import { notaLink } from "../db/links.js";
 import { espacioMiembro, espacios, numeroVendedora, repartoRueda } from "../db/schema.js";
+import { etiquetaDeToken } from "./auditoriaLink.js";
+import { anotarCortes } from "./auditoriaLinkRepositorio.js";
 import { destinosPosibles } from "../reparto/destino.js";
 
 /**
@@ -185,7 +187,7 @@ export async function sacarMiembro(
         sql`lower(btrim(${notaLink.creadoPor})) = ${quien}
             AND ${notaLink.notaId} IN (SELECT id FROM notas WHERE espacio_id = ${datos.espacioId})`,
       )
-      .returning({ token: notaLink.token });
+      .returning({ token: notaLink.token, notaId: notaLink.notaId });
 
     await tx
       .delete(espacioMiembro)
@@ -196,10 +198,23 @@ export async function sacarMiembro(
         ),
       );
 
-    return borrados.length;
+    return borrados;
   });
 
-  return cortados;
+  // ⚠️ **El registro se escribe DESPUÉS de la transacción, y a propósito.** Adentro,
+  // un fallo al anotar revertiría el corte — y la persona quedaría afuera del
+  // espacio con su link vivo, que es exactamente el estado que este corte existe
+  // para impedir. El corte manda; el registro acompaña (`anotar` nunca lanza).
+  //
+  // 🔴 Y lleva MOTIVO: sin él, estos cortes aparecen firmados por quien administró
+  // el espacio, como si hubiera ido link por link. Lo que pasó es otra cosa.
+  await anotarCortes(
+    base,
+    cortados.map((c) => ({ notaId: c.notaId, etiqueta: etiquetaDeToken(c.token) })),
+    { quien: datos.vendedoraId.trim(), motivo: "sacaron_al_miembro", at: new Date() },
+  );
+
+  return cortados.length;
 }
 
 /**
@@ -212,15 +227,27 @@ export async function sacarMiembro(
  * no el contenido.
  */
 export async function archivarEspacio(base: typeof DbSingleton, id: number, ahora: Date): Promise<number> {
-  return base.transaction(async (tx) => {
-    const cortados = await tx
+  const cortados = await base.transaction(async (tx) => {
+    const borrados = await tx
       .delete(notaLink)
       .where(sql`${notaLink.notaId} IN (SELECT id FROM notas WHERE espacio_id = ${id})`)
-      .returning({ token: notaLink.token });
+      .returning({ token: notaLink.token, notaId: notaLink.notaId });
 
     await tx.update(espacios).set({ archivadoAt: ahora }).where(eq(espacios.id, id));
-    return cortados.length;
+    return borrados;
   });
+
+  // ⚠️ `quien: null` no es un dato faltante: **nadie cortó estos links**. Se
+  // cayeron porque se archivó el lugar donde vivían sus páginas, y la pantalla lo
+  // dice con esas palabras. Poner acá a quien archivó el espacio lo haría figurar
+  // cortando links que ni sabía que existían.
+  await anotarCortes(
+    base,
+    cortados.map((c) => ({ notaId: c.notaId, etiqueta: etiquetaDeToken(c.token) })),
+    { quien: null, motivo: "archivaron_el_espacio", at: ahora },
+  );
+
+  return cortados.length;
 }
 
 /**
