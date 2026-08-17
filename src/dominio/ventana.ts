@@ -8,11 +8,24 @@
  * campo— y esos son justo los que importan.
  *
  * ── LA SEÑAL ES POSITIVA, Y ESO DECIDE EL DISEÑO ──────────────────────────
- * Una ventana CERRADA no dibuja nada. No es un olvido: el plazo es duro solo en
- * la línea de la Cloud API; en las tres líneas whatsmeow de las vendedoras Meta
- * no rechaza nada. Una píldora que dijera «cerrada» sería falsa en tres de
- * cuatro líneas, y lo que se pierde con esa mentira es una venta que nadie
- * intenta. Se dice a quién SÍ se le puede hablar, nunca a quién no.
+ * Una ventana CERRADA no dibuja nada **en la cola**. No es un olvido: el plazo es
+ * duro solo en la línea de la Cloud API, y en una línea whatsmeow Meta no rechaza
+ * nada. Una píldora que dijera «cerrada» sería falsa ahí, y lo que se pierde con
+ * esa mentira es una venta que nadie intenta. En la cola se dice a quién SÍ se le
+ * puede hablar, nunca a quién no — **y eso no cambia** (ADR 0041).
+ *
+ * ── LA ENMIENDA, Y POR QUÉ NO CONTRADICE LO DE ARRIBA (ADR 0058) ──────────
+ * Lo que la regla de arriba protege es no MENTIR sobre una línea donde el plazo
+ * no existe. La fila de la cola no sabe por qué línea va a salir la respuesta;
+ * **el composer sí** (`numeroPropio` → `transporte` de `/api/whatsapp/sesion`).
+ * Donde se sabe que el plazo es duro, callarlo no es prudencia: es dejar que el
+ * mensaje rebote. Por eso `avisoDeComposer` puede decir «cerrada» y
+ * `lecturaDeVentana` sigue sin poder — no es la misma pregunta ni el mismo lugar.
+ *
+ * Lo que lo volvió urgente, medido el 17-ago-2026: los dos únicos envíos manuales
+ * fallidos de dos semanas fueron ventana vencida, a 28,3 h y a **24,5 h** del
+ * último entrante. El segundo se pasó **por media hora** y nadie tenía cómo
+ * saberlo: el aviso no existía y el rechazo llegaba mudo.
  *
  * ── EL ORO ────────────────────────────────────────────────────────────────
  * Acá el oro SÍ corresponde, y es de los pocos lugares: en esta app significa
@@ -77,4 +90,59 @@ export function lecturaDeVentana(
     urgente: falta < UMBRAL_ORO_MS,
     ayuda: `Se le puede escribir: la ventana cierra en ${cuantoFalta(falta)}`,
   };
+}
+
+/** Qué le decimos a quien está por escribir. `null` = nada, y es el default. */
+export type AvisoDeComposer = {
+  /** `cerrada` es un hecho consumado; `por-cerrar` todavía se puede aprovechar. */
+  clase: 'cerrada' | 'por-cerrar';
+  texto: string;
+} | null;
+
+/**
+ * EL AVISO ARRIBA DE LA CAJA DE ESCRIBIR (ADR 0058).
+ *
+ * ── AVISA, NO BLOQUEA — y la razón no es estilo ──────────────────────────
+ * El cierre se calcula sobre el último entrante que Hermes CONOCE. Si la ingesta
+ * se perdió un mensaje —ya pasó—, Hermes cree cerrada una ventana que está
+ * abierta, y un bloqueo le impediría contestar a alguien que sí podía recibir.
+ * Un aviso que a veces sobra cuesta una línea de más; un bloqueo que a veces
+ * sobra cuesta la venta. **La garantía nunca es el front**: quien rechaza es
+ * Meta, y ahora eso se lee en la burbuja (`whatsapp/motivoEntrega.ts`).
+ *
+ * ── SOLO EN LA LÍNEA DONDE EL PLAZO ES DURO ──────────────────────────────
+ * `cloud-api` y nada más. En `whatsmeow` Meta no rechaza por ventana (el riesgo
+ * ahí es el ban, que es otra conversación) y en `falso` no se manda a nadie.
+ * ⚠️ **Un `transporte` ausente es un server viejo y NO avisa**: es preferible
+ * quedarse como antes del frente a inventar una prohibición que quizá no rige.
+ */
+export function avisoDeComposer(
+  ventanaCierra: string | null | undefined,
+  transporte: 'whatsmeow' | 'cloud-api' | 'falso' | undefined,
+  ahora: Date,
+): AvisoDeComposer {
+  if (transporte !== 'cloud-api') return null;
+  if (!ventanaCierra) return null;
+
+  const cierra = new Date(ventanaCierra).getTime();
+  // Una fecha ilegible no autoriza a afirmar nada, en ninguno de los dos sentidos.
+  if (Number.isNaN(cierra)) return null;
+
+  const falta = cierra - ahora.getTime();
+  if (falta <= 0) {
+    return {
+      clase: 'cerrada',
+      texto:
+        'Pasaron más de 24 h desde su último mensaje: WhatsApp va a rechazar lo que escribas acá. Solo entra una plantilla aprobada.',
+    };
+  }
+  if (falta < UMBRAL_ORO_MS) {
+    // Se nombra el plazo, no solo el reloj: «queda 1 h» no dice qué se cierra ni
+    // qué pasa después, y eso es justo lo que nadie sabía.
+    return {
+      clase: 'por-cerrar',
+      texto: `Queda ${cuantoFalta(falta)} de la ventana de 24 h. Después solo entra una plantilla aprobada.`,
+    };
+  }
+  return null;
 }

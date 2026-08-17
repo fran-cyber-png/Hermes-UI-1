@@ -640,6 +640,21 @@ expand-only), UI en la línea de la hora de cada saliente.
   hay backfill posible, y un ✓ inventado es peor que un hueco.
 - UI: ✓ / ✓✓ / ✓✓ **azul**, el vocabulario que la vendedora ya trae del teléfono. `fallido` rompe el molde
   (triángulo rojo) porque es lo único que pide una acción. `docs/evidencia/entrega-tildes.png`.
+- 🔴 **Y ESE TRIÁNGULO ERA MUDO POR CONSTRUCCIÓN — se leía como «no se mandó», que es lo contrario de lo
+  que pasó** (ADR 0058). El webhook leía `st.status`, `st.id` y `st.timestamp` y **nunca `st.errors`**,
+  que es donde Meta manda el código del rechazo. El mensaje SALE (queda `id_externo`) y el `failed`
+  llega un segundo después por webhook: `estado='enviado'` + `estado_entrega='fallido'`. Ahora el
+  código se guarda (`estado_entrega_codigo`, migración **0028**) y el motivo va **escrito abajo de la
+  burbuja**, no en un hover que nadie visita.
+  · **Se guarda el CÓDIGO, no la frase**: el diccionario vive en el front (`whatsapp/motivoEntrega.ts`)
+    y se reescribe sin tocar una fila. ⚠️ El `detalle` en inglés de Meta va a `motivo` para AUDITAR y
+    **no se sirve**. Un código desconocido **no inventa** una explicación: muestra el número.
+  · ⚠️ **`entrega` sigue siendo la CADENA** y `entregaMotivo` viaja al lado: volverla objeto rompía los
+    hilos rehidratados de IndexedDB (ADR 0007), sin error y hasta que alguien limpie el caché.
+  · **Lo que se mide es casi todo un solo motivo**: `131047`, la ventana de 24 h. Los dos únicos fallos
+    manuales de dos semanas (16-ago-2026) eran eso, a 28,3 h y a **24,5 h** — uno se pasó por media
+    hora. Al medir esto filtrá `vendedora_id <> 'campana'`: los 202 del 14-ago son la campaña.
+  · **Sin backfill**: los fallos anteriores a 0028 no tienen código y nunca lo van a tener.
 
 ## Correos — con qué buzón sale, y a quién le contestan (ADR 0058)
 
@@ -1016,13 +1031,21 @@ La cola ordena la DEUDA. Esta es la otra pregunta: **¿a quién todavía se le p
 - 🔴 **DESDE EL ÚLTIMO ENTRANTE, nunca desde lo último que pasó.** La ventana la abre quien escribe y
   nuestra respuesta no la extiende. Con `referencia`, responder a las 23 h se leería como «te quedan 24 h
   más».
-- 🔴 **LA SEÑAL SE DICE EN POSITIVO Y NO PUEDE DEJAR DE ESTARLO.** El plazo es duro **solo en la línea de
-  la Cloud API**; en whatsmeow Meta **no rechaza nada** (el riesgo ahí es el ban). Un «ya no le podés
-  escribir» sería falso en toda línea whatsmeow. **Una ventana cerrada no dibuja NADA.** Misma forma que
-  `limitesMedia`: el plazo lo impone el transporte.
-  ⚠️ **El argumento se escribió con «tres de cuatro líneas» y el reparto cambió** (11-ago-2026: quedan
-  dos, una de cada transporte). La regla NO depende del conteo —depende de que exista más de un
-  transporte—, así que no se toca; pero si alguna vez corre SOLO la Cloud API, este 🔴 hay que releerlo.
+- 🔴 **EN LA COLA LA SEÑAL SE DICE EN POSITIVO Y NO PUEDE DEJAR DE ESTARLO.** El plazo es duro **solo en
+  la línea de la Cloud API**; en whatsmeow Meta **no rechaza nada** (el riesgo ahí es el ban). Un «ya no
+  le podés escribir» sería falso en toda línea whatsmeow. **En la cola, una ventana cerrada no dibuja
+  NADA.** Misma forma que `limitesMedia`: el plazo lo impone el transporte.
+  🔴 **PERO EL COMPOSER SÍ AVISA, y eso NO reabre esto** (ADR 0058, enmienda del 17-ago-2026). Lo que la
+  regla protege es no MENTIR donde el plazo no existe; la fila de la cola no sabe por qué línea sale la
+  respuesta y **el composer sí** (`numeroPropio` → `transporte` de `/api/whatsapp/sesion`). Donde se
+  sabe que el plazo es duro, callarlo no es prudencia: es dejar que el mensaje rebote. `lecturaDeVentana`
+  (la píldora) **no cambió**; el que puede decir «cerrada» es `avisoDeComposer` (`dominio/ventana.ts`), y
+  **solo con `cloud-api`** — con `transporte` ausente (server viejo) tampoco avisa.
+  🔴 **AVISA, NO BLOQUEA**, y el motivo no es estilo: el cierre se calcula sobre el último entrante **que
+  Hermes conoce**, y la ingesta ya se perdió mensajes. Un aviso que sobra cuesta una línea; un bloqueo
+  que sobra cuesta la venta. La garantía nunca es el front — quien rechaza es Meta, y eso ahora se lee.
+  ⚠️ **Lo que sí hay que releer**: al 17-ago-2026 corre **UNA sola línea y es Cloud API**
+  (`WHATSAPP_TRANSPORTE=falso`), así que hoy el plazo rige para todo lo que mandan las vendedoras.
 - La regla vive **una vez**, pura, en `cola/ventana.ts`, con su gemelo `ventanaCierraSql` y
   `ventana.paridad.test.db.ts` de candado — que verifica **el instante** del cierre, no solo el sí/no.
   ⚠️ **`ventanaDiasSql` NO se toca**: es el contrato de `EXPIRA`, vale solo para comentarios y tiene su

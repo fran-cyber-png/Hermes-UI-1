@@ -22,6 +22,8 @@ import { useCatalogoHechos, type HechoDelCatalogo } from '../hechos/catalogo';
 import { PantallaHechos } from '../hechos/PantallaHechos';
 import { textoDelBoton } from '../autorespuesta/revision';
 import { TextoWhatsapp } from './TextoWhatsapp';
+import { lecturaDeMotivo } from './motivoEntrega';
+import { avisoDeComposer } from '../../dominio/ventana';
 import { citaDeMensaje, clavesDelHilo, respondidos, rotuloDeCita, sePuedeCitar, type CitaHilo } from './cita';
 import { Avatar } from '../../components/Avatar';
 import type { Conversacion } from '../../dominio/conversaciones';
@@ -201,10 +203,13 @@ function ReaccionesEnBurbuja({
  * acción. Y **ausente no dibuja nada**: los mensajes anteriores a este frente no
  * tienen estado, y un ✓ inventado es peor que un hueco.
  */
-function TildesDeEntrega({ estado }: { estado: EstadoEntregaWa }) {
+function TildesDeEntrega({ estado, motivo }: { estado: EstadoEntregaWa; motivo?: string }) {
   if (estado === 'fallido') {
     return (
-      <span title="No se pudo entregar" className="inline-flex items-center text-destructive">
+      <span
+        title={lecturaDeMotivo(motivo).detalle}
+        className="inline-flex items-center text-destructive"
+      >
         <AlertTriangle size={12} />
       </span>
     );
@@ -1144,7 +1149,7 @@ export function HiloWhatsapp({
                               </span>
                             )}
                             {new Date(m.occurred_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
-                            {m.entrega && <TildesDeEntrega estado={m.entrega} />}
+                            {m.entrega && <TildesDeEntrega estado={m.entrega} motivo={m.entregaMotivo} />}
                           </span>
                         </div>
                         )}
@@ -1154,6 +1159,19 @@ export function HiloWhatsapp({
                           reacciones={m.reacciones}
                           saliente={m.direccion === 'saliente'}
                         />
+                      )}
+                      {/* 🔴 EL PORQUÉ VA ESCRITO, NO SOLO EN EL HOVER. El
+                          triángulo pelado se leía como «no se mandó», y lo que
+                          pasó es lo contrario: el mensaje SALIÓ y WhatsApp lo
+                          rechazó. Son dos acciones distintas —una se reintenta,
+                          la otra necesita una plantilla— y la vendedora no
+                          pasa el mouse por encima de un ícono para averiguar
+                          cuál. Es la única cosa del hilo que pide una acción,
+                          así que es la única que se gana un renglón propio. */}
+                      {m.entrega === 'fallido' && (
+                        <p className="mt-1 text-right text-[11px] leading-snug text-destructive">
+                          {lecturaDeMotivo(m.entregaMotivo).texto}
+                        </p>
                       )}
                       </div>
                       {m.direccion === 'entrante' && acciones}
@@ -1173,6 +1191,13 @@ export function HiloWhatsapp({
           el frame de más que dejaba solo el `useEffect` (review de PR #84).
           También de yapa: el adjunto elegido (que no se persiste) se resetea
           solo, porque la instancia entera es nueva. */}
+      {/* LA REGLA DE LAS 24 H, DONDE SE ESCRIBE. Ver `dominio/ventana.ts`: en la
+          cola la señal es solo positiva, acá se puede decir «cerrada» porque el
+          composer sabe por qué LÍNEA sale la respuesta. Va arriba de la caja y
+          no adentro de `ComposerWa` para no sumarle dos props a un componente
+          que ya tiene doce, y porque es una advertencia sobre el envío, no una
+          parte de la caja. */}
+      <AvisoDeVentana ventanaCierra={conversacion.ventana_cierra} transporte={sesion?.transporte} />
       <ComposerWa
         key={sugerencia ? `${telefono}:sug:${sugerencia.id}` : telefono}
         telefono={telefono}
@@ -1200,6 +1225,59 @@ export function HiloWhatsapp({
  * leyenda de una captura de 3 MB fugaba 3 MB por tecla. Con el clip pasaba poco
  * (adjuntar era raro); con ⌘V pasa todo el tiempo.
  */
+/**
+ * EL AVISO DE LA VENTANA DE 24 H, ARRIBA DE LA CAJA (ADR 0058).
+ *
+ * ── Lo que se rompe sin esto, medido ─────────────────────────────────────
+ * El 16-ago-2026 dos seguimientos de Luz rebotaron por ventana vencida — uno se
+ * pasó **por media hora**. La caja los aceptó sin decir nada, salieron, y Meta
+ * los rechazó un segundo después. La regla existía en el server, en la cola y en
+ * la doc; en el único lugar donde alguien está a punto de escribir, no.
+ *
+ * ── Dos estados y dos colores, y la diferencia importa ───────────────────
+ * `por-cerrar` es oro, que en esta app significa **tiempo que se acaba** y nada
+ * más (`src/index.css`), y todavía se puede aprovechar. `cerrada` es rojo: ya no
+ * hay nada que apurar, lo que sigue es cambiar de herramienta. Pintar las dos
+ * igual haría que la urgente se lea como una queja.
+ *
+ * ⚠️ **No deshabilita nada.** El porqué está en `avisoDeComposer`: el cálculo se
+ * apoya en el último entrante que Hermes conoce, y bloquear con un dato que
+ * puede faltar cuesta una venta.
+ */
+function AvisoDeVentana({
+  ventanaCierra,
+  transporte,
+}: {
+  ventanaCierra?: string | null;
+  transporte?: 'whatsmeow' | 'cloud-api' | 'falso';
+}) {
+  /**
+   * El reloj se lee en cada render y no se congela en un `useMemo`: el hilo se
+   * refresca solo cada 5 s, así que el aviso cruza de `por-cerrar` a `cerrada`
+   * sin que nadie toque nada. Con la fecha memoizada, la vendedora podía tener
+   * «queda 1 min» en pantalla durante media hora.
+   */
+  const aviso = avisoDeComposer(ventanaCierra, transporte, new Date());
+  if (!aviso) return null;
+  const cerrada = aviso.clase === 'cerrada';
+  return (
+    <p
+      role="status"
+      className={
+        'flex items-start gap-1.5 px-3 pt-2 text-[11px] leading-snug ' +
+        // `text-gold-ink` y no `text-gold`: el dorado puro sobre blanco no llega
+        // al contraste que pide un texto de 11 px. Es el mismo par que ya usa la
+        // píldora de la ventana en la cola (`FilaConversacion.tsx`) — el oro de
+        // esta app significa «tiempo que se acaba» y acá significa exactamente eso.
+        (cerrada ? 'text-destructive' : 'text-gold-ink')
+      }
+    >
+      <AlertTriangle size={13} className="mt-px shrink-0" />
+      <span>{aviso.texto}</span>
+    </p>
+  );
+}
+
 function useVistaPreviaAdjunto(adjunto: File | null): string | null {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {

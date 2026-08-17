@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cuantoFalta, lecturaDeVentana, UMBRAL_ORO_MS } from './ventana';
+import { avisoDeComposer, cuantoFalta, lecturaDeVentana, UMBRAL_ORO_MS } from './ventana';
 
 const AHORA = new Date('2026-08-07T15:00:00Z');
 const en = (ms: number) => new Date(AHORA.getTime() + ms).toISOString();
@@ -63,5 +63,60 @@ describe('lecturaDeVentana', () => {
     expect(lecturaDeVentana(en(6 * HORA), AHORA)?.ayuda).toBe(
       'Se le puede escribir: la ventana cierra en 6 h',
     );
+  });
+});
+
+/**
+ * EL AVISO DEL COMPOSER (ADR 0058).
+ *
+ * Lo que estos tests protegen no es que el aviso aparezca: es **dónde NO
+ * aparece**. Decir «cerrada» sobre una línea whatsmeow sería falso, y el costo de
+ * esa mentira es una venta que nadie intenta — que es exactamente el argumento
+ * con el que ADR 0041 dejó la señal solo en positivo.
+ */
+describe('avisoDeComposer', () => {
+  const aviso = (cierra: string | null | undefined, transporte?: 'whatsmeow' | 'cloud-api' | 'falso') =>
+    avisoDeComposer(cierra, transporte, AHORA);
+
+  it('🔴 la ventana vencida se DICE: es el caso que costó dos mensajes', () => {
+    // Medido el 16-ago-2026: 28,3 h y 24,5 h desde el último entrante. Los dos
+    // salieron y los dos rebotaron, sin que nada lo anticipara.
+    const a = aviso(en(-4 * HORA), 'cloud-api');
+    expect(a?.clase).toBe('cerrada');
+    expect(a?.texto).toContain('24 h');
+    // Dice qué hacer, no solo qué pasa.
+    expect(a?.texto).toContain('plantilla aprobada');
+  });
+
+  it('🔴 en whatsmeow NO dice nada, aunque la ventana esté vencida', () => {
+    // Ahí Meta no rechaza por ventana. Un «va a rebotar» sería falso, y la
+    // vendedora dejaría de escribirle a alguien a quien sí podía escribirle.
+    expect(aviso(en(-4 * HORA), 'whatsmeow')).toBe(null);
+    expect(aviso(en(-4 * HORA), 'falso')).toBe(null);
+  });
+
+  it('🔴 un server viejo (sin `transporte`) se comporta como antes del frente', () => {
+    // N4 va solo y N5 es un botón: esa ventana de deploy existe siempre. Ante la
+    // duda no se inventa una prohibición.
+    expect(aviso(en(-4 * HORA), undefined)).toBe(null);
+  });
+
+  it('avisa ANTES, mientras todavía se puede aprovechar', () => {
+    const a = aviso(en(UMBRAL_ORO_MS - MINUTO), 'cloud-api');
+    expect(a?.clase).toBe('por-cerrar');
+    expect(a?.texto).toContain('2 h');
+  });
+
+  it('con la ventana holgada no molesta', () => {
+    expect(aviso(en(UMBRAL_ORO_MS + MINUTO), 'cloud-api')).toBe(null);
+    expect(aviso(en(20 * HORA), 'cloud-api')).toBe(null);
+  });
+
+  it('sin ventana no hay nada que avisar, y eso no es «cerrada»', () => {
+    // Una conversación donde la persona nunca escribió no tiene puerta que mirar.
+    // Tratarla como cerrada pondría el cartel rojo en toda la mesa.
+    expect(aviso(null, 'cloud-api')).toBe(null);
+    expect(aviso(undefined, 'cloud-api')).toBe(null);
+    expect(aviso('no soy una fecha', 'cloud-api')).toBe(null);
   });
 });

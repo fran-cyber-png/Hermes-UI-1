@@ -51,7 +51,16 @@ const MENSAJES = [
   // Los cuatro estados, para poder mirarlos juntos.
   { id: 6, direccion: 'saliente', autor: 'luz', texto: 'Te dejo el link de pago', occurred_at: HACE(4), external_id: 'e6', entrega: 'entregado' },
   { id: 7, direccion: 'saliente', autor: 'luz', texto: '¿Lo pudiste abrir?', occurred_at: HACE(3), external_id: 'e7', entrega: 'enviado' },
-  { id: 8, direccion: 'saliente', autor: 'luz', texto: 'Te reenvío el comprobante', occurred_at: HACE(2), external_id: 'e8', entrega: 'fallido' },
+  // ── LOS TRES FALLIDOS, y los tres se leen distinto a propósito ─────────
+  // 1 · EL CASO MEDIDO (17-ago-2026): la ventana de 24 h, con el texto REAL que
+  //     rebotó. Es el único motivo que apareció en envíos manuales.
+  { id: 8, direccion: 'saliente', autor: 'luz', texto: 'Buenas tardes señor Ronald. ¿Aun te encuentras interesado en inscribirte en el foro?', occurred_at: HACE(2), external_id: 'e8', entrega: 'fallido', entregaMotivo: '131047' },
+  // 2 · UN CÓDIGO QUE NO ESTÁ EN EL DICCIONARIO: no se inventa una explicación.
+  //     El crudo va al hover, que es de donde sale para poder agregarlo.
+  { id: 81, direccion: 'saliente', autor: 'luz', texto: 'Te reenvío el comprobante', occurred_at: HACE(2), external_id: 'e81', entrega: 'fallido', entregaMotivo: '133010' },
+  // 3 · UN FALLO SIN CÓDIGO: todo lo anterior a la migración 0028 — o sea, lo
+  //     mayoritario las primeras semanas. Se comporta como antes del frente.
+  { id: 82, direccion: 'saliente', autor: 'luz', texto: 'Quedo atenta a tu respuesta', occurred_at: HACE(2), external_id: 'e82', entrega: 'fallido' },
   // Un mensaje viejo, de antes de este frente: SIN estado. No dibuja nada.
   { id: 9, direccion: 'saliente', autor: 'luz', texto: 'Cualquier cosa me escribís', occurred_at: HACE(1), external_id: 'e9' },
 
@@ -94,8 +103,27 @@ const MENSAJES = [
   },
 ];
 
+/**
+ * LA VENTANA DE 24 H, para ver el aviso de arriba de la caja (ADR 0058).
+ *
+ * `?ventana=cerrada` es el caso que costó dos mensajes el 16-ago-2026;
+ * `?ventana=porcerrar` es el que los habría salvado. Sin el parámetro la ventana
+ * está holgada y **no se dibuja nada**, que es el estado normal — un aviso
+ * permanente dejaría de leerse a la semana.
+ *
+ * ⚠️ El aviso solo sale en `cloud-api`: con `?whatsmeow=1` desaparece aunque la
+ * ventana esté vencida, porque ahí Meta no rechaza nada. Es el veto de ADR 0041
+ * y se puede comprobar combinando los dos parámetros.
+ */
+const HORA_MS = 60 * 60 * 1000;
+const VENTANA = new URLSearchParams(location.search).get('ventana');
+const VENTANA_CIERRA = new Date(
+  Date.now() + (VENTANA === 'cerrada' ? -4 * HORA_MS : VENTANA === 'porcerrar' ? 1.5 * HORA_MS : 18 * HORA_MS),
+).toISOString();
+
 const CONVERSACION = {
   clave: `conv:whatsapp:${TELEFONO}:${NUMERO_PROPIO}`,
+  ventana_cierra: VENTANA_CIERRA,
   canal: 'whatsapp',
   tipo: 'mensaje',
   persona_id: TELEFONO,
