@@ -93,6 +93,44 @@ export async function lineasDeVendedora(db: Base, vendedoraId: string): Promise<
 }
 
 /**
+ * Las líneas de esta persona **con cuántas la atienden** — el dato que separa
+ * «su línea» de «la línea del equipo» (ver `numeros/autoVinculacion.ts`).
+ *
+ * 🔴 **EL CONTEO NO SE FILTRA POR LA VENDEDORA.** La subconsulta cuenta TODAS
+ * las filas de `numero_vendedora` de ese número, no sólo las suyas. Si se colara
+ * ahí el `WHERE` de la persona, toda línea daría `duenas = 1`, el tope volvería
+ * a mirar cualquier línea, y el defecto que este dato existe para arreglar
+ * volvería **mudo** — sin error, sin log, sólo el botón que no aparece.
+ *
+ * Es una consulta aparte de `lineasDeVendedora` por la misma razón que
+ * `lineasDeVendedoraConProposito`: responden preguntas distintas y la mayoría de
+ * los llamadores no necesita el conteo. Sigue siendo este módulo el único dueño
+ * de `numero_vendedora`.
+ *
+ * ⚠️ **Sin JOIN contra `numeros_wa`, y al revés que `…ConProposito`**: acá la
+ * pregunta es «¿cuánta gente comparte esta asignación?», y se responde entera
+ * dentro de `numero_vendedora`. Una fila huérfana —asignada a un número que ya
+ * no está registrado— igual ocupa cupo si es sólo suya; esconderla con un
+ * `innerJoin` dejaría a alguien vinculando una segunda línea sin saberlo.
+ */
+export async function lineasDeVendedoraConDuenas(
+  db: Base,
+  vendedoraId: string,
+): Promise<{ numero: string; duenas: number }[]> {
+  const filas = await db
+    .select({
+      numero: schema.numeroVendedora.numero,
+      duenas: sql<number>`(
+        SELECT count(*) FROM ${schema.numeroVendedora} AS todas
+         WHERE todas.numero = ${schema.numeroVendedora.numero}
+      )`,
+    })
+    .from(schema.numeroVendedora)
+    .where(mismaVendedoraSql(schema.numeroVendedora.vendedoraId, vendedoraId));
+  return filas.map((f) => ({ numero: f.numero, duenas: Number(f.duenas) }));
+}
+
+/**
  * Las líneas de esta persona **con su propósito**, para poder decidir si ve solo
  * las suyas (`cola/lineas.ts` → `soloSusLineas`).
  *

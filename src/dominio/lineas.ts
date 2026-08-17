@@ -27,6 +27,19 @@ export interface LineaWhatsapp {
    * todo, que es el comportamiento de siempre.
    */
   mias?: boolean;
+  /**
+   * ¿La atienden VARIAS personas? La línea de Meta (`51984429504`) tiene siete,
+   * y por eso NO es «su línea»: no se la trajo ella y no la puede retirar.
+   *
+   * 🔴 Es lo que separa «ya tiene línea» de «atiende la del equipo». Sin este
+   * campo, el panel le escondía «Vincular tu WhatsApp» a las siete personas que
+   * comparten esa línea — o sea a todo el equipo de ventas — y sin decir nada.
+   *
+   * Opcional: un server viejo no lo manda → `undefined` → se trata como NO
+   * compartida, que es el comportamiento anterior. Nunca se asume compartida
+   * por defecto: eso ofrecería vincular a quien ya tiene la suya.
+   */
+  compartida?: boolean;
 }
 
 export function useLineas() {
@@ -57,6 +70,14 @@ export function useLineas() {
      * es el fail-open: sin dato, no hay opción y se ve todo.
      */
     hayMias: lineas.some((l) => l.mias === true),
+    /**
+     * Sus líneas PROPIAS: las suyas que no comparte con nadie. Es lo que el
+     * panel mira para decidir si le ofrece traer una — la línea del equipo
+     * no cuenta, misma regla que el tope del server
+     * (`numeros/autoVinculacion.ts`). Con dos reglas distintas, el botón
+     * aparecería y el POST contestaría 409.
+     */
+    propias: lineas.filter((l) => l.mias === true && l.compartida !== true),
     cargando: q.isPending,
   };
 }

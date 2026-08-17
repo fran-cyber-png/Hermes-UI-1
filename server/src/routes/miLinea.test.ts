@@ -53,7 +53,10 @@ interface Espia {
 
 function armar(
   opciones: {
+    /** Sus líneas PROPIAS (una dueña): las que ocupan el cupo de «solo 1». */
     lineas?: Record<string, string[]>;
+    /** Líneas del EQUIPO que ella atiende (varias dueñas): NO ocupan cupo. */
+    lineasCompartidas?: Record<string, string[]>;
     numerosRegistrados?: Record<string, string[]>;
     montadas?: string[];
     montarLanza?: boolean;
@@ -76,11 +79,19 @@ function armar(
     vinculadosMarcados: [],
   };
   const lineas = { ...(opciones.lineas ?? {}) };
+  const compartidas = { ...(opciones.lineasCompartidas ?? {}) };
   const registrados = { ...(opciones.numerosRegistrados ?? {}) };
   const montadas = new Set(opciones.montadas ?? []);
 
   const repositorio: RepositorioMiLinea = {
-    lineasDeVendedora: async (vendedoraId) => lineas[vendedoraId.toLowerCase()] ?? [],
+    lineasDeVendedora: async (vendedoraId) => {
+      const yo = vendedoraId.toLowerCase();
+      return [
+        ...(lineas[yo] ?? []).map((numero) => ({ numero, duenas: 1 })),
+        // 7 = las que tiene `51984429504` en producción; cualquier valor > 1 sirve.
+        ...(compartidas[yo] ?? []).map((numero) => ({ numero, duenas: 7 })),
+      ];
+    },
     obtenerNumero: async (numero) =>
       registrados[numero] ? { numero, vendedoras: registrados[numero] } : null,
     upsertNumero: async (numero, datos) => {

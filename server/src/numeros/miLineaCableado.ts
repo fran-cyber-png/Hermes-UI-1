@@ -4,7 +4,7 @@ import { vinculador } from "../whatsapp/vinculador.js";
 import { agregarLineaWhatsmeow, gestorWhatsappSiActivo } from "../whatsapp/wiring.js";
 import { miLineaRouter } from "../routes/miLinea.js";
 import { sesionDeNumero } from "./estadoSesion.js";
-import { lineasDeVendedora, marcarVinculado, obtenerNumero, upsertNumero } from "./repositorio.js";
+import { lineasDeVendedoraConDuenas, marcarVinculado, obtenerNumero, upsertNumero } from "./repositorio.js";
 
 /**
  * EL CABLEADO REAL DE «MI LÍNEA» — el único lugar que ata el router a la base,
@@ -20,7 +20,7 @@ import { lineasDeVendedora, marcarVinculado, obtenerNumero, upsertNumero } from 
 export function miLineaDeProduccion(): Router {
   return miLineaRouter({
     repositorio: {
-      lineasDeVendedora: (vendedoraId) => lineasDeVendedora(db, vendedoraId),
+      lineasDeVendedora: (vendedoraId) => lineasDeVendedoraConDuenas(db, vendedoraId),
       obtenerNumero: (numero) => obtenerNumero(db, numero),
       upsertNumero: (numero, datos) => upsertNumero(db, numero, datos),
       marcarVinculado: (numero) => marcarVinculado(db, numero),

@@ -87,6 +87,47 @@ export function transportePuedeVincular(env: NodeJS.ProcessEnv): boolean {
 }
 
 /**
+ * Una línea de la vendedora, con **cuántas personas la atienden**.
+ *
+ * `duenas` es el dato que separa «su línea» de «la línea del equipo», y viene de
+ * contar `numero_vendedora` — no de `proposito`, que no alcanza: la línea de
+ * Meta es `proposito: 'vendedora'` igual que lo sería una personal.
+ */
+export interface LineaDeLaVendedora {
+  numero: string;
+  /** Cuántas vendedoras la tienen asignada. `1` = suya. `> 1` = del equipo. */
+  duenas: number;
+}
+
+/**
+ * 🔴 UNA LÍNEA COMPARTIDA NO CUENTA PARA EL TOPE, Y ESO ES LA REGLA — no una
+ * excepción (decisión del dueño, 17-ago-2026).
+ *
+ * ── Qué se rompió sin esto, medido en producción ──
+ *
+ * `51984429504` («Ventas Meta», la Cloud API que trae TODOS los leads) tiene
+ * **siete personas asignadas**: Luz, Sindy y las cinco `ventas1X@`. Con el tope
+ * contando cualquier línea, las siete caían en `ya_tiene_linea` y el panel les
+ * escondía el botón — o sea que **el frente entero era inalcanzable justo para
+ * el equipo que vende**, que es para quien se construyó. Y no daba error: el
+ * front sólo ofrece «Vincular tu WhatsApp» a quien no tiene ninguna, así que la
+ * vendedora no veía un rechazo, no veía nada.
+ *
+ * ⚠️ **Lo destapó la normalización de grafías de este mismo frente.** Antes,
+ * `lineasDeVendedora('luz')` comparaba exacto contra el `Luz` que empuja
+ * Cerberus y devolvía `[]`: Luz habría pasado, por un bug. Al arreglar la
+ * comparación empezó a resolver bien a `{51984429504}` y quedó bloqueada. El
+ * arreglo correcto no era volver atrás: era que el tope mire lo que de verdad
+ * importa.
+ *
+ * ── Por qué `duenas` y no `proposito` ──
+ *
+ * `proposito` no distingue: la línea de Meta es `'vendedora'`, igual que lo sería
+ * la personal de alguien. Lo que separa una de otra es que **la del equipo la
+ * comparten varias**. `soloSusLineas` (`cola/lineas.ts`) mira `'campana'` y
+ * responde otra pregunta —«¿ve sólo lo suyo?»—, así que reusarla acá habría
+ * atado dos decisiones que cambian por motivos distintos.
+ *
  * `numeroPedido` existe para que **re-vincular la línea propia siga siendo
  * posible**: «solo 1» es un tope de CUÁNTAS, no una prohibición de volver a
  * parear la que ya es suya. Sin esto, si el montaje en caliente falla —o si el
@@ -102,7 +143,7 @@ export function puedeAutoVincular(
    */
   _vendedoraId: string,
   env: NodeJS.ProcessEnv,
-  lineasActuales: readonly string[],
+  lineasActuales: readonly LineaDeLaVendedora[],
   numeroPedido: string,
 ): DecisionAutoVinculacion {
   // Primero el veto del SERVER: no depende de quién pregunte y es el que evita
@@ -110,7 +151,11 @@ export function puedeAutoVincular(
   if (!transportePuedeVincular(env)) return { ok: false, motivo: "transporte_sin_vinculacion" };
   // Acá vivía el veto por rol (`esSupervisor`). Se retiró el 18-ago-2026: ahora
   // **todo el equipo** puede traer su línea. Lo que queda es el tope de cantidad.
-  const otraLinea = lineasActuales.some((linea) => linea !== numeroPedido);
+  // Sólo las EXCLUSIVAMENTE suyas ocupan el cupo. Una compartida es del equipo:
+  // no se la trajo ella, no la puede retirar, y tenerla no dice nada sobre si
+  // necesita una propia.
+  const propias = lineasActuales.filter((l) => l.duenas === 1);
+  const otraLinea = propias.some((l) => l.numero !== numeroPedido);
   if (otraLinea) return { ok: false, motivo: "ya_tiene_linea" };
   return { ok: true };
 }

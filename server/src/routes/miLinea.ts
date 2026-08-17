@@ -14,6 +14,7 @@ import {
 import { esMiPareo, pareoVigente, type PareoPropio } from "../numeros/pareoPropio.js";
 import {
   puedeAutoVincular,
+  type LineaDeLaVendedora,
   type MotivoRechazoAutoVinculacion,
 } from "../numeros/autoVinculacion.js";
 
@@ -62,12 +63,26 @@ import {
 
 // ── LOS SEAMS ─────────────────────────────────────────────────────────────────
 
-/** Lo que este router necesita del registro de números. Nada de SQL acá. */
+/**
+ * Lo que este router necesita del registro de números. Nada de SQL acá.
+ *
+ * ⚠️ `lineasDeVendedora` trae **cuántas la atienden**, no sólo el número: sin ese
+ * dato no se puede distinguir su línea de la del equipo, y las siete personas de
+ * `51984429504` quedaban sin poder traer la suya. Ver `numeros/autoVinculacion.ts`.
+ */
 export interface RepositorioMiLinea {
-  lineasDeVendedora(vendedoraId: string): Promise<string[]>;
+  lineasDeVendedora(vendedoraId: string): Promise<LineaDeLaVendedora[]>;
   obtenerNumero(numero: string): Promise<{ numero: string; vendedoras: string[] } | null>;
   upsertNumero(numero: string, datos: DatosUpsert): Promise<unknown>;
   marcarVinculado(numero: string): Promise<void>;
+}
+
+/**
+ * La línea PROPIA: la que no comparte con nadie. `null` si sólo atiende líneas
+ * del equipo — que es justo el caso en el que todavía puede traer la suya.
+ */
+export function lineaPropia(lineas: readonly LineaDeLaVendedora[]): string | null {
+  return lineas.find((l) => l.duenas === 1)?.numero ?? null;
 }
 
 /** Lo que este router necesita del vinculador global (D13). Lo satisface el real. */
@@ -166,7 +181,9 @@ export function miLineaRouter(deps: DependenciasMiLinea): Router {
     "/",
     ruta(
       conVendedora(async (_req, res, vendedoraId) => {
-        const [numero] = await deps.repositorio.lineasDeVendedora(vendedoraId);
+        // La del EQUIPO no es «mi línea»: si sólo atiende la compartida, acá va
+        // `null` y el panel le ofrece traer la suya. Misma regla que el tope.
+        const numero = lineaPropia(await deps.repositorio.lineasDeVendedora(vendedoraId));
         if (!numero) {
           res.json({ numero: null });
           return;

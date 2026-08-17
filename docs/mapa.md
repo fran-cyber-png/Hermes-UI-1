@@ -11,9 +11,9 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 32 | 364 | 50,315 | 15,845 |
-| server | 66 | 751 | 77,609 | 47,859 |
-| **total** | **98** | **1,115** | **127,924** | **63,704** |
+| front | 32 | 365 | 50,353 | 15,940 |
+| server | 66 | 751 | 77,719 | 47,921 |
+| **total** | **98** | **1,116** | **128,072** | **63,861** |
 
 ## Front — `src/`
 
@@ -32,14 +32,14 @@
 | `padron` | Los contactos que nunca escribieron: filtrarlos por facetas y repartirlos. | 8 | 1,878 | 2 | 2 | 4 |
 | `campana` | Armar y mirar una campaña por plantilla aprobada de Meta: listas, corridas e historial. | 9 | 1,776 | 0 | 1 | 2 |
 | `autorespuesta` | El acuse fuera de horario visto desde la app: el interruptor, la cola de revisión y el modo supervisado. | 13 | 1,711 | 4 | 2 | 3 |
-| `dominio` | El vocabulario del CRM que más de una vista necesita: qué ES una conversación, las queries que la traen, y las derivaciones puras sobre ella — canal, curso, ventana, antigüedad, cliente, dueño, líneas, la paleta de categorías y el desglose del embudo. Capa 1: importa `lib` y nada más. 🔴 Nació sacando esto de adentro de `features/canales`, donde 58 de los 148 imports cruzados del front entraban a una feature para pedirle el modelo. | 23 | 1,651 | 10 | 20 | 1 |
+| `dominio` | El vocabulario del CRM que más de una vista necesita: qué ES una conversación, las queries que la traen, y las derivaciones puras sobre ella — canal, curso, ventana, antigüedad, cliente, dueño, líneas, la paleta de categorías y el desglose del embudo. Capa 1: importa `lib` y nada más. 🔴 Nació sacando esto de adentro de `features/canales`, donde 58 de los 148 imports cruzados del front entraban a una feature para pedirle el modelo. | 23 | 1,672 | 10 | 20 | 1 |
 | `entrenamiento` | Entrenar el bot: sus corridas, sus lecciones y los agujeros que deja. | 9 | 1,604 | 2 | 1 | 2 |
 | `plantillas` | Las secuencias de venta: editarlas, aprobar una propuesta y mandarlas paso a paso. | 7 | 1,429 | 1 | 2 | 2 |
 | `ivi` | La consulta al cerebro RAG y cómo se presenta lo que contesta: los tres tipos y los ocho errores. | 10 | 1,395 | 4 | 1 | 1 |
 | `venta` | Registrar la venta contra Cerberus sin salir del chat. | 6 | 1,127 | 1 | 2 | 6 |
 | `agenda` | Los seguimientos que una vendedora se agendó: cuándo vuelve a tocar a quién. | 6 | 1,023 | 2 | 4 | 4 |
 | `hechos` | Los datos recomendados — la munición de una línea. Tocar uno lo pone en el composer; no envía. | 7 | 1,003 | 2 | 2 | 3 |
-| `auth` | Entrar y salir: login contra Cerberus, el SSO de Centurión, y el token que el cliente cree antes de preguntar. | 12 | 902 | 6 | 4 | 4 |
+| `auth` | Entrar y salir: login contra Cerberus, el SSO de Centurión, y el token que el cliente cree antes de preguntar. | 13 | 919 | 7 | 4 | 4 |
 | `navegador` | El navegador embebido: qué peldaño de la escalera corre esta máquina y a dónde se puede ir. | 9 | 843 | 3 | 1 | 1 |
 | `app` | El armazón: qué vista está abierta, los ⌘N y qué capa se monta encima de la mesa. Compone features; no tiene regla de negocio propia. | 2 | 835 | 0 | 0 | 17 |
 | `eventos` | Registrar lo que la vendedora ESCUCHÓ, tipado, en el timeline del contacto. | 4 | 683 | 2 | 2 | 1 |
@@ -56,7 +56,7 @@
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
-| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. | 61 | 10,139 | 11 | 3 | 48 |
+| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. | 61 | 10,166 | 11 | 3 | 48 |
 | `bot` | El bot de primera línea que atiende solo: su agente, sus guardrails, sus frenos y el reenganche. | 56 | 7,997 | 24 | 7 | 13 |
 | `scripts` | Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción. | 34 | 5,623 | 0 | 0 | 33 |
 | `cola` | La consulta que ordena la deuda: a quién se atiende primero y por qué. Cada regla vive pura y con su gemelo SQL. | 56 | 4,815 | 37 | 9 | 6 |
@@ -79,9 +79,9 @@
 | `padron` | Los contactos de icarus que nunca escribieron: el WHERE que los recorta, sus facetas, y a quién se le habilitan. Es una frontera. | 15 | 1,023 | 6 | 4 | 2 |
 | `canales` | 🪦 Heredado de meta-escuela — las consultas de salud y tesorería del dashboard de pauta. ⚠️ No confundir con `front/canales`, que es la cola y sí se usa. | 6 | 1,021 | 0 | 2 | 4 |
 | `atribucion` | Que una venta encuentre su conversación: la llave determinista y la cascada etiquetada de respaldo. | 10 | 996 | 4 | 4 | 5 |
+| `numeros` | Los números de WhatsApp de Goberna: su estado de vinculación y de quién es cada uno. | 12 | 856 | 5 | 4 | 4 |
 | `meta` | Traer de Meta lo que pasó —interacciones, leads, anuncios— por los dos caminos (polling y webhook), que escriben igual. | 8 | 843 | 2 | 5 | 1 |
 | `resultados` | Qué pasó DESPUÉS de mandar una pieza. Deriva el veredicto; los nombres no prometen causa. | 9 | 840 | 4 | 2 | 5 |
-| `numeros` | Los números de WhatsApp de Goberna: su estado de vinculación y de quién es cada uno. | 12 | 773 | 5 | 4 | 4 |
 | `lazo` | 🪦 Heredado de meta-escuela — el outbox que le contaría las conversiones a Meta por CAPI. Apagado (`LAZO_RELOJ`). | 7 | 747 | 2 | 6 | 3 |
 | `notas` | Las páginas de la Libreta y su texto plano. | 8 | 743 | 5 | 1 | 2 |
 | `identidad` | El puente clave-de-conversación ↔ persona: enlazar, revocar, unificar. | 7 | 736 | 3 | 2 | 1 |

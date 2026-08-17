@@ -136,10 +136,19 @@ whatsappRouter.get('/lineas', ruta(async (req, res) => {
 
   let etiquetas = new Map<string, string>();
   let mias = new Set<string>();
+  /**
+   * Las que atiende MÁS DE UNA persona. `51984429504` tiene siete en producción,
+   * y por eso no es «la línea» de ninguna de ellas: nadie se la trajo y nadie la
+   * puede retirar. El panel lo usa para decidir si ofrece traer una propia — con
+   * la misma regla que el tope del server (`numeros/autoVinculacion.ts`), porque
+   * con dos reglas distintas el botón aparecería y el POST contestaría 409.
+   */
+  let compartidas = new Set<string>();
   let exclusiva = false;
   try {
     const registradas = await listarNumeros(db);
     etiquetas = new Map(registradas.map((n) => [n.numero, n.etiqueta]));
+    compartidas = new Set(registradas.filter((n) => n.vendedoras.length > 1).map((n) => n.numero));
     const yo = req.vendedoraId;
     if (yo) {
       // Normalizando los DOS lados: Cerberus empuja la grafía que tiene («Luz»)
@@ -167,6 +176,7 @@ whatsappRouter.get('/lineas', ruta(async (req, res) => {
       etiqueta: etiquetas.get(l.numero)?.trim() || l.numero,
       estado: l.transporte.estado().estado,
       mias: mias.has(l.numero),
+      compartida: compartidas.has(l.numero),
     })),
   });
 }));

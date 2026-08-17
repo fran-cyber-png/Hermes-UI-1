@@ -72,6 +72,9 @@ export function PanelUsuario({
   const { propsOverlay } = usePopover(abierto, cerrar, { z: 'z-30' });
 
   const mias = lineas.filter((l) => l.mias === true);
+  // La del EQUIPO no habilita ni deshabilita nada: lo que decide si puede
+  // traer la suya es no tener NINGUNA propia. Misma regla que el server.
+  const tienePropia = mias.some((l) => l.compartida !== true);
 
   return (
     <span className="relative">
@@ -107,6 +110,7 @@ export function PanelUsuario({
               vendedora={vendedora}
               cerberusVivo={cerberusVivo}
               mias={mias}
+              tienePropia={tienePropia}
               onSalir={onSalir}
               onVincular={() => {
                 cerrar();
@@ -134,12 +138,15 @@ export function ContenidoUsuario({
   vendedora,
   cerberusVivo,
   mias,
+  tienePropia,
   onSalir,
   onVincular,
 }: {
   vendedora: Vendedora;
   cerberusVivo: boolean | null;
-  mias: { numero: string; etiqueta: string }[];
+  mias: { numero: string; etiqueta: string; compartida?: boolean }[];
+  /** ¿Tiene alguna línea que NO comparta? Si no, se le ofrece traer la suya. */
+  tienePropia?: boolean;
   onSalir: () => void;
   /** Ausente = la galería, que pinta el panel solo (sin el modal detrás). */
   onVincular?: () => void;
@@ -206,32 +213,42 @@ export function ContenidoUsuario({
 
             <div className="mt-2.5">
               <p className="text-[11px] font-semibold text-muted-foreground">Tus líneas</p>
-              {mias.length > 0 ? (
+              {mias.length > 0 && (
                 <ul className="mt-1 space-y-0.5">
                   {mias.map((l) => (
                     <li key={l.numero} className="flex items-center gap-1.5 text-[11px] text-foreground">
                       <Smartphone size={11} className="shrink-0 text-muted-foreground" />
                       <span className="min-w-0 flex-1 truncate">{l.etiqueta}</span>
+                      {/* Decir cuál es del equipo importa: es la que explica por
+                          qué le sigue apareciendo «Vincular tu WhatsApp». */}
+                      {l.compartida === true && (
+                        <span className="shrink-0 text-[10px] text-muted-foreground">del equipo</span>
+                      )}
                       <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{l.numero}</span>
                     </li>
                   ))}
                 </ul>
-              ) : (
-                <>
-                  {/* Sin líneas asignadas se ve TODO — es el fail-open de
-                      `cola/lineas.ts`, y decirlo evita que lea la cola de todos
-                      creyendo que es la suya. */}
-                  <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-                    No tenés ninguna asignada, así que ves las conversaciones de todas.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => onVincular?.()}
-                    className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-1.5 text-[11px] font-bold text-foreground transition-colors hover:border-primary/50 hover:text-primary"
-                  >
-                    <Smartphone size={12} /> Vincular tu WhatsApp
-                  </button>
-                </>
+              )}
+              {mias.length === 0 && (
+                <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                  No tenés ninguna asignada.
+                </p>
+              )}
+              {/* 🔴 EL BOTÓN LO DECIDE «NO TENER PROPIA», NO «NO TENER NINGUNA».
+                  Con la condición vieja (`mias.length === 0`) las SIETE personas
+                  que comparten `51984429504` —Luz, Sindy y las cinco ventas1X@,
+                  o sea el equipo entero— no veían este botón. Y no veían un
+                  rechazo: no veían nada. Es la misma regla que el tope del
+                  server (`numeros/autoVinculacion.ts`); si divergen, el botón
+                  aparece y el POST contesta 409. */}
+              {tienePropia !== true && (
+                <button
+                  type="button"
+                  onClick={() => onVincular?.()}
+                  className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-1.5 text-[11px] font-bold text-foreground transition-colors hover:border-primary/50 hover:text-primary"
+                >
+                  <Smartphone size={12} /> Vincular tu WhatsApp
+                </button>
               )}
             </div>
 
