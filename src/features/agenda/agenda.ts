@@ -21,6 +21,7 @@ export interface Recordatorio {
   nota: string;
   cuando: string;
   estado: 'pendiente' | 'hecho';
+  importancia?: 'alta' | 'media' | 'baja';
 }
 
 export function useAgenda() {
@@ -67,7 +68,19 @@ export function useAgenda() {
     onSuccess: invalidar,
   });
 
-  return { agenda, crear, cambiarEstado, borrar };
+  const actualizarHora = useMutation({
+    mutationFn: (v: { id: number; cuando: string }) =>
+      api(`/api/agenda/${v.id}`, { method: 'PATCH', body: JSON.stringify({ cuando: v.cuando }) }),
+    onSuccess: invalidar,
+  });
+
+  const actualizarImportancia = useMutation({
+    mutationFn: (v: { id: number; importancia?: 'alta' | 'media' | 'baja' }) =>
+      api(`/api/agenda/${v.id}`, { method: 'PATCH', body: JSON.stringify({ importancia: v.importancia }) }),
+    onSuccess: invalidar,
+  });
+
+  return { agenda, crear, cambiarEstado, borrar, actualizarHora, actualizarImportancia };
 }
 
 /** Cuántas promesas están venciendo: vencidas + las de hoy. Para el badge del header. */

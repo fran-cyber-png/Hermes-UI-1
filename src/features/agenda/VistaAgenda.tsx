@@ -2,8 +2,6 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   AlarmClockCheck,
   CalendarPlus,
-  ChevronLeft,
-  ChevronRight,
   Loader2,
   MessageSquareText,
   Trash2,
@@ -17,6 +15,12 @@ import { useSesionWa } from '../whatsapp/conversacionWa';
 import { conversacionDeRecordatorio, opcionesRapidas, useAgenda, type Recordatorio } from './agenda';
 import { aLocal, horaDe, indiceTrasAhora, inicioDeSemana, mismaFecha, traducirCuando } from './fechas';
 import { BARRA_TIPO, barraDeNota, estiloDeNota, tipoDominante } from './tipoDeNota';
+import { useNotificacionesRecordatorio } from './useNotificacionesRecordatorio';
+import { VistaSemanaConTimeline } from './VistaSemanaConTimeline';
+import { MiniCalendario } from './MiniCalendario';
+import { CalendarHeader } from './components/CalendarHeader';
+import { colorPuntoImportancia } from './importancia';
+import { SelectorImportancia } from './SelectorImportancia';
 
 /**
  * LA AGENDA — el calendario de la vendedora, estilo Google Calendar pero de
@@ -33,7 +37,6 @@ import { BARRA_TIPO, barraDeNota, estiloDeNota, tipoDominante } from './tipoDeNo
 const DIAS_SEMANA = ['LU', 'MA', 'MI', 'JU', 'VI', 'SÁ', 'DO'];
 const MODOS = ['mes', 'semana', 'dia'] as const;
 type Modo = (typeof MODOS)[number];
-const MODO_LABEL: Record<Modo, string> = { mes: 'Mes', semana: 'Semana', dia: 'Día' };
 
 // ── La línea del ahora: el único oro estructural — tiempo pasando ──────────
 
@@ -56,11 +59,15 @@ function Chip({ r, vencido, onVer }: { r: Recordatorio; vencido: boolean; onVer:
         e.stopPropagation();
         onVer(r);
       }}
+      title={r.importancia ? `Importancia: ${r.importancia.toUpperCase()}` : 'Sin importancia definida'}
       className={
         'flex w-full items-center gap-1 truncate rounded-md px-1 py-0.5 text-left text-[11px] font-medium transition-colors hover:brightness-95 ' +
         estiloDeNota(r.nota, vencido, r.estado === 'hecho')
       }
     >
+      {r.importancia && (
+        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${colorPuntoImportancia(r.importancia)}`} />
+      )}
       <span className="shrink-0 font-mono text-[11px] tabular-nums opacity-80">{horaDe(r)}</span>
       <span className="truncate">{r.nota}</span>
     </button>
@@ -108,7 +115,7 @@ function Detalle({
   onCerrar: () => void;
   onAbrir: (c: Conversacion) => void;
 }) {
-  const { cambiarEstado, borrar } = useAgenda();
+  const { cambiarEstado, borrar, actualizarImportancia } = useAgenda();
   const [confirmaBorrar, setConfirmaBorrar] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hecho = r.estado === 'hecho';
@@ -149,6 +156,18 @@ function Detalle({
           {r.personaNombre ??
             (r.personaId ? <span className="font-mono text-[11px] tabular-nums">{formatoTelefono(r.personaId)}</span> : 'sin conversación atada')}
         </span>
+      </div>
+
+      {/* Selector de importancia */}
+      <div className="mt-3">
+        <div className="text-xs font-semibold text-foreground mb-1.5">Importancia</div>
+        <SelectorImportancia
+          valor={r.importancia}
+          onChange={(importancia) => {
+            actualizarImportancia.mutate({ id: r.id, importancia }, { onError: () => setError('No se guardó la importancia — probá de nuevo.') });
+          }}
+          disabled={actualizarImportancia.isPending}
+        />
       </div>
 
       <div className="mt-3 flex gap-2">
@@ -361,7 +380,7 @@ export function VistaAgenda({
   crearInicial?: { telefono?: string; nota?: string } | null;
   onCrearInicialUsado?: () => void;
 }) {
-  const { agenda } = useAgenda();
+  const { agenda, actualizarHora } = useAgenda();
   // La hora del cliente, recalculada por minuto: mueve la línea del ahora y
   // vuelve «mañana» en «vencido» sin que nadie toque nada.
   const [ahora, setAhora] = useState(() => new Date());
@@ -387,6 +406,12 @@ export function VistaAgenda({
     setSemilla(null);
     setCrearEn(f);
   }
+  function manejarActualizarHora(recordatorioId: number, nuevaFecha: Date) {
+    actualizarHora.mutate({
+      id: recordatorioId,
+      cuando: nuevaFecha.toISOString(),
+    });
+  }
 
   // El puente entra: crear abierto con lo que mandó la otra vista.
   useEffect(() => {
@@ -398,6 +423,9 @@ export function VistaAgenda({
   }, [crearInicial, onCrearInicialUsado]);
 
   const rs = agenda.data?.recordatorios ?? [];
+
+  // Hook de notificaciones
+  useNotificacionesRecordatorio(rs);
 
   const porDia = useMemo(() => {
     const m = new Map<string, Recordatorio[]>();
@@ -411,12 +439,6 @@ export function VistaAgenda({
 
   const inicioHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
   const vencidos = rs.filter((r) => r.estado === 'pendiente' && new Date(r.cuando) < inicioHoy);
-  // Esta semana = pendientes de hoy en adelante; los vencidos ya tienen su pill.
-  const estaSemana = rs.filter((r) => {
-    const d = new Date(r.cuando);
-    const fin = new Date(inicioDeSemana(hoy).getTime() + 7 * 86_400_000);
-    return r.estado === 'pendiente' && d >= inicioHoy && d < fin;
-  });
 
   // Las celdas del mes: desde el lunes de la primera semana hasta completar 6 filas.
   const celdasMes = useMemo(() => {
@@ -443,85 +465,46 @@ export function VistaAgenda({
   const esFocoHoy = mismaFecha(foco, hoy);
   const corteDia = esFocoHoy ? indiceTrasAhora(delDiaFoco, ahora) : -1;
 
+  const titleFormat = modo === 'mes'
+    ? foco.toLocaleDateString('es', { month: 'long', year: 'numeric' })
+    : foco.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' });
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col p-3">
-      {/* ── La toolbar, a lo GCal ── */}
-      <div className="mb-2.5 flex shrink-0 items-center gap-2 px-1">
-        <button
-          type="button"
-          onClick={() => setFoco(new Date())}
-          className="rounded-full border border-border px-3.5 py-1.5 text-xs font-bold text-foreground transition-colors hover:border-primary hover:bg-secondary/40"
-        >
-          Hoy
-        </button>
-        <div className="flex">
-          <button type="button" onClick={() => mover(-1)} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-            <ChevronLeft size={16} />
-          </button>
-          <button type="button" onClick={() => mover(1)} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-            <ChevronRight size={16} />
-          </button>
-        </div>
-        {/* El titular de la vista: el mes en Montserrat, el año en voz de imprenta. */}
-        {modo === 'dia' ? (
-          <h2 className="font-heading text-xl font-bold capitalize tracking-tight text-foreground">
-            {foco.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })}
-          </h2>
-        ) : (
-          <h2 className="font-heading text-2xl font-bold capitalize tracking-tight text-foreground">
-            {foco.toLocaleDateString('es', { month: 'long' })}
-            <span className="ml-1 align-baseline font-mono text-xs font-normal text-muted-foreground">{foco.getFullYear()}</span>
-          </h2>
-        )}
+    <div className="flex min-h-0 flex-1 flex-col bg-background">
+      {/* ── Toolbar superior con CalendarHeader ── */}
+      <CalendarHeader
+        title={titleFormat}
+        modo={modo}
+        overdue={vencidos.length}
+        onToday={() => setFoco(new Date())}
+        onPrevious={() => mover(-1)}
+        onNext={() => mover(1)}
+        onModoChange={setModo}
+        onCreateClick={() => abrirCrear(null)}
+      />
 
-        <div className="ml-3 flex items-center gap-2 text-[11px]">
-          {vencidos.length > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                setFoco(new Date());
-                setModo('dia');
-              }}
-              className="rounded-full bg-destructive/10 px-2 py-0.5 font-semibold text-destructive transition-colors hover:bg-destructive/20"
-            >
-              {vencidos.length} promesa{vencidos.length === 1 ? '' : 's'} vencida{vencidos.length === 1 ? '' : 's'}
-            </button>
-          )}
-          {estaSemana.length > 0 && (
-            <span className="rounded-full bg-gold/15 px-2 py-0.5 font-semibold text-gold-ink">
-              {estaSemana.length} esta semana
-            </span>
-          )}
+      {/* ── Contenedor principal con minicalendario ── */}
+      <div className="flex min-h-0 flex-1 gap-4 overflow-hidden p-4">
+        {/* Minicalendario a la izquierda */}
+        <div className="shrink-0">
+          <MiniCalendario
+            foco={foco}
+            onClickDia={(fecha) => {
+              setFoco(fecha);
+              setModo('dia');
+            }}
+            onCambiarMes={(direccion) => {
+              const nuevaFecha = new Date(foco);
+              nuevaFecha.setMonth(nuevaFecha.getMonth() + direccion);
+              setFoco(nuevaFecha);
+            }}
+            porDia={porDia}
+            hoy={hoy}
+          />
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
-          <div className="flex rounded-full border border-border bg-card p-0.5">
-            {MODOS.map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setModo(m)}
-                className={
-                  'rounded-full px-3 py-1 text-xs font-semibold transition-colors ' +
-                  (modo === m ? 'bg-navy text-white' : 'text-muted-foreground hover:text-foreground')
-                }
-              >
-                {MODO_LABEL[m]}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={() => abrirCrear(null)}
-            className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-primary-foreground shadow-[0_4px_14px_-4px_rgba(37,99,235,0.5)] transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover active:scale-[0.97]"
-          >
-            <CalendarPlus size={14} /> Crear
-          </button>
-        </div>
-      </div>
-
-      {/* ── El calendario ── */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
+        {/* Calendario principal */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-card border border-border shadow-sm">
         {vacioTotal && (
           <p className="shrink-0 border-b border-border bg-secondary/30 px-4 py-2 text-center text-xs text-muted-foreground">
             Todavía no agendaste nada. Clic en cualquier día para tu primer seguimiento — nada se envía solo.
@@ -634,39 +617,14 @@ export function VistaAgenda({
             ))}
           </div>
         ) : modo === 'semana' ? (
-          <div className="grid min-h-0 flex-1 grid-cols-7">
-            {diasSemana.map((fecha) => {
-              const delDia = porDia.get(fecha.toDateString()) ?? [];
-              const esHoy = mismaFecha(fecha, hoy);
-              const corte = esHoy ? indiceTrasAhora(delDia, ahora) : -1;
-              return (
-                <div key={fecha.toISOString()} className="flex min-h-0 flex-col border-r border-border/60 last:border-r-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFoco(fecha);
-                      setModo('dia');
-                    }}
-                    className={'border-b border-border px-2 py-2 text-center transition-colors hover:bg-secondary/30 ' + (esHoy ? 'bg-secondary/50' : '')}
-                  >
-                    <div className="font-mono text-[11px] tracking-wider text-muted-foreground">{DIAS_SEMANA[(fecha.getDay() + 6) % 7]}</div>
-                    <div className={'mx-auto mt-0.5 flex size-6 items-center justify-center rounded-full text-sm tabular-nums ' + (esHoy ? 'bg-navy font-bold text-white' : 'text-foreground')}>
-                      {fecha.getDate()}
-                    </div>
-                  </button>
-                  <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-1.5">
-                    {esHoy && corte === 0 && <LineaAhora />}
-                    {delDia.map((r, i) => (
-                      <Fragment key={r.id}>
-                        <Chip r={r} vencido={r.estado === 'pendiente' && new Date(r.cuando) < inicioHoy} onVer={abrirDetalle} />
-                        {esHoy && corte === i + 1 && <LineaAhora />}
-                      </Fragment>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <VistaSemanaConTimeline
+            diasSemana={diasSemana}
+            hoy={hoy}
+            ahora={ahora}
+            porDia={porDia}
+            onVer={abrirDetalle}
+            onActualizarHora={manejarActualizarHora}
+          />
         ) : (
           /* ── Día ── */
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -700,20 +658,21 @@ export function VistaAgenda({
             )}
           </div>
         )}
-      </div>
+        </div>
 
-      {detalle && <Detalle r={detalle} onCerrar={() => setDetalle(null)} onAbrir={onAbrir} />}
-      {crearEn !== 'cerrado' && (
-        <Crear
-          fechaInicial={crearEn}
-          notaInicial={semilla?.nota}
-          telefonoInicial={semilla?.telefono}
-          onCerrar={() => {
-            setCrearEn('cerrado');
-            setSemilla(null);
-          }}
-        />
-      )}
+        {detalle && <Detalle r={detalle} onCerrar={() => setDetalle(null)} onAbrir={onAbrir} />}
+        {crearEn !== 'cerrado' && (
+          <Crear
+            fechaInicial={crearEn}
+            notaInicial={semilla?.nota}
+            telefonoInicial={semilla?.telefono}
+            onCerrar={() => {
+              setCrearEn('cerrado');
+              setSemilla(null);
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 }
