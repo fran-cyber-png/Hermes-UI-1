@@ -168,18 +168,101 @@ C3/C6 **de a uno** por R2.
 
 ---
 
-## 5 · Antes de tomar cualquier unidad
+## 5 · Cómo se ejecuta una unidad, paso a paso
 
-1. **Re-medí.** Las cifras del plan son del 15-ago: 24 conversaciones, Tracy con 10, 2.564
-   huérfanas. Pasaron dos días y varios deploys. El propio plan pone el candado: *«si toca 34 o 44,
-   alguien metió a Tracy o a ventas10@»*.
-2. **Leé el 🔴 de tu paso en el plan.** Cada uno tiene su trampa escrita, y son las que ya mordieron.
-3. **`git worktree add` y verificá la rama** (`git branch --show-current`) antes del primer commit.
-4. **Corré `npm run mapa:verificar`** antes de abrir el PR: las seis reglas tienen que estar en verde.
+### 5.1 · Montar el worktree (una vez por unidad)
+
+```bash
+# 1. Rama y worktree propios. El ID de la unidad va en el nombre de los dos.
+cd /Users/milaa/goberna/hermes
+git fetch origin
+git worktree add -b fix/b1-tabla-de-roles .claude/worktrees/B1 origin/main
+
+# 2. Dependencias — hacen falta en la RAÍZ y en `server/`, son dos node_modules.
+cd .claude/worktrees/B1 && npm ci && (cd server && npm ci)
+
+# 3. 🔴 El `.env` del server es GITIGNORED: el worktree nace SIN él.
+#    Sin esto, seis tests con base fallan con «DATABASE_URL no está configurado»
+#    y parece un bug del código. Copialo de un checkout que ya lo tenga.
+cp /Users/milaa/goberna/hermes/server/.env server/.env
+
+# 4. La base efímera de test (puerto 5442 — nunca 5438/5434/5439).
+docker compose -f docker-compose.test.yml up -d --wait
+(cd server && npx tsx src/pruebas/montarBase.ts)
+```
+
+⚠️ **La base de test es UNA sola para todos los worktrees.** Dos unidades corriendo `test:db` a la
+vez se pisan. Si vas a correr tests con base en paralelo, hacelo de a uno o levantá otro contenedor
+en otro puerto.
+
+### 5.2 · Abrir el pane y nombrarlo
+
+```bash
+herdr agent rename B1     # el pane se llama como la fila del tablero
+```
+
+Después arrancás tu agente ahí adentro (`claude`, `opencode`, lo que sea). Herdr lo detecta solo y
+te va a mostrar `working` / `idle` / `blocked` en la pestaña.
+
+### 5.3 · El prompt. Lo que hoy funcionó y lo que no
+
+El prompt tiene que traer **cinco cosas**, y las cinco salieron de corridas de hoy:
+
+1. **El worktree, y que todo comando empiece con `cd <worktree>`.** Sin eso el agente trabaja en el
+   checkout equivocado.
+2. **Qué archivos son suyos**, explícito. «Tocá lo que haga falta» termina en tres agentes editando
+   el mismo archivo.
+3. **Las prohibiciones ENUMERADAS.** Lo que no se prohíbe explícito, el agente lo decide solo. Las
+   que sirvieron: no cambiar contratos HTTP ni códigos de estado · no borrar comentarios (acá
+   documentan el porqué medido y valen más que el código) · no usar `any` para callar al compilador
+   · no commitear ni pushear · escribir en castellano.
+4. **El 🔴 de su paso, copiado del plan.** Es la trampa que ya mordió. Un agente que no la lee la
+   vuelve a pisar.
+5. **Cómo verificar, con los comandos**, y —si el frente tiene candado— **que lo verifique por
+   MUTACIÓN**: revertir el arreglo y comprobar que el test se pone rojo. Hoy eso atrapó tests que
+   habrían pasado igual sin el arreglo.
+
+⚠️ **Y pedile que reporte lo que NO pudo verificar.** El mejor resultado de hoy fue un agente que
+dijo «esto está hecho y NO se puede mergear», con la medición al lado. Un agente que sólo puede
+decir «listo» te devuelve un listo que no vale.
+
+### 5.4 · Antes de abrir el PR
+
+```bash
+cd <worktree>
+git branch --show-current          # 🔴 el checkout cambia de rama solo: verificá SIEMPRE
+npm run mapa:verificar             # las seis reglas en verde
+npx tsc --noEmit -p tsconfig.app.json && (cd server && npx tsc --noEmit)
+npm test && (cd server && npm test)
+(cd server && env DATABASE_URL="postgresql://hermes_test:hermes_test@127.0.0.1:5442/hermes_test" \
+   npx tsx --test 'src/**/*.test.db.ts')
+```
+
+Si tu unidad trae **migración**: `npm run db:generate`, después
+`JOURNAL_FILE=server/drizzle/meta/_journal.json goberna-journal-set-when`, y commiteá
+`server/drizzle/` **completo**. Ver R2.
+
+### 5.5 · Al terminar
+
+1. `Estado` → `listo` en la tabla de arriba, con tu rama.
+2. Escribí en la **bitácora** lo que otro agente necesita y no está en el plan. Con el comando.
+3. PR con `Closes #N`. **Y esperá**: el runner es uno (R1), así que no abras la siguiente unidad
+   con PR hasta que ésta cierre.
 
 ---
 
-## 6 · Bitácora — sólo se AGREGA, no se edita
+## 6 · Antes de tomar cualquier unidad
+
+1. **Re-medí.** Las cifras del plan son del 15-ago: 24 conversaciones, Tracy con 10, 2.564
+   huérfanas. Pasaron días y varios deploys. El propio plan pone el candado: *«si toca 34 o 44,
+   alguien metió a Tracy o a ventas10@»*.
+2. **Leé el 🔴 de tu paso en el plan.** Cada uno tiene su trampa escrita, y son las que ya mordieron.
+3. **Mirá el disco antes de empezar** (`git status`, `git stash list`): puede haber trabajo bueno de
+   una corrida que murió sin reportar. Le pasó hoy a dos.
+
+---
+
+## 7 · Bitácora — sólo se AGREGA, no se edita
 
 Acá va lo que otro agente necesita saber y no está en el plan. Formato: fecha · unidad · hallazgo.
 Si medís algo, **poné el comando**.
