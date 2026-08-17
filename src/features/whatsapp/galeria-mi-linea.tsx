@@ -14,7 +14,7 @@ import { VistaMiLinea, type PasoMiLinea } from './VincularMiWhatsapp';
  *
  *     npx vite --port 5199
  *     → http://localhost:5199/galeria-mi-linea.html?paso=formulario
- *     → ?paso=qr | conectado | baneado | error
+ *     → ?paso=qr | conectado | conectado_sin_montar | baneado | error
  */
 
 const QR_DEMO =
@@ -41,7 +41,10 @@ const PASOS: Record<string, PasoMiLinea> = {
   },
   esperando: { tipo: 'esperando', onCancelar: () => {} },
   qr: { tipo: 'qr', qr: QR_DEMO, onCancelar: () => {} },
-  conectado: { tipo: 'conectado', numero: '51955135507', onCerrar: () => {} },
+  conectado: { tipo: 'conectado', numero: '51955135507', montada: true, onCerrar: () => {} },
+  // El feo, y por eso está: la línea quedó vinculada y NO está atendiendo. La
+  // galería que sólo sirve el caso ideal ya escondió tres defectos una vez.
+  conectado_sin_montar: { tipo: 'conectado', numero: '51955135507', montada: false, onCerrar: () => {} },
   baneado: { tipo: 'baneado', ban: { codigo: '131056', expira: '2026-08-16 10:00' }, onVolver: () => {} },
   error: { tipo: 'error', motivo: 'no se pudo iniciar whatsmeow: sesión corrupta', onVolver: () => {} },
 };

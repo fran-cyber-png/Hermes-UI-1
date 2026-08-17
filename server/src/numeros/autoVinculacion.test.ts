@@ -1,36 +1,89 @@
-import { test } from "node:test";
+import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { puedeAutoVincular } from "./autoVinculacion.js";
+import { puedeAutoVincular, transportePuedeVincular } from "./autoVinculacion.js";
 
-const SIN_SUPERVISORES = {} as NodeJS.ProcessEnv;
-const CON_ANA_SUPERVISORA = { HERMES_SUPERVISORES: "ana" } as NodeJS.ProcessEnv;
+const MI_NUMERO = "51955135507";
+const OTRO_NUMERO = "51987654321";
 
-test("puedeAutoVincular: una vendedora sin línea y sin ser supervisora, puede", () => {
-  assert.deepEqual(puedeAutoVincular("luz", SIN_SUPERVISORES, []), { ok: true });
-});
+/** El server que SÍ puede vincular: whatsmeow. Sin supervisores configurados. */
+const WHATSMEOW = { WHATSAPP_TRANSPORTE: "whatsmeow" } as NodeJS.ProcessEnv;
+const WHATSMEOW_CON_ANA_SUPERVISORA = {
+  WHATSAPP_TRANSPORTE: "whatsmeow",
+  HERMES_SUPERVISORES: "ana",
+} as NodeJS.ProcessEnv;
 
-test("puedeAutoVincular: una supervisora NO puede, tenga o no línea", () => {
-  assert.deepEqual(puedeAutoVincular("ana", CON_ANA_SUPERVISORA, []), {
-    ok: false,
-    motivo: "es_supervisor",
+describe("transportePuedeVincular — el veto del server", () => {
+  test("whatsmeow sí", () => {
+    assert.equal(transportePuedeVincular(WHATSMEOW), true);
+  });
+
+  test("🔴 sin la variable, NO — el mismo default que arrancarWhatsapp (`falso`)", () => {
+    assert.equal(transportePuedeVincular({} as NodeJS.ProcessEnv), false);
+  });
+
+  test("`falso` y `cloud-api` no vinculan: su sesión .db no la usaría nadie", () => {
+    assert.equal(transportePuedeVincular({ WHATSAPP_TRANSPORTE: "falso" } as NodeJS.ProcessEnv), false);
+    assert.equal(transportePuedeVincular({ WHATSAPP_TRANSPORTE: "cloud-api" } as NodeJS.ProcessEnv), false);
   });
 });
 
-test("puedeAutoVincular: normaliza los DOS lados, como el resto del reparto", () => {
-  // Cerberus empuja `Ana`, ella entra escribiendo `ana`: sigue siendo supervisora.
-  assert.deepEqual(
-    puedeAutoVincular("ANA", { HERMES_SUPERVISORES: "ana" } as NodeJS.ProcessEnv, []),
-    { ok: false, motivo: "es_supervisor" },
-  );
-});
-
-test("puedeAutoVincular: quien ya tiene una línea no puede traer otra — 'solo 1'", () => {
-  assert.deepEqual(puedeAutoVincular("luz", SIN_SUPERVISORES, ["51987654321"]), {
-    ok: false,
-    motivo: "ya_tiene_linea",
+describe("puedeAutoVincular", () => {
+  test("una vendedora sin línea y sin ser supervisora, puede", () => {
+    assert.deepEqual(puedeAutoVincular("luz", WHATSMEOW, [], MI_NUMERO), { ok: true });
   });
-});
 
-test("puedeAutoVincular: sin HERMES_SUPERVISORES configurado, nadie es supervisor (fail-closed heredado)", () => {
-  assert.deepEqual(puedeAutoVincular("cualquiera", SIN_SUPERVISORES, []), { ok: true });
+  test("🔴 el transporte se pregunta PRIMERO: un botón no escribe una credencial que nadie va a usar", () => {
+    // Producción corre `WHATSAPP_TRANSPORTE=falso`: acá es donde eso se convierte
+    // en 409 en vez de en 43 MB de sesión de WhatsApp escritos en VPS1.
+    assert.deepEqual(puedeAutoVincular("luz", {} as NodeJS.ProcessEnv, [], MI_NUMERO), {
+      ok: false,
+      motivo: "transporte_sin_vinculacion",
+    });
+  });
+
+  test("el veto del transporte le gana hasta a una supervisora con línea", () => {
+    assert.deepEqual(
+      puedeAutoVincular("ana", { HERMES_SUPERVISORES: "ana" } as NodeJS.ProcessEnv, [OTRO_NUMERO], MI_NUMERO),
+      { ok: false, motivo: "transporte_sin_vinculacion" },
+    );
+  });
+
+  test("una supervisora NO puede, tenga o no línea", () => {
+    assert.deepEqual(puedeAutoVincular("ana", WHATSMEOW_CON_ANA_SUPERVISORA, [], MI_NUMERO), {
+      ok: false,
+      motivo: "es_supervisor",
+    });
+  });
+
+  test("normaliza los DOS lados, como el resto del reparto", () => {
+    // Cerberus empuja `Ana`, ella entra escribiendo `ana`: sigue siendo supervisora.
+    assert.deepEqual(puedeAutoVincular("ANA", WHATSMEOW_CON_ANA_SUPERVISORA, [], MI_NUMERO), {
+      ok: false,
+      motivo: "es_supervisor",
+    });
+  });
+
+  test("quien ya tiene OTRA línea no puede traer una segunda — 'solo 1'", () => {
+    assert.deepEqual(puedeAutoVincular("luz", WHATSMEOW, [OTRO_NUMERO], MI_NUMERO), {
+      ok: false,
+      motivo: "ya_tiene_linea",
+    });
+  });
+
+  test("🔴 re-vincular LA PROPIA sí se puede: «solo 1» es cuántas, no cuántas veces", () => {
+    // Es el reintento del montaje: si `agregarLineaWhatsmeow` falló, la fila ya
+    // está escrita y ésta es la única forma de volver a levantarla desde la app.
+    assert.deepEqual(puedeAutoVincular("luz", WHATSMEOW, [MI_NUMERO], MI_NUMERO), { ok: true });
+  });
+
+  test("con una línea propia, pedir OTRA sigue siendo `ya_tiene_linea`", () => {
+    assert.deepEqual(puedeAutoVincular("luz", WHATSMEOW, [MI_NUMERO], OTRO_NUMERO), {
+      ok: false,
+      motivo: "ya_tiene_linea",
+    });
+  });
+
+  test("sin HERMES_SUPERVISORES configurado, nadie es supervisor (fail-closed heredado)", () => {
+    assert.deepEqual(puedeAutoVincular("cualquiera", WHATSMEOW, [], MI_NUMERO), { ok: true });
+  });
 });

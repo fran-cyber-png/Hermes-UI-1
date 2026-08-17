@@ -15,6 +15,7 @@ import { guardarReaccion } from '../reacciones/repositorio.js';
 import { aplicarRecibo } from '../entrega/repositorio.js';
 import type { TransporteWhatsapp } from './transporte.js';
 import { porQueFallo } from '../lib/porQueFallo.js';
+import { transportePuedeVincular } from '../numeros/autoVinculacion.js';
 
 /**
  * EL ARMADO DE WHATSAPP AL ARRANCAR EL SERVER — ahora de N números (#50).
@@ -256,8 +257,23 @@ export function gestorWhatsapp(): GestorWhatsapp {
  * bootear) es lo que hoy garantiza que un `.env` sin tocar levanta igual que
  * ayer, y tocar esa garantía es su propio frente, no un efecto colateral de
  * este.
+ *
+ * ⚠️ **LA GUARDA DEL TRANSPORTE ESTÁ ACÁ, PERO ACÁ LLEGA TARDE.** Un server que
+ * corre `falso` o `cloud-api` no tiene por qué montar una línea de whatsmeow, y
+ * este `throw` lo impide — pero para cuando alguien llama a esta función, la
+ * credencial de WhatsApp **ya está escrita en disco**: la escribe
+ * `Vinculador.iniciar()` al crear el cliente (`whatsapp/vinculador.ts`), sin
+ * mirar el transporte. El veto que de verdad protege el `.wa-sessions/*.db` vive
+ * **antes de iniciar el pareo**, en `numeros/autoVinculacion.ts`. Esto es la
+ * segunda vuelta de llave, no la primera.
  */
-export function agregarLineaWhatsmeow(numero: string): WhatsappArmado {
+export function agregarLineaWhatsmeow(numero: string, env: NodeJS.ProcessEnv = process.env): WhatsappArmado {
+  if (!transportePuedeVincular(env)) {
+    throw new Error(
+      `No monto la línea ${numero} por whatsmeow: este server corre con otro transporte, ` +
+        `así que esa sesión no la iba a atender nadie.`,
+    );
+  }
   const g = gestorWhatsapp();
   if (g.de(numero)) {
     throw new Error(`La línea ${numero} ya está montada: no se monta dos veces.`);

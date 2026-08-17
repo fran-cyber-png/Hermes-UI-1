@@ -166,11 +166,27 @@ npm install && npm run dev:app                     # la cáscara Tauri (arranca 
   monta **en caliente** (`whatsapp/wiring.ts:agregarLineaWhatsmeow`, sin `WHATSAPP_NUMEROS` ni reinicio).
   Cerberus sigue siendo la ÚNICA vía para líneas de Escuela o de campaña; esto es solo `proposito:
   'vendedora'`, y el número queda atado 1:1 a quien lo trajo (`numeros/autoVinculacion.ts`).
+  🔴 **Y HOY, EN PRODUCCIÓN, CONTESTA 409.** El veto está en `numeros/autoVinculacion.ts` y es lo
+  primero que se pregunta: **sin `WHATSAPP_TRANSPORTE=whatsmeow` no se inicia el pareo**. El motivo
+  es que `Vinculador.iniciar()` hace `createClient({ store: .wa-sessions/<n>.db })` **sin mirar el
+  transporte** — o sea que un botón escribía 43 MB de credencial de WhatsApp real en VPS1 para un
+  server que nunca iba a montar esa línea. Producción corre `falso` desde el 13-ago, así que
+  **prender este frente es un cambio de `.env` + reinicio a mano**, no un merge (N5 sale verde sin
+  reiniciar si el SHA ya está desplegado: verificar `ActiveEnterTimestamp`).
   ⚠️ **No sobrevive un reinicio.** El montaje en caliente vive solo en el proceso: si el server
   reinicia (N5, un crash), la línea auto-vinculada no vuelve a montarse sola — sigue siendo
   `WHATSAPP_NUMEROS` + reinicio manual lo que la trae de vuelta, igual que hoy con una línea de
   Cerberus. Cerrar esa brecha del todo es sacar el arranque de esa variable y leerlo de `numeros_wa`
   (anotado como #194 en `numeros/dominio.ts`) — frente aparte, no resuelto acá.
+  🔴 **Y eso NO es una molestia, es la precondición**: medido, producción reinicia **24 veces por
+  semana** con mediana de **1,36 h** entre reinicios. Una línea auto-vinculada tiene vida esperada
+  de HORAS. **Sin #194 esto no se puede prender**, y el workaround «agregala a `WHATSAPP_NUMEROS`»
+  tampoco alcanza mientras el transporte esté en `falso`: ahí `wiring.ts` ni siquiera lee esa lista.
+  ⚠️ **Si el montaje en caliente falla, la fila QUEDA** (no hay `quitar` en `GestorWhatsapp`): la
+  respuesta trae `montada: false` y la pantalla lo dice en vez de festejar. El reintento es **volver
+  a vincular el MISMO número** — «solo 1» es cuántas líneas, no cuántas veces. Una línea que YA está
+  montada se rechaza con `linea_ya_corriendo`: el vinculador y el transporte abrirían el mismo `.db`
+  y SQLite no admite dos escritores.
 - **El webview viejo ya no existe**: `PanelWhatsapp.tsx`, `cuentas.ts`, `whatsapp/tipos.ts` y los tres
   preloads de `electron/` se borraron con ADR 0039.
 - **Nada de automatización, con UNA excepción escrita**: no envío masivo, no warmup, **no anti-ban**.

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { montar, reposar, teclear, type Montado } from '../../pruebas/dom';
+import { escribir, montar, reposar, teclear, tocar, type Montado } from '../../pruebas/dom';
 import { VincularMiWhatsapp, VistaMiLinea, type PasoMiLinea } from './VincularMiWhatsapp';
 
 /**
@@ -58,9 +58,21 @@ describe('VistaMiLinea — cada paso se distingue sin leer', () => {
     expect(img?.getAttribute('src')).toBe(QR_DEMO);
   });
 
+  test('🔴 conectado SIN montar: no dice «¡Listo!» — la línea todavía no atiende', () => {
+    montado = montar(
+      <VistaMiLinea
+        paso={{ tipo: 'conectado', numero: '51955135507', montada: false, onCerrar: () => {} }}
+        onCerrar={() => {}}
+      />,
+    );
+    const texto = montado.contenedor.textContent ?? '';
+    expect(texto).toContain('no está atendiendo');
+    expect(texto).not.toContain('¡Listo!');
+  });
+
   test('conectado: no queda ni un rastro del formulario ni del QR', () => {
     montado = montar(
-      <VistaMiLinea paso={{ tipo: 'conectado', numero: '51955135507', onCerrar: () => {} }} onCerrar={() => {}} />,
+      <VistaMiLinea paso={{ tipo: 'conectado', numero: '51955135507', montada: true, onCerrar: () => {} }} onCerrar={() => {}} />,
     );
     expect(montado.contenedor.textContent).toContain('quedó vinculado');
     expect(montado.contenedor.querySelector('img')).toBeNull();
@@ -89,7 +101,7 @@ describe('VistaMiLinea — cada paso se distingue sin leer', () => {
     const onCerrar = vi.fn();
     const pasos: PasoMiLinea[] = [
       { tipo: 'esperando', onCancelar: () => {} },
-      { tipo: 'conectado', numero: '51955135507', onCerrar: () => {} },
+      { tipo: 'conectado', numero: '51955135507', montada: true, onCerrar: () => {} },
     ];
     for (const paso of pasos) {
       montado = montar(<VistaMiLinea paso={paso} onCerrar={onCerrar} />);
@@ -109,6 +121,45 @@ describe('VincularMiWhatsapp — el cableado', () => {
     await reposar();
     teclear('Escape');
     expect(onCerrar).toHaveBeenCalledTimes(1);
+  });
+
+  test('🔴 el polling NO sale antes de que el POST vuelva: si no, el camino feliz dice «se cortó»', async () => {
+    // El defecto medido: `setEnVuelo(true)` iba ANTES del `await`, así que el
+    // primer poll llegaba con el POST todavía en el aire — el server no tenía
+    // pareo tomado y contestaba `expirado`, o sea «La vinculación se cortó» a los
+    // pocos milisegundos de apretar Vincular, sin que existiera un solo QR.
+    const llamadas: string[] = [];
+    const enElAire: { soltar: ((r: Response) => void) | null } = { soltar: null };
+    const json = (cuerpo: unknown) =>
+      new Response(JSON.stringify(cuerpo), { status: 200, headers: { 'content-type': 'application/json' } });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
+        const metodo = init?.method ?? 'GET';
+        llamadas.push(`${metodo} ${String(url)}`);
+        if (metodo === 'POST') return new Promise<Response>((r) => (enElAire.soltar = r));
+        return Promise.resolve(json({ estado: 'expirado' }));
+      }),
+    );
+
+    montado = montar(<VincularMiWhatsapp onCerrar={() => {}} />);
+    const input = montado.contenedor.querySelector('input') as HTMLInputElement;
+    escribir(input, '51955135507');
+    const vincular = [...montado.contenedor.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Vincular',
+    );
+    expect(vincular).toBeDefined();
+    if (vincular) tocar(vincular);
+    await reposar();
+
+    const polls = () => llamadas.filter((l) => l.includes('/vincular/estado'));
+    expect(polls()).toHaveLength(0);
+    expect(montado.contenedor.textContent).not.toContain('se cortó');
+
+    enElAire.soltar?.(json({ estado: 'vinculando' }));
+    await reposar();
+    expect(polls().length).toBeGreaterThan(0);
   });
 
   test('Enter con menos de 8 dígitos NO arranca la vinculación (no hay POST)', async () => {

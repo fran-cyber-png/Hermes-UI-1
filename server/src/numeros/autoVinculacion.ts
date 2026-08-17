@@ -15,23 +15,87 @@ import { esSupervisor } from "../padron/supervisor.js";
  * levantar nada. Quien llama trae ya resueltas las líneas actuales
  * (`numeros/repositorio.ts:lineasDeVendedora`) — la MISMA consulta que usa «Las
  * mías» — para que «ya tenés una línea» sea el mismo hecho en los dos lugares.
+ *
+ * ══ 🔴 EL PRIMER VETO ES DEL SERVER, NO DE LA PERSONA ══════════════════════
+ *
+ * Un botón de esta ruta **escribe una credencial real de WhatsApp en el disco de
+ * VPS1**: `Vinculador.iniciar()` hace `createClient({ store: .wa-sessions/<n>.db })`
+ * SIN mirar el transporte (`whatsapp/vinculador.ts`), y ese `.db` es la cuenta de
+ * WhatsApp de esa persona — 43 MB de credencial, gitignored por el nombre exacto
+ * del directorio, imposible de recuperar sin el teléfono físico.
+ *
+ * Por eso la guarda va acá, que es **antes de iniciar el pareo**, y no antes de
+ * montar la línea: para cuando se monta, la credencial ya está escrita. Con
+ * cualquier transporte que no sea `whatsmeow` no hay nada que esa sesión pueda
+ * hacer después —el proceso no va a levantar esa línea— así que escribirla es
+ * puro riesgo sin contrapartida.
+ *
+ * ⚠️ **Y esto tiene un precio que hay que decir en voz alta**: producción corre
+ * hoy `WHATSAPP_TRANSPORTE=falso`, así que con esta guarda la auto-vinculación
+ * responde **409 en producción** hasta que alguien cambie el `.env` de VPS1 y
+ * reinicie a mano (N5 sale verde sin reiniciar si el SHA ya está desplegado).
+ * El frente queda dependiendo de esa operación; no es un detalle de código.
+ *
+ * ══ ⚠️ EL ROL, CUANDO ATERRICE LA TABLA DE EQUIPO ═════════════════════════
+ *
+ * Hoy esto pregunta `esSupervisor(id, env)`, que lee `HERMES_SUPERVISORES`. Con
+ * el modelo de roles administrado desde Hermes (paso 5 del plan, tabla `equipo`,
+ * la construye otra unidad en paralelo) este call site pasa a preguntar
+ * **`rol === 'vendedora'`** — comparación EXACTA al rol más bajo—, y **no**
+ * `!alcanzaRol(rol, 'supervisor')`.
+ *
+ * Es el decimoctavo call site y el único que no pregunta «¿ve de más?» sino «¿es
+ * del piso?». La diferencia la decide un caso real: Luz dirige *y además* atiende
+ * 2.355 conversaciones. Con la pregunta jerárquica, subirle el rol le sacaría la
+ * línea propia con la que trabaja todos los días — o sea que la jerarquía se
+ * vuelve en contra justo en la persona que más la necesita. Con la exacta, sólo
+ * quien es *solamente* vendedora trae línea, y quien tiene un rol más alto se lo
+ * declara Cerberus como cualquier otra línea.
  */
 
-export type MotivoRechazoAutoVinculacion = "es_supervisor" | "ya_tiene_linea";
+/** El único transporte que puede USAR una sesión de whatsmeow después de escribirla. */
+export const TRANSPORTE_QUE_VINCULA = "whatsmeow";
+
+export type MotivoRechazoAutoVinculacion =
+  | "transporte_sin_vinculacion"
+  | "es_supervisor"
+  | "ya_tiene_linea";
 
 export type DecisionAutoVinculacion =
   | { ok: true }
   | { ok: false; motivo: MotivoRechazoAutoVinculacion };
 
+/**
+ * ¿Este server puede escribir una sesión de WhatsApp que después va a servir para
+ * algo? Default `falso` — el mismo default que `whatsapp/wiring.ts:arrancarWhatsapp`,
+ * a propósito: dos defaults distintos darían un server que vincula sesiones que
+ * nunca va a montar.
+ */
+export function transportePuedeVincular(env: NodeJS.ProcessEnv): boolean {
+  return (env.WHATSAPP_TRANSPORTE ?? "falso") === TRANSPORTE_QUE_VINCULA;
+}
+
+/**
+ * `numeroPedido` existe para que **re-vincular la línea propia siga siendo
+ * posible**: «solo 1» es un tope de CUÁNTAS, no una prohibición de volver a
+ * parear la que ya es suya. Sin esto, si el montaje en caliente falla —o si el
+ * server reinicia y la línea queda registrada y muda (#194)— la vendedora tiene
+ * su fila escrita y ninguna forma de volver a intentarlo desde la app.
+ */
 export function puedeAutoVincular(
   vendedoraId: string,
   env: NodeJS.ProcessEnv,
   lineasActuales: readonly string[],
+  numeroPedido: string,
 ): DecisionAutoVinculacion {
+  // Primero el veto del SERVER: no depende de quién pregunte y es el que evita
+  // escribir una credencial que nadie va a usar.
+  if (!transportePuedeVincular(env)) return { ok: false, motivo: "transporte_sin_vinculacion" };
   // Los supervisores no traen línea propia: supervisan las de las demás. Va
-  // primero porque es la condición que no cambia con el tiempo — «ya tiene
-  // línea» sí, si algún día se retira una.
+  // antes que «ya tiene línea» porque es la condición que no cambia con el
+  // tiempo — «ya tiene línea» sí, si algún día se retira una.
   if (esSupervisor(vendedoraId, env)) return { ok: false, motivo: "es_supervisor" };
-  if (lineasActuales.length > 0) return { ok: false, motivo: "ya_tiene_linea" };
+  const otraLinea = lineasActuales.some((linea) => linea !== numeroPedido);
+  if (otraLinea) return { ok: false, motivo: "ya_tiene_linea" };
   return { ok: true };
 }

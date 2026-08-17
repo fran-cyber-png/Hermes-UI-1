@@ -7,6 +7,7 @@ import {
   useEstadoAutoVinculacion,
   useIniciarAutoVinculacion,
   useInvalidarMiLinea,
+  useOlvidarEstadoAutoVinculacion,
 } from './miLinea';
 
 /**
@@ -29,47 +30,66 @@ import {
 export function VincularMiWhatsapp({ onCerrar }: { onCerrar: () => void }) {
   useEscape(onCerrar);
   const [numero, setNumero] = useState('');
-  const [enVuelo, setEnVuelo] = useState(false);
 
   const iniciar = useIniciarAutoVinculacion();
   const cancelar = useCancelarAutoVinculacion();
   const invalidarMiLinea = useInvalidarMiLinea();
-  const estadoQuery = useEstadoAutoVinculacion(enVuelo);
+  const olvidarEstado = useOlvidarEstadoAutoVinculacion();
+
+  /**
+   * 🔴 EL POLLING ARRANCA CON EL 200 DEL POST, NUNCA CON EL CLIC.
+   *
+   * Antes esto era un `setEnVuelo(true)` **antes** del `await`: el primer poll
+   * salía mientras el POST todavía viajaba, el server no tenía pareo tomado
+   * todavía y contestaba `expirado` — o sea que el camino feliz mostraba «La
+   * vinculación se cortó» a los pocos milisegundos de apretar Vincular, antes de
+   * que existiera un QR. `isSuccess` es exactamente «el POST volvió 200», que es
+   * la condición real; `isPending` cubre el rato de la espera para que la
+   * pantalla no se quede en el formulario sin decir nada.
+   */
+  const hayPareo = iniciar.isSuccess;
+  const estadoQuery = useEstadoAutoVinculacion(hayPareo);
   const e = estadoQuery.data;
 
   async function vincular() {
     const limpio = numero.replace(/\D/g, '');
     if (limpio.length < 8) return;
-    setEnVuelo(true);
+    // El estado del intento anterior no puede sobrevivir al siguiente: misma
+    // queryKey, así que sin esto el primer render mostraría el `conectado` viejo.
+    olvidarEstado();
     try {
       await iniciar.mutateAsync(limpio);
     } catch {
-      setEnVuelo(false); // el 400/409 lo muestra `iniciar.error`; no hay nada que pollear
+      /* el 400/409 lo muestra `iniciar.error`; no hay nada que pollear */
     }
   }
 
   function volverAIntentar() {
-    setEnVuelo(false);
+    olvidarEstado();
     iniciar.reset();
   }
 
   async function cancelarPareo() {
     await cancelar.mutateAsync();
-    setEnVuelo(false);
+    volverAIntentar();
   }
 
-  const paso: PasoMiLinea = !enVuelo
-    ? {
-        tipo: 'formulario',
-        numero,
-        onNumero: setNumero,
-        onVincular: () => void vincular(),
-        error: iniciar.error instanceof ErrorApi ? iniciar.error.message : null,
-      }
+  const paso: PasoMiLinea = !hayPareo
+    ? iniciar.isPending
+      ? { tipo: 'esperando', onCancelar: () => void cancelarPareo() }
+      : {
+          tipo: 'formulario',
+          numero,
+          onNumero: setNumero,
+          onVincular: () => void vincular(),
+          error: iniciar.error instanceof ErrorApi ? iniciar.error.message : null,
+        }
     : e?.estado === 'conectado'
       ? {
           tipo: 'conectado',
           numero: e.numero,
+          // Ausente = server viejo, que no sabía distinguirlo: se lee «anduvo».
+          montada: e.montada ?? true,
           onCerrar: () => {
             invalidarMiLinea();
             onCerrar();
@@ -94,7 +114,13 @@ export type PasoMiLinea =
   | { tipo: 'formulario'; numero: string; onNumero: (v: string) => void; onVincular: () => void; error: string | null }
   | { tipo: 'esperando'; onCancelar: () => void }
   | { tipo: 'qr'; qr: string; onCancelar: () => void }
-  | { tipo: 'conectado'; numero: string; onCerrar: () => void }
+  /**
+   * `montada: false` = quedó vinculada y REGISTRADA, pero el server no la pudo
+   * poner a atender en caliente. No es un error de la vendedora y no se esconde:
+   * decir «¡Listo!» sobre una línea muda es justo la mentira que este frente
+   * existe para no contar. El reintento es volver a vincular el mismo número.
+   */
+  | { tipo: 'conectado'; numero: string; montada: boolean; onCerrar: () => void }
   | { tipo: 'baneado'; ban: { codigo: string; expira: string }; onVolver: () => void }
   | { tipo: 'error'; motivo: string; onVolver: () => void };
 
@@ -179,8 +205,21 @@ export function VistaMiLinea({ paso, onCerrar }: { paso: PasoMiLinea; onCerrar: 
 
             {paso.tipo === 'conectado' && (
               <div className="flex flex-col items-center gap-2 py-3 text-center">
-                <CheckCircle2 size={32} className="text-success" />
-                <p className="text-sm font-bold text-foreground">¡Listo! Tu número quedó vinculado.</p>
+                {paso.montada ? (
+                  <>
+                    <CheckCircle2 size={32} className="text-success" />
+                    <p className="text-sm font-bold text-foreground">¡Listo! Tu número quedó vinculado.</p>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle size={32} className="text-destructive" />
+                    <p className="text-sm font-bold text-foreground">Tu número quedó vinculado.</p>
+                    <p className="text-[12px] leading-snug text-muted-foreground">
+                      Todavía <b>no está atendiendo</b>: Hermes no pudo ponerlo a andar ahora mismo. Volvé a
+                      vincular el mismo número, y si sigue igual avisá a quien administra Hermes.
+                    </p>
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={paso.onCerrar}
