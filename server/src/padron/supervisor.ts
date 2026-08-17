@@ -60,12 +60,16 @@ import { mismaVendedora } from "../reparto/destino.js";
  *
  * Lo que sigue vivo de acá:
  * - `supervisoresConfigurados`, que la cascada usa para las DOS listas del `.env`.
- * - `esSupervisor`, con **un solo llamador**: la frontera de `cola/consultarCola.ts`,
- *   que se mueve al rol en un paso posterior y en otra rama.
+ *   **Ésta es la única que se sigue llamando en producción.**
+ * - `esSupervisor`, que desde D4 **no tiene un solo llamador de producción**: su
+ *   último consumidor era la frontera de `cola/consultarCola.ts`, que ahora
+ *   recibe el rol resuelto. Queda exportada a propósito, con su test: apagar los
+ *   CSV es el último paso del plan (el 12) y borrarla antes obligaría a
+ *   reescribirla el día que la cascada necesite responder «¿y qué decía el CSV?».
  *
- * Apagar los CSV —y borrar esto— es el último paso del plan, no éste: si se
- * apagaran junto con la migración, el despliegue en que la tabla todavía no está
- * dejaría a todo el mundo sin rol.
+ * Apagar los CSV —y borrar esto— es ese último paso, no éste: si se apagaran
+ * junto con la migración, el despliegue en que la tabla todavía no está dejaría a
+ * todo el mundo sin rol.
  */
 
 /** El nombre de la variable, en un solo lugar (regla dura #1: se referencia, no se pega). */

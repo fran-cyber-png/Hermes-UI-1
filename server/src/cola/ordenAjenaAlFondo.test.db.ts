@@ -4,6 +4,7 @@ import { baseDePrueba } from "../pruebas/base.js";
 import { sembrarMensaje } from "../pruebas/sembrar.js";
 import { conversacionAsignada } from "../db/reparto.js";
 import { consultarCola } from "./consultarCola.js";
+import { COMO_SUPERVISORA, COMO_VENDEDORA } from "../pruebas/rol.js";
 
 /**
  * LO QUE TIENE DUEÑA Y NO SOY YO, VA DESPUÉS.
@@ -43,19 +44,11 @@ const LINEA = "51984429504";
 const YO = "luz";
 
 /**
- * ⚠️ Lo único que queda del entorno en este archivo, y es transitorio: quién es
- * supervisora sale hoy de `HERMES_SUPERVISORES` (`padron/supervisor.ts`).
- * `consultarCola` lo resuelve una vez y lo baja como booleano; el día que el rol
- * viva en la tabla `equipo`, esto se reemplaza por sembrar una fila.
+ * ✅ Acá había un `comoSupervisora(t, YO)` que escribía `HERMES_SUPERVISORES` con
+ * su `t.after`, y su docblock decía que el día que el rol viviera en la tabla
+ * `equipo` se reemplazaba. Ese día es éste: el rol viaja como tercer parámetro de
+ * `consultarCola` y se arma con `pruebas/rol.ts`.
  */
-function comoSupervisora(t: { after: (fn: () => void) => void }, quien: string) {
-  const antes = process.env.HERMES_SUPERVISORES;
-  process.env.HERMES_SUPERVISORES = quien;
-  t.after(() => {
-    if (antes === undefined) delete process.env.HERMES_SUPERVISORES;
-    else process.env.HERMES_SUPERVISORES = antes;
-  });
-}
 
 async function asignar(
   db: Awaited<ReturnType<typeof baseDePrueba>>,
@@ -73,13 +66,14 @@ async function asignar(
 
 /** Los nombres en el orden en que la cola los devuelve. */
 async function orden(db: Awaited<ReturnType<typeof baseDePrueba>>, vendedoraId?: string) {
-  const r = await consultarCola(db, { vendedoraId, limit: 20 });
+  // Siempre con rol de supervisora: es el único que ve más de una dueña en la
+  // misma mesa, o sea el único donde este orden se puede observar (ver arriba).
+  const r = await consultarCola(db, { vendedoraId, limit: 20 }, COMO_SUPERVISORA);
   return (r.conversaciones as { persona_nombre: string | null }[]).map((c) => c.persona_nombre);
 }
 
 test("una conversación AJENA con más sin leer queda debajo de la mía", async (t) => {
   const db = await baseDePrueba(t);
-  comoSupervisora(t, YO);
 
   // La ajena tiene MÁS sin leer y es igual de vieja: con el orden anterior ganaba.
   await sembrarMensaje(db, { personaId: "51900000001", personaNombre: "AJENA", numeroPropio: LINEA });
@@ -105,7 +99,6 @@ test("una conversación AJENA con más sin leer queda debajo de la mía", async 
  */
 test("🔴 para quien SUPERVISA, lo ajeno no desaparece: sigue en la cola, abajo", async (t) => {
   const db = await baseDePrueba(t);
-  comoSupervisora(t, YO);
   await sembrarMensaje(db, { personaId: "51900000001", personaNombre: "AJENA", numeroPropio: LINEA });
   await asignar(db, "51900000001", "ventas12");
 
@@ -119,17 +112,21 @@ test("🔴 para quien SUPERVISA, lo ajeno no desaparece: sigue en la cola, abajo
  */
 test("🔴 y para una VENDEDORA lo ajeno no se sirve: no hay orden que discutir", async (t) => {
   const db = await baseDePrueba(t);
-  comoSupervisora(t, "otra");
   await sembrarMensaje(db, { personaId: "51900000001", personaNombre: "AJENA", numeroPropio: LINEA });
   await asignar(db, "51900000001", "ventas12");
 
-  const nombres = await orden(db, YO);
+  // El ÚNICO cambio respecto del test de arriba es el rol: misma siembra, misma
+  // persona. Sin eso, «lo ajeno va al fondo» y «lo ajeno no se sirve» podrían
+  // estar los dos verdes por motivos que no se cruzan nunca.
+  const r = await consultarCola(db, { vendedoraId: YO, limit: 20 }, COMO_VENDEDORA);
+  const nombres = (r.conversaciones as { persona_nombre: string | null }[]).map(
+    (c) => c.persona_nombre,
+  );
   assert.ok(!nombres.includes("AJENA"), `la frontera manda — salió: ${nombres.join(", ")}`);
 });
 
 test("lo SIN DUEÑO no se castiga: es de quien lo agarre", async (t) => {
   const db = await baseDePrueba(t);
-  comoSupervisora(t, YO);
   await sembrarMensaje(db, { personaId: "51900000001", personaNombre: "AJENA", numeroPropio: LINEA });
   await sembrarMensaje(db, { personaId: "51900000001", personaNombre: "AJENA", numeroPropio: LINEA });
   await sembrarMensaje(db, { personaId: "51900000003", personaNombre: "LIBRE", numeroPropio: LINEA });
@@ -152,7 +149,6 @@ test("lo SIN DUEÑO no se castiga: es de quien lo agarre", async (t) => {
  */
 test("`Luz` y `luz` son la misma persona: su conversación no se le va al fondo", async (t) => {
   const db = await baseDePrueba(t);
-  comoSupervisora(t, YO);
   await sembrarMensaje(db, { personaId: "51900000001", personaNombre: "AJENA", numeroPropio: LINEA });
   await sembrarMensaje(db, { personaId: "51900000001", personaNombre: "AJENA", numeroPropio: LINEA });
   await sembrarMensaje(db, { personaId: "51900000002", personaNombre: "MIA", numeroPropio: LINEA });

@@ -17,7 +17,15 @@ type Base = Pick<typeof db, "execute">;
 /** Lo medido de una persona, con la frontera puesta. */
 export interface FilaPreflight {
   vendedoraId: string;
-  esSupervisora: boolean;
+  /**
+   * ¿Esta persona queda FUERA de la frontera? Se llamaba `esSupervisora` cuando
+   * el rol salía de `HERMES_SUPERVISORES` y ahí eran lo mismo. Ya no: el rol sale
+   * de la tabla `equipo` y **un admin no es un supervisor y también ve todo**
+   * (`equipo/roles.ts` §escalera). Con el nombre viejo, la línea del informe le
+   * habría dicho «vendedora» a un admin y el techo de huérfanas le habría saltado
+   * encima — un diagnóstico falso justo antes de un N5.
+   */
+  veTodo: boolean;
   /** Cuántas conversaciones le serviría la cola HOY, con la frontera aplicada. */
   total: number;
   /** De ésas, cuántas son suyas (`?mios=1`). */
@@ -54,7 +62,7 @@ export interface Veredicto {
  * media empresa sin cola. Los dos errores se cometen el mismo día y por el mismo
  * cambio, así que se preguntan juntos.
  *
- * ⚠️ **Una supervisora en cero también es un problema.** Ve todo por definición,
+ * ⚠️ **Quien ve todo en cero también es un problema.** Ve todo por definición,
  * así que cero significa que la cola entera está vacía —base equivocada, ventana
  * de 30 días vencida, ingesta caída— y eso invalida la medición de todas las
  * demás: sin este chequeo, «todas ven poco» se leería como «la frontera anda».
@@ -72,20 +80,20 @@ export function veredictoDelPreflight(
   for (const f of filas) {
     if (f.total === 0) {
       problemas.push(
-        `${f.vendedoraId} quedaría con la cola VACÍA (rol ${f.esSupervisora ? "supervisora" : "vendedora"}). ` +
+        `${f.vendedoraId} quedaría con la cola VACÍA (${f.veTodo ? "ve todo" : "recortada"}). ` +
           `Se lee como «la app perdió mis conversaciones», no como «no te asignaron nada».`,
       );
     }
-    // 🔴 EL TECHO DE HUÉRFANAS NO SE LE APLICA A UNA SUPERVISORA, Y NO ES UNA
-    // EXCEPCIÓN DE CORTESÍA: para ella `huerfanas = total - propias` es la mesa
-    // entera POR DEFINICIÓN, porque ve todo — eso es justo lo que la frontera le
-    // concede. Sin esta guarda, cualquier supervisora configurada rompe el techo
+    // 🔴 EL TECHO DE HUÉRFANAS NO SE LE APLICA A QUIEN VE TODO, Y NO ES UNA
+    // EXCEPCIÓN DE CORTESÍA: para esa persona `huerfanas = total - propias` es la
+    // mesa entera POR DEFINICIÓN — eso es justo lo que la frontera le concede.
+    // Sin esta guarda, cualquier supervisor o admin rompe el techo
     // sola y el script sale en 1 diciendo «la cláusula de línea no está acotando
     // — revisá `numero_vendedora`», que es un diagnóstico FALSO y manda a mirar
     // la tabla equivocada justo antes de un N5. Un preflight que grita en verde
     // se aprende a ignorar, y ahí «falla por los dos lados» deja de ser garantía.
     // (Es la misma exclusión que el detector de «frontera apagada» de acá abajo.)
-    if (!f.esSupervisora && f.huerfanas > umbrales.maxHuerfanas) {
+    if (!f.veTodo && f.huerfanas > umbrales.maxHuerfanas) {
       problemas.push(
         `${f.vendedoraId} arrastra ${f.huerfanas} huérfanas (techo ${umbrales.maxHuerfanas}): ` +
           `la cláusula de línea no está acotando — revisá \`numero_vendedora\` antes de desplegar.`,
@@ -103,7 +111,7 @@ export function veredictoDelPreflight(
   // dos y no hay nada mal. Lo encontró correr el script contra una mesa sembrada,
   // no un test. Con la frontera apagada la condición se cumple sola: lo ajeno que
   // se cuela cuenta acá como «huérfanas», así que el número no puede ser cero.
-  const vendedoras = filas.filter((f) => !f.esSupervisora);
+  const vendedoras = filas.filter((f) => !f.veTodo);
   const totales = new Set(vendedoras.map((f) => f.total));
   const alguienVeAjeno = vendedoras.some((f) => f.huerfanas > 0);
   if (vendedoras.length > 1 && totales.size === 1 && alguienVeAjeno) {
@@ -117,22 +125,27 @@ export function veredictoDelPreflight(
 }
 
 /**
- * QUIÉN CUENTA COMO «IDENTIDAD ACTIVA» — la UNIÓN de tres tablas, no una.
+ * QUIÉN CUENTA COMO «IDENTIDAD ACTIVA» — la UNIÓN de CUATRO tablas, no una.
  *
- * 🔴 **Ninguna de las tres alcanza sola, y el contraejemplo tiene nombre.**
+ * 🔴 **Ninguna alcanza sola, y el contraejemplo tiene nombre.**
  * `tracy` tiene conversaciones asignadas y **no está en `numero_vendedora`**; hay
  * quien está en el mapa de líneas y no en la rueda; y la rueda tiene bajas
- * lógicas. Un preflight construido sobre una sola de las tres deja afuera justo a
+ * lógicas. Un preflight construido sobre una sola de ellas deja afuera justo a
  * quien más raro le va a quedar la frontera.
  *
- * ⚠️ **`activa` sólo se filtra en la rueda**, que es la única de las tres que
- * tiene baja lógica. Estar en `numero_vendedora` o tener conversaciones
- * asignadas es un hecho, no un permiso — y si alguien ya no trabaja acá, lo que
- * hay que arreglar es esa fila, no esconderla del preflight.
+ * ⚠️ **`equipo` es la cuarta y NO reemplaza a las otras tres**, contra lo que
+ * este bloque anticipaba («el día que exista `equipo`, esto se reemplaza por un
+ * SELECT de esa tabla»). Dos motivos, y el segundo es el que obliga: quien tiene
+ * trabajo asignado y todavía no tiene fila en `equipo` es exactamente a quien la
+ * frontera le puede quedar rara —es el caso `tracy`— y desaparecería de la
+ * medición; y al revés, alguien recién dada de alta sin una sola conversación
+ * tiene que aparecer con **cero**, que es el problema que este script existe para
+ * gritar. Se suma, no se sustituye.
  *
- * ⚠️ Hermes **no tiene tabla de personas**, así que esto es lo más cerca de un
- * padrón que se puede armar hoy. El día que exista `equipo`, esta función se
- * reemplaza por un `SELECT` de esa tabla y el resto del script no se toca.
+ * ⚠️ **`activa` se filtra donde hay baja lógica**: en la rueda y en `equipo`.
+ * Estar en `numero_vendedora` o tener conversaciones asignadas es un hecho, no un
+ * permiso — y si alguien ya no trabaja acá, lo que hay que arreglar es esa fila,
+ * no esconderla del preflight.
  */
 export async function identidadesActivas(
   base: Base,
@@ -144,6 +157,8 @@ export async function identidadesActivas(
       SELECT vendedora_id, 'linea' AS origen FROM numero_vendedora
       UNION ALL
       SELECT vendedora_id, 'asignadas' AS origen FROM conversacion_asignada
+      UNION ALL
+      SELECT persona_id AS vendedora_id, 'equipo' AS origen FROM equipo WHERE activa
     )
     SELECT lower(btrim(vendedora_id))            AS vendedora_id,
            array_agg(DISTINCT origen ORDER BY origen) AS origenes

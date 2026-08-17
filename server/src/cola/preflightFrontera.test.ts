@@ -14,7 +14,7 @@ import { veredictoDelPreflight, type FilaPreflight } from "./preflightFrontera.j
 
 const sana = (over: Partial<FilaPreflight> = {}): FilaPreflight => ({
   vendedoraId: "sindy",
-  esSupervisora: false,
+  veTodo: false,
   total: 40,
   propias: 38,
   huerfanas: 2,
@@ -48,7 +48,7 @@ test("🔴 alguien en CERO frena el deploy", () => {
  */
 test("una SUPERVISORA en cero también frena: la medición entera queda invalidada", () => {
   const v = veredictoDelPreflight(
-    [sana({ vendedoraId: "jefa", esSupervisora: true, total: 0, propias: 0, huerfanas: 0 })],
+    [sana({ vendedoraId: "jefa", veTodo: true, total: 0, propias: 0, huerfanas: 0 })],
     UMBRALES,
   );
   assert.equal(v.ok, false);
@@ -85,7 +85,7 @@ test("si TODAS las vendedoras ven exactamente lo mismo, la frontera no se está 
  * situación más común (una persona de guardia).
  */
 test("con una sola vendedora, «todas ven lo mismo» no dispara", () => {
-  const v = veredictoDelPreflight([sana(), sana({ vendedoraId: "jefa", esSupervisora: true, total: 40 })], UMBRALES);
+  const v = veredictoDelPreflight([sana(), sana({ vendedoraId: "jefa", veTodo: true, total: 40 })], UMBRALES);
   assert.equal(v.ok, true, v.problemas.join(" · "));
 });
 
@@ -137,7 +137,7 @@ test("el techo de huérfanas se puede bajar, y entonces sí dispara", () => {
 test("una supervisora no rompe el techo de huérfanas — ve todo por definición", () => {
   const jefa = sana({
     vendedoraId: "jefa",
-    esSupervisora: true,
+    veTodo: true,
     total: 5492,
     propias: 12,
     huerfanas: 5480,

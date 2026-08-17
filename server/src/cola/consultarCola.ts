@@ -53,9 +53,9 @@ import {
   esMiaSql,
   fronteraDeAsignacionSql,
 } from "./asignadaSql.js";
-import { esSupervisor } from "../padron/supervisor.js";
+import { laFronteraSeAplica, SIN_IDENTIDAD, type RolResuelto } from "../equipo/cascada.js";
+import { puedeSupervisar } from "../equipo/roles.js";
 import { recorteDeLineas, soloSusLineas } from "./lineas.js";
-import { estaEnAlgunaRueda } from "../reparto/asignar.js";
 import { lineasDeVendedoraConProposito } from "../numeros/repositorio.js";
 
 /**
@@ -451,30 +451,6 @@ export interface OpcionesCola {
    * lleva su número, así que no se entra a ciegas (`BarraFiltros`).
    */
   misAsignadas?: boolean;
-  /**
-   * QUIEN ESTÁ EN UNA RUEDA DEL REPARTO VE **SOLO LO SUYO**, sin pedirlo.
-   *
-   * Es la diferencia entre un filtro y una cola. Con cinco personas compartiendo
-   * una línea, un chip que hay que acordarse de encender no evita nada: la
-   * primera mañana que alguien se olvide, vuelve a leer los chats de las otras
-   * cuatro. Así que el recorte lo decide el SERVER a partir de un hecho —¿está
-   * en la rueda?— y no de una preferencia guardada que puede quedar vieja.
-   *
-   * Lo resuelve `consultarCola` con `estaEnAlgunaRueda`, igual que resuelve
-   * `misLineas` contra `numero_vendedora`: la ruta no lo manda.
-   *
-   * ⚠️ **Sigue sin ser un permiso** (ver `cola/asignadaSql.ts`).
-   *
-   * 🔴 **Y «quien NO está en ninguna rueda ve todo» YA NO ES CIERTO** — lo era
-   * hasta que la frontera dejó de ser opt-in, en este mismo PR. Hoy quien está
-   * fuera de la rueda ve **lo suyo más lo huérfano de su alcance de línea**, y
-   * eso incluye a Luz, que quedó afuera a propósito. El fail-open no murió, se
-   * corrió de lugar: lo que no tiene dueña le sigue apareciendo a alguien en vez
-   * de desaparecer, sólo que ahora acotado por línea. Quien ve todo sin recorte
-   * es **el rol supervisor**, no el estar fuera de la rueda.
-   * El candado: `cola/consultarCola.mios.test.db.ts`.
-   */
-  enElReparto?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -549,11 +525,41 @@ export interface ResultadoCola {
    */
   sinAsignacion?: boolean;
   /**
-   * true = quien pregunta está en una rueda del reparto, así que **esta cola ya
-   * es solo lo suyo**. El front lo usa para no dibujar lo que sobra: un chip
-   * «Míos» que no filtra nada y una píldora «Vos» repetida en cada fila.
+   * true = **esta cola ya es solo lo suyo** porque se pidió «Míos» (`?mios=1`).
+   *
+   * 🔴 **Antes también se prendía SOLA**, al estar en una rueda del reparto, y
+   * ese recorte automático murió con D4 del plan de roles: quién ve qué es
+   * propiedad del ROL, no de estar o no en la rueda (ver `colaRecortada` acá
+   * abajo y `cola/asignadaSql.ts` §POR QUÉ YA NO ES OPT-IN). Lo que promete el
+   * campo —«lo que estás viendo ya es tuyo»— sigue siendo cierto para el caso
+   * que sobrevive, así que el nombre y el contrato no se tocan; lo que cambió es
+   * el disparador.
+   *
+   * ⚠️ Consecuencia: hoy la app **nunca** lo recibe en `true`, porque todavía no
+   * manda `?mios=1` desde ninguna pantalla. Quien quiera decirle a la vendedora
+   * que su cola está recortada tiene que leer `colaRecortada`.
    */
   enElReparto?: boolean;
+  /**
+   * true = LA FRONTERA DEL ROL ESTÁ PUESTA en esta respuesta: se sirvió lo que
+   * tiene por dueña a quien pregunta más lo huérfano de su alcance de línea, y
+   * **el trabajo repartido a otra persona no viajó**.
+   *
+   * Existe para que el recorte deje de ser mudo. Hasta hoy la cabecera decía «N
+   * en cola» con el mismo rótulo para todo el mundo, así que el día que la
+   * frontera se encienda una vendedora ve su número caer de 5.494 a ~2.400 sin
+   * una palabra en pantalla — y el síntoma que eso produce está medido en este
+   * repo: se lee «la app perdió mis conversaciones», no «esto es lo mío».
+   *
+   * ⚠️ **El front lo lee OPCIONAL**, como `sinPadron` y `sinLineasPropias`: un
+   * server viejo o una respuesta rehidratada del caché de IndexedDB (ADR 0007)
+   * no lo traen, y ahí no se dibuja nada. Ausente NUNCA significa «no hay
+   * recorte»: significa «no se sabe», y de eso no se afirma nada.
+   *
+   * `false` no se emite: se omite. Es una bandera del mismo tipo que las cuatro
+   * de degradación de arriba.
+   */
+  colaRecortada?: boolean;
   /**
    * true = se pidió «las mías» y `numero_vendedora` no le asigna ninguna, así que
    * se sirvió TODO. Se dice en voz alta: un filtro que no filtra y no avisa se ve
@@ -604,10 +610,29 @@ export type FilaDesglose = {
  * El orden importa: primero se apaga lo que el error nombra (así un
  * `clientes_padron` ausente no se lleva puestos el pin y el no-leído, que son de
  * otra tabla), y solo si eso no alcanza se apaga lo demás.
+ *
+ * ══ 🔴 EL ROL VA EN UN TERCER PARÁMETRO, FUERA DE `OpcionesCola` ═════════════
+ *
+ * `quienPide` es lo que `cargarRol` resolvió **una vez para todo el request**
+ * (tabla `equipo`, con los CSV del `.env` de respaldo — `equipo/cascada.ts`), y
+ * la ruta lo baja con `rolDe(req)`. Es seguro porque el rol lo derivó el SERVER
+ * a partir del Bearer: el cliente no lo manda ni lo puede tocar.
+ *
+ * **No entra a `OpcionesCola` y ésa es la garantía.** `OpcionesCola` es lo que se
+ * arma con el query string; un rol ahí sería «no me recortes» a un
+ * `?rol=admin` de distancia — la frontera imaginaria contra la que este repo
+ * escribe en todos lados. Por el mismo motivo tampoco baja como un booleano
+ * suelto que la ruta pueda calcular: baja el rol resuelto y **la traducción a
+ * «ve todo» vive acá adentro, una sola vez**.
+ *
+ * El default (`SIN_IDENTIDAD`) es fail-closed: rol `vendedora`, o sea frontera
+ * PUESTA. Un llamador que se olvide del parámetro —un test, un script— ve de
+ * menos, nunca de más.
  */
 export async function consultarCola(
   base: typeof db,
   opciones: OpcionesCola = {},
+  quienPide: RolResuelto = SIN_IDENTIDAD,
 ): Promise<ResultadoCola> {
   let conEstado = true;
   let conPadron = true;
@@ -640,32 +665,50 @@ export async function consultarCola(
     asignadas: misAsignadasConProposito.map((l) => l.numero),
   });
 
-  // ¿PARTICIPA DEL REPARTO? Se pregunta UNA vez, antes del loop, por lo mismo
-  // que el mapa de líneas: no depende de qué tabla degradó. Y se resuelve acá y
-  // no en la ruta para que el recorte sea un HECHO del server —«está en la
-  // rueda»— y no una bandera que el cliente pueda dejar de mandar.
-  const enElReparto =
-    opciones.misAsignadas === true || (await estaEnAlgunaRueda(base, opciones.vendedoraId));
+  /**
+   * 🔴 ESTAR EN LA RUEDA YA NO RECORTA NADA — SE FUE UNA CONSULTA Y UNA REGLA.
+   *
+   * Acá había un `estaEnAlgunaRueda(base, vendedoraId)`: quien participaba del
+   * reparto veía solo lo suyo **sin pedirlo**, y quien no, veía la mesa entera.
+   * Era la mejor aproximación posible cuando el rol no existía en ningún lado.
+   *
+   * Con D4 la frontera es propiedad del ROL —toda vendedora ve lo suyo más lo
+   * huérfano de sus líneas; supervisor y admin ven todo—, y dejar el recorte por
+   * rueda vivo «solo para las vendedoras» **haría falso a D4 justo para la mitad
+   * de ellas**: Luz está fuera de la rueda a propósito, y `tracy` tampoco está.
+   * Dos reglas para la misma pregunta es #37 otra vez, y la que sobreviviera en
+   * silencio sería la vieja.
+   *
+   * ⚠️ **Lo que NO murió es el chip «Míos»** (`?mios=1`): eso lo prende la
+   * vendedora a mano para mirar su reparto, y es un filtro, no una frontera. Por
+   * eso lo que queda es la mitad de aquel `||` que sí venía de una acción humana.
+   */
+  const enElReparto = opciones.misAsignadas === true;
 
   /**
-   * ¿VE TODO? — se resuelve UNA vez y baja como booleano, por lo mismo que las
-   * dos de arriba: no depende de qué tabla degradó, y sobre todo **no es asunto
-   * del armador de SQL**. Antes vivía adentro de `ejecutarCola` como
-   * `esSupervisor(vendedoraId, process.env)`.
+   * ¿VE TODO? — se resuelve UNA vez, acá, y baja como booleano: **no es asunto
+   * del armador de SQL**, y no depende de qué tabla degradó.
    *
-   * ⚠️ **La fuente sigue siendo el `.env`, a propósito.** `HERMES_SUPERVISORES`
-   * es la verdad hasta que exista la tabla `equipo`; mudar la fuente es un paso
-   * aparte del plan de roles (el 10), y hacerlo acá de paso mezclaría dos
-   * cambios que se revierten distinto. Lo que este PR fija es la FORMA: quien
-   * llame a `ejecutarCola` decide el rol, no la consulta.
+   * Dos motivos, y son distintos:
    *
-   * 🔴 **Fail-closed hereda de `esSupervisor`**: sin la variable, NADIE es
-   * supervisor y todas quedan detrás de la frontera. Eso es correcto como
-   * default de permisos y es peligroso como default de deploy — por eso este
-   * frente trae `npm run frontera:preflight`, que imprime a cuánto queda cada
-   * identidad ANTES de reiniciar.
+   * · **El rol manda** (`puedeSupervisar`): supervisor y admin ven la mesa
+   *   entera porque son quienes reparten, y no se puede repartir lo que no se
+   *   ve. Sale de la tabla `equipo`, no del `.env` — ahí el CSV quedó solo como
+   *   respaldo de la cascada.
+   * · **Sin tabla de equipo no hay de dónde sacar el rol de NADIE**
+   *   (`laFronteraSeAplica`): en el despliegue en que la migración todavía no
+   *   está, recortar a todo el mundo a sus asignadas sería apagarle la mesa al
+   *   equipo por una migración que falta. Un BLIP de la base, en cambio, deja la
+   *   frontera puesta — son dos banderas distintas a propósito y `equipo/cascada.ts`
+   *   explica por qué colapsarlas abre la cola entera.
+   *
+   * 🔴 **Fail-closed cuando el rol no se pudo resolver**: `SIN_IDENTIDAD` es
+   * `vendedora`, así que un pedido sin sesión —o con `cargarRol` sin anotar—
+   * queda detrás de la frontera. Es el default correcto de permisos y es el
+   * peligroso de deploy: por eso existe `npm run frontera:preflight`, que
+   * imprime a cuánto queda cada identidad ANTES de reiniciar.
    */
-  const esSupervisora = esSupervisor(opciones.vendedoraId ?? "", process.env);
+  const veTodo = puedeSupervisar(quienPide.rol) || !laFronteraSeAplica(quienPide);
 
   /**
    * 🔴 EL TOPE SE DERIVA, NO SE ESCRIBE A MANO. Decía «cuatro degradaciones ⇒
@@ -693,7 +736,7 @@ export async function consultarCola(
       const r = await base.transaction((tx) =>
         ejecutarCola(
           tx,
-          { ...opciones, enElReparto, esSupervisora },
+          { ...opciones, veTodo },
           lineas,
           conEstado,
           conPadron,
@@ -821,19 +864,19 @@ type Ejecutor = Pick<typeof db, "execute">;
 /**
  * LO QUE `consultarCola` RESUELVE POR SU CUENTA Y `ejecutarCola` SOLO CONSUME.
  *
- * 🔴 **`esSupervisora` NO está en `OpcionesCola`, y la omisión es la garantía.**
+ * 🔴 **`veTodo` NO está en `OpcionesCola`, y la omisión es la garantía.**
  * `OpcionesCola` es lo que arma la ruta a partir del query string; un campo
- * booleano ahí sería «no me recortes» a un `?esSupervisora=1` de distancia — la
- * frontera imaginaria contra la que este repo escribe en todos lados. `enElReparto`
- * sí vive en `OpcionesCola` y no es una incoherencia: aquél recorta de MÁS, así
- * que mentirlo se castiga solo.
+ * booleano ahí sería «no me recortes» a un `?veTodo=1` de distancia — la frontera
+ * imaginaria contra la que este repo escribe en todos lados. Se llamó
+ * `esSupervisora` mientras el rol salía del `.env`; el nombre cambió con la
+ * fuente, porque **un admin no es un supervisor y también ve todo**, y porque hay
+ * un segundo motivo para verlo todo que no es el rol (la tabla `equipo` sin
+ * migrar, ver `consultarCola`).
  *
- * ⚠️ La fuente del rol sigue siendo `esSupervisor(id, process.env)` **a propósito**:
- * es la verdad hasta que aterrice la tabla `equipo`, y mudarla es el paso 10 del
- * plan de roles, no éste. Lo que cambió acá es que se resuelve **una vez, arriba**,
- * en vez de adentro del armador de SQL.
+ * ⚠️ `enElReparto` sí vive en `OpcionesCola` como `misAsignadas` y no es una
+ * incoherencia: aquél recorta de MÁS, así que mentirlo se castiga solo.
  */
-type OpcionesResueltas = OpcionesCola & { esSupervisora: boolean };
+type OpcionesResueltas = OpcionesCola & { veTodo: boolean };
 
 async function ejecutarCola(
   base: Ejecutor,
@@ -1032,8 +1075,11 @@ async function ejecutarCola(
   const mia = esMia
     ? sql`((${esMia}) OR (tipo = 'lead' AND cl.vendedora_id IS NULL))`
     : null;
-  const soloMias =
-    conAsignacion && (opciones.misAsignadas || opciones.enElReparto) && mia ? [mia] : [];
+  // ⚠️ **Solo `misAsignadas`, y antes acá había un `|| opciones.enElReparto`.**
+  // Eso era el recorte automático por estar en la rueda, que murió con D4 (ver
+  // `consultarCola`): «Míos» vuelve a ser lo que dice ser — un filtro que la
+  // vendedora prende y apaga. Lo que no se apaga es la frontera, acá abajo.
+  const soloMias = conAsignacion && opciones.misAsignadas && mia ? [mia] : [];
 
   /**
    * 🔴 LA FRONTERA VA SIEMPRE, NO CON UN FLAG — esa es la diferencia con «Míos».
@@ -1047,15 +1093,14 @@ async function ejecutarCola(
    * así que entra por la rama de «no llegó por ninguna línea nuestra». No hace
    * falta la exención de ADR 0051 acá.
    *
-   * ⚠️ **EL ROL LLEGA RESUELTO, ESTA FUNCIÓN NO LEE EL ENTORNO.** Hasta hoy acá
-   * adentro había un `esSupervisor(vendedoraId, process.env)`: una decisión de
+   * ⚠️ **EL ROL LLEGA RESUELTO, ESTA FUNCIÓN NO LEE EL ENTORNO NI LA BASE.**
+   * Hubo un `esSupervisor(vendedoraId, process.env)` acá adentro: una decisión de
    * permisos tomada en el armador de SQL, imposible de fijar en un test sin
-   * manosear `process.env` con un `t.after` — que es exactamente lo que hacía
-   * `fronteraDeAsignacion.test.db.ts`. Ahora se resuelve una vez en
-   * `consultarCola` y baja como booleano.
+   * manosear `process.env` con un `t.after`. Ahora `consultarCola` traduce el rol
+   * que resolvió `cargarRol` a un solo booleano y lo baja.
    */
   const frontera = conAsignacion
-    ? fronteraDeAsignacionSql(vendedoraId, opciones.esSupervisora === true)
+    ? fronteraDeAsignacionSql(vendedoraId, opciones.veTodo === true)
     : null;
 
   const condiciones = [
@@ -1307,6 +1352,13 @@ async function ejecutarCola(
     conteosFiltro,
     desglose,
     hayMas: filas.length === limit,
+    // 🔴 SE DERIVA DEL PREDICADO QUE DE VERDAD SE APLICÓ, no de `veTodo`. Son
+    // tres los motivos por los que la frontera puede no estar: el rol, la tabla
+    // `equipo` sin migrar y un pedido sin vendedora — y encima `conAsignacion`
+    // la apaga sola cuando falta la migración del reparto. Con dos lugares
+    // decidiendo lo mismo, el cartel afirmaría un recorte que el `WHERE` no
+    // hizo, que es exactamente la frontera imaginaria que este repo no acepta.
+    ...(frontera ? { colaRecortada: true } : {}),
   };
 }
 

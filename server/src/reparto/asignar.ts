@@ -212,51 +212,24 @@ export async function vendedorasDeLaRueda(
 }
 
 /**
- * ¿ESTA PERSONA PARTICIPA DEL REPARTO EN ALGUNA LÍNEA?
+ * 🔴 ACÁ VIVÍA `estaEnAlgunaRueda`, Y SE BORRÓ CON D4 — vale dejarlo escrito.
  *
- * Es lo que convierte «Míos» de FILTRO en la cola misma. Quien está en una rueda
- * trabaja lo que le tocó y nada más: no hace falta un chip que lo pida —y
- * tenerlo sería peor, porque cinco personas compartiendo una línea no tienen por
- * qué acordarse de encender un filtro para no leer los chats de las otras
- * cuatro—.
+ * Respondía «¿esta persona participa del reparto en alguna línea?» y era lo que
+ * convertía «Míos» de FILTRO en la cola misma: quien estaba en una rueda veía
+ * solo lo suyo **sin pedirlo**, y quien no —Luz, que quedó afuera a propósito—
+ * seguía viendo todo. Fue la mejor aproximación que había mientras el rol no
+ * existiera en ningún lado.
  *
- * Se pregunta acá y no en el front por lo de siempre: si el cliente decidiera
- * quién está en el reparto habría dos lugares decidiéndolo, y una preferencia
- * vieja en localStorage podría devolverle la cola entera a alguien que sí está.
+ * Desde D4 el recorte es propiedad del ROL (`equipo/roles.ts`; el predicado, en
+ * `cola/asignadaSql.ts`): toda vendedora ve lo suyo más lo huérfano de sus
+ * líneas, y supervisor/admin ven todo. Dejar viva la regla de la rueda «solo
+ * para vendedoras» habría hecho **falso a D4 justo para las que están fuera de
+ * la rueda**, que son dos de las que venden. Y dos reglas para la misma pregunta
+ * es #37: la que sobrevive en silencio es siempre la vieja.
  *
- * ⚠️ **Sigue sin ser un permiso.** El hilo, la ficha y el envío responden
- * cualquier conversación a cualquier token; esto cambia lo que la cola MUESTRA.
- * Quien no está en ninguna rueda —Luz, que quedó afuera a propósito, y quien
- * supervisa— sigue viendo todo: es el fail-open que hace que una conversación
- * mal asignada, o sin asignar, le aparezca a alguien.
- *
- * Compara normalizado de los dos lados: en producción el mismo humano tiene dos
- * grafías (`Luz` de Cerberus, `luz` del login) y la exacta diría que no está.
+ * ⚠️ Si vuelve a hacer falta algo así, la pregunta correcta es por el **rol**, no
+ * por la rueda. La rueda decide a quién le TOCA lo nuevo, no quién VE qué.
  */
-export async function estaEnAlgunaRueda(
-  base: typeof Base,
-  vendedoraId: string | undefined,
-): Promise<boolean> {
-  const limpio = (vendedoraId ?? "").trim().toLowerCase();
-  if (!limpio) return false;
-  try {
-    const [fila] = await base
-      .select({ vendedoraId: repartoRueda.vendedoraId })
-      .from(repartoRueda)
-      .where(
-        and(
-          sql`lower(btrim(${repartoRueda.vendedoraId})) = ${limpio}`,
-          eq(repartoRueda.activa, "si"),
-        ),
-      )
-      .limit(1);
-    return fila != null;
-  } catch {
-    // Sin la tabla migrada nadie está en ninguna rueda, y la cola se sirve
-    // entera: fail-open, igual que todo lo demás de este frente.
-    return false;
-  }
-}
 
 /** Una fila del reparto tal como se AUDITA: quién, cuántas tiene, si sigue recibiendo. */
 export interface EnElReparto {

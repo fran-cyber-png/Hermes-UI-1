@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
 import { baseDePrueba } from "../pruebas/base.js";
 import { sembrarLineaDeVendedora, sembrarMensaje } from "../pruebas/sembrar.js";
+import { COMO_SUPERVISORA, COMO_VENDEDORA, SIN_TABLA_DE_EQUIPO } from "../pruebas/rol.js";
 import { conversacionAsignada } from "../db/reparto.js";
 import { consultarCola } from "./consultarCola.js";
 
@@ -58,28 +59,20 @@ async function asignar(
 }
 
 /**
- * ⚠️ **LO ÚNICO QUE QUEDA DEL ENTORNO EN ESTE ARCHIVO, Y ES TRANSITORIO.**
+ * ✅ **YA NO QUEDA NADA DEL ENTORNO EN ESTE ARCHIVO.**
  *
- * Quién es supervisora todavía sale de `HERMES_SUPERVISORES`
- * (`padron/supervisor.ts`), y `consultarCola` lo resuelve UNA vez y lo baja como
- * booleano — ya no lo lee el armador de SQL. Mudar la fuente a la tabla `equipo`
- * es un paso aparte del plan de roles; el día que aterrice, este helper se borra
- * y el test pasa a sembrar una fila.
+ * Acá vivía un `conSupervisores(t, "jefa")` que escribía `HERMES_SUPERVISORES` y
+ * lo devolvía con un `t.after`. Su propio docblock decía que era transitorio y
+ * que el día que el rol viviera en la tabla `equipo` se borraba: ese día es éste.
+ * El rol viaja como TERCER parámetro de `consultarCola` —lo mismo que `cargarRol`
+ * resuelve una vez por request— y se arma con `pruebas/rol.ts`.
  */
-function conSupervisores(t: { after: (fn: () => void) => void }, quienes: string) {
-  const antes = process.env.HERMES_SUPERVISORES;
-  process.env.HERMES_SUPERVISORES = quienes;
-  t.after(() => {
-    if (antes === undefined) delete process.env.HERMES_SUPERVISORES;
-    else process.env.HERMES_SUPERVISORES = antes;
-  });
-}
-
 async function nombresQueVe(
   db: Awaited<ReturnType<typeof baseDePrueba>>,
   vendedoraId: string | undefined,
+  rol = COMO_VENDEDORA,
 ) {
-  const r = await consultarCola(db, { vendedoraId, limit: 50 });
+  const r = await consultarCola(db, { vendedoraId, limit: 50 }, rol);
   return (r.conversaciones as { persona_nombre: string | null }[]).map((c) => c.persona_nombre);
 }
 
@@ -132,9 +125,8 @@ test("`Sindy` y `sindy` son la misma persona: ve lo suyo", async (t) => {
 test("la supervisora ve todo: es quien reparte lo que todavía no tiene dueña", async (t) => {
   const db = await baseDePrueba(t);
   await sembrarLaMesa(db);
-  conSupervisores(t, "jefa");
 
-  const ve = await nombresQueVe(db, "jefa");
+  const ve = await nombresQueVe(db, "jefa", COMO_SUPERVISORA);
   for (const n of ["DE_LUZ", "DE_SINDY", "SIN_DUENA"]) {
     assert.ok(ve.includes(n), `la supervisora tiene que ver ${n} — vio: ${ve.join(", ")}`);
   }
@@ -143,14 +135,13 @@ test("la supervisora ve todo: es quien reparte lo que todavía no tiene dueña",
 /**
  * 🔴 EL CONTROL DEL TEST DE ARRIBA, Y SIN ÉL AQUÉL NO PRUEBA NADA. «La
  * supervisora ve todo» se cumple trivialmente si la frontera no recorta nunca.
- * Misma persona, misma siembra; el único cambio es que no está en la lista.
+ * Misma persona, misma siembra; el único cambio es el ROL con el que pregunta.
  */
-test("y la MISMA persona, fuera de la lista de supervisoras, queda recortada", async (t) => {
+test("y la MISMA persona, con rol de vendedora, queda recortada", async (t) => {
   const db = await baseDePrueba(t);
   await sembrarLaMesa(db);
-  conSupervisores(t, "otra");
 
-  const ve = await nombresQueVe(db, "jefa");
+  const ve = await nombresQueVe(db, "jefa", COMO_VENDEDORA);
   assert.ok(!ve.includes("DE_LUZ"), `sin ser supervisora no ve lo de Luz — vio: ${ve.join(", ")}`);
   assert.ok(!ve.includes("DE_SINDY"), `ni lo de Sindy — vio: ${ve.join(", ")}`);
   assert.ok(ve.includes("SIN_DUENA"), "lo huérfano sí, que es de quien lo agarre");
@@ -178,7 +169,7 @@ test("sin la tabla del reparto la frontera se apaga entera, y lo dice", async (t
   await sembrarLaMesa(db);
   await db.execute(sql`DROP TABLE conversacion_asignada`);
 
-  const r = await consultarCola(db, { vendedoraId: "sindy", limit: 50 });
+  const r = await consultarCola(db, { vendedoraId: "sindy", limit: 50 }, COMO_VENDEDORA);
   assert.equal(r.sinAsignacion, true, "la respuesta tiene que decir que le falta la tabla");
   assert.equal(r.conversaciones.length, 3, "y sirve las tres: nunca una cola vacía sin explicar");
 });
@@ -196,11 +187,64 @@ test("la frontera deja pasar lo huérfano; «Míos» no", async (t) => {
   const conFrontera = await nombresQueVe(db, "sindy");
   assert.deepEqual([...conFrontera].sort(), ["DE_SINDY", "SIN_DUENA"]);
 
-  const r = await consultarCola(db, { vendedoraId: "sindy", misAsignadas: true, limit: 50 });
+  const r = await consultarCola(
+    db,
+    { vendedoraId: "sindy", misAsignadas: true, limit: 50 },
+    COMO_VENDEDORA,
+  );
   const soloMios = (r.conversaciones as { persona_nombre: string | null }[]).map(
     (c) => c.persona_nombre,
   );
   assert.deepEqual(soloMios, ["DE_SINDY"]);
+});
+
+/**
+ * 🔴 SIN LA TABLA `equipo` LA FRONTERA SE APAGA — y es lo contrario de un blip.
+ *
+ * La migración de `equipo` viaja por N5 (un botón) y el front por N4
+ * (automático), así que existe de verdad la ventana en que el server nuevo corre
+ * contra una base sin la tabla. Ahí NO hay de dónde sacar el rol de nadie:
+ * recortar a todo el mundo a sus asignadas sería apagarle la mesa al equipo
+ * entero por una migración que falta. La decisión y su tabla de verdad viven en
+ * `equipo/cascada.ts` (`laFronteraSeAplica`).
+ *
+ * ⚠️ **Un blip de Postgres NO es esto**: ahí el rol queda `vendedora` con
+ * `rolNoResuelto` y la frontera sigue PUESTA. Colapsar las dos banderas serviría
+ * la cola entera a cualquier token en cada hipo de la base.
+ */
+test("sin la tabla `equipo` la frontera se apaga, y NO cuenta como recorte", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarLaMesa(db);
+
+  const r = await consultarCola(db, { vendedoraId: "sindy", limit: 50 }, SIN_TABLA_DE_EQUIPO);
+  assert.equal(r.conversaciones.length, 3, "sin rol posible, la cola es la de antes del frente");
+  assert.equal(r.colaRecortada, undefined, "y no se puede afirmar un recorte que no se hizo");
+});
+
+/**
+ * 🔴 EL RECORTE SE DICE EN LA RESPUESTA — el cartel de la cabecera sale de acá.
+ *
+ * Sin este campo, el día que la frontera se encienda una vendedora ve su número
+ * caer de 5.494 a ~2.400 sin una palabra en pantalla, y el síntoma que eso
+ * produce está medido en este repo: se lee «la app perdió mis conversaciones».
+ *
+ * ⚠️ **Se emite sólo cuando el `WHERE` de verdad llevó la frontera.** Por eso las
+ * tres afirmaciones van juntas: la vendedora recortada, la supervisora que ve
+ * todo y el pedido sin identidad. Con el campo derivado del ROL en vez del
+ * predicado, los dos últimos anunciarían un recorte sobre una cola completa.
+ */
+test("la respuesta dice `colaRecortada` sólo cuando el WHERE llevó la frontera", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarLaMesa(db);
+
+  const vendedora = await consultarCola(db, { vendedoraId: "sindy", limit: 50 }, COMO_VENDEDORA);
+  assert.equal(vendedora.colaRecortada, true);
+
+  const supervisora = await consultarCola(db, { vendedoraId: "jefa", limit: 50 }, COMO_SUPERVISORA);
+  assert.equal(supervisora.colaRecortada, undefined, "ve todo: no hay recorte que anunciar");
+
+  const servicio = await consultarCola(db, { limit: 50 }, COMO_VENDEDORA);
+  assert.equal(servicio.colaRecortada, undefined, "sin identidad no hay a quién recortarle");
 });
 
 /**

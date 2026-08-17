@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { baseDePrueba } from "../pruebas/base.js";
 import { sembrarComentario, sembrarLineaDeVendedora, sembrarMensaje } from "../pruebas/sembrar.js";
 import { consultarCola } from "./consultarCola.js";
+import { COMO_SUPERVISORA } from "../pruebas/rol.js";
 
 /**
  * «LAS MÍAS» — la cola acotada a las líneas que `numero_vendedora` le asigna a
@@ -93,13 +94,11 @@ test("SIN líneas asignadas, «las mías» sirve TODO y lo dice — la que recor
 
   // El control que separa a los dos recortes: con rol de supervisora, la MISMA
   // consulta devuelve las tres. O sea que `misLineas` no filtró nada.
-  const antes = process.env.HERMES_SUPERVISORES;
-  process.env.HERMES_SUPERVISORES = "sindy";
-  t.after(() => {
-    if (antes === undefined) delete process.env.HERMES_SUPERVISORES;
-    else process.env.HERMES_SUPERVISORES = antes;
-  });
-  const comoSupervisora = await consultarCola(db, { misLineas: true, vendedoraId: "sindy" });
+  const comoSupervisora = await consultarCola(
+    db,
+    { misLineas: true, vendedoraId: "sindy" },
+    COMO_SUPERVISORA,
+  );
   assert.equal(comoSupervisora.conversaciones.length, 3);
   assert.equal(comoSupervisora.sinLineasPropias, true);
 });

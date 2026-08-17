@@ -204,20 +204,35 @@ export function esMiaSql(vendedoraId: string | undefined): SQL {
  * las revierte a propósito**: la frontera es propiedad del ROL — toda vendedora
  * ve lo suyo más lo huérfano de sus líneas, y supervisor/admin ven todo. Los dos
  * tests que afirmaban lo contrario (`consultarCola.mios.test.db.ts`,
- * `ordenAjenaAlFondo.test.db.ts`) se reescribieron en este mismo commit, que es
- * la conversación que había que tener y no un efecto colateral.
+ * `ordenAjenaAlFondo.test.db.ts`) se reescribieron con ella, que es la
+ * conversación que había que tener y no un efecto colateral.
  *
- * ⚠️ **`HERMES_COLA_AISLADA` deja de leerse.** Si quedó en el `.env` de VPS1 no
- * hace nada; sacarla es higiene, no un paso del deploy.
+ * ⚠️ **`HERMES_COLA_AISLADA` no se lee en ningún lado.** Si quedó en el `.env` de
+ * VPS1 no hace nada; sacarla es higiene, no un paso del deploy.
+ *
+ * ⚠️ **Y la tercera regla también murió**: hasta D4, estar en una rueda del
+ * reparto recortaba la cola SOLO (`estaEnAlgunaRueda`, borrada de
+ * `reparto/asignar.ts`). Sobrevivir «solo para vendedoras» habría hecho falso a
+ * D4 justo para las dos que están fuera de la rueda. Quién ve qué se pregunta en
+ * UN lugar: el rol.
  */
 export function fronteraDeAsignacionSql(
   vendedoraId: string | undefined,
-  esSupervisora: boolean,
+  /**
+   * ¿Esta persona queda fuera de la frontera? Llega RESUELTO desde
+   * `consultarCola`, que es el único que sabe traducir el rol —y los dos motivos
+   * que no son el rol, como la tabla `equipo` sin migrar— a un solo booleano.
+   * Acá no se lee el entorno ni se pregunta nada: este archivo arma SQL.
+   *
+   * Se llamaba `esSupervisora` mientras el rol salía de un CSV. El nombre cambió
+   * con la fuente: **un admin no es un supervisor y también ve todo**.
+   */
+  veTodo: boolean,
 ): SQL | null {
   const limpio = (vendedoraId ?? "").trim().toLowerCase();
-  // Sin identidad (un servicio) o siendo supervisora no se recorta: el
-  // supervisor es quien reparte, y necesita ver lo que todavía no repartió.
-  if (!limpio || esSupervisora) return null;
+  // Sin identidad (un servicio) o viendo todo no se recorta: quien supervisa es
+  // quien reparte, y necesita ver lo que todavía no repartió.
+  if (!limpio || veTodo) return null;
   return sql`(
     lower(btrim(${duenoSql})) = ${limpio}
     OR (${duenoSql} IS NULL AND ${lineaAlcanzableSql(limpio)})

@@ -4,6 +4,7 @@ import { baseDePrueba } from "../pruebas/base.js";
 import { sembrarLineaDeVendedora, sembrarMensaje } from "../pruebas/sembrar.js";
 import { conversacionAsignada } from "../db/reparto.js";
 import { consultarCola } from "./consultarCola.js";
+import { COMO_SUPERVISORA } from "../pruebas/rol.js";
 
 /**
  * 🔴 LA FRONTERA TIENE QUE RECORTAR LOS NÚMEROS, NO SÓLO LAS FILAS (#390).
@@ -143,14 +144,7 @@ test("la supervisora ve las nueve, y sus números también dicen nueve", async (
   const db = await baseDePrueba(t);
   await laMesa(db);
 
-  const antes = process.env.HERMES_SUPERVISORES;
-  process.env.HERMES_SUPERVISORES = "jefa";
-  t.after(() => {
-    if (antes === undefined) delete process.env.HERMES_SUPERVISORES;
-    else process.env.HERMES_SUPERVISORES = antes;
-  });
-
-  const r = await consultarCola(db, { vendedoraId: "jefa", limit: 50 });
+  const r = await consultarCola(db, { vendedoraId: "jefa", limit: 50 }, COMO_SUPERVISORA);
   assert.equal(filasDe(r), 9);
   assert.equal(r.total, 9);
   assert.equal(r.conteosFiltro?.preguntoPrecio, 9);

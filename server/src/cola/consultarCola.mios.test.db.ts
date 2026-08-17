@@ -6,6 +6,7 @@ import { sembrarLineaDeVendedora, sembrarMensaje } from "../pruebas/sembrar.js";
 import { conversacionAsignada, repartoRueda } from "../db/reparto.js";
 import { asignarSiHaceFalta } from "../reparto/asignar.js";
 import { consultarCola } from "./consultarCola.js";
+import { COMO_SUPERVISORA, COMO_VENDEDORA } from "../pruebas/rol.js";
 
 /**
  * «MÍOS» — la cola acotada a las conversaciones que el REPARTO le asignó a quien
@@ -47,14 +48,18 @@ async function llegaUnLead(
 }
 
 /**
- * 🔴 ESTAR EN LA RUEDA **ES** EL RECORTE — no hay filtro que encender.
+ * 🔴 ESTAR EN LA RUEDA YA NO RECORTA NADA — D4 lo mató, y era la regla vieja.
  *
- * Con cinco personas compartiendo una línea, un chip que hay que acordarse de
- * prender no evita nada: la primera mañana que alguien se olvide vuelve a leer
- * los chats de las otras cuatro. Así que lo decide el SERVER, a partir de un
- * hecho («¿está en la rueda?») y no de una preferencia guardada que envejece.
+ * Este test se llamaba «quien está en la rueda ve SOLO lo suyo, sin pedirlo» y
+ * esperaba UNA fila. La rueda decide **a quién le TOCA lo nuevo**; quién VE qué
+ * es propiedad del ROL. Dejar las dos reglas vivas hacía falso a D4 justo para
+ * las que están fuera de la rueda (Luz, `tracy`), y de dos reglas para la misma
+ * pregunta la que sobrevive en silencio es siempre la vieja (#37).
+ *
+ * Lo que se ve ahora es la frontera pura: lo suyo **más** lo huérfano de su
+ * alcance de línea. Lo de Beto sigue sin servirse — que era el punto original.
  */
-test("quien está en la rueda ve SOLO lo suyo, sin pedirlo", async (t) => {
+test("estar en la rueda no recorta: manda la frontera del rol", async (t) => {
   const db = await baseDePrueba(t);
   await sembrarRueda(db);
   await llegaUnLead(db, "51900000001", "DeAna");
@@ -62,10 +67,18 @@ test("quien está en la rueda ve SOLO lo suyo, sin pedirlo", async (t) => {
   // Una de las viejas: entró antes del reparto y nadie se la asignó.
   await sembrarMensaje(db, { personaId: "51900000009", personaNombre: "Huerfana", numeroPropio: BOT });
 
-  // Sin `misAsignadas` en las opciones: no hace falta pedirlo.
-  const { conversaciones, enElReparto } = await consultarCola(db, { vendedoraId: "ana" });
-  assert.equal(enElReparto, true, "la respuesta lo dice, para que el front no dibuje lo que sobra");
-  assert.deepEqual((conversaciones as Fila[]).map((c) => c.persona_nombre), ["DeAna"]);
+  const { conversaciones, enElReparto, colaRecortada } = await consultarCola(
+    db,
+    { vendedoraId: "ana" },
+    COMO_VENDEDORA,
+  );
+  assert.equal(enElReparto, undefined, "nadie pidió «Míos»: no se prende sola nunca más");
+  assert.equal(colaRecortada, true, "lo que la respuesta anuncia es la frontera, no la rueda");
+  assert.deepEqual(
+    (conversaciones as Fila[]).map((c) => c.persona_nombre).sort(),
+    ["DeAna", "Huerfana"],
+    "lo suyo y lo huérfano; lo de Beto no",
+  );
 });
 
 /**
@@ -88,8 +101,12 @@ test("quien NO está en la rueda ve lo huérfano — pero ya no lo repartido a o
   await llegaUnLead(db, "51900000001", "Repartida");
   await sembrarMensaje(db, { personaId: "51900000002", personaNombre: "Huerfana", numeroPropio: BOT });
 
-  const { conversaciones, enElReparto } = await consultarCola(db, { vendedoraId: "luz" });
-  assert.equal(enElReparto, undefined, "sigue fuera de la rueda: el recorte del reparto no se aplica");
+  const { conversaciones, enElReparto } = await consultarCola(
+    db,
+    { vendedoraId: "luz" },
+    COMO_VENDEDORA,
+  );
+  assert.equal(enElReparto, undefined, "«Míos» no se pidió, y ya no se prende sola");
   const porNombre = new Map((conversaciones as Fila[]).map((c) => [c.persona_nombre, c.asignada_a]));
   assert.equal(porNombre.size, 1, `vio: ${[...porNombre.keys()].join(", ")}`);
   assert.ok(!porNombre.has("Repartida"), "la de `ana` es de `ana`");
@@ -100,19 +117,21 @@ test("quien NO está en la rueda ve lo huérfano — pero ya no lo repartido a o
 });
 
 /**
- * Sacar a alguien de la rueda le apaga el recorte del REPARTO —vuelve a ver lo
- * huérfano sin pedir nada— pero **no le abre la cola de las demás**: eso lo
- * decide la frontera, y la frontera mira el rol. Antes este test se llamaba
- * «vuelve a ver todo» y esperaba 2; con D4, `DeBeto` es de Beto.
+ * DAR DE BAJA A ALGUIEN DE LA RUEDA NO LE CAMBIA LO QUE VE, y eso es lo nuevo.
+ *
+ * Antes la baja le apagaba el recorte automático y la cola se le abría. Ahora la
+ * rueda no interviene: sigue viendo lo suyo, y lo de Beto sigue siendo de Beto.
+ * El test se conserva porque la pregunta que responde cambió de signo y merece
+ * quedar fijada — si alguien reintroduce el recorte por rueda, se pone rojo.
  */
-test("una vendedora INACTIVA en la rueda deja de recortarse por reparto, no por rol", async (t) => {
+test("dar de baja en la rueda no le cambia la cola: el rol es lo único que manda", async (t) => {
   const db = await baseDePrueba(t);
   await sembrarRueda(db);
   await llegaUnLead(db, "51900000001", "DeAna");
   await llegaUnLead(db, "51900000002", "DeBeto");
   await db.update(repartoRueda).set({ activa: "no" }).where(eq(repartoRueda.vendedoraId, "ana"));
 
-  const { conversaciones } = await consultarCola(db, { vendedoraId: "ana" });
+  const { conversaciones } = await consultarCola(db, { vendedoraId: "ana" }, COMO_VENDEDORA);
   assert.deepEqual(
     (conversaciones as Fila[]).map((c) => c.persona_nombre),
     ["DeAna"],
@@ -174,24 +193,17 @@ test("el conteo de «míos» se cuenta con el filtro APAGADO", async (t) => {
     await llegaUnLead(db, `5190000${String(i).padStart(4, "0")}`, `Lead ${i}`);
   }
 
-  // ⚠️ **Quien mira el reparto ENTERO es quien supervisa, no quien está fuera de
-  // la rueda.** Antes acá alcanzaba con `luz`; con la frontera (D4) una vendedora
-  // fuera de la rueda ve lo huérfano y nada más, así que este medio test dejó de
-  // poder hacerse desde ahí. La pregunta que fija sigue siendo la misma: que el
-  // chip de «Míos» diga su número aunque el filtro esté apagado.
-  const antes = process.env.HERMES_SUPERVISORES;
-  process.env.HERMES_SUPERVISORES = "luz";
-  t.after(() => {
-    if (antes === undefined) delete process.env.HERMES_SUPERVISORES;
-    else process.env.HERMES_SUPERVISORES = antes;
-  });
-
-  const deAfuera = await consultarCola(db, { vendedoraId: "luz" });
+  // ⚠️ **Quien mira el reparto ENTERO es quien supervisa.** Con la frontera (D4)
+  // una vendedora ve lo suyo y lo huérfano, así que este medio test no se puede
+  // hacer desde ahí. La pregunta que fija sigue siendo la misma: que el chip de
+  // «Míos» diga su número aunque el filtro esté apagado.
+  const deAfuera = await consultarCola(db, { vendedoraId: "luz" }, COMO_SUPERVISORA);
   assert.equal(deAfuera.conversaciones.length, 12);
-  assert.equal(deAfuera.conteosFiltro?.mios, 0, "luz no está en la rueda: no le tocó ninguna");
+  assert.equal(deAfuera.conteosFiltro?.mios, 0, "a luz no le tocó ninguna");
 
-  // Y desde adentro, la cola YA es la suya.
-  const deAna = await consultarCola(db, { vendedoraId: "ana" });
+  // Y para una de las seis, la frontera deja exactamente las suyas: los 12 leads
+  // están todos repartidos, así que no hay huérfano que sumar.
+  const deAna = await consultarCola(db, { vendedoraId: "ana" }, COMO_VENDEDORA);
   assert.equal(deAna.total, 2, "12 leads entre 6 → 2 a cada uno");
   assert.equal(deAna.conteosFiltro?.mios, 2);
 });
