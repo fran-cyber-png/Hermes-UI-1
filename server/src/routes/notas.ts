@@ -1,6 +1,10 @@
-import { Router } from 'express';
+import { existsSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import express, { Router } from 'express';
 import { db } from '../db/client.js';
 import { requiereVendedora } from '../auth/sesion.js';
+import { RUTA_MEDIA, archivoSeguro, nombreSeguro } from '../whatsapp/mediaDir.js';
 import { ruta } from '../lib/ruta.js';
 import { abrirLink, cortarLink, leerPorToken } from '../espacios/linkRepositorio.js';
 import { configuracionDeLink, puedeEditarPorLink } from '../espacios/linkModelo.js';
@@ -22,6 +26,7 @@ import {
   moverNota,
   prepararContenido,
   prepararEdicion,
+  validarAnotaciones,
   validarDiagrama,
 } from '../notas/notas.js';
 
@@ -96,6 +101,127 @@ function docExcedeElTope(doc: unknown): string | null {
  */
 export const notasRouter = Router();
 notasRouter.use(requiereVendedora);
+
+/* ───────────────── Las imágenes que se pegan en una página ──────────────── */
+
+/**
+ * Los formatos que se aceptan. Lista BLANCA y corta: lo que un navegador pinta
+ * sin sorpresas en un `<canvas>` y lo que el portapapeles produce de verdad
+ * (una captura de pantalla siempre llega como PNG).
+ *
+ * ⚠️ Nada de SVG, y no es un olvido: un SVG es un documento con scripts y
+ * referencias externas. Servirlo desde el mismo origen que la app sería darle a
+ * cualquiera que pueda pegar una imagen un XSS de primera clase.
+ */
+const TIPOS_DE_IMAGEN: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+};
+
+/**
+ * 8 MB por imagen. Es una captura de pantalla holgada y una foto de teléfono
+ * normal. No es el tope del `jsonb` —la capa guarda el NOMBRE del archivo, no
+ * los bytes— sino el del disco y el de la subida.
+ */
+const TOPE_IMAGEN_BYTES = 8 * 1024 * 1024;
+
+/**
+ * PEGAR UNA IMAGEN EN UNA PÁGINA — `POST /api/notas/adjuntos`.
+ *
+ * ══ POR QUÉ EL CUERPO ES CRUDO Y NO JSON ════════════════════════════════════
+ *
+ * `index.ts` monta `express.json()` sin `limit`, o sea 100 KB para toda la app.
+ * Una captura de pantalla en base64 adentro de un JSON no entra ni de casualidad
+ * — y aunque entrara, base64 infla un tercio y el body viaja en CADA
+ * autoguardado de la página. Acá el cuerpo son los bytes tal cual, con su propio
+ * tope, exactamente como ya lo hace `plantillas.ts` para el flyer de un paso.
+ *
+ * La capa de anotaciones guarda **el nombre del archivo**, nunca los bytes.
+ *
+ * ══ DÓNDE VIVEN ═════════════════════════════════════════════════════════════
+ *
+ * En `RUTA_MEDIA`, el mismo directorio por el que ya pasa todo adjunto de
+ * WhatsApp: está gitignoreado, ya existe en cada deploy y ya tiene su saneado de
+ * nombres. Inventar un segundo almacén sería un segundo lugar que respaldar y
+ * un segundo saneado que endurecer por separado.
+ *
+ * El prefijo `nota-` no es decorativo: hace obvio de dónde salió cada archivo el
+ * día que haya que limpiar huérfanos.
+ */
+notasRouter.post(
+  '/adjuntos',
+  express.raw({ type: () => true, limit: '8mb' }),
+  ruta(async (req, res) => {
+    const bytes = req.body as Buffer;
+    const mime = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
+
+    if (!bytes?.length) {
+      res.status(400).json({ ok: false, message: 'el cuerpo tiene que ser la imagen cruda' });
+      return;
+    }
+    if (bytes.length > TOPE_IMAGEN_BYTES) {
+      res.status(413).json({
+        ok: false,
+        message: `la imagen pesa ${Math.round(bytes.length / 1024 / 1024)} MB y el tope es ${TOPE_IMAGEN_BYTES / 1024 / 1024} MB`,
+      });
+      return;
+    }
+
+    const extension = TIPOS_DE_IMAGEN[mime];
+    if (!extension) {
+      res.status(415).json({
+        ok: false,
+        message: `«${mime || 'sin tipo'}» no se puede pegar. Solo PNG, JPG, WEBP o GIF.`,
+      });
+      return;
+    }
+
+    // El nombre lo arma el SERVER, entero: nada de lo que llegue del cliente
+    // entra en un path. `nombreSeguro` es la segunda red, no la primera.
+    const archivo = nombreSeguro(`nota-${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${extension}`);
+    await writeFile(join(RUTA_MEDIA, archivo), bytes);
+
+    res.status(201).json({ ok: true, adjunto: { archivo, mime, bytes: bytes.length } });
+  }),
+);
+
+/**
+ * SERVIR UNA IMAGEN PEGADA — `GET /api/notas/adjuntos/:archivo`.
+ *
+ * ══ VIVE DENTRO DEL PERÍMETRO, Y SE PUEDE ═══════════════════════════════════
+ *
+ * Todo `/api/*` exige el token de una vendedora, y un `<img src>` no manda
+ * cabeceras — el atajo habitual sería abrir la ruta o meterle un token en la
+ * URL. **No hace falta ninguna de las dos**: la capa pinta en un `<canvas>`, así
+ * que el front baja la imagen con `fetch` y su `Authorization` de siempre y la
+ * mete en un `ImageBitmap`.
+ *
+ * O sea: las imágenes de una libreta privada quedan tan cerradas como su texto,
+ * sin una excepción nueva en el perímetro. Ver `dibujo/adjuntos.ts`.
+ *
+ * ⚠️ Lo que esto NO hace: comprobar que ESTA vendedora sea la dueña de la página
+ * donde se pegó la imagen. Con el nombre de archivo (16 caracteres aleatorios) no
+ * se puede adivinar cuál pedir, pero una compañera que lo conozca puede bajarlo.
+ * Es exactamente la misma propiedad que ya tiene `/api/whatsapp/media/:archivo`
+ * desde que existe; atarlo a la fila exige guardar de qué nota es cada adjunto y
+ * es un frente propio.
+ */
+notasRouter.get('/adjuntos/:archivo', (req, res) => {
+  const archivo = req.params.archivo;
+  // `archivoSeguro` es lista blanca: un nombre o un 400, jamás un path.
+  if (!archivoSeguro(archivo)) {
+    res.status(400).json({ ok: false, message: 'nombre de archivo inválido' });
+    return;
+  }
+  const ruta = join(RUTA_MEDIA, archivo);
+  if (!existsSync(ruta)) {
+    res.status(404).json({ ok: false, message: 'esa imagen ya no está' });
+    return;
+  }
+  res.sendFile(ruta);
+});
 
 /**
  * GET /api/notas?clave=<clave>              → mi libreta privada de esa ancla.
@@ -223,6 +349,17 @@ notasRouter.post('/', ruta(async (req, res) => {
     res.status(400).json({ ok: false, message: excede });
     return;
   }
+  // La capa de anotaciones tiene su propio tope y su propia forma. Se valida
+  // ACÁ y no dentro de `prepararContenido` porque no es contenido del texto: es
+  // una columna aparte, y mezclarlas haría que un dibujo pesado se reporte como
+  // un problema del texto.
+  if (req.body?.anotaciones !== undefined) {
+    const capa = validarAnotaciones(req.body.anotaciones);
+    if (!capa.ok) {
+      res.status(400).json({ ok: false, message: capa.motivo });
+      return;
+    }
+  }
   // `prepararContenido` deriva el texto del `doc` cuando viene, y descarta el
   // que haya mandado el cliente: el server calcula, el navegador no.
   const v = prepararContenido(req.body ?? {});
@@ -252,6 +389,7 @@ notasRouter.post('/', ruta(async (req, res) => {
     texto: v.texto,
     espacioId,
     ...(req.body?.doc !== undefined ? { doc: req.body.doc } : {}),
+    ...(req.body?.anotaciones !== undefined ? { anotaciones: req.body.anotaciones } : {}),
   });
   res.json({ ok: true, nota: conOrigenNota(nota) });
 }));
