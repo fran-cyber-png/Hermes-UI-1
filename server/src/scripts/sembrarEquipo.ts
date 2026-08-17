@@ -38,14 +38,21 @@ import { clavePersona } from "../equipo/roles.js";
 
 const APLICAR = process.argv.includes("--aplicar");
 
-/** Las columnas `vendedora_id` que existen HOY, preguntándoselo a la base. */
+/**
+ * Las columnas que guardan la identidad de una PERSONA, preguntándoselo a la base.
+ *
+ * ⚠️ **`creada_por` queda afuera a propósito**: ahí viven `alta-automatica`,
+ * `siembra` y otros valores de máquina que se verían como humanos nuevos. Y las
+ * propias tablas `equipo*` también, o el censo se leería a sí mismo.
+ */
 async function columnasDeIdentidad(): Promise<{ tabla: string; columna: string }[]> {
   const filas = await db.execute<{ table_name: string; column_name: string }>(sql`
     SELECT table_name, column_name
       FROM information_schema.columns
      WHERE table_schema = 'public'
-       AND column_name IN ('vendedora_id', 'asignada_por', 'creada_por')
+       AND column_name IN ('vendedora_id', 'asignada_por')
        AND data_type = 'text'
+       AND table_name NOT LIKE 'equipo%'
      ORDER BY table_name, column_name
   `);
   return filas.map((f) => ({ tabla: f.table_name, columna: f.column_name }));
