@@ -149,11 +149,11 @@ agente = un worktree = una rama. Al terminar, `Estado` → `listo` y escribí ab
 | ID | Paso | Qué | Modelo | Estado | Dueño | Rama / worktree |
 |---|---|---|---|---|---|---|
 | **A1** | — | Rescatar el plan a git | — | ✅ listo | — | `fix/los-tres-que-quedaban` |
-| **A2** | — | #387: los tres `OFFSET 0` en `telefono/identidadSql.ts` + re-verificar el costo | **opus** | 🟡 en curso | claude-opus5 (2026-08-17) | `chore/a2-medir-llave-telefono` · `.claude/worktrees/A2` |
-| **A3** | 3.1 | La cláusula de línea en la frontera (contra `numero_vendedora`, no `numeros_wa`) | **opus** | 🟡 en curso | claude-opus5 (2026-08-17) | `fix/a3-frontera-clausula-de-linea` · `.claude/worktrees/A3` |
-| **A4** | 4 | Auto-vinculación: los 7 defectos | **opus** | 🟡 en curso | claude-opus5 (2026-08-17) | `feat/auto-vinculacion-whatsapp` · `.claude/worktrees/auto-vinculacion-whatsapp` |
+| **A2** | — | #387: los tres `OFFSET 0` en `telefono/identidadSql.ts` + re-verificar el costo | **opus** | 🔴 medida · NO MERGEA | claude-opus5 (2026-08-17) | `chore/a2-medir-llave-telefono` — 2 commits, verde, sin PR a propósito |
+| **A3** | 3.1 | La cláusula de línea en la frontera (contra `numero_vendedora`, no `numeros_wa`) | **opus** | ✅ listo | claude-opus5 (2026-08-17) | `fix/a3-frontera-clausula-de-linea` — 3 commits, sin PR |
+| **A4** | 4 | Auto-vinculación: los 7 defectos | **opus** | ✅ listo | claude-opus5 (2026-08-17) | `feat/auto-vinculacion-whatsapp` — 6 commits, sin PR · ⚠️ bloqueada por #194 para PRENDERSE |
 | **A5** | 1 | Reasignar las 24+20 conversaciones · sacar a Tracy de la rueda | humano | 🔒 bloqueado por P1/P2 | — | |
-| **B1** | 5 | Tabla de roles + `cargarRol` + los 17 call sites (migración) | **opus** | 🟡 en curso | claude-opus5 (2026-08-17) | `feat/b1-tabla-de-roles` · `.claude/worktrees/B1` |
+| **B1** | 5 | Tabla de roles + `cargarRol` + los 17 call sites (migración) | **opus** | ✅ listo · **DESBLOQUEA C1·C2·C4** | claude-opus5 (2026-08-17) | `feat/b1-tabla-de-roles` — 5 commits, migración 0028, sin PR |
 | **C1** | 6 | Cerrar `/api/routing` | barato | 🔒 espera B1 | — | |
 | **C2** | 7 | `/api/equipo` + vista Equipo | barato | 🔒 espera B1 | — | |
 | **C3** | 8 | Líneas y rueda desde el panel (migración) | **opus** | 🔒 espera B1 · serie con C6 | — | |
@@ -378,3 +378,142 @@ nueva + el import que agrega A4. Verificado después: `tsc --noEmit` en verde **
 
 ⚠️ **Un worktree nuevo no sirve sin `server/.env`** (gitignored, §5.1 ya lo dice) **ni sin los dos
 `node_modules`** — raíz y `server/`, ~560 MB por worktree.
+
+### 2026-08-17 · A2 · 🔴 LA VALLA REPRODUCE, Y EL CABLEADO SIGUE SIN PODER MERGEARSE
+
+Son **dos hallazgos, no uno**, y el segundo tumba al primero.
+
+**(1) Los tres `OFFSET 0` valen, reproducido dos veces con siembras distintas.** Con las funciones
+REALES del repo importadas (26 ramas de país) sobre 25.511 leads × 4.000 conversaciones: la cascada
+**sin** la valla **no termina** (plan de **7.083 KB**), **con** la valla cuesta 77–188 ms (plan de
+20 KB), contra 34–61 ms del sufijo pelado. O sea ~2× el sufijo. El «1.000×» del 17-ago queda
+confirmado en dirección y orden de magnitud.
+
+**(2) 🔴 PERO LA VALLA ARREGLA EL FRAGMENTO Y NO SOBREVIVE A LA COMPOSICIÓN.** Sobre los mismos
+datos y la misma máquina, **`consultarCola` pasa de 169 ms a 232–255 s. 1.400×.** Y está ubicado:
+la consulta del `CREATE TEMP TABLE todo` —donde viven `sufijos_con_conversacion` y `leadsCte`—
+cuesta **116–166 ms** (o sea que el brazo de leads con la identidad está BIEN, al revés de lo que
+su propio docblock predecía); la que explota es la de la **página**, la que lleva el CTE
+`lead_curso` de `cola/cursoSql.ts`: **232 s**. Suelta, esa misma consulta cuesta 114 ms.
+
+⚠️ **Es la lección del repo AL REVÉS**: acá aislar el fragmento lo hace parecer BARATO. La regla
+«medí el seam completo» no era sobre no subestimar el fragmento — es que el fragmento y el seam
+pueden diferir en cualquiera de las dos direcciones.
+
+```bash
+cd .claude/worktrees/A2/server
+npx tsx scratchpad/medir-llave-telefono.ts --leads=25511 --conv=4000 --repeticiones=3 --timeout=60 --resembrar
+npx tsx scratchpad/medir-llave-telefono.ts --solo-seam --seam --repeticiones=2 --timeout=300
+```
+
+🔴 **POR QUÉ LA MEDICIÓN ANTERIOR «NO TERMINABA», y esto sirve para cualquier medición futura:
+`statement_timeout` NO ALCANZA.** El timeout de Postgres se chequea en los puntos de interrupción
+del **ejecutor**, y la **planificación** casi no los tiene — así que una forma que explota al
+PLANIFICAR se lleva puesto el timeout y sigue corriendo (medida activa a los 3 min con
+`statement_timeout = 120s`). Hace falta un **perro guardián en el cliente**, que cancele desde OTRA
+conexión. Segunda trampa que también costó una corrida en falso: medir el seam con
+`postgres({max: 1})` **se auto-bloquea**, porque `consultarCola` abre una transacción — y el síntoma
+es idéntico a «esta forma no termina».
+
+**Lo siguiente a probar**, y es un mecanismo distinto del de la valla (la valla de adentro ya se
+probó y no sirve): `WITH lead_curso AS MATERIALIZED (…)` en `cola/consultarCola.ts` y
+`dashboard/negocio.ts`.
+
+### 2026-08-17 · A2 · 🔴 HAY UN CUARTO CRUCE POR TELÉFONO SIN MIGRAR, Y ESCRIBE EN `intereses`
+
+`cursos/consultarDerivados.ts` —el interés DERIVADO de la ficha, el del «📣 … [Confirmar]» cuyo clic
+**escribe en `intereses`**, la única fuente de verdad de «qué curso quiere»— sigue cruzando
+`JOIN leads l ON sufijoTelefonoSql(l.phone) = p.sufijo`. Reproducido con la MISMA siembra que el
+test nuevo declara arreglada (conversación `51987654321` + lead `+56987654321`): la cola ya no le
+cuelga el curso chileno y `candidatosPorClave` **sí** devuelve el «Diplomado en Ciberseguridad».
+O sea que el cableado, tal como está, hace que **dos superficies digan cosas distintas de la misma
+persona** — #37 textual. `gente/leadDeTelefono.ts:102` está igual. Ninguno de los dos está en la
+deuda declarada de `cursoSql.ts`.
+
+### 2026-08-17 · A3 · El bug de los conteos (3.2) YA estaba arreglado en `main`
+
+Lo arregló `2ded5d8`, **17 commits después** del corte de medición del plan. La frontera dejó de ser
+opt-in igual (se retiró `HERMES_COLA_AISLADA` y `tieneColaAislada`) y se le agregó el candado
+dedicado que faltaba (`cola/frontera.conteos.test.db.ts`). **Antes de implementar un paso del plan,
+mirá si `main` ya lo hizo.**
+
+### 2026-08-17 · A3 · 🔴 EL PREFLIGHT SALÍA ROJO CONTRA PRODUCCIÓN POR UN MOTIVO FALSO
+
+El techo de huérfanas corría sobre **todas** las filas, supervisoras incluidas — y para una
+supervisora `huerfanas = total - propias` es **la mesa entera por definición**: ve todo, que es lo
+que la frontera le concede. Con la mesa real (~5.492) cualquier supervisora configurada rompía el
+techo sola y el script salía en 1 diciendo «la cláusula de línea no está acotando — revisá
+`numero_vendedora`»: un diagnóstico **falso**, apuntando a la tabla equivocada, justo antes de un N5.
+
+⚠️ **La exclusión estaba pensada**: el detector de «frontera apagada» de veinte líneas más abajo sí
+hace `filas.filter((f) => !f.esSupervisora)`. Y **ningún test lo veía** porque el único escenario con
+`esSupervisora: true` del archivo usaba `huerfanas: 2`. **Un caso de prueba con cifras de juguete no
+ejercita el umbral que el código tiene.** El candado nuevo usa 5.480 sobre 5.492 y exige que el techo
+SIGA disparando para una vendedora en la misma corrida — si no, la guarda apagaría el chequeo en vez
+de acotarlo. Verificado por mutación: sin la guarda se pone rojo exactamente uno.
+
+⚠️ **Lo que A3 NO midió y hay que mirar antes del N5**: la cláusula agrega un `EXISTS` + un
+`NOT EXISTS` correlacionados por fila, y entran en las **tres** consultas, encima de la tabla
+temporal de #361. A favor: `numero_vendedora` tiene ~5 filas con PK `(numero, vendedora_id)`. En
+contra: no se corrió el seam completo. Es literalmente el frente donde A2 acaba de medir 1.400×.
+
+### 2026-08-17 · A4 · Los siete defectos, y las dos cosas que siguen bloqueando el frente
+
+Los siete arreglados, cada uno con candado verificado por mutación. Los que cambiaron de forma al
+arreglarse: el **candado global** se extrajo puro a `numeros/pareoPropio.ts` reusando la MISMA
+constante `VIGENCIA_QR_MS` del vinculador (dos vigencias que pueden divergir es un frente nuevo); la
+**guarda del transporte** va **antes de iniciar el pareo**, no antes de montar, porque la credencial
+la escribe `Vinculador.iniciar()` al hacer `createClient({store})`; y el **defecto 5 no se arregla
+desmontando** (`GestorWhatsapp` no expone `quitar`) sino con «la fila queda, el montaje se reintenta»
+— por eso `puedeAutoVincular` acepta re-parear la propia: «solo 1» es cuántas líneas, no cuántas veces.
+
+🔴 **Y siguen las dos cosas que no son código.** Producción corre `WHATSAPP_TRANSPORTE=falso`, así
+que la guarda del defecto 3 deja la auto-vinculación en **409 en producción**: prenderla es un cambio
+de `.env` + reinicio manual. Y **#194 sigue siendo la precondición**: con 24 reinicios por semana y
+mediana de 1,36 h, una línea auto-vinculada tiene vida esperada de horas. **Está listo y no se puede
+prender.**
+
+⚠️ **Y el re-pareo PISA lo que declaró Cerberus**: en la rama `conectado`, `upsertNumero` escribe
+`proposito: 'vendedora'` sobre cualquier número cuyo set de vendedoras la incluya — la exención del
+reintento. Si esa fila era una línea que Cerberus declaró `proposito: 'campana'` a su nombre, queda
+reclasificada y `soloSusLineas` deja de dar true: **la persona pasa a ver la cola de la Escuela**, que
+es el cruce entre los dos planos de Goberna. Hoy es inalcanzable (hace falta el teléfono físico, y el
+transporte en `falso` corta antes), pero el comentario del router afirma lo contrario de lo que el
+código hace.
+
+### 2026-08-17 · B1 · 🔴 R2 ATRAPADO EN EL ACTO: el `when` generado era MENOR que el máximo de main
+
+`db:generate` produjo la 0028 con `when: 1786979446616` y el máximo aplicado en `main` es
+**1787314368155**. O sea: sin `goberna-journal-set-when`, drizzle **la salteaba en silencio** y el
+deploy salía verde con las tres tablas sin crear. Quedó en `1787400768155`, y el journal verificado
+monótono **releyéndolo**, no confiando en que el comando corrió.
+
+```bash
+python3 -c "import json;j=json.load(open('server/drizzle/meta/_journal.json'));print('monótono:', all(j['entries'][i]['when']<j['entries'][i+1]['when'] for i in range(len(j['entries'])-1)))"
+```
+
+⚠️ **El call site 17 (`cola/consultarCola.ts`) queda leyendo el CSV** mientras el padrón, las
+campañas y el Dashboard ya leen la tabla — es de A3 y era la instrucción. El efecto durante la
+ventana entre los dos merges es concreto y mudo: darle `supervisor` a alguien **en la tabla** sin
+agregarlo al CSV le abre el padrón, «El negocio» y las campañas, **y le deja la cola recortada**.
+Dos fuentes para el mismo permiso, viviendo en producción. **Conviene que B1 y el paso 10 no se
+separen mucho.**
+
+⚠️ `hayQuienMande` puede contradecir a la puerta: devuelve `true` desde el CSV cuando la tabla no
+tiene ningún admin/supervisor, pero la cascada le da `vendedora` a esa misma persona si tiene fila
+activa (la fila le gana al CSV). Reproducido contra base. Hoy no es alcanzable —`revisarSemilla` no
+siembra a quien está en el CSV con rol menor— y se vuelve alcanzable en cuanto el panel (paso 7)
+escriba una fila `vendedora` para alguien que quedó en el `.env`.
+
+### 2026-08-17 · TODAS · `mapa:verificar` cuenta LÍNEAS DE COMENTARIO, y eso pone N1 rojo solo
+
+Mordió a **dos de las cuatro** unidades y es invisible: `docs/mapa.md` lleva el conteo de líneas de
+comentario, así que **cualquier edición de un comentario** posterior al último `npm run mapa` deja el
+archivo desactualizado, y `mapa:verificar` es un paso de `ci.yml` que compara **byte a byte**. En A4
+pasó dentro de la misma rama: un commit regeneró el mapa y el siguiente agregó 6 líneas de comentario
+a un test. El PR no mergea y el mensaje no dice qué cambió. **Regenerá el mapa en el ÚLTIMO commit,
+no en el que agrega el módulo.**
+
+⚠️ Y **las cuatro unidades regeneraron `docs/mapa.md`**, así que el primer merge deja a las otras tres
+en conflicto. Es generado: quien mergee segundo corre `npm run mapa`, **no resuelve el conflicto a
+mano**.
