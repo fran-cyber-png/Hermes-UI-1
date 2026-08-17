@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { DarkModeToggle } from './DarkModeToggle';
 
 interface CalendarHeaderProps {
   title: string;
@@ -66,7 +67,7 @@ export function CalendarHeader({
         )}
       </div>
 
-      {/* Right: Mode & Create Button */}
+      {/* Right: Mode, Dark Mode & Create Button */}
       <div className="flex items-center gap-2">
         <div className="flex gap-1 rounded-lg border border-border p-1">
           {MODOS.map((m) => (
@@ -84,6 +85,7 @@ export function CalendarHeader({
             </button>
           ))}
         </div>
+        <DarkModeToggle />
         <button
           onClick={onCreateClick}
           className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground transition-all duration-150 hover:bg-primary/90 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
