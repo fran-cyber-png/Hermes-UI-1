@@ -74,6 +74,8 @@ test('🔴 traer una página del espacio a mi libreta AVISA con los nombres, y n
       onMover={(d) => movido.push(d)}
       onAbrirLink={() => {}}
       onCortarLink={() => {}}
+      onTocarDividir={() => {}}
+      onCortarDivision={() => {}}
     />,
   );
   await reposar();
@@ -107,6 +109,8 @@ test('«Dejarla acá» no mueve nada', async () => {
       onMover={(d) => movido.push(d)}
       onAbrirLink={() => {}}
       onCortarLink={() => {}}
+      onTocarDividir={() => {}}
+      onCortarDivision={() => {}}
     />,
   );
   await reposar();
@@ -132,6 +136,8 @@ test('mover HACIA un espacio no pregunta nada: no le saca nada a nadie', async (
       onMover={(d) => movido.push(d)}
       onAbrirLink={() => {}}
       onCortarLink={() => {}}
+      onTocarDividir={() => {}}
+      onCortarDivision={() => {}}
     />,
   );
   await reposar();
@@ -156,6 +162,8 @@ test('🔴 el modal del link DICE que se abre sin entrar a Hermes', async () => 
       onMover={() => {}}
       onAbrirLink={() => {}}
       onCortarLink={() => {}}
+      onTocarDividir={() => {}}
+      onCortarDivision={() => {}}
     />,
   );
   await reposar();
@@ -180,6 +188,8 @@ test('una página SIN link muestra las opciones ANTES de crearlo', async () => {
       onMover={() => {}}
       onAbrirLink={() => {}}
       onCortarLink={() => {}}
+      onTocarDividir={() => {}}
+      onCortarDivision={() => {}}
     />,
   );
   await reposar();
@@ -208,6 +218,8 @@ test('🔴 elegir «cualquiera con el link» APAGA el permiso de editar', async 
       onMover={() => {}}
       onAbrirLink={() => {}}
       onCortarLink={() => {}}
+      onTocarDividir={() => {}}
+      onCortarDivision={() => {}}
     />,
   );
   await reposar();
@@ -240,6 +252,8 @@ test('«Todavía no lo abrió nadie» es la respuesta cuando el link no se usó'
       onMover={() => {}}
       onAbrirLink={() => {}}
       onCortarLink={() => {}}
+      onTocarDividir={() => {}}
+      onCortarDivision={() => {}}
     />,
   );
   await reposar();

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Link2, Lock, MoveRight, Users } from 'lucide-react';
+import { Check, Columns2, Link2, Lock, MoveRight, Users } from 'lucide-react';
 import { AuditoriaDeLink } from './AuditoriaDeLink';
 import { ModalDeLink } from './ModalDeLink';
 import type { DondeEstoy, Espacio } from './espacios';
@@ -66,6 +66,8 @@ export function AccionesDePagina({
   onMover,
   onAbrirLink,
   onCortarLink,
+  onTocarDividir,
+  onCortarDivision,
 }: {
   nota: Nota;
   donde: DondeEstoy;
@@ -74,6 +76,10 @@ export function AccionesDePagina({
   onMover: (destino: DondeEstoy) => void;
   onAbrirLink: (v: { alcance: Alcance; permiso: Permiso; venceAt: string | null }) => void;
   onCortarLink: () => void;
+  /** Abre el selector de la pantalla dividida, en el panel de al lado. */
+  onTocarDividir: () => void;
+  /** Deshace la división — se ofrece en el propio botón cuando ya hay una. */
+  onCortarDivision: () => void;
 }) {
   /**
    * `link` abre el modal de configuración y `registro` el Audit Log. Son estados
@@ -123,6 +129,29 @@ export function AccionesDePagina({
       >
         <Link2 className="size-3.5" />
         {token ? 'Compartida con link' : 'Compartir con link'}
+      </button>
+
+      {/*
+        DIVIDIR PANTALLA (17-ago-2026). Un clic sobre «por nota, una vez»: la
+        columna del server es escalar, así que ya hay como máximo UNA
+        contraparte — este botón no abre un submenú a elegir cuál, es un
+        toggle. Sin contraparte, ABRE el selector en el panel de al lado (vive
+        en `Libreta.tsx`, no acá: es una columna entera, no un dropdown de
+        19rem). Con una, el botón mismo la CORTA — el mismo molde que
+        «Compartida con link», que también se dice siempre y no se esconde.
+      */}
+      <button
+        type="button"
+        onClick={() => (nota.paginaDivididaId ? onCortarDivision() : onTocarDividir())}
+        aria-pressed={Boolean(nota.paginaDivididaId)}
+        className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition ${
+          nota.paginaDivididaId
+            ? 'border-primary bg-secondary text-foreground'
+            : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
+        }`}
+      >
+        <Columns2 className="size-3.5" />
+        {nota.paginaDivididaId ? 'Pantalla dividida' : 'Dividir pantalla'}
       </button>
 
       {confirmar !== 'no' && espacioActual && (

@@ -41,6 +41,13 @@ http
     if (req.method === 'OPTIONS') return enviar({}, 204);
 
     if (url.pathname === '/api/auth/yo') return enviar({ vendedora: { id: 'luz', nombre: 'Luz' } });
+    if (url.pathname === '/api/auth/login' && req.method === 'POST') {
+      // Token con forma real (`<id>|<expira>` en base64url + un punto) para que
+      // `quienDiceSer` lo pinte de una en el próximo reload, como con uno real.
+      const expira = Date.now() + 14 * 24 * 60 * 60 * 1000;
+      const cuerpo = Buffer.from(`luz|${expira}`).toString('base64url');
+      return enviar({ token: `${cuerpo}.stub`, vendedora: { id: 'luz', nombre: 'Luz' } });
+    }
     if (url.pathname === '/api/espacios/padron') return enviar({ personas: PADRON });
     if (url.pathname === '/api/espacios') return enviar({ espacios: ESPACIOS });
     if (/^\/api\/notas\/\d+\/link$/.test(url.pathname)) return enviar({ ok: true, token: '7f3a9c2e8b1d40561122334455667788' });

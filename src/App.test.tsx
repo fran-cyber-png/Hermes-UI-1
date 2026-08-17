@@ -85,6 +85,14 @@ function vistaActual(m: Montado): string {
  * de turnos es lo que hace que estos tests digan lo que prometen: sin esto, el
  * de «Escape sigue llegando a window» pasaba mirando un `<div>` de carga, que
  * por supuesto no se come ninguna tecla.
+ *
+ * ⚠️ **El tope subió de 50 a 300 el 18-ago-2026, y no es un flake que se tapa.**
+ * El chunk de la Libreta creció con la Ribbon (#409) y el editor de diagramas
+ * (React Flow + dagre): el PRIMER montaje pasó de ~8 turnos a **139 medidos**;
+ * los siguientes dan 0 porque el módulo ya está en caché. Con 50 el test moría
+ * en el `throw`, o sea que **avisó de lo que tenía que avisar** — lo que
+ * cambió es cuánto tarda de verdad, no si monta. Si algún día vuelve a rozar
+ * este techo, lo que hay que mirar es el TAMAÑO del chunk, no este número.
  */
 async function irALaLibreta(m: Montado, tecla: 'n' | '⌘8' = 'n'): Promise<void> {
   if (tecla === 'n') teclear('n');

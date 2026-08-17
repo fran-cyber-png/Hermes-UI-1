@@ -11,15 +11,15 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 33 | 456 | 60,571 | 19,575 |
-| server | 66 | 784 | 82,317 | 51,352 |
-| **total** | **99** | **1,240** | **142,888** | **70,927** |
+| front | 33 | 470 | 62,364 | 20,524 |
+| server | 66 | 784 | 82,639 | 51,398 |
+| **total** | **99** | **1,254** | **145,003** | **71,922** |
 
 ## Front — `src/`
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
-| `notas` | La Libreta: páginas, espacios compartidos, autoguardado y el link público. | 58 | 6,874 | 17 | 5 | 1 |
+| `notas` | La Libreta: páginas, espacios compartidos, autoguardado y el link público. | 72 | 8,667 | 22 | 5 | 1 |
 | `whatsapp` | La conversación nativa: el hilo, el composer, los adjuntos, las citas y la compresión de video. | 44 | 5,246 | 23 | 9 | 5 |
 | `canales` | La cola unificada, y sólo eso: la lista de conversaciones, su fila, la barra de filtros y el panel de contexto. El modelo que dibuja NO vive acá — vive en `dominio/`. | 32 | 4,585 | 6 | 1 | 11 |
 | `panel` | La ficha al costado del chat, en el orden de las preguntas que decide una venta: quién es, qué quiere, qué mandarle, qué hacer. | 26 | 3,501 | 9 | 5 | 8 |
@@ -57,12 +57,12 @@
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
-| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. Capa 3 — nadie la importa: un archivo que otro módulo necesita no es un router y no va acá (fue el caso de `costoPorLead`). | 62 | 10,532 | 12 | 1 | 48 |
+| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. Capa 3 — nadie la importa: un archivo que otro módulo necesita no es un router y no va acá (fue el caso de `costoPorLead`). | 62 | 10,661 | 12 | 1 | 48 |
 | `bot` | El bot de primera línea que atiende solo: su agente, sus guardrails, sus frenos y el reenganche. | 56 | 7,997 | 24 | 7 | 13 |
 | `scripts` | Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción. Capa 3. | 36 | 6,207 | 0 | 0 | 36 |
 | `cola` | La consulta que ordena la deuda: a quién se atiende primero y por qué. Cada regla vive pura y con su gemelo SQL. | 62 | 5,494 | 42 | 9 | 6 |
 | `whatsapp` | La costura con WhatsApp: la interfaz de transporte y sus implementaciones, el hilo, y la única puerta por la que sale un envío. | 49 | 4,263 | 23 | 13 | 10 |
-| `db` | El schema y la conexión. Capa 0: no conoce ninguna regla de negocio y no puede importar a nadie. | 20 | 3,945 | 1 | 53 | 0 |
+| `db` | El schema y la conexión. Capa 0: no conoce ninguna regla de negocio y no puede importar a nadie. | 20 | 3,990 | 1 | 53 | 0 |
 | `autorespuesta` | El acuse fuera de horario del lado del server: a quién corresponde, con qué plantilla y a qué ritmo. Nunca manda solo. | 30 | 2,993 | 13 | 7 | 5 |
 | `campana` | Mandar una campaña por plantilla aprobada de Meta: el público, los vetos, el ritmo y los reintentos. | 27 | 2,907 | 12 | 3 | 6 |
 | `correos` | El correo 1-a-1 y su rastro. Sin listas ni campañas. | 24 | 1,684 | 15 | 2 | 2 |
@@ -81,9 +81,9 @@
 | `padron` | Los contactos de icarus que nunca escribieron: el WHERE que los recorta, sus facetas, y a quién se le habilitan. Es una frontera. | 15 | 1,023 | 6 | 4 | 2 |
 | `canales` | 🪦 Heredado de meta-escuela — las consultas de salud y tesorería del dashboard de pauta. ⚠️ No confundir con `front/canales`, que es la cola y sí se usa. | 6 | 1,021 | 0 | 2 | 4 |
 | `atribucion` | Que una venta encuentre su conversación: la llave determinista y la cascada etiquetada de respaldo. | 10 | 996 | 4 | 4 | 5 |
+| `notas` | Las páginas de la Libreta y su texto plano. | 8 | 928 | 5 | 1 | 2 |
 | `meta` | Traer de Meta lo que pasó —interacciones, leads, anuncios— por los dos caminos (polling y webhook), que escriben igual. | 8 | 843 | 2 | 5 | 1 |
 | `resultados` | Qué pasó DESPUÉS de mandar una pieza. Deriva el veredicto; los nombres no prometen causa. | 9 | 840 | 4 | 3 | 5 |
-| `notas` | Las páginas de la Libreta y su texto plano. | 8 | 780 | 5 | 1 | 2 |
 | `equipo` | Quién es quién: los tres roles, de dónde sale el de quien pide, y con qué degrada cuando la tabla no está o la base no contesta. | 12 | 772 | 6 | 5 | 5 |
 | `lazo` | 🪦 Heredado de meta-escuela — el outbox que le contaría las conversiones a Meta por CAPI. Apagado (`LAZO_RELOJ`). | 7 | 747 | 2 | 6 | 3 |
 | `identidad` | El puente clave-de-conversación ↔ persona: enlazar, revocar, unificar. | 7 | 736 | 3 | 2 | 1 |

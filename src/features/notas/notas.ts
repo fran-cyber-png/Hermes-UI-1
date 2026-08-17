@@ -82,6 +82,24 @@ export interface Nota {
   venceAt?: string | null;
   /** `null` = nunca lo abrió nadie — la respuesta más útil. */
   ultimoAccesoAt?: string | null;
+  /**
+   * PANTALLA DIVIDIDA (17-ago-2026): con qué otra página se ve al lado, a la
+   * derecha. `null`/ausente = pantalla simple.
+   *
+   * ⚠️ UNIDIRECCIONAL: es la contraparte que ESTA página eligió, no una
+   * relación simétrica — abrir la otra no trae a ésta de vuelta salvo que
+   * ELLA también apunte para acá. Y es UNA SOLA: dividir de nuevo reemplaza,
+   * nunca agrega una segunda.
+   */
+  paginaDivididaId?: number | null;
+  /**
+   * `'texto'` (BlockNote, el de siempre) o `'diagrama'` (React Flow — nodos y
+   * conexiones). Ausente se lee como `'texto'`: un server viejo no lo manda, y
+   * toda fila de antes de este frente ES texto.
+   */
+  tipo?: 'texto' | 'diagrama';
+  /** El diagrama de React Flow, o `null`/ausente si `tipo !== 'diagrama'`. */
+  diagrama?: { nodes: unknown[]; edges: unknown[] } | null;
 }
 
 /**
@@ -124,6 +142,20 @@ export function useNotas(clave: string, espacioId: number | null = null, activo 
       ),
     select: (d) => ordenarNotas(d.notas),
     enabled: activo && Boolean(clave),
+  });
+}
+
+/**
+ * UNA PÁGINA, POR SU ID — lo que la pantalla dividida necesita para mostrar al
+ * lado una página que no pertenece a la `clave`/`espacio` que `useNotas` está
+ * trayendo. `null` la apaga: no hay pantalla dividida (todavía) que mirar.
+ */
+export function useNotaPorId(id: number | null) {
+  return useQuery({
+    queryKey: ['notas', 'por-id', id],
+    queryFn: () => api<{ ok: true; nota: Nota }>(`/api/notas/${id}`),
+    select: (d) => d.nota,
+    enabled: id !== null,
   });
 }
 
@@ -191,6 +223,35 @@ export function useMutacionesNotas(clave: string, espacioId: number | null = nul
     },
   });
 
+  /**
+   * UN DIAGRAMA DE REACT FLOW (17-ago-2026) — el gemelo de `crear`/`autoguardar`
+   * para `tipo: 'diagrama'`. Aparte y no una rama de las de arriba: un diagrama
+   * nunca manda `texto`/`doc` (no hay BlockNote de por medio), así que
+   * mezclarlos habría dejado un solo body con dos formas posibles según qué
+   * campos vinieran — más difícil de leer que dos mutaciones chicas.
+   */
+  const crearDiagrama = useMutation({
+    mutationFn: (v: { diagrama: unknown }) =>
+      api<{ ok: true; nota: Nota }>('/api/notas', {
+        method: 'POST',
+        body: JSON.stringify({ clave, espacioId, tipo: 'diagrama', diagrama: v.diagrama }),
+      }),
+    onSuccess: invalidar,
+  });
+
+  const autoguardarDiagrama = useMutation({
+    mutationFn: (v: { id: number; diagrama: unknown }) =>
+      api<{ ok: true; nota: Nota }>(`/api/notas/${v.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ diagrama: v.diagrama }),
+      }),
+    onSuccess: (r) => {
+      qc.setQueryData<{ notas: Nota[] }>(['notas', clave, espacioId], (prev) =>
+        prev ? { notas: prev.notas.map((n) => (n.id === r.nota.id && n.origen === 'nota' ? { ...n, ...r.nota } : n)) } : prev,
+      );
+    },
+  });
+
   const archivar = useMutation({
     mutationFn: (id: number) => api<{ ok: true; nota: Nota }>(`/api/notas/${id}/archivar`, { method: 'PATCH' }),
     onSuccess: invalidar,
@@ -246,7 +307,43 @@ export function useMutacionesNotas(clave: string, espacioId: number | null = nul
     onSuccess: invalidar,
   });
 
-  return { crear, editar, archivar, desarchivar, autoguardar, mover, abrirLink, cortarLink };
+  /**
+   * PANTALLA DIVIDIDA (17-ago-2026): con qué otra página se ve al lado.
+   * `dividir` la abre —o la cambia—, `cortarDivision` la deshace.
+   *
+   * ⚠️ Invalida la lista de ESTA página (la que cambió su `paginaDivididaId`),
+   * no la de la contraparte: dividir no la mueve de lugar ni la toca, así que
+   * no hay nada que refrescar del otro lado. Quien la muestra al lado
+   * (`useNotaPorId`) la trae por su propio queryKey.
+   */
+  const dividir = useMutation({
+    mutationFn: (v: { id: number; paginaDivididaId: number }) =>
+      api<{ ok: true; nota: Nota }>(`/api/notas/${v.id}/dividir`, {
+        method: 'PATCH',
+        body: JSON.stringify({ paginaDivididaId: v.paginaDivididaId }),
+      }),
+    onSuccess: invalidar,
+  });
+
+  const cortarDivision = useMutation({
+    mutationFn: (id: number) => api<{ ok: true; nota: Nota }>(`/api/notas/${id}/dividir`, { method: 'DELETE' }),
+    onSuccess: invalidar,
+  });
+
+  return {
+    crear,
+    editar,
+    archivar,
+    desarchivar,
+    autoguardar,
+    mover,
+    abrirLink,
+    cortarLink,
+    dividir,
+    cortarDivision,
+    crearDiagrama,
+    autoguardarDiagrama,
+  };
 }
 
 /** La primera línea con texto — el título que la Libreta muestra en la lista. */

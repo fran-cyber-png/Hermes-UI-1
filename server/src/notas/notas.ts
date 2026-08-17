@@ -3,7 +3,7 @@ import type { db as DbSingleton } from '../db/client.js';
 import { notaLink } from '../db/links.js';
 import { gestiones, notas } from '../db/schema.js';
 import { planearMovimiento } from '../espacios/mover.js';
-import { puedeEditar, type QuienPregunta } from '../espacios/visibilidad.js';
+import { puedeEditar, puedeVer, type QuienPregunta } from '../espacios/visibilidad.js';
 import { miLibretaPrivadaSql, mismaVendedoraEnSql, visibleParaSql } from '../espacios/visibilidadSql.js';
 import { aTextoPlano } from './textoPlano.js';
 
@@ -94,11 +94,45 @@ export function prepararContenido(entrada: { texto?: unknown; doc?: unknown }): 
   return validarTexto(entrada.doc !== undefined ? aTextoPlano(entrada.doc) : entrada.texto);
 }
 
+export interface Diagrama {
+  nodes: unknown[];
+  edges: unknown[];
+}
+
+export type ResultadoDiagrama = { ok: true; diagrama: Diagrama } | { ok: false; motivo: string };
+
+/**
+ * UN DIAGRAMA DE REACT FLOW — validación mínima (17-ago-2026).
+ *
+ * No se interpreta la forma de cada nodo/conexión: eso es contrato de React
+ * Flow del lado del cliente, y repetirlo acá es la próxima oportunidad de que
+ * las dos formas diverjan (#37). Lo único que el server exige es lo que
+ * **necesita para no guardar basura**: un objeto, con `nodes`/`edges` como
+ * arrays — ausentes degradan a `[]` (un diagrama recién abierto, sin tocar,
+ * es válido y vacío), pero presentes-y-no-array se rechazan: ahí no hay nada
+ * razonable que asumir.
+ */
+export function validarDiagrama(valor: unknown): ResultadoDiagrama {
+  if (typeof valor !== 'object' || valor === null || Array.isArray(valor)) {
+    return { ok: false, motivo: 'el diagrama tiene que ser un objeto con nodes/edges' };
+  }
+  const v = valor as { nodes?: unknown; edges?: unknown };
+  if (v.nodes !== undefined && !Array.isArray(v.nodes)) {
+    return { ok: false, motivo: 'nodes tiene que ser un array' };
+  }
+  if (v.edges !== undefined && !Array.isArray(v.edges)) {
+    return { ok: false, motivo: 'edges tiene que ser un array' };
+  }
+  return { ok: true, diagrama: { nodes: v.nodes ?? [], edges: v.edges ?? [] } };
+}
+
 export interface CambiosEdicion {
   texto?: string;
   /** Solo se incluye si el PATCH lo trajo: omitirlo NO borra el `doc` que había. */
   doc?: unknown;
   fijada?: boolean;
+  /** Solo se incluye si el PATCH lo trajo: omitirlo NO borra el diagrama que había. */
+  diagrama?: Diagrama;
   editadoAt: Date;
 }
 
@@ -109,9 +143,15 @@ export type ResultadoEdicion = { ok: true; cambios: CambiosEdicion } | { ok: fal
  * columna no tiene default más que null); CUALQUIER PATCH la setea a `ahora`,
  * inyectado como en `cola/urgencia.ts` para no depender del reloj real. Separada
  * de la escritura en base para poder testearse sin IO.
+ *
+ * ⚠️ **`diagrama` es UN CUARTO campo editable, aparte de `texto`/`doc`, no una
+ * rama de los mismos** — el autoguardado de una página de diagrama nunca manda
+ * `texto` ni `doc` (no hay BlockNote de por medio), así que exigir uno de esos
+ * dos para «hay algo que editar» habría dejado sin autoguardado a todo
+ * `tipo = 'diagrama'`.
  */
 export function prepararEdicion(
-  cambios: { texto?: unknown; doc?: unknown; fijada?: unknown },
+  cambios: { texto?: unknown; doc?: unknown; fijada?: unknown; diagrama?: unknown },
   ahora: Date,
 ): ResultadoEdicion {
   const resultado: CambiosEdicion = { editadoAt: ahora };
@@ -128,8 +168,15 @@ export function prepararEdicion(
   if (cambios.fijada !== undefined) {
     resultado.fijada = Boolean(cambios.fijada);
   }
-  if (resultado.texto === undefined && resultado.fijada === undefined) {
-    return { ok: false, motivo: 'no hay nada que editar (mandá texto, doc y/o fijada)' };
+
+  if (cambios.diagrama !== undefined) {
+    const v = validarDiagrama(cambios.diagrama);
+    if (!v.ok) return v;
+    resultado.diagrama = v.diagrama;
+  }
+
+  if (resultado.texto === undefined && resultado.fijada === undefined && resultado.diagrama === undefined) {
+    return { ok: false, motivo: 'no hay nada que editar (mandá texto, doc, fijada y/o diagrama)' };
   }
   return { ok: true, cambios: resultado };
 }
@@ -192,6 +239,19 @@ export interface NotaListada {
   venceAt?: Date | null;
   /** La última vez que alguien abrió el link. `null` = nunca lo abrió nadie. */
   ultimoAccesoAt?: Date | null;
+  /**
+   * PANTALLA DIVIDIDA (17-ago-2026): con qué otra página se ve al lado. `null`
+   * = pantalla simple. En una histórica de `gestiones` es SIEMPRE null: esas
+   * filas no tienen columna donde ponerlo, y su id además es de otra tabla.
+   */
+  paginaDivididaId: number | null;
+  /**
+   * `'texto'` (BlockNote) o `'diagrama'` (React Flow). En una histórica de
+   * `gestiones` es SIEMPRE `'texto'`: esas son el textarea de siempre.
+   */
+  tipo: 'texto' | 'diagrama';
+  /** El diagrama de React Flow, o `null` si `tipo !== 'diagrama'`. */
+  diagrama: Diagrama | null;
 }
 
 /**
@@ -226,6 +286,9 @@ async function listarNotasHistoricas(
       origen: 'gestion' as const,
       espacioId: null,
       token: null,
+      paginaDivididaId: null,
+      tipo: 'texto' as const,
+      diagrama: null,
     }));
 }
 
@@ -296,6 +359,10 @@ export async function listarNotas(
   ]);
 
   const combinadas: NotaListada[] = [
+    // `tipo`/`diagrama` viajan como `string`/`unknown` desde drizzle (la columna
+    // es `text`/`jsonb` sin enum de Postgres detrás): el cast es el mismo borde
+    // que ya cruza `doc` acá abajo, y no un chequeo nuevo — la forma la valida
+    // `prepararEdicion`/`validarDiagrama` en la ESCRITURA, no en cada lectura.
     ...nuevas.map((f) => ({
       ...f.nota,
       origen: 'nota' as const,
@@ -304,6 +371,8 @@ export async function listarNotas(
       permiso: f.permiso,
       venceAt: f.venceAt,
       ultimoAccesoAt: f.ultimoAccesoAt,
+      tipo: f.nota.tipo as 'texto' | 'diagrama',
+      diagrama: f.nota.diagrama as Diagrama | null,
     })),
     ...historicas,
   ];
@@ -364,7 +433,16 @@ export async function buscarNotas(
  */
 export async function crearNota(
   base: typeof DbSingleton,
-  datos: { clave: string; vendedoraId: string; texto: string; doc?: unknown; espacioId?: number | null },
+  datos: {
+    clave: string;
+    vendedoraId: string;
+    texto: string;
+    doc?: unknown;
+    espacioId?: number | null;
+    /** `'diagrama'` cuando viene con `diagrama`; ausente/`'texto'` es el default de siempre. */
+    tipo?: 'texto' | 'diagrama';
+    diagrama?: Diagrama;
+  },
 ): Promise<NotaFila> {
   const { clave, vendedoraId } = datos;
   // `espacioId` va SIEMPRE, y `null` es un valor con significado («mi libreta»),
@@ -375,6 +453,13 @@ export async function crearNota(
     datos.doc === undefined
       ? { clave, vendedoraId, texto: datos.texto, espacioId }
       : { clave, vendedoraId, texto: aTextoPlano(datos.doc), doc: datos.doc, espacioId };
+  // `tipo`/`diagrama` van APARTE de la rama de arriba: un diagrama nunca trae
+  // `doc` (no hay BlockNote de por medio), así que mezclarlos en el ternario
+  // habría hecho que un diagrama caiga en la rama de `doc === undefined` y
+  // listo — correcto por accidente, no por diseño. Explícito es más claro.
+  if (datos.tipo === 'diagrama') {
+    Object.assign(valores, { tipo: 'diagrama' as const, diagrama: datos.diagrama ?? { nodes: [], edges: [] } });
+  }
 
   const [fila] = await base.insert(notas).values(valores).returning();
   return fila;
@@ -441,6 +526,69 @@ export async function moverNota(
   const [fila] = await base
     .update(notas)
     .set({ espacioId: plan.destino })
+    .where(eq(notas.id, opciones.id))
+    .returning();
+  return { ok: true, nota: fila };
+}
+
+/**
+ * DIVIDIR LA PANTALLA — con qué otra página se ve al lado, a la derecha
+ * (17-ago-2026). `dividirNota` la abre/cambia; `cortarDivision` la deshace.
+ *
+ * ══ «POR NOTA, UNA SOLA VEZ» LA DA EL TIPO, NO UNA VALIDACIÓN ═══════════════
+ *
+ * `pagina_dividida_id` es un `bigint` escalar, no una tabla de a muchas: dividir
+ * de nuevo REEMPLAZA la contraparte que había, nunca agrega una segunda. Y es
+ * UNIDIRECCIONAL — abrir la página objetivo no hace aparecer ésta del otro
+ * lado, salvo que ELLA también tenga su propio puntero apuntando para acá. Es
+ * una vista de A sobre B, no una relación simétrica.
+ *
+ * ══ DOS GUARDAS, Y NO SE COLAPSAN ════════════════════════════════════════════
+ *
+ * La página que se divide tiene que poder EDITARSE —es su columna la que
+ * cambia—; el OBJETIVO alcanza con que se pueda VER —mostrarlo al lado no es
+ * tocarlo. Sin la segunda, cualquiera con acceso a UNA nota podría enterarse
+ * de que un id ajeno EXISTE con solo probar a dividir contra él, aunque
+ * después el fetch de su contenido lo rechace. Por eso «no lo veo» y «no
+ * existe» contestan el MISMO motivo acá: distinguirlos delataría justo lo que
+ * la regla de visibilidad de ADR 0046 protege.
+ */
+export async function dividirNota(
+  base: typeof DbSingleton,
+  opciones: { id: number; objetivoId: number; quien: QuienPregunta },
+): Promise<ResultadoMutacion | { ok: false; motivo: 'objetivo-no-encontrado' }> {
+  const [existente] = await base.select().from(notas).where(eq(notas.id, opciones.id));
+  if (!existente || existente.archivadoAt) return { ok: false, motivo: 'no-encontrada' };
+  if (noPuedeTocar(existente, opciones.quien)) return { ok: false, motivo: 'prohibido' };
+
+  const [objetivo] = await base.select().from(notas).where(eq(notas.id, opciones.objetivoId));
+  const objetivoVisible =
+    objetivo && !objetivo.archivadoAt && puedeVer({ vendedoraId: objetivo.vendedoraId, espacioId: objetivo.espacioId }, opciones.quien);
+  if (!objetivoVisible) return { ok: false, motivo: 'objetivo-no-encontrado' };
+
+  const [fila] = await base
+    .update(notas)
+    .set({ paginaDivididaId: opciones.objetivoId })
+    .where(eq(notas.id, opciones.id))
+    .returning();
+  return { ok: true, nota: fila };
+}
+
+/**
+ * DESHACE LA DIVISIÓN. No toca la otra página —ni su contenido ni su
+ * `pagina_dividida_id` si tuviera uno propio—, solo el puntero de ésta.
+ */
+export async function cortarDivision(
+  base: typeof DbSingleton,
+  opciones: { id: number; quien: QuienPregunta },
+): Promise<ResultadoMutacion> {
+  const [existente] = await base.select().from(notas).where(eq(notas.id, opciones.id));
+  if (!existente || existente.archivadoAt) return { ok: false, motivo: 'no-encontrada' };
+  if (noPuedeTocar(existente, opciones.quien)) return { ok: false, motivo: 'prohibido' };
+
+  const [fila] = await base
+    .update(notas)
+    .set({ paginaDivididaId: null })
     .where(eq(notas.id, opciones.id))
     .returning();
   return { ok: true, nota: fila };

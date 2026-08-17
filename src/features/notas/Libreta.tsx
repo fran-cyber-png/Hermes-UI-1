@@ -1,13 +1,10 @@
-import { useState } from 'react';
-import { BlockNoteView } from '@blocknote/mantine';
-import { useCreateBlockNote } from '@blocknote/react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ChevronLeft, Link2, Notebook, Pin, PinOff, Plus, Search, Trash2, Undo2 } from 'lucide-react';
-import '@blocknote/mantine/style.css';
-import { DICCIONARIO_LIBRETA, ESQUEMA_LIBRETA, soloBloquesConocidos, soloEstilosConocidos } from './editor';
-import { BarraDeFormato } from './BarraDeFormato';
 import { TAB_POR_DEFECTO, type TabRibbon } from './ribbon/catalogo';
-import type { VistaDeLaLibreta } from './ribbon/Ribbon';
 import { AccionesDePagina } from './AccionesDePagina';
+import { DiagramaDePagina } from './DiagramaDePagina';
+import { EditorDePagina } from './EditorDePagina';
+import { PantallaDividida } from './PantallaDividida';
 import { mismoUsuario, nombreCorto, useEspacios, type DondeEstoy } from './espacios';
 import { SelectorDeEspacio } from './SelectorDeEspacio';
 import { tokenDeLaUrl, usePaginaPorLink } from './porLink';
@@ -67,72 +64,6 @@ function mismaSeleccion(a: Seleccion, b: Seleccion): boolean {
   if (a === null || b === null) return a === b;
   if (a.tipo !== b.tipo) return false;
   return a.tipo === 'nota' && b.tipo === 'nota' ? a.id === b.id : true;
-}
-
-/**
- * EL EDITOR de una página. Va con `key` de afuera para que cambiar de nota lo
- * REMONTE: `useCreateBlockNote` fija su `initialContent` en el primer render y
- * no lo vuelve a mirar, así que sin remontar se quedaría con la nota anterior.
- */
-function EditorDePagina({
-  contenidoInicial,
-  soloLectura,
-  onCambio,
-  tab,
-  onTab,
-  vista,
-}: {
-  contenidoInicial: unknown[] | undefined;
-  soloLectura: boolean;
-  onCambio: (doc: unknown) => void;
-  /**
-   * 🔴 LA PESTAÑA ACTIVA DE LA RIBBON VIVE ACÁ ARRIBA Y NO ADENTRO DE LA BARRA.
-   *
-   * Este componente se **remonta con `key`** cada vez que se abre otra página
-   * (`useCreateBlockNote` fija su `initialContent` en el primer render). Con el
-   * estado adentro de la Ribbon, cambiar de nota te devolvería a «Inicio» cada
-   * vez — y en una libreta se salta de página todo el tiempo.
-   */
-  tab: TabRibbon;
-  onTab: (tab: TabRibbon) => void;
-  vista: VistaDeLaLibreta;
-}) {
-  const editor = useCreateBlockNote({
-    // El cast es el borde con la librería: `docParaEditor` produce la forma de
-    // BlockNote pero el tipo viaja como `unknown` desde la base — tiparlo fuerte
-    // más arriba sería afirmar sobre un `jsonb` algo que nadie verificó.
-    // Saneado ANTES de entrar: un bloque que el esquema no conoce lanza durante
-    // el render y, sin ErrorBoundary, deja la app en blanco (ver `editor.ts`).
-    // Dos saneadores, dos trampas distintas: uno filtra BLOQUES que el esquema no
-    // conoce y el otro ESTILOS. Cualquiera de los dos, sin sanear, no deja «la
-    // nota no abre» sino la ventana en blanco (ver `editor.ts`).
-    initialContent: (contenidoInicial
-      ? soloEstilosConocidos(soloBloquesConocidos(contenidoInicial))
-      : undefined) as never,
-    // Sin esto el editor entero sale en INGLÉS dentro de una app en español, y
-    // ofrece bloques de archivo que no se pueden guardar. Ver `editor.ts`.
-    schema: ESQUEMA_LIBRETA,
-    dictionary: DICCIONARIO_LIBRETA,
-  });
-
-  return (
-    <BlockNoteView
-      editor={editor}
-      editable={!soloLectura}
-      theme="light"
-      // La barra va FIJA arriba (`BarraDeFormato`), así que la flotante que
-      // BlockNote abre al seleccionar se apaga: con las dos, el mismo control
-      // aparece dos veces y uno tapa al otro.
-      formattingToolbar={false}
-      onChange={() => onCambio(editor.document)}
-      data-libreta-editor
-    >
-      {/* En solo lectura no se dibuja: una barra de formato sobre algo que no
-          se puede editar promete una acción que no existe — el mismo criterio
-          por el que «Responder» no aparece en modo revisión. */}
-      {!soloLectura && <BarraDeFormato tab={tab} onTab={onTab} vista={vista} />}
-    </BlockNoteView>
-  );
 }
 
 /**
@@ -247,8 +178,11 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
   /** Lo recién archivado, para poder deshacerlo. Se limpia solo. */
   const [archivada, setArchivada] = useState<{ id: number; titulo: string } | null>(null);
   /**
-   * DÓNDE ESTOY ESCRIBIENDO (ADR 0046). `null` = mi libreta privada, y es el
-   * arranque: quien no tenga ni un espacio ve exactamente la Libreta de antes.
+   * DÓNDE ESTOY ESCRIBIENDO (ADR 0046). `null` = mi libreta privada.
+   *
+   * Arranca en `null` y el efecto de más abajo la corre al primer espacio en
+   * cuanto hay alguno — ver ese efecto para el porqué. Quien no tenga ni un
+   * espacio se queda acá, y ve exactamente la Libreta de antes.
    */
   const [donde, setDonde] = useState<DondeEstoy>(null);
   /**
@@ -280,17 +214,63 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
   const termino = busqueda.trim();
   const lista = useNotas(CLAVE_LIBRETA, donde);
   const encontradas = useBuscarNotas(termino);
-  const { crear, editar, archivar, desarchivar, autoguardar, mover, abrirLink, cortarLink } = useMutacionesNotas(
-    CLAVE_LIBRETA,
-    donde,
-  );
+  const {
+    crear,
+    editar,
+    archivar,
+    desarchivar,
+    autoguardar,
+    mover,
+    abrirLink,
+    cortarLink,
+    dividir,
+    cortarDivision,
+    crearDiagrama,
+    autoguardarDiagrama,
+  } = useMutacionesNotas(CLAVE_LIBRETA, donde);
+  /**
+   * DIVIDIR PANTALLA (17-ago-2026): «estoy eligiendo con qué otra página se
+   * divide ésta». Local y ajeno a la base — lo persistido es
+   * `paginaAbierta.paginaDivididaId`, que MANDA sobre esto en cuanto existe
+   * (ver el render, más abajo). Se apaga solo al cambiar de página: si no,
+   * el selector de la anterior quedaría abierto encima de la nueva.
+   */
+  const [mostrarSelectorDivision, setMostrarSelectorDivision] = useState(false);
   // Los espacios ya vienen cacheados por el selector: es la MISMA queryKey, así
   // que esto no dispara un request nuevo — solo lee lo que ya está.
   const espacios = useEspacios();
 
+  /**
+   * AL ENTRAR, si ya hay algún espacio, arranca AHÍ y no en Mi libreta —
+   * decisión del dueño (17-ago-2026): con espacios de equipo en uso, la
+   * privada deja de ser lo primero que se ve, aunque sigue existiendo y
+   * accesible desde el selector.
+   *
+   * Se dispara UNA sola vez por montaje (`yaEntro`), no en cada render con
+   * `donde === null`: si no fuera así, volver a "Mi libreta" a mano desde el
+   * selector la traería de vuelta al espacio en el próximo render, y el botón
+   * quedaría muerto. Espera a que la consulta resuelva (`espacios.data`, no
+   * `.isPending`) para no pisar un `donde` que YA cambió por otro camino —p.ej.
+   * llegar por un link— mientras el pedido todavía viaja.
+   */
+  const yaEntro = useRef(false);
+  useEffect(() => {
+    if (yaEntro.current || !espacios.data) return;
+    yaEntro.current = true;
+    if (espacios.data.length > 0) setDonde(espacios.data[0].id);
+  }, [espacios.data]);
+
   const notas = termino ? (encontradas.data ?? []) : (lista.data ?? []);
   const paginaAbierta =
     seleccion?.tipo === 'nota' ? notas.find((n) => n.id === seleccion.id && n.origen === seleccion.origen) : undefined;
+  /** `null`/ausente = pantalla simple. Viene de la nota, así que sobrevive a un reload. */
+  const divididaId = paginaAbierta?.paginaDivididaId ?? null;
+
+  // Cambiar de página apaga el selector de división de la anterior — si no,
+  // «Dividir pantalla» quedaría abierto encima de una página que no lo pidió.
+  useEffect(() => {
+    setMostrarSelectorDivision(false);
+  }, [seleccion]);
 
   /**
    * El autoguardado vive en su propio hook (`useAutoguardado`), y no por
@@ -314,7 +294,13 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
             ? { tipo: 'nota' as const, id: seleccion.id }
             : null,
     puertas: {
-      actualizar: (v) => autoguardar.mutateAsync(v),
+      // 🔴 UNA PÁGINA DE DIAGRAMA NUNCA MANDA `doc`: no hay BlockNote de por
+      // medio. La izquierda no tiene forma de CREAR una (ese camino es
+      // exclusivo de «Nuevo Diagrama», a la derecha), así que `crear` no
+      // necesita la rama — solo `actualizar`, para cuando se abre acá una que
+      // ya existía como diagrama (por búsqueda, por «Mover», o al reabrirla).
+      actualizar: (v) =>
+        paginaAbierta?.tipo === 'diagrama' ? autoguardarDiagrama.mutateAsync({ id: v.id, diagrama: v.doc }) : autoguardar.mutateAsync(v),
       crear: (v) => crear.mutateAsync(v),
     },
     alCrear: (id) => setSeleccion({ tipo: 'nota', id, origen: 'nota' }),
@@ -572,9 +558,7 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
                 contenidoInicial={docParaEditor(deLink)}
                 soloLectura={!porLink.data?.puedeEditar}
                 onCambio={alCambiar}
-                tab={tabRibbon}
-                onTab={setTabRibbon}
-                vista={vista}
+                ribbon={{ tab: tabRibbon, onTab: setTabRibbon, vista }}
               />
             </ColumnaDeEscritura>
           )}
@@ -644,52 +628,100 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
                 contenidoInicial={undefined}
                 soloLectura={false}
                 onCambio={alCambiar}
-                tab={tabRibbon}
-                onTab={setTabRibbon}
-                vista={vista}
+                ribbon={{ tab: tabRibbon, onTab: setTabRibbon, vista }}
               />
             </ColumnaDeEscritura>
           )}
 
-          {!deLink && paginaAbierta && (
-            <ColumnaDeEscritura>
-              <div className="mx-auto max-w-3xl px-6 pt-8">
-                {/* Mover y compartir van sobre una página GUARDADA y editable: una
-                    histórica de `gestiones` no se puede mover (vive en otra tabla)
-                    ni compartir, y una página en blanco todavía no tiene id. */}
-                {paginaAbierta.origen === 'nota' && (
-                  <AccionesDePagina
-                    nota={paginaAbierta}
-                    donde={donde}
-                    espacios={espacios.data ?? []}
-                    vendedoraId={vendedoraId}
-                    onMover={(destino) => {
-                      mover.mutate({ id: paginaAbierta.id, destino });
-                      // La página se fue de esta lista: dejarla abierta mostraría —y
-                      // autoguardaría— algo que ya no está acá.
-                      setSeleccion(null);
-                    }}
-                    onAbrirLink={(v) => abrirLink.mutate({ id: paginaAbierta.id, ...v })}
-                    onCortarLink={() => cortarLink.mutate(paginaAbierta.id)}
-                  />
-                )}
-                {paginaAbierta.origen === 'gestion' && (
-                  <p className="mb-4 rounded-lg border border-dashed border-border bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-                    Esta quedó de una gestión vieja. Se lee, no se edita — la etapa de esa conversación se apoya en ella.
-                  </p>
+          {!deLink && paginaAbierta && (() => {
+            // PANTALLA DIVIDIDA (17-ago-2026): solo una página editable puede
+            // pedirla (`AccionesDePagina` ni se dibuja sobre una histórica), y
+            // solo se abre por elección propia o porque ya venía persistida.
+            const dividiendo =
+              paginaAbierta.origen === 'nota' && (mostrarSelectorDivision || divididaId !== null);
+            // Un diagrama arma su PROPIA barra de herramientas y necesita todo
+            // el ancho, igual que en la pantalla dividida — el molde es el
+            // mismo, y no es casualidad: es la MISMA regla, aplicada del otro
+            // lado, para cuando un diagrama se abre acá directo (por
+            // búsqueda, por «Mover», o al reabrirlo) y no solo desde el panel.
+            const esDiagrama = paginaAbierta.origen === 'nota' && paginaAbierta.tipo === 'diagrama';
+            // 🔴 LA COLUMNA ANGOSTA ES DE LAS ACCIONES, NUNCA DEL EDITOR. La
+            // Ribbon vive adentro de `BlockNoteView` y tiene que cruzar el panel
+            // como la de Word; el ancho del TEXTO lo pone `.bn-editor` en
+            // `index.css`. Un `max-w-3xl` acá arriba volvería a encajonar la
+            // barra — que es exactamente lo que se deshizo al traerla.
+            const anchoDeAcciones = dividiendo ? 'px-6 pt-8' : 'mx-auto max-w-3xl px-6 pt-8';
+            return (
+              <div className={dividiendo ? 'flex flex-col items-stretch md:flex-row' : ''}>
+                <div className={dividiendo ? 'min-w-0 md:w-1/2' : ''}>
+                  <ColumnaDeEscritura>
+                    {/* Mover, compartir y dividir van sobre una página GUARDADA y
+                        editable: una histórica de `gestiones` no se puede mover (vive
+                        en otra tabla) ni compartir, y una página en blanco todavía no
+                        tiene id. */}
+                    {paginaAbierta.origen === 'nota' && (
+                      <div className={esDiagrama ? 'px-3 pt-3' : anchoDeAcciones}>
+                        <AccionesDePagina
+                          nota={paginaAbierta}
+                          donde={donde}
+                          espacios={espacios.data ?? []}
+                          vendedoraId={vendedoraId}
+                          onMover={(destino) => {
+                            mover.mutate({ id: paginaAbierta.id, destino });
+                            // La página se fue de esta lista: dejarla abierta mostraría —y
+                            // autoguardaría— algo que ya no está acá.
+                            setSeleccion(null);
+                          }}
+                          onAbrirLink={(v) => abrirLink.mutate({ id: paginaAbierta.id, ...v })}
+                          onCortarLink={() => cortarLink.mutate(paginaAbierta.id)}
+                          onTocarDividir={() => setMostrarSelectorDivision(true)}
+                          onCortarDivision={() => {
+                            cortarDivision.mutate(paginaAbierta.id);
+                            setMostrarSelectorDivision(false);
+                          }}
+                        />
+                      </div>
+                    )}
+                    {paginaAbierta.origen === 'gestion' && (
+                      <div className={anchoDeAcciones}>
+                        <p className="mb-4 rounded-lg border border-dashed border-border bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+                          Esta quedó de una gestión vieja. Se lee, no se edita — la etapa de esa conversación se apoya en ella.
+                        </p>
+                      </div>
+                    )}
+                    {esDiagrama ? (
+                      <DiagramaDePagina
+                        key={`${paginaAbierta.origen}-${paginaAbierta.id}`}
+                        contenidoInicial={paginaAbierta.diagrama ?? undefined}
+                        onCambio={(v) => alCambiar(v)}
+                      />
+                    ) : (
+                      <EditorDePagina
+                        key={`${paginaAbierta.origen}-${paginaAbierta.id}`}
+                        contenidoInicial={docParaEditor(paginaAbierta)}
+                        soloLectura={paginaAbierta.origen === 'gestion'}
+                        onCambio={alCambiar}
+                        ribbon={{ tab: tabRibbon, onTab: setTabRibbon, vista }}
+                      />
+                    )}
+                  </ColumnaDeEscritura>
+                </div>
+
+                {dividiendo && (
+                  <div className="min-w-0 border-t border-border md:w-1/2 md:border-l md:border-t-0">
+                    <PantallaDividida
+                      key={paginaAbierta.id}
+                      paginaIzquierdaId={paginaAbierta.id}
+                      divididaId={divididaId}
+                      notasDisponibles={notas}
+                      mutaciones={{ crear, editar, dividir, crearDiagrama, autoguardarDiagrama }}
+                      onCerrar={() => setMostrarSelectorDivision(false)}
+                    />
+                  </div>
                 )}
               </div>
-              <EditorDePagina
-                key={`${paginaAbierta.origen}-${paginaAbierta.id}`}
-                contenidoInicial={docParaEditor(paginaAbierta)}
-                soloLectura={paginaAbierta.origen === 'gestion'}
-                onCambio={alCambiar}
-                tab={tabRibbon}
-                onTab={setTabRibbon}
-                vista={vista}
-              />
-            </ColumnaDeEscritura>
-          )}
+            );
+          })()}
         </main>
       </div>
     </section>

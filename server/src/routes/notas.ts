@@ -7,19 +7,22 @@ import { configuracionDeLink, puedeEditarPorLink } from '../espacios/linkModelo.
 import { personasDelRegistro, resumirPorLink } from '../espacios/auditoriaLink.js';
 import { historialDe } from '../espacios/auditoriaLinkRepositorio.js';
 import { espaciosDe } from '../espacios/repositorio.js';
-import { puedeEditar, puedeEscribirEn, type QuienPregunta } from '../espacios/visibilidad.js';
+import { puedeEditar, puedeEscribirEn, puedeVer, type QuienPregunta } from '../espacios/visibilidad.js';
 import { consultarNotaPorId } from '../notas/consultarNotaPorId.js';
 import type { NotaFila } from '../notas/notas.js';
 import {
   archivarNota,
   buscarNotas,
+  cortarDivision,
   crearNota,
   desarchivarNota,
+  dividirNota,
   editarNota,
   listarNotas,
   moverNota,
   prepararContenido,
   prepararEdicion,
+  validarDiagrama,
 } from '../notas/notas.js';
 
 /**
@@ -136,12 +139,85 @@ notasRouter.get('/', ruta(async (req, res) => {
   res.json({ notas });
 }));
 
+/**
+ * UNA PÁGINA, POR SU ID — lo que le faltaba a la pantalla dividida (17-ago-2026):
+ * mostrar al lado una página que no pertenece a la `clave`/`espacio` que el
+ * listado de arriba está trayendo. Antes solo existía el equivalente para un
+ * link anónimo (`por-link/:token`); acá es la MISMA fila, detrás de la sesión.
+ *
+ * ⚠️ **Va DESPUÉS de `/por-link/:token` en este archivo mismo por prolijidad,
+ * pero no colisiona ni en ese orden ni al revés**: son dos segmentos
+ * (`/por-link/xyz`) contra uno (`/42`), así que Express nunca confunde una ruta
+ * con la otra sin importar quién se registró primero.
+ */
+notasRouter.get('/:id', ruta(async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ ok: false, message: 'id inválido' });
+    return;
+  }
+  const nota = await consultarNotaPorId(db, id);
+  if (!nota || nota.archivadoAt) {
+    res.status(404).json({ ok: false, message: 'esa página no existe (o no la podés ver)' });
+    return;
+  }
+  const quien = await quienPregunta(req.vendedoraId!);
+  // Mismo mensaje que «no existe»: distinguirlos delataría que un id ajeno
+  // EXISTE, aunque no se pueda ver — la misma guarda que `dividirNota`.
+  if (!puedeVer({ vendedoraId: nota.vendedoraId, espacioId: nota.espacioId }, quien)) {
+    res.status(404).json({ ok: false, message: 'esa página no existe (o no la podés ver)' });
+    return;
+  }
+  res.json({ ok: true, nota: conOrigenNota(nota) });
+}));
+
+/**
+ * EL TÍTULO FIJO de toda página de diagrama nueva — nunca se deriva de su
+ * contenido (React Flow no tiene «texto», tiene nodos) y nunca se edita: es lo
+ * que hace que `tituloDeNota` y la búsqueda tengan algo que mostrar sin que el
+ * server tenga que inventar un aplanador de grafos.
+ */
+const TITULO_DIAGRAMA = 'Diagrama de flujo';
+
 notasRouter.post('/', ruta(async (req, res) => {
   const clave = typeof req.body?.clave === 'string' ? req.body.clave.trim() : '';
   if (!clave) {
     res.status(400).json({ ok: false, message: 'falta la clave (conversación, o "general" para la libreta)' });
     return;
   }
+
+  // ── UN DIAGRAMA ES OTRO CAMINO ENTERO, no una rama de `doc` ──
+  // Nunca pasa por `prepararContenido`: no hay BlockNote de por medio, así que
+  // exigirle `texto`/`doc` a una página de nodos sería rechazar exactamente lo
+  // que este camino existe para aceptar.
+  if (req.body?.tipo === 'diagrama') {
+    const v = validarDiagrama(req.body?.diagrama);
+    if (!v.ok) {
+      res.status(400).json({ ok: false, message: v.motivo });
+      return;
+    }
+    const espacioId = espacioPedido(req.body?.espacioId);
+    if (espacioId === 'invalido') {
+      res.status(400).json({ ok: false, message: 'espacio inválido' });
+      return;
+    }
+    const quien = await quienPregunta(req.vendedoraId!);
+    if (!puedeEscribirEn(espacioId, quien)) {
+      res.status(403).json({ ok: false, message: 'no sos miembro de ese espacio' });
+      return;
+    }
+    const nota = await crearNota(db, {
+      clave,
+      vendedoraId: req.vendedoraId!,
+      texto: TITULO_DIAGRAMA,
+      espacioId,
+      tipo: 'diagrama',
+      diagrama: v.diagrama,
+    });
+    res.json({ ok: true, nota: conOrigenNota(nota) });
+    return;
+  }
+
   const excede = docExcedeElTope(req.body?.doc);
   if (excede) {
     res.status(400).json({ ok: false, message: excede });
@@ -241,6 +317,59 @@ notasRouter.patch('/:id/mover', ruta(async (req, res) => {
   }
   if (!r.ok) {
     res.status(403).json({ ok: false, message: 'no podés mover esa página ahí' });
+    return;
+  }
+  res.json({ ok: true, nota: conOrigenNota(r.nota) });
+}));
+
+/**
+ * LA PANTALLA DIVIDIDA (17-ago-2026): con qué otra página se ve al lado.
+ *
+ * `PATCH` abre —o CAMBIA— la contraparte (una sola: dividir de nuevo reemplaza
+ * la que había, nunca agrega una segunda). `DELETE` la deshace, sin tocar la
+ * otra página. La regla entera vive en `notas/notas.ts`; acá solo el HTTP.
+ */
+notasRouter.patch('/:id/dividir', ruta(async (req, res) => {
+  const id = Number(req.params.id);
+  const objetivoId = Number(req.body?.paginaDivididaId);
+  if (!Number.isInteger(id) || !Number.isInteger(objetivoId) || objetivoId <= 0) {
+    res.status(400).json({ ok: false, message: 'falta un paginaDivididaId válido' });
+    return;
+  }
+  if (objetivoId === id) {
+    res.status(400).json({ ok: false, message: 'una página no se puede dividir consigo misma' });
+    return;
+  }
+
+  const r = await dividirNota(db, { id, objetivoId, quien: await quienPregunta(req.vendedoraId!) });
+  if (!r.ok && r.motivo === 'no-encontrada') {
+    res.status(404).json({ ok: false, message: 'la nota no existe (o está archivada)' });
+    return;
+  }
+  if (!r.ok && r.motivo === 'objetivo-no-encontrado') {
+    res.status(404).json({ ok: false, message: 'esa página no existe (o no la podés ver)' });
+    return;
+  }
+  if (!r.ok) {
+    res.status(403).json({ ok: false, message: 'no podés dividir esa página' });
+    return;
+  }
+  res.json({ ok: true, nota: conOrigenNota(r.nota) });
+}));
+
+notasRouter.delete('/:id/dividir', ruta(async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ ok: false, message: 'id inválido' });
+    return;
+  }
+  const r = await cortarDivision(db, { id, quien: await quienPregunta(req.vendedoraId!) });
+  if (!r.ok && r.motivo === 'no-encontrada') {
+    res.status(404).json({ ok: false, message: 'la nota no existe (o está archivada)' });
+    return;
+  }
+  if (!r.ok) {
+    res.status(403).json({ ok: false, message: 'no podés tocar esa página' });
     return;
   }
   res.json({ ok: true, nota: conOrigenNota(r.nota) });

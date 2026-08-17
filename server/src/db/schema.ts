@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 // acá se IMPORTAN además de re-exportarse: `notas.espacio_id` los referencia.
 import { espacios } from "./espacios.js";
 import {
+  type AnyPgColumn,
   bigint,
   bigserial,
   boolean,
@@ -1143,6 +1144,19 @@ export const notas = pgTable(
      */
     espacioId: bigint("espacio_id", { mode: "number" }).references(() => espacios.id),
     /**
+     * QUÉ CLASE DE PÁGINA (17-ago-2026): `'texto'` (BlockNote, el de siempre) o
+     * `'diagrama'` (React Flow — nodos y conexiones, no prosa). Default
+     * `'texto'` a propósito: TODA fila anterior a este frente es texto, y el
+     * default hace que esa afirmación sea automática, no un backfill.
+     *
+     * ⚠️ **No se deriva de si `diagrama` es null**: un `tipo` explícito es lo
+     * que le permite a `editarNota` saber CUÁL columna truncar en cada
+     * autoguardado sin adivinar por la forma de lo que llegó, y lo que le deja
+     * al front decidir qué editor montar sin tener que mirar dos campos para
+     * una sola pregunta.
+     */
+    tipo: text("tipo").notNull().default("texto"),
+    /**
      * EL TEXTO PLANO, y desde la Libreta es una columna DERIVADA: cuando hay
      * `doc`, esto es `aTextoPlano(doc)` (`notas/textoPlano.ts`) escrito en el
      * MISMO insert/update. Se queda como `text NOT NULL` a propósito — el GIN y
@@ -1161,6 +1175,18 @@ export const notas = pgTable(
      * pantalla pero **no aparece nunca en la búsqueda**. No rompe: miente.
      */
     doc: jsonb("doc"),
+    /**
+     * EL DIAGRAMA de React Flow (17-ago-2026): `{ nodes: Node[], edges: Edge[]
+     * }`, tal cual lo entiende la librería — no se reinterpreta del lado del
+     * server. `null` en toda página que no sea `tipo = 'diagrama'`.
+     *
+     * ⚠️ **NO es `doc`, y no se colapsan**: `aTextoPlano` (`notas/textoPlano.ts`)
+     * espera un `Block[]` de BlockNote y con `{nodes,edges}` devolvería `""`
+     * siempre — meterlo en `doc` habría dejado toda página de diagrama
+     * rechazada por `validarTexto` (texto vacío). Con columna propia, un
+     * diagrama ni pasa por esa validación ni la rompe.
+     */
+    diagrama: jsonb("diagrama"),
     /** Sube la nota al tope de su ancla. */
     fijada: boolean("fijada").notNull().default(false),
     creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
@@ -1168,6 +1194,25 @@ export const notas = pgTable(
     editadoAt: timestamp("editado_at", { withTimezone: true }),
     /** null = viva. No hay borrado físico. */
     archivadoAt: timestamp("archivado_at", { withTimezone: true }),
+    /**
+     * LA PANTALLA DIVIDIDA (17-ago-2026) — con QUÉ otra página se ve al lado, a
+     * la derecha. `null` = pantalla simple, el default de siempre.
+     *
+     * ⚠️ **ES UNIDIRECCIONAL Y DE UNA SOLA**, y las dos cosas las da el tipo, no
+     * una validación: es un `bigint` escalar, no una tabla — así que una página
+     * no puede tener DOS contrapartes (dividir de nuevo REEMPLAZA la que había,
+     * nunca agrega una segunda), y abrir B no hace aparecer A del otro lado salvo
+     * que B tenga su PROPIO `pagina_dividida_id` apuntando para allá. Es a
+     * propósito: la pantalla dividida es una vista de A sobre B, no una relación
+     * simétrica entre las dos.
+     *
+     * Self-reference (`references((): AnyPgColumn => notas.id)`) porque apunta a
+     * la misma tabla. Sin `onDelete`: una página no se borra físicamente (solo
+     * `archivado_at`), así que el objetivo de una división nunca desaparece de
+     * la fila que la referencia — se archiva, y sigue ahí para servir 404 o
+     * dejar que se corte a mano.
+     */
+    paginaDivididaId: bigint("pagina_dividida_id", { mode: "number" }).references((): AnyPgColumn => notas.id),
   },
   (t) => [
     index("notas_clave_idx").on(t.clave, t.creadoAt),

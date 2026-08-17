@@ -103,6 +103,36 @@ function remendarJsdom() {
       clear: () => caja.clear(),
     } satisfies Storage;
   }
+  // `DOMMatrixReadOnly`: jsdom no lo trae, y React Flow lo usa para leer el
+  // zoom actual (`new DOMMatrixReadOnly(style.transform).m22`) cada vez que
+  // `useUpdateNodeInternals()` remide un nodo — sin este stub, ESE remedido
+  // (que corre en un `requestAnimationFrame`, después de que el test ya
+  // afirmó y siguió de largo) tira una excepción no atrapada que ensucia la
+  // corrida entera. Solo entiende `matrix(a,b,c,d,e,f)`; cualquier otra cosa
+  // (`"none"`, cadena vacía) cae en la identidad — jsdom no calcula el
+  // `transform` real, así que fingir más que eso sería inventar un dato.
+  const w2 = globalThis as { DOMMatrixReadOnly?: unknown };
+  if (!w2.DOMMatrixReadOnly) {
+    w2.DOMMatrixReadOnly = class {
+      m11 = 1;
+      m12 = 0;
+      m21 = 0;
+      m22 = 1;
+      m41 = 0;
+      m42 = 0;
+      constructor(inicial?: string) {
+        const coincide = typeof inicial === 'string' ? inicial.match(/matrix\(([^)]+)\)/) : null;
+        if (!coincide) return;
+        const [a, b, c, d, e, f] = coincide[1].split(',').map((n) => parseFloat(n.trim()));
+        if (!Number.isNaN(a)) this.m11 = a;
+        if (!Number.isNaN(b)) this.m12 = b;
+        if (!Number.isNaN(c)) this.m21 = c;
+        if (!Number.isNaN(d)) this.m22 = d;
+        if (!Number.isNaN(e)) this.m41 = e;
+        if (!Number.isNaN(f)) this.m42 = f;
+      }
+    };
+  }
 }
 remendarJsdom();
 

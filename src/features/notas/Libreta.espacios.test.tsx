@@ -51,16 +51,19 @@ const PAGINAS: Record<string, unknown[]> = {
 let montado: Montado | null = null;
 /** Las URLs que la app pidió. Sirve para esperar a un request CONCRETO. */
 let pedidas: string[] = [];
+/** Lo que devuelve `/api/espacios` en ESTE test. Mutable: el de «sin espacios» la vacía. */
+let espaciosDelServer: unknown[] = ESPACIOS;
 
 beforeEach(() => {
   pedidas = [];
+  espaciosDelServer = ESPACIOS;
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
       pedidas.push(String(url));
       const u = String(url);
       if (u.includes('/api/espacios/padron')) return new Response(JSON.stringify({ personas: ['luz', 'sindy'] }));
-      if (u.includes('/api/espacios')) return new Response(JSON.stringify({ espacios: ESPACIOS }));
+      if (u.includes('/api/espacios')) return new Response(JSON.stringify({ espacios: espaciosDelServer }));
       if (u.includes('/api/notas')) {
         const espacio = new URL(u, 'http://x').searchParams.get('espacio');
         return new Response(JSON.stringify({ notas: PAGINAS[espacio ?? 'privada'] ?? [] }));
@@ -107,22 +110,37 @@ async function esperarA(condicion: () => boolean, queEsperaba: string) {
 const cargoElEspacio = (id: number) => () =>
   pedidas.some((u) => u.includes(`espacio=${id}`)) && !document.body.textContent?.includes('Cargando…');
 
-test('el selector muestra «Mi libreta» primera y los espacios abajo', async () => {
+test('al entrar, con un espacio disponible, arranca AHÍ y no en Mi libreta', async () => {
+  // Decisión del dueño (17-ago-2026): con espacios de equipo en uso, dejan de
+  // ser lo segundo — el selector los sigue mostrando abajo de Mi libreta
+  // (orden), pero el lugar donde la vendedora ATERRIZA es el primer espacio.
   montado = montar(<Libreta vendedoraId="luz" />);
-  await esperarA(() => Boolean(botonQueDice('Equipo de ventas')), 'llegaron los espacios');
+  await esperarA(cargoElEspacio(7), 'cargaron las páginas del espacio 7');
 
   expect(botonQueDice('Mi libreta')).toBeTruthy();
-  // La privada está marcada como el lugar actual al arrancar: quien no tenga ni
-  // un espacio ve exactamente la Libreta de antes.
+  expect(botonQueDice('Mi libreta')?.getAttribute('aria-current')).toBeNull();
+  expect(botonQueDice('Equipo de ventas')?.getAttribute('aria-current')).toBe('true');
+});
+
+test('sin ningún espacio, se queda en Mi libreta — la Libreta de siempre', async () => {
+  // El fallback que hace seguro el redirect: quien todavía no tiene un espacio
+  // de equipo no puede quedar sin ningún lugar donde aterrizar.
+  espaciosDelServer = [];
+  montado = montar(<Libreta vendedoraId="luz" />);
+  await esperarA(() => Boolean(botonQueDice('mi página privada')), 'llegó la página privada');
+
   expect(botonQueDice('Mi libreta')?.getAttribute('aria-current')).toBe('true');
-  expect(botonQueDice('Equipo de ventas')?.getAttribute('aria-current')).toBeNull();
 });
 
 test('🔴 cambiar de espacio CIERRA la página abierta', async () => {
   montado = montar(<Libreta vendedoraId="luz" />);
+  await esperarA(cargoElEspacio(7), 'cargaron las páginas del espacio 7');
+
+  // Vuelvo a la privada a mano para abrir una página de ahí — el redirect
+  // automático solo corre una vez, al montar, así que no me trae de vuelta.
+  botonQueDice('Mi libreta')?.click();
   await esperarA(() => Boolean(botonQueDice('mi página privada')), 'llegó la página privada');
 
-  // Abro la página privada.
   botonQueDice('mi página privada')?.click();
   await reposar();
   expect(document.querySelector('[data-libreta-editor]')).toBeTruthy();
@@ -136,9 +154,6 @@ test('🔴 cambiar de espacio CIERRA la página abierta', async () => {
 
 test('🔴 en un espacio VACÍO no aparece la bienvenida — no se queda encerrada', async () => {
   montado = montar(<Libreta vendedoraId="luz" />);
-  await esperarA(() => Boolean(botonQueDice('Equipo de ventas')), 'llegaron los espacios');
-
-  botonQueDice('Equipo de ventas')?.click();
   await esperarA(cargoElEspacio(7), 'cargaron las páginas del espacio 7');
 
   // La bienvenida es de la libreta privada: su texto no puede salir acá, porque
@@ -154,9 +169,6 @@ test('el vacío de un espacio NO dice «nadie más del equipo la ve»', async ()
   // La peor mentira posible de este frente: la que hace escribir un precio mal
   // puesto creyendo que no lo lee nadie.
   montado = montar(<Libreta vendedoraId="luz" />);
-  await esperarA(() => Boolean(botonQueDice('Equipo de ventas')), 'llegaron los espacios');
-
-  botonQueDice('Equipo de ventas')?.click();
   await esperarA(cargoElEspacio(7), 'cargaron las páginas del espacio 7');
 
   expect(document.body.textContent).not.toContain('nadie más del equipo la ve');
@@ -167,12 +179,11 @@ test('«Administrar…» aparece solo sobre un espacio propio', async () => {
   // la CONSULTE — con la comparación exacta, Luz (que entra como `luz`) no vería
   // el botón de su propio espacio.
   montado = montar(<Libreta vendedoraId="Luz" />);
-  await esperarA(() => Boolean(botonQueDice('Equipo de ventas')), 'llegaron los espacios');
-
-  expect(botonQueDice('Administrar')).toBeFalsy();
-
-  botonQueDice('Equipo de ventas')?.click();
   await esperarA(cargoElEspacio(7), 'cargaron las páginas del espacio 7');
 
   expect(botonQueDice('Administrar')).toBeTruthy();
+
+  botonQueDice('Mi libreta')?.click();
+  await reposar();
+  expect(botonQueDice('Administrar')).toBeFalsy();
 });
