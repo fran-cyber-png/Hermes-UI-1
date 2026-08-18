@@ -11,15 +11,15 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 33 | 492 | 67,886 | 21,948 |
+| front | 33 | 464 | 65,350 | 21,085 |
 | server | 66 | 788 | 83,156 | 51,763 |
-| **total** | **99** | **1,280** | **151,042** | **73,711** |
+| **total** | **99** | **1,252** | **148,506** | **72,848** |
 
 ## Front — `src/`
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
-| `notas` | La Libreta: páginas, espacios compartidos, autoguardado y el link público. | 94 | 14,146 | 27 | 5 | 1 |
+| `notas` | La Libreta: páginas, espacios compartidos, autoguardado y el link público. | 66 | 11,610 | 21 | 5 | 1 |
 | `whatsapp` | La conversación nativa: el hilo, el composer, los adjuntos, las citas y la compresión de video. | 44 | 5,246 | 23 | 9 | 5 |
 | `canales` | La cola unificada, y sólo eso: la lista de conversaciones, su fila, la barra de filtros y el panel de contexto. El modelo que dibuja NO vive acá — vive en `dominio/`. | 32 | 4,585 | 6 | 1 | 11 |
 | `panel` | La ficha al costado del chat, en el orden de las preguntas que decide una venta: quién es, qué quiere, qué mandarle, qué hacer. | 26 | 3,501 | 9 | 5 | 8 |
@@ -155,7 +155,7 @@ agrupados bajo un módulo que en realidad pertenecen a otra capa. Es el termóme
 los módulos están bien dibujados, y baja sacando el núcleo compartido a su propia capa.
 
 **Qué queda afuera del grafo** (acá y en «Quién depende de quién»): los tests, y las
-**23 galerías** `src/features/*/galeria*.tsx`. Las dos cosas por el mismo
+**22 galerías** `src/features/*/galeria*.tsx`. Las dos cosas por el mismo
 motivo: miran a cualquiera a propósito y ninguna la importa la app — cada galería se sirve por
 su propio `galeria-*.html` y existe para poder fotografiar los casos feos. Contarlas inventaba
 dependencias entre features que el producto no tiene: sacarlas bajó este nudo de 7 a 3.
@@ -190,11 +190,13 @@ No significa que estén muertos —pueden ser puntos de entrada o scripts—, pe
 
 **No se revisan** (el porqué está en `arquitectura.json`): `server/src/routes/decisions.ts` · `server/src/routes/leads.ts` · `server/src/routes/overview.ts`
 
-### ✅ `docsSinRutasMuertas` — sin violaciones
+### 🔴 `docsSinRutasMuertas` — 1 violación
 
 > Medido el 16-ago-2026: 68 de 221 rutas de archivo citadas en los docs no existían (31 %), 18 de ellas de `bot/`. Una ruta muerta en un doc no se ve como error: se lee como que el archivo está en otro lado.
 
 **No se revisan** (el porqué está en `arquitectura.json`): `docs/mapa.md` · `docs/heredado-meta-escuela` · `docs/claude-md-2026-08-09-completo.md`
+
+- src/features/notas/BarraDeFormato.test.tsx  (citada en docs/adr/0058-la-ribbon-de-la-libreta.md)
 
 ### ✅ `moduloDeclarado` — sin violaciones
 

@@ -15,10 +15,18 @@
 // que cambie solo haría fallar la comparación byte a byte.
 
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'node:fs'
-import { join, dirname, resolve, relative, extname } from 'node:path'
+import { join, dirname, resolve, relative, extname, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+
+// 🔴 EN WINDOWS `relative()` DEVUELVE BACKSLASHES, Y TODO LO DEMÁS ACÁ —los
+// prefijos de `arquitectura.json`, los que arma `${carpeta}/${entrada}`, lo
+// que se imprime en el mapa— usa `/`. Sin normalizar, CADA comparación de
+// prefijo falla en silencio: `duenoDe` no encuentra dueño para ningún
+// archivo y el mapa sale con 0 módulos, 0 archivos, en TODAS las zonas —
+// medido corriendo el script tal cual en Windows, no una hipótesis.
+const relPosix = (p) => relative(RAIZ, p).split(sep).join('/')
 const SALIDA = join(RAIZ, 'docs', 'mapa.md')
 const CONFIG = JSON.parse(sinComentarios(leer(join(RAIZ, 'arquitectura.json'))))
 
@@ -106,7 +114,7 @@ function descubrirModulos() {
 }
 
 function duenoDe(rutaAbs, prefijos) {
-  const rel = relative(RAIZ, rutaAbs)
+  const rel = relPosix(rutaAbs)
   for (const { id, prefijo } of prefijos) {
     if (rel === prefijo || rel.startsWith(prefijo + '/')) return id
   }
@@ -200,7 +208,7 @@ function analizar() {
       modulos.get(a).loUsan.add(de)
       const k = `${de}→${a}`
       if (!detalle.has(k)) detalle.set(k, new Set())
-      detalle.get(k).add(`${relative(RAIZ, f)} → ${m[1]}`)
+      detalle.get(k).add(`${relPosix(f)} → ${m[1]}`)
     }
   }
 
@@ -237,10 +245,10 @@ function analizar() {
 
   const ciclosArchivo = ciclos([...grafoArchivo.keys()], grafoArchivo).map((g) =>
     g.map((f) => ({
-      archivo: relative(RAIZ, f),
+      archivo: relPosix(f),
       hacia: grafoArchivo.get(f)
         .filter((d) => g.includes(d))
-        .map((d) => ({ a: relative(RAIZ, d), spec: specArchivo.get(`${f}|${d}`) })),
+        .map((d) => ({ a: relPosix(d), spec: specArchivo.get(`${f}|${d}`) })),
     }))
   )
 
@@ -314,7 +322,7 @@ function verificar(a) {
       if (sueltos > 0) {
         fallas.push({
           regla: 'handlersEnvueltos',
-          que: `${relative(RAIZ, f)} — ${sueltos} handler(s) async sin ruta()`,
+          que: `${relPosix(f)} — ${sueltos} handler(s) async sin ruta()`,
           detalle: [],
         })
       }
@@ -325,7 +333,7 @@ function verificar(a) {
     const dir = join(RAIZ, R.routersSinSqlInline.aplicaA)
     for (const f of archivosDe(dir)) {
       if (esTest(f)) continue
-      const rel = relative(RAIZ, f)
+      const rel = relPosix(f)
       if (R.routersSinSqlInline.excepciones.includes(rel)) continue
       const txt = leer(f)
       const nSql = (txt.match(/\bsql`/g) ?? []).length
@@ -376,7 +384,7 @@ function rutasCitadasEnDocs() {
   const R = CONFIG.reglas.docsSinRutasMuertas
   const exc = R.excepciones ?? []
   const excluido = (p) => {
-    const rel = relative(RAIZ, p)
+    const rel = relPosix(p)
     return exc.some((e) => rel === e || rel.startsWith(e + '/'))
   }
   const fuentes = []
@@ -401,7 +409,7 @@ function rutasCitadasEnDocs() {
   const encontradas = new Map()
   for (const f of fuentes) {
     for (const m of leer(f).matchAll(RE_RUTA)) {
-      if (!encontradas.has(m[1])) encontradas.set(m[1], relative(RAIZ, f))
+      if (!encontradas.has(m[1])) encontradas.set(m[1], relPosix(f))
     }
   }
   return [...encontradas.entries()].sort()
