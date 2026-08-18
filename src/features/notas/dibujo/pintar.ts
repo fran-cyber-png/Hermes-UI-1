@@ -163,7 +163,12 @@ function trazarImagen(ctx: CanvasRenderingContext2D, f: Extract<Figura, { clase:
   ctx.restore();
 }
 
-function trazarUna(ctx: CanvasRenderingContext2D, f: Figura): void {
+/**
+ * ⚠️ La opacidad llega RESUELTA (objeto × capa) y no se lee de la figura: la de
+ * la capa es una lente, no una edición, así que no está guardada en el objeto.
+ * Ver `opacidadEfectiva` en `capas.ts`.
+ */
+function trazarUna(ctx: CanvasRenderingContext2D, f: Figura, opacidad: number): void {
   /**
    * 🔴 LA CAJA DE TEXTO NO SE PINTA ACÁ. Es un `contenteditable` de verdad,
    * apoyado sobre el mismo contenedor — ver `CajaFlotante.tsx`. Dibujarla
@@ -175,7 +180,7 @@ function trazarUna(ctx: CanvasRenderingContext2D, f: Figura): void {
   // La opacidad del OBJETO se aplica a todo lo que se dibuje de él. El
   // resaltador la multiplica por la suya adentro de su `save`.
   ctx.save();
-  ctx.globalAlpha = f.opacidad;
+  ctx.globalAlpha = opacidad;
 
   if (f.clase === 'imagen') {
     trazarImagen(ctx, f);
@@ -198,7 +203,7 @@ function trazarUna(ctx: CanvasRenderingContext2D, f: Figura): void {
     // de selección— saldría translúcido y mezclado con el texto de abajo.
     ctx.save();
     ctx.globalCompositeOperation = 'multiply';
-    ctx.globalAlpha = f.opacidad * RESALTADOR_ALFA;
+    ctx.globalAlpha = opacidad * RESALTADOR_ALFA;
     ctx.lineWidth = f.grosor * RESALTADOR_ANCHO;
     // Punta cuadrada: un marcador deja una banda con los extremos rectos, no
     // dos semicírculos.
@@ -308,6 +313,12 @@ export interface OpcionesDePintado {
   lazo?: Caja | null;
   /** Con `false` no se dibujan recuadros ni tiradores (modo texto, solo lectura). */
   conAdornos?: boolean;
+  /**
+   * Con qué opacidad va cada figura. Se inyecta en vez de leerse de la figura
+   * porque la de la CAPA la multiplica y no está guardada en el objeto — quien
+   * pinta no conoce las capas, y no tiene por qué.
+   */
+  opacidadDe?: (f: Figura) => number;
 }
 
 /**
@@ -320,7 +331,7 @@ export interface OpcionesDePintado {
  * hasta mover el mouse).
  */
 export function pintar(ctx: CanvasRenderingContext2D, figuras: Figura[], opciones: OpcionesDePintado): void {
-  const { ancho, alto, dpr, seleccionadas = [], lazo = null, conAdornos = true } = opciones;
+  const { ancho, alto, dpr, seleccionadas = [], lazo = null, conAdornos = true, opacidadDe } = opciones;
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, ancho, alto);
@@ -331,7 +342,7 @@ export function pintar(ctx: CanvasRenderingContext2D, figuras: Figura[], opcione
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  for (const f of figuras) trazarUna(ctx, f);
+  for (const f of figuras) trazarUna(ctx, f, opacidadDe ? opacidadDe(f) : f.opacidad);
 
   if (!conAdornos) return;
 

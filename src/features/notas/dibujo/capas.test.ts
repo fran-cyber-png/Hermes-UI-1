@@ -5,7 +5,12 @@ import {
   borrarCapa,
   cambiarCapa,
   capasNecesarias,
+  duplicarCapa,
   esTocable,
+  figurasDe,
+  moverCapa,
+  opacidadEfectiva,
+  ordenarParaPintar,
   seleccionables,
   visibles,
   type Capa,
@@ -17,14 +22,14 @@ import type { Figura } from './figuras';
  * son reglas de verdad o solo un ícono distinto en un panel.
  */
 
-function fig(id: string, capaId: string): Figura {
-  return { id, capaId, opacidad: 1, clase: 'trazo', color: '#000', grosor: 2, puntos: [[0, 0]] };
+function fig(id: string, capaId: string, opacidad = 1): Figura {
+  return { id, capaId, opacidad, clase: 'trazo', color: '#000', grosor: 2, puntos: [[0, 0]] };
 }
 
 const CAPAS: Capa[] = [
-  { id: 'base', nombre: 'Capa 1', visible: true, bloqueada: false },
-  { id: 'oculta', nombre: 'Capa 2', visible: false, bloqueada: false },
-  { id: 'trabada', nombre: 'Capa 3', visible: true, bloqueada: true },
+  { id: 'base', nombre: 'Capa 1', visible: true, bloqueada: false, opacidad: 1 },
+  { id: 'oculta', nombre: 'Capa 2', visible: false, bloqueada: false, opacidad: 1 },
+  { id: 'trabada', nombre: 'Capa 3', visible: true, bloqueada: true, opacidad: 0.5 },
 ];
 
 const FIGURAS = [fig('a', 'base'), fig('b', 'oculta'), fig('c', 'trabada')];
@@ -74,9 +79,20 @@ describe('administrar capas', () => {
   it('agregar no repite un nombre que ya está', () => {
     // El número sale del conjunto usado y no de un contador: con «Capa 2»
     // borrada, la siguiente vuelve a ser «Capa 2» y no salta a «Capa 7».
-    const dos = agregarCapa(CAPAS_INICIALES);
+    const dos = agregarCapa(CAPAS_INICIALES).capas;
     expect(dos[1].nombre).toBe('Capa 2');
-    expect(agregarCapa(dos)[2].nombre).toBe('Capa 3');
+    expect(agregarCapa(dos).capas[2].nombre).toBe('Capa 3');
+  });
+
+  it('🔴 la capa nueva va ENCIMA de la activa, no al final', () => {
+    // Es lo que se espera al apretar «+» parado en una capa del medio; mandarla
+    // siempre al tope obliga a arrastrarla de vuelta cada vez.
+    const r = agregarCapa(CAPAS, 'base');
+    expect(r.capas.map((c) => c.id)).toEqual(['base', r.nueva.id, 'oculta', 'trabada']);
+  });
+
+  it('la capa nueva nace visible, desbloqueada y opaca', () => {
+    expect(agregarCapa(CAPAS_INICIALES).nueva).toMatchObject({ visible: true, bloqueada: false, opacidad: 1 });
   });
 
   it('cambiar solo toca la capa nombrada', () => {
@@ -87,14 +103,91 @@ describe('administrar capas', () => {
 
   it('🔴 la ÚLTIMA capa no se puede borrar', () => {
     // Sin ninguna capa, las figuras nuevas no tendrían dónde caer.
-    expect(borrarCapa(CAPAS_INICIALES, 'base')).toBeNull();
+    expect(borrarCapa(CAPAS_INICIALES, FIGURAS, 'base')).toBeNull();
   });
 
-  it('🔴 borrar una capa dice a dónde mudar lo que tenía', () => {
-    // Sus figuras NO se borran: borrar una capa por error no puede llevarse el
-    // trabajo de una hora.
-    const r = borrarCapa(CAPAS, 'oculta');
+  it('🔴 borrar una capa DICE cuántos objetos se lleva', () => {
+    // Es lo que deja preguntar antes con un número de verdad, en vez de un
+    // «¿estás segura?» que nadie lee.
+    const r = borrarCapa(CAPAS, FIGURAS, 'oculta');
     expect(r?.capas.map((c) => c.id)).toEqual(['base', 'trabada']);
-    expect(r?.mudarA).toBe('base');
+    expect(r?.seLleva).toEqual(['b']);
+  });
+
+  it('al borrar queda activa la capa DE AL LADO, no el fondo', () => {
+    // Borrando la 3 de tres, se queda parado en la 2 y no salta al principio.
+    expect(borrarCapa(CAPAS, FIGURAS, 'trabada')?.activaNueva).toBe('oculta');
+  });
+});
+
+describe('el orden de pintado', () => {
+  it('🔴 manda la CAPA primero y la figura después', () => {
+    // Antes las capas eran solo etiquetas y el orden lo decidía el array de
+    // figuras: arrastrar una capa no cambiaba nada de lo que se veía.
+    const sueltas = [fig('z', 'trabada'), fig('a', 'base')];
+    expect(ordenarParaPintar(sueltas, CAPAS).map((f) => f.id)).toEqual(['a', 'z']);
+  });
+
+  it('dentro de una capa se conserva el orden del array', () => {
+    const dos = [fig('primera', 'base'), fig('segunda', 'base')];
+    expect(ordenarParaPintar(dos, CAPAS).map((f) => f.id)).toEqual(['primera', 'segunda']);
+  });
+
+  it('una figura de una capa desconocida va al final, no desaparece', () => {
+    const suelta = fig('huerfana', 'niIdea');
+    expect(ordenarParaPintar([suelta, fig('a', 'base')], CAPAS).map((f) => f.id)).toEqual(['a', 'huerfana']);
+  });
+
+  it('moverCapa reubica y recorta a los extremos', () => {
+    expect(moverCapa(CAPAS, 'base', 2).map((c) => c.id)).toEqual(['oculta', 'trabada', 'base']);
+    expect(moverCapa(CAPAS, 'base', -5).map((c) => c.id)).toEqual(['base', 'oculta', 'trabada']);
+    expect(moverCapa(CAPAS, 'inventada', 0)).toEqual(CAPAS);
+  });
+});
+
+describe('la opacidad', () => {
+  it('🔴 la de la capa MULTIPLICA la del objeto, no la pisa', () => {
+    // Un objeto al 50 % en una capa al 50 % se ve al 25 %. Pisar el valor haría
+    // que mover el deslizador de la capa destruyera lo que la vendedora eligió
+    // a mano, sin forma de recuperarlo.
+    expect(opacidadEfectiva(fig('x', 'trabada', 0.5), CAPAS)).toBeCloseTo(0.25, 5);
+  });
+
+  it('subir la capa de vuelta devuelve al objeto SU opacidad', () => {
+    const plena = cambiarCapa(CAPAS, 'trabada', { opacidad: 1 });
+    expect(opacidadEfectiva(fig('x', 'trabada', 0.5), plena)).toBeCloseTo(0.5, 5);
+  });
+
+  it('una capa desconocida no atenúa nada', () => {
+    expect(opacidadEfectiva(fig('x', 'niIdea', 0.8), CAPAS)).toBeCloseTo(0.8, 5);
+  });
+});
+
+describe('duplicar una capa', () => {
+  it('🔴 copia sus objetos con ids NUEVOS y en la capa nueva', () => {
+    const r = duplicarCapa(CAPAS, FIGURAS, 'base');
+    const copias = figurasDe(r!.figuras, r!.nueva.id);
+    expect(copias).toHaveLength(1);
+    expect(copias[0].id).not.toBe('a');
+  });
+
+  it('🔴 la copia NO se corre de lugar', () => {
+    // Al revés de duplicar objetos sueltos: acá la copia va en otra capa, así
+    // que queda calcada encima del original — que es para lo que sirve.
+    const conPos: Figura[] = [{ ...fig('a', 'base'), clase: 'trazo', puntos: [[10, 20]] } as Figura];
+    const r = duplicarCapa(CAPAS, conPos, 'base');
+    const copia = figurasDe(r!.figuras, r!.nueva.id)[0];
+    expect(copia.clase === 'trazo' && copia.puntos[0]).toEqual([10, 20]);
+  });
+
+  it('la capa nueva va justo encima y conserva las perillas', () => {
+    const r = duplicarCapa(CAPAS, FIGURAS, 'trabada');
+    expect(r!.capas.map((c) => c.id)).toEqual(['base', 'oculta', 'trabada', r!.nueva.id]);
+    expect(r!.nueva).toMatchObject({ bloqueada: true, opacidad: 0.5 });
+    expect(r!.nueva.nombre).toContain('copia');
+  });
+
+  it('duplicar una capa que no existe no rompe', () => {
+    expect(duplicarCapa(CAPAS, FIGURAS, 'inventada')).toBeNull();
   });
 });
