@@ -2,6 +2,8 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../../index.css';
 import { RotuloDeLaCola } from './RotuloDeLaCola';
+import { explicacionDelRotulo } from './explicacionDeLaCola';
+import { VacioDeLineaPropia } from './VacioDeLineaPropia';
 
 /**
  * LA GALERÍA DEL RÓTULO DE LA COLA — los tres estados, uno al lado del otro.
@@ -22,7 +24,7 @@ import { RotuloDeLaCola } from './RotuloDeLaCola';
  * lindos ya escondió tres defectos una vez.
  */
 
-const CASOS: { rotulo: string; total: number; recortada?: boolean }[] = [
+const CASOS: { rotulo: string; total: number; recortada?: boolean; lineaPropia?: boolean }[] = [
   {
     rotulo:
       'SUPERVISORA / ADMIN — ve la mesa entera, así que no hay recorte que anunciar. Es también lo que ve un server viejo o una página rehidratada del caché: ausente ≠ «no hay recorte», ausente es «no se sabe», y de eso no se afirma nada.',
@@ -39,6 +41,13 @@ const CASOS: { rotulo: string; total: number; recortada?: boolean }[] = [
       'SINDY — el caso donde el número por fin coincide con las filas: la cola le servía 3.095 y la cabecera le decía 5.494. Con dos dígitos, «para vos» es lo único que separa «me asignaron poco» de «se rompió algo».',
     total: 192,
     recortada: true,
+  },
+  {
+    rotulo:
+      'WALTER, QUE TRAJO SU PROPIA LÍNEA POR QR (18-ago-2026) — mismo rótulo, otra explicación. Ve su línea entera más lo que le asignen, así que la frase de siempre («lo que todavía no tiene dueña») le explicaría su número con lo único que ya NO ve: se le cayó esa rama y con ella 2.879 conversaciones del archivo de las líneas apagadas. Medido: pasa de 2.930 a 51, y esos 51 son leads de formulario — en la otra línea todavía no le asignaron ninguna.',
+    total: 51,
+    recortada: true,
+    lineaPropia: true,
   },
 ];
 
@@ -69,10 +78,36 @@ function Galeria() {
                   </span>
                 ))}
               </div>
-              <RotuloDeLaCola total={c.total} recortada={c.recortada} />
+              <RotuloDeLaCola total={c.total} recortada={c.recortada} lineaPropia={c.lineaPropia} />
             </div>
+            {/* ⚠️ **El `title` no sale en una captura**, y es la mitad que explica
+                el número — sin esto la galería mostraría cuatro renglones casi
+                idénticos y no se podría juzgar lo único que cambió. Sale de
+                `explicacionDelRotulo`, la MISMA función que el componente: una
+                galería que imprime su propia versión del texto deja de ser
+                evidencia el día que alguien mejore una de las dos (#37). */}
+            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+              <span className="font-bold">al pasar el mouse:</span>{' '}
+              {explicacionDelRotulo(c.recortada, c.lineaPropia) ??
+                '— (sin recorte anunciado no hay nada que explicar)'}
+            </p>
           </div>
         ))}
+      </div>
+
+      {/* ⚠️ **El vacío es la otra mitad del mismo frente**, y es la que más se va
+          a ver el día del deploy: las dos personas con línea propia no tienen
+          ninguna conversación asignada todavía (medido el 18-ago-2026). Va acá y
+          no en una galería nueva porque responde la MISMA pregunta que el
+          rótulo —«¿de quién es lo que estoy viendo?»— y se juzgan juntas. */}
+      <h2 className="mt-10 font-heading text-lg font-bold text-navy">Y cuando no hay nada</h2>
+      <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+        Sin este texto, la cola vacía de alguien que trajo su línea se lee «se perdieron las
+        conversaciones». Se dicen las dos fuentes de su cola y no se afirma ningún conteo: el front
+        no sabe cuántas le asignaron.
+      </p>
+      <div className="mt-4 rounded-lg border border-border bg-card px-4 py-12 text-center">
+        <VacioDeLineaPropia />
       </div>
     </div>
   );

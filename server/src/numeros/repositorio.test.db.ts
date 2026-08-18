@@ -111,7 +111,52 @@ test("🔴 lineasDeVendedora encuentra la línea aunque la grafía no coincida e
   assert.deepEqual(await lineasDeVendedora(db, "otra"), [], "una vendedora sin línea sigue vacía");
 
   const conProposito = await lineasDeVendedoraConProposito(db, "luz");
-  assert.deepEqual(conProposito, [{ numero: "51900000009", proposito: "vendedora" }]);
+  assert.deepEqual(conProposito, [{ numero: "51900000009", proposito: "vendedora", duenas: 1 }]);
+});
+
+/**
+ * 🔴 `duenas` CUENTA EL MAPA ENTERO DEL NÚMERO, NO LAS FILAS DE ESTA PERSONA.
+ *
+ * Es la mitad que le faltaba a `cola/lineaPropia.ts` para poder distinguir la
+ * línea que alguien trajo por QR de «Ventas Meta», que en producción dice
+ * `proposito='vendedora'` igual y la comparten SIETE (medido el 18-ago-2026). El
+ * `WHERE` de esta consulta ya filtró por `vendedora_id`, así que un `count(*)`
+ * sobre sus propias filas daría **1 para las dos** — y `1` es exactamente lo que
+ * la regla lee como «línea propia». O sea: el conteo equivocado no falla, le
+ * regala la línea entera de la Escuela a cualquiera del equipo.
+ */
+test("🔴 `duenas` cuenta a TODOS los que comparten la línea, no solo a quien pregunta", async (t) => {
+  const db = await baseDePrueba(t);
+  // El molde de «Ventas Meta»: dice `vendedora` y la comparten varias personas.
+  await upsertNumero(db, "51984429504", {
+    etiqueta: "Ventas Meta",
+    proposito: "vendedora",
+    referencia: null,
+    activo: true,
+    vendedoras: ["Luz", "sindy", "ventas10@grupogoberna.com"],
+  });
+  // El molde de una línea traída por QR: la declara una sola persona.
+  await upsertNumero(db, "51941654039", {
+    etiqueta: "Walter Ventas",
+    proposito: "vendedora",
+    referencia: null,
+    activo: true,
+    vendedoras: ["walter"],
+  });
+
+  // ⚠️ ACÁ ESTÁ LA DISCRIMINACIÓN, y es lo único que este test mira: el `WHERE`
+  // de la consulta devuelve UNA fila en los dos casos, así que un conteo sobre
+  // sus propias filas diría `1` para los dos. Lo que separa a las dos líneas es
+  // que el conteo mira el mapa entero del número.
+  assert.deepEqual(await lineasDeVendedoraConProposito(db, "luz"), [
+    { numero: "51984429504", proposito: "vendedora", duenas: 3 },
+  ]);
+  assert.deepEqual(await lineasDeVendedoraConProposito(db, "walter"), [
+    { numero: "51941654039", proposito: "vendedora", duenas: 1 },
+  ]);
+
+  // Y con la grafía del login, que es por donde entra el `vendedoraId` real.
+  assert.equal((await lineasDeVendedoraConProposito(db, "  LUZ "))[0]?.duenas, 3);
 });
 
 /**

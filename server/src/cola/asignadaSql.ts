@@ -1,4 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
+import { PROPOSITO_LINEA_PROPIA } from "./lineaPropia.js";
 
 /**
  * DE QUIÉN ES ESTA CONVERSACIÓN, EN LA FILA DE LA COLA — aparte de
@@ -186,6 +187,30 @@ export function esMiaSql(vendedoraId: string | undefined): SQL {
  *     es lo que mantiene visible el archivo de las líneas retiradas mientras
  *     alguien decida qué hacer con él.
  *
+ * ══ QUIEN TRAJO SU PROPIA LÍNEA VE UNA RAMA MENOS (18-ago-2026) ═════════════
+ *
+ * Pedido del dueño: «los que se enlazan con qr también deberían poder el ventas
+ * meta, solo los 2 — pero de ventas meta solo los que le asignaron a ellos».
+ * Traducido: quien vinculó su número escaneando el QR desde Hermes ve **su línea
+ * entera** más **lo asignado a él en cualquier otra línea**, y nada más.
+ *
+ * No hizo falta una regla nueva: con `conLineaPropia` se le cae **la tercera
+ * rama** (la de «la línea no tiene dueña») y queda exactamente eso —
+ * `lower(btrim(dueño)) = yo` ya le trae lo asignado en Ventas Meta, y la rama de
+ * «la línea es mía» le trae la suya completa.
+ *
+ * 🔴 **Lo que se va son 2.879 conversaciones para Walter y 5.577 para Usuario1**
+ * (medido con `npm run frontera:preflight` contra producción, 18-ago-2026): el
+ * archivo de líneas apagadas que nadie declaró suyo. El porqué de cada número
+ * está en `RAMA_LINEA_SIN_DUENA`, acá abajo.
+ *
+ * ⚠️ **Quién tiene línea propia NO se decide acá y NO es una lista de nombres**:
+ * es un hecho de `numeros_wa` × `numero_vendedora` que resuelve
+ * `cola/lineaPropia.ts` (propósito `vendedora` **y** una sola persona en el mapa
+ * — ninguna de las dos condiciones alcanza sola: Ventas Meta también dice
+ * `vendedora`, y la comparten SIETE). Hoy alcanza a dos personas y mañana a
+ * quien vincule, sin tocar código.
+ *
  * 🔴 **SE PREGUNTA CONTRA `numero_vendedora`, NUNCA CONTRA `numeros_wa.activo`.**
  * Las 5 filas de `numeros_wa` tienen `activo = true`, incluidas las tres líneas
  * retiradas el 11-ago-2026: esa columna **no distingue nada** (tampoco tiene
@@ -228,6 +253,23 @@ export function fronteraDeAsignacionSql(
    * con la fuente: **un admin no es un supervisor y también ve todo**.
    */
   veTodo: boolean,
+  /**
+   * ¿Esta persona TRAJO SU PROPIA LÍNEA (la vinculó por QR desde Hermes)?
+   *
+   * ⚠️ **Llega como booleano ya resuelto, igual que `veTodo`, y por el mismo
+   * motivo**: quién tiene línea propia se decide leyendo `numeros_wa` ×
+   * `numero_vendedora` y aplicando `cola/lineaPropia.ts`; este archivo arma SQL
+   * y no pregunta nada. Si la respuesta se calculara acá adentro, la única forma
+   * de fijarla en un test sería sembrando esas dos tablas — que es exactamente
+   * el enredo del que se sacó `esSupervisora`.
+   *
+   * ⚠️ **`false` tiene que ser IDÉNTICO a lo de antes de este frente.** Es lo que
+   * ve la mayoría del equipo (Luz, Sindy y las cinco `ventas1X`), así que un
+   * cambio de predicado acá se les nota a todas a la vez. Por eso las ramas se
+   * COMPONEN y la tercera se agrega, en vez de haber dos predicados escritos a
+   * mano que después divergen (#37).
+   */
+  conLineaPropia: boolean,
 ): SQL | null {
   const limpio = (vendedoraId ?? "").trim().toLowerCase();
   // Sin identidad (un servicio) o viendo todo no se recorta: quien supervisa es
@@ -235,13 +277,15 @@ export function fronteraDeAsignacionSql(
   if (!limpio || veTodo) return null;
   return sql`(
     lower(btrim(${duenoSql})) = ${limpio}
-    OR (${duenoSql} IS NULL AND ${lineaAlcanzableSql(limpio)})
+    OR (${duenoSql} IS NULL AND ${lineaAlcanzableSql(limpio, conLineaPropia)})
   )`;
 }
 
 /**
- * ¿LA LÍNEA DE ESTA FILA ES ALCANZABLE PARA ESTA VENDEDORA? — la mitad nueva de
- * la frontera, y la única que mira `numero_vendedora`.
+ * ¿LA LÍNEA DE ESTA FILA ES ALCANZABLE PARA ESTA VENDEDORA? — la mitad de la
+ * frontera que mira `numero_vendedora`, y **la única que tiene dos formas**: con
+ * `conLineaPropia` se le cae la rama de «la línea no tiene dueña» (ver
+ * `RAMA_LINEA_SIN_DUENA`, que lleva los números de lo que eso quita).
  *
  * 🔴 **Se resuelve en SQL y no con dos listas leídas antes, por la grafía.**
  * `lineasDeVendedoraConProposito` (`numeros/repositorio.ts`) compara el
@@ -269,16 +313,118 @@ export function fronteraDeAsignacionSql(
  * frontera entera — o sea, fail-open hacia el comportamiento de antes. Es lo
  * correcto: una frontera que no se puede evaluar no puede esconder la cola.
  */
-function lineaAlcanzableSql(vendedoraIdNormalizado: string): SQL {
-  return sql`(
-    todo.numero_propio IS NULL
-    OR EXISTS (
+function lineaAlcanzableSql(vendedoraIdNormalizado: string, conLineaPropia: boolean): SQL {
+  /**
+   * ⚠️ **SE COMPONE, NO SE ESCRIBEN DOS PREDICADOS.** La tentación es un `if`
+   * con dos ``sql`` `` enteros, uno con la tercera rama y otro sin ella; el día
+   * que se toque la rama de «esta línea es mía» habría que acordarse de tocarla
+   * dos veces, y la que quedaría vieja es la del caso `false`, que es el de casi
+   * todo el equipo (#37). Acá las dos primeras ramas son **el mismo fragmento**
+   * para los dos casos: no pueden divergir.
+   *
+   * Verificado que el caso `false` no cambió: se renderizaron con `PgDialect`
+   * el fragmento de `HEAD` y éste, y el SQL sale **carácter por carácter igual
+   * salvo un espacio después del paréntesis** que `sql.join` no pone (mismos
+   * parámetros, mismo orden). Postgres tokeniza igual: el plan no se mueve.
+   */
+  const ramas: SQL[] = [
+    RAMA_SIN_LINEA,
+    // ⚠️ La rama 2 cambia de FORMA con el mismo booleano que quita la rama 3, y
+    // las dos mitades tienen que moverse juntas: con la rama 3 fuera pero la 2
+    // ancha, agregar a esta persona a una línea compartida le entrega esa línea
+    // entera — el agujero por el que se colaba Ventas Meta.
+    ramaLineaMiaSql(vendedoraIdNormalizado, conLineaPropia),
+  ];
+  if (!conLineaPropia) ramas.push(RAMA_LINEA_SIN_DUENA);
+  return sql`(${sql.join(ramas, sql` OR `)})`;
+}
+
+/**
+ * RAMA 1 — **NO ENTRÓ POR NINGUNA LÍNEA NUESTRA**, así que ninguna línea la
+ * puede reclamar: los leads de formulario (`tipo = 'lead'`) y los comentarios
+ * de FB/IG.
+ *
+ * ⚠️ **SE CONSERVA TAMBIÉN PARA QUIEN TIENE LÍNEA PROPIA, Y ES UNA DECISIÓN,
+ * NO UN OLVIDO.** Es lo primero que uno saca cuando lee «ve su línea entera más
+ * lo que le asignaron»: un formulario no está en ninguna de las dos bolsas. Pero
+ * ADR 0051 exime a los leads del reparto **a propósito** —«la pelota es
+ * nuestra»: nadie les escribió todavía, así que no pueden tener dueño y no hay
+ * a quién asignárselos—, y sacarlos de acá le apagaría los formularios a Walter
+ * y a Usuario1 sin que nadie lo haya pedido. Son ~154 tarjetas de trabajo real
+ * en la ventana de 30 días (medido, ADR 0051).
+ */
+const RAMA_SIN_LINEA: SQL = sql`todo.numero_propio IS NULL`;
+
+/**
+ * RAMA 2 — **LA LÍNEA ES MÍA**: `numero_vendedora` me la declara. Es la que da
+ * la línea ENTERA, incluido lo que todavía no repartió nadie.
+ *
+ * 🔴 **TIENE DOS FORMAS, Y COLAPSARLAS ROMPE EL PEDIDO ENTERO.** Para quien NO
+ * tiene línea propia es «cualquiera de mis líneas», como siempre. Para quien SÍ
+ * la tiene es **sólo sus líneas PROPIAS**, y la diferencia no es teórica: el día
+ * que alguien agregue a Walter a `numero_vendedora` de `51984429504` —que es lo
+ * primero que uno hace para darle trabajo en Ventas Meta— con la forma ancha
+ * pasaría a ver **Ventas Meta ENTERA**, sus 2.591 conversaciones incluido todo
+ * lo huérfano. O sea exactamente lo contrario de «de ventas meta sólo los que le
+ * asignaron a ellos». Lo que le toca de una línea compartida entra por la
+ * PRIMERA condición de la frontera (`lower(btrim(dueño)) = yo`) y por ninguna
+ * otra.
+ */
+function ramaLineaMiaSql(vendedoraIdNormalizado: string, soloPropias: boolean): SQL {
+  if (!soloPropias) {
+    return sql`EXISTS (
       SELECT 1 FROM numero_vendedora nv
        WHERE nv.numero = todo.numero_propio
          AND lower(btrim(nv.vendedora_id)) = ${vendedoraIdNormalizado}
-    )
-    OR NOT EXISTS (
-      SELECT 1 FROM numero_vendedora nv WHERE nv.numero = todo.numero_propio
-    )
-  )`;
+    )`;
+  }
+  return sql`EXISTS (
+      SELECT 1 FROM numeros_wa n
+       WHERE n.numero = todo.numero_propio
+         AND n.proposito = ${PROPOSITO_LINEA_PROPIA}
+         AND EXISTS (
+           SELECT 1 FROM numero_vendedora nv
+            WHERE nv.numero = n.numero
+              AND lower(btrim(nv.vendedora_id)) = ${vendedoraIdNormalizado}
+         )
+         AND (
+           SELECT count(DISTINCT lower(btrim(nv2.vendedora_id)))
+             FROM numero_vendedora nv2 WHERE nv2.numero = n.numero
+         ) = 1
+    )`;
 }
+
+/**
+ * RAMA 3 — **LA LÍNEA NO TIENE DUEÑA**: nadie la declaró en `numero_vendedora`,
+ * así que es de todos. Es la rama que mantiene visible el archivo de las líneas
+ * retiradas mientras alguien decida qué hacer con él… y es **la única que se cae
+ * cuando la persona tiene línea propia**.
+ *
+ * 🔴 **ACÁ ESTABAN LAS 2.879 CONVERSACIONES HUÉRFANAS DE WALTER.** Medido en
+ * producción el 18-ago-2026 con `npm run frontera:preflight`: de las 2.930 filas
+ * que la cola le servía, **51 eran suyas y 2.879 le entraban por esta rama** —
+ * historia de líneas APAGADAS (`51986394450` sin un entrante desde el 28-jul,
+ * `51944531711` sin tráfico nunca), que al no tener fila en `numero_vendedora`
+ * quedan alcanzables para cualquiera. Lo mismo con Usuario1: 5.577 de 5.628.
+ *
+ * El pedido del dueño (18-ago-2026) —«los que se enlazan con qr también deberían
+ * poder el ventas meta, solo los 2, pero de ventas meta solo los que le
+ * asignaron a ellos»— es exactamente **quitar esta rama** a esas personas: quien
+ * trajo su propio número no tiene nada que hacer en el archivo de una línea que
+ * se apagó, y lo que sí le toca de las líneas ajenas ya entra por
+ * `lower(btrim(dueño)) = yo`, la primera condición de la frontera.
+ *
+ * ⚠️ **No es una regla nueva: es una rama menos, condicionada.** Escrito así
+ * porque la diferencia importa al leer un plan de consulta y al explicar por qué
+ * a alguien le bajó la cola de 2.930 a 51.
+ *
+ * ⚠️ **Y el día del deploy ese «51» puede ser CERO en la otra línea.** Nadie va a
+ * ser agregado a la rueda del reparto: el dueño asigna a mano después, y hoy ni
+ * Walter ni Usuario1 tienen una sola fila en `conversacion_asignada` (medido:
+ * ahí sólo hay filas de luz, Sindy, ventas10-14 y Tracy). La pantalla tiene que
+ * **explicar ese vacío**, no verse vacía sin motivo — si no, lo que se lee es
+ * «se perdieron las conversaciones».
+ */
+const RAMA_LINEA_SIN_DUENA: SQL = sql`NOT EXISTS (
+      SELECT 1 FROM numero_vendedora nv WHERE nv.numero = todo.numero_propio
+    )`;

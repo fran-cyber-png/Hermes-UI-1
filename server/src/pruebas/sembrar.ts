@@ -530,6 +530,19 @@ export async function sembrarCalificacionBot(
  * `numero_vendedora`). Las dos tablas juntas porque hay una FK: una asignación
  * sin su número no se puede insertar, y un test que lo intentara fallaría por el
  * andamio y no por lo que mide.
+ *
+ * ⚠️ **El `proposito` es un parámetro desde el 18-ago-2026, y sin él esta función
+ * no puede sembrar una línea propia.** `numeros_wa.proposito` tiene default
+ * `escuela`, y `cola/lineaPropia.ts` exige `vendedora` **y** una sola persona en
+ * el mapa: omitiéndolo, un test que cree estar sembrando la línea que alguien
+ * trajo por QR siembra una de la Escuela y **pasa en verde por el motivo
+ * equivocado** — la regla contesta `false` y la cola se ve igual que antes del
+ * frente. Se deja opcional para no tocar a los llamadores a los que el propósito
+ * les da lo mismo.
+ *
+ * ⚠️ **`onConflictDoNothing` NO pisa el propósito de una fila que ya existe**: si
+ * el mismo número se siembra dos veces con propósitos distintos, gana el primero
+ * y en silencio. Sembrá cada línea una sola vez.
  */
 export async function sembrarLineaDeVendedora(
   db: DbDePrueba,

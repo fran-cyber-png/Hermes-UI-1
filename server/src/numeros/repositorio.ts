@@ -121,8 +121,16 @@ export async function lineasDeVendedoraConDuenas(
   const filas = await db
     .select({
       numero: schema.numeroVendedora.numero,
+      // 🔴 **`DISTINCT lower(btrim(...))` Y NO `count(*)`.** La PK es
+      // `(numero, vendedora_id)`, así que `Walter` y `walter` —las dos grafías
+      // vivas del mismo humano en producción— entran como DOS filas y un conteo
+      // crudo diría que su línea la comparten dos personas. Acá eso le libera el
+      // cupo de «solo 1» y la deja vincular una segunda; en `cola/lineaPropia.ts`
+      // le apaga la regla y le devuelve el archivo de las líneas retiradas. **El
+      // mismo dato mal contado, dos defectos, y los dos mudos.**
       duenas: sql<number>`(
-        SELECT count(*) FROM ${schema.numeroVendedora} AS todas
+        SELECT count(DISTINCT lower(btrim(todas.vendedora_id)))
+          FROM ${schema.numeroVendedora} AS todas
          WHERE todas.numero = ${schema.numeroVendedora.numero}
       )`,
     })
@@ -132,8 +140,10 @@ export async function lineasDeVendedoraConDuenas(
 }
 
 /**
- * Las líneas de esta persona **con su propósito**, para poder decidir si ve solo
- * las suyas (`cola/lineas.ts` → `soloSusLineas`).
+ * Las líneas de esta persona **con su propósito y con cuánta gente comparte cada
+ * una**. Con esa sola lectura se deciden los dos recortes que miran el mapa:
+ * «¿ve solo las suyas?» (`cola/lineas.ts` → `soloSusLineas`, campaña) y «¿trajo
+ * su propia línea escaneando el QR?» (`cola/lineaPropia.ts` → `tieneLineaPropia`).
  *
  * Es una consulta aparte y no un campo más en `lineasDeVendedora` porque las dos
  * responden preguntas distintas —«¿cuáles son las suyas?» vs. «¿qué clase de
@@ -142,15 +152,60 @@ export async function lineasDeVendedoraConDuenas(
  *
  * El JOIN es interno a propósito: una asignación a un número que ya no está en
  * `numeros_wa` no puede decidir nada sobre lo que se ve.
+ *
+ * 🔴 **`duenas` SALE DE UNA SUBCONSULTA Y NO DE LAS FILAS DE ARRIBA, Y AHÍ
+ * ESTÁ TODO EL FILO.** Este `SELECT` ya filtró por `vendedora_id`, así que
+ * cualquier conteo sobre sus propias filas —un `count(*)` agrupado, un
+ * `count(*) OVER (PARTITION BY numero)`— daría **1 para todas**, incluida
+ * `51984429504` «Ventas Meta», que en producción la comparten **SIETE** personas
+ * (medido el 18-ago-2026 sobre `numeros_wa` × `numero_vendedora`). Y `1` es
+ * justo el valor que `cola/lineaPropia.ts` lee como «línea propia»: el conteo
+ * equivocado no rompe nada ni tira un error — le regala la regla a Luz, a Sindy
+ * y a las cinco `ventas1X`, o sea a todo el equipo de la Escuela, que es lo
+ * contrario de lo pedido. La subconsulta cuenta el mapa ENTERO de ese número.
+ *
+ * ⚠️ **Cuenta también las identidades federadas** (`centurion:…`, ver
+ * `origenIdentidad.ts`), y no es un descuido: la pregunta es «¿cuánta gente
+ * comparte esta línea?», y la otra mitad de la misma regla —`RAMA_LINEA_SIN_DUENA`
+ * en `cola/asignadaSql.ts`, un `NOT EXISTS` sobre `numero_vendedora`— tampoco las
+ * excluye. Descontarlas acá dejaría a las dos mitades opinando distinto sobre la
+ * misma línea, que es #37 adentro de un recorte.
+ *
+ * ⚠️ **Va en la MISMA consulta y no en una segunda pasada.** `consultarCola` la
+ * resuelve UNA vez por pedido, antes del loop de degradación (el porqué está
+ * escrito ahí); un segundo round-trip le costaría latencia a cada apertura de la
+ * cola para contestar media pregunta que esta consulta ya tenía delante.
  */
 export async function lineasDeVendedoraConProposito(
   db: Base,
   vendedoraId: string,
-): Promise<{ numero: string; proposito: string }[]> {
+): Promise<{ numero: string; proposito: string; duenas: number }[]> {
   return db
     .select({
       numero: schema.numeroVendedora.numero,
       proposito: schema.numerosWa.proposito,
+      // `::int` y no el `bigint` de `count(*)`: postgres.js devuelve int8 como
+      // CADENA, y `'7' === 1` es false igual que `7 === 1`, así que el defecto
+      // no se vería — se vería una línea compartida pasando por propia.
+      // 🔴 **`DISTINCT lower(btrim(...))`, NO `count(*)` — y es corrección, no
+      // higiene.** La PK de `numero_vendedora` es `(numero, vendedora_id)`, así
+      // que `Walter` y `walter` entran como DOS filas: es el mismo humano con
+      // las dos grafías que este repo tiene vivas en producción (Cerberus empuja
+      // una, el login escribe la otra). Con un conteo crudo esa línea da
+      // `personas = 2`, `tieneLineaPropia` contesta false y **la regla se apaga
+      // sola, sin un solo síntoma** — la persona vuelve a arrastrar el archivo de
+      // las líneas retiradas y nadie relaciona una cosa con la otra.
+      //
+      // ⚠️ Y tiene que contar IGUAL que su gemelo SQL (`ramaLineaMiaSql` en
+      // `cola/asignadaSql.ts`, que también cuenta `DISTINCT lower(btrim(...))`):
+      // si una mitad dice «es propia» y la otra «no», el booleano apaga la rama
+      // que la otra ya acotó. Las dos escrituras se cruzan en
+      // `lineaPropia.paridad.test.db.ts`.
+      duenas: sql<number>`(
+        SELECT count(DISTINCT lower(btrim(nv_todas.vendedora_id)))::int
+          FROM ${schema.numeroVendedora} nv_todas
+         WHERE nv_todas.numero = ${schema.numeroVendedora.numero}
+      )`,
     })
     .from(schema.numeroVendedora)
     .innerJoin(schema.numerosWa, eq(schema.numerosWa.numero, schema.numeroVendedora.numero))

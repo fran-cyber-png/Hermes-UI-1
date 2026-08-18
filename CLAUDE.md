@@ -1571,6 +1571,48 @@ Desde el 4-ago-2026 **varias personas comparten un número** (la línea del bot 
   alguien es **baja lógica**. La ruta `/api/reparto` solo LEE.
 - Ver sin server: `/galeria-reparto.html`. Captura: `docs/evidencia/reparto-cola.png`.
 
+### Quien trajo su propia línea ve una rama menos (ADR 0060)
+
+Pedido del dueño (18-ago-2026): quien vinculó su número **por QR desde Hermes** ve **su línea entera**
+más **lo asignado a él en cualquier otra**, y nada más. No es una regla nueva: es **una rama menos**
+—la de «la línea no tiene dueña»— condicionada por `conLineaPropia`. La regla, pura, en
+`server/src/cola/lineaPropia.ts`; la arma `consultarCola` y la aplica `cola/asignadaSql.ts`.
+
+- 🔴 **`proposito = 'vendedora'` NO DISCRIMINA: «Ventas Meta» también lo dice, y la comparten SIETE**
+  (medido el 18-ago-2026). Atar la regla a ese campo se la aplica a Luz, a Sindy y a las cinco
+  `ventas1X` — o sea a TODO el equipo de la Escuela, que es lo contrario de lo pedido. Se piden **dos**
+  condiciones: propósito `vendedora` **y** una sola persona en `numero_vendedora`. ⚠️ Y el conteo solo
+  tampoco alcanza: el día que Ventas Meta quede con una sola persona (una baja, o un `PUT` de Cerberus
+  con `vendedoras` incompleto, que **vacía el mapa sin log**) le regalaría la línea entera de la Escuela
+  a quien quedó.
+- 🔴 **LA REGLA SE APAGA SOLA SI LA LÍNEA DEJA DE SER DE UNA SOLA PERSONA, Y NO AVISA.** Agregar a
+  alguien más a esa línea la devuelve al comportamiento de hoy (vuelve a ver el archivo huérfano). Es
+  fail-open a propósito, pero **mudo**: y el caso que muerde sin que nadie lo haya querido es la MISMA
+  persona cargada dos veces (`walter`/`Walter`, o una identidad `centurion:` suya) — `personas` es un
+  `count(*)` **crudo**. Lo detecta `npm run frontera:preflight`, que cuenta `DISTINCT lower(btrim(...))`
+  y **cruza contra lo que el server dijo**; empatar los conteos taparía el síntoma, la fila duplicada es
+  el arreglo.
+- 🔴 **«DARLE VENTAS META» AGREGÁNDOLO A `numero_vendedora` LE DA ESA LÍNEA ENTERA, NO LO ASIGNADO.**
+  La rama de «la línea es mía» no distingue propia de compartida (verificado contra base): con esa fila
+  empieza a ver también lo huérfano de Ventas Meta. Lo que el pedido quiere se consigue **asignando
+  conversaciones**, nunca tocando el mapa de la línea.
+- ⚠️ **`veTodo` gana ANTES**: `usuario1` es **admin** y tiene línea propia, así que esta regla no lo
+  toca — acotarlo es cambiarle el rol (D4: la frontera es propiedad del rol), que es operación y no
+  código. El preflight lleva la misma exclusión o sale rojo hoy por un motivo falso.
+- ⚠️ **Los leads de formulario se CONSERVAN** (`numero_propio IS NULL`), y es decisión, no olvido: ADR
+  0051 los exime del reparto porque nadie les escribió — sacarlos apagaría ~154 tarjetas de trabajo real.
+- ⚠️ **La bandera de la respuesta se deriva del recorte APLICADO**, no de tener una línea: un cartel que
+  afirme un recorte que el `WHERE` no hizo es la frontera imaginaria que este repo no acepta. El front la
+  lee **opcional** y `=== true` (ausente = server viejo o caché de IndexedDB, ADR 0007).
+- ⚠️ **Nadie fue agregado a la rueda**: el dueño asigna a mano, así que el día del deploy estas personas
+  pueden tener CERO asignadas en la línea compartida — por eso la cola **explica el vacío** en vez de
+  verse vacía (`src/features/canales/VacioDeLineaPropia.tsx`), y no festeja «estás al día».
+- **Sigue siendo un recorte de la LISTA, no aislamiento**: el hilo, la ficha y el envío siguen sirviendo
+  cualquier conversación a cualquier token (`docs/auditoria-aislamiento-de-chats-2026-08-17.md`).
+  ⚠️ Y **el Dashboard no acompaña**: recorta por `conversacion_asignada` (ADR 0036), así que la línea
+  propia —sin dueño asignado— no aparece ahí.
+- Captura: `docs/evidencia/cola-linea-propia-rotulo.png`. Sin server: `/galeria-cola-recortada.html`.
+
 ## El padrón de contactos — los 72.923 que NUNCA escribieron (ADR 0035)
 
 La cola ordena a quien **ya escribió**. El padrón responde: **¿a quiénes les hablamos ahora?** Son los

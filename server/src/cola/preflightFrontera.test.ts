@@ -18,10 +18,32 @@ const sana = (over: Partial<FilaPreflight> = {}): FilaPreflight => ({
   total: 40,
   propias: 38,
   huerfanas: 2,
+  // El caso base es el de casi todo el equipo: NO trajo su propia línea. Por eso
+  // `ajenas` va en `null` —«no se midió»— y no en 0: en estas filas la tercera
+  // consulta no se paga, y un 0 acá afirmaría que se midió y dio cero.
+  lineaPropia: false,
+  lineasPropias: [],
+  servidorDice: undefined,
+  ajenas: null,
   ...over,
 });
 
-const UMBRALES = { maxHuerfanas: 500 };
+/** Quien SÍ trajo su línea por QR, y todo salió bien: el server la aplicó y de
+ *  afuera de sus líneas sólo le quedan los formularios de la ventana. */
+const conLineaPropia = (over: Partial<FilaPreflight> = {}): FilaPreflight =>
+  sana({
+    vendedoraId: "walter",
+    total: 205,
+    propias: 51,
+    huerfanas: 154,
+    lineaPropia: true,
+    lineasPropias: ["51941654039"],
+    servidorDice: true,
+    ajenas: 154,
+    ...over,
+  });
+
+const UMBRALES = { maxHuerfanas: 500, maxAjenas: 500 };
 
 test("una mesa sana pasa", () => {
   const v = veredictoDelPreflight(
@@ -117,8 +139,8 @@ test("sin filas el preflight FALLA: no verificó nada", () => {
 
 test("el techo de huérfanas se puede bajar, y entonces sí dispara", () => {
   const filas = [sana({ huerfanas: 40, total: 78 }), sana({ vendedoraId: "luz", total: 60 })];
-  assert.equal(veredictoDelPreflight(filas, { maxHuerfanas: 500 }).ok, true);
-  assert.equal(veredictoDelPreflight(filas, { maxHuerfanas: 10 }).ok, false);
+  assert.equal(veredictoDelPreflight(filas, { maxHuerfanas: 500, maxAjenas: 500 }).ok, true);
+  assert.equal(veredictoDelPreflight(filas, { maxHuerfanas: 10, maxAjenas: 500 }).ok, false);
 });
 
 /**
@@ -153,4 +175,131 @@ test("una supervisora no rompe el techo de huérfanas — ve todo por definició
   assert.equal(v.ok, false);
   assert.match(v.problemas.join(" "), /sindy arrastra 5480 huérfanas/);
   assert.doesNotMatch(v.problemas.join(" "), /jefa arrastra/);
+});
+
+/**
+ * 🔴 EL DEPLOY QUE NO HIZO NADA — el tercer lado por el que este script falla.
+ *
+ * El mapa dice que Walter trajo su línea por QR y la respuesta de la cola no
+ * dice que la regla se haya aplicado. Ninguna fila queda en cero y ningún techo
+ * salta: sin este chequeo el preflight sale en VERDE sobre una cola que no
+ * cambió una sola fila, y lo que se despliega es la regla escrita, no la
+ * cableada.
+ */
+test("🔴 con línea propia y el server callado, el preflight FRENA", () => {
+  const v = veredictoDelPreflight([conLineaPropia({ servidorDice: undefined }), sana()], UMBRALES);
+  assert.equal(v.ok, false);
+  assert.match(v.problemas.join(" "), /walter/);
+  assert.match(v.problemas.join(" "), /NO publica esa bandera/);
+});
+
+/**
+ * ⚠️ Y `false` explícito NO se confunde con ausente: son dos causas distintas
+ * —la mitad sin cablear vs. el server diciendo que a esta persona no le toca— y
+ * el renglón tiene que mandar a mirar lugares distintos.
+ */
+test("el server que dice `false` sobre alguien con línea propia también frena, con otra redacción", () => {
+  const v = veredictoDelPreflight([conLineaPropia({ servidorDice: false })], UMBRALES);
+  assert.equal(v.ok, false);
+  assert.match(v.problemas.join(" "), /dice que NO la aplicó/);
+});
+
+/**
+ * 🔴 LA RAMA CABLEADA Y MAL ESCRITA: el server dice que sí y no se nota.
+ *
+ * Los números son los medidos el 18-ago-2026: con la rama viva, a Walter le
+ * entran 2.879 conversaciones del archivo de las líneas apagadas que no son
+ * suyas. Con la regla puesta ahí sólo puede quedar lo asignado (hoy 0) y los
+ * formularios de la ventana (~154).
+ */
+test("🔴 con línea propia aplicada, seguir viendo miles de afuera de sus líneas frena", () => {
+  const v = veredictoDelPreflight([conLineaPropia({ total: 2930, ajenas: 2879 })], UMBRALES);
+  assert.equal(v.ok, false);
+  assert.match(v.problemas.join(" "), /2879 conversaciones de afuera/);
+  assert.match(v.problemas.join(" "), /la rama NO se está cayendo/);
+});
+
+/**
+ * 🔴 EL TECHO DE HUÉRFANAS NO SE LE APLICA, Y ES LA MITAD QUE HACE USABLE ESTO.
+ *
+ * La línea de Walter (`51941654039`) es una de las dos apagadas que concentran
+ * el 99,1 % de lo huérfano de la ventana, y ese archivo es exactamente lo que el
+ * dueño le concedió («su línea entera»). Con el techo viejo aplicado, un deploy
+ * correcto saldría en rojo mandando a revisar `numero_vendedora`.
+ *
+ * ⚠️ Y la misma corrida tiene que seguir disparando para una vendedora sin línea
+ * propia, o la guarda estaría apagando el chequeo en vez de acotarlo.
+ */
+test("quien tiene línea propia no rompe el techo de huérfanas: ese archivo es SU línea", () => {
+  const walter = conLineaPropia({ total: 2930, propias: 51, huerfanas: 2879, ajenas: 154 });
+  assert.equal(veredictoDelPreflight([walter, sana()], UMBRALES).ok, true);
+
+  const v = veredictoDelPreflight(
+    [walter, sana({ vendedoraId: "sindy", total: 2930, propias: 51, huerfanas: 2879 })],
+    UMBRALES,
+  );
+  assert.equal(v.ok, false);
+  assert.match(v.problemas.join(" "), /sindy arrastra 2879 huérfanas/);
+  assert.doesNotMatch(v.problemas.join(" "), /walter arrastra/);
+});
+
+/**
+ * ⚠️ **NO MEDIDO NO ES CERO.** Si la tercera consulta no se pudo hacer, el
+ * detector de «no surtió efecto» no corrió — y un preflight que no midió no
+ * aprueba. Lo contrario (leer `null` como 0) sería el falso verde más caro de
+ * los tres: diría «se nota perfecto» sobre algo que nadie miró.
+ */
+test("con línea propia y `ajenas` sin medir, el preflight no aprueba", () => {
+  const v = veredictoDelPreflight([conLineaPropia({ ajenas: null })], UMBRALES);
+  assert.equal(v.ok, false);
+  assert.match(v.problemas.join(" "), /NO se pudo medir/);
+});
+
+/**
+ * ⚠️ El control: sin línea propia, `ajenas: null` es lo normal y no dice nada.
+ * Sin esto, el chequeo de arriba frenaría todos los deploys del equipo entero.
+ */
+test("sin línea propia, `ajenas` sin medir es lo esperado y no frena", () => {
+  assert.equal(
+    veredictoDelPreflight([sana(), sana({ vendedoraId: "luz", total: 60, propias: 58 })], UMBRALES).ok,
+    true,
+  );
+});
+
+test("el techo de ajenas se puede bajar, y entonces sí dispara", () => {
+  const filas = [conLineaPropia({ ajenas: 154 })];
+  assert.equal(veredictoDelPreflight(filas, { maxHuerfanas: 500, maxAjenas: 500 }).ok, true);
+  assert.equal(veredictoDelPreflight(filas, { maxHuerfanas: 500, maxAjenas: 100 }).ok, false);
+});
+
+/**
+ * 🔴 EL ROJO FALSO QUE ESTE PREFLIGHT SE HABRÍA COMIDO CONTRA PRODUCCIÓN HOY.
+ *
+ * `usuario1` es **admin Y trajo su propia línea** (`51955135507`, medido el
+ * 18-ago-2026). El server no le publica la bandera porque no le aplica ninguna
+ * frontera —`veTodo` gana antes que cualquier recorte, D4—, así que sin la
+ * guarda el script salía en 1 diciendo «la regla está escrita y la cola no
+ * cambió una sola fila» sobre el único caso donde eso es exactamente lo
+ * correcto. Un preflight que grita en verde se aprende a ignorar.
+ *
+ * ⚠️ Y la misma corrida tiene que seguir gritando por una VENDEDORA con línea
+ * propia sin cablear, o la guarda estaría apagando el chequeo en vez de acotarlo.
+ */
+test("un admin con línea propia no dispara: `veTodo` gana antes que el recorte", () => {
+  const usuario1 = conLineaPropia({
+    vendedoraId: "usuario1",
+    veTodo: true,
+    total: 5628,
+    propias: 51,
+    huerfanas: 5577,
+    lineasPropias: ["51955135507"],
+    servidorDice: undefined,
+    ajenas: null,
+  });
+  assert.equal(veredictoDelPreflight([usuario1, sana()], UMBRALES).ok, true);
+
+  const v = veredictoDelPreflight([usuario1, conLineaPropia({ servidorDice: undefined })], UMBRALES);
+  assert.equal(v.ok, false);
+  assert.match(v.problemas.join(" "), /walter/);
+  assert.doesNotMatch(v.problemas.join(" "), /usuario1 tiene línea propia/);
 });

@@ -24,6 +24,7 @@ import {
 import { lineaEfectiva, opcionesDeLinea } from './alcance';
 import { BarraFiltros } from './BarraFiltros';
 import { RotuloDeLaCola } from './RotuloDeLaCola';
+import { VacioDeLineaPropia } from './VacioDeLineaPropia';
 import { useConversaciones, useEstadoConversacion, type Conversacion } from '../../dominio/conversaciones';
 import { useLineas } from '../../dominio/lineas';
 import { FilaConversacion } from './FilaConversacion';
@@ -146,6 +147,7 @@ export function ColaUnificada({
     sinEstado,
     sinLineasPropias,
     colaRecortada,
+    conLineaPropia,
   } = useConversaciones({
     tab,
     filtroSec,
@@ -193,6 +195,24 @@ export function ColaUnificada({
   const nHoy = miVendedora
     ? statsDia.data?.porVendedora.find((v) => v.vendedora === miVendedora)?.conversaciones_hoy
     : undefined;
+
+  /**
+   * 🔴 «ESTÁS AL DÍA» ES UN FESTEJO, Y NO SE FESTEJA UNA MESA QUE NUNCA TUVO
+   * TRABAJO.
+   *
+   * Quien trajo su propia línea (18-ago-2026) ve **su línea más lo que le
+   * asignen**, y el día del deploy eso puede ser CERO: el dueño reparte a mano y
+   * hoy no hay una sola fila suya en `conversacion_asignada`. Con la cola en cero
+   * y `nHoy` en cero, «no queda deuda» es literalmente cierto y como respuesta es
+   * falsa: le dice «terminaste» a alguien a quien todavía no le dieron nada, y
+   * encima cierra la pregunta —«¿por qué no veo nada?»— con la explicación
+   * equivocada, que es peor que no explicar.
+   *
+   * ⚠️ **Con `nHoy > 0` el festejo se queda**: ahí contestó gente de verdad hoy,
+   * y esa cifra sale del Dashboard, no de la cola. Lo que se recorta es la
+   * felicitación sin respaldo, no la felicitación.
+   */
+  const felicitacionConRespaldo = !conLineaPropia || (typeof nHoy === 'number' && nHoy > 0);
 
   // La salida de «estás al día»: a quién mirar cuando no hay deuda. Es el chip de
   // plata y no el de deuda, justamente porque acá ya no queda deuda que ofrecer.
@@ -512,7 +532,7 @@ export function ColaUnificada({
                  ⚠️ Lo decidía `enElReparto` («¿está en una rueda?»); ahora lo
                  decide `colaRecortada`, que es el HECHO de que el server haya
                  aplicado la frontera. El porqué de cada palabra, en el componente. */
-              <RotuloDeLaCola total={total} recortada={colaRecortada} />
+              <RotuloDeLaCola total={total} recortada={colaRecortada} lineaPropia={conLineaPropia} />
             )
           )}
         </div>
@@ -652,7 +672,7 @@ export function ColaUnificada({
                 reciente como para entrar en la cola.
               </p>
             </div>
-          ) : despachada ? (
+          ) : despachada && felicitacionConRespaldo ? (
             <div className="px-6 py-14 text-center">
               {typeof nHoy === 'number' && nHoy > 0 ? (
                 <>
@@ -697,9 +717,24 @@ export function ColaUnificada({
             </div>
           ) : (
             <div className="px-4 py-12 text-center">
-              <p className="text-sm text-muted-foreground">
-                {categoriaActiva ? `Nadie en «${categoriaActiva.nombre}» todavía.` : filtroSec ? 'Nada con ese filtro.' : tabMeta.vacio}
-              </p>
+              {/* 🔴 EL VACÍO TIENE QUE DECIR SU MOTIVO, y para quien trajo su
+                  propia línea el motivo es OTRO. Desde el 18-ago-2026 esa
+                  persona ve su línea entera más lo que le asignen — y el día del
+                  deploy puede no tener nada asignado todavía (el dueño reparte a
+                  mano; medido: cero filas en `conversacion_asignada` para las
+                  dos). Con el texto de siempre lee «no entró nada», que es
+                  FALSO: entró, no es suyo. Es la misma forma que el Dashboard
+                  usa con `soloMisAsignadas` (ADR 0036), y por el mismo motivo:
+                  un vacío sin explicación se lee «se perdieron las
+                  conversaciones». Sólo con la cola limpia — con un filtro puesto
+                  el motivo del vacío es el filtro, y decir otra cosa mentiría. */}
+              {conLineaPropia && !hayFiltroActivo ? (
+                <VacioDeLineaPropia />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {categoriaActiva ? `Nadie en «${categoriaActiva.nombre}» todavía.` : filtroSec ? 'Nada con ese filtro.' : tabMeta.vacio}
+                </p>
+              )}
               {hayFiltroActivo ? (
                 <button
                   type="button"

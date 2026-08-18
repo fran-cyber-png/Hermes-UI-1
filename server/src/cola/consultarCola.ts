@@ -57,6 +57,7 @@ import { laFronteraSeAplica, SIN_IDENTIDAD, type RolResuelto } from "../equipo/c
 import { puedeSupervisar } from "../equipo/roles.js";
 import { recorteDeLineas, soloSusLineas } from "./lineas.js";
 import { sinLineaVedadaSql } from "../numeros/campana.js";
+import { tieneLineaPropia } from "./lineaPropia.js";
 import { lineasDeVendedoraConProposito } from "../numeros/repositorio.js";
 
 /**
@@ -587,6 +588,40 @@ export interface ResultadoCola {
    */
   colaRecortada?: boolean;
   /**
+   * true = **quien mira trajo su propia línea**, así que esta cola es su línea
+   * entera más lo que le asignaron en otras — y el archivo de las líneas que
+   * nadie declara suyas NO viajó (`cola/lineaPropia.ts`, `RAMA_LINEA_SIN_DUENA`).
+   *
+   * 🔴 **Existe porque el día del deploy la cola de estas personas puede ser
+   * CASI NADA, y eso hay que explicarlo o se lee como una avería.** Medido con
+   * `npm run frontera:preflight` contra producción el 18-ago-2026: `walter` ve
+   * 2.930 conversaciones y **51 son suyas** (las otras 2.879 entran por la rama
+   * que este recorte le quita). Y nadie va a ser agregado a la rueda del reparto
+   * —el dueño asigna a mano después—, así que en la línea compartida hoy tiene
+   * **cero** filas en `conversacion_asignada`. Una lista corta sin una palabra al
+   * lado se lee «se perdieron las conversaciones», que es el síntoma que
+   * `sinLineasPropias` y `sinPadron` existen para evitar.
+   *
+   * 🔴 **Se deriva del predicado que DE VERDAD se aplicó**, igual que
+   * `colaRecortada` y por la misma cicatriz: `conLineaPropia` puede ser `true`
+   * mientras la frontera no está puesta (un admin con línea propia —hoy
+   * `usuario1`— o la migración del reparto ausente), y ahí el cartel afirmaría un
+   * recorte que el `WHERE` no hizo. Un cartel que miente sobre un recorte es peor
+   * que ninguno, porque se le cree.
+   *
+   * ⚠️ **El front lo lee OPCIONAL**, como `colaRecortada` y `sinPadron`: un server
+   * viejo o una respuesta rehidratada del caché de IndexedDB (ADR 0007) no lo
+   * traen. Ausente NO significa «no tiene línea propia»: significa «no se sabe».
+   * `false` no se emite, se omite.
+   *
+   * ⚠️ **Se llama igual que la opción interna `OpcionesResueltas.conLineaPropia`
+   * y es a propósito**: es el MISMO hecho, una vez como entrada del `WHERE` y
+   * otra como lo que la respuesta se anima a afirmar. Dos nombres para el mismo
+   * hecho es cómo se llega a que el cartel y el recorte digan cosas distintas.
+   * El front lo lee con este nombre exacto (`src/dominio/conversaciones.ts`).
+   */
+  conLineaPropia?: boolean;
+  /**
    * true = se pidió «las mías» y `numero_vendedora` no le asigna ninguna, así que
    * se sirvió TODO. Se dice en voz alta: un filtro que no filtra y no avisa se ve
    * igual que uno que sí, y la vendedora creería que esas conversaciones son suyas.
@@ -680,7 +715,11 @@ export async function consultarCola(
         // Degrada al comportamiento de siempre: sin poder leer el mapa se sirve
         // todo, como con `?mias=1` sin filas. Nunca una cola vacía sin explicar.
         console.warn("[cola] no se pudo leer las líneas de la vendedora: se sirve todo", e);
-        return [] as { numero: string; proposito: string }[];
+        // ⚠️ El `[]` también apaga la línea propia (`tieneLineaPropia([])` es
+        // `false`), y ésa es la dirección correcta: sin poder leer el mapa se
+        // sirve DE MÁS, nunca de menos. Al revés le esconderíamos a Walter el
+        // archivo entero por un hipo de la base, sin una palabra en pantalla.
+        return [] as { numero: string; proposito: string; duenas: number }[];
       })
     : [];
 
@@ -690,6 +729,34 @@ export async function consultarCola(
     exclusivas: soloSusLineas(misAsignadasConProposito),
     asignadas: misAsignadasConProposito.map((l) => l.numero),
   });
+
+  /**
+   * ¿ESTA PERSONA TRAJO SU PROPIA LÍNEA? — se resuelve acá, con la MISMA lectura
+   * del mapa que ya se hizo arriba, y baja a `ejecutarCola` como un booleano.
+   *
+   * Pedido del dueño (18-ago-2026): «los que se enlazan con qr también deberían
+   * poder el ventas meta, solo los 2 — pero de ventas meta solo los que le
+   * asignaron a ellos». Quien vinculó su número por QR ve su línea entera más lo
+   * asignado a él en cualquier otra, y **no** el archivo de las líneas que nadie
+   * declara suyas (`RAMA_LINEA_SIN_DUENA`, `cola/asignadaSql.ts`).
+   *
+   * ⚠️ **No es una segunda consulta.** `misAsignadasConProposito` ya trae
+   * `duenas` por línea, que es lo único que le faltaba a la regla; pedirlo
+   * aparte sería un round-trip más en cada apertura de la cola.
+   *
+   * ⚠️ **La regla vive en `cola/lineaPropia.ts` y no en un `if` acá**: son dos
+   * condiciones que ninguna alcanza sola (propósito `vendedora` **y** una sola
+   * persona en el mapa) y el porqué de cada una está medido contra producción.
+   * Escrita en línea, la próxima persona que lea este archivo vería un `&&` sin
+   * contexto y le sacaría la mitad que «sobra».
+   *
+   * 🔴 **Y no toca a quien VE TODO**: `fronteraDeAsignacionSql` sale por `null`
+   * antes de mirar esto. `usuario1` es **admin** y tiene línea propia — con el
+   * orden al revés, esta regla le recortaría la mesa a un admin y haría falso a
+   * D4 (la frontera es propiedad del ROL). Acotarlo es cambiarle el rol, que es
+   * operación y no código.
+   */
+  const conLineaPropia = tieneLineaPropia(misAsignadasConProposito);
 
   /**
    * 🔴 ESTAR EN LA RUEDA YA NO RECORTA NADA — SE FUE UNA CONSULTA Y UNA REGLA.
@@ -762,7 +829,7 @@ export async function consultarCola(
       const r = await base.transaction((tx) =>
         ejecutarCola(
           tx,
-          { ...opciones, veTodo },
+          { ...opciones, veTodo, conLineaPropia },
           lineas,
           conEstado,
           conPadron,
@@ -902,7 +969,24 @@ type Ejecutor = Pick<typeof db, "execute">;
  * ⚠️ `enElReparto` sí vive en `OpcionesCola` como `misAsignadas` y no es una
  * incoherencia: aquél recorta de MÁS, así que mentirlo se castiga solo.
  */
-type OpcionesResueltas = OpcionesCola & { veTodo: boolean };
+type OpcionesResueltas = OpcionesCola & {
+  veTodo: boolean;
+  /**
+   * ¿Quien mira TRAJO SU PROPIA LÍNEA (la vinculó por QR desde Hermes)? Le quita
+   * la rama de «la línea no tiene dueña» a la frontera: ve su línea entera más lo
+   * que le asignaron en otras, y nada más (`cola/lineaPropia.ts`).
+   *
+   * 🔴 **Tampoco está en `OpcionesCola`, y por el MISMO motivo que `veTodo`,
+   * con el signo cambiado.** Éste recorta de MÁS, así que un `?lineaPropia=1`
+   * no sería una puerta a ver de más: sería una a **esconderle la cola a otra
+   * persona** desde el query string, y con `false` a que quien la tiene se
+   * lleve de vuelta las 2.879 huérfanas que este frente le saca. Las dos
+   * direcciones son mentiras que el `WHERE` obedece sin chistar, así que el
+   * valor lo resuelve `consultarCola` leyendo el mapa y nadie más puede
+   * proponerlo.
+   */
+  conLineaPropia: boolean;
+};
 
 async function ejecutarCola(
   base: Ejecutor,
@@ -1132,8 +1216,25 @@ async function ejecutarCola(
    * manosear `process.env` con un `t.after`. Ahora `consultarCola` traduce el rol
    * que resolvió `cargarRol` a un solo booleano y lo baja.
    */
+  /**
+   * ⚠️ **LOS DOS BOOLEANOS LLEGAN RESUELTOS Y SE PASAN EXPLÍCITOS**, nunca por un
+   * default de la firma: un default es un argumento que alguien se olvida de
+   * mandar y que nadie ve faltar — el defecto exacto del `PUT` declarativo de
+   * Cerberus, donde «ausente» significaba «poné el default» y vaciaba el mapa de
+   * un número sin un log. Así, el día que aparezca un tercer motivo para recortar,
+   * el compilador no deja pasar la firma incompleta.
+   *
+   * `=== true` en los dos y no `!!`: `OpcionesResueltas` los declara requeridos,
+   * pero esta función la llaman también los tests con base armando el objeto a
+   * mano, y ahí un `undefined` tiene que leerse como el caso conservador de cada
+   * uno — frontera PUESTA y sin quitarle la rama de lo huérfano a nadie.
+   */
   const frontera = conAsignacion
-    ? fronteraDeAsignacionSql(vendedoraId, opciones.veTodo === true)
+    ? fronteraDeAsignacionSql(
+        vendedoraId,
+        opciones.veTodo === true,
+        opciones.conLineaPropia === true,
+      )
     : null;
 
   const condiciones = [
@@ -1396,6 +1497,10 @@ async function ejecutarCola(
     // decidiendo lo mismo, el cartel afirmaría un recorte que el `WHERE` no
     // hizo, que es exactamente la frontera imaginaria que este repo no acepta.
     ...(frontera ? { colaRecortada: true } : {}),
+    // Cuelga de `frontera` y no de `conLineaPropia` a secas: sin recorte aplicado
+    // no hay nada que explicar, y el 🔴 del campo dice por qué afirmarlo igual
+    // sería un cartel mintiendo sobre un `WHERE` que no corrió.
+    ...(frontera && opciones.conLineaPropia === true ? { conLineaPropia: true } : {}),
   };
 }
 

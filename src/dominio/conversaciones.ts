@@ -192,6 +192,27 @@ type Pagina = {
    * sabe», y de eso no se afirma nada — ver `RotuloDeLaCola`.
    */
   colaRecortada?: boolean;
+  /**
+   * QUIEN MIRA TRAJO SU PROPIA LÍNEA (la vinculó por QR desde Hermes), así que
+   * esta cola es **su línea entera más lo que le asignaron en las otras** — y
+   * NADA del archivo de las líneas que no tienen dueña.
+   *
+   * 🔴 **Cambia lo que la pantalla puede AFIRMAR, no cómo se ve una fila.** Sin
+   * esto, el rótulo de la cabecera le promete «lo que todavía no tiene dueña»
+   * (`RotuloDeLaCola`) — que para esta persona es exactamente la rama que se le
+   * cayó, o sea una explicación falsa sobre por qué su número bajó. Y el vacío
+   * diría «nada cayó con estos filtros», que también es falso: cayó, no es suyo
+   * y todavía no le asignaron nada. Es el mismo problema que `soloMisAsignadas`
+   * resuelve en el Dashboard (ADR 0036).
+   *
+   * ⚠️ **Opcional, y ausente NO es «no tiene línea propia»**: es «no se sabe» —
+   * un server viejo no lo manda (el front sale por N4 y el server por N5) y una
+   * página rehidratada del caché de IndexedDB tampoco (ADR 0007). Se lee
+   * `?? false` / `=== true`: no afirmar nada deja el texto de siempre, que como
+   * mucho es incompleto. Al revés se afirmaría un recorte sobre la cola de todo
+   * el equipo.
+   */
+  conLineaPropia?: boolean;
   /** La misma foto abierta por «ya le hablamos» × precio × viva × ventana. Solo primera página. */
   desglose?: FilaDesglose[];
 };
@@ -301,6 +322,17 @@ export function useConversaciones(
      * rueda?», que dejó de gobernar lo que se ve.
      */
     colaRecortada: q.data?.pages[0]?.colaRecortada === true,
+    /**
+     * TRAJO SU PROPIA LÍNEA: la cola es su línea entera + lo que le asignen en
+     * las otras. La pantalla lo usa para DECIRLO — hoy son dos personas que van
+     * a abrir la cola y ver muy poco, porque el dueño todavía no les asignó nada
+     * en la línea compartida (medido el 18-ago-2026: cero filas en
+     * `conversacion_asignada` para las dos). Un vacío sin motivo se lee «se
+     * perdieron las conversaciones».
+     *
+     * ⚠️ `=== true` y no `?? true`: ausente es «no se sabe» y no se afirma nada.
+     */
+    conLineaPropia: q.data?.pages[0]?.conLineaPropia === true,
   };
 }
 

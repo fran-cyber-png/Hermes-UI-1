@@ -41,17 +41,47 @@
  * la cabecera ya tenía; se anota acá porque la primera versión del test lo dio
  * por sentado al revés y falló por eso.
  *
+ * ══ 🔴 QUIEN TRAJO SU PROPIA LÍNEA NECESITA OTRA EXPLICACIÓN ════════════════
+ *
+ * Desde el 18-ago-2026 quien vinculó su número por QR ve **su línea entera más
+ * lo que le asignaron en las otras**, y se le cae la rama de «lo que todavía no
+ * tiene dueña» (`cola/asignadaSql.ts` §RAMA_LINEA_SIN_DUENA). O sea que la frase
+ * de siempre —«lo que te tocó a vos y lo que todavía no tiene dueña»— le
+ * explicaría su número con **justo lo único que ya no ve**: una explicación
+ * falsa es peor que ninguna, porque cierra la pregunta con la respuesta
+ * equivocada y nadie vuelve a mirar. Por eso hay dos textos y no uno con un
+ * agregado.
+ *
+ * ⚠️ **Lo que NO cambia es la palabra visible**: sigue diciendo «para vos»,
+ * porque sigue siendo cierto y porque el rótulo se lee de reojo — dos etiquetas
+ * distintas para el mismo hecho («para vos» / «tu línea») harían que la de al
+ * lado parezca otra cosa. Lo que cambia es el porqué, y el porqué vive en el
+ * `title`.
+ *
+ * ⚠️ **`lineaPropia` sin `recortada` no dice nada**: si el server no anunció el
+ * recorte, el número es el de siempre y no hay nada que explicar. Se lee como el
+ * resto de este componente — ausente es «no se sabe», nunca un default que
+ * afirme.
+ *
  * Galería: `npx vite --port 5199` → `/galeria-cola-recortada.html`.
- * Captura: `docs/evidencia/cola-recortada-rotulo.png`.
+ * Captura: `docs/evidencia/cola-linea-propia-rotulo.png` (los cuatro casos, con
+ * el texto del `title` impreso al lado: en una captura ese atributo no se ve).
  */
-export function RotuloDeLaCola({ total, recortada }: { total: number; recortada?: boolean }) {
+
+import { explicacionDelRotulo } from './explicacionDeLaCola';
+
+export function RotuloDeLaCola({
+  total,
+  recortada,
+  lineaPropia,
+}: {
+  total: number;
+  recortada?: boolean;
+  lineaPropia?: boolean;
+}) {
   return (
     <span
-      title={
-        recortada
-          ? 'Es tu cola: lo que te tocó a vos y lo que todavía no tiene dueña. Lo que se repartió a otra persona no se muestra acá.'
-          : undefined
-      }
+      title={explicacionDelRotulo(recortada, lineaPropia)}
       className="pr-1 font-mono text-[11px] tabular-nums text-muted-foreground"
     >
       {total.toLocaleString('es')} {recortada ? 'para vos' : 'en cola'}

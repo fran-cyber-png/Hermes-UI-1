@@ -62,6 +62,44 @@ describe('el rótulo de la cola', () => {
    * `5,494` (coma), que sería peor. Este caso fija que a partir de cinco dígitos
    * el punto sí aparece: es el que se rompe si alguien cambia el locale.
    */
+  /**
+   * 🔴 LA EXPLICACIÓN VIEJA ES FALSA PARA QUIEN TRAJO SU PROPIA LÍNEA.
+   *
+   * A esa persona se le cae justamente la rama de lo huérfano
+   * (`cola/asignadaSql.ts` §RAMA_LINEA_SIN_DUENA): ve su línea entera más lo que
+   * le asignen. Si el `title` le siguiera prometiendo «lo que todavía no tiene
+   * dueña», le estaría explicando el número que bajó con lo ÚNICO que ya no ve —
+   * y una explicación falsa cierra la pregunta con la respuesta equivocada.
+   *
+   * Se fijan las dos mitades: que aparezca su línea y que **no** aparezca la
+   * promesa vieja. Sin la segunda, alguien puede «arreglar» esto agregando una
+   * frase al texto de siempre y el test seguiría verde con las dos afirmaciones
+   * conviviendo.
+   */
+  test('🔴 con línea propia, la explicación cambia y NO promete lo huérfano', () => {
+    const m = montar(<RotuloDeLaCola total={51} recortada lineaPropia />);
+    const span = m.contenedor.querySelector('span');
+    expect(span?.textContent).toBe('51 para vos');
+    const ayuda = span?.getAttribute('title') ?? '';
+    expect(ayuda).toContain('tu línea');
+    expect(ayuda).toContain('asignen');
+    expect(ayuda).not.toContain('dueña');
+    m.desmontar();
+  });
+
+  /**
+   * ⚠️ El control: sin recorte anunciado no hay número recortado que explicar, así
+   * que la bandera sola no puede inventar una explicación. Es el mismo criterio
+   * que el primer test de este archivo.
+   */
+  test('`lineaPropia` sin `recortada` no dice nada', () => {
+    const m = montar(<RotuloDeLaCola total={40} lineaPropia />);
+    const span = m.contenedor.querySelector('span');
+    expect(span?.textContent).toBe('40 en cola');
+    expect(span?.getAttribute('title')).toBe(null);
+    m.desmontar();
+  });
+
   test('a partir de cinco dígitos el número va con separador de miles', () => {
     const m = montar(<RotuloDeLaCola total={25386} recortada />);
     expect(m.contenedor.querySelector('span')?.textContent).toContain('25.386');
