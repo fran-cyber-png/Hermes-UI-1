@@ -2,8 +2,11 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlarmClockCheck,
   CalendarPlus,
+  Clock3,
+  Flag,
   Loader2,
   MessageSquareText,
+  Phone,
   Trash2,
   Undo2,
   X,
@@ -11,14 +14,19 @@ import {
 import type { Conversacion } from '../../dominio/conversaciones';
 import { BadgeCanal } from '../../components/BadgeCanal';
 import { formatoTelefono } from '../../lib/formato';
+import { useEscape } from '../../lib/teclado/useEscape';
 import { useSesionWa } from '../whatsapp/conversacionWa';
 import { conversacionDeRecordatorio, opcionesRapidas, useAgenda, type Recordatorio } from './agenda';
 import { aLocal, horaDe, indiceTrasAhora, inicioDeSemana, mismaFecha, traducirCuando } from './fechas';
 import { BARRA_TIPO, barraDeNota, estiloDeNota, tipoDominante } from './tipoDeNota';
 import { useNotificacionesRecordatorio } from './useNotificacionesRecordatorio';
 import { VistaSemanaConTimeline } from './VistaSemanaConTimeline';
+import { VistaGantt } from './VistaGantt';
+import { ProximasActividades } from './ProximasActividades';
+import { diasDeGantt, rangoDeGantt } from './gantt';
 import { MiniCalendario } from './MiniCalendario';
 import { CalendarHeader } from './components/CalendarHeader';
+import type { Modo } from './modos';
 import { colorPuntoImportancia } from './importancia';
 import { SelectorImportancia } from './SelectorImportancia';
 
@@ -27,16 +35,26 @@ import { SelectorImportancia } from './SelectorImportancia';
  * la casa: la grilla del mes manda, los seguimientos viven DENTRO de los días
  * como chips (coloreados por tipo de acción), y todo lo demás es un gesto:
  * clic en un día vacío → crear ahí; clic en un chip → el detalle con sus
- * acciones; Hoy / ‹ › / Mes · Semana · Día arriba, como todo calendario serio.
+ * acciones; ‹ › y «Hoy» junto al título, Mes · Semana · Día · Gantt arriba.
  *
  * Lo que NO es de Google: los vencidos gritan primero (rojo, arriba), el
  * dorado significa SOLO tiempo — la línea del ahora, el subrayado de hoy y la
  * pill de la semana — y nada se envía solo: la agenda te avisa, vos hacés.
+ *
+ * **Crear y el detalle son MODALES en el centro**, no popovers en la esquina.
+ * Un panel abajo a la derecha se lee como una notificación —algo que avisa— y
+ * los dos piden lo contrario: que se les responda antes de seguir. Es el mismo
+ * molde que el resto de los modales de Hermes (scrim + `useEscape`).
+ *
+ * Debajo del calendario vive **el resumen de próximas actividades**
+ * (`ProximasActividades`), que contesta «¿qué sigue?» sin obligar a recorrer la
+ * grilla, y cada renglón abre este mismo detalle.
  */
 
 const DIAS_SEMANA = ['LU', 'MA', 'MI', 'JU', 'VI', 'SÁ', 'DO'];
-const MODOS = ['mes', 'semana', 'dia'] as const;
-type Modo = (typeof MODOS)[number];
+
+/** Cuántos días abarca la ventana del Gantt: tres semanas entran sin apretar. */
+const DIAS_GANTT = 21;
 
 // ── La línea del ahora: el único oro estructural — tiempo pasando ──────────
 
@@ -104,7 +122,7 @@ function FilaDia({ r, vencido, onVer }: { r: Recordatorio; vencido: boolean; onV
   );
 }
 
-// ── El detalle flotante (popover a lo GCal, sin backdrop: no tapa la mesa) ──
+// ── El detalle, modal al centro ────────────────────────────────────────────
 
 function Detalle({
   r,
@@ -121,6 +139,7 @@ function Detalle({
   const hecho = r.estado === 'hecho';
   const fecha = new Date(r.cuando);
   const tieneConversacion = r.clave.startsWith('conv:') || r.clave.startsWith('int:');
+  useEscape(onCerrar);
 
   // La red del borrar: el «¿Borrar?» armado se desarma solo a los 3 s.
   useEffect(() => {
@@ -130,108 +149,135 @@ function Detalle({
   }, [confirmaBorrar]);
 
   return (
-    <div className="fixed bottom-5 right-5 z-40 w-80 animate-entrar rounded-2xl bg-card p-4 shadow-[0_1px_3px_rgba(14,42,82,0.10),0_24px_60px_-24px_rgba(14,42,82,0.35)]">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="font-heading text-sm font-bold text-foreground">{r.nota}</div>
-          <div className="mt-0.5 font-mono text-xs tabular-nums text-muted-foreground">
-            {fecha.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })} · {horaDe(r)}
-          </div>
-        </div>
-        <button type="button" onClick={onCerrar} className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-          <X size={14} />
-        </button>
-      </div>
-
-      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-        <span className="relative shrink-0">
-          <span className="flex size-7 items-center justify-center rounded-[9px] bg-secondary font-heading text-[11px] font-bold text-navy">
-            {(r.personaNombre ?? r.personaId ?? '·').replace(/^@/, '').slice(0, 2).toUpperCase()}
-          </span>
-          <span className="absolute -bottom-0.5 -right-0.5">
-            <BadgeCanal canal={r.canal} size={11} />
-          </span>
-        </span>
-        <span className="truncate">
-          {r.personaNombre ??
-            (r.personaId ? <span className="font-mono text-[11px] tabular-nums">{formatoTelefono(r.personaId)}</span> : 'sin conversación atada')}
-        </span>
-      </div>
-
-      {/* Selector de importancia */}
-      <div className="mt-3">
-        <div className="text-xs font-semibold text-foreground mb-1.5">Importancia</div>
-        <SelectorImportancia
-          valor={r.importancia}
-          onChange={(importancia) => {
-            actualizarImportancia.mutate({ id: r.id, importancia }, { onError: () => setError('No se guardó la importancia — probá de nuevo.') });
-          }}
-          disabled={actualizarImportancia.isPending}
-        />
-      </div>
-
-      <div className="mt-3 flex gap-2">
-        {tieneConversacion && (
-          <button
-            type="button"
-            onClick={() => {
-              onAbrir(conversacionDeRecordatorio(r));
-              onCerrar();
-            }}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary py-1.5 text-xs font-bold text-primary-foreground transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover active:scale-[0.98]"
-          >
-            <MessageSquareText size={13} /> Abrir chat
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => {
-            cambiarEstado.mutate(
-              { id: r.id, estado: hecho ? 'pendiente' : 'hecho' },
-              { onSuccess: onCerrar, onError: () => setError('No se guardó el cambio — probá de nuevo.') },
-            );
-          }}
-          className={
-            'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-bold transition-[color,background-color,transform] duration-200 ease-house active:scale-[0.98] ' +
-            (hecho ? 'border border-border text-muted-foreground hover:text-foreground' : 'bg-success/10 text-success hover:bg-success/20')
-          }
+    <>
+      <div className="fixed inset-0 z-40 bg-navy/30 backdrop-blur-[2px]" onClick={onCerrar} aria-hidden="true" />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Detalle del seguimiento"
+          className="w-full max-w-sm animate-entrar rounded-2xl bg-card p-5 shadow-[0_1px_3px_rgba(14,42,82,0.10),0_24px_60px_-24px_rgba(14,42,82,0.35)]"
         >
-          {cambiarEstado.isPending ? (
-            <Loader2 size={13} className="animate-spin" />
-          ) : hecho ? (
-            <Undo2 size={13} />
-          ) : (
-            <AlarmClockCheck size={13} />
-          )}
-          {hecho ? 'Reabrir' : 'Hecho'}
-        </button>
-        {confirmaBorrar ? (
-          <button
-            type="button"
-            onClick={() => {
-              borrar.mutate(r.id, { onSuccess: onCerrar, onError: () => setError('No se borró — probá de nuevo.') });
-            }}
-            className="rounded-lg bg-destructive px-2.5 text-[11px] font-bold text-white transition-[background-color,transform] duration-200 ease-house active:scale-[0.98]"
-          >
-            {borrar.isPending ? <Loader2 size={13} className="animate-spin" /> : '¿Borrar?'}
-          </button>
-        ) : (
-          <button
-            type="button"
-            title="Borrar"
-            onClick={() => setConfirmaBorrar(true)}
-            className="rounded-lg border border-border p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-          >
-            <Trash2 size={13} />
-          </button>
-        )}
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="font-heading text-base font-bold text-foreground">{r.nota}</div>
+              <div className="mt-0.5 font-mono text-xs tabular-nums text-muted-foreground">
+                {fecha.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })} · {horaDe(r)}
+              </div>
+            </div>
+            <button
+              type="button"
+              aria-label="Cerrar"
+              onClick={onCerrar}
+              className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="relative shrink-0">
+              <span className="flex size-7 items-center justify-center rounded-[9px] bg-secondary font-heading text-[11px] font-bold text-secondary-foreground">
+                {(r.personaNombre ?? r.personaId ?? '·').replace(/^@/, '').slice(0, 2).toUpperCase()}
+              </span>
+              <span className="absolute -bottom-0.5 -right-0.5">
+                <BadgeCanal canal={r.canal} size={11} />
+              </span>
+            </span>
+            <span className="truncate">
+              {r.personaNombre ??
+                (r.personaId ? <span className="font-mono text-[11px] tabular-nums">{formatoTelefono(r.personaId)}</span> : 'sin conversación atada')}
+            </span>
+          </div>
+
+          {/* Selector de importancia */}
+          <div className="mt-4">
+            <div className="mb-1.5 text-xs font-semibold text-foreground">Importancia</div>
+            <SelectorImportancia
+              valor={r.importancia}
+              onChange={(importancia) => {
+                actualizarImportancia.mutate({ id: r.id, importancia }, { onError: () => setError('No se guardó la importancia — probá de nuevo.') });
+              }}
+              disabled={actualizarImportancia.isPending}
+            />
+          </div>
+
+          <div className="mt-4 flex gap-2">
+            {tieneConversacion && (
+              <button
+                type="button"
+                onClick={() => {
+                  onAbrir(conversacionDeRecordatorio(r));
+                  onCerrar();
+                }}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary py-2 text-xs font-bold text-primary-foreground transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover active:scale-[0.98]"
+              >
+                <MessageSquareText size={13} /> Abrir chat
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                cambiarEstado.mutate(
+                  { id: r.id, estado: hecho ? 'pendiente' : 'hecho' },
+                  { onSuccess: onCerrar, onError: () => setError('No se guardó el cambio — probá de nuevo.') },
+                );
+              }}
+              className={
+                'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-bold transition-[color,background-color,transform] duration-200 ease-house active:scale-[0.98] ' +
+                (hecho ? 'border border-border text-muted-foreground hover:text-foreground' : 'bg-success/10 text-success hover:bg-success/20')
+              }
+            >
+              {cambiarEstado.isPending ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : hecho ? (
+                <Undo2 size={13} />
+              ) : (
+                <AlarmClockCheck size={13} />
+              )}
+              {hecho ? 'Reabrir' : 'Hecho'}
+            </button>
+            {confirmaBorrar ? (
+              <button
+                type="button"
+                onClick={() => {
+                  borrar.mutate(r.id, { onSuccess: onCerrar, onError: () => setError('No se borró — probá de nuevo.') });
+                }}
+                className="rounded-lg bg-destructive px-2.5 text-[11px] font-bold text-white transition-[background-color,transform] duration-200 ease-house active:scale-[0.98]"
+              >
+                {borrar.isPending ? <Loader2 size={13} className="animate-spin" /> : '¿Borrar?'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                title="Borrar"
+                onClick={() => setConfirmaBorrar(true)}
+                className="rounded-lg border border-border p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
+          {error && <p className="mt-2 text-[11px] text-destructive">{error}</p>}
+        </div>
       </div>
-      {error && <p className="mt-2 text-[11px] text-destructive">{error}</p>}
+    </>
+  );
+}
+
+/** Una fila del modal de crear: el ícono a la izquierda, el campo al lado (molde GCal). */
+function FilaCampo({ icono, children }: { icono: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-3 px-5 py-3">
+      <span aria-hidden className="mt-1.5 shrink-0 text-muted-foreground">
+        {icono}
+      </span>
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
 }
 
-// ── Crear desde la agenda (con o sin conversación — en dos toques) ─────────
+// ── Crear desde la agenda (modal al centro — con o sin conversación) ───────
 
 function Crear({
   fechaInicial,
@@ -252,6 +298,9 @@ function Crear({
   const [confirmarSinAtar, setConfirmarSinAtar] = useState(false);
   const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
   const rapidas = opcionesRapidas();
+  // El contrato de cierre de TODOS los modales de Hermes: en captura, y con el
+  // foco en un campo el Escape es del campo — no se lleva puesto lo tipeado.
+  useEscape(onCerrar);
 
   const tel = telefono.replace(/\D/g, '');
   const conTel = tel.length >= 8 && sesion?.estado === 'conectado';
@@ -283,84 +332,111 @@ function Crear({
   }
 
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        void guardar();
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          e.stopPropagation();
-          onCerrar();
-        }
-      }}
-      className="fixed bottom-5 right-5 z-40 w-80 animate-entrar rounded-2xl bg-card p-4 shadow-[0_1px_3px_rgba(14,42,82,0.10),0_24px_60px_-24px_rgba(14,42,82,0.35)]"
-    >
-      <div className="flex items-center justify-between">
-        <div className="font-heading text-sm font-bold text-foreground">Nuevo seguimiento</div>
-        <button type="button" onClick={onCerrar} className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-          <X size={14} />
-        </button>
-      </div>
-      <input
-        value={nota}
-        onChange={(e) => setNota(e.target.value)}
-        autoFocus
-        placeholder="Qué vas a hacer: llamada, reunión, mandar temario…"
-        className="mt-2.5 w-full rounded-lg border border-border bg-muted/40 px-2.5 py-2 text-xs outline-none focus:border-primary"
-      />
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {rapidas.map((o) => {
-          const activa = cuando === aLocal(o.cuando);
-          return (
+    <>
+      <div className="fixed inset-0 z-40 bg-navy/30 backdrop-blur-[2px]" onClick={onCerrar} aria-hidden="true" />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <form
+          role="dialog"
+          aria-modal="true"
+          aria-label="Nuevo seguimiento"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void guardar();
+          }}
+          className="flex max-h-[90vh] w-full max-w-xl animate-entrar flex-col overflow-hidden rounded-2xl bg-card shadow-[0_1px_3px_rgba(14,42,82,0.10),0_24px_60px_-24px_rgba(14,42,82,0.35)]"
+        >
+          {/* Cabecera: cerrar a la izquierda, el título es el campo, Agendar a la derecha */}
+          <header className="flex shrink-0 items-start gap-3 px-5 pb-3 pt-4">
             <button
-              key={o.etiqueta}
               type="button"
-              onClick={() => setCuando(aLocal(o.cuando))}
-              className={
-                'rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ' +
-                (activa ? 'border border-navy bg-navy text-white' : 'border border-border text-foreground hover:border-primary')
-              }
+              aria-label="Cerrar"
+              onClick={onCerrar}
+              className="mt-2 rounded-lg p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
-              {o.etiqueta}
+              <X size={18} />
             </button>
-          );
-        })}
+            <input
+              value={nota}
+              onChange={(e) => setNota(e.target.value)}
+              autoFocus
+              placeholder="Qué vas a hacer: llamada, reunión, mandar temario…"
+              aria-label="Qué vas a hacer"
+              className="min-w-0 flex-1 border-b-2 border-border bg-transparent px-1 py-1.5 text-lg text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-primary"
+            />
+            <button
+              type="submit"
+              disabled={crear.isPending || !nota.trim()}
+              className="mt-1 flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-5 py-2 text-xs font-bold text-primary-foreground transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover active:scale-[0.98] disabled:opacity-40"
+            >
+              {crear.isPending ? <Loader2 size={13} className="animate-spin" /> : <CalendarPlus size={13} />}
+              {confirmarSinAtar ? 'Agendar sin atar' : 'Agendar'}
+            </button>
+          </header>
+
+          <div className="min-h-0 flex-1 divide-y divide-border overflow-y-auto border-t border-border">
+            {/* Cuándo */}
+            <FilaCampo icono={<Clock3 size={17} />}>
+              <div className="flex flex-wrap gap-1.5">
+                {rapidas.map((o) => {
+                  const activa = cuando === aLocal(o.cuando);
+                  return (
+                    <button
+                      key={o.etiqueta}
+                      type="button"
+                      onClick={() => setCuando(aLocal(o.cuando))}
+                      className={
+                        'rounded-full px-3 py-1 text-[11px] font-semibold transition-colors ' +
+                        (activa ? 'border border-navy bg-navy text-white' : 'border border-border text-foreground hover:border-primary')
+                      }
+                    >
+                      {o.etiqueta}
+                    </button>
+                  );
+                })}
+              </div>
+              <input
+                type="datetime-local"
+                value={cuando}
+                onChange={(e) => setCuando(e.target.value)}
+                aria-label="Cuándo"
+                className="mt-2 w-full rounded-lg border border-border bg-muted/40 px-3 py-2 font-mono text-xs outline-none focus:border-primary"
+              />
+              {lineaViva && <p className="mt-1 px-0.5 font-mono text-[11px] text-muted-foreground">{lineaViva}</p>}
+            </FilaCampo>
+
+            {/* A quién — el teléfono es lo que ata el seguimiento a un chat */}
+            <FilaCampo icono={<Phone size={17} />}>
+              <input
+                value={telefono}
+                onChange={(e) => {
+                  setTelefono(e.target.value);
+                  setConfirmarSinAtar(false);
+                }}
+                inputMode="tel"
+                aria-label="Teléfono"
+                placeholder="Teléfono (opcional — lo ata a un chat)"
+                className="w-full rounded-lg border border-border bg-muted/40 px-3 py-2 font-mono text-xs outline-none focus:border-primary placeholder:font-sans"
+              />
+              {sinAtar && (
+                <p className="mt-1 px-0.5 text-[11px] text-destructive">
+                  {tel.length < 8 ? 'Número incompleto — se guarda sin atar al chat.' : 'WhatsApp está desconectado: se guarda sin atar al chat.'}
+                  {confirmarSinAtar && ' Tocá Agendar de nuevo para confirmar.'}
+                </p>
+              )}
+            </FilaCampo>
+
+            {/* La promesa de la casa, donde siempre estuvo: al pie del formulario */}
+            <FilaCampo icono={<Flag size={17} />}>
+              <p className="py-1.5 text-[11px] text-muted-foreground">Nada se envía solo: la agenda te avisa, vos hacés.</p>
+            </FilaCampo>
+          </div>
+
+          {errorGuardar && (
+            <p className="shrink-0 border-t border-border px-5 py-2 text-[11px] text-destructive">{errorGuardar}</p>
+          )}
+        </form>
       </div>
-      <input
-        type="datetime-local"
-        value={cuando}
-        onChange={(e) => setCuando(e.target.value)}
-        className="mt-2 w-full rounded-lg border border-border bg-muted/40 px-2.5 py-2 font-mono text-xs outline-none focus:border-primary"
-      />
-      {lineaViva && <p className="mt-1 px-0.5 font-mono text-[11px] text-muted-foreground">{lineaViva}</p>}
-      <input
-        value={telefono}
-        onChange={(e) => {
-          setTelefono(e.target.value);
-          setConfirmarSinAtar(false);
-        }}
-        inputMode="tel"
-        placeholder="Teléfono (opcional — lo ata a un chat)"
-        className="mt-2 w-full rounded-lg border border-border bg-muted/40 px-2.5 py-2 font-mono text-xs outline-none focus:border-primary placeholder:font-sans"
-      />
-      {sinAtar && (
-        <p className="mt-1 px-0.5 text-[11px] text-destructive">
-          {tel.length < 8 ? 'Número incompleto — se guarda sin atar al chat.' : 'WhatsApp está desconectado: se guarda sin atar al chat.'}
-          {confirmarSinAtar && ' Tocá Agendar de nuevo para confirmar.'}
-        </p>
-      )}
-      <button
-        type="submit"
-        disabled={crear.isPending || !nota.trim()}
-        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary py-2 text-xs font-bold text-primary-foreground transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover active:scale-[0.98] disabled:opacity-40"
-      >
-        {crear.isPending ? <Loader2 size={13} className="animate-spin" /> : <CalendarPlus size={13} />}
-        {confirmarSinAtar ? 'Agendar sin atar' : 'Agendar'}
-      </button>
-      {errorGuardar && <p className="mt-2 text-[11px] text-destructive">{errorGuardar}</p>}
-      <p className="mt-1.5 text-center text-[11px] text-muted-foreground">Nada se envía solo: la agenda te avisa, vos hacés.</p>
-    </form>
+    </>
   );
 }
 
@@ -370,6 +446,7 @@ export function VistaAgenda({
   onAbrir,
   crearInicial,
   onCrearInicialUsado,
+  modoInicial = 'mes',
 }: {
   onAbrir: (c: Conversacion) => void;
   /**
@@ -379,13 +456,19 @@ export function VistaAgenda({
    */
   crearInicial?: { telefono?: string; nota?: string } | null;
   onCrearInicialUsado?: () => void;
+  /**
+   * Con qué modo abre la agenda. Es el valor INICIAL y nada más: a partir de ahí
+   * manda el estado, así que pasarlo no clava la vista. Existe para que la
+   * galería de evidencia pueda fotografiar el Gantt sin un clic (regla dura #2).
+   */
+  modoInicial?: Modo;
 }) {
   const { agenda, actualizarHora } = useAgenda();
   // La hora del cliente, recalculada por minuto: mueve la línea del ahora y
   // vuelve «mañana» en «vencido» sin que nadie toque nada.
   const [ahora, setAhora] = useState(() => new Date());
   const hoy = ahora;
-  const [modo, setModo] = useState<Modo>('mes');
+  const [modo, setModo] = useState<Modo>(modoInicial);
   const [foco, setFoco] = useState<Date>(hoy); // el mes/semana/día que se mira
   const [detalle, setDetalle] = useState<Recordatorio | null>(null);
   const [crearEn, setCrearEn] = useState<Date | null | 'cerrado'>('cerrado');
@@ -452,10 +535,14 @@ export function VistaAgenda({
     return Array.from({ length: 7 }, (_, i) => new Date(desde.getTime() + i * 86_400_000));
   }, [foco]);
 
+  // La ventana del Gantt arranca en el lunes de la semana del foco, así ‹ › la
+  // mueve de a semanas enteras y el eje nunca queda cortado por la mitad.
+  const diasGantt = useMemo(() => diasDeGantt(inicioDeSemana(foco), DIAS_GANTT), [foco]);
+
   function mover(direccion: 1 | -1) {
     const d = new Date(foco);
     if (modo === 'mes') d.setMonth(d.getMonth() + direccion);
-    else if (modo === 'semana') d.setDate(d.getDate() + 7 * direccion);
+    else if (modo === 'semana' || modo === 'gantt') d.setDate(d.getDate() + 7 * direccion);
     else d.setDate(d.getDate() + direccion);
     setFoco(d);
   }
@@ -465,9 +552,23 @@ export function VistaAgenda({
   const esFocoHoy = mismaFecha(foco, hoy);
   const corteDia = esFocoHoy ? indiceTrasAhora(delDiaFoco, ahora) : -1;
 
-  const titleFormat = modo === 'mes'
-    ? foco.toLocaleDateString('es', { month: 'long', year: 'numeric' })
-    : foco.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' });
+  const titleFormat =
+    modo === 'mes'
+      ? foco.toLocaleDateString('es', { month: 'long', year: 'numeric' })
+      : modo === 'gantt'
+        ? rangoDeGantt(diasGantt)
+        : foco.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  // «Hoy» encendido significa «ya estás mirando hoy»: en mes y gantt eso es que
+  // el día de hoy CAE en la ventana, no que el foco sea exactamente hoy.
+  const enHoy =
+    modo === 'mes'
+      ? hoy.getFullYear() === foco.getFullYear() && hoy.getMonth() === foco.getMonth()
+      : modo === 'gantt'
+        ? diasGantt.some((d) => mismaFecha(d, hoy))
+        : modo === 'semana'
+          ? diasSemana.some((d) => mismaFecha(d, hoy))
+          : esFocoHoy;
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -478,6 +579,7 @@ export function VistaAgenda({
         title={titleFormat}
         modo={modo}
         overdue={vencidos.length}
+        enHoy={enHoy}
         onToday={() => setFoco(new Date())}
         onPrevious={() => mover(-1)}
         onNext={() => mover(1)}
@@ -506,7 +608,8 @@ export function VistaAgenda({
           />
         </div>
 
-        {/* Calendario principal */}
+        {/* Calendario principal, con el resumen debajo */}
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-card border border-border shadow-sm">
         {vacioTotal && (
           <p className="shrink-0 border-b border-border bg-secondary/30 px-4 py-2 text-center text-xs text-muted-foreground">
@@ -628,6 +731,8 @@ export function VistaAgenda({
             onVer={abrirDetalle}
             onActualizarHora={manejarActualizarHora}
           />
+        ) : modo === 'gantt' ? (
+          <VistaGantt dias={diasGantt} hoy={hoy} recordatorios={rs} onVer={abrirDetalle} />
         ) : (
           /* ── Día ── */
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -661,6 +766,12 @@ export function VistaAgenda({
             )}
           </div>
         )}
+        </div>
+
+          {/* ── El resumen de lo que sigue, debajo del calendario ── */}
+          {!agenda.isError && !agenda.isPending && (
+            <ProximasActividades recordatorios={rs} ahora={ahora} onVer={abrirDetalle} />
+          )}
         </div>
 
         {detalle && <Detalle r={detalle} onCerrar={() => setDetalle(null)} onAbrir={onAbrir} />}

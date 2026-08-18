@@ -31,13 +31,23 @@ export function tipoDeNota(nota: string): TipoNota {
   return 'otro';
 }
 
-/** Fondo y texto del chip, por tipo. */
+/**
+ * Fondo y texto del chip, por tipo.
+ *
+ * 🔴 **Cada par tiene que estar definido en LOS DOS temas.** `otro` era
+ * `bg-secondary text-navy`, y `--navy` es color de MARCA: no se redefine en el
+ * bloque oscuro de `index.css` (ahí sigue siendo `#0E2A52`) mientras
+ * `--secondary` sí pasa a `#1E293B`. O sea que en modo oscuro el chip quedaba
+ * navy sobre navy —contraste ~1,3:1— y **un seguimiento existía sin poder
+ * leerse**. Al elegir un fondo, usá su `-foreground` hermano, nunca un color de
+ * marca: es el mismo defecto que `::selection` tuvo en las burbujas del chat.
+ */
 export const CHIP_TIPO: Record<TipoNota, string> = {
   llamada: 'bg-primary/10 text-primary',
   wsp: 'bg-success/10 text-success',
   correo: 'bg-secondary text-secondary-foreground',
   reunion: 'bg-navy text-white',
-  otro: 'bg-secondary text-navy',
+  otro: 'bg-muted text-foreground',
 };
 
 /** Color sólido del tipo, para la barrita de FilaDia y los puntitos del mes. */
