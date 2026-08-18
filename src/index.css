@@ -312,11 +312,82 @@
   font-family: inherit;
 }
 
-/* La página se apoya en el fondo de la app: la superficie ya es la Libreta. */
+/* La página se apoya en el fondo de la app: la superficie ya es la Libreta.
+
+   Y ACÁ VIVE LA COLUMNA DE ESCRITURA. El contenedor ocupa el ancho del panel
+   para que la barra de formato lo cruce como la de Word (ver
+   `ColumnaDeEscritura` en `Libreta.tsx`), así que la restricción de ancho está
+   sobre el TEXTO y no sobre el contenedor. Los `48rem` son `max-w-3xl` y el
+   `1.5rem` es el `px-6` que tenían los envoltorios: si cambia uno, mirar el
+   otro — la cabecera de la página (mover, compartir) sigue en un `max-w-3xl` de
+   Tailwind y las dos columnas tienen que quedar alineadas. */
 .bn-container .bn-editor.bn-default-styles {
   background-color: transparent;
-  padding-inline: 0;
+  /* 🔴 LO QUE EL SELECTOR DE FUENTE Y EL DE TAMAÑO AFIRMAN CUANDO NO HAY ESTILO
+     PUESTO. Los dos muestran «Arial» y «16» de entrada, así que el papel tiene
+     que ser eso de verdad — si acá dijera otra cosa, la barra estaría mintiendo
+     sobre lo que la vendedora está escribiendo.
+
+     ⚠️ Esto CAMBIA la Libreta respecto de la regla de arriba: el resto de la app
+     hereda Montserrat, y acá se fija Arial a pedido del dueño (17-ago-2026) para
+     que el selector arranque en una fuente de verdad y no en la palabra
+     «Predeterminada». El `16px` está duplicado en `estilosDeTexto.tsx`
+     (`TAMANO_POR_DEFECTO`) y hay un test que cruza los dos. */
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  max-width: 48rem;
+  margin-inline: auto;
+  padding-inline: 1.5rem;
   /* Alto disponible, para que el clic en el vacío de abajo entre al editor en
      vez de caer en el contenedor y no hacer nada. */
   min-height: 60vh;
+}
+
+/* ── La Ribbon FIJA (`ribbon/Ribbon.tsx`, montada por `BarraDeFormato.tsx`) ───
+   ⚠️ **Acá vivía la neutralización de `.bn-toolbar`, y se retiró porque quedó
+   muerta.** Esa regla existía para que el `FormattingToolbar` del paquete —que
+   está pensado para FLOTAR: borde, radio, sombra y `width: fit-content`— no se
+   viera como una cápsula adentro de nuestra barra. La Ribbon **ya no usa
+   `FormattingToolbar`** (su `Root` de Mantine instala un `useFocusTrap` que deja
+   el `Tab` dando vueltas adentro de la barra, ver `ribbon/useRovingRibbon.ts`),
+   así que adentro de `[data-libreta-barra]` no hay ni un `.bn-toolbar` —
+   verificado sobre el DOM montado: cero. Una regla que no matchea nada es la
+   clase de cosa que después se lee como que algo la necesita.
+
+   Los botones del paquete se siguen usando, y llegan sueltos con su clase
+   `.bn-button`; su tamaño (30 px, un `ActionIcon` de Mantine) es el que la
+   Ribbon copia para sus propios botones — el número está anotado en
+   `ribbon/RibbonBoton.tsx`. */
+/* 🔴 BLOCKNOTE RENDERIZA SUS HIJOS DESPUÉS DEL CONTENIDO, y sin esto la barra
+   queda FUERA DE LA PANTALLA. Medido sobre el DOM real, los hijos de
+   `.bn-container` salen en este orden:
+
+       0. .bn-editor            ← el papel
+       1. [data-libreta-barra]  ← la barra
+       2. .bn-root
+
+   Con `min-height: 60vh` en el editor, eso deja la barra 60vh más abajo: existe,
+   tiene sus botones y no se ve. **Ningún test de DOM lo puede ver** —jsdom no
+   hace layout, así que para él la barra está perfectamente presente—; lo
+   encontró una captura de pantalla.
+
+   La documentación de BlockNote resuelve esto con `flex-direction: column-reverse`.
+   Acá se usa `order` porque `column-reverse` da vuelta TODOS los hijos, incluido
+   `.bn-root` (los portales del menú de `/` y del menú lateral): mover algo que no
+   es nuestro para acomodar lo que sí lo es. Con `order` se toca una sola caja. */
+.bn-container:has([data-libreta-barra]) {
+  display: flex;
+  flex-direction: column;
+}
+
+[data-libreta-barra] {
+  order: -1;
+}
+
+/* «Vista ▸ Ancho completo» (`ribbon/vistaDelPapel.ts`). Va como atributo y la
+   regla vive ACÁ, al lado de la que fija los 48rem: con un `style.maxWidth`
+   inline habría dos lugares diciendo cuánto mide la columna de escritura, y el
+   inline le gana al CSS sin que el CSS se entere. */
+.bn-container .bn-editor.bn-default-styles[data-ancho='completo'] {
+  max-width: none;
 }
