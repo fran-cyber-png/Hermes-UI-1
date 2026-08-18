@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ChevronLeft, Link2, Notebook, Pin, PinOff, Plus, Search, Trash2, Undo2 } from 'lucide-react';
-import { TAB_POR_DEFECTO, type TabRibbon } from './ribbon/tabs';
 import { BarraDeDibujo, GROSORES, PALETA, type Herramienta } from './dibujo/BarraDeDibujo';
 import { CapaDeAnotaciones } from './dibujo/CapaDeAnotaciones';
 import { SelectorDeColor } from './dibujo/SelectorDeColor';
@@ -529,22 +528,6 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
    */
   const [tokenEntrante] = useState(tokenDeLaUrl);
   const porLink = usePaginaPorLink(tokenEntrante);
-  /**
-   * LA PESTAÑA ABIERTA DE LA RIBBON — **una sola, y para las tres formas de
-   * abrir una página**. Vive acá porque el editor se remonta al cambiar de nota
-   * (ver `EditorDePagina`): adentro de la barra, saltar de página te devolvería
-   * a «Inicio» cada vez.
-   */
-  const [tabRibbon, setTabRibbon] = useState<TabRibbon>(TAB_POR_DEFECTO);
-  /**
-   * ESCONDER LA LISTA DE PÁGINAS — el «Vista ▸ Lista de páginas» de la Ribbon.
-   *
-   * ⚠️ **Sólo tiene efecto de `md:` para arriba.** En ancho de teléfono la lista
-   * y la página ya son maestro-detalle (o una o la otra), así que esconderla ahí
-   * dejaría la pantalla sin forma de volver.
-   */
-  const [listaVisible, setListaVisible] = useState(true);
-  const vista = { listaVisible, alternarLista: () => setListaVisible((v) => !v) };
 
   /**
    * EL MODAL DE PLANTILLAS VIVE ACÁ Y NO ADENTRO DE `EditorDePagina`
@@ -857,11 +840,7 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
         <aside
           className={
             'w-full shrink-0 flex-col border-r border-border md:w-[19rem] ' +
-            (enBienvenida ? 'hidden' : seleccion === null ? 'flex md:flex' : 'hidden md:flex') +
-            // «Vista ▸ Lista de páginas». ⚠️ Sólo de `md:` para arriba: abajo la
-            // lista y la página ya son maestro-detalle, y esconderla ahí dejaría
-            // la pantalla sin forma de volver.
-            (listaVisible ? '' : ' md:hidden')
+            (enBienvenida ? 'hidden' : seleccion === null ? 'flex md:flex' : 'hidden md:flex')
           }
         >
           {/* DÓNDE ESTOY ESCRIBIENDO. Va ARRIBA del botón de página nueva, y en
@@ -1019,7 +998,6 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
                 contenidoInicial={docParaEditor(deLink)}
                 soloLectura={!porLink.data?.puedeEditar}
                 onCambio={alCambiarDoc}
-                ribbon={{ tab: tabRibbon, onTab: setTabRibbon, vista }}
                 onAbrirPlantillas={abrirPlantillas}
                 registrarPegado={registrarPegado}
               />
@@ -1091,7 +1069,6 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
                 contenidoInicial={undefined}
                 soloLectura={false}
                 onCambio={alCambiarDoc}
-                ribbon={{ tab: tabRibbon, onTab: setTabRibbon, vista }}
                 onAbrirPlantillas={abrirPlantillas}
                 registrarPegado={registrarPegado}
               />
@@ -1166,7 +1143,8 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
                         contenidoInicial={docParaEditor(paginaAbierta)}
                         soloLectura={paginaAbierta.origen === 'gestion'}
                         onCambio={alCambiarDoc}
-                        ribbon={{ tab: tabRibbon, onTab: setTabRibbon, vista }}
+                        onAbrirPlantillas={abrirPlantillas}
+                        registrarPegado={registrarPegado}
                       />
                     )}
                   </ColumnaDeEscritura>

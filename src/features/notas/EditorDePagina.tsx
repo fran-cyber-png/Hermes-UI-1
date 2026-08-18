@@ -11,9 +11,7 @@ import {
   soloBloquesConocidos,
   soloEstilosConocidos,
 } from './editor';
-import { BarraDeFormato } from './BarraDeFormato';
-import type { TabRibbon } from './ribbon/tabs';
-import type { VistaDeLaLibreta } from './ribbon/Ribbon';
+import { BarraFlotante } from './BarraFlotante';
 
 /**
  * EL EDITOR de una página. Va con `key` de afuera para que cambiar de nota lo
@@ -29,7 +27,6 @@ export function EditorDePagina({
   contenidoInicial,
   soloLectura,
   onCambio,
-  ribbon,
   onAbrirPlantillas,
   registrarPegado,
 }: {
@@ -37,18 +34,7 @@ export function EditorDePagina({
   soloLectura: boolean;
   onCambio: (doc: unknown) => void;
   /**
-   * 🔴 LA RIBBON ES OPCIONAL, Y ESO ES LO QUE HACE QUE LA PANTALLA DIVIDIDA NO
-   * TENGA DOS BARRAS. Ausente = este editor no dibuja ninguna.
-   *
-   * ⚠️ **La pestaña activa vive ARRIBA de este componente, nunca adentro de la
-   * barra**: acá se remonta con `key` cada vez que se abre otra página
-   * (`useCreateBlockNote` fija su `initialContent` en el primer render), así que
-   * con el estado adentro, cambiar de nota te devolvería a «Inicio» cada vez — y
-   * en una libreta se salta de página todo el tiempo.
-   */
-  ribbon?: { tab: TabRibbon; onTab: (tab: TabRibbon) => void; vista: VistaDeLaLibreta };
-  /**
-   * Avisa al padre que abra el modal de Plantillas. OPCIONAL como `ribbon`: sin
+   * Avisa al padre que abra el modal de Plantillas. OPCIONAL: sin
    * él, el `/` no ofrece «Plantillas» — que es lo correcto en la mitad derecha
    * de la pantalla dividida, donde el modal no tiene dueño.
    */
@@ -72,6 +58,10 @@ export function EditorDePagina({
     // ofrece bloques de archivo que no se pueden guardar. Ver `editor.ts`.
     schema: ESQUEMA_LIBRETA,
     dictionary: DICCIONARIO_LIBRETA,
+    // Apagado por default en BlockNote. Sin esto, «combinar celdas» de la barra
+    // flotante del paquete se queda callado (devuelve `null`) aunque el resto
+    // de la barrita ande.
+    tables: { splitCells: true },
   });
 
   /**
@@ -158,11 +148,10 @@ export function EditorDePagina({
       editor={editor}
       editable={!soloLectura}
       theme="light"
-      // Con la barra FIJA arriba (`BarraDeFormato`), la flotante que BlockNote
-      // abre al seleccionar se apaga: con las dos, el mismo control aparece dos
-      // veces y uno tapa al otro. Sin ribbon —la mitad derecha de la pantalla
-      // dividida— se deja la flotante, que ahí es la ÚNICA forma de dar formato.
-      formattingToolbar={!ribbon}
+      // La flotante del paquete se apaga acá y la monta `BarraFlotante`: la
+      // del paquete sola tiene un bug real (ver su docblock — cerraba la
+      // barrita entera al tocar «Colores»), y el arreglo es envolverla.
+      formattingToolbar={false}
       // 🔴 SIN ESTO, `/` ABRE DOS MENÚS SUPERPUESTOS Y NINGUNO SE PUEDE
       // CLICKEAR. `BlockNoteView` monta SU PROPIO `SuggestionMenuController`
       // para `/` a menos que se le diga `slashMenu={false}` (ver
@@ -179,9 +168,10 @@ export function EditorDePagina({
       {/* En solo lectura no se dibuja: una barra de formato sobre algo que no
           se puede editar promete una acción que no existe — el mismo criterio
           por el que «Responder» no aparece en modo revisión. */}
-      {ribbon && !soloLectura && (
-        <BarraDeFormato tab={ribbon.tab} onTab={ribbon.onTab} vista={ribbon.vista} />
-      )}
+      {/* En solo lectura no se dibuja: una barra de formato sobre algo que no
+          se puede editar promete una acción que no existe — el mismo criterio
+          por el que «Responder» no aparece en modo revisión. */}
+      {!soloLectura && <BarraFlotante />}
       {/* Montar el controlador propio es la ÚNICA forma de sumarle un ítem al
           menú del `/`: el catálogo del paquete no es extensible desde afuera.
           En solo lectura no va — ofrecería insertar sobre algo que no se edita. */}

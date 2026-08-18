@@ -407,53 +407,27 @@
   min-height: 60vh;
 }
 
-/* ── La Ribbon FIJA (`ribbon/Ribbon.tsx`, montada por `BarraDeFormato.tsx`) ───
-   ⚠️ **Acá vivía la neutralización de `.bn-toolbar`, y se retiró porque quedó
-   muerta.** Esa regla existía para que el `FormattingToolbar` del paquete —que
-   está pensado para FLOTAR: borde, radio, sombra y `width: fit-content`— no se
-   viera como una cápsula adentro de nuestra barra. La Ribbon **ya no usa
-   `FormattingToolbar`** (su `Root` de Mantine instala un `useFocusTrap` que deja
-   el `Tab` dando vueltas adentro de la barra, ver `ribbon/useRovingRibbon.ts`),
-   así que adentro de `[data-libreta-barra]` no hay ni un `.bn-toolbar` —
-   verificado sobre el DOM montado: cero. Una regla que no matchea nada es la
-   clase de cosa que después se lee como que algo la necesita.
+/* EL MENÚ DE «/» — tamaño fijo, en vez de estirarse hasta llenar la pantalla.
+   `SuggestionMenuController` del paquete pone en el DIV de afuera (el que
+   posiciona floating-ui) un `max-height: <espacio disponible>px` inline, en
+   cada reposición — y con el cursor cerca del borde inferior, «espacio
+   disponible arriba, si flipea» puede ser casi el alto entero de la ventana:
+   medido, un menú de 630 px tapando toda la columna de escritura.
 
-   Los botones del paquete se siguen usando, y llegan sueltos con su clase
-   `.bn-button`; su tamaño (30 px, un `ActionIcon` de Mantine) es el que la
-   Ribbon copia para sus propios botones — el número está anotado en
-   `ribbon/RibbonBoton.tsx`. */
-/* 🔴 BLOCKNOTE RENDERIZA SUS HIJOS DESPUÉS DEL CONTENIDO, y sin esto la barra
-   queda FUERA DE LA PANTALLA. Medido sobre el DOM real, los hijos de
-   `.bn-container` salen en este orden:
+   El propio CSS de BlockNote ya deja la puerta abierta: `.bn-suggestion-menu`
+   (el panel de ADENTRO, no el div que posiciona) hereda ese `max-height`
+   (`max-height: inherit`) y ya trae `overflow-y: auto`. Fijarlo ACÁ en vez de
+   heredarlo le pone un techo real -- una vez que el contenido de adentro no
+   crece más de esto, floating-ui mide un panel chico y el flip hacia arriba
+   pasa a decidirse contra un alto realista, no contra toda la ventana.
 
-       0. .bn-editor            ← el papel
-       1. [data-libreta-barra]  ← la barra
-       2. .bn-root
-
-   Con `min-height: 60vh` en el editor, eso deja la barra 60vh más abajo: existe,
-   tiene sus botones y no se ve. **Ningún test de DOM lo puede ver** —jsdom no
-   hace layout, así que para él la barra está perfectamente presente—; lo
-   encontró una captura de pantalla.
-
-   La documentación de BlockNote resuelve esto con `flex-direction: column-reverse`.
-   Acá se usa `order` porque `column-reverse` da vuelta TODOS los hijos, incluido
-   `.bn-root` (los portales del menú de `/` y del menú lateral): mover algo que no
-   es nuestro para acomodar lo que sí lo es. Con `order` se toca una sola caja. */
-.bn-container:has([data-libreta-barra]) {
-  display: flex;
-  flex-direction: column;
-}
-
-[data-libreta-barra] {
-  order: -1;
-}
-
-/* «Vista ▸ Ancho completo» (`ribbon/vistaDelPapel.ts`). Va como atributo y la
-   regla vive ACÁ, al lado de la que fija los 48rem: con un `style.maxWidth`
-   inline habría dos lugares diciendo cuánto mide la columna de escritura, y el
-   inline le gana al CSS sin que el CSS se entere. */
-.bn-container .bn-editor.bn-default-styles[data-ancho='completo'] {
-  max-width: none;
+   ⚠️ **El `!important` no es estilo, es orden de carga**: `@blocknote/mantine/style.css`
+   se importa DENTRO de `Libreta.tsx` (que es lazy), así que puede terminar
+   después de este archivo en el bundle final — y con la MISMA especificidad
+   (dos clases de cada lado), quien carga último gana. Sin el `!important` el
+   techo dependería de un orden de imports que nadie declaró a propósito. */
+.bn-mantine .bn-suggestion-menu {
+  max-height: 22rem !important;
 }
 
 /* ── DARK MODE PARA AGENDA SOLO ────────────────────────────────────────── */
