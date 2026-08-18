@@ -3,7 +3,10 @@ import { BlockNoteView } from '@blocknote/mantine';
 import { useCreateBlockNote } from '@blocknote/react';
 import { AlertTriangle, ChevronLeft, Link2, Notebook, Pin, PinOff, Plus, Search, Trash2, Undo2 } from 'lucide-react';
 import '@blocknote/mantine/style.css';
-import { DICCIONARIO_LIBRETA, ESQUEMA_LIBRETA, soloBloquesConocidos } from './editor';
+import { DICCIONARIO_LIBRETA, ESQUEMA_LIBRETA, soloBloquesConocidos, soloEstilosConocidos } from './editor';
+import { BarraDeFormato } from './BarraDeFormato';
+import { TAB_POR_DEFECTO, type TabRibbon } from './ribbon/catalogo';
+import type { VistaDeLaLibreta } from './ribbon/Ribbon';
 import { AccionesDePagina } from './AccionesDePagina';
 import { mismoUsuario, nombreCorto, useEspacios, type DondeEstoy } from './espacios';
 import { SelectorDeEspacio } from './SelectorDeEspacio';
@@ -75,10 +78,24 @@ function EditorDePagina({
   contenidoInicial,
   soloLectura,
   onCambio,
+  tab,
+  onTab,
+  vista,
 }: {
   contenidoInicial: unknown[] | undefined;
   soloLectura: boolean;
   onCambio: (doc: unknown) => void;
+  /**
+   * 🔴 LA PESTAÑA ACTIVA DE LA RIBBON VIVE ACÁ ARRIBA Y NO ADENTRO DE LA BARRA.
+   *
+   * Este componente se **remonta con `key`** cada vez que se abre otra página
+   * (`useCreateBlockNote` fija su `initialContent` en el primer render). Con el
+   * estado adentro de la Ribbon, cambiar de nota te devolvería a «Inicio» cada
+   * vez — y en una libreta se salta de página todo el tiempo.
+   */
+  tab: TabRibbon;
+  onTab: (tab: TabRibbon) => void;
+  vista: VistaDeLaLibreta;
 }) {
   const editor = useCreateBlockNote({
     // El cast es el borde con la librería: `docParaEditor` produce la forma de
@@ -86,7 +103,12 @@ function EditorDePagina({
     // más arriba sería afirmar sobre un `jsonb` algo que nadie verificó.
     // Saneado ANTES de entrar: un bloque que el esquema no conoce lanza durante
     // el render y, sin ErrorBoundary, deja la app en blanco (ver `editor.ts`).
-    initialContent: (contenidoInicial ? soloBloquesConocidos(contenidoInicial) : undefined) as never,
+    // Dos saneadores, dos trampas distintas: uno filtra BLOQUES que el esquema no
+    // conoce y el otro ESTILOS. Cualquiera de los dos, sin sanear, no deja «la
+    // nota no abre» sino la ventana en blanco (ver `editor.ts`).
+    initialContent: (contenidoInicial
+      ? soloEstilosConocidos(soloBloquesConocidos(contenidoInicial))
+      : undefined) as never,
     // Sin esto el editor entero sale en INGLÉS dentro de una app en español, y
     // ofrece bloques de archivo que no se pueden guardar. Ver `editor.ts`.
     schema: ESQUEMA_LIBRETA,
@@ -98,10 +120,40 @@ function EditorDePagina({
       editor={editor}
       editable={!soloLectura}
       theme="light"
+      // La barra va FIJA arriba (`BarraDeFormato`), así que la flotante que
+      // BlockNote abre al seleccionar se apaga: con las dos, el mismo control
+      // aparece dos veces y uno tapa al otro.
+      formattingToolbar={false}
       onChange={() => onCambio(editor.document)}
       data-libreta-editor
-    />
+    >
+      {/* En solo lectura no se dibuja: una barra de formato sobre algo que no
+          se puede editar promete una acción que no existe — el mismo criterio
+          por el que «Responder» no aparece en modo revisión. */}
+      {!soloLectura && <BarraDeFormato tab={tab} onTab={onTab} vista={vista} />}
+    </BlockNoteView>
   );
+}
+
+/**
+ * EL EDITOR OCUPA EL ANCHO DEL PANEL; EL TEXTO SIGUE EN COLUMNA.
+ *
+ * La barra tiene que cruzar la pantalla como la de Word, y vive adentro de
+ * `BlockNoteView` (es el patrón oficial: `FormattingToolbar` necesita el
+ * contexto que ese componente provee). Si el contenedor estuviera en una columna
+ * de `max-w-3xl`, la barra terminaría al ancho del texto.
+ *
+ * Así que la restricción de ancho se mudó del CONTENEDOR al TEXTO: acá no hay
+ * `max-w`, y `.bn-editor` se centra en `index.css`. Se evita levantar la
+ * instancia del editor y envolver todo con `BlockNoteContext` a mano, que es API
+ * bastante menos transitada que ésta.
+ *
+ * ⚠️ El `pb-8` va acá y no en `.bn-editor`: ese elemento tiene `min-height: 60vh`
+ * para que el clic en el vacío de abajo entre al editor, y sumarle padding
+ * empujaría esa zona fuera de la vista.
+ */
+function ColumnaDeEscritura({ children }: { children: React.ReactNode }) {
+  return <div className="pb-8">{children}</div>;
 }
 
 /** Un renglón de la lista de páginas. */
@@ -208,6 +260,22 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
    */
   const [tokenEntrante] = useState(tokenDeLaUrl);
   const porLink = usePaginaPorLink(tokenEntrante);
+  /**
+   * LA PESTAÑA ABIERTA DE LA RIBBON — **una sola, y para las tres formas de
+   * abrir una página**. Vive acá porque el editor se remonta al cambiar de nota
+   * (ver `EditorDePagina`): adentro de la barra, saltar de página te devolvería
+   * a «Inicio» cada vez.
+   */
+  const [tabRibbon, setTabRibbon] = useState<TabRibbon>(TAB_POR_DEFECTO);
+  /**
+   * ESCONDER LA LISTA DE PÁGINAS — el «Vista ▸ Lista de páginas» de la Ribbon.
+   *
+   * ⚠️ **Sólo tiene efecto de `md:` para arriba.** En ancho de teléfono la lista
+   * y la página ya son maestro-detalle (o una o la otra), así que esconderla ahí
+   * dejaría la pantalla sin forma de volver.
+   */
+  const [listaVisible, setListaVisible] = useState(true);
+  const vista = { listaVisible, alternarLista: () => setListaVisible((v) => !v) };
 
   const termino = busqueda.trim();
   const lista = useNotas(CLAVE_LIBRETA, donde);
@@ -351,7 +419,11 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
         <aside
           className={
             'w-full shrink-0 flex-col border-r border-border md:w-[19rem] ' +
-            (enBienvenida ? 'hidden' : seleccion === null ? 'flex md:flex' : 'hidden md:flex')
+            (enBienvenida ? 'hidden' : seleccion === null ? 'flex md:flex' : 'hidden md:flex') +
+            // «Vista ▸ Lista de páginas». ⚠️ Sólo de `md:` para arriba: abajo la
+            // lista y la página ya son maestro-detalle, y esconderla ahí dejaría
+            // la pantalla sin forma de volver.
+            (listaVisible ? '' : ' md:hidden')
           }
         >
           {/* DÓNDE ESTOY ESCRIBIENDO. Va ARRIBA del botón de página nueva, y en
@@ -486,20 +558,25 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
             archivarla, y desaparece sola en cuanto hay una página de verdad.
           */}
           {deLink && (
-            <div className="mx-auto max-w-3xl px-6 py-8">
-              <div className="mb-4 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
-                Llegaste por un link.{' '}
-                {porLink.data?.puedeEditar
-                  ? 'Podés editarla, y queda registrado que fuiste vos.'
-                  : 'Se lee, no se edita.'}
+            <ColumnaDeEscritura>
+              <div className="mx-auto max-w-3xl px-6 pt-8">
+                <div className="mb-4 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+                  Llegaste por un link.{' '}
+                  {porLink.data?.puedeEditar
+                    ? 'Podés editarla, y queda registrado que fuiste vos.'
+                    : 'Se lee, no se edita.'}
+                </div>
               </div>
               <EditorDePagina
                 key={`link-${deLink.id}`}
                 contenidoInicial={docParaEditor(deLink)}
                 soloLectura={!porLink.data?.puedeEditar}
                 onCambio={alCambiar}
+                tab={tabRibbon}
+                onTab={setTabRibbon}
+                vista={vista}
               />
-            </div>
+            </ColumnaDeEscritura>
           )}
 
           {porLink.isError && (
@@ -561,44 +638,57 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
           )}
 
           {!deLink && seleccion?.tipo === 'nueva' && (
-            <div className="mx-auto max-w-3xl px-6 py-8">
-              <EditorDePagina key="nueva" contenidoInicial={undefined} soloLectura={false} onCambio={alCambiar} />
-            </div>
+            <ColumnaDeEscritura>
+              <EditorDePagina
+                key="nueva"
+                contenidoInicial={undefined}
+                soloLectura={false}
+                onCambio={alCambiar}
+                tab={tabRibbon}
+                onTab={setTabRibbon}
+                vista={vista}
+              />
+            </ColumnaDeEscritura>
           )}
 
           {!deLink && paginaAbierta && (
-            <div className="mx-auto max-w-3xl px-6 py-8">
-              {/* Mover y compartir van sobre una página GUARDADA y editable: una
-                  histórica de `gestiones` no se puede mover (vive en otra tabla)
-                  ni compartir, y una página en blanco todavía no tiene id. */}
-              {paginaAbierta.origen === 'nota' && (
-                <AccionesDePagina
-                  nota={paginaAbierta}
-                  donde={donde}
-                  espacios={espacios.data ?? []}
-                  vendedoraId={vendedoraId}
-                  onMover={(destino) => {
-                    mover.mutate({ id: paginaAbierta.id, destino });
-                    // La página se fue de esta lista: dejarla abierta mostraría —y
-                    // autoguardaría— algo que ya no está acá.
-                    setSeleccion(null);
-                  }}
-                  onAbrirLink={(v) => abrirLink.mutate({ id: paginaAbierta.id, ...v })}
-                  onCortarLink={() => cortarLink.mutate(paginaAbierta.id)}
-                />
-              )}
-              {paginaAbierta.origen === 'gestion' && (
-                <p className="mb-4 rounded-lg border border-dashed border-border bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-                  Esta quedó de una gestión vieja. Se lee, no se edita — la etapa de esa conversación se apoya en ella.
-                </p>
-              )}
+            <ColumnaDeEscritura>
+              <div className="mx-auto max-w-3xl px-6 pt-8">
+                {/* Mover y compartir van sobre una página GUARDADA y editable: una
+                    histórica de `gestiones` no se puede mover (vive en otra tabla)
+                    ni compartir, y una página en blanco todavía no tiene id. */}
+                {paginaAbierta.origen === 'nota' && (
+                  <AccionesDePagina
+                    nota={paginaAbierta}
+                    donde={donde}
+                    espacios={espacios.data ?? []}
+                    vendedoraId={vendedoraId}
+                    onMover={(destino) => {
+                      mover.mutate({ id: paginaAbierta.id, destino });
+                      // La página se fue de esta lista: dejarla abierta mostraría —y
+                      // autoguardaría— algo que ya no está acá.
+                      setSeleccion(null);
+                    }}
+                    onAbrirLink={(v) => abrirLink.mutate({ id: paginaAbierta.id, ...v })}
+                    onCortarLink={() => cortarLink.mutate(paginaAbierta.id)}
+                  />
+                )}
+                {paginaAbierta.origen === 'gestion' && (
+                  <p className="mb-4 rounded-lg border border-dashed border-border bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+                    Esta quedó de una gestión vieja. Se lee, no se edita — la etapa de esa conversación se apoya en ella.
+                  </p>
+                )}
+              </div>
               <EditorDePagina
                 key={`${paginaAbierta.origen}-${paginaAbierta.id}`}
                 contenidoInicial={docParaEditor(paginaAbierta)}
                 soloLectura={paginaAbierta.origen === 'gestion'}
                 onCambio={alCambiar}
+                tab={tabRibbon}
+                onTab={setTabRibbon}
+                vista={vista}
               />
-            </div>
+            </ColumnaDeEscritura>
           )}
         </main>
       </div>

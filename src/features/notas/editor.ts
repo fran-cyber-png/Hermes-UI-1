@@ -1,5 +1,6 @@
-import { BlockNoteSchema, defaultBlockSpecs } from '@blocknote/core';
+import { BlockNoteSchema, defaultBlockSpecs, defaultStyleSpecs } from '@blocknote/core';
 import { es } from '@blocknote/core/locales';
+import { ESTILOS_PROPIOS, Fuente, Tamano } from './estilosDeTexto';
 
 /**
  * CÓMO SE CONFIGURA EL EDITOR DE LA LIBRETA — y las dos cosas que estaban mal.
@@ -47,6 +48,9 @@ export const BLOQUES_RETIRADOS = ['image', 'video', 'audio', 'file'] as const;
 
 export const ESQUEMA_LIBRETA = BlockNoteSchema.create({
   blockSpecs: BLOQUES_QUE_SE_PUEDEN_GUARDAR,
+  // `fuente` y `tamano` son NUESTROS: no vienen en el paquete. Lo que implican
+  // para el documento guardado está escrito en `estilosDeTexto.tsx`.
+  styleSpecs: { ...defaultStyleSpecs, fuente: Fuente, tamano: Tamano },
 });
 
 /**
@@ -81,6 +85,55 @@ export function soloBloquesConocidos(doc: unknown[]): unknown[] {
     // Sin `type` BlockNote asume `paragraph`, que sí existe: se deja pasar.
     return typeof tipo !== 'string' || TIPOS_CONOCIDOS.has(tipo);
   });
+}
+
+/**
+ * 🔴 Y LO MISMO CON LOS ESTILOS — la mitad que faltaba.
+ *
+ * `soloBloquesConocidos` filtra BLOQUES. Cuando entraron `fuente` y `tamano`
+ * (`estilosDeTexto.tsx`) apareció la misma trampa un nivel más abajo: un estilo
+ * que el esquema no conoce también hace fallar la construcción del editor, y el
+ * saneador de bloques **no lo ve** porque no vive en `type` sino adentro de
+ * `styles`, en el contenido en línea.
+ *
+ * El caso concreto que esto tapa es el rollback: si algún día se sacan estos dos
+ * del esquema, todas las páginas que alguien haya escrito con una fuente elegida
+ * dejarían la Libreta en blanco. Con esto, se abren sin el formato — que es feo y
+ * es reversible, mientras que la ventana en blanco no lo es.
+ *
+ * ══ POR QUÉ CAMINA TODO EL ÁRBOL Y NO LAS RUTAS CONOCIDAS ═══════════════════
+ *
+ * Los estilos viven en `content[]`, pero también adentro de `children[]` (listas
+ * anidadas) y de `rows[].cells[]` (tablas). Enumerar esas rutas es una lista que
+ * hay que mantener cada vez que BlockNote agregue un contenedor — y olvidarse de
+ * una no da error: deja pasar el estilo desconocido justo en el caso raro.
+ *
+ * Se recorre cualquier objeto y se limpia **donde aparezca** una clave `styles`.
+ * Es la misma decisión que `aTextoPlano` toma del lado del server, y por el mismo
+ * motivo: lo que no se enumera no se puede olvidar.
+ */
+const ESTILOS_CONOCIDOS = new Set([
+  ...Object.keys(ESQUEMA_LIBRETA.styleSchema),
+  ...ESTILOS_PROPIOS,
+]);
+
+export function soloEstilosConocidos<T>(valor: T): T {
+  if (Array.isArray(valor)) return valor.map(soloEstilosConocidos) as T;
+  if (valor === null || typeof valor !== 'object') return valor;
+
+  const salida: Record<string, unknown> = {};
+  for (const [clave, v] of Object.entries(valor as Record<string, unknown>)) {
+    if (clave === 'styles' && v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      const limpios: Record<string, unknown> = {};
+      for (const [estilo, valorDelEstilo] of Object.entries(v as Record<string, unknown>)) {
+        if (ESTILOS_CONOCIDOS.has(estilo)) limpios[estilo] = valorDelEstilo;
+      }
+      salida[clave] = limpios;
+      continue;
+    }
+    salida[clave] = soloEstilosConocidos(v);
+  }
+  return salida as T;
 }
 
 /**

@@ -11,19 +11,19 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 32 | 345 | 46,000 | 13,969 |
+| front | 32 | 379 | 49,395 | 14,994 |
 | server | 65 | 695 | 72,088 | 42,649 |
-| **total** | **97** | **1,040** | **118,088** | **56,618** |
+| **total** | **97** | **1,074** | **121,483** | **57,643** |
 
 ## Front — `src/`
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
+| `notas` | La Libreta: páginas, espacios compartidos, autoguardado y el link público. | 52 | 6,006 | 15 | 4 | 1 |
 | `whatsapp` | La conversación nativa: el hilo, el composer, los adjuntos, las citas y la compresión de video. | 34 | 4,407 | 18 | 8 | 5 |
 | `canales` | La cola unificada, y sólo eso: la lista de conversaciones, su fila, la barra de filtros y el panel de contexto. El modelo que dibuja NO vive acá — vive en `dominio/`. | 27 | 4,220 | 5 | 2 | 11 |
 | `vistas` | El Pipeline: el tablero por etapas, sus tarjetas y las compuertas para mover una. | 15 | 2,880 | 6 | 1 | 10 |
 | `panel` | La ficha al costado del chat, en el orden de las preguntas que decide una venta: quién es, qué quiere, qué mandarle, qué hacer. | 21 | 2,825 | 6 | 5 | 7 |
-| `notas` | La Libreta: páginas, espacios compartidos, autoguardado y el link público. | 18 | 2,611 | 8 | 4 | 1 |
 | `dashboard` | Los números en pantalla: el radar, el embudo y qué recorte ve quien mira. | 8 | 2,458 | 2 | 3 | 7 |
 | `lib` | Lo que no sabe de negocio: el cliente HTTP con su caché en IndexedDB, el SSE, el teclado, formato y notificaciones. Capa 0 — no puede importar ninguna feature. | 48 | 2,057 | 16 | 29 | 0 |
 | `gestion` | Lo que la vendedora asienta sobre una conversación: etapa, categorías, intereses y sus herramientas. | 11 | 1,994 | 2 | 5 | 8 |
