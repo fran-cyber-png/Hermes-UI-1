@@ -8,6 +8,7 @@ import { repositorioDrizzle } from './repositorioDrizzle.js';
 import { registroEnviosDrizzle } from './registroEnviosDrizzle.js';
 import { GestorWhatsapp, numerosConfigurados, type WhatsappArmado } from './gestor.js';
 import { emitirRT } from '../realtime/bus.js';
+import { claveDeConversacion, duenaDeConversacion } from '../realtime/duenaDeConversacion.js';
 import { notificarEntrante } from '../bot/ingesta.js';
 import { configDesdeEnv } from '../bot/config.js';
 import { db } from '../db/client.js';
@@ -119,10 +120,17 @@ function montar(numero: string, cual: string): WhatsappArmado {
    */
   transporte.onReaccion?.((r) => {
     void guardarReaccion(db, r)
-      .then((que) => {
+      .then(async (que) => {
         // El hilo abierto se refresca solo: una reacción que aparece 5 s
         // después de que la pusieron se siente rota.
-        if (que !== 'sin_tabla') emitirRT({ tipo: 'mensaje', canal: 'whatsapp', telefono: r.dePersona });
+        //
+        // Lleva `duena` por lo mismo que el mensaje: el teléfono del lead ajeno
+        // no se le nombra a quien no trabaja esa conversación. Acá NO va
+        // `direccion` —una reacción no es un mensaje nuevo— así que ni siquiera
+        // para la dueña dispara la campanita, que es lo correcto.
+        if (que === 'sin_tabla') return;
+        const duena = await duenaDeConversacion(db, claveDeConversacion('whatsapp', r.dePersona, numero));
+        emitirRT({ tipo: 'mensaje', canal: 'whatsapp', telefono: r.dePersona, duena });
       })
       .catch((err: unknown) => {
         // eslint-disable-next-line no-console
@@ -142,7 +150,9 @@ function montar(numero: string, cual: string): WhatsappArmado {
       .then((filas) => {
         // Solo se avisa si algo cambió de verdad: los recibos repetidos son la
         // mayoría, y un refresco por cada uno castigaría la pantalla.
-        if (filas > 0) emitirRT({ tipo: 'mensaje', canal: 'whatsapp', telefono: null });
+        // `telefono: null` = no identifica ninguna conversación, así que no hay
+        // dueña que resolver: es un «refrescá la pantalla» pelado y sale para todas.
+        if (filas > 0) emitirRT({ tipo: 'mensaje', canal: 'whatsapp', telefono: null, duena: null });
       })
       .catch((err: unknown) => {
         // eslint-disable-next-line no-console

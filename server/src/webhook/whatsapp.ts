@@ -9,6 +9,8 @@ import { notificarEntrante } from "../bot/ingesta.js";
 import { configDesdeEnv } from "../bot/config.js";
 import { claveDeLlamada } from "./llamadas.js";
 import { asignarSiHaceFalta } from "../reparto/asignar.js";
+import { emitirRT } from "../realtime/bus.js";
+import { duenaDeConversacion } from "../realtime/duenaDeConversacion.js";
 import { porQueFallo } from "../lib/porQueFallo.js";
 
 /**
@@ -221,10 +223,38 @@ export async function recibirWhatsapp(req: Request, res: Response): Promise<void
              * mensaje de la conversación, que es exactamente el que dispara el
              * reparto. Buscarlo después sería buscarlo cuando ya no está.
              */
-            await asignarSiHaceFalta(db, clave, numeroLinea, m.referral?.source_id).catch(
-              (err: unknown) =>
-                console.error("[reparto] asignarSiHaceFalta falló:", (err as Error).message),
+            /**
+             * ⚠️ **Se pregunta ANTES quién era la dueña, y no es una consulta de
+             * más.** El aviso de tiempo real ya salió (adentro de
+             * `recibirEntrante` → `repositorioDrizzle.persistir`), y en el PRIMER
+             * mensaje de un lead salió **sin dueña**, porque el reparto corre acá
+             * abajo: bajo la regla de `realtime/visibilidad.ts` eso es un evento
+             * recortado, o sea que a la vendedora que acaba de recibir el lead no
+             * le suena nada — justo la campanita que más vale.
+             *
+             * Por eso se avisa de nuevo, y **solo si la conversación NO tenía
+             * dueña**: `asignarSiHaceFalta` devuelve la dueña exista o no, así que
+             * sin esta comparación una conversación ya asignada dispararía DOS
+             * campanitas por cada mensaje.
+             */
+            const teniaDuena = await duenaDeConversacion(db, clave);
+            const duena = await asignarSiHaceFalta(db, clave, numeroLinea, m.referral?.source_id).catch(
+              (err: unknown) => {
+                console.error("[reparto] asignarSiHaceFalta falló:", (err as Error).message);
+                return null;
+              },
             );
+            // `emitirRT` es síncrono y sobre un EventEmitter del proceso: no puede
+            // fallar ni demorar, así que no necesita su propia red.
+            if (!teniaDuena && duena) {
+              emitirRT({
+                tipo: "mensaje",
+                canal: "whatsapp",
+                telefono: m.from,
+                direccion: "entrante",
+                duena,
+              });
+            }
           }
         }
       }
