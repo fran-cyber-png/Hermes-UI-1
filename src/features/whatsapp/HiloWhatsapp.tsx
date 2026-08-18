@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Bot, Check, CheckCheck, Copy, CornerDownRight, CornerUpLeft, CornerUpRight, FileText, SmilePlus, Loader2, Megaphone, Paperclip, Pencil, Phone, Play, QrCode, Send, Link2, Trash2, WifiOff, X } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
+import { esDeCampana } from './campanaAjena';
 import { useBlobAutenticado } from '../../lib/datos/blobAutenticado';
 import { formatoTelefono, tempClass } from '../../lib/formato';
 import { usePopover } from '../../lib/teclado/usePopover';
@@ -900,15 +901,25 @@ export function HiloWhatsapp({
         ) : hilo.isError ? (
           <div className="py-8 text-center">
             <p className="text-sm text-muted-foreground">
-              No se pudo cargar el hilo — no es que no haya mensajes.
+              {esDeCampana(hilo.error)
+                ? 'Esta conversación es de una línea de campaña y no la atendés.'
+                : 'No se pudo cargar el hilo — no es que no haya mensajes.'}
             </p>
-            <button
-              type="button"
-              onClick={() => void hilo.refetch()}
-              className="mt-2 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1"
-            >
-              Reintentar
-            </button>
+            {/*
+              «Reintentar» SOLO en lo transitorio — la misma regla que los ocho
+              códigos de Ivi (`features/ivi/errores.ts`). Un 403 de la frontera de
+              campaña no cambia por insistir: el botón ahí sería un lazo, y encima
+              haría dudar de si el mensaje es cierto.
+            */}
+            {!esDeCampana(hilo.error) && (
+              <button
+                type="button"
+                onClick={() => void hilo.refetch()}
+                className="mt-2 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1"
+              >
+                Reintentar
+              </button>
+            )}
           </div>
         ) : (
           <>
