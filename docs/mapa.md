@@ -11,9 +11,9 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 32 | 353 | 46,668 | 14,273 |
-| server | 66 | 723 | 74,456 | 45,011 |
-| **total** | **98** | **1,076** | **121,124** | **59,284** |
+| front | 32 | 353 | 46,686 | 14,273 |
+| server | 66 | 727 | 74,769 | 45,309 |
+| **total** | **98** | **1,080** | **121,455** | **59,582** |
 
 ## Front — `src/`
 
@@ -25,7 +25,7 @@
 | `panel` | La ficha al costado del chat, en el orden de las preguntas que decide una venta: quién es, qué quiere, qué mandarle, qué hacer. | 21 | 2,825 | 6 | 5 | 7 |
 | `notas` | La Libreta: páginas, espacios compartidos, autoguardado y el link público. | 18 | 2,611 | 8 | 4 | 1 |
 | `dashboard` | Los números en pantalla: el radar, el embudo y qué recorte ve quien mira. | 8 | 2,458 | 2 | 3 | 7 |
-| `lib` | Lo que no sabe de negocio: el cliente HTTP con su caché en IndexedDB, el SSE, el teclado, formato y notificaciones. Capa 0 — no puede importar ninguna feature. | 48 | 2,057 | 16 | 29 | 0 |
+| `lib` | Lo que no sabe de negocio: el cliente HTTP con su caché en IndexedDB, el SSE, el teclado, formato y notificaciones. Capa 0 — no puede importar ninguna feature. | 48 | 2,075 | 16 | 29 | 0 |
 | `gestion` | Lo que la vendedora asienta sobre una conversación: etapa, categorías, intereses y sus herramientas. | 11 | 1,994 | 2 | 5 | 8 |
 | `routing` | Qué campaña de Meta le cae a qué vendedora. | 8 | 1,992 | 3 | 1 | 1 |
 | `padron` | Los contactos que nunca escribieron: filtrarlos por facetas y repartirlos. | 8 | 1,866 | 2 | 2 | 4 |
@@ -56,20 +56,20 @@
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
-| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. | 60 | 9,250 | 10 | 3 | 48 |
+| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. | 61 | 9,286 | 11 | 3 | 48 |
 | `bot` | El bot de primera línea que atiende solo: su agente, sus guardrails, sus frenos y el reenganche. | 56 | 7,997 | 24 | 7 | 13 |
 | `scripts` | Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción. | 33 | 5,389 | 0 | 0 | 32 |
 | `cola` | La consulta que ordena la deuda: a quién se atiende primero y por qué. Cada regla vive pura y con su gemelo SQL. | 56 | 4,815 | 37 | 9 | 6 |
-| `whatsapp` | La costura con WhatsApp: la interfaz de transporte y sus implementaciones, el hilo, y la única puerta por la que sale un envío. | 49 | 4,212 | 23 | 13 | 10 |
-| `db` | El schema y la conexión. Capa base del server: no conoce ninguna regla de negocio. | 20 | 3,596 | 1 | 52 | 0 |
+| `whatsapp` | La costura con WhatsApp: la interfaz de transporte y sus implementaciones, el hilo, y la única puerta por la que sale un envío. | 49 | 4,234 | 23 | 13 | 10 |
+| `db` | El schema y la conexión. Capa base del server: no conoce ninguna regla de negocio. | 20 | 3,596 | 1 | 53 | 0 |
 | `autorespuesta` | El acuse fuera de horario del lado del server: a quién corresponde, con qué plantilla y a qué ritmo. Nunca manda solo. | 30 | 2,993 | 13 | 7 | 5 |
 | `campana` | Mandar una campaña por plantilla aprobada de Meta: el público, los vetos, el ritmo y los reintentos. | 24 | 2,623 | 10 | 3 | 5 |
 | `dashboard` | Los números: radar, embudo, series, y el recorte según quién los pide. Es una frontera. | 19 | 1,498 | 10 | 3 | 7 |
 | `sdk` | 🪦 Heredado de meta-escuela — el SDK de consulta del dashboard de pauta. | 9 | 1,420 | 1 | 1 | 6 |
 | `routing` | Qué campaña de Meta le cae a qué vendedora, y resolver el anuncio contra la Graph API. | 11 | 1,195 | 5 | 3 | 5 |
 | `analisis` | 🪦 Heredado de meta-escuela — los análisis del dashboard de pauta (ROAS, cartera, geo). | 15 | 1,173 | 6 | 5 | 2 |
+| `webhook` | Todo lo que entra de afuera: Meta, WhatsApp, Cerberus y las landings. Ack primero, firma siempre. | 12 | 1,167 | 4 | 1 | 10 |
 | `pauta` | 🪦 Heredado de meta-escuela — recolectar gasto, fatiga y engagement de la pauta publicitaria. | 13 | 1,161 | 4 | 4 | 6 |
-| `webhook` | Todo lo que entra de afuera: Meta, WhatsApp, Cerberus y las landings. Ack primero, firma siempre. | 12 | 1,137 | 4 | 1 | 10 |
 | `plantillas` | Las secuencias de venta: catálogo, expansión de `{variables}` y aprobación de una propuesta minada. | 12 | 1,126 | 6 | 4 | 4 |
 | `cerberus` | Hablarle al ERP: login, ficha, productos, ventas — y el latin1 que revienta con emojis. | 12 | 1,125 | 6 | 9 | 3 |
 | `cursos` | Traducir el texto con el que llegó una persona a una familia de curso. | 15 | 1,051 | 7 | 8 | 3 |
@@ -106,9 +106,10 @@
 | `corridas` | Las corridas de entrenamiento del bot y los agujeros que dejan. | 4 | 319 | 2 | 1 | 3 |
 | `index` | El pegamento: monta los routers y arranca los relojes. ⚠️ Sus comentarios describen la arquitectura de meta-escuela y engañan (ver `docs/arquitectura.md` §2). | 1 | 307 | 0 | 0 | 12 |
 | `centurion` | Las credenciales del SSO de Centurión. | 2 | 288 | 1 | 1 | 1 |
+| `realtime` | El bus que empuja los cambios a la app por SSE. | 4 | 260 | 1 | 3 | 2 |
 | `entrega` | Los ✓✓: la escala monótona de un recibo y su avance, arbitrado por la base. | 5 | 259 | 3 | 3 | 1 |
 | `categorias` | Las categorías con color que cada vendedora se arma. | 4 | 247 | 2 | 3 | 1 |
-| `lib` | Utilidades sin dominio: hora de Lima, rangos y por qué falló una consulta. | 9 | 246 | 3 | 8 | 0 |
+| `lib` | Utilidades sin dominio: hora de Lima, rangos y por qué falló una consulta. | 9 | 246 | 3 | 9 | 0 |
 | `interacciones` | Las interacciones crudas de `interactions` como las consulta la app: el listado, los canales y la frescura de la ingesta. | 1 | 224 | 0 | 1 | 3 |
 | `icarus` | Leer la base de icarus, siempre read-only. | 4 | 223 | 2 | 1 | 1 |
 | `negocio` | Las líneas de negocio y el embudo de consultoría. | 4 | 186 | 2 | 2 | 0 |
@@ -120,7 +121,6 @@
 | `dominio` | 🪦 Heredado de meta-escuela — la máquina de estados de venta. | 2 | 125 | 1 | 3 | 0 |
 | `contactos` | Lo que se escribe sobre un contacto desde su ficha, empezando por la venta registrada contra Cerberus. | 1 | 69 | 0 | 1 | 2 |
 | `correos` | El correo 1-a-1 y su rastro. Sin listas ni campañas. | 1 | 69 | 0 | 1 | 1 |
-| `realtime` | El bus que empuja los cambios a la app por SSE. | 1 | 35 | 0 | 3 | 0 |
 | `pruebas` | El andamio de los tests: base efímera, sembrado y humo end-to-end. | 9 | 0 | 9 | 0 | 0 |
 
 ## Quién depende de quién
@@ -129,7 +129,7 @@ Los módulos con más entradas son los que no se pueden tocar sin mirar a todo e
 
 | Módulo | Lo importan | Quiénes |
 |---|--:|---|
-| `server/db` | 52 | `agenda` · `analisis` · `atribucion` · `autorespuesta` · `bot` · `campana` · `canales` · `catalogo` · `categorias` · `cerberus` · `clientes` · `cola` · `contactos` · `correos` · `corridas` · `cursos` · `dashboard` · `ediciones` · `entrega` · `entrenamiento` · `equipo` · `espacios` · `eventos` · `fuentes` · `gente` · `gestiones` · `hechos` · `icarus` · `identidad` · `index` · `interacciones` · `lazo` · `meta` · `notas` · `numeros` · `ontologia` · `padron` · `pauta` · `plantillas` · `procedencia` · `reacciones` · `reparto` · `responder` · `resultados` · `routes` · `routing` · `scripts` · `sdk` · `senales` · `sugerencias` · `webhook` · `whatsapp` |
+| `server/db` | 53 | `agenda` · `analisis` · `atribucion` · `autorespuesta` · `bot` · `campana` · `canales` · `catalogo` · `categorias` · `cerberus` · `clientes` · `cola` · `contactos` · `correos` · `corridas` · `cursos` · `dashboard` · `ediciones` · `entrega` · `entrenamiento` · `equipo` · `espacios` · `eventos` · `fuentes` · `gente` · `gestiones` · `hechos` · `icarus` · `identidad` · `index` · `interacciones` · `lazo` · `meta` · `notas` · `numeros` · `ontologia` · `padron` · `pauta` · `plantillas` · `procedencia` · `reacciones` · `realtime` · `reparto` · `responder` · `resultados` · `routes` · `routing` · `scripts` · `sdk` · `senales` · `sugerencias` · `webhook` · `whatsapp` |
 | `front/lib` | 29 | `agenda` · `app` · `auth` · `autorespuesta` · `campana` · `canales` · `cerberus` · `componentes` · `correos` · `dashboard` · `dominio` · `entrenamiento` · `eventos` · `gestion` · `hechos` · `identidad` · `ivi` · `navegador` · `notas` · `padron` · `panel` · `plantillas` · `reparto` · `routing` · `senales` · `sugerencias` · `venta` · `vistas` · `whatsapp` |
 | `front/dominio` | 19 | `agenda` · `app` · `auth` · `autorespuesta` · `canales` · `cerberus` · `dashboard` · `entrenamiento` · `gestion` · `hechos` · `padron` · `panel` · `plantillas` · `reparto` · `senales` · `sugerencias` · `venta` · `vistas` · `whatsapp` |
 | `server/whatsapp` | 13 | `atribucion` · `autorespuesta` · `bot` · `clientes` · `corridas` · `ediciones` · `gente` · `index` · `numeros` · `reacciones` · `routes` · `scripts` · `webhook` |
@@ -137,8 +137,8 @@ Los módulos con más entradas son los que no se pueden tocar sin mirar a todo e
 | `front/whatsapp` | 10 | `agenda` · `app` · `auth` · `autorespuesta` · `canales` · `dashboard` · `hechos` · `padron` · `reparto` · `sugerencias` |
 | `server/cerberus` | 9 | `auth` · `bot` · `contactos` · `cursos` · `eventos` · `gestiones` · `plantillas` · `routes` · `scripts` |
 | `server/cola` | 9 | `canales` · `dashboard` · `equipo` · `gestiones` · `interacciones` · `resultados` · `routes` · `routing` · `scripts` |
+| `server/lib` | 9 | `canales` · `dashboard` · `equipo` · `interacciones` · `pauta` · `realtime` · `routes` · `webhook` · `whatsapp` |
 | `server/cursos` | 8 | `bot` · `dashboard` · `gestiones` · `index` · `plantillas` · `routes` · `routing` · `scripts` |
-| `server/lib` | 8 | `canales` · `dashboard` · `equipo` · `interacciones` · `pauta` · `routes` · `webhook` · `whatsapp` |
 | `server/autorespuesta` | 7 | `bot` · `campana` · `catalogo` · `index` · `routes` · `scripts` · `whatsapp` |
 | `server/bot` | 7 | `corridas` · `dashboard` · `index` · `routes` · `scripts` · `webhook` · `whatsapp` |
 | `server/gente` | 7 | `atribucion` · `autorespuesta` · `cola` · `cursos` · `dashboard` · `routes` · `scripts` |

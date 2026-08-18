@@ -42,9 +42,15 @@ import {
  *
  * `pareoActual` existe para que el pareo en vuelo no se le atribuya a quien lo
  * mira, sino a quien lo empezó. El vinculador es un singleton sin dueño: sin
- * esto, si Ana inicia un pareo y Bea consulta `/vincular/estado` mientras tanto,
- * Bea vería el QR de Ana y —peor— si llega justo cuando conecta, la línea de Ana
- * quedaría escrita como propia de Bea. La regla (dueño + vigencia, comparando
+ * esto, si Ana inicia un pareo y Bea consulta ESTE `/vincular/estado` mientras
+ * tanto, Bea vería el QR de Ana y —peor— si llega justo cuando conecta, la línea
+ * de Ana quedaría escrita como propia de Bea.
+ *
+ * ⚠️ **Este candado cubre SÓLO esta puerta.** La consola anónima de `/vincular`
+ * lo derrotaba entero —lee el MISMO singleton y no pide credencial—, y por eso
+ * dejó de montarse en producción el 17-ago-2026 (PR #400). En local sigue
+ * montada, o sea que **ahí este candado sigue sin valer**: es el precio conocido
+ * de conservar la herramienta de trabajo, no un descuido. La regla (dueño + vigencia, comparando
  * grafías normalizadas) vive pura en `numeros/pareoPropio.ts`.
  *
  * Se declara `requiereVendedora` explícitamente aunque el perímetro

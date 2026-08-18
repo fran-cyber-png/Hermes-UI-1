@@ -787,6 +787,79 @@ tercera lista de roles —`VEN_ROUTING` en el FRONT (`src/features/vistas/acceso
 - ⚠️ **`ventas10@grupogoberna.com` no está en la semilla a propósito**: su rol es una pregunta sin
   decidir, y sin fila conserva exactamente lo que el `.env` le da hoy.
 
+## El tiempo real se filtra por dueña (**ADR 0059**)
+
+`GET /api/stream` era un **broadcast**: le empujaba a cada vendedora el teléfono de **cada** mensaje
+de todo Hermes, en vivo y sin quedar en ningún log. Server en `server/src/realtime/`.
+Contexto y las 82 fugas: `docs/auditoria-aislamiento-de-chats-2026-08-17.md`.
+
+- **El invariante, y es de todo el frente de aislamiento**: *ve el contenido de una conversación ⟺
+  es su dueña, o supervisa*. «Su supervisor» = **TODOS los supervisores** (decisión del dueño): se
+  pregunta **`mandaEnElEquipo(req)`**, nunca `rol === 'supervisor'`, o el admin queda afuera.
+- 🔴 **DOS TIPOS, y esa ES la frontera** (`realtime/bus.ts`): `EventoRT` se publica adentro y lleva
+  `duena`; `EventoPublico` es lo que sale por el cable y **no tiene dónde ponerla**. El nombre de la
+  dueña es un metadato ajeno («a Luz le escribieron recién»): que no se pueda serializar es más
+  fuerte que acordarse de no hacerlo.
+- 🔴 **`duena` es REQUERIDO aunque casi siempre valga `null`.** Opcional, un emisor nuevo compila sin
+  resolverlo: no fuga (la regla es fail-closed) pero deja **una campanita muerta sin un solo
+  síntoma**. Requerido, el compilador obliga a decidir.
+- 🔴 **La regla FALLA CERRADO y normaliza los DOS lados** (`realtime/visibilidad.ts`, pura). Con
+  `Luz` vs `luz` la comparación exacta no da error: da que **Luz se queda sin su propia campanita**,
+  para siempre. Misma cicatriz que `esMiaSql` y `mismaVendedora`.
+- 🔴 **NO copia `lineaAlcanzableSql`, y eso es deliberado.** La cola además lista **lo huérfano de tus
+  líneas**; acá no. Son dos preguntas —la cola decide qué se LISTA, esto qué se NOMBRA— y traer ese
+  predicado a TypeScript sería #37 **en una frontera**, donde divergir falla hacia ABIERTO.
+  ⚠️ **Lo que cuesta**: una conversación **sin dueña no le suena a nadie**. La fila igual aparece en
+  la cola y el hilo abierto se sigue refrescando; falta el sonido.
+- ⚠️ **El evento recortado SE MANDA igual** (`{tipo, canal}`): callarlo dejaría la cola de quien no es
+  dueña sin refrescar. Y en el front, sin `telefono` se invalida el **prefijo**
+  `['wa','conversacion']` — sin esa rama, toda conversación sin dueña dejaría de actualizarse sola
+  con el chat abierto, que es el defecto que este bus vino a arreglar.
+- 🔴 **EL PRIMER MENSAJE DE UN LEAD NUEVO SALE SIN DUEÑA**, porque `asignarSiHaceFalta` corre
+  **después** de persistir (y ese orden es a propósito: «un lead perdido no vuelve»). Por eso
+  `webhook/whatsapp.ts` avisa **de nuevo** tras asignar, y **sólo si antes no tenía dueña** —
+  `asignarSiHaceFalta` devuelve la dueña exista o no, así que sin esa comparación una conversación ya
+  asignada dispara DOS campanitas por mensaje.
+- **DOS candados, y el segundo es el que importa**: `visibilidad.test.ts` (la regla) y
+  **`routes/stream.test.ts` (el CABLEADO)**, que levanta el montaje real de `index.ts`, conecta dos
+  vendedoras y mira los bytes de cada cable. El defecto no era una regla mal escrita: era que **el
+  handler nunca miraba el request** (lección de ADR 0024). Los dos se verificaron en rojo.
+  ⚠️ Ese test necesita **`server.closeAllConnections()`**: `close()` espera a que las conexiones
+  abiertas terminen y un SSE no termina nunca.
+
+### `/vincular` ya no se monta en producción — y le quedó UN candado, no dos
+
+La consola de operador (D13) vivía montada **fuera del perímetro** y **sin un solo middleware**:
+`GET /vincular/estado` servía el **data-URI del QR** de un pareo en vuelo sin `Authorization` (quien
+lo escanee se queda con la sesión de WhatsApp de esa línea) y `POST /vincular/iniciar` **actuaba sin
+credencial**, abriendo un segundo escritor whatsmeow sobre el mismo SQLite. Leía el MISMO singleton
+`whatsapp/vinculador.ts` que las otras dos puertas, así que **derrotaba la guarda por dueño de
+`routes/miLinea.ts`** — cuyo propio docblock ya advertía «si Ana inicia un pareo y Bea consulta
+`/vincular/estado`, Bea vería el QR de Ana».
+
+Se cerró **moviendo el mount adentro de `if (NODE_ENV !== 'production')`** (PR #400), no borrándolo:
+en local sigue siendo la herramienta de trabajo. Candado: `routes/vincular.montaje.test.ts`.
+
+- 🔴 **TIENE UN SOLO CANDADO Y SUS VECINOS TIENEN DOS.** `_sim` y `_dev` se montan igual sólo fuera de
+  producción **y además** su exención del perímetro es solo-dev (`auth/perimetro.ts`) — es eso lo que
+  respalda la frase «en prod no hay agujero que recordar». **`/vincular` vive fuera de `/api`, así que
+  el perímetro nunca lo mira**: su única defensa es el `NODE_ENV`. Un despliegue con esa variable mal
+  puesta reabre la puerta entera.
+- ⚠️ **La regla de NGINX que la tapaba sigue SIN versionar en el repo** (403 desde internet, 200 desde
+  `127.0.0.1:4110`, medido el 17-ago — y VPS1 corre decenas de contenedores que alcanzan ese puerto).
+  Ya no es la única protección, pero sigue siendo config invisible para quien lea el código.
+- ⚠️ **La lección del método, y vale más que el arreglo**: leer el código da la SUPERFICIE y sólo el
+  sistema vivo da el ALCANCE. Los auditores la reportaron como alcanzable desde internet — lo es en el
+  código y no lo era en producción. Hacen falta los dos.
+
+### Lo que este frente NO cierra
+
+El hilo (`GET /api/whatsapp/conversacion/:telefono`), la ficha y `GET /api/persona/:interactionId`
+—**enumerable**, el id es un `serial`— siguen sirviendo cualquier conversación a cualquier token, y
+con ellas ~40 rutas más. **Lo que NO hay que hacer es parchearlas una por una**: así se llegó acá. La
+forma es el seam único `puedeVerConversacion(rol, vendedoraId, clave)` con su gemelo SQL, su test de
+paridad y un middleware que **rompa el arranque** si una ruta nueva no lo declara (auditoría §7.2).
+
 ## Ivi — el puente al cerebro RAG (proxy)
 
 > Fundamento: **ADR 0021** (la costura) y **ADR 0024** (la superficie).
