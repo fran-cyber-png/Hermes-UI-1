@@ -35,10 +35,48 @@ on:
 # WORKFLOW. Con `cancel-in-progress: true`, dos pushes seguidos (un merge y un hotfix)
 # pueden matar N4 justo entre `mv dist dist.anterior` y `mv dist.nuevo dist`, dejando
 # producción SIN front. En una rama, cancelar solo cuesta minutos de runner.
+# ══ ZONA HORARIA ═════════════════════════════════════════════════════════════
+# Producción corre en `America/Lima` y hay lógica de fechas que depende de la zona
+# del proceso. Mientras el CI vivió solo en VPS1 —también en Lima— esto no hacía
+# falta y por eso no estaba. Al mudar los jobs a VPS2 (`Europe/Berlin`) fallaron
+# tres tests de fecha, los tres por UN día exacto.
+#
+# No es un capricho del runner: es un bug real que el CI no podía ver. El código
+# construye la fecha con componentes LOCALES y la serializa en UTC, así que
+# `new Date(2026, 6, 11).toISOString()` da '2026-07-11' con cualquier offset
+# negativo (todas las Américas) y '2026-07-10' con uno positivo (Europa, Asia).
+# Está anotado como deuda: si Hermes opera algún día fuera de América, hay que
+# arreglar el código, no la variable. Ver hermes#421.
+#
+# Fijarla acá es correcto igual: un CI cuyo resultado dependa de la configuración
+# del host donde le tocó correr no es reproducible, y esta es la zona en la que
+# corre producción — que es lo que el CI tiene que estar probando.
+env:
+  TZ: America/Lima
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+# ══ DÓNDE CORRE CADA JOB ══════════════════════════════════════════════════════
+# Dos labels, dos hosts, y la división no es estética:
+#
+#   `hermes-ci`   → VPS2 (12 núcleos, ociosos). N1, N2, N2b y el resumen. Son jobs
+#                   autocontenidos: `actions/checkout` + su propio `docker-compose.test.yml`.
+#                   No tocan disco de producción, así que no tienen por qué vivir ahí.
+#   `vps1-hermes` → VPS1. SOLO N3 y N4, que despliegan: escriben en `/srv/hermes-staging`
+#                   y `/srv/hermes` y hacen smoke contra `127.0.0.1:4111`. Ese trabajo es
+#                   local al host por definición y no se puede mover.
+#
+# Antes los seis jobs pedían `vps1-hermes`, servido por UN runner: N2 y N2b están
+# escritos para correr en paralelo (los dos `needs: n1-rapido`) y se serializaban.
+# Medido el 18-ago-2026: el 47 % de los jobs esperaba más de un minuto en cola, p90 de
+# 9 min y picos de 20. Y competían por CPU con producción — VPS1 estaba en load 23 con
+# 8 núcleos, 3 de ellos reservados a la transcodificación de nexus-vimeo.
+#
+# ⚠️ Si cambiás un label acá, el runner que lo publica tiene que existir ANTES del push.
+# GitHub no falla cuando nadie ofrece el label: deja el job encolado para siempre, en
+# silencio. Verificá con `gh api repos/Goberna-Lab/hermes/actions/runners`.
 jobs:
   # ══ NIVEL 1 ══════════════════════════════════════════════════════════════════
   # Las guardias que no necesitan instalar NADA van primero de todo: son segundos y
@@ -46,12 +84,12 @@ jobs:
   # Después, con las dependencias del server puestas, todo lo que se apoya en ellas —
   # incluidos los tests puros, que son 820 y tardan 3 s.
   #
-  # Por qué los tests del server están en el nivel «rápido» y no en el 2: el runner es
-  # UNO y cada job extra paga su propio `npm ci`. Agrupar por costo de dependencias
-  # —server acá, front en N2— sale más barato Y falla antes que agrupar por temática.
+  # Por qué los tests del server están en el nivel «rápido» y no en el 2: cada job extra
+  # paga su propio `npm ci`. Agrupar por costo de dependencias —server acá, front en N2—
+  # sale más barato Y falla antes que agrupar por temática.
   n1-rapido:
     name: 'N1 · guardias, server y tests puros'
-    runs-on: [self-hosted, vps1-hermes]
+    runs-on: [self-hosted, hermes-ci]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -215,7 +253,7 @@ jobs:
   n2-front:
     name: 'N2 · lint, typecheck, build y tests del front'
     needs: n1-rapido
-    runs-on: [self-hosted, vps1-hermes]
+    runs-on: [self-hosted, hermes-ci]
     steps:
       - uses: actions/checkout@v4
 
@@ -251,7 +289,7 @@ jobs:
   n2b-base:
     name: 'N2b · tests con base (el SQL y la paridad del schema)'
     needs: n1-rapido
-    runs-on: [self-hosted, vps1-hermes]
+    runs-on: [self-hosted, hermes-ci]
     env:
       TEST_DATABASE_URL: postgresql://hermes_test:hermes_test@127.0.0.1:5442/hermes_test
       # El singleton de `db/client.ts` revienta AL IMPORTARSE si `DATABASE_URL` falta —
@@ -548,7 +586,7 @@ jobs:
     name: 'Resumen'
     needs: [n1-rapido, n2-front, n2b-base, n3-staging, n4-prod-front]
     if: always()
-    runs-on: [self-hosted, vps1-hermes]
+    runs-on: [self-hosted, hermes-ci]
     steps:
       - name: Consolidar
         env:

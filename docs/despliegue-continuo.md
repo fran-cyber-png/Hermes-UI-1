@@ -38,8 +38,7 @@ PR o push          push a main                     botón en Actions
 El orden no es decorativo: **lo barato falla primero**. Nada llega a tocar una base sin haber pasado
 por los niveles anteriores.
 
-> **Por qué los jobs se agrupan así.** El runner self-hosted es **uno solo**: se serializan aunque
-> el grafo los dibuje en paralelo, y cada job extra paga su propio `npm ci`. Por eso la división es
+> **Por qué los jobs se agrupan así.** Cada job extra paga su propio `npm ci`. Por eso la división es
 > por **conjunto de dependencias** (server / front / base) y no por temática: son tres `npm ci` en
 > vez de cinco. Efecto lateral bienvenido: los 820 tests del server tardan 3 s, así que caben en el
 > nivel «rápido» y la mayor parte de la suite falla en los primeros 45 segundos.
@@ -167,9 +166,18 @@ Todo contra VPS1, el 2026-07-22:
 | `sudo -n systemctl` (sin contraseña) | funciona |
 | `dist/index.html` existe | sí |
 
-**El runner ya vive en VPS1** (label `vps1-hermes`, servicio
+**El runner de deploy vive en VPS1** (label `vps1-hermes`, servicio
 `actions.runner.Goberna-Lab-hermes.vps1-hermes`). No hace falta SSH, ni claves de despliegue, ni
-secretos en GitHub: el workflow escribe en el disco local.
+secretos en GitHub: el workflow escribe en el disco local. Eso vale para **N3, N4 y N5** — los que
+despliegan.
+
+**Desde el 18-ago-2026 el CI no corre ahí.** N1, N2, N2b y el resumen piden el label `hermes-ci`, que
+publican dos runners en **VPS2** (`vps2-hermes-ci-1` y `-2`, usuario `gh-runner`, unidades
+`actions.runner.Goberna-Lab-hermes.vps2-hermes-ci-*`). Se movieron por dos razones medidas: un solo
+runner serializaba N2 y N2b —escritos para ir en paralelo— dejando al 47 % de los jobs esperando más
+de un minuto (p90 de 9 min); y VPS1 estaba en load 23 sobre 8 núcleos, así que el CI competía por CPU
+con las vendedoras. VPS2 tiene 12 núcleos al 11 %. Se puede porque esos jobs son autocontenidos: no
+escriben en `/srv` ni dependen de las bases del host. Ver ADR 0038 de `goberna-infra`.
 
 ---
 
@@ -275,6 +283,7 @@ Los cuatro huecos que esta sección declaraba el 2026-07-22 se cerraron el 2026-
   vendedoras. Deuda consciente (ADR 0022).
 - **La cáscara no entra al pipeline.** Tauri se sigue empaquetando aparte y a mano (`empaquetar:mac`
   local, `tauri-windows.yml` a botón). Y sus tests **tampoco son gate de PR**: `ci.yml` corre entero
-  en el runner de VPS1, que no tiene Rust ni las libs de sistema de Tauri (ADR 0040 §6).
+  en runners self-hosted que no tienen Rust ni las libs de sistema de Tauri — antes el de VPS1, hoy
+  los de CI en VPS2, y ninguno de los dos las tiene (ADR 0040 §6).
 - **No hay despliegue por tags ni versionado.** Se despliega el HEAD de `main` o un SHA suelto.
 - **CORS sigue en `*`** (issue #94). No es del CD, pero es la deuda de perímetro que queda viva.
