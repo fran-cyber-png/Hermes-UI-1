@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import type { db } from '../db/client.js';
 import { faltaEsquema } from '../autorespuesta/repositorio.js';
+import { sinEstasLineasSql } from "../numeros/campana.js";
 
 /**
  * EL HILO DE UNA CONVERSACIÓN, ACOTADO A SU LÍNEA PROPIA (#50).
@@ -72,7 +73,28 @@ export const MENSAJES_DEL_HILO = 200;
  * estable el corte cuando dos mensajes comparten `occurred_at` (pasa con las
  * secuencias, que salen a 1,5 s pero se sellan con la hora de WhatsApp).
  */
-export async function hiloDe(base: typeof db, telefono: string, numeroPropio?: string, conMarca = true) {
+export async function hiloDe(
+  base: typeof db,
+  telefono: string,
+  numeroPropio?: string,
+  conMarca = true,
+  /**
+   * LAS LÍNEAS QUE QUIEN PIDE NO PUEDE VER (`numeros/campana.ts`).
+   *
+   * 🔴 **El default es `[]` —«no hay nadie mirando»— y ESO es lo correcto acá.**
+   * Tres de los cinco llamadores de esta función son MAQUINARIA del propio
+   * server (`bot/orquestador.ts`, `bot/contexto.ts`, `corridas/correrCorrida.ts`):
+   * leen el hilo para poder contestar, y el bot que atiende una línea de campaña
+   * ES esa línea. Un default fail-closed acá le serviría un hilo VACÍO y el bot
+   * contestaría sin contexto, sin un solo error.
+   *
+   * Por eso la frontera se resuelve en la RUTA, que es el único lugar donde hay
+   * una persona del otro lado, y baja como una lista explícita. Quien agregue una
+   * ruta nueva sobre esta función tiene que pasarla — igual que hoy pasa el
+   * `numeroPropio`.
+   */
+  lineasVedadas: readonly string[] = [],
+) {
   const marca = conMarca
     ? sql`COALESCE(ew.automatico, false) AS automatico, arp.aprobada_por AS aprobada_por`
     : sql`false AS automatico, NULL::text AS aprobada_por`;
@@ -111,6 +133,7 @@ export async function hiloDe(base: typeof db, telefono: string, numeroPropio?: s
         ${join}
         WHERE i.canal = 'whatsapp' AND i.persona_id = ${telefono}
           ${mismaLinea(numeroPropio)}
+          AND ${sinEstasLineasSql(sql`i.numero_propio`, lineasVedadas)}
         ORDER BY i.occurred_at DESC, i.id DESC
         LIMIT ${MENSAJES_DEL_HILO}
       ) AS ultimos
@@ -119,7 +142,7 @@ export async function hiloDe(base: typeof db, telefono: string, numeroPropio?: s
   } catch (e) {
     if (conMarca && faltaEsquema(e)) {
       console.warn('[whatsapp] `envios_wa.automatico` no existe: sirvo el hilo sin la marca (ADR 0015).');
-      return hiloDe(base, telefono, numeroPropio, false);
+      return hiloDe(base, telefono, numeroPropio, false, lineasVedadas);
     }
     throw e;
   }

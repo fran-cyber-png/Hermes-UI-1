@@ -12,6 +12,7 @@ import {
 import { porQueFallo } from "../lib/porQueFallo.js";
 import { ruta } from "../lib/ruta.js";
 import { MetaGraphClient, MetaGraphError } from "../meta/metaClient.js";
+import { vedadasDe } from "../numeros/cargarLineasVedadas.js";
 
 export const personaRouter = Router();
 
@@ -41,7 +42,7 @@ personaRouter.get(
   ruta(async (req, res) => {
     const { canal, personaId } = req.params;
 
-    const historial = await hiloDeLaConversacion(db, canal, personaId);
+    const historial = await hiloDeLaConversacion(db, canal, personaId, vedadasDe(req));
 
     const nombre = historial.find((h) => h.persona_nombre)?.persona_nombre ?? null;
     res.json({ historial, canal, nombre, total: historial.length });
@@ -53,7 +54,7 @@ personaRouter.get(
   ruta(async (req, res) => {
     const id = Number(req.params.interactionId);
 
-    const actual = await interaccionPorId(db, id);
+    const actual = await interaccionPorId(db, id, vedadasDe(req));
 
     if (!actual) {
       res.status(404).json({ type: "not_found" });
@@ -67,7 +68,7 @@ personaRouter.get(
       return;
     }
 
-    const historial = await historialDeLaPersona(db, actual.canal, actual.persona_id);
+    const historial = await historialDeLaPersona(db, actual.canal, actual.persona_id, vedadasDe(req));
 
     res.json({
       historial,

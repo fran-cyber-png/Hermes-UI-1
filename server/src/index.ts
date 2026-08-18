@@ -66,6 +66,8 @@ import { requiereServicio } from "./auth/servicio.js";
 import { db } from "./db/client.js";
 import { sembrarAliasCurso } from "./cursos/repositorio.js";
 import { cargarRol } from "./equipo/cargarRol.js";
+import { cargarLineasVedadas } from "./numeros/cargarLineasVedadas.js";
+import { lineasVedadasDe } from "./numeros/repositorio.js";
 import { leerPersona, sembrarEquipo } from "./equipo/repositorio.js";
 import { EQUIPO_SEMILLA, revisarSemilla } from "./equipo/semilla.js";
 import { arrancarDespachador } from "./bot/despachador.js";
@@ -92,6 +94,9 @@ app.use(perimetroApi);
 // quedaría `undefined` justo en la ruta por la que baja al front. Ver el
 // docblock de `equipo/cargarRol.ts`; hay test.
 app.use(cargarRol((id) => leerPersona(db, id)));
+// Y las líneas que NO puede ver, por la misma puerta y con el mismo contrato:
+// una anotación, no una guarda. Quién la usa decide el 403 (`numeros/campana.ts`).
+app.use(cargarLineasVedadas((id) => lineasVedadasDe(db, id)));
 // El `verify` guarda el body CRUDO de /webhook/*: la firma HMAC del webhook de
 // la Cloud API se calcula sobre los bytes exactos, no sobre el JSON re-serializado.
 app.use(express.json({ verify: capturarCuerpoCrudo }));

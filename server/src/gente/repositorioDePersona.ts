@@ -1,6 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import type { db } from "../db/client.js";
 import { interactions } from "../db/schema.js";
+import { sinEstasLineasSql } from "../numeros/campana.js";
 
 /**
  * EL SEAM DE LA FICHA DE PERSONA — lo que `routes/persona.ts` necesita de la base.
@@ -17,6 +18,19 @@ import { interactions } from "../db/schema.js";
  *
  * ⚠️ Las consultas están tal cual salieron del router: mismo texto, mismos
  * parámetros, mismo orden de filas. Esto es una mudanza, no una optimización.
+ *
+ * ══ LA FRONTERA DE CAMPAÑA (`numeros/campana.ts`) ═══════════════════════════
+ *
+ * Las tres consultas de acá leen `interactions` por `(canal, persona_id)` o por
+ * id, **sin mirar por qué línea entró el mensaje**, así que las tres servían la
+ * conversación de una línea de campaña a cualquiera. Cada una recibe ahora la
+ * lista de líneas vedadas, resuelta en la ruta (que es donde hay una persona).
+ *
+ * 🔴 **`interaccionPorId` filtra en el `WHERE` y devuelve `undefined`, o sea un
+ * 404 — no un 403.** El id es un `serial`: es ENUMERABLE (hallazgo C3 de la
+ * auditoría del 17-ago-2026), así que un 403 confirmaría que ese id existe y
+ * convertiría la frontera en un censo. Con el 404, una fila de campaña se ve
+ * igual que una que no existe.
  */
 
 /** Una fila del hilo completo de una persona en un canal (la vista de conversación). */
@@ -41,11 +55,13 @@ export async function hiloDeLaConversacion(
   base: typeof db,
   canal: string,
   personaId: string,
+  lineasVedadas: readonly string[] = [],
 ): Promise<FilaDelHilo[]> {
   return await base.execute<FilaDelHilo>(sql`
     SELECT id, tipo, direccion, autor, persona_nombre, texto, occurred_at, status
     FROM interactions
     WHERE canal = ${canal} AND persona_id = ${personaId}
+      AND ${sinEstasLineasSql(sql`numero_propio`, lineasVedadas)}
     ORDER BY occurred_at ASC
     LIMIT 100
   `);
@@ -63,9 +79,11 @@ export type InteraccionAbierta = {
 export async function interaccionPorId(
   base: typeof db,
   id: number,
+  lineasVedadas: readonly string[] = [],
 ): Promise<InteraccionAbierta | undefined> {
   const [actual] = await base.execute<InteraccionAbierta>(
-    sql`SELECT id, canal, persona_id, persona_nombre FROM interactions WHERE id = ${id}`,
+    sql`SELECT id, canal, persona_id, persona_nombre FROM interactions
+         WHERE id = ${id} AND ${sinEstasLineasSql(sql`numero_propio`, lineasVedadas)}`,
   );
   return actual;
 }
@@ -85,11 +103,13 @@ export async function historialDeLaPersona(
   base: typeof db,
   canal: string,
   personaId: string,
+  lineasVedadas: readonly string[] = [],
 ): Promise<FilaDelHistorial[]> {
   return await base.execute<FilaDelHistorial>(sql`
     SELECT id, tipo, texto, contexto_texto, occurred_at, status
     FROM interactions
     WHERE canal = ${canal} AND persona_id = ${personaId}
+      AND ${sinEstasLineasSql(sql`numero_propio`, lineasVedadas)}
     ORDER BY occurred_at DESC
     LIMIT 25
   `);

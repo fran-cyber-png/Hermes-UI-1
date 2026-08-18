@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import express, { Router } from 'express';
+import express, { Router, type Request, type Response } from 'express';
 import { db } from '../db/client.js';
 import { requiereVendedora } from '../auth/sesion.js';
 import { gestorWhatsapp, whatsapp } from '../whatsapp/wiring.js';
@@ -24,6 +24,7 @@ import { procedenciaDelComposer, type LeerPasoDeSecuencia } from '../procedencia
 import { obtenerPlantilla } from '../plantillas/repositorio.js';
 import { listarNumeros } from '../numeros/repositorio.js';
 import { soloSusLineas } from '../cola/lineas.js';
+import { lineaVedadaEnElRequest, vedadasDe } from '../numeros/cargarLineasVedadas.js';
 import { upsertEstado } from '../cola/estado.js';
 import { reaccionesPorMensaje } from '../reacciones/repositorio.js';
 import { estadosPorMensaje } from '../entrega/repositorio.js';
@@ -111,6 +112,30 @@ whatsappRouter.get('/sesion', (req, res) => {
 });
 
 /**
+ * LA FRONTERA DE CAMPAÑA, EN UNA LÍNEA POR RUTA (`numeros/campana.ts`).
+ *
+ * Devuelve `true` cuando YA contestó — el llamador solo tiene que salir. Se
+ * escribe así, y no como un middleware del router, porque **el número propio
+ * viaja en tres lugares distintos** según la ruta (`:telefono` + query, body,
+ * query de un `raw`): un middleware tendría que adivinar dónde mirar, y el día
+ * que una ruta nueva lo ponga en otro lado pasaría de largo **sin un síntoma**.
+ * Acá el compilador no ayuda, pero la línea es visible en cada handler.
+ *
+ * ⚠️ **403 y no 404.** Que la línea de campaña existe no es un secreto —está en
+ * el panel de admin, y quien pregunta es del equipo—: lo que no se sirve es su
+ * contenido. Un 404 mandaría a alguien a investigar un teléfono que sí existe.
+ */
+function frenaLaCampana(req: Request, res: Response, numeroPropio: string | undefined | null): boolean {
+  if (!lineaVedadaEnElRequest(req, numeroPropio)) return false;
+  res.status(403).json({
+    ok: false,
+    motivo: 'linea_de_campana',
+    message: 'esa línea es de una campaña y no la atendés',
+  });
+  return true;
+}
+
+/**
  * LAS LÍNEAS QUE ESTÁN CORRIENDO, para que la vendedora pueda recortar la cola a
  * una (#50). Lo que devuelve es el GESTOR —las líneas vivas—, no `numeros_wa`:
  * una fila registrada por Cerberus cuyo transporte no arrancó no es una línea
@@ -168,7 +193,16 @@ whatsappRouter.get('/lineas', ruta(async (req, res) => {
 
   // Fail-open igual que siempre: si el mapa no se pudo leer, `exclusiva` queda
   // en false y se ofrecen todas — quedarse sin filtro es peor que ver de más.
-  const ofrecidas = exclusiva ? vivas.filter((l) => mias.has(l.numero)) : vivas;
+  const propias = exclusiva ? vivas.filter((l) => mias.has(l.numero)) : vivas;
+
+  // ── Y la frontera de campaña, que NO es fail-open (`numeros/campana.ts`) ──
+  // Va DESPUÉS del recorte de arriba y no fusionada con él porque son dos cosas
+  // distintas: aquél decide qué se OFRECE (y con el mapa ilegible ofrece todo,
+  // que es lo correcto para un filtro), éste decide qué NO se puede mirar. Si las
+  // vedadas no se pudieron resolver, `vedadasDe` tira y la ruta termina en 500 —
+  // un selector que no puede evaluar la frontera no la adivina.
+  const vedadas = new Set(vedadasDe(req));
+  const ofrecidas = propias.filter((l) => !vedadas.has(l.numero));
 
   res.json({
     lineas: ofrecidas.map((l) => ({
@@ -188,7 +222,13 @@ whatsappRouter.get('/conversacion/:telefono', ruta(async (req, res) => {
   // para ella son dos chats distintos. Sin este scope las dos se ven como una, y
   // la respuesta puede salir por el número que el lead no conoce.
   const numeroPropio = typeof req.query.numeroPropio === 'string' ? req.query.numeroPropio : undefined;
-  const mensajes = await hiloDe(db, telefono, numeroPropio);
+  // 🔴 LAS DOS MITADES, y hacen falta las dos. Con línea explícita se contesta
+  // 403 —es lo honesto: la conversación existe y no te toca—. **Sin ella el hilo
+  // se sirve igual y lo de campaña se cae adentro**, porque `hiloDe` sin
+  // `numeroPropio` junta TODAS las líneas de ese teléfono: un 403 ahí escondería
+  // también la conversación de la Escuela con la misma persona.
+  if (frenaLaCampana(req, res, numeroPropio)) return;
+  const mensajes = await hiloDe(db, telefono, numeroPropio, true, vedadasDe(req));
 
   // La captura del embudo: si algún mensaje trajo el origen (anuncio/landing), se
   // devuelve — enriquecido con el nombre del anuncio y la campaña si vino de Meta.
@@ -315,6 +355,10 @@ whatsappRouter.get('/conversacion/:telefono', ruta(async (req, res) => {
 whatsappRouter.post('/leido/:telefono', requiereVendedora, ruta(async (req, res) => {
   const telefono = identidadDeParametro(req.params.telefono);
   const numeroPropio = typeof req.query.numeroPropio === 'string' ? req.query.numeroPropio : undefined;
+  // Manda los ✓✓ AZULES al lead: es una acción sobre la conversación de otro
+  // negocio, no una lectura. Sin `numeroPropio` no se puede saber de qué línea
+  // es y esta ruta ya se comporta distinto (no toca el cursor).
+  if (frenaLaCampana(req, res, numeroPropio)) return;
 
   // ── 1 · EL CURSOR PRIMERO. Es lo único que la vendedora está esperando. ──
   // Antes iba después de los ticks, y los ticks son una llamada de RED (whatsmeow
@@ -364,6 +408,9 @@ whatsappRouter.post('/leido/:telefono', requiereVendedora, ruta(async (req, res)
  */
 whatsappRouter.post('/enviar', requiereVendedora, ruta(async (req, res) => {
   const { numeroPropio, telefono, texto, referencia, citaDe } = req.body ?? {};
+  // Mandarle un mensaje a un lead de la campaña es lo más caro que se puede
+  // hacer del lado equivocado de esta frontera: le llega a una persona.
+  if (frenaLaCampana(req, res, typeof numeroPropio === 'string' ? numeroPropio : undefined)) return;
 
   // Mandar y persistir el saliente van juntos (`enviarYProyectar.ts`): un envío
   // que sale y no queda en el hilo es un mensaje fantasma, y la vendedora lo
@@ -449,6 +496,7 @@ whatsappRouter.get('/foto/:telefono', requiereVendedora, ruta(async (req, res) =
     return;
   }
   const numeroPropio = typeof req.query.numeroPropio === 'string' ? req.query.numeroPropio : undefined;
+  if (frenaLaCampana(req, res, numeroPropio)) return;
 
   const cache = await leerFotoDePerfilCacheada(db, telefono);
   const fresca = cache && Date.now() - cache.actualizadoAt.getTime() < FOTO_FRESCA_MS;
@@ -515,6 +563,7 @@ whatsappRouter.get('/foto/:telefono', requiereVendedora, ruta(async (req, res) =
  */
 whatsappRouter.post('/reaccionar', requiereVendedora, express.json(), ruta(async (req, res) => {
   const { telefono, numeroPropio, mensajeId, emoji } = (req.body ?? {}) as Record<string, string>;
+  if (frenaLaCampana(req, res, numeroPropio)) return;
   const linea = gestorWhatsapp().de(String(numeroPropio ?? ''));
   if (!linea) {
     res.status(409).json({ ok: false, message: 'esa línea no está corriendo' });
@@ -543,6 +592,7 @@ whatsappRouter.post('/reaccionar', requiereVendedora, express.json(), ruta(async
  */
 whatsappRouter.post('/editar', requiereVendedora, express.json(), ruta(async (req, res) => {
   const { telefono, numeroPropio, mensajeId, texto } = (req.body ?? {}) as Record<string, string>;
+  if (frenaLaCampana(req, res, numeroPropio)) return;
   const linea = gestorWhatsapp().de(String(numeroPropio ?? ''));
   if (!linea) {
     res.status(409).json({ ok: false, message: 'esa línea no está corriendo' });
@@ -572,6 +622,8 @@ whatsappRouter.post(
   express.raw({ type: () => true, limit: '64mb' }),
   ruta(async (req, res) => {
     const { telefono, numeroPropio, referencia, caption, nombre } = req.query as Record<string, string | undefined>;
+    // Antes de escribir 64 MB a disco: es un envío, y va a una persona.
+    if (frenaLaCampana(req, res, numeroPropio)) return;
     const mime = req.headers['content-type'] ?? 'application/octet-stream';
     const bytes = req.body as Buffer;
 
