@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import { BLOQUES_RETIRADOS, ESQUEMA_LIBRETA } from '../editor';
-import { ACCESO_RAPIDO, TABS, gruposDe, todosLosComandos, type Comando } from './catalogo';
+import { ACCESO_RAPIDO, gruposDe, todosLosComandos, type Comando } from './catalogo';
+import { TABS } from './tabs';
 import { ICONOS } from './iconos';
 
 /**

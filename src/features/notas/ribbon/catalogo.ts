@@ -1,5 +1,6 @@
 import { BLOQUES_RETIRADOS, ESQUEMA_LIBRETA } from '../editor';
 import type { NombreDeIcono } from './iconos';
+import { TABS, type TabRibbon } from './tabs';
 
 /**
  * EL CATÁLOGO DE LA RIBBON — qué hay en cada pestaña, y cuál de esas cosas ANDA.
@@ -38,28 +39,6 @@ import type { NombreDeIcono } from './iconos';
  * test rojo, sin nadie que se entere. Es la forma de #37 aplicada a una lista
  * de dos elementos.
  */
-
-export type TabRibbon = 'inicio' | 'insertar' | 'dibujar' | 'revisar' | 'vista';
-
-export interface Tab {
-  id: TabRibbon;
-  etiqueta: string;
-}
-
-/** Las cinco, siempre en el mismo orden y siempre todas. */
-export const TABS: readonly Tab[] = [
-  { id: 'inicio', etiqueta: 'Inicio' },
-  { id: 'insertar', etiqueta: 'Insertar' },
-  { id: 'dibujar', etiqueta: 'Dibujar' },
-  { id: 'revisar', etiqueta: 'Revisar' },
-  { id: 'vista', etiqueta: 'Vista' },
-];
-
-export const TAB_POR_DEFECTO: TabRibbon = 'inicio';
-
-export function esTabRibbon(valor: unknown): valor is TabRibbon {
-  return TABS.some((t) => t.id === valor);
-}
 
 /**
  * 🔴 El motivo es OBLIGATORIO en `futuro`. Ver el docblock de arriba: es lo

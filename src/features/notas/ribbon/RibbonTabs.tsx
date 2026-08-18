@@ -1,6 +1,6 @@
 import { useRef, type KeyboardEvent } from 'react';
 import { cn } from '../../../lib/utils';
-import { TABS, type TabRibbon } from './catalogo';
+import { TABS, type TabRibbon } from './tabs';
 
 /**
  * LA TIRA DE PESTAÑAS — patrón `tablist` de ARIA, con roving tabindex.

@@ -1,5 +1,5 @@
 import { Ribbon, type VistaDeLaLibreta } from './ribbon/Ribbon';
-import type { TabRibbon } from './ribbon/catalogo';
+import type { TabRibbon } from './ribbon/tabs';
 
 /**
  * LA BARRA DE FORMATO DE LA LIBRETA — hoy es una Ribbon.

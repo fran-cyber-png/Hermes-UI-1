@@ -6,7 +6,7 @@ import '@blocknote/mantine/style.css';
 import '../../index.css';
 import { BarraDeFormato } from './BarraDeFormato';
 import { DICCIONARIO_LIBRETA, ESQUEMA_LIBRETA } from './editor';
-import { TAB_POR_DEFECTO, type TabRibbon } from './ribbon/catalogo';
+import { TAB_POR_DEFECTO, type TabRibbon } from './ribbon/tabs';
 
 /**
  * LA GALERÍA DE LA RIBBON — la evidencia, sin server ni base.

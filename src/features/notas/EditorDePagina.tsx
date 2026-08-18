@@ -3,7 +3,7 @@ import { useCreateBlockNote } from '@blocknote/react';
 import '@blocknote/mantine/style.css';
 import { DICCIONARIO_LIBRETA, ESQUEMA_LIBRETA, soloBloquesConocidos, soloEstilosConocidos } from './editor';
 import { BarraDeFormato } from './BarraDeFormato';
-import type { TabRibbon } from './ribbon/catalogo';
+import type { TabRibbon } from './ribbon/tabs';
 import type { VistaDeLaLibreta } from './ribbon/Ribbon';
 
 /**

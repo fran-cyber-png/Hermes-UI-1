@@ -1,7 +1,8 @@
 import { useBlockNoteEditor } from '@blocknote/react';
 import { useRef, useState } from 'react';
 import { cn } from '../../../lib/utils';
-import { ACCESO_RAPIDO, TABS, type TabRibbon } from './catalogo';
+import { ACCESO_RAPIDO } from './catalogo';
+import { TABS, type TabRibbon } from './tabs';
 import { RibbonBoton } from './RibbonBoton';
 import { RibbonTabs } from './RibbonTabs';
 import { useRovingRibbon } from './useRovingRibbon';
