@@ -57,7 +57,25 @@ export async function canjearTokenDeCenturion(
 
   const vendedoraId = vendedoraIdDeCenturion(identidad.usuario);
   const lineas = await buscarLineas(vendedoraId);
-  if (lineas.length === 0) return { ok: false, motivo: 'sin_linea_asignada' };
+  if (lineas.length === 0) {
+    /**
+     * 🔴 EL RECHAZO DICE A QUIÉN, y sin esto el alta era a ciegas.
+     *
+     * El alta de un agente digital son dos pasos en dos sistemas, y el que falla
+     * en silencio es el segundo: la fila de `numero_vendedora` se escribe con la
+     * identidad que **Centurión** manda en el `sub`, no con la que uno supuso. Un
+     * `angie` contra un `angie.torres` no da error en ninguna parte: da que esa
+     * persona **nunca entra**, y del lado de Hermes no había nada que mirar.
+     *
+     * Se loguea la identidad ya resuelta —nunca el token, que es una credencial—,
+     * así el alta se corrige mirando el log en vez de adivinando.
+     */
+    console.warn(
+      `[centurión] «${vendedoraId}» entró bien pero no tiene línea asignada: 403. ` +
+        `Si esperabas que entrara, ése es el id exacto que hay que dar de alta.`,
+    );
+    return { ok: false, motivo: 'sin_linea_asignada' };
+  }
 
   return {
     ok: true,
