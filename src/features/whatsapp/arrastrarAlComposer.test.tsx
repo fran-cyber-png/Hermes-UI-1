@@ -124,7 +124,7 @@ describe('arrastrar un archivo al chat', () => {
     window.dispatchEvent(arrastre('dragover', [captura()]));
     await reposar();
     // Mientras cuelga del puntero, la pantalla dice dónde va a caer.
-    expect(m.contenedor.textContent).toContain('Soltá acá para adjuntarlo');
+    expect(m.contenedor.textContent).toContain('Soltá el archivo acá');
 
     window.dispatchEvent(arrastre('drop', [captura()]));
     await reposar();
@@ -133,7 +133,54 @@ describe('arrastrar un archivo al chat', () => {
     // exactamente lo mismo que hace ⌘V, porque es la misma función.
     expect(m.contenedor.textContent).toMatch(/captura-\d{4}-\d{2}-\d{2}-\d{4}\.png/);
     // Y el resalte se apagó.
-    expect(m.contenedor.textContent).not.toContain('Soltá acá para adjuntarlo');
+    expect(m.contenedor.textContent).not.toContain('Soltá el archivo acá');
+  });
+
+  test('🔴 el cartel TAPA EL CHAT ENTERO, no una franja sobre el composer', async () => {
+    const m = await abrirChat();
+    window.dispatchEvent(arrastre('dragover', [captura()]));
+    await reposar();
+
+    /**
+     * Era una tirita de dos renglones encima de la caja de texto: arrastrando
+     * sobre la mitad de arriba del hilo no reaccionaba NADA, y eso se lee como
+     * «acá no se puede». El área que responde tiene que ser la que la persona
+     * apunta, o sea la columna completa.
+     *
+     * jsdom no hace layout, así que no se puede medir el rectángulo. Lo que sí
+     * se fija es el mecanismo: el cartel es `absolute inset-0` sobre el
+     * contenedor del chat, no un hermano del composer.
+     */
+    const cartel = m.contenedor.querySelector('[data-arrastre-chat]') as HTMLElement;
+    expect(cartel, 'no se dibujó el cartel').toBeTruthy();
+    expect(cartel.className).toContain('absolute');
+    expect(cartel.className).toContain('inset-0');
+    expect(cartel.closest('footer'), 'sigue colgando del composer').toBeNull();
+  });
+
+  test('🔴 el cartel NO recibe eventos, o rompería el arrastre que anuncia', async () => {
+    const m = await abrirChat();
+    window.dispatchEvent(arrastre('dragover', [captura()]));
+    await reposar();
+
+    /**
+     * Los tres listeners viven en `window` y el `drop` decide mirando
+     * `e.target`. Con el overlay recibiendo eventos, el `target` de cada
+     * `dragover` pasaría a ser ÉL: la guarda `enUnaCaja` —la que deja arrastrar
+     * un link adentro del composer— dejaría de reconocer la caja de texto, y el
+     * `dragleave` al entrar al overlay haría parpadear el cartel sin parar.
+     */
+    const cartel = m.contenedor.querySelector('[data-arrastre-chat]') as HTMLElement;
+    expect(cartel.className).toContain('pointer-events-none');
+  });
+
+  test('el cartel dice a QUIÉN le va a llegar', async () => {
+    const m = await abrirChat();
+    window.dispatchEvent(arrastre('dragover', [captura()]));
+    await reposar();
+    // La misma promesa que el pie del composer: se manda a una persona, no en
+    // masa. Al soltar un archivo sin querer, eso es lo que hay que haber leído.
+    expect(m.contenedor.textContent).toContain('Javier');
   });
 
   test('🔴 el drop queda CANCELADO: sin eso el webview navega al archivo', async () => {
@@ -246,6 +293,6 @@ describe('arrastrar un archivo al chat', () => {
     window.dispatchEvent(arrastre('dragover', [captura()]));
     await reposar();
     // Descubrirlo recién al soltar sería peor: el gesto ya se hizo.
-    expect(m.contenedor.textContent).toContain('estás aprobando un texto preparado');
+    expect(m.contenedor.textContent).toContain('el adjunto se descarta');
   });
 });

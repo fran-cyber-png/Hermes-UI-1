@@ -776,6 +776,12 @@ export function HiloWhatsapp({
 }) {
   const telefono = conversacion.persona_id ?? '';
   const numeroPropio = conversacion.numero_propio ?? '';
+  /**
+   * Hay un archivo colgando del puntero. Lo DETECTA el composer —que es quien
+   * cancela el default del navegador— y lo dibuja acá, porque el cartel ocupa
+   * la columna entera y el composer solo tiene su franja.
+   */
+  const [arrastrandoArchivo, setArrastrandoArchivo] = useState(false);
   const { data: sesion } = useSesionWa(numeroPropio || undefined);
   const { hilo, enviar, enviarMedia, marcarLeido, reaccionar, editar } = useConversacionWa(telefono);
   const finRef = useRef<HTMLDivElement>(null);
@@ -871,7 +877,10 @@ export function HiloWhatsapp({
   });
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
+    // `relative` para que el cartel de arrastre se apoye acá y tape la columna
+    // entera. `overflow-hidden` ya estaba: recorta el overlay contra las
+    // esquinas redondeadas, que es justo lo que se quiere.
+    <div className="relative flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
       {/* Cabecera del contacto — la misma anatomía en los tres canales */}
       <header className="flex shrink-0 items-center gap-2.5 border-b border-border px-4 py-3">
         <Avatar
@@ -1210,6 +1219,7 @@ export function HiloWhatsapp({
           parte de la caja. */}
       <AvisoDeVentana ventanaCierra={conversacion.ventana_cierra} transporte={sesion?.transporte} />
       <ComposerWa
+        onArrastrando={setArrastrandoArchivo}
         key={sugerencia ? `${telefono}:sug:${sugerencia.id}` : telefono}
         telefono={telefono}
         sugerencia={sugerencia}
@@ -1223,6 +1233,63 @@ export function HiloWhatsapp({
         enviar={enviar}
         enviarMedia={enviarMedia}
       />
+
+      {/*
+        EL CARTEL DE ARRASTRE, sobre la columna entera.
+        ────────────────────────────────────────────────────────────────────
+        Era una tirita de dos renglones encima del composer, y quedaba abajo de
+        todo: arrastrando una imagen sobre la mitad de arriba del chat no había
+        NADA que reaccionara, y eso se lee como «acá no se puede» — la vendedora
+        suelta el archivo afuera o vuelve al clip. El área que responde tiene que
+        ser la misma que la persona apunta, que es el chat completo.
+
+        🔴 `pointer-events-none`, y no es cosmético. Los tres listeners viven en
+        `window` (ver `ComposerWa`) y el `drop` se decide mirando `e.target`: si
+        este overlay recibiera eventos, el `target` de cada `dragover` pasaría a
+        ser ÉL y no lo que hay debajo, y la guarda `enUnaCaja` —la que deja
+        arrastrar un link adentro del composer— dejaría de reconocer la caja de
+        texto. Además el `dragleave` se dispararía al entrar al overlay y el
+        cartel parpadearía sin parar.
+
+        `animate-in fade-in` para que aparezca sin golpe: el cartel se enciende
+        con el puntero todavía en movimiento y un corte seco se lee como un
+        error de la pantalla.
+      */}
+      {arrastrandoArchivo && (
+        <div
+          className={
+            'pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 ' +
+            'rounded-2xl border-2 border-dashed backdrop-blur-[2px] ' +
+            (sugerencia
+              ? 'border-warning/60 bg-warning/[0.07]'
+              : 'border-primary/60 bg-primary/[0.07]')
+          }
+          // No es un diálogo ni roba el foco: es un estado de la pantalla que
+          // hay que anunciar mientras dura.
+          role="status"
+          aria-live="polite"
+          data-arrastre-chat
+        >
+          <div
+            className={
+              'flex size-16 items-center justify-center rounded-2xl ' +
+              (sugerencia ? 'bg-warning/15 text-warning-foreground' : 'bg-primary/15 text-primary')
+            }
+          >
+            <Paperclip size={28} />
+          </div>
+          {/* En revisión el aviso es el CONTRARIO, porque ahí el adjunto se
+              rechaza (ADR 0018) y descubrirlo recién al soltar sería peor. */}
+          <p className="px-8 text-center font-heading text-base font-bold text-foreground">
+            {sugerencia ? 'Acá no se adjunta' : 'Soltá el archivo acá'}
+          </p>
+          <p className="max-w-xs px-8 text-center text-xs text-muted-foreground">
+            {sugerencia
+              ? 'Estás aprobando un texto preparado; el adjunto se descarta.'
+              : `Se lo mandás a ${conversacion.persona_nombre ?? formatoTelefono(telefono)}, con tu nombre.`}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -1335,6 +1402,7 @@ function ComposerWa({
   enviar,
   enviarMedia,
   sugerencia,
+  onArrastrando,
 }: {
   telefono: string;
   numeroPropio: string;
@@ -1349,6 +1417,15 @@ function ComposerWa({
   enviar: MutacionEnviar;
   enviarMedia: MutacionEnviarMedia;
   sugerencia?: SugerenciaEnComposer;
+  /**
+   * Avisa que hay un archivo colgando del puntero.
+   *
+   * La DETECCIÓN se queda acá —es la misma que decide si se cancela el default
+   * del navegador, y partirla en dos sería tener dos opiniones sobre el mismo
+   * gesto—, pero el CARTEL lo dibuja la columna del chat, que es la que tiene
+   * el alto para mostrarlo entero.
+   */
+  onArrastrando?: (arrastrando: boolean) => void;
 }) {
   // El valor inicial ya hidrata correcto: con `key` esto es SIEMPRE el primer
   // render de una instancia nueva.
@@ -1574,6 +1651,17 @@ function ComposerWa({
   const aceptarRef = useRef(aceptarArchivos);
   aceptarRef.current = aceptarArchivos;
 
+  /**
+   * Por REF y con un efecto aparte, por el mismo motivo que `aceptarRef`: los
+   * listeners de arrastre se enganchan UNA vez y no pueden depender de una
+   * función que cambia en cada tecla.
+   */
+  const avisarRef = useRef(onArrastrando);
+  avisarRef.current = onArrastrando;
+  useEffect(() => {
+    avisarRef.current?.(arrastrando);
+  }, [arrastrando]);
+
   useEffect(() => {
     const tipos = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []);
     const traeArchivos = (e: DragEvent) => tipos(e).includes('Files');
@@ -1702,21 +1790,10 @@ function ComposerWa({
             : 'border-border')
       }
     >
-      {/* Que se vea DÓNDE va a caer. Sin esto, arrastrar sobre una pantalla que no
-          reacciona se lee como «acá no se puede» y la vendedora vuelve al clip.
-          En revisión el aviso es el contrario, porque ahí el adjunto se rechaza
-          (ADR 0018) y descubrirlo recién al soltar sería peor. */}
-      {arrastrando && (
-        <div
-          className={
-            'mb-2 flex items-center justify-center gap-2 rounded-xl border border-dashed px-3 py-2 text-xs font-semibold ' +
-            (sugerencia ? 'border-warning/50 text-warning-foreground' : 'border-primary/50 text-navy')
-          }
-        >
-          <Paperclip size={13} />
-          {sugerencia ? 'Acá no se adjunta: estás aprobando un texto preparado.' : 'Soltá acá para adjuntarlo'}
-        </div>
-      )}
+      {/* El cartel de arrastre YA NO VIVE ACÁ: lo dibuja la columna del chat,
+          que tiene el alto para mostrarlo sobre todo el hilo. Acá se conserva
+          solo el tinte del pie, que es la señal de que el composer es el
+          destino — el cartel dice qué va a pasar, el tinte dónde. */}
       {/* ── LA MARCA DE QUE ESTO NO LO ESCRIBIÓ ELLA ──
           El texto vive en el composer —que es donde se edita— pero el composer
           es también donde ella escribe de su puño. Sin esta banda, a los cinco
