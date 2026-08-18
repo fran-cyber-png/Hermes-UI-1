@@ -25,7 +25,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, desarrollo]
   workflow_dispatch:
 
 # Un push nuevo a la misma rama cancela la corrida vieja: hay un solo runner.
@@ -54,7 +54,12 @@ on:
 env:
   TZ: America/Lima
 
-# ⚠️ En `main` el grupo lleva el SHA, y eso NO es cosmético.
+# `desarrollo` entra a la MISMA excepción que `main` y por el MISMO motivo: ahí N3
+# despliega el entorno de pruebas, con su propio `mv dist dist.anterior`. Cancelar a
+# mitad dejaría pruebas sin front — no es producción, pero es el lugar donde alguien
+# está mirando.
+#
+# ⚠️ En las dos ramas que despliegan el grupo lleva el SHA, y eso NO es cosmético.
 # GitHub guarda UN SOLO run en espera por grupo de concurrencia: cuando llega otro,
 # al que estaba esperando lo CANCELA. `cancel-in-progress: false` protege al que
 # está corriendo, no al que espera. Con el grupo compartido `ci-refs/heads/main`,
@@ -66,14 +71,14 @@ env:
 # superset. Deja de funcionar en cuanto ese run siguiente falla: ahí no se desplegó
 # ninguno de los dos y el historial no lo grita.
 #
-# Con el SHA en el grupo, cada commit de main tiene su propia cola de uno y ninguno
-# puede cancelar a otro. Lo que impide dos deploys pisándose son los candados de
-# N3/N4/N5 (`desplegar-staging` y `desplegar-produccion`), que son por JOB y siguen
-# intactos — más las guardias de «no retroceder» que esos jobs tienen adentro.
-# En ramas todo sigue igual: grupo por rama y cancel-in-progress.
+# Con el SHA en el grupo, cada commit tiene su propia cola de uno y ninguno puede
+# cancelar a otro. Lo que impide dos deploys pisándose son los candados de N3/N4/N5
+# (`desplegar-staging` y `desplegar-produccion`), que son por JOB y siguen intactos
+# — más las guardias de «no retroceder» que esos jobs tienen adentro.
+# En las demás ramas todo sigue igual: grupo por rama y cancel-in-progress.
 concurrency:
-  group: ci-${{ github.ref }}-${{ github.ref == 'refs/heads/main' && github.sha || 'rama' }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: ci-${{ github.ref }}-${{ contains(fromJSON('["refs/heads/main","refs/heads/desarrollo"]'), github.ref) && github.sha || 'rama' }}
+  cancel-in-progress: ${{ !contains(fromJSON('["refs/heads/main","refs/heads/desarrollo"]'), github.ref) }}
 
 # ══ DÓNDE CORRE CADA JOB ══════════════════════════════════════════════════════
 # Dos labels, dos hosts, y la división no es estética:
@@ -346,9 +351,14 @@ jobs:
   # era el de las vendedoras. Acá las migraciones se aplican de verdad, sobre una base
   # CON historia, y corre el smoke funcional autenticado.
   n3-staging:
-    name: 'N3 · desplegar a staging y smoke'
+    name: 'N3 · desplegar a PRUEBAS y smoke'
     needs: [n2-front, n2b-base]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Corre en las DOS ramas, y con propósitos distintos:
+    #   · en `desarrollo` es el entorno de pruebas — el lugar donde se PREVISUALIZA;
+    #   · en `main` es el ensayo general que sigue siendo gate duro de N4.
+    # Es el mismo entorno en los dos casos: un push a `main` lo pisa con el código de
+    # `main`, que a esa altura ya pasó por acá vía `desarrollo`.
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/desarrollo')
     runs-on: [self-hosted, vps1-hermes]
     # Staging tiene su propia cola: no comparte candado con producción.
     concurrency:
@@ -403,7 +413,11 @@ jobs:
           if [ -d server/dist ]; then mv server/dist server/dist.anterior; fi
           mv server/dist.nuevo server/dist
 
-          env VITE_API_URL=http://127.0.0.1:4111 npx vite build --outDir dist.nuevo --emptyOutDir
+          # La URL va absoluta y pública-en-la-tailnet, no `127.0.0.1`: con loopback
+          # el bundle solo funcionaba abierto DENTRO de VPS1, que es lo que hacía que
+          # staging no se pudiera mirar. Es el mismo origen desde el que se sirve, así
+          # que no hay CORS de por medio.
+          env VITE_API_URL=https://pruebas.hermes.goberna.us npx vite build --outDir dist.nuevo --emptyOutDir
           test -f dist.nuevo/index.html
           rm -rf dist.anterior
           if [ -d dist ]; then mv dist dist.anterior; fi
@@ -654,7 +668,7 @@ jobs:
             echo "| N1 | secretos · expand-only · journal · server | $(icono "$R1") |"
             echo "| N2 | lint · typecheck · build · tests del front | $(icono "$R2") |"
             echo "| N2b | SQL con base + paridad del schema | $(icono "$R2B") |"
-            echo "| N3 | staging + migraciones + smoke | $(icono "$R3") |"
+            echo "| N3 | pruebas + migraciones + smoke | $(icono "$R3") |"
             # 🔴 N4 termina en `success` TAMBIEN cuando decide NO desplegar (porque
             # el cambio toca `server/`). No desplegar cuando no corresponde es lo
             # correcto, pero un tilde ahi se lee como «el front salio» — y eso
@@ -667,7 +681,7 @@ jobs:
             fi
             echo
             if [ "$R3" = "skipped" ]; then
-              echo "> N3 y N4 solo corren al pushear a \`main\`. En un PR, verde hasta N2b es todo lo que hay que mirar."
+              echo "> N3 corre al pushear a \`desarrollo\` (entorno de pruebas) y a \`main\` (ensayo previo a producción); N4 solo en \`main\`. En un PR, verde hasta N2b es todo lo que hay que mirar."
             fi
             if [ "$R4" = "success" ]; then
               echo "> El **front** ya está en producción. Si el cambio tocaba \`server/\`, el server sigue con el código viejo hasta que dispares **Desplegar server (con restart)**."
