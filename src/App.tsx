@@ -7,6 +7,8 @@ import { Suspense, lazy, useEffect, useMemo, useRef, useState, type CSSPropertie
 import {
   AlarmClock,
   BrainCircuit,
+  ChevronLeft,
+  ChevronRight,
   Columns3,
   Compass,
   LayoutDashboard,
@@ -19,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Escudo } from './components/Marca';
 import { Avisos } from './components/Avisos';
+import { useLocalStorage } from './lib/useLocalStorage';
 import { ColaUnificada } from './features/canales/ColaUnificada';
 import { ConversacionActiva } from './features/canales/ConversacionActiva';
 import type { Conversacion } from './dominio/conversaciones';
@@ -356,6 +359,15 @@ function PaletaAcciones({
 export default function App() {
   const { vendedora, cargando, sinServer, reintentar, entrar, salir, cerberusVivo, errorCenturion } = useSesion();
   const [abierta, setAbierta] = useState<Conversacion | null>(null);
+  /**
+   * EL PANEL DERECHO SE PUEDE CONTRAER (`PanelDerecho`, la ficha de al lado del
+   * chat). Es una PREFERENCIA DE UI —no estado del servidor—, así que va a
+   * `localStorage` y no a React a secas: la regla de `lib/datos/cliente.ts`
+   * («preferencias de UI → localStorage, nunca al servidor») y el mismo molde
+   * que ya usa la cola para su tab y su línea (`ColaUnificada.tsx`, `KEY_TAB`).
+   * Empieza ABIERTO — quien nunca lo tocó ve exactamente el panel de siempre.
+   */
+  const [panelColapsado, setPanelColapsado] = useLocalStorage('hermes.panelDerechoColapsado', false);
   const [vista, setVista] = useState<Vista>('dashboard');
   const [direccion, setDireccion] = useState<'abajo' | 'arriba'>('abajo');
   const [telefonoPersonas, setTelefonoPersonas] = useState<string | null>(null);
@@ -840,38 +852,64 @@ export default function App() {
             />
           </section>
           {abierta && (
-            // 22.5rem = 360 px: el ancho para el que está diseñado el panel
-            // multifunción (antes 18rem, que solo daba para la ficha).
-            <aside className="flex min-h-0 w-[22.5rem] shrink-0 flex-col gap-3">
-              {/* EL PORQUÉ DE LA SUGERENCIA, arriba del panel y no en vez de él:
-                  «por qué se sugiere esto» y «quién es esta persona» son dos
-                  preguntas y se contestan las dos. Bloque aparte a propósito —
-                  el panel multifunción (ADR 0017) es de otro frente y este
-                  cambio no toca ninguno de sus archivos. Cuando convenga, esto
-                  se vuelve una pestaña suya: el contenido ya está aislado y no
-                  depende de dónde se monte.
+            /* `relative` SOLO para anclar el trigger — no le agrega ningún
+               estilo al contenido, es la envoltura mínima para poder poner el
+               botón `absolute` sobre el borde sin que empuje nada adentro. */
+            <div className="relative flex min-h-0 shrink-0">
+              {/*
+                EL TRIGGER, SOBRE EL BORDE DEL PANEL — no adentro de él ni
+                arriba en el header. `absolute` + `-translate-x-1/2` lo saca
+                del flujo por completo: nunca empuja ni angosta el contenido
+                del panel (el pedido explícito), y por eso sigue en el MISMO
+                lugar tanto contraído como expandido — es lo que lo hace
+                encontrable para volver a abrir.
+              */}
+              <button
+                type="button"
+                onClick={() => setPanelColapsado((c) => !c)}
+                title={panelColapsado ? 'Mostrar la ficha del contacto' : 'Ocultar la ficha del contacto'}
+                aria-label={panelColapsado ? 'Mostrar la ficha del contacto' : 'Ocultar la ficha del contacto'}
+                aria-pressed={panelColapsado}
+                className="absolute left-0 top-1/2 z-10 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-[color,border-color,transform] duration-200 ease-house hover:border-primary/40 hover:text-navy active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                {panelColapsado ? <ChevronLeft size={13} strokeWidth={2} /> : <ChevronRight size={13} strokeWidth={2} />}
+              </button>
 
-                  Solo aparece en revisión, así que fuera del modo el panel
-                  ocupa la columna entera como siempre. */}
-              {revision.activo && revision.actual && revision.actual.clave === abierta.clave && (
-                <PorQueEstaSugerencia sugerencia={revision.actual} limites={limitesAuto} />
+              {!panelColapsado && (
+                // 22.5rem = 360 px: el ancho para el que está diseñado el panel
+                // multifunción (antes 18rem, que solo daba para la ficha).
+                <aside className="flex min-h-0 w-[22.5rem] shrink-0 flex-col gap-3">
+                  {/* EL PORQUÉ DE LA SUGERENCIA, arriba del panel y no en vez de él:
+                      «por qué se sugiere esto» y «quién es esta persona» son dos
+                      preguntas y se contestan las dos. Bloque aparte a propósito —
+                      el panel multifunción (ADR 0017) es de otro frente y este
+                      cambio no toca ninguno de sus archivos. Cuando convenga, esto
+                      se vuelve una pestaña suya: el contenido ya está aislado y no
+                      depende de dónde se monte.
+
+                      Solo aparece en revisión, así que fuera del modo el panel
+                      ocupa la columna entera como siempre. */}
+                  {revision.activo && revision.actual && revision.actual.clave === abierta.clave && (
+                    <PorQueEstaSugerencia sugerencia={revision.actual} limites={limitesAuto} />
+                  )}
+                  {/* El panel se queda con lo que sobra y scrollea adentro, como
+                      siempre: el bloque del porqué es `shrink-0` y él `flex-1`. Sin
+                      esto, apilarlos dejaba al de abajo aplastado a media frase. */}
+                  <div className="min-h-0 flex-1">
+                    {/* `miVendedora` viaja como prop y no llamando a `useSesion()`
+                        adentro: ese hook hace su propio `fetch` a `/api/auth/yo`
+                        al montar (no es react-query), así que ahí abajo sería un
+                        request más por cada conversación que se abre. Lo necesita
+                        el timeline para saber cuáles eventos podés editar. */}
+                    <PanelDerecho
+                      conversacion={abierta}
+                      miVendedora={vendedora.id}
+                      onMandarCorreo={mandarCorreoA}
+                    />
+                  </div>
+                </aside>
               )}
-              {/* El panel se queda con lo que sobra y scrollea adentro, como
-                  siempre: el bloque del porqué es `shrink-0` y él `flex-1`. Sin
-                  esto, apilarlos dejaba al de abajo aplastado a media frase. */}
-              <div className="min-h-0 flex-1">
-                {/* `miVendedora` viaja como prop y no llamando a `useSesion()`
-                    adentro: ese hook hace su propio `fetch` a `/api/auth/yo`
-                    al montar (no es react-query), así que ahí abajo sería un
-                    request más por cada conversación que se abre. Lo necesita
-                    el timeline para saber cuáles eventos podés editar. */}
-                <PanelDerecho
-                  conversacion={abierta}
-                  miVendedora={vendedora.id}
-                  onMandarCorreo={mandarCorreoA}
-                />
-              </div>
-            </aside>
+            </div>
           )}
         </div>
 

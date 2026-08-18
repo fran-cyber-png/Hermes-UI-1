@@ -56,16 +56,25 @@ async function quienPregunta(vendedoraId: string): Promise<QuienPregunta> {
 }
 
 /**
- * El `?espacio=` de la query. `null` = mi libreta privada (y es el default, así
- * que un front viejo sigue viendo exactamente lo suyo).
+ * El `?espacio=` de la query, Y el `espacioId` del BODY (POST/PATCH). `null` =
+ * mi libreta privada (y es el default, así que un front viejo sigue viendo
+ * exactamente lo suyo).
  *
  * Un valor que no es un entero **no cae en silencio a la libreta privada**:
  * responde `'invalido'`. Sin eso, `?espacio=abc` mostraría las páginas propias
  * con el título del espacio compartido arriba — la peor forma de fallar, porque
  * se ve bien.
+ *
+ * 🔴 **`valor === null` tiene que entrar por la MISMA rama que `undefined`.**
+ * Una query string nunca produce `null` (`?espacio=` ausente es `undefined`),
+ * así que esta función nació correcta para el GET. El POST de `useMutacionesNotas`
+ * manda `espacioId: null` **de verdad** cuando la página es de la libreta privada
+ * (`JSON.stringify` conserva un `null` explícito) — y sin esta rama, CREAR LA
+ * PRIMERA PÁGINA PRIVADA DE CUALQUIERA respondía 400 `espacio inválido`: el
+ * mismo sentinel que en todo el resto del módulo significa «mi libreta».
  */
 function espacioPedido(valor: unknown): number | null | 'invalido' {
-  if (valor === undefined || valor === '') return null;
+  if (valor === undefined || valor === null || valor === '') return null;
   const n = Number(valor);
   return Number.isInteger(n) && n > 0 ? n : 'invalido';
 }

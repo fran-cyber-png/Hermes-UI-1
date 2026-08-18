@@ -188,3 +188,17 @@ export const DICCIONARIO_LIBRETA = {
     table: { ...es.slash_menu.table, subtext: 'Una tabla' },
   },
 } as const;
+
+/**
+ * TEXTO PLANO → BLOQUES, una línea = un párrafo. Es la misma conversión que
+ * `docParaEditor` (`notas.ts`) usa para abrir una nota vieja sin `doc`, acá
+ * reusada para PEGAR una plantilla (`ModalDePlantillas`) donde ya hay un editor
+ * corriendo: dos escrituras de la misma regla es #37, así que si esto cambia,
+ * `docParaEditor` también hay que mirarlo.
+ */
+export function bloquesDeTexto(texto: string) {
+  return texto.split('\n').map((linea) => ({
+    type: 'paragraph' as const,
+    content: linea === '' ? [] : [{ type: 'text' as const, text: linea, styles: {} }],
+  }));
+}

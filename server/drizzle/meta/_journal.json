@@ -253,6 +253,13 @@
       "when": 1788005568155,
       "tag": "0035_magical_ma_gnuci",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1788091968155,
+      "tag": "0036_familiar_bruce_banner",
+      "breakpoints": true
     }
   ]
 }

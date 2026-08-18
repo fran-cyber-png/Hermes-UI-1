@@ -1255,6 +1255,34 @@ export const notas = pgTable(
 );
 
 /**
+ * PLANTILLAS DE TEXTO DE LA LIBRETA — snippets que la vendedora arma una vez y
+ * pega después desde el menú `/` del editor, encima de «Encabezado 1».
+ *
+ * **No es `plantillas`** (la tabla de arriba, las secuencias de WhatsApp): esa
+ * es del NEGOCIO —se manda a un lead, tiene pasos, familia de curso, estado— y
+ * ésta es de la LIBRETA —texto que se pega adentro de una página propia, nunca
+ * sale por WhatsApp—. Compartir la tabla mezclaría dos catálogos con reglas
+ * opuestas (#37): uno se aprueba y se manda, el otro es un cajón personal.
+ *
+ * Personal, como `notas` antes de ADR 0046: no hay espacios acá, cada vendedora
+ * tiene las suyas y nadie más las ve. Sin borrado físico (patrón de `notas`).
+ */
+export const plantillasTexto = pgTable(
+  "plantillas_texto",
+  {
+    id: bigserial({ mode: "number" }).primaryKey(),
+    vendedoraId: text("vendedora_id").notNull(),
+    titulo: text("titulo").notNull(),
+    texto: text("texto").notNull(),
+    creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+    actualizadoAt: timestamp("actualizado_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Soft-delete: `null` = viva. No hay borrado físico (patrón de `notas`). */
+    archivadoAt: timestamp("archivado_at", { withTimezone: true }),
+  },
+  (t) => [index("plantillas_texto_vendedora_idx").on(t.vendedoraId, t.archivadoAt)],
+);
+
+/**
  * ESTADO PERSONAL DE LA CONVERSACIÓN — todo lo que la vendedora decide sobre una
  * conversación de la cola (la fija, la marca favorita, hasta dónde la leyó), una
  * fila por (vendedora, conversación). La cola potenciada (#49) la une con UN solo

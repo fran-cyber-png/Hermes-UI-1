@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/datos/cliente';
+import { bloquesDeTexto } from './editor';
 
 /**
  * NOTAS — el «Notion» a una tecla (issue #47). Datos y reglas de orden/atajo;
@@ -383,7 +384,6 @@ export function resumenDeNota(nota: Nota, tope = 90): string {
  */
 export function docParaEditor(nota: Nota): unknown[] | undefined {
   if (Array.isArray(nota.doc) && nota.doc.length > 0) return nota.doc;
-  const lineas = nota.texto.split('\n');
-  if (lineas.every((l) => l.trim() === '')) return undefined;
-  return lineas.map((linea) => ({ type: 'paragraph', content: linea === '' ? [] : [{ type: 'text', text: linea, styles: {} }] }));
+  if (nota.texto.split('\n').every((l) => l.trim() === '')) return undefined;
+  return bloquesDeTexto(nota.texto);
 }

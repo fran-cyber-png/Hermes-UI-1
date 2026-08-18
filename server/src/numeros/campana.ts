@@ -224,6 +224,16 @@ export const PREFIJOS_VEDADOS_A_CAMPANA = [
   "/api/espacios",
   "/api/correos",
   "/api/entrenamiento",
+  // Las piezas de texto de la Libreta (ADR 0057 §plantillas): es la superficie
+  // de `/api/notas` con otra forma —mismo dueño, mismos datos—, así que entra
+  // por la misma puerta. Dejarla afuera le daría al operador de campaña justo
+  // lo que las otras cuatro le niegan, y por un router agregado después.
+  //
+  // ⚠️ NO confundir con `/api/plantillas` (las secuencias de WhatsApp), que es
+  // otra cosa y NO está vedada: `esSuperficieDeEscuela` compara el prefijo
+  // completo, así que «/api/plantillas» no cae adentro de esto por compartir
+  // el comienzo (hay test).
+  "/api/plantillas-texto",
 ] as const;
 
 /** ¿Este path es una superficie de la Escuela? `startsWith`, no igualdad. */

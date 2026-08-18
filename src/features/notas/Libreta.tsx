@@ -18,6 +18,7 @@ import {
 } from './dibujo/capas';
 import { PanelDeCapas } from './dibujo/PanelDeCapas';
 import { agregarReciente, leerRecientes } from './dibujo/coloresRecientes';
+import { ModalDePlantillas } from './ModalDePlantillas';
 import { AccionesDePagina } from './AccionesDePagina';
 import { DiagramaPerezoso, EditorPerezoso, precargarDiagrama, precargarEditor } from './perezosos';
 import { PantallaDividida } from './PantallaDividida';
@@ -545,6 +546,21 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
   const [listaVisible, setListaVisible] = useState(true);
   const vista = { listaVisible, alternarLista: () => setListaVisible((v) => !v) };
 
+  /**
+   * EL MODAL DE PLANTILLAS VIVE ACÁ Y NO ADENTRO DE `EditorDePagina`
+   * (ver su docblock): esta página del componente NO se remonta al crear la
+   * primera página, así que el modal sobrevive esa transición. Lo que SÍ
+   * cambia con cada remonte es CÓMO pegar —la instancia de `editor` es otra—,
+   * y por eso viaja por una `ref` que la página activa se encarga de mantener
+   * al día (`registrarPegado`, más abajo).
+   */
+  const [plantillasAbierto, setPlantillasAbierto] = useState(false);
+  const pegarPlantillaRef = useRef<((texto: string) => void) | null>(null);
+  const abrirPlantillas = useCallback(() => setPlantillasAbierto(true), []);
+  const registrarPegado = useCallback((fn: ((texto: string) => void) | null) => {
+    pegarPlantillaRef.current = fn;
+  }, []);
+
   const termino = busqueda.trim();
   const lista = useNotas(CLAVE_LIBRETA, donde);
   const encontradas = useBuscarNotas(termino);
@@ -1004,6 +1020,8 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
                 soloLectura={!porLink.data?.puedeEditar}
                 onCambio={alCambiarDoc}
                 ribbon={{ tab: tabRibbon, onTab: setTabRibbon, vista }}
+                onAbrirPlantillas={abrirPlantillas}
+                registrarPegado={registrarPegado}
               />
             </ColumnaDeEscritura>
           )}
@@ -1074,6 +1092,8 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
                 soloLectura={false}
                 onCambio={alCambiarDoc}
                 ribbon={{ tab: tabRibbon, onTab: setTabRibbon, vista }}
+                onAbrirPlantillas={abrirPlantillas}
+                registrarPegado={registrarPegado}
               />
             </ColumnaDeEscritura>
           )}
@@ -1170,6 +1190,17 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
           </ZonaDeTrabajo>
         </main>
       </div>
+
+      {/* Acá y no adentro de `EditorDePagina`: ver el docblock de `abrirPlantillas`. */}
+      {plantillasAbierto && (
+        <ModalDePlantillas
+          onCerrar={() => setPlantillasAbierto(false)}
+          onElegir={(texto) => {
+            pegarPlantillaRef.current?.(texto);
+            setPlantillasAbierto(false);
+          }}
+        />
+      )}
     </section>
   );
 }

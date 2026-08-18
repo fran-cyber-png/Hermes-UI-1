@@ -11,15 +11,15 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 33 | 490 | 67,401 | 21,948 |
-| server | 66 | 786 | 82,932 | 51,763 |
-| **total** | **99** | **1,276** | **150,333** | **73,711** |
+| front | 33 | 492 | 67,886 | 21,948 |
+| server | 66 | 788 | 83,156 | 51,763 |
+| **total** | **99** | **1,280** | **151,042** | **73,711** |
 
 ## Front — `src/`
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
-| `notas` | La Libreta: páginas, espacios compartidos, autoguardado y el link público. | 92 | 13,699 | 27 | 5 | 1 |
+| `notas` | La Libreta: páginas, espacios compartidos, autoguardado y el link público. | 94 | 14,146 | 27 | 5 | 1 |
 | `whatsapp` | La conversación nativa: el hilo, el composer, los adjuntos, las citas y la compresión de video. | 44 | 5,246 | 23 | 9 | 5 |
 | `canales` | La cola unificada, y sólo eso: la lista de conversaciones, su fila, la barra de filtros y el panel de contexto. El modelo que dibuja NO vive acá — vive en `dominio/`. | 32 | 4,585 | 6 | 1 | 11 |
 | `panel` | La ficha al costado del chat, en el orden de las preguntas que decide una venta: quién es, qué quiere, qué mandarle, qué hacer. | 26 | 3,501 | 9 | 5 | 8 |
@@ -39,7 +39,7 @@
 | `ivi` | La consulta al cerebro RAG y cómo se presenta lo que contesta: los tres tipos y los ocho errores. | 10 | 1,395 | 4 | 1 | 1 |
 | `auth` | Entrar y salir: login contra Cerberus, el SSO de Centurión, y el token que el cliente cree antes de preguntar. | 18 | 1,300 | 9 | 3 | 4 |
 | `venta` | Registrar la venta contra Cerberus sin salir del chat. | 6 | 1,135 | 1 | 2 | 6 |
-| `app` | El armazón: qué vista está abierta, los ⌘N y qué capa se monta encima de la mesa. Compone features; no tiene regla de negocio propia. | 2 | 1,038 | 0 | 0 | 18 |
+| `app` | El armazón: qué vista está abierta, los ⌘N y qué capa se monta encima de la mesa. Compone features; no tiene regla de negocio propia. | 2 | 1,076 | 0 | 0 | 18 |
 | `hechos` | Los datos recomendados — la munición de una línea. Tocar uno lo pone en el composer; no envía. | 7 | 1,003 | 2 | 2 | 3 |
 | `navegador` | El navegador embebido: qué peldaño de la escalera corre esta máquina y a dónde se puede ir. | 9 | 843 | 3 | 1 | 1 |
 | `bot` | El interruptor del bot de primera línea visto desde la app: en qué modo está, de dónde sale ese modo (la base o el entorno) y cómo apagarlo sin un deploy. | 5 | 724 | 2 | 1 | 1 |
@@ -57,12 +57,12 @@
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
-| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. Capa 3 — nadie la importa: un archivo que otro módulo necesita no es un router y no va acá (fue el caso de `costoPorLead`). | 62 | 10,799 | 12 | 1 | 48 |
+| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. Capa 3 — nadie la importa: un archivo que otro módulo necesita no es un router y no va acá (fue el caso de `costoPorLead`). | 63 | 10,880 | 12 | 1 | 48 |
 | `bot` | El bot de primera línea que atiende solo: su agente, sus guardrails, sus frenos y el reenganche. | 56 | 7,997 | 24 | 7 | 13 |
 | `scripts` | Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción. Capa 3. | 36 | 6,207 | 0 | 0 | 36 |
 | `cola` | La consulta que ordena la deuda: a quién se atiende primero y por qué. Cada regla vive pura y con su gemelo SQL. | 62 | 5,494 | 42 | 9 | 6 |
 | `whatsapp` | La costura con WhatsApp: la interfaz de transporte y sus implementaciones, el hilo, y la única puerta por la que sale un envío. | 49 | 4,263 | 23 | 13 | 10 |
-| `db` | El schema y la conexión. Capa 0: no conoce ninguna regla de negocio y no puede importar a nadie. | 20 | 4,012 | 1 | 53 | 0 |
+| `db` | El schema y la conexión. Capa 0: no conoce ninguna regla de negocio y no puede importar a nadie. | 20 | 4,040 | 1 | 53 | 0 |
 | `autorespuesta` | El acuse fuera de horario del lado del server: a quién corresponde, con qué plantilla y a qué ritmo. Nunca manda solo. | 30 | 2,993 | 13 | 7 | 5 |
 | `campana` | Mandar una campaña por plantilla aprobada de Meta: el público, los vetos, el ritmo y los reintentos. | 27 | 2,907 | 12 | 3 | 6 |
 | `correos` | El correo 1-a-1 y su rastro. Sin listas ni campañas. | 24 | 1,684 | 15 | 2 | 2 |
@@ -72,12 +72,12 @@
 | `sdk` | 🪦 Heredado de meta-escuela — el SDK de consulta del dashboard de pauta. | 9 | 1,420 | 1 | 1 | 6 |
 | `pauta` | 🪦 Heredado de meta-escuela — recolectar gasto, fatiga y engagement de la pauta publicitaria, y el costo REAL por lead (leads capturados contra lo que Meta dice que costó traerlos, todo en dólares). | 14 | 1,349 | 4 | 4 | 5 |
 | `cerberus` | Hablarle al ERP: login, ficha, productos, ventas — y el latin1 que revienta con emojis. | 14 | 1,313 | 7 | 10 | 3 |
-| `numeros` | Los números de WhatsApp de Goberna: su estado de vinculación y de quién es cada uno. | 18 | 1,297 | 9 | 7 | 5 |
+| `numeros` | Los números de WhatsApp de Goberna: su estado de vinculación y de quién es cada uno. | 18 | 1,307 | 9 | 7 | 5 |
 | `cursos` | Traducir el texto con el que llegó una persona a una familia de curso. | 15 | 1,223 | 7 | 8 | 3 |
 | `webhook` | Todo lo que entra de afuera: Meta, WhatsApp, Cerberus y las landings. Ack primero, firma siempre. Capa 3 — es una entrada, nadie lo importa. | 12 | 1,178 | 4 | 1 | 10 |
 | `analisis` | 🪦 Heredado de meta-escuela — los análisis del dashboard de pauta (ROAS, cartera, geo). | 15 | 1,173 | 6 | 5 | 2 |
+| `notas` | Las páginas de la Libreta y su texto plano. | 11 | 1,159 | 7 | 1 | 3 |
 | `plantillas` | Las secuencias de venta: catálogo, expansión de `{variables}` y aprobación de una propuesta minada. | 12 | 1,126 | 6 | 4 | 4 |
-| `notas` | Las páginas de la Libreta y su texto plano. | 10 | 1,061 | 7 | 1 | 2 |
 | `ontologia` | 🪦 Heredado de meta-escuela — las proyecciones ontológicas. ⚠️ `ontologia.conversiones` NO está muerto: `lazo/worker.ts` lo consulta. | 7 | 1,040 | 2 | 2 | 4 |
 | `padron` | Los contactos de icarus que nunca escribieron: el WHERE que los recorta, sus facetas, y a quién se le habilitan. Es una frontera. | 15 | 1,023 | 6 | 4 | 2 |
 | `canales` | 🪦 Heredado de meta-escuela — las consultas de salud y tesorería del dashboard de pauta. ⚠️ No confundir con `front/canales`, que es la cola y sí se usa. | 6 | 1,021 | 0 | 2 | 4 |
@@ -92,7 +92,7 @@
 | `auth` | Quién entra: Cerberus, Centurión, el token HMAC y el perímetro cerrado por default. | 13 | 628 | 7 | 6 | 2 |
 | `procedencia` | De qué pieza salió cada envío, estampado en la ORDEN de envío y no en un update posterior. | 6 | 625 | 3 | 6 | 3 |
 | `telefono` | Partir y comparar un teléfono E.164. La llave canónica del repo: vive una sola vez. Capa 0. | 6 | 608 | 3 | 6 | 0 |
-| `reparto` | De quién es cada conversación cuando varias comparten una línea. Round-robin por carga, fail-open. | 6 | 590 | 3 | 7 | 2 |
+| `reparto` | De quién es cada conversación cuando varias comparten una línea. Round-robin por carga, fail-open. | 6 | 590 | 3 | 8 | 2 |
 | `gestiones` | La bitácora comercial: lo que una persona AFIRMA sobre una conversación. | 8 | 546 | 4 | 5 | 5 |
 | `ivi` | El proxy al cerebro RAG: traduce su dialecto y falla ruidoso — nunca disfraza una caída de «no encontró datos». | 3 | 519 | 2 | 1 | 0 |
 | `piezas` | Cómo se direcciona una pieza y cómo se calcula su versión. Un solo lugar — con dos recetas, el join da cero filas en silencio. | 6 | 513 | 3 | 5 | 0 |
@@ -105,9 +105,9 @@
 | `hechos` | El catálogo de datos recomendados y cuáles llegan a verse en cada momento de venta. | 6 | 396 | 2 | 3 | 2 |
 | `decisions` | 🪦 Heredado de meta-escuela — el feed de «qué requiere atención» del dashboard de pauta. | 3 | 368 | 1 | 3 | 1 |
 | `reacciones` | El 👍 al flyer: una señal que cuelga de un mensaje, en los dos dialectos y con una sola forma. | 5 | 336 | 2 | 3 | 2 |
+| `index` | El pegamento: monta los routers y arranca los relojes. ⚠️ Sus comentarios describen la arquitectura de meta-escuela y engañan (ver `docs/arquitectura.md` §2). | 1 | 325 | 0 | 0 | 12 |
 | `migraciones` | Verificar que una migración sea expand-only y que el journal sea monótono. | 4 | 321 | 2 | 1 | 0 |
 | `corridas` | Las corridas de entrenamiento del bot y los agujeros que dejan. | 4 | 319 | 2 | 1 | 3 |
-| `index` | El pegamento: monta los routers y arranca los relojes. ⚠️ Sus comentarios describen la arquitectura de meta-escuela y engañan (ver `docs/arquitectura.md` §2). | 1 | 318 | 0 | 0 | 12 |
 | `realtime` | El bus que empuja los cambios a la app por SSE. | 4 | 295 | 1 | 3 | 2 |
 | `centurion` | Las credenciales del SSO de Centurión. | 2 | 288 | 1 | 1 | 1 |
 | `categorias` | Las categorías con color que cada vendedora se arma. | 4 | 247 | 2 | 3 | 1 |
@@ -140,11 +140,11 @@ Los módulos con más entradas son los que no se pueden tocar sin mirar a todo e
 | `front/whatsapp` | 9 | `agenda` · `app` · `auth` · `autorespuesta` · `canales` · `dashboard` · `hechos` · `padron` · `sugerencias` |
 | `server/cola` | 9 | `canales` · `dashboard` · `equipo` · `gestiones` · `interacciones` · `resultados` · `routes` · `routing` · `scripts` |
 | `server/cursos` | 8 | `bot` · `dashboard` · `gestiones` · `index` · `plantillas` · `routes` · `routing` · `scripts` |
+| `server/reparto` | 8 | `espacios` · `eventos` · `notas` · `numeros` · `padron` · `routes` · `scripts` · `webhook` |
 | `server/autorespuesta` | 7 | `bot` · `campana` · `catalogo` · `index` · `routes` · `scripts` · `whatsapp` |
 | `server/bot` | 7 | `corridas` · `dashboard` · `index` · `routes` · `scripts` · `webhook` · `whatsapp` |
 | `server/gente` | 7 | `atribucion` · `autorespuesta` · `cola` · `cursos` · `dashboard` · `routes` · `scripts` |
 | `server/numeros` | 7 | `cola` · `dashboard` · `gente` · `index` · `routes` · `scripts` · `whatsapp` |
-| `server/reparto` | 7 | `espacios` · `eventos` · `numeros` · `padron` · `routes` · `scripts` · `webhook` |
 
 ## Los nudos entre módulos (informativo, no es una regla)
 

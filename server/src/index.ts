@@ -33,6 +33,7 @@ import { capturarCuerpoCrudo } from "./webhook/firma.js";
 import { landingRouter } from "./webhook/landing.js";
 import { correosRouter } from "./routes/correos.js";
 import { notasRouter } from "./routes/notas.js";
+import { plantillasTextoRouter } from "./routes/plantillasTexto.js";
 import { publicoRouter } from "./routes/publico.js";
 import { espaciosRouter } from "./routes/espacios.js";
 import { ventaRouter } from "./routes/venta.js";
@@ -131,9 +132,15 @@ app.use("/webhook/landing", landingRouter); // los leads de las landings, reenvi
 // El riel las esconde (`App.tsx`, `soloPara`) y esto las NIEGA: esconder no
 // protege, y las tres tienen datos propios. La cuarta —el Navegador— es un
 // comando de la cáscara y no pasa por acá. Ver `numeros/campana.ts`.
+//
+// ⚠️ `plantillas-texto` entra por la MISMA puerta y no es una excepción: son las
+// piezas de texto de la Libreta, o sea la superficie de `/api/notas` con otra
+// forma. Dejarla afuera le daría al operador de campaña justo lo que las otras
+// tres le niegan, y por un router que se agregó después.
 const deLaEscuela = soloEscuela((id) => lineasDeVendedoraConProposito(db, id));
 app.use("/api/correos", deLaEscuela, correosRouter); // email 1-a-1, auditado — sin listas, sin campañas
 app.use("/api/notas", deLaEscuela, notasRouter); // el «Notion» a una tecla — editable, no deriva nada
+app.use("/api/plantillas-texto", deLaEscuela, plantillasTextoRouter); // snippets de la Libreta que se pegan desde el `/` — no confundir con /api/plantillas (secuencias de WhatsApp)
 app.use("/api/espacios", deLaEscuela, espaciosRouter); // dónde vive cada página: mi libreta o un espacio del equipo (ADR 0046)
 // 🔴 LA ÚNICA RUTA QUE SIRVE CONTENIDO SIN CREDENCIAL (ADR 0047), y por eso vive
 // FUERA de `/api`: una excepción adentro del perímetro es un prefijo que el
