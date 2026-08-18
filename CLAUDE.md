@@ -327,7 +327,7 @@ Hermes: `src/features/navegador/` (vista ⌘9) + comandos `navegador_*` en `src-
   con `?ir=<sitio>` y `HERMES_DEV_EVIDENCIA=1` (sin eso `screencapture` fotografía la app INSTALADA,
   porque las dos son el proceso `app`). Capturas: `docs/evidencia/navegador-*.png`.
 - 🔴 **LOS TESTS DE LA CÁSCARA NO SON GATE DE PR, Y ESO YA COSTÓ UNA ROTURA INVISIBLE.** `ci.yml` corre
-  en el runner de VPS1, que no tiene Rust; los de la cáscara viven en `tauri-windows.yml`, que es
+  en runners self-hosted sin Rust (desde el 18-ago-2026 los de CI están en VPS2; tampoco lo tiene); los de la cáscara viven en `tauri-windows.yml`, que es
   `workflow_dispatch`. Medido el 9-ago-2026: **el último build verde de Windows es del 4-ago**, y hoy
   falla en «Tests de la cáscara» con `STATUS_ENTRYPOINT_NOT_FOUND` (`0xc0000139`) — el binario de test
   compila y no arranca, así que **no hay `.exe`**. Es de **ADR 0040**, no de 0043 (verificado disparando
@@ -1959,8 +1959,21 @@ dns-cloudflare; el 4110 no se expone).
 (sin sesión desde el 28-jul). Hoy corren **`51963139984` por whatsmeow y `51984429504` por Cloud API** —
 ver §«Administración de números» para cómo se retira una línea de verdad.
 
-**Hay CD, en cinco niveles** (`docs/despliegue-continuo.md`; ADR 0021 y 0022). Todo corre en el **runner
-self-hosted de VPS1** (label `vps1-hermes`), que es uno solo: los jobs se serializan.
+**Hay CD, en cinco niveles** (`docs/despliegue-continuo.md`; ADR 0021 y 0022). Corre en **dos hosts, y
+la división es deliberada** (18-ago-2026):
+
+- **N1, N2, N2b y el resumen → `hermes-ci`**, dos runners en **VPS2**. Son jobs autocontenidos
+  (`actions/checkout` + su propio `docker-compose.test.yml`) y no tocan disco de producción.
+- **N3, N4 y N5 → `vps1-hermes`**, el runner de siempre en **VPS1**. Despliegan: escriben en
+  `/srv/hermes-staging` y `/srv/hermes`. Ese trabajo es local al host y no se puede mover.
+
+Antes los seis pedían `vps1-hermes` y lo servía UN runner, así que se serializaban aunque N2 y N2b
+estén escritos para ir en paralelo. Medido el 18-ago: **el 47 % de los jobs esperaba más de un minuto
+en cola, p90 de 9 min, picos de 20** — y competían por CPU con producción, con VPS1 en load 23 sobre
+8 núcleos. Ver ADR 0038 de `goberna-infra`.
+⚠️ **Antes de cambiar un label, el runner que lo publica tiene que existir.** GitHub no falla cuando
+nadie ofrece un label: deja el job encolado para siempre, sin error. `gh api
+repos/Goberna-Lab/hermes/actions/runners`.
 
 | | Qué | Cuándo |
 |---|---|---|
@@ -2011,7 +2024,10 @@ ve verde igual**.
 · Arreglarlo: `git checkout -- <rutas>` **después** de verificar que esos archivos existen en `main` y que
   ningún commit los borró. ⚠️ **Nunca `reset --hard` ni `checkout .` a ciegas**: eso pisaría una edición
   hecha a mano, que es justo lo que la regla #6 protege.
-· El runner es **uno solo y serializa**: N5 puede quedar 15+ min encolado. **Encolado ≠ colgado.**
+· N5 comparte el runner `vps1-hermes` con N3 y N4, y ese runner **es uno solo y serializa**:
+  puede quedar encolado detrás de un deploy en curso. **Encolado ≠ colgado.** Desde el 18-ago-2026
+  espera bastante menos, porque N1/N2/N2b se mudaron al label `hermes-ci` en VPS2 y ya no le compiten
+  por el turno — pero sigue siendo una cola de uno.
 
 🔴 **El smoke verifica los ASSETS, no solo el bundle** (`deploy/vps1/verificar-assets.sh`, en N4 y N5).
 Comparar el hash del `index-*.js` no mueve un asset que falta. **Y no alcanza con mirar el código HTTP**: el
