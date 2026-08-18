@@ -5,7 +5,8 @@ import { requiereVendedora } from '../auth/sesion.js';
 import { ssoDeCenturionConfigurado } from '../auth/centurion.js';
 import { canjearTokenDeCenturion, MENSAJE_SIN_LINEA } from '../auth/sesionCenturion.js';
 import { resolverLogin } from '../auth/loginCascada.js';
-import { lineasDeVendedora } from '../numeros/repositorio.js';
+import { lineasDeVendedora, lineasDeVendedoraConProposito } from '../numeros/repositorio.js';
+import { atiendeUnaCampana } from '../numeros/campana.js';
 import { porQueFallo } from '../lib/porQueFallo.js';
 import { ruta } from '../lib/ruta.js';
 
@@ -151,7 +152,22 @@ authRouter.post('/centurion', ruta(async (req, res) => {
 authRouter.get('/yo', requiereVendedora, ruta(async (req, res) => {
   res.json({
     ok: true,
-    vendedora: { id: req.vendedoraId, nombre: req.vendedoraId },
+    vendedora: {
+      id: req.vendedoraId,
+      nombre: req.vendedoraId,
+      /**
+       * ¿De qué lado del negocio trabaja? Es lo que decide qué vistas tiene el
+       * riel (`App.tsx`), y baja por acá porque **`/yo` es el único canal por el
+       * que el front se entera de algo sobre quien entró** — el mismo motivo por
+       * el que `equipo/cargarRol.ts` resuelve el Bearer por su cuenta.
+       *
+       * ⚠️ Es SÓLO para dibujar. Lo que de verdad niega las cuatro superficies es
+       * `numeros/soloEscuela.ts`, en el `WHERE` de sus rutas: si esto viajara
+       * como `false` por un server viejo, se vería el ícono y la ruta contestaría
+       * 403 igual. Al revés —esconder sin negar— sería la frontera imaginaria.
+       */
+      esDeCampana: atiendeUnaCampana(await lineasDeVendedoraConProposito(db, req.vendedoraId!)),
+    },
     cerberus: Boolean(await obtenerSesionCerberus(req.vendedoraId!)),
   });
 }));

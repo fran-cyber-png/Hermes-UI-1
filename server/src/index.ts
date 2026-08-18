@@ -67,7 +67,8 @@ import { db } from "./db/client.js";
 import { sembrarAliasCurso } from "./cursos/repositorio.js";
 import { cargarRol } from "./equipo/cargarRol.js";
 import { cargarLineasVedadas } from "./numeros/cargarLineasVedadas.js";
-import { lineasVedadasDe } from "./numeros/repositorio.js";
+import { lineasDeVendedoraConProposito, lineasVedadasDe } from "./numeros/repositorio.js";
+import { soloEscuela } from "./numeros/soloEscuela.js";
 import { leerPersona, sembrarEquipo } from "./equipo/repositorio.js";
 import { EQUIPO_SEMILLA, revisarSemilla } from "./equipo/semilla.js";
 import { arrancarDespachador } from "./bot/despachador.js";
@@ -126,9 +127,14 @@ app.use("/api/sugerencias", sugerenciasRouter); // las dos respuestas listas del
 app.use("/api/hechos", hechosRouter); // los datos recomendados: la munición de una línea (#153)
 app.use("/api/dashboard", dashboardRouter); // el radar: leads cayendo + números por vendedora
 app.use("/webhook/landing", landingRouter); // los leads de las landings, reenviados por Bravo
-app.use("/api/correos", correosRouter); // email 1-a-1, auditado — sin listas, sin campañas
-app.use("/api/notas", notasRouter); // el «Notion» a una tecla — editable, no deriva nada
-app.use("/api/espacios", espaciosRouter); // dónde vive cada página: mi libreta o un espacio del equipo (ADR 0046)
+// 🔴 LAS TRES SUPERFICIES DE LA ESCUELA QUE UN OPERADOR DE CAMPAÑA NO TIENE.
+// El riel las esconde (`App.tsx`, `soloPara`) y esto las NIEGA: esconder no
+// protege, y las tres tienen datos propios. La cuarta —el Navegador— es un
+// comando de la cáscara y no pasa por acá. Ver `numeros/campana.ts`.
+const deLaEscuela = soloEscuela((id) => lineasDeVendedoraConProposito(db, id));
+app.use("/api/correos", deLaEscuela, correosRouter); // email 1-a-1, auditado — sin listas, sin campañas
+app.use("/api/notas", deLaEscuela, notasRouter); // el «Notion» a una tecla — editable, no deriva nada
+app.use("/api/espacios", deLaEscuela, espaciosRouter); // dónde vive cada página: mi libreta o un espacio del equipo (ADR 0046)
 // 🔴 LA ÚNICA RUTA QUE SIRVE CONTENIDO SIN CREDENCIAL (ADR 0047), y por eso vive
 // FUERA de `/api`: una excepción adentro del perímetro es un prefijo que el
 // próximo router hereda sin que nadie lo note — la forma exacta que tuvo el #36.
@@ -178,7 +184,7 @@ app.use("/api/autorespuesta", autorespuestaRouter); // el interruptor sin deploy
 app.use("/api/bot", botRouter); // el kill-switch del bot de primera línea: apagar cuesta un click, no un deploy
 // El chat de prueba (#256): corre el MOTOR REAL sin transporte, así que se puede
 // mirar trabajar al bot sin gastar un solo lead de la pauta.
-app.use("/api/entrenamiento", entrenamientoRouter);
+app.use("/api/entrenamiento", deLaEscuela, entrenamientoRouter);
 app.use("/api/admin", requiereServicio, adminRouter); // administración de números desde Cerberus (#50/#95)
 /**
  * 🔴 LO SOLO-DEV NO SE MONTA EN PRODUCCIÓN — «en prod no hay agujero que
