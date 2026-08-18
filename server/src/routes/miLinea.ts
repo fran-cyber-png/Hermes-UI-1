@@ -112,7 +112,6 @@ const MENSAJE_RECHAZO: Record<MotivoRechazoAutoVinculacion, string> = {
   // que no sabe nombrar. Quien SÍ puede accionarlo lee el log del server.
   transporte_sin_vinculacion:
     "este Hermes no está configurado para vincular líneas nuevas — avisá a quien lo administra",
-  es_supervisor: "los supervisores no auto-vinculan una línea propia",
   ya_tiene_linea: "ya tenés una línea vinculada — para cambiarla, hablá con quien administra Hermes",
 };
 

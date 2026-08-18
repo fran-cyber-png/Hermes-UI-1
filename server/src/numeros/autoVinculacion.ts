@@ -1,9 +1,21 @@
-import { esSupervisor } from "../padron/supervisor.js";
-
 /**
- * ¿QUIÉN PUEDE AUTO-VINCULAR SU PROPIA LÍNEA, DESDE LA APP? — decisión del
- * dueño del 15-ago-2026: «siempre un vendedor (no supervisor) va a tener la
- * posibilidad de enlazar su número, solo 1».
+ * ¿QUIÉN PUEDE AUTO-VINCULAR SU PROPIA LÍNEA, DESDE LA APP? — **cualquiera del
+ * equipo, incluidas las supervisoras**.
+ *
+ * 🔴 **ENMIENDA DEL 18-ago-2026, y revierte al dueño del 15-ago.** La regla nació
+ * como «siempre un vendedor (NO supervisor) va a tener la posibilidad de enlazar
+ * su número, solo 1»; el dueño la cambió a que **todos puedan**, supervisoras
+ * incluidas. El tope de **una línea por persona no se toca**: lo que se retira es
+ * el veto por rol, no el de cantidad.
+ *
+ * Lo que costaba en producción, medido antes de sacarlo: `HERMES_SUPERVISORES`
+ * tenía tres ids (`ventas10@grupogoberna.com`, `alan`, `Usuario1`) y esas tres
+ * personas comían 409 al intentar traer su propio número.
+ *
+ * ⚠️ **Por qué el veto ya no tiene a quién proteger**: era una regla de PRODUCTO
+ * («los supervisores supervisan las líneas de las demás»), nunca de seguridad —
+ * la línea que traen queda atada 1:1 a quien la trajo, y un supervisor ya podía
+ * declararse una por Cerberus. Sacarlo no le da acceso a nada ajeno.
  *
  * Hasta acá vincular era D13: server-side, con un operador mirando el `/vincular`
  * o el panel de Cerberus. Esto NO reemplaza esa puerta (Cerberus sigue pudiendo
@@ -58,7 +70,6 @@ export const TRANSPORTE_QUE_VINCULA = "whatsmeow";
 
 export type MotivoRechazoAutoVinculacion =
   | "transporte_sin_vinculacion"
-  | "es_supervisor"
   | "ya_tiene_linea";
 
 export type DecisionAutoVinculacion =
@@ -83,7 +94,13 @@ export function transportePuedeVincular(env: NodeJS.ProcessEnv): boolean {
  * su fila escrita y ninguna forma de volver a intentarlo desde la app.
  */
 export function puedeAutoVincular(
-  vendedoraId: string,
+  /**
+   * ⚠️ **Ya no decide nada, y se conserva a propósito.** Con el veto por rol
+   * retirado, la decisión no mira quién pregunta — pero la firma es el contrato
+   * del call site y sacarlo obligaría a tocarlo por un cambio que no es suyo. El
+   * día que vuelva a haber una regla por persona, el parámetro ya está.
+   */
+  _vendedoraId: string,
   env: NodeJS.ProcessEnv,
   lineasActuales: readonly string[],
   numeroPedido: string,
@@ -91,10 +108,8 @@ export function puedeAutoVincular(
   // Primero el veto del SERVER: no depende de quién pregunte y es el que evita
   // escribir una credencial que nadie va a usar.
   if (!transportePuedeVincular(env)) return { ok: false, motivo: "transporte_sin_vinculacion" };
-  // Los supervisores no traen línea propia: supervisan las de las demás. Va
-  // antes que «ya tiene línea» porque es la condición que no cambia con el
-  // tiempo — «ya tiene línea» sí, si algún día se retira una.
-  if (esSupervisor(vendedoraId, env)) return { ok: false, motivo: "es_supervisor" };
+  // Acá vivía el veto por rol (`esSupervisor`). Se retiró el 18-ago-2026: ahora
+  // **todo el equipo** puede traer su línea. Lo que queda es el tope de cantidad.
   const otraLinea = lineasActuales.some((linea) => linea !== numeroPedido);
   if (otraLinea) return { ok: false, motivo: "ya_tiene_linea" };
   return { ok: true };

@@ -48,18 +48,26 @@ describe("puedeAutoVincular", () => {
     );
   });
 
-  test("una supervisora NO puede, tenga o no línea", () => {
-    assert.deepEqual(puedeAutoVincular("ana", WHATSMEOW_CON_ANA_SUPERVISORA, [], MI_NUMERO), {
-      ok: false,
-      motivo: "es_supervisor",
-    });
+  test("🔴 una supervisora SÍ puede — el veto por rol se retiró el 18-ago-2026", () => {
+    // Antes esto devolvía `es_supervisor`. Es el test que cambia de signo con la
+    // enmienda del dueño; se conserva en vez de borrarse porque lo que hay que
+    // fijar no es «no hay regla», es **qué regla hay ahora**.
+    assert.deepEqual(puedeAutoVincular("ana", WHATSMEOW_CON_ANA_SUPERVISORA, [], MI_NUMERO), { ok: true });
   });
 
-  test("normaliza los DOS lados, como el resto del reparto", () => {
-    // Cerberus empuja `Ana`, ella entra escribiendo `ana`: sigue siendo supervisora.
-    assert.deepEqual(puedeAutoVincular("ANA", WHATSMEOW_CON_ANA_SUPERVISORA, [], MI_NUMERO), {
+  test("🔴 y estar en `HERMES_SUPERVISORES` con CUALQUIER grafía tampoco la frena", () => {
+    // El caso que antes probaba la normalización del veto: `Ana` en la lista y
+    // `ANA` en el token. Ya no hay nada que normalizar acá, y esto lo fija —
+    // si alguien reintroduce el veto, este test se pone rojo antes que nadie.
+    assert.deepEqual(puedeAutoVincular("ANA", WHATSMEOW_CON_ANA_SUPERVISORA, [], MI_NUMERO), { ok: true });
+  });
+
+  test("el tope de UNA línea NO se retiró: le sigue valiendo a la supervisora", () => {
+    // Lo que se sacó es el veto por ROL, no el de CANTIDAD. Sin este test, un
+    // «ahora pueden todos» se lee como «ahora pueden todo».
+    assert.deepEqual(puedeAutoVincular("ana", WHATSMEOW_CON_ANA_SUPERVISORA, [OTRO_NUMERO], MI_NUMERO), {
       ok: false,
-      motivo: "es_supervisor",
+      motivo: "ya_tiene_linea",
     });
   });
 

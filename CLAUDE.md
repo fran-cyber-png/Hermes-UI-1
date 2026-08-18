@@ -158,21 +158,27 @@ npm install && npm run dev:app                     # la cáscara Tauri (arranca 
   ⚠️ **Y esa credencial no va en una laptop**: el 29-jul se encontró la línea de VENTAS en el checkout
   de desarrollo. El `.gitignore` cubre **el nombre exacto** `.wa-sessions/`, así que renombrar ese
   directorio deja 43 MB de credencial a la vista de git. Para desarrollo va `WHATSAPP_TRANSPORTE=falso`.
-  🔴 **Desde el 15-ago-2026, D13 ya NO es absoluto: la app de la vendedora TAMBIÉN vincula, un caso
-  angosto.** Decisión del dueño: toda vendedora que no es supervisora puede traer su propio número —
-  **solo 1**— escaneando el QR desde adentro de Hermes (`PanelUsuario` → «Vincular tu WhatsApp» →
+  🔴 **Desde el 15-ago-2026, D13 ya NO es absoluto: la app de la vendedora TAMBIÉN vincula.**
+  Decisión del dueño, **enmendada el 18-ago-2026**: **cualquiera del equipo, supervisoras incluidas**,
+  puede traer su propio número — **solo 1**— escaneando el QR desde adentro de Hermes (`PanelUsuario` → «Vincular tu WhatsApp» →
   `server/src/routes/miLinea.ts`, `POST /api/whatsapp/mi-linea/vincular`). Reusa el MISMO vinculador
   global de D13 (uno-a-la-vez en todo el server); lo que cambia es quién lo dispara y que la línea se
   monta **en caliente** (`whatsapp/wiring.ts:agregarLineaWhatsmeow`, sin `WHATSAPP_NUMEROS` ni reinicio).
   Cerberus sigue siendo la ÚNICA vía para líneas de Escuela o de campaña; esto es solo `proposito:
   'vendedora'`, y el número queda atado 1:1 a quien lo trajo (`numeros/autoVinculacion.ts`).
-  🔴 **Y HOY, EN PRODUCCIÓN, CONTESTA 409.** El veto está en `numeros/autoVinculacion.ts` y es lo
-  primero que se pregunta: **sin `WHATSAPP_TRANSPORTE=whatsmeow` no se inicia el pareo**. El motivo
-  es que `Vinculador.iniciar()` hace `createClient({ store: .wa-sessions/<n>.db })` **sin mirar el
-  transporte** — o sea que un botón escribía 43 MB de credencial de WhatsApp real en VPS1 para un
-  server que nunca iba a montar esa línea. Producción corre `falso` desde el 13-ago, así que
-  **prender este frente es un cambio de `.env` + reinicio a mano**, no un merge (N5 sale verde sin
-  reiniciar si el SHA ya está desplegado: verificar `ActiveEnterTimestamp`).
+  ⚠️ **El veto que queda es del SERVER, no de la persona**: `numeros/autoVinculacion.ts` pregunta
+  primero **`WHATSAPP_TRANSPORTE=whatsmeow`**, porque `Vinculador.iniciar()` hace
+  `createClient({ store: .wa-sessions/<n>.db })` **sin mirar el transporte** — un botón escribiría
+  43 MB de credencial real en VPS1 para un server que nunca va a montar esa línea.
+  🔴 **Este archivo decía «producción corre `falso`, así que contesta 409» y quedó VIEJO**: medido el
+  18-ago-2026 en el `.env` de VPS1, **`WHATSAPP_TRANSPORTE=whatsmeow`**. O sea que la puerta está
+  abierta de verdad. **Antes de afirmar que este frente está apagado, `grep WHATSAPP_TRANSPORTE` en
+  el `.env` de VPS1** — no lo deduzcas de acá.
+  🔴 **Y el veto por ROL se retiró el 18-ago-2026** (enmienda del dueño). Antes `esSupervisor()`
+  rechazaba con `es_supervisor`, y en producción eso eran tres personas reales
+  (`HERMES_SUPERVISORES` = `ventas10@grupogoberna.com`, `alan`, `Usuario1`). **Lo que NO se tocó es
+  el tope de UNA línea por persona**: se sacó el veto de quién, no el de cuántas — y hay test que se
+  pone rojo si alguien los confunde.
   ⚠️ **No sobrevive un reinicio.** El montaje en caliente vive solo en el proceso: si el server
   reinicia (N5, un crash), la línea auto-vinculada no vuelve a montarse sola — sigue siendo
   `WHATSAPP_NUMEROS` + reinicio manual lo que la trae de vuelta, igual que hoy con una línea de
