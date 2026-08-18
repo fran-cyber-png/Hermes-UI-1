@@ -2037,6 +2037,16 @@ Antes los seis pedían `vps1-hermes` y lo servía UN runner, así que se seriali
 estén escritos para ir en paralelo. Medido el 18-ago: **el 47 % de los jobs esperaba más de un minuto
 en cola, p90 de 9 min, picos de 20** — y competían por CPU con producción, con VPS1 en load 23 sobre
 8 núcleos. Ver ADR 0038 de `goberna-infra`.
+🔴 **Un merge a `main` YA NO cancela al anterior** (18-ago-2026). GitHub guarda **un solo run
+en espera** por grupo de concurrencia: cuando llega otro, al que esperaba **lo cancela**, y
+`cancel-in-progress: false` protege al que corre, no al que espera. Con el grupo compartido
+`ci-${{ github.ref }}`, dos merges seguidos dejaban al del medio en `cancelled` **sin ejecutar un
+solo job** — pasó dos veces el 18-ago. Ahora el grupo lleva el SHA en main, así que cada commit
+tiene su cola de uno. Lo que impide dos deploys pisándose son los candados **por job**
+(`desplegar-staging`, `desplegar-produccion`), que no se tocaron, más las guardias de
+«no retroceder» de N3 y N4: si lo desplegado ya CONTIENE el commit del run, el job se saltea con
+un `::notice::` en vez de hacer `checkout --force` de un árbol viejo sobre producción.
+
 ⚠️ **Antes de cambiar un label, el runner que lo publica tiene que existir.** GitHub no falla cuando
 nadie ofrece un label: deja el job encolado para siempre, sin error. `gh api
 repos/Goberna-Lab/hermes/actions/runners`.

@@ -54,8 +54,25 @@ on:
 env:
   TZ: America/Lima
 
+# ⚠️ En `main` el grupo lleva el SHA, y eso NO es cosmético.
+# GitHub guarda UN SOLO run en espera por grupo de concurrencia: cuando llega otro,
+# al que estaba esperando lo CANCELA. `cancel-in-progress: false` protege al que
+# está corriendo, no al que espera. Con el grupo compartido `ci-refs/heads/main`,
+# dos merges seguidos hacían que el del medio se cancelara sin ejecutar un solo job
+# — medido el 18-ago-2026: dos merges a main con `jobs_ejecutados=0`, y el aviso es
+# un `cancelled` gris que no le llega a nadie.
+#
+# Funcionaba «de casualidad» porque main es lineal y el run siguiente despliega un
+# superset. Deja de funcionar en cuanto ese run siguiente falla: ahí no se desplegó
+# ninguno de los dos y el historial no lo grita.
+#
+# Con el SHA en el grupo, cada commit de main tiene su propia cola de uno y ninguno
+# puede cancelar a otro. Lo que impide dos deploys pisándose son los candados de
+# N3/N4/N5 (`desplegar-staging` y `desplegar-produccion`), que son por JOB y siguen
+# intactos — más las guardias de «no retroceder» que esos jobs tienen adentro.
+# En ramas todo sigue igual: grupo por rama y cancel-in-progress.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}-${{ github.ref == 'refs/heads/main' && github.sha || 'rama' }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 # ══ DÓNDE CORRE CADA JOB ══════════════════════════════════════════════════════
@@ -346,6 +363,18 @@ jobs:
           set -euo pipefail
           cd "$SRV"
           git fetch --quiet origin
+
+          # Sin el candado compartido de main, dos commits pueden llegar acá en
+          # cualquier orden: el candado `desplegar-staging` los serializa, pero no
+          # promete que el más viejo entre primero. Si lo que ya está desplegado
+          # CONTIENE a este commit, desplegarlo sería retroceder staging.
+          DESPLEGADO="$(git rev-parse HEAD)"
+          if [ "$DESPLEGADO" != "$NUEVO" ] && git merge-base --is-ancestor "$NUEVO" "$DESPLEGADO" 2>/dev/null; then
+            echo "::notice::staging ya está en ${DESPLEGADO:0:8}, que incluye a ${NUEVO:0:8}. No retrocedo."
+            echo "staging ya incluye \`${NUEVO:0:8}\` (está en \`${DESPLEGADO:0:8}\`): no se redesplegó" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
           git checkout --quiet --force "$NUEVO"
 
           npm ci --no-audit --no-fund
@@ -463,6 +492,16 @@ jobs:
 
           if [ "$VIEJO" = "$NUEVO" ]; then
             echo "Ya estaba desplegado." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Y el caso que la igualdad no cubre: que lo desplegado sea MÁS NUEVO y ya
+          # contenga a este commit. Pasa cuando dos merges entran casi juntos y el
+          # segundo termina su CI primero. Sin esta guardia, el run del commit viejo
+          # haría `checkout --force` de un árbol anterior sobre producción.
+          if git -C "$SRV" merge-base --is-ancestor "$NUEVO" "$VIEJO" 2>/dev/null; then
+            echo "::notice::producción ya está en ${VIEJO:0:8}, que incluye a ${NUEVO:0:8}. No retrocedo."
+            echo "Producción ya incluye \`${NUEVO:0:8}\` (está en \`${VIEJO:0:8}\`): no se tocó nada." | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
