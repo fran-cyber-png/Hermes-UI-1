@@ -5,7 +5,7 @@ import { leerEstado, llegaALaLinea, ordenarCampanas, type CampanaEnRouting } fro
 import { productoLeadSql } from "../dashboard/fuenteLead.js";
 import { esTablaAusente } from "../cola/estadoSql.js";
 import { aliasesActivos } from "../cursos/repositorio.js";
-import { familiaDe } from "./producto.js";
+import { familiaDe, resolucionDe } from "./producto.js";
 
 /**
  * LO QUE LEE Y ESCRIBE EL RUTEO. El veredicto vive en `dominio.ts` (puro); acá
@@ -206,6 +206,7 @@ export async function fotoDeRouting(
       continue;
     }
     const v = volumen.get(c.campanaId);
+    const r = resolucionDe(aliases, c.nombre);
     campanas.push({
       campanaId: c.campanaId,
       nombre: c.nombre,
@@ -213,7 +214,9 @@ export async function fotoDeRouting(
       anuncios: v?.anuncios ?? 0,
       personas: v?.personas ?? 0,
       ultima: v?.ultima ?? null,
-      familia: familiaDe(aliases, c.nombre),
+      familia: r?.familia ?? null,
+      ...(r ? { origenFamilia: r.origen } : {}),
+      ...(r?.alias ? { aliasFamilia: r.alias } : {}),
       vendedoras: cables.get(c.campanaId) ?? [],
     });
   }
@@ -344,8 +347,12 @@ export async function guardarCampanas(
 /** Un curso de formulario, como se lo ve en la pantalla. */
 export interface CursoEnRouting {
   curso: string;
-  /** Su producto. Los cursos resuelven 19 de 21: son nombres comerciales. */
+  /** Su producto. Los cursos resuelven 20 de 22: son nombres comerciales. */
   familia: string | null;
+  /** De dónde salió. Ver `CampanaEnRouting.origenFamilia`. */
+  origenFamilia?: "manual" | "sku" | "alias";
+  /** Qué alias enganchó, cuando fue por texto. */
+  aliasFamilia?: string;
   /** Cuántos leads llegaron por ese curso en la ventana. */
   leads: number;
   /** El último. ISO, o `null`. */
@@ -393,11 +400,20 @@ export async function cursosDeFormulario(
     aliasesActivos(base as never).catch(() => []),
   ]);
 
+  const conResolucion = (curso: string) => {
+    const r = resolucionDe(aliases, curso);
+    return {
+      familia: r?.familia ?? null,
+      ...(r ? { origenFamilia: r.origen } : {}),
+      ...(r?.alias ? { aliasFamilia: r.alias } : {}),
+    };
+  };
+
   const filas = new Map<string, CursoEnRouting>();
   for (const v of vistos) {
     filas.set(v.curso, {
       curso: v.curso,
-      familia: familiaDe(aliases, v.curso),
+      ...conResolucion(v.curso),
       leads: Number(v.leads ?? 0),
       ultimo: new Date(v.ultimo).toISOString(),
       vendedoras: cables.get(v.curso) ?? [],
@@ -405,7 +421,7 @@ export async function cursosDeFormulario(
   }
   for (const [curso, vendedoras] of cables) {
     if (!filas.has(curso))
-      filas.set(curso, { curso, familia: familiaDe(aliases, curso), leads: 0, ultimo: null, vendedoras });
+      filas.set(curso, { curso, ...conResolucion(curso), leads: 0, ultimo: null, vendedoras });
   }
 
   // Primero lo que más gente trae; a igualdad, alfabético para que dos aperturas

@@ -1,8 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  decididoAMano,
+  familiaAfirmadaPorSku,
   familiaDeAnuncio,
   familiaDeTexto,
+  resolverFamilia,
   normalizarTexto,
   ALIAS_SEMILLA,
   CAMPANAS_CON_VOLUMEN,
@@ -168,4 +171,158 @@ test("«Dirección Corporativa de Seguridad» es su propio producto, no el Direc
     "GENCDE6AE",
   );
   assert.equal(familiaDeTexto(ALIAS_SEMILLA, "Director de Seguridad")?.familia, "DIPDIRS");
+});
+
+/**
+ * ══ EL SKU QUE LA PAUTA ESCRIBE ENTRE CORCHETES ══════════════════════════════
+ *
+ * Los textos de acá abajo son **nombres reales de campañas de la cuenta**
+ * (medidos el 18-ago-2026 sobre las 153 de `campana_meta`), no ejemplos: cada
+ * uno de los siete que corrige estuvo enlazado al producto equivocado en
+ * producción, y los tres falsos positivos del control son campañas vivas que un
+ * regex sin corchetes se comía.
+ */
+
+test("🔴 el SKU entre corchetes le gana al alias de texto — los 7 casos reales", () => {
+  const casos = [
+    // texto real                                          alias decía   el SKU dice
+    ["[MAR] [DIPCIBE004] CIBERDEFENSA 30 ABR", "DIPCINTE", "DIPCIBE"],
+    ["[FEB] [DIPIOPS004] INTELIGENCIA OPERATIVA 27 MAR", "DIPICOT", "DIPIOPS"],
+    ["[EPCOPAP004] - Diploma Internacional del Asesor Presidencial - 16 AGO", "DIPASEPRE", "EPCOPAP"],
+    ["[OCT] [DIPMP0001] Marketing Político - 13 de NOV", "DIPIAMP", "DIPMP"],
+  ] as const;
+
+  for (const [texto, loQueDecia, loQueAfirma] of casos) {
+    assert.equal(
+      familiaDeTexto(ALIAS_SEMILLA, texto)?.familia,
+      loQueDecia,
+      `el alias de texto sigue diciendo ${loQueDecia} — si esto cambia, el caso dejó de valer`,
+    );
+    assert.equal(resolverFamilia(ALIAS_SEMILLA, texto)?.familia, loQueAfirma);
+    assert.equal(resolverFamilia(ALIAS_SEMILLA, texto)?.origen, "sku");
+  }
+});
+
+test("🔴 sin corchetes NO es un SKU: los tres falsos positivos que se comía el borrador", () => {
+  // Nombres comerciales reales. `CONSULTOR360` no es la familia «CONSULTOR».
+  for (const texto of [
+    "[OCT]CONSULTOR360 - CONVERSION",
+    "[NOV] [BLACK FRIDAY] GOBERNA360 WASAP",
+    "[JUN] GOBERNA360 - LEADS",
+  ]) {
+    assert.equal(familiaAfirmadaPorSku(texto), null, texto);
+  }
+  // Y el prefijo del mes, que está entre corchetes pero no es un SKU.
+  assert.equal(familiaAfirmadaPorSku("[JUL] INTELIGENCIA | WSP"), null);
+  assert.equal(familiaAfirmadaPorSku("[FEB] SEGURIDAD - R"), null);
+});
+
+test("el SKU tolera el espacio de adentro y cualquier cantidad de dígitos", () => {
+  assert.equal(familiaAfirmadaPorSku("[ OCT] [EPCOGPT002] ChatGPT 4X4 - NOV 28"), "EPCOGPT");
+  assert.equal(familiaAfirmadaPorSku("[OCT] [DIPMP0001] Marketing Político"), "DIPMP", "cuatro dígitos");
+  assert.equal(familiaAfirmadaPorSku("[MAY] [DIPECOC002] CRIMEN ORGANIZADO 04 JUL"), "DIPECOC");
+});
+
+test("🔴 un GEN* es su propia familia — la regla la pone `familiaDeSku`, no un regex de acá", () => {
+  // Colapsarlos al prefijo juntaría cursos que no tienen nada que ver (#129).
+  assert.equal(familiaAfirmadaPorSku("[ENE] [GEN5C2G3] BICAMERAL"), "GEN5C2G3");
+  assert.equal(familiaAfirmadaPorSku("[ENE] [GEN9000F6] OTRO"), "GEN9000F6");
+});
+
+test("🔴 identidad sin nombre NO se cae al código crudo: la vendedora nunca lee «PKGOSAN»", () => {
+  // Nueve familias afirmadas por SKU no tienen ni un alias cargado. Tienen
+  // identidad (sirve para agrupar y rutear) y no tienen cómo nombrarse.
+  const r = resolverFamilia(ALIAS_SEMILLA, "[ENE] [PKGOSAN001] SAN VALENTÍN 360");
+  assert.equal(r?.familia, "PKGOSAN");
+  assert.equal(r?.nombreCurso, null, "sin alias no hay nombre, y eso se dice con null");
+});
+
+test("una familia afirmada por SKU que SÍ tiene alias queda completa", () => {
+  const r = resolverFamilia(ALIAS_SEMILLA, "[MAR] [DIPCIBE004] CIBERDEFENSA 30 ABR");
+  assert.equal(r?.familia, "DIPCIBE");
+  assert.ok(r?.nombreCurso, "el nombre sale de cualquier alias vivo de esa familia");
+});
+
+test("sin SKU, resolverFamilia es exactamente familiaDeTexto", () => {
+  for (const texto of ["[JUL] INTELIGENCIA | WSP", "Diploma técnico en Osint & Socmint", "Reel spot antiguo"]) {
+    const porTexto = familiaDeTexto(ALIAS_SEMILLA, texto);
+    const resuelta = resolverFamilia(ALIAS_SEMILLA, texto);
+    assert.equal(resuelta?.familia ?? null, porTexto?.familia ?? null, texto);
+    assert.equal(resuelta?.nombreCurso ?? null, porTexto?.nombreCurso ?? null, texto);
+    if (resuelta) assert.equal(resuelta.origen, "alias");
+  }
+});
+
+/**
+ * ══ LA CORRECCIÓN A MANO — «este formulario va con otro producto» ════════════
+ *
+ * Los dos casos son reales y medidos el 18-ago-2026 en los formularios de
+ * icarus: el alias «consultoria politica» se lleva puesto al Programa Premium de
+ * ChatGPT (3 leads) y «inteligencia» se lleva al Master de IA (1 lead). Ninguno
+ * de los dos se puede arreglar sacando el alias — «consultoria politica» le hace
+ * falta a trece campañas del Consultor Político.
+ */
+
+/** Como queda `alias_curso` después de corregir desde la pantalla. */
+const CORRECCION = {
+  alias: "Programa Premium ChatGPT Pro para consultoría política 4×4",
+  familia: "EPCOGPT",
+  nombreCurso: "ChatGPT Pro 4x4",
+};
+
+test("🔴 corregir a mano gana sobre el alias que lo enganchaba mal", () => {
+  const texto = "Programa Premium ChatGPT Pro para consultoría política 4×4";
+  assert.equal(
+    resolverFamilia(ALIAS_SEMILLA, texto)?.familia,
+    "DIPCPOL",
+    "sin la corrección lo agarra «consultoria politica» — si esto cambia, el caso dejó de valer",
+  );
+  const r = resolverFamilia([...ALIAS_SEMILLA, CORRECCION], texto);
+  assert.equal(r?.familia, "EPCOGPT");
+  assert.equal(r?.origen, "manual");
+  assert.equal(r?.nombreCurso, "ChatGPT Pro 4x4");
+});
+
+test("🔴 y gana también sobre el SKU — el caso que se veía aplicado sin estarlo", () => {
+  // Una campaña con SKU adentro, corregida a mano a otra familia. Sin la
+  // consulta a `decididoAMano` primero, el SKU la volvía a pisar en la lectura
+  // siguiente: la pantalla mostraba el producto nuevo y la regla no era ésa.
+  const texto = "[OCT] [DIPMP0001] Marketing Político - 13 de NOV";
+  assert.equal(resolverFamilia(ALIAS_SEMILLA, texto)?.origen, "sku");
+
+  const conCorreccion = [...ALIAS_SEMILLA, { alias: texto, familia: "DIPIAMP", nombreCurso: "IA y Marketing Político" }];
+  const r = resolverFamilia(conCorreccion, texto);
+  assert.equal(r?.familia, "DIPIAMP");
+  assert.equal(r?.origen, "manual");
+});
+
+test("la corrección es de ESA pieza y no toca a las demás", () => {
+  const conCorreccion = [...ALIAS_SEMILLA, CORRECCION];
+  // El resto de los textos que usaban «consultoria politica» siguen igual.
+  for (const otro of [
+    "[JUL] CONSULTOR POLÍTICO 25 | WSP",
+    "Diploma Internacional del Consultor Político",
+    "Diploma Internacional en Dirección de Consultoría Política",
+  ]) {
+    assert.equal(
+      resolverFamilia(conCorreccion, otro)?.familia,
+      resolverFamilia(ALIAS_SEMILLA, otro)?.familia,
+      otro,
+    );
+  }
+});
+
+test("deshacer la corrección devuelve la pieza a su resolución automática", () => {
+  // Deshacer es `activo = false`, o sea que la fila deja de venir en `aliases`.
+  const texto = CORRECCION.alias;
+  assert.equal(resolverFamilia([...ALIAS_SEMILLA, CORRECCION], texto)?.origen, "manual");
+  assert.equal(resolverFamilia(ALIAS_SEMILLA, texto)?.origen, "alias");
+});
+
+test("⚠️ una fila por `adId` NUNCA cuenta como corrección de texto", () => {
+  // Su `alias` es una etiqueta humana («Anuncio “Adquiérelo ahora”»), no un texto
+  // que deba aparecer en una campaña: matchearlo por coincidencia total le daría
+  // a un anuncio genérico el poder de decidir el producto de una campaña homónima.
+  const conAdId = [{ alias: "Adquiérelo ahora", familia: "DIPICOT", nombreCurso: "X", adId: "123" }];
+  assert.equal(decididoAMano(conAdId, "Adquiérelo ahora"), null);
 });

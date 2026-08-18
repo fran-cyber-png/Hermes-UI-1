@@ -39,9 +39,25 @@ export interface CampanaEnRouting {
   ultima: string | null;
   /**
    * A qué producto pertenece (`alias_curso`). `null` = no resuelve a ninguno, y
-   * entonces se cablea suelta — son 25 de 44, así que no es el caso raro.
+   * entonces se cablea suelta — son 70 de 153, así que no es el caso raro.
    */
   familia: string | null;
+  /**
+   * 🔴 **DE DÓNDE SALIÓ ESA FAMILIA — y sin esto la pantalla no es corregible.**
+   *
+   * «Consultor Político» a secas no se puede juzgar: hay que saber si lo decidió
+   * una persona (`manual`), si lo AFIRMA el SKU que la pauta escribió en el
+   * nombre (`sku`) o si es una adivinanza por palabras (`alias`, y ahí viene
+   * `aliasFamilia` con cuál matcheó). Los tres se ven igual en la fila y solo el
+   * tercero puede estar mal — de los 22 cursos de formulario, **4 lo están**.
+   *
+   * ⚠️ **Opcional a propósito**: ausente = server viejo o respuesta rehidratada
+   * del caché de IndexedDB (ADR 0007). La hoja se calla en vez de afirmar «lo
+   * decidió alguien» sobre algo que no sabe.
+   */
+  origenFamilia?: "manual" | "sku" | "alias";
+  /** Qué alias enganchó, cuando fue por texto. Es lo que se muestra entre comillas. */
+  aliasFamilia?: string;
   /**
    * LOS CABLES: a quiénes les puede caer. Vacío = a la rueda general.
    *

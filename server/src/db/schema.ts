@@ -1469,6 +1469,22 @@ export const aliasCurso = pgTable(
     /** Fuera de circulación sin perder el rastro. La consulta solo lee los activos. */
     activo: boolean("activo").notNull().default(true),
     creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * QUIÉN CORRIGIÓ EL PRODUCTO DE UNA PIEZA DESDE ROUTING (18-ago-2026), y
+     * cuándo. `null` = la fila vino de `ALIAS_SEMILLA` o se cargó a mano en la
+     * base; nadie la decidió desde la app.
+     *
+     * 🔴 **Sin esto, una corrección es una decisión sin dueño** — y ésta cambia
+     * lo que muestran el chip de curso de la cola, el Dashboard y el bot, no
+     * solo la pantalla desde donde se hizo. Es el mismo criterio que
+     * `campana_cable.asignada_por`.
+     *
+     * ⚠️ **Sobrevive a deshacer**: al desactivar la fila no se limpian, porque la
+     * pregunta que hay que poder contestar después es «¿quién había decidido
+     * esto?», y esa pregunta aparece justo cuando alguien lo revirtió.
+     */
+    corregidoPor: text("corregido_por"),
+    corregidoAt: timestamp("corregido_at", { withTimezone: true }),
   },
   (t) => [
     // Un mismo texto no puede mapear a dos familias: la propuesta sería un volado.

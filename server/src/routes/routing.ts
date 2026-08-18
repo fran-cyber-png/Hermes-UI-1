@@ -28,6 +28,12 @@ import { esTablaAusente } from "../cola/estadoSql.js";
 import { porQueFallo } from "../lib/porQueFallo.js";
 import { ruta } from "../lib/ruta.js";
 import { nombreDeProducto } from "../routing/producto.js";
+import {
+  corregirProductoDePieza,
+  familiasElegibles,
+  type TipoDePieza,
+} from "../routing/productoDePieza.js";
+import { buscarProductos } from "../cerberus/productos.js";
 import { aliasesActivos } from "../cursos/repositorio.js";
 
 /**
@@ -324,6 +330,82 @@ routingRouter.put("/productos", ruta(async (req, res) => {
     res.json({ ok: true, familia, vendedoras: pedidas, modo: parsed.data.modo, ...tocados });
   } catch (e) {
     console.error(`PUT /api/routing/productos («${familia}») falló — ${porQueFallo(e)}`);
+    res.status(500).json({ ok: false, message: "No se pudo completar la operación." });
+  }
+}));
+
+/**
+ * A QUÉ PRODUCTOS SE PUEDE MANDAR UNA PIEZA.
+ *
+ * Va aparte del GET principal **porque pregunta a Cerberus**, y esa llamada no
+ * puede colgarse de la pantalla que hay que abrir justo cuando algo anda mal
+ * (el mismo argumento por el que refrescar es un POST). Se pide al abrir la
+ * hoja de la derecha, que es cuando alguien va a elegir.
+ */
+routingRouter.get("/productos-elegibles", ruta(async (_req, res) => {
+  try {
+    const r = await familiasElegibles(db, () => buscarProductos());
+    res.json(r);
+  } catch (e) {
+    console.error(`GET /api/routing/productos-elegibles falló — ${porQueFallo(e)}`);
+    res.status(500).json({ ok: false, message: "No se pudo completar la operación." });
+  }
+}));
+
+/**
+ * CORREGIR A QUÉ PRODUCTO PERTENECE UNA PIEZA — «esta campaña va con otro».
+ *
+ * 🔴 **Escribe en `alias_curso`, así que CORRIGE EN TODAS LAS PANTALLAS**: el
+ * chip de curso de la cola, el Dashboard y el bot leen ese mismo diccionario.
+ * Decisión del dueño del 18-ago-2026 — la alternativa era una tabla propia de
+ * Routing, y con eso la cola seguiría mostrando el producto viejo (#37). Ver
+ * `routing/productoDePieza.ts`.
+ *
+ * ⚠️ **La clave viaja, el TEXTO no.** El server lo resuelve de la base: el alias
+ * se guarda por texto exacto normalizado, así que un carácter de diferencia
+ * escribe una fila que no matchea la pieza y la corrección se ve aplicada sin
+ * estarlo.
+ *
+ * `familia: null` deshace y la pieza vuelve a resolverse sola.
+ */
+routingRouter.put("/pieza-producto", ruta(async (req, res) => {
+  const parsed = z
+    .object({
+      tipo: z.enum(["campana", "curso"]),
+      clave: z.string().min(1),
+      familia: z.string().min(1).nullable(),
+    })
+    .safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({
+      ok: false,
+      message: "se espera `tipo` (campana|curso), `clave` y `familia` (o `null` para deshacer)",
+    });
+    return;
+  }
+
+  try {
+    const r = await corregirProductoDePieza(db, {
+      tipo: parsed.data.tipo as TipoDePieza,
+      clave: parsed.data.clave,
+      familia: parsed.data.familia,
+      quien: req.vendedoraId ?? "",
+      catalogo: () => buscarProductos(),
+    });
+    if (!r.ok) {
+      /**
+       * ⚠️ **Tres códigos, tres estados HTTP distintos.** `catalogo_caido` es un
+       * 503 y no un 409: lo que falló es Cerberus, y quien lo lea tiene que
+       * volver a intentar, no cambiar lo que pidió.
+       */
+      const estado =
+        r.codigo === "pieza_desconocida" ? 404 : r.codigo === "catalogo_caido" ? 503 : 409;
+      res.status(estado).json(r);
+      return;
+    }
+    res.json(r);
+  } catch (e) {
+    console.error(`PUT /api/routing/pieza-producto falló — ${porQueFallo(e)}`);
     res.status(500).json({ ok: false, message: "No se pudo completar la operación." });
   }
 }));
