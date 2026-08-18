@@ -334,10 +334,8 @@ Qué mirar, en orden:
 
 ### Deuda que este frente deja abierta
 
-- 🔴 **Falta el ADR.** Regla dura #3: toda reescritura documenta qué reemplaza y archiva
-  al predecesor. Esto reemplaza la barra fija de `docs/barra-de-formato-libreta.md`, y ese
-  documento **todavía describe la barra vieja** («qué tiene la barra hoy», §3). Hay que
-  escribir el ADR y actualizar aquel §3, o va a envejecer igual que `arquitectura.md`.
+- ✅ **El ADR está escrito**: `docs/adr/0058-la-ribbon-de-la-libreta.md`, y el §3 del
+  documento anterior quedó marcado como superado (regla dura #3, las dos mitades).
 - ⚠️ **`CLAUDE.md` no menciona este frente.** Si queda algún 🔴 que frene un error antes de
   cometerlo, va ahí; el fundamento va al ADR.
 - ⚠️ **El pincel se desarma al cambiar de pestaña** (su estado vive en `TabInicio`). Es

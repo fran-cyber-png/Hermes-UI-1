@@ -1,5 +1,18 @@
 # La barra de formato de la Libreta
 
+> 🔴 **SUPERADO EL 18-AGO-2026 POR ADR 0058.** La barra fija que describe el §3 **ya no
+> existe**: se convirtió en una Ribbon de cinco pestañas
+> (`docs/adr/0058-la-ribbon-de-la-libreta.md`, bitácora en `docs/ribbon-de-la-libreta.md`).
+>
+> **Este documento sigue vivo por el §4**, que es la única parte que toca el esquema —
+> `fuente` y `tamano`, la puerta de una sola dirección y su red `soloEstilosConocidos`— y
+> que la Ribbon **no tocó**. El §2 (por qué no hay librería de ribbon y qué se descartó) y
+> el §7 (cómo se mide si sirvió) también siguen valiendo.
+>
+> **Lo que quedó viejo es el §3**: esos quince controles siguen existiendo, pero repartidos
+> en grupos rotulados y acompañados de lo que antes no tenía dónde ir. La tabla de qué hay
+> hoy vive en el ADR.
+
 > Contexto del frente `feat/desarrollo-notas-c` (17-ago-2026). Qué se construyó, de
 > dónde salió cada pieza, y qué debería pasar si esto sirve.
 >
@@ -62,7 +75,13 @@ Lo que sí hay, y es lo que se usó:
 
 ---
 
-## 3. Qué tiene la barra hoy
+## 3. Qué tenía la barra ~~hoy~~ (superado por ADR 0058)
+
+> 🔴 **Esta fila ya no existe.** Los quince controles siguen ahí, agrupados y rotulados
+> dentro de la Ribbon; qué hay hoy y en qué pestaña vive en
+> `docs/adr/0058-la-ribbon-de-la-libreta.md`. **La tabla de abajo se conserva porque su
+> tercera columna —«¿toca el esquema?»— sigue siendo cierta y es lo que importa**: de los
+> quince, sólo fuente y tamaño cambian lo que se guarda (§4).
 
 ```
 ↶ ↷ │ Tipo ▾ │ Fuente ▾ │ Tamaño ▾ │ N K S̲ S̶ ⌨ │ A▾ │ ⬅ ⬛ ➡ │ ⇤ ⇥ │ 🔗 │ ✧
