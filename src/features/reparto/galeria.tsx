@@ -7,6 +7,7 @@ import { BarraFiltros } from '../canales/BarraFiltros';
 import { FilaConversacion } from '../canales/FilaConversacion';
 import { PanelDerecho } from '../panel/PanelDerecho';
 import { ContenidoUsuario } from '../auth/PanelUsuario';
+import { PasarConversacion } from './PasarConversacion';
 import { VincularMiWhatsapp } from '../whatsapp/VincularMiWhatsapp';
 import type { Conversacion } from '../../dominio/conversaciones';
 
@@ -93,6 +94,49 @@ const CONTEOS = { preguntoPrecio: 65, teEscribieron: 33, botEscalada: 33, botCal
 queryClient.setQueryData(['lineas-whatsapp'], {
   lineas: [{ numero: '51984429504', etiqueta: 'Ventas Meta', estado: 'conectado', mias: true }],
 });
+
+// ── El selector de destinos, ANTES y DESPUÉS ────────────────────────────────
+// Los destinos son los REALES de producción (medidos el 18-ago-2026), incluidas
+// las dos cuentas que Hermes no sabe cómo se llaman: si la galería sirviera un
+// caso ideal, escondería justo el borde que este frente tiene que dibujar bien.
+const DESTINOS_REALES = [
+  'Luz',
+  'Sindy',
+  'ventas11@grupogoberna.com',
+  'ventas12@grupogoberna.com',
+  'ventas13@grupogoberna.com',
+];
+const RUEDA_REAL = [
+  { vendedoraId: 'ventas11@grupogoberna.com', asignadas: 11, orden: 1, activa: true },
+  { vendedoraId: 'ventas12@grupogoberna.com', asignadas: 11, orden: 2, activa: true },
+  { vendedoraId: 'ventas13@grupogoberna.com', asignadas: 1, orden: 3, activa: false },
+];
+
+// ANTES (o: un server sin este frente, o una respuesta rehidratada del caché de
+// IndexedDB): `nombres` ausente. Cada fila cae a `nombreCorto()`.
+queryClient.setQueryData(['reparto-rueda', '51900000000'], {
+  linea: '51900000000',
+  rueda: RUEDA_REAL,
+  destinos: DESTINOS_REALES,
+});
+
+// DESPUÉS: lo que sirve `nombresDe` hoy en producción. Ojo que `ventas13@` NO
+// está — en Cerberus no tiene nombre y nunca se logueó, así que `equipo.nombre`
+// guarda su propio correo y `esNombreDeVerdad` lo descarta. Se sigue viendo
+// «Ventas13», que es la verdad: Hermes no sabe cómo se llama.
+queryClient.setQueryData(['reparto-rueda', '51984429504'], {
+  linea: '51984429504',
+  rueda: RUEDA_REAL,
+  destinos: DESTINOS_REALES,
+  nombres: {
+    'ventas11@grupogoberna.com': 'Cielo Huambo',
+    'ventas12@grupogoberna.com': 'James',
+  },
+});
+
+function paraSelector(numeroPropio: string): Conversacion {
+  return fila({ persona_id: '51900000009', persona_nombre: 'Lead de prueba', numero_propio: numeroPropio, clave: `conv:whatsapp:51900000009:${numeroPropio}` } as Partial<Conversacion>);
+}
 
 function Galeria() {
   const [vinculandoEnGaleria, setVinculandoEnGaleria] = useState(false);
@@ -201,6 +245,39 @@ function Galeria() {
           <div className="h-[45rem] w-[22.5rem]">
             <PanelDerecho conversacion={FILAS[0]!.c} />
           </div>
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="text-sm font-bold text-foreground">
+            «Pasar la conversación a» — un nombre, no una cuenta de sistema
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            El selector no leía mal el nombre: <b>no leía ninguno</b>. Recortaba el{' '}
+            <code>vendedora_id</code>, que para media rueda es el correo de Cerberus. Luz y Sindy se
+            veían bien de casualidad — su username ya es su nombre.
+          </p>
+          <div className="flex gap-10">
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold text-muted-foreground">
+                ANTES · sin <code>nombres</code> (server viejo o caché rehidratado)
+              </p>
+              <div className="w-[22.5rem] rounded-2xl bg-card p-3 pb-64 shadow-panel">
+                <PasarConversacion conversacion={paraSelector('51900000000')} miVendedora="Luz" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold text-muted-foreground">DESPUÉS</p>
+              <div className="w-[22.5rem] rounded-2xl bg-card p-3 pb-64 shadow-panel">
+                <PasarConversacion conversacion={paraSelector('51984429504')} miVendedora="Luz" />
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            <b>Ventas13 sigue diciendo «Ventas13», y está bien</b>: en Cerberus no tiene nombre
+            cargado y nunca se logueó, así que <code>equipo.nombre</code> guarda su propio correo y{' '}
+            <code>esNombreDeVerdad</code> lo descarta. Servirlo mostraría{' '}
+            <code>ventas13@grupogob…</code> cortado, que es peor. Un hueco no se dibuja nunca.
+          </p>
         </section>
 
         <section className="space-y-4">

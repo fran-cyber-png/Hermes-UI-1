@@ -11,9 +11,9 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 32 | 399 | 53,804 | 16,991 |
+| front | 32 | 399 | 53,881 | 16,991 |
 | server | 66 | 753 | 77,817 | 47,958 |
-| **total** | **98** | **1,152** | **131,621** | **64,949** |
+| **total** | **98** | **1,152** | **131,698** | **64,949** |
 
 ## Front — `src/`
 
@@ -45,8 +45,8 @@
 | `eventos` | Registrar lo que la vendedora ESCUCHÓ, tipado, en el timeline del contacto. | 4 | 683 | 2 | 2 | 1 |
 | `cerberus` | La ficha del contacto: la que trae el ERP y la que dejó el formulario de landing. | 7 | 592 | 2 | 5 | 4 |
 | `componentes` | Átomos visuales que usa medio árbol y no son de ninguna feature: la marca, los gráficos, el avatar y la píldora de canal. Capa 0 — no puede importar una feature ni el dominio. | 8 | 585 | 0 | 10 | 1 |
+| `reparto` | De quién es cada conversación, visto desde la app. | 3 | 565 | 0 | 1 | 6 |
 | `identidad` | «Es la misma persona que…»: buscar contactos y unificar fichas. | 5 | 524 | 1 | 2 | 3 |
-| `reparto` | De quién es cada conversación, visto desde la app. | 3 | 488 | 0 | 1 | 6 |
 | `sugerencias` | Las dos respuestas listas del panel derecho. | 2 | 333 | 0 | 0 | 4 |
 | `senales` | Las etiquetas derivadas —cotizado, se enfrió— que no se guardan en ningún lado. | 2 | 119 | 0 | 1 | 3 |
 | `leads` | Qué tan caliente está un lead. | 1 | 26 | 0 | 1 | 0 |
