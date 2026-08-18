@@ -25,3 +25,37 @@ export const VEN_ROUTING = ['alan', 'Usuario1'] as const;
 export function veRouting(vendedoraId: string | null | undefined): boolean {
   return VEN_ROUTING.some((quien) => mismoUsuario(quien, vendedoraId));
 }
+
+/**
+ * QUIÉN MIRA — lo mínimo que una regla del riel necesita saber de la persona.
+ *
+ * Era `vendedoraId: string | null`, y con eso alcanzaba mientras la única regla
+ * fuera «¿es de esta lista?». La segunda pregunta —«¿de qué lado del negocio
+ * trabaja?»— no se puede contestar desde un id: la contesta el server, que es
+ * quien tiene `numero_vendedora`. Por eso el parámetro pasa a ser la vendedora.
+ */
+export interface QuienMira {
+  id?: string | null;
+  esDeCampana?: boolean;
+}
+
+/**
+ * LAS CUATRO VISTAS QUE UN OPERADOR DE CAMPAÑA NO TIENE — Navegador, Libreta,
+ * Correos y Entrenar bot. Decisión del dueño del 18-ago-2026.
+ *
+ * 🔴 **ESTO ESCONDE, NO PROTEGE — y acá esa distinción sí muerde.** Routing se
+ * podía dar el lujo de vivir sólo en el riel porque su vista está vacía; estas
+ * cuatro tienen datos. Lo que de verdad las niega es `numeros/soloEscuela.ts`,
+ * montado sobre `/api/correos`, `/api/notas`, `/api/espacios` y
+ * `/api/entrenamiento`. Si alguien saca este `soloPara`, el operador de campaña
+ * ve los íconos y come 403; si alguien saca el del server, **la frontera
+ * desaparece y la pantalla sigue diciendo que está** — que es la peor de las dos
+ * mitades para perder.
+ *
+ * El Navegador no tiene ruta que negar: es un comando de la cáscara Tauri (ADR
+ * 0043), así que sacarle la vista sí es todo lo que hay que hacer, y su candado
+ * de verdad son las capabilities.
+ */
+export function noEsDeCampana(quien: QuienMira | null | undefined): boolean {
+  return !quien?.esDeCampana;
+}

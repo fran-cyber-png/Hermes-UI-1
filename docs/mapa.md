@@ -11,9 +11,9 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 32 | 411 | 55,453 | 17,932 |
-| server | 66 | 765 | 79,817 | 49,251 |
-| **total** | **98** | **1,176** | **135,270** | **67,183** |
+| front | 32 | 411 | 55,507 | 17,989 |
+| server | 66 | 768 | 79,999 | 49,493 |
+| **total** | **98** | **1,179** | **135,506** | **67,482** |
 
 ## Front — `src/`
 
@@ -24,7 +24,7 @@
 | `canales` | La cola unificada, y sólo eso: la lista de conversaciones, su fila, la barra de filtros y el panel de contexto. El modelo que dibuja NO vive acá — vive en `dominio/`. | 30 | 4,399 | 6 | 2 | 11 |
 | `correos` | El correo 1-a-1, auditado. Sin listas ni campañas. | 11 | 3,500 | 5 | 1 | 4 |
 | `panel` | La ficha al costado del chat, en el orden de las preguntas que decide una venta: quién es, qué quiere, qué mandarle, qué hacer. | 22 | 2,956 | 7 | 5 | 7 |
-| `vistas` | El Pipeline: el tablero por etapas, sus tarjetas y las compuertas para mover una. | 15 | 2,893 | 6 | 1 | 10 |
+| `vistas` | El Pipeline: el tablero por etapas, sus tarjetas y las compuertas para mover una. | 15 | 2,927 | 6 | 1 | 10 |
 | `routing` | Qué campaña de Meta le cae a qué vendedora. | 10 | 2,511 | 4 | 1 | 1 |
 | `dashboard` | Los números en pantalla: el radar, el embudo y qué recorte ve quien mira. | 8 | 2,469 | 2 | 3 | 7 |
 | `lib` | Lo que no sabe de negocio: el cliente HTTP con su caché en IndexedDB, el SSE, el teclado, formato y notificaciones. Capa 0 — no puede importar ninguna feature. | 48 | 2,128 | 16 | 29 | 0 |
@@ -39,9 +39,9 @@
 | `venta` | Registrar la venta contra Cerberus sin salir del chat. | 6 | 1,127 | 1 | 2 | 6 |
 | `agenda` | Los seguimientos que una vendedora se agendó: cuándo vuelve a tocar a quién. | 6 | 1,023 | 2 | 4 | 4 |
 | `hechos` | Los datos recomendados — la munición de una línea. Tocar uno lo pone en el composer; no envía. | 7 | 1,003 | 2 | 2 | 3 |
-| `auth` | Entrar y salir: login contra Cerberus, el SSO de Centurión, y el token que el cliente cree antes de preguntar. | 13 | 919 | 7 | 4 | 4 |
+| `auth` | Entrar y salir: login contra Cerberus, el SSO de Centurión, y el token que el cliente cree antes de preguntar. | 13 | 931 | 7 | 4 | 4 |
+| `app` | El armazón: qué vista está abierta, los ⌘N y qué capa se monta encima de la mesa. Compone features; no tiene regla de negocio propia. | 2 | 843 | 0 | 0 | 17 |
 | `navegador` | El navegador embebido: qué peldaño de la escalera corre esta máquina y a dónde se puede ir. | 9 | 843 | 3 | 1 | 1 |
-| `app` | El armazón: qué vista está abierta, los ⌘N y qué capa se monta encima de la mesa. Compone features; no tiene regla de negocio propia. | 2 | 835 | 0 | 0 | 17 |
 | `eventos` | Registrar lo que la vendedora ESCUCHÓ, tipado, en el timeline del contacto. | 4 | 683 | 2 | 2 | 1 |
 | `cerberus` | La ficha del contacto: la que trae el ERP y la que dejó el formulario de landing. | 7 | 592 | 2 | 5 | 4 |
 | `componentes` | Átomos visuales que usa medio árbol y no son de ninguna feature: la marca, los gráficos, el avatar y la píldora de canal. Capa 0 — no puede importar una feature ni el dominio. | 8 | 585 | 0 | 10 | 1 |
@@ -56,10 +56,10 @@
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
-| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. | 62 | 10,392 | 12 | 3 | 48 |
+| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. | 62 | 10,408 | 12 | 3 | 48 |
 | `bot` | El bot de primera línea que atiende solo: su agente, sus guardrails, sus frenos y el reenganche. | 56 | 7,997 | 24 | 7 | 13 |
 | `scripts` | Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción. | 34 | 5,623 | 0 | 0 | 33 |
-| `cola` | La consulta que ordena la deuda: a quién se atiende primero y por qué. Cada regla vive pura y con su gemelo SQL. | 57 | 4,881 | 38 | 9 | 6 |
+| `cola` | La consulta que ordena la deuda: a quién se atiende primero y por qué. Cada regla vive pura y con su gemelo SQL. | 57 | 4,894 | 38 | 9 | 6 |
 | `whatsapp` | La costura con WhatsApp: la interfaz de transporte y sus implementaciones, el hilo, y la única puerta por la que sale un envío. | 49 | 4,263 | 23 | 13 | 10 |
 | `db` | El schema y la conexión. Capa base del server: no conoce ninguna regla de negocio. | 20 | 3,862 | 1 | 53 | 0 |
 | `autorespuesta` | El acuse fuera de horario del lado del server: a quién corresponde, con qué plantilla y a qué ritmo. Nunca manda solo. | 30 | 2,993 | 13 | 7 | 5 |
@@ -69,11 +69,11 @@
 | `dashboard` | Los números: radar, embudo, series, y el recorte según quién los pide. Es una frontera. | 19 | 1,551 | 10 | 3 | 8 |
 | `espacios` | Dónde vive cada página de la Libreta y quién la puede ver o escribir. Es una frontera, no un filtro. | 18 | 1,490 | 8 | 2 | 2 |
 | `sdk` | 🪦 Heredado de meta-escuela — el SDK de consulta del dashboard de pauta. | 9 | 1,420 | 1 | 1 | 6 |
+| `numeros` | Los números de WhatsApp de Goberna: su estado de vinculación y de quién es cada uno. | 19 | 1,281 | 9 | 6 | 6 |
 | `cursos` | Traducir el texto con el que llegó una persona a una familia de curso. | 15 | 1,223 | 7 | 8 | 3 |
 | `webhook` | Todo lo que entra de afuera: Meta, WhatsApp, Cerberus y las landings. Ack primero, firma siempre. | 12 | 1,178 | 4 | 1 | 10 |
 | `analisis` | 🪦 Heredado de meta-escuela — los análisis del dashboard de pauta (ROAS, cartera, geo). | 15 | 1,173 | 6 | 5 | 2 |
 | `pauta` | 🪦 Heredado de meta-escuela — recolectar gasto, fatiga y engagement de la pauta publicitaria. | 13 | 1,161 | 4 | 4 | 6 |
-| `numeros` | Los números de WhatsApp de Goberna: su estado de vinculación y de quién es cada uno. | 16 | 1,134 | 7 | 6 | 6 |
 | `plantillas` | Las secuencias de venta: catálogo, expansión de `{variables}` y aprobación de una propuesta minada. | 12 | 1,126 | 6 | 4 | 4 |
 | `cerberus` | Hablarle al ERP: login, ficha, productos, ventas — y el latin1 que revienta con emojis. | 12 | 1,125 | 6 | 10 | 3 |
 | `ontologia` | 🪦 Heredado de meta-escuela — las proyecciones ontológicas. ⚠️ `ontologia.conversiones` NO está muerto: `lazo/worker.ts` lo consulta. | 7 | 1,040 | 2 | 2 | 4 |
@@ -106,7 +106,7 @@
 | `reacciones` | El 👍 al flyer: una señal que cuelga de un mensaje, en los dos dialectos y con una sola forma. | 5 | 336 | 2 | 3 | 2 |
 | `migraciones` | Verificar que una migración sea expand-only y que el journal sea monótono. | 4 | 321 | 2 | 1 | 0 |
 | `corridas` | Las corridas de entrenamiento del bot y los agujeros que dejan. | 4 | 319 | 2 | 1 | 3 |
-| `index` | El pegamento: monta los routers y arranca los relojes. ⚠️ Sus comentarios describen la arquitectura de meta-escuela y engañan (ver `docs/arquitectura.md` §2). | 1 | 312 | 0 | 0 | 12 |
+| `index` | El pegamento: monta los routers y arranca los relojes. ⚠️ Sus comentarios describen la arquitectura de meta-escuela y engañan (ver `docs/arquitectura.md` §2). | 1 | 318 | 0 | 0 | 12 |
 | `realtime` | El bus que empuja los cambios a la app por SSE. | 4 | 295 | 1 | 3 | 2 |
 | `centurion` | Las credenciales del SSO de Centurión. | 2 | 288 | 1 | 1 | 1 |
 | `categorias` | Las categorías con color que cada vendedora se arma. | 4 | 247 | 2 | 3 | 1 |

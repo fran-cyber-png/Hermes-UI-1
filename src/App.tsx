@@ -39,7 +39,7 @@ import { VistaCorreos } from './features/correos/VistaCorreos';
 import { VistaEntrenamiento } from './features/entrenamiento/VistaEntrenamiento';
 import { VistaNavegador } from './features/navegador/VistaNavegador';
 import { VistaRouting } from './features/routing/VistaRouting';
-import { veRouting } from './features/vistas/acceso';
+import { noEsDeCampana, veRouting, type QuienMira } from './features/vistas/acceso';
 import { pendientesQueApuran, useAgenda } from './features/agenda/agenda';
 import { Login } from './features/auth/Login';
 import { useSesion } from './features/auth/sesion';
@@ -90,30 +90,32 @@ const VISTAS = [
   { id: 'embudo', label: 'Pipeline', icono: Columns3 },
   { id: 'personas', label: 'Contactos', icono: Users },
   { id: 'bandeja', label: 'Mensajes', icono: MessagesSquare },
-  { id: 'correos', label: 'Correos', icono: Mail },
+  { id: 'correos', label: 'Correos', icono: Mail, soloPara: noEsDeCampana },
   { id: 'agenda', label: 'Agenda', icono: AlarmClock },
   // La séptima: donde se mira trabajar al bot sin gastar un lead de la pauta.
   // No es trabajo diario de la vendedora, pero vive en el riel igual — fuera de
   // la app quedaría huérfana, y lo que no está a la vista no se usa.
-  { id: 'entrenamiento', label: 'Entrenar bot', icono: Bot },
+  { id: 'entrenamiento', label: 'Entrenar bot', icono: Bot, soloPara: noEsDeCampana },
   // La octava (ADR 0034). Entra por el MISMO criterio que dejó afuera a la
   // Cabina y a Ivi —«el riel es para LUGARES»—, no por una excepción: a Ivi se
   // lo consulta, a la libreta se entra. Vivió 12 días detrás de la tecla «n»
   // sin ícono en ningún lado, y `notas` terminó con cero filas.
-  { id: 'libreta', label: 'Libreta', icono: Notebook },
+  { id: 'libreta', label: 'Libreta', icono: Notebook, soloPara: noEsDeCampana },
   // La novena (ADR 0040). Entra por el mismo criterio de ADR 0034 —el riel es
   // para LUGARES— y no por ser útil: se sale a la web con la sesión de trabajo
   // y se vuelve, como a la Libreta se entra a escribir. La acción primaria se
   // puede nombrar en dos palabras: «abrir un sitio».
-  { id: 'navegador', label: 'Navegador', icono: Compass },
-  // La décima, y la PRIMERA que no la ve todo el mundo: `soloPara` decide quién
-  // la tiene en el riel (`features/vistas/acceso.ts`). Está vacía a propósito —
-  // el lugar se reservó antes que el contenido.
+  { id: 'navegador', label: 'Navegador', icono: Compass, soloPara: noEsDeCampana },
+  // La décima. `soloPara` decide quién la tiene en el riel
+  // (`features/vistas/acceso.ts`). Está vacía a propósito — el lugar se reservó
+  // antes que el contenido.
   //
-  // ⚠️ Lo que `soloPara` hace es ESCONDER, no proteger. Mientras la vista no
-  // pida nada al server no hay diferencia; el día que pida, el recorte va en el
-  // `WHERE` de su ruta (ADR 0035/0036) y esto sigue siendo solo el riel.
-  { id: 'routing', label: 'Routing', icono: Route, soloPara: veRouting },
+  // ⚠️ Lo que `soloPara` hace es ESCONDER, no proteger, y ésta es la ÚNICA que se
+  // puede dar ese lujo: mientras la vista no pida nada al server no hay
+  // diferencia. Las cuatro de arriba sí piden, así que su recorte vive en el
+  // `WHERE` de sus rutas (`numeros/soloEscuela.ts`, ADR 0035/0036) y el
+  // `soloPara` es sólo la mitad que se ve.
+  { id: 'routing', label: 'Routing', icono: Route, soloPara: (q: QuienMira) => veRouting(q.id) },
 ] as const;
 
 type Vista = (typeof VISTAS)[number]['id'];
@@ -133,9 +135,15 @@ type Vista = (typeof VISTAS)[number]['id'];
  */
 const TECLAS_DE_VISTA = 9;
 
-/** Las vistas que ESTA persona tiene en el riel. Sin `soloPara`, la ve todo el mundo. */
-function vistasDe(vendedoraId: string | null | undefined) {
-  return VISTAS.filter((v) => ('soloPara' in v ? v.soloPara(vendedoraId) : true));
+/**
+ * Las vistas que ESTA persona tiene en el riel. Sin `soloPara`, la ve todo el mundo.
+ *
+ * ⚠️ Recibe la vendedora entera y no su id: desde que hay una regla que pregunta
+ * «¿de qué lado del negocio trabaja?» (`noEsDeCampana`), el id no alcanza — ese
+ * hecho lo sabe el server y baja por `/api/auth/yo`.
+ */
+function vistasDe(quien: QuienMira | null | undefined) {
+  return VISTAS.filter((v) => ('soloPara' in v ? v.soloPara(quien ?? {}) : true));
 }
 
 /**
@@ -286,7 +294,7 @@ export default function App() {
   // El riel de ESTA persona. El riel, los ⌘N y la cabina leen esta lista y no
   // `VISTAS`: con dos listas, la tecla que anda y el rótulo que la anuncia se
   // separan sin que nada lo diga (#37).
-  const vistas = vistasDe(vendedora?.id);
+  const vistas = vistasDe(vendedora);
 
   // La transición direccional: bajar en el riel entra desde abajo, subir desde arriba.
   function cambiarVista(destino: Vista) {

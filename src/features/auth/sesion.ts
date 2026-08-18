@@ -32,6 +32,18 @@ import { tieneSesionDeCerberus } from './identidad';
 export interface Vendedora {
   id: string;
   nombre: string;
+  /**
+   * ¿Atiende una línea de campaña? Decide qué vistas tiene el riel
+   * (`features/vistas/acceso.ts`).
+   *
+   * ⚠️ **OPCIONAL, y se lee como `false` cuando falta.** Falta en un server viejo
+   * y en el atajo de `quienDiceSer` —que arma la vendedora leyendo el token, sin
+   * preguntarle nada a nadie—, y en los dos casos el riel completo es el
+   * comportamiento de siempre. Que el default sea «no es de campaña» no abre
+   * nada: las cuatro superficies las niega el server (`numeros/soloEscuela.ts`),
+   * así que lo peor que pasa es ver un ícono que contesta 403.
+   */
+  esDeCampana?: boolean;
 }
 
 /** El último usuario que entró — JAMÁS la contraseña. Precarga el login. */

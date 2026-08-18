@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { VEN_ROUTING, veRouting } from './acceso';
+import { noEsDeCampana, VEN_ROUTING, veRouting } from './acceso';
 
 describe('quién ve Routing', () => {
   it('la ven las dos personas de la lista', () => {
@@ -34,5 +34,62 @@ describe('quién ve Routing', () => {
 
   it('la lista es la que se pidió, y se lee de un solo lado', () => {
     expect([...VEN_ROUTING]).toEqual(['alan', 'Usuario1']);
+  });
+});
+
+/**
+ * El árbol del front como texto. `import.meta.glob` y **no `node:fs`**: el
+ * segundo pasa en vitest y **falla** en `tsc -p tsconfig.app.json`, que no lleva
+ * los tipos de node (la cicatriz de `lib/etapas.test.ts`).
+ */
+const APP: string = Object.values(
+  import.meta.glob('../../App.tsx', { eager: true, query: '?raw', import: 'default' }) as Record<string, string>,
+)[0];
+
+describe('las cuatro vistas que un operador de campaña no tiene', () => {
+  it('quien no atiende campaña las ve todas — el default es el riel de siempre', () => {
+    expect(noEsDeCampana({ id: 'luz' })).toBe(true);
+    expect(noEsDeCampana({ id: 'luz', esDeCampana: false })).toBe(true);
+  });
+
+  /**
+   * ⚠️ El campo es OPCIONAL: falta en un server viejo y en el atajo de
+   * `quienDiceSer`, que arma la vendedora leyendo el token sin preguntar nada.
+   * En los dos casos el riel completo es lo correcto — negar de verdad es
+   * trabajo del server (`numeros/soloEscuela.ts`), no de este booleano.
+   */
+  it('ausente se lee como «no es de campaña», nunca como «sí»', () => {
+    expect(noEsDeCampana({ id: 'luz' })).toBe(true);
+    expect(noEsDeCampana({})).toBe(true);
+    expect(noEsDeCampana(null)).toBe(true);
+    expect(noEsDeCampana(undefined)).toBe(true);
+  });
+
+  it('quien atiende una campaña no las tiene', () => {
+    expect(noEsDeCampana({ id: 'centurion:betto.romero', esDeCampana: true })).toBe(false);
+  });
+
+  /**
+   * 🔴 EL CANDADO QUE IMPORTA: que las cuatro sigan marcadas en `App.tsx`.
+   * Sacarle el `soloPara` a una no rompe ningún test de componente —el riel
+   * renderiza lo que su lista diga— y el síntoma es que un operador de campaña
+   * ve un ícono de la Escuela. Su gemelo del server, que es el que de verdad
+   * niega, es `numeros/superficiesDeEscuela.paridad.test.ts`.
+   */
+  it.each(['correos', 'entrenamiento', 'libreta', 'navegador'])(
+    'la vista «%s» está marcada con noEsDeCampana en App.tsx',
+    (id) => {
+      const renglon = APP.split('\n').find((l) => l.includes(`id: '${id}'`));
+      expect(renglon, `no encontré la vista «${id}» en App.tsx`).toBeDefined();
+      expect(renglon).toContain('soloPara: noEsDeCampana');
+    },
+  );
+
+  it('y las que SÍ son de todos no la llevan', () => {
+    for (const id of ['dashboard', 'embudo', 'personas', 'bandeja', 'agenda']) {
+      const renglon = APP.split('\n').find((l) => l.includes(`id: '${id}'`));
+      expect(renglon).toBeDefined();
+      expect(renglon).not.toContain('soloPara');
+    }
   });
 });
