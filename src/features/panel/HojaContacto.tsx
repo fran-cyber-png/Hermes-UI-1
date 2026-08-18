@@ -2,6 +2,7 @@ import { IdCard, X } from 'lucide-react';
 import { useEscape } from '../../lib/teclado/useEscape';
 import type { Conversacion } from '../../dominio/conversaciones';
 import { PanelDerecho } from './PanelDerecho';
+import type { DestinoCorreo } from '../../lib/puente';
 
 /**
  * LA FICHA, AL COSTADO DE DONDE ESTABAS — el panel derecho fuera de Mensajes.
@@ -49,6 +50,7 @@ export function HojaContacto({
   onCerrar,
   escapeActivo = true,
   miVendedora,
+  onMandarCorreo,
 }: {
   conversacion: Conversacion;
   onCerrar: () => void;
@@ -65,6 +67,16 @@ export function HojaContacto({
    * hacer desde Mensajes y no desde acá.
    */
   miVendedora?: string | null;
+  /**
+   * Puente a Correos, de paso hacia `PanelDerecho`. Va acá y no adentro porque
+   * quién sabe cambiar de vista es el shell, no la hoja.
+   *
+   * ⚠️ **Es la misma prop opcional que esconde la acción cuando falta**: la
+   * hoja se monta desde TRES pantallas (Pipeline, padrón y el radar del
+   * Dashboard) y olvidarse en una deja «Escribirle» viva en dos y muerta en la
+   * tercera, sobre la misma ficha y sin ningún síntoma.
+   */
+  onMandarCorreo?: (destino: DestinoCorreo) => void;
 }) {
   useEscape(onCerrar, escapeActivo);
 
@@ -96,7 +108,11 @@ export function HojaContacto({
           Mensajes: su pie («Registrar venta») está clavado y no se puede empujar
           fuera de la hoja. */}
       <div className="min-h-0 flex-1">
-        <PanelDerecho conversacion={conversacion} miVendedora={miVendedora} />
+        <PanelDerecho
+          conversacion={conversacion}
+          miVendedora={miVendedora}
+          onMandarCorreo={onMandarCorreo}
+        />
       </div>
     </aside>
   );

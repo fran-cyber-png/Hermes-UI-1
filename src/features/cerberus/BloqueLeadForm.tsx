@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Check, Copy, Megaphone } from 'lucide-react';
+import { Check, Copy, Mail, Megaphone } from 'lucide-react';
 import { api } from '../../lib/datos/cliente';
 import { fechaCorta } from '../../lib/formato';
 import { sectionLabel } from '../../lib/styles';
 import { etiquetaFuente, nombreDistinto, type LeadForm as LeadFormDato } from './leadForm';
+import type { DestinoCorreo } from '../../lib/puente';
 
 /**
  * EL BLOQUE «LEAD-FORM» (#113) — lo que Meta o la landing web ya sabía.
@@ -57,12 +58,25 @@ export function BloqueLeadForm({
   activo,
   pushname,
   sinNombre = false,
+  onCorreo,
 }: {
   telefono: string | null;
   activo: boolean;
   pushname: string | null;
   /** El nombre real ya se muestra arriba (la banda del panel): no repetirlo acá. */
   sinNombre?: boolean;
+  /**
+   * 🔴 **ACÁ EL CORREO NO ES UN DATO MÁS: ES EL ÚNICO CANAL QUE HAY.** Un lead
+   * de formulario nunca nos escribió (ADR 0051), así que abrirle el chat es
+   * contacto en frío — el camino corto al ban en whatsmeow (regla dura #7) —
+   * y en la línea de Cloud API la ventana de 24 h ni siquiera está abierta.
+   * El correo sí se puede mandar hoy, y hasta ahora lo único que se podía
+   * hacer con él era copiarlo a mano.
+   *
+   * Sin esta prop se dibuja solo el copiar, como antes: nunca un botón que
+   * no lleva a ningún lado.
+   */
+  onCorreo?: (destino: DestinoCorreo) => void;
 }) {
   const { data } = useLeadForm(telefono, activo);
   const lead = data?.lead;
@@ -87,6 +101,15 @@ export function BloqueLeadForm({
           <div className="min-w-0">
             <div className="text-[11px] text-muted-foreground">Correo</div>
             <EmailCopiable email={lead.email} />
+            {onCorreo && (
+              <button
+                type="button"
+                onClick={() => onCorreo({ para: lead.email!, nombre: lead.nombre ?? pushname ?? undefined })}
+                className="mt-1 inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] font-semibold text-primary transition-colors hover:bg-secondary"
+              >
+                <Mail size={10} /> Escribirle
+              </button>
+            )}
           </div>
         )}
 

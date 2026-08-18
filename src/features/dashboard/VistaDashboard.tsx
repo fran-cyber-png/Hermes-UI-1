@@ -14,6 +14,7 @@ import { BarraSegmentada } from '../../components/graficos/BarraSegmentada';
 import { Chispa } from '../../components/graficos/Chispa';
 import { BadgeCanal, nombreCanal } from '../../components/BadgeCanal';
 import { HojaContacto } from '../panel/HojaContacto';
+import type { DestinoCorreo } from '../../lib/puente';
 import type { Conversacion } from '../../dominio/conversaciones';
 import { conversacionDeRecordatorio, useAgenda, type Recordatorio } from '../agenda/agenda';
 import { conversacionDeTelefono } from '../../dominio/conversacionNueva';
@@ -169,8 +170,17 @@ export function VistaDashboard({
   onBuscarPersona: (telefono: string) => void;
   onIrAgenda: () => void;
   miVendedora: string;
-  /** Puente a Correos (§2.9): prellena el Para. Opcional hasta que App lo cablee (Fase 3). */
-  onMandarCorreo?: (para: string) => void;
+  /**
+   * Puente a Correos (§2.9): prellena el Para.
+   *
+   * ⚠️ **Acepta el correo suelto O el destino completo, y las dos formas se
+   * usan acá adentro.** La fila del radar solo tiene el correo del formulario
+   * (no hay conversación de la cual sacar una `clave`), y la `HojaContacto`
+   * sí la tiene. Estrechar esto a `(para: string)` volvería a dejar sin origen
+   * a todo correo que salga de la ficha — que es el defecto que se está
+   * arreglando (ver `lib/puente.ts`).
+   */
+  onMandarCorreo?: (destino: string | DestinoCorreo) => void;
 }) {
   /**
    * LA FICHA AL COSTADO, TAMBIÉN ACÁ (ADR 0037, PR #292).
@@ -1101,6 +1111,7 @@ export function VistaDashboard({
           conversacion={ficha}
           onCerrar={() => setFicha(null)}
           miVendedora={miVendedora}
+          onMandarCorreo={onMandarCorreo}
         />
       )}
     </div>

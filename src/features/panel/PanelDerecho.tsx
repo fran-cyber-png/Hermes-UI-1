@@ -19,6 +19,7 @@ import { FichaContacto } from '../cerberus/FichaContacto';
 import { VentaDesdeElPanel } from '../venta/VentaDesdeElPanel';
 import { origenDeLead } from '../cerberus/leadForm';
 import { personaEsTelefono } from '../../dominio/canal';
+import type { DestinoCorreo } from '../../lib/puente';
 
 function fichaDeCliente(f: Ficha | undefined): Extract<Ficha, { estado: 'cliente' }> | null {
   return f?.estado === 'cliente' ? f : null;
@@ -36,6 +37,7 @@ function formatearTelefono(raw: string): string {
 export function PanelDerecho({
   conversacion,
   miVendedora,
+  onMandarCorreo,
 }: {
   conversacion: Conversacion;
   /**
@@ -45,6 +47,12 @@ export function PanelDerecho({
    * que es la degradación correcta (nunca al revés).
    */
   miVendedora?: string | null;
+  /**
+   * Puente a Correos. Sin esto, «Escribirle» no se dibuja (ver el cableado
+   * abajo, donde está el porqué de que eso ya haya costado un mes de feature
+   * invisible).
+   */
+  onMandarCorreo?: (destino: DestinoCorreo) => void;
 }) {
   /**
    * El registro de la venta. Vive acá y no adentro del pie porque el pie es
@@ -72,7 +80,7 @@ export function PanelDerecho({
   const lead = useLeadForm(telefono, tieneTelefono);
   const { data: senales } = useSenales([conversacion.clave]);
   const { data: intereses } = useIntereses(conversacion.clave);
-  const { data: eventos } = useEventos(conversacion.clave);
+  const { data: delTimeline } = useEventos(conversacion.clave);
   const { editar, borrar } = useMutacionesEventos(conversacion.clave);
 
   const padron = marcaDeCliente(conversacion);
@@ -110,7 +118,8 @@ export function PanelDerecho({
     senales: senales?.senales?.[conversacion.clave],
     leadForm: lead.data?.lead ? { campana: lead.data.lead.campana ?? undefined, fecha: lead.data.lead.fecha } : undefined,
     conversacion: { persona_nombre: conversacion.persona_nombre ?? undefined, lead_nombre: conversacion.lead_nombre ?? undefined },
-    eventos,
+    eventos: delTimeline?.eventos ?? [],
+    correos: delTimeline?.correos ?? [],
     yo: miVendedora,
   });
 
@@ -205,7 +214,40 @@ export function PanelDerecho({
               dibujaría una segunda tarjeta con el nombre repetido. */}
           <div className="mt-3 border-t border-border pt-3">
             <h3 className="mb-1.5 text-xs font-semibold text-muted-foreground">Ficha de Cerberus</h3>
-            <FichaContacto conversacion={conversacion} embebida />
+            {/* 🔴 EL SEGUNDO PUENTE MUERTO DE ESTE MISMO COMPONENTE, y el
+                diagnóstico es idéntico al de tres líneas más arriba: hasta hoy
+                `grep 'onCorreo=' src/` daba **CERO**. `FichaContacto` declaraba
+                la prop, dibujaba «Escribirle» solo si le llegaba (o sea: nunca)
+                y nadie se la pasaba — así que **la acción no existió en la app
+                durante casi un mes**, con el correo del contacto ahí al lado.
+
+                ⚠️ El patrón «prop opcional que esconde la feature cuando falta»
+                se rompe SIN un solo síntoma: no hay error, no hay log, no hay
+                test rojo y la pantalla se ve perfecta. Es correcto como diseño
+                —un botón que no hace nada es peor— pero obliga a que el
+                cableado sea lo primero que se verifique, no lo último.
+
+                Acá se le suma la `clave`: la ficha sabe a quién escribirle, y
+                sólo el panel sabe DE QUÉ conversación salió. Sin eso el correo
+                se guarda con `clave = NULL` y desaparece del timeline de esta
+                misma persona (ver `lib/puente.ts`). */}
+            <FichaContacto
+              conversacion={conversacion}
+              embebida
+              onCorreo={
+                onMandarCorreo
+                  ? (destino) =>
+                      onMandarCorreo({
+                        ...destino,
+                        clave: destino.clave ?? conversacion.clave,
+                        // El nombre resuelto (Cerberus > formulario > alias de
+                        // WhatsApp, #118), no el crudo del canal: es lo que la
+                        // vendedora tiene delante de los ojos al tocar el botón.
+                        nombre: destino.nombre ?? nombreData.principal ?? undefined,
+                      })
+                  : undefined
+              }
+            />
           </div>
         </div>
       </div>

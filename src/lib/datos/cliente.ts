@@ -79,6 +79,30 @@ export class ErrorApi extends Error {
    * Ahí manda la tabla del front, que sigue siendo el respaldo — nunca se asume `false` acá.
    */
   readonly reintentable?: boolean;
+  /**
+   * EL CUERPO DEL ERROR, CRUDO — lo que el endpoint dijo y estas cinco propiedades
+   * no alcanzan a representar.
+   *
+   * 🔴 **Sin esto, un error que trae CIFRAS se aplana a una frase.** El caso que lo
+   * obligó es el techo de ritmo de Correos: el server contesta
+   * `429 { codigo: 'techo_de_ritmo', motivo: 'techo_hora', techo: 20, usado: 20 }`
+   * — o sea que se tomó el trabajo de decir **cuál** techo y **cuánto** va usado,
+   * justamente para que la pantalla pueda escribir «20 de 20 en la última hora» en
+   * vez de «no se pudo enviar». De los cuatro campos, `ErrorApi` sólo se quedaba con
+   * `codigo`: los otros tres se perdían en este borde, y la vendedora quedaba
+   * mirando un fallo genérico que la invita a volver a apretar Enviar.
+   *
+   * Es la misma lección que `codigo` y `reintentable` (#175): **el server distingue
+   * con cuidado y el cliente lo aplana**. La diferencia es que aquellos dos son
+   * transversales y merecen su propiedad; esto es la válvula para lo que es propio
+   * de un endpoint y no justifica una sexta.
+   *
+   * ⚠️ **No se lee sin comprobar el tipo.** Es `unknown` adentro a propósito: viene
+   * de la red, y un `techo` que llega como cadena tiene que romper en el `if` de
+   * quien lo lee, nunca aparecer concatenado en un mensaje. `undefined` = el cuerpo
+   * no era un objeto JSON (una caída de nginx devuelve HTML).
+   */
+  readonly cuerpo?: Record<string, unknown>;
 
   constructor(
     message: string,
@@ -87,6 +111,7 @@ export class ErrorApi extends Error {
     errores?: string[],
     codigo?: string,
     reintentable?: boolean,
+    cuerpo?: Record<string, unknown>,
   ) {
     super(message);
     this.status = status;
@@ -94,6 +119,7 @@ export class ErrorApi extends Error {
     this.errores = errores;
     this.codigo = codigo;
     this.reintentable = reintentable;
+    this.cuerpo = cuerpo;
   }
 }
 
@@ -134,6 +160,9 @@ export async function api<T>(ruta: string, init?: RequestInit): Promise<T> {
       // Solo un booleano de verdad cuenta como que el server se pronunció. Cualquier otra cosa
       // —ausente, `null`, una cadena— queda en `undefined` y decide la tabla del front.
       typeof cuerpo.reintentable === 'boolean' ? cuerpo.reintentable : undefined,
+      // El cuerpo entero, para lo que ninguna de las cinco de arriba representa (ver `ErrorApi`).
+      // `null` es un objeto para `typeof` y NO trae nada: se descarta acá y no en cada lector.
+      typeof cuerpo === 'object' && cuerpo !== null ? (cuerpo as Record<string, unknown>) : undefined,
     );
   }
   return res.json() as Promise<T>;

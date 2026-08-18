@@ -17,6 +17,7 @@ import { ETAPA_ROTULO, type Etapa } from '../../lib/etapas';
 import { decidirDrop, decidirRebote, reintentoTrasInteres } from './compuertas';
 import { ModalInteresCotizado, ModalVentaCierre } from './ModalesCompuerta';
 import { HojaContacto } from '../panel/HojaContacto';
+import type { DestinoCorreo } from '../../lib/puente';
 import { TarjetaEmbudo } from './TarjetaEmbudo';
 import { cotizarEnUnClic } from './tarjeta';
 import {
@@ -110,6 +111,7 @@ export function VistaEmbudo({
   onAgendarBienvenida,
   onIrAMensajes,
   miVendedora,
+  onMandarCorreo,
 }: {
   onAbrir: (c: Conversacion) => void;
   /** La siguiente jugada del recibo de venta (cae en la Agenda vía puente). */
@@ -118,6 +120,8 @@ export function VistaEmbudo({
   onIrAMensajes?: () => void;
   /** Quién mira — la `HojaContacto` la necesita para el timeline (ADR 0037). */
   miVendedora?: string | null;
+  /** Puente a Correos: baja hasta la ficha de la hoja. Sin esto, ahí no hay «Escribirle». */
+  onMandarCorreo?: (destino: DestinoCorreo) => void;
 }) {
   const qc = useQueryClient();
   /**
@@ -715,6 +719,7 @@ export function VistaEmbudo({
           onCerrar={() => setFicha(null)}
           escapeActivo={pendienteInteres == null && ventaPara == null}
           miVendedora={miVendedora}
+          onMandarCorreo={onMandarCorreo}
         />
       )}
 

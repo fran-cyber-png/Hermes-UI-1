@@ -49,7 +49,7 @@ import { useSesionWa } from './features/whatsapp/conversacionWa';
 import { useDashboard } from './features/dashboard/dashboard';
 import { useTiempoReal } from './lib/datos/tiempoReal';
 import { SELECTOR_CAMPOS } from './lib/teclado/escapeDePopover';
-import type { Puente } from './lib/puente';
+import type { DestinoCorreo, Puente } from './lib/puente';
 import { esAtajoLibreta } from './features/notas/notas';
 import { ConsultaIvi } from './features/ivi/ConsultaIvi';
 
@@ -463,8 +463,25 @@ export default function App() {
           )
       : undefined;
 
-  function mandarCorreoA(para: string) {
-    setPuente({ tipo: 'correo', para });
+  /**
+   * IR A CORREOS CON EL DESTINATARIO PUESTO — y con la conversación de la que
+   * salió, que es la mitad que faltaba.
+   *
+   * 🔴 **Acepta las DOS formas a propósito.** El único llamador que existía
+   * hasta hoy es el radar del Dashboard, que solo tiene el correo del
+   * formulario (`fila.form.correo`) y ninguna conversación: pasa un string
+   * suelto. Los llamadores nuevos —la ficha, en Mensajes, en el Pipeline y en
+   * el padrón— sí saben de qué conversación vienen y pasan el objeto. Exigir el
+   * objeto obligaría a tocar el Dashboard para no ganar nada; aceptar las dos
+   * deja que cada pantalla mande lo que de verdad sabe.
+   *
+   * ⚠️ Sin `clave` el correo sale igual y queda huérfano (ver `lib/puente.ts`):
+   * eso es correcto cuando NO hay conversación, y es un defecto cuando la hay
+   * y no se pasó.
+   */
+  function mandarCorreoA(destino: string | DestinoCorreo) {
+    const d = typeof destino === 'string' ? { para: destino } : destino;
+    setPuente({ tipo: 'correo', para: d.para, clave: d.clave, nombre: d.nombre });
     cambiarVista('correos');
   }
 
@@ -654,7 +671,11 @@ export default function App() {
                     al montar (no es react-query), así que ahí abajo sería un
                     request más por cada conversación que se abre. Lo necesita
                     el timeline para saber cuáles eventos podés editar. */}
-                <PanelDerecho conversacion={abierta} miVendedora={vendedora.id} />
+                <PanelDerecho
+                  conversacion={abierta}
+                  miVendedora={vendedora.id}
+                  onMandarCorreo={mandarCorreoA}
+                />
               </div>
             </aside>
           )}
@@ -680,6 +701,10 @@ export default function App() {
                 // La bandeja de Interesados no se trabaja en el kanban: se responde en Mensajes.
                 onIrAMensajes={() => cambiarVista('bandeja')}
                 miVendedora={vendedora.id}
+                // La hoja del Pipeline es el MISMO `PanelDerecho` que Mensajes:
+                // sin este cable, «Escribirle» aparecería en una pantalla y no
+                // en la otra sobre la misma ficha.
+                onMandarCorreo={mandarCorreoA}
               />
             )}
             {vista === 'agenda' && (
@@ -689,7 +714,16 @@ export default function App() {
                 onCrearInicialUsado={() => setPuente(null)}
               />
             )}
-            {vista === 'personas' && <VistaPersonas telefonoInicial={telefonoPersonas} onEscribir={escribirA} miVendedora={vendedora.id} />}
+            {vista === 'personas' && (
+              <VistaPersonas
+                telefonoInicial={telefonoPersonas}
+                onEscribir={escribirA}
+                miVendedora={vendedora.id}
+                // Baja hasta la `HojaContacto` del padrón: la tercera pantalla
+                // donde vive la misma ficha (ADR 0035).
+                onMandarCorreo={mandarCorreoA}
+              />
+            )}
             {vista === 'entrenamiento' && <VistaEntrenamiento />}
             {/* 🔴 `tapado` NO es cosmética: el navegador es un webview hijo, o
                 sea una capa del SISTEMA OPERATIVO encima del DOM (ADR 0043), y
@@ -730,8 +764,19 @@ export default function App() {
               </Suspense>
             )}
 
+            {/* El puente lleva TRES cosas y no una: el correo prellena el Para,
+                la `clave` es lo que ata el correo a su conversación (sin ella
+                queda huérfano — ver `lib/puente.ts`) y el nombre es solo para
+                saludar. Las tres se leen del MISMO objeto y se limpian juntas
+                con `onConsumido`: si el shell limpiara antes de que la vista
+                las lea, se perdería la clave y el correo saldría sin origen. */}
             {vista === 'correos' && (
-              <VistaCorreos correoInicial={puente?.tipo === 'correo' ? puente.para : null} onConsumido={() => setPuente(null)} />
+              <VistaCorreos
+                correoInicial={puente?.tipo === 'correo' ? puente.para : null}
+                claveInicial={puente?.tipo === 'correo' ? (puente.clave ?? null) : null}
+                nombreInicial={puente?.tipo === 'correo' ? (puente.nombre ?? null) : null}
+                onConsumido={() => setPuente(null)}
+              />
             )}
           </div>
         )}

@@ -1,14 +1,28 @@
 import type { Ficha } from '../cerberus/ficha';
 import type { InteresRegistrado } from '../gestion/lineaDeTiempo';
 import type { Senal } from '../senales/senales';
-import { esMio, nombreCortoVendedora, rotuloDeTipo, type EventoContacto } from '../eventos/eventos';
+import {
+  esMio,
+  nombreCortoVendedora,
+  rotuloDeTipo,
+  type CorreoEnTimeline,
+  type EventoContacto,
+} from '../eventos/eventos';
 
 export type TipoEvento = 'llegada' | 'identidad' | 'mensaje' | 'interes_detectado'
   | 'interes_registrado' | 'compra' | 'cotizacion' | 'enfriamiento' | 'pendiente'
   /** Lo que una persona registró a mano (`eventos_contacto`). */
-  | 'registrado';
+  | 'registrado'
+  /** Un correo que salió (o no salió) desde Hermes hacia esta persona. */
+  | 'correo';
 
-export type EstadoEvento = 'confirmado' | 'manual' | 'ia' | 'pendiente';
+/**
+ * ⚠️ **`fallido` es el único que pide UNA ACCIÓN, y por eso rompe el molde.**
+ * Los otros cuatro describen de dónde salió el dato; éste describe que algo no
+ * pasó. Es el mismo criterio que el ✓✓ del hilo, donde el fallido es lo único
+ * que se dibuja distinto (triángulo rojo) en vez de un tilde más.
+ */
+export type EstadoEvento = 'confirmado' | 'manual' | 'ia' | 'pendiente' | 'fallido';
 
 export interface EventoLinea {
   /** Estable: sirve de key de React. `${tipo}:${timestamp ?? 'sin-fecha'}:${valor ?? ''}`. */
@@ -60,6 +74,8 @@ export const COLOR: Record<EstadoEvento, { punto: string; tag: string }> = {
   manual: { punto: 'bg-primary', tag: 'Manual' },
   ia: { punto: 'bg-warning', tag: 'IA' },
   pendiente: { punto: 'border-dashed', tag: 'Pendiente' },
+  // Sin oro: acá no corre ningún plazo. El rojo es lo que pide una acción.
+  fallido: { punto: 'bg-destructive', tag: 'No salió' },
 };
 
 export interface TimelineArmada {
@@ -76,6 +92,18 @@ interface DatosTimeline {
   conversacion?: { persona_nombre?: string; lead_nombre?: string };
   /** Lo que las vendedoras registraron a mano (`eventos_contacto`). */
   eventos?: readonly EventoContacto[];
+  /**
+   * Los correos que salieron hacia esta persona desde Hermes (H7).
+   *
+   * 🔴 **Van en su propia lista y NO mezclados en `eventos`**, y la razón tiene
+   * filo: `eventos_contacto.id` y `correos.id` son dos `bigserial`
+   * independientes, así que el evento 7 y el correo 7 existen los dos. Como el
+   * timeline cuelga Editar y Borrar de `eventoId`, un correo que llegara con ese
+   * campo mostraría los dos botones y tocarlos haría `PATCH`/`DELETE
+   * /api/eventos/7` — **archivando el evento manual de otra persona, con un 200 y
+   * sin un solo síntoma**. Y además un correo no se edita ni se archiva: pasó.
+   */
+  correos?: readonly CorreoEnTimeline[];
   /** Quién está mirando — para saber cuáles de esos eventos puede tocar. */
   yo?: string | null;
 }
@@ -223,6 +251,51 @@ export function ensamblarTimeline(
       autor: nombreCortoVendedora(ev.vendedoraId),
       eventoId: ev.id,
       mio: esMio(ev, datos.yo),
+    });
+  }
+
+  /**
+   * LOS CORREOS (H7) — «¿ya le escribimos por mail?».
+   *
+   * 🔴 **La columna `correos.clave` existía desde el 21-jul-2026 y no la leía
+   * NADIE.** El front no la mandaba, el server no la consultaba y las tres filas
+   * de producción la tenían en NULL: la intención estaba escrita en el schema y
+   * el dato nunca existió. El caso concreto que eso costaba: una vendedora abre
+   * la conversación de un lead al que OTRA le mandó la cotización por correo
+   * ayer, el timeline muestra los mensajes de WhatsApp y del correo no hay una
+   * sola línea — y le vuelve a mandar un precio, o peor, otro.
+   *
+   * ⚠️ **El fallido se dibuja, y se dibuja DISTINTO.** Es el caso que más le
+   * importa a quien mira («le escribí y no salió»): esconderlo deja el mismo
+   * agujero de H7 con otra forma, y pintarlo igual que un enviado es peor, porque
+   * afirma lo contrario de lo que pasó.
+   *
+   * ⚠️ **Un `estado` que este build no conoce se trata como enviado, nunca se
+   * descarta.** La columna es `text` y el vocabulario puede crecer del lado del
+   * server (N4 va solo, N5 es un botón). Descartar escondería justo el correo
+   * raro, que es el que hay que mirar; y afirmarlo como fallido sería inventar un
+   * fracaso. Sólo el `'fallido'` explícito rompe el molde.
+   *
+   * ⚠️ **Sin `eventoId` y sin `editable`**: un correo no se edita ni se archiva
+   * —pasó— y ese campo es lo que dibuja Editar y Borrar contra `/api/eventos/:id`,
+   * que es OTRA tabla con otros ids. Ver el docblock de `correos` en `DatosTimeline`.
+   */
+  for (const c of datos.correos ?? []) {
+    const fallado = c.estado === 'fallido';
+    eventos.push({
+      id: `correo:${c.id}`,
+      tipo: 'correo',
+      rotulo: fallado ? 'Correo que no salió' : 'Correo enviado',
+      valor: c.asunto || undefined,
+      // El destinatario va en el comentario y no en `valor` porque lo que se lee
+      // de un vistazo es DE QUÉ era el correo; a quién ya lo dice la conversación.
+      comentario: fallado && c.motivo ? `a ${c.para} · ${c.motivo}` : `a ${c.para}`,
+      timestamp: c.creadoAt,
+      estado: fallado ? 'fallido' : 'confirmado',
+      // El nombre corto sale de la MISMA función que usan los eventos vecinos: el
+      // server manda el id crudo justo para que las dos filas de la misma columna
+      // no se acorten con dos reglas distintas (`luz.perez` → «Luz» vs «Luz.perez»).
+      autor: nombreCortoVendedora(c.vendedoraId),
     });
   }
 

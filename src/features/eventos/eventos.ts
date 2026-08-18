@@ -175,12 +175,83 @@ export function esMio(evento: { vendedoraId: string }, yo: string | null | undef
 
 // ── Los hooks ──────────────────────────────────────────────────────────────
 
+/**
+ * UN CORREO, COMO LO VE EL TIMELINE. Lo sirve `GET /api/eventos?clave=` al lado
+ * de los eventos (`server/src/correos/enElTimeline.ts`).
+ *
+ * ⚠️ **Sin `cuerpo`, a propósito**: el timeline se refresca en cada apertura de
+ * conversación y el cuerpo es lo que una persona le escribió a un lead. Se pide
+ * aparte con `GET /api/correos/:id`, que es lo que abre `LecturaDeCorreo`.
+ *
+ * ⚠️ **`estado` es `string` y no la unión `'enviado' | 'fallido'`.** La columna
+ * es `text` y una fila vieja —o escrita por otro camino— puede traer cualquier
+ * cosa; un estado desconocido se DIBUJA, nunca se descarta. Descartarlo
+ * escondería justo el correo raro, que es el que hay que mirar.
+ */
+export interface CorreoEnTimeline {
+  id: number;
+  vendedoraId: string;
+  para: string;
+  asunto: string;
+  estado: string;
+  motivo: string | null;
+  creadoAt: string;
+}
+
+/**
+ * EL TIMELINE DEL PANEL, EN UNA SOLA CONSULTA.
+ *
+ * 🔴 **Devuelve las DOS listas y ya no `select: (d) => d.eventos`.** Ese `select`
+ * fue el hueco H7 del lado del front: el server empezó a servir `correos` en la
+ * misma respuesta y **el hook los tiraba en el borde**, así que un correo mandado
+ * a ese lead no aparecía en ningún lado. Es la misma forma del defecto que este
+ * frente vino a arreglar tres veces —una prop opcional, una clave descartada, un
+ * endpoint sin consumidor—: **no hay error, no hay log, el dato simplemente no
+ * llega y la pantalla se ve bien.**
+ *
+ * ⚠️ **Una sola `queryKey` para las dos listas.** Con una key propia para los
+ * correos serían dos requests a la MISMA ruta, y las dos mitades del timeline
+ * podrían quedar de momentos distintos.
+ *
+ * ⚠️ **`correos` se lee como opcional** (`?? []`): falta en un server viejo —el
+ * front sale por N4 y el server por N5, que es un botón— y en una respuesta
+ * rehidratada del caché de IndexedDB (ADR 0007).
+ */
 export function useEventos(clave: string) {
   return useQuery({
     queryKey: ['eventos', clave],
     queryFn: () =>
-      api<{ eventos: EventoContacto[] }>(`/api/eventos?clave=${encodeURIComponent(clave)}`),
-    select: (d) => d.eventos,
+      api<{ eventos: EventoContacto[]; correos?: CorreoEnTimeline[] }>(
+        `/api/eventos?clave=${encodeURIComponent(clave)}`,
+      ),
+    /**
+     * 🔴 **SIN `select`, Y ESO NO ES ESTILO: UN `select` QUE ARMA UN OBJETO
+     * NUEVO RE-RENDERIZA EN CADA RENDER.**
+     *
+     * Acá había `select: (d) => ({ eventos, correos })`. TanStack Query cachea el
+     * resultado de `select` mientras no cambien ni `data` ni la REFERENCIA de la
+     * función — y ésta es una flecha inline, o sea nueva en cada render: el
+     * `select` se re-ejecuta siempre y devuelve **un objeto distinto cada vez**.
+     * Como `data` es lo que el componente compara para decidir si volvió a
+     * cambiar, el panel entra en un ciclo de renders que no termina hasta que se
+     * estabiliza solo.
+     *
+     * La versión anterior no tenía el problema **de casualidad**: devolvía
+     * `d.eventos`, que es la MISMA referencia que ya venía del caché. Al sumarle
+     * los correos (H7) se convirtió en un objeto armado, y ahí apareció.
+     *
+     * ⚠️ **Lo delató un test que no tiene nada que ver con Correos**: el de la
+     * Libreta como octava vista, que espera su carga perezosa contando turnos del
+     * event loop. Los renders de más se comen esos turnos, así que el síntoma fue
+     * «la Libreta nunca terminó de montarse» en el runner del CI —cargado— y en
+     * ninguna máquina local. **No era un flake: el presupuesto de 50 turnos era el
+     * termómetro.**
+     *
+     * Sin `select`, `data` es la respuesta del caché: referencia estable, cero
+     * renders de más. Los dos `?? []` viven en el consumidor, que es donde se
+     * sabe qué hacer con lo que falta (server viejo entre N4 y N5, o una
+     * respuesta rehidratada de IndexedDB — ADR 0007).
+     */
   });
 }
 

@@ -366,3 +366,72 @@ describe('ensamblarTimeline', () => {
     expect(resultado[0].id).toBe('identidad:sin-fecha:Juan');
   });
 });
+
+/**
+ * 🔴 H7: EL CORREO TIENE QUE VERSE EN EL TIMELINE.
+ *
+ * La columna `correos.clave` existió desde el 21-jul-2026 **sin un solo lector**:
+ * el front no la mandaba, el server no la consultaba y las tres filas de
+ * producción la tenían en NULL. Este frente cerró la cadena entera y el defecto
+ * apareció DOS veces más en el camino, siempre con la misma forma —el dato llega
+ * y alguien lo descarta en un borde, sin error y sin log—: primero el server no
+ * lo consultaba, después `useEventos` lo tiraba con un `select`.
+ *
+ * Estos tests fijan el último tramo. Lo que protegen no es «se dibuja un
+ * renglón»: es que **un correo nunca se pueda confundir con un evento editable**,
+ * porque esa confusión archiva la fila de otra persona.
+ */
+describe('H7 — los correos en el timeline', () => {
+  const CORREO = {
+    id: 7,
+    vendedoraId: 'ventas11@grupogoberna.com',
+    para: 'lead@gmail.com',
+    asunto: 'Diplomado en Gestión Pública',
+    estado: 'enviado',
+    motivo: null,
+    creadoAt: '2026-08-17T15:00:00.000Z',
+  };
+
+  const lineas = (correos: unknown[]) =>
+    ensamblarTimeline({ correos: correos as never, yo: 'luz' }).grupos.flatMap((g) => g.eventos);
+
+  it('un correo enviado aparece, con su asunto y quién lo mandó', () => {
+    const [linea] = lineas([CORREO]).filter((e) => e.tipo === 'correo');
+    expect(linea, 'el correo no llegó al timeline').toBeDefined();
+    expect(linea.valor).toBe('Diplomado en Gestión Pública');
+    expect(linea.estado).toBe('confirmado');
+    expect(linea.comentario).toContain('lead@gmail.com');
+    expect(linea.autor, 'sin autor, un correo se lee como algo que pasó solo').toBeTruthy();
+  });
+
+  it('🔴 NO trae `eventoId` ni `editable`: con eso, Borrar archivaría el evento manual con ese id', () => {
+    // `eventos_contacto.id` y `correos.id` son dos bigserial independientes: el
+    // evento 7 y el correo 7 existen los dos a la vez.
+    const [linea] = lineas([CORREO]).filter((e) => e.tipo === 'correo');
+    expect(linea.eventoId).toBeUndefined();
+    expect(linea.editable).toBeFalsy();
+    expect(linea.mio, 'sin `mio` no se dibujan Editar ni Borrar').toBeFalsy();
+  });
+
+  it('🔴 el que NO salió se ve distinto y dice por qué', () => {
+    const [linea] = lineas([
+      { ...CORREO, estado: 'fallido', motivo: '550 mailbox unavailable' },
+    ]).filter((e) => e.tipo === 'correo');
+    expect(linea.estado).toBe('fallido');
+    expect(linea.rotulo).not.toBe('Correo enviado');
+    expect(linea.comentario, 'el motivo es lo único accionable que hay').toContain('550');
+  });
+
+  it('⚠️ un `estado` que este build no conoce se DIBUJA (no se descarta ni se afirma fallido)', () => {
+    // La columna es `text` y el vocabulario crece del lado del server (N4 va solo,
+    // N5 es un botón). Descartar escondería justo el correo raro.
+    const [linea] = lineas([{ ...CORREO, estado: 'rebotado' }]).filter((e) => e.tipo === 'correo');
+    expect(linea, 'un estado nuevo no puede hacer desaparecer el correo').toBeDefined();
+    expect(linea.estado).toBe('confirmado');
+  });
+
+  it('⚠️ sin correos (server viejo o caché de ayer) el timeline se arma igual', () => {
+    expect(() => ensamblarTimeline({ yo: 'luz' })).not.toThrow();
+    expect(lineas([]).filter((e) => e.tipo === 'correo')).toHaveLength(0);
+  });
+});

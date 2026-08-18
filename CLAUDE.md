@@ -635,6 +635,46 @@ expand-only), UI en la línea de la hora de cada saliente.
 - UI: ✓ / ✓✓ / ✓✓ **azul**, el vocabulario que la vendedora ya trae del teléfono. `fallido` rompe el molde
   (triángulo rojo) porque es lo único que pide una acción. `docs/evidencia/entrega-tildes.png`.
 
+## Correos — con qué buzón sale, y a quién le contestan (ADR 0058)
+
+Un correo = UNA vendedora → UN destinatario, auditado. Server en `server/src/correos/` (todo puro
+salvo `repositorio.ts`) + `server/src/routes/correos.ts`, front en `src/features/correos/`, tabla
+`remitentes_correo` + cuatro columnas de `correos` (migración **0029**). Las dos decisiones del
+dueño: los remitentes viven en una tabla y se administran desde la app, y **el `Reply-To` es el
+correo de quien escribió**.
+
+- 🔴 **EL SMTP ES AMAZON SES** (`email-smtp.us-east-1.amazonaws.com`), **no `mail.goberna.us`** —el
+  MX de `goberna.us` es Google Workspace, así que por ahí no sale nada—. La doc lo dijo mal desde el
+  21-jul hasta el 17-ago-2026, y ese nombre de host **es lo que un operador busca justo cuando algo
+  falla**: manda a revisar un buzón de Google mientras el problema está en la consola de SES, con un
+  lead esperando. Una doc que miente sobre un dato de diagnóstico no es doc vieja, es una pista falsa.
+- 🔴 **`grupogoberna.com` NO está verificado en SES: los `ventas1X@` pueden ser `Reply-To` y NUNCA
+  `From`.** Medido mandando de verdad, con dos controles que cortan (`prueba@gmail.com` y
+  `a@gobernaus.com` dan **554 «Email address is not verified»**). `goberna.us` sí está verificado
+  **como dominio y cubre sus subdominios** (`avisos@mail.goberna.us` aceptado). De ahí sale la forma
+  del sobre: el `From` sale por un buzón verificado con el nombre de la vendedora en el display name
+  —que SES no verifica— y el `Reply-To` es la rendija, porque **SES verifica de quién SALE, no a
+  dónde se CONTESTA**. La lista vive en `SMTP_DOMINIOS_VERIFICADOS` y se chequea al **dar de alta**
+  (`correos/verificado.ts`), no al mandar: un remitente mal cargado no se ve mal en ningún lado y
+  aparece días después, en el correo de otra persona.
+- 🔴 **`sinSaltos()` ES LO ÚNICO QUE SEPARA LA CAJA DE ASUNTO DE UNA INYECCIÓN DE CABECERAS.** Una
+  cabecera SMTP termina en CRLF: un `\r` adentro del asunto la cierra y **lo que sigue se manda como
+  una cabecera nueva** — o sea que desde la pantalla se podía agregar un `Bcc:` y mandarle el correo
+  a quien fuera, sin tocar la API y sin dejar rastro en `correos`. Los que inyectan son `\r` y `\n`;
+  los otros cuatro se limpian igual para que la regla no tenga excepciones que alguien deba recordar.
+  ⚠️ Se reemplazan por un espacio, **no se borran**: borrarlos pega las palabras y al lead le llega
+  un asunto que en la pantalla se veía bien.
+- 🔴 **DAR DE ALTA EL PRIMER REMITENTE ES UN PASO MANUAL DEL DEPLOY**: `cd server && npm run
+  correos:remitentes -- --alta <buzón> --nombre "…" --aplicar` (dry-run por default). El front sale
+  por **N4** y el server por **N5**, así que hay una ventana con la tabla creada y vacía en la que la
+  pantalla de administración **todavía no existe del otro lado**. Sin el script eso se destraba con
+  un `INSERT` a mano contra producción, que **se saltea `puedeSerRemitente`** —el único control de
+  dominio verificado del frente— y el defecto sale en el 554 del primer envío. Mientras no haya
+  ninguno, Correos sale por `SMTP_FROM` como el 21-jul (compat, no falla).
+- Sin server: `npx vite --port 5199` → `/galeria-correos.html` (un flag por caso real). ⚠️ Sirve las
+  **tres filas que existen en producción** —las tres pruebas, con `desde` en hueco— y no un caso
+  ideal. Capturas: `docs/evidencia/correos-*.png`.
+
 ## La Libreta se comparte — espacios de trabajo (ADR 0046, revierte 0012 y 0034 §7)
 
 Una página vive en **mi libreta privada** o en un **espacio con miembros elegidos**. Server en
@@ -1960,6 +2000,11 @@ Solo en `server/.env` (gitignored). **Se referencian por nombre, jamás se pegan
 **no es un secreto, es una lista de `vendedora_id`**, pero fail-closed: sin ella nadie es supervisor y
 **todas ven solo lo suyo**; desde la tabla `equipo` es el **respaldo**, no la fuente) y **`HERMES_ADMINS`**
 (el break-glass: entra como `admin` aunque la base no conteste — tampoco es un secreto, y vacía = nadie).
+Correos (ADR 0058): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (el buzón de
+compatibilidad, el que se usa mientras no haya ningún remitente dado de alta) y
+`SMTP_DOMINIOS_VERIFICADOS` (**no es un secreto**: la lista de dominios que SES ya aceptó, default
+`goberna.us`). ⚠️ En SES el `SMTP_USER` es un **Access Key ID de IAM**, no un buzón: no sirve de
+`From` y no puede viajar al navegador.
 Ver `server/.env.example` (solo nombres).
 
 ## Reglas duras (Goberna)

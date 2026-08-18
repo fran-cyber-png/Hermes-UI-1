@@ -3,6 +3,7 @@ import { ExternalLink, FileText, Search } from 'lucide-react';
 import { api } from '../../lib/datos/cliente';
 import { kicker, sectionLabel } from '../../lib/styles';
 import type { Conversacion } from '../../dominio/conversaciones';
+import type { DestinoCorreo } from '../../lib/puente';
 import { BadgeCanal, nombreCanal } from '../../components/BadgeCanal';
 import HistorialPersona from './HistorialPersona';
 import { Avatar } from '../../components/Avatar';
@@ -24,13 +25,38 @@ import { PersonaUnificada } from '../identidad/PersonaUnificada';
  * entero de la publicación, imagen, curso inferido del anuncio) llega con los
  * slices S8 (`docs/plan-panel-contexto.md`) — y este panel lo dice, no lo
  * disimula: cada hueco de datos se declara.
+ *
+ * 🔴 **HOY NO LO MONTA NADIE — medido el 17-ago-2026: `grep -rn 'PanelContexto'
+ * src/` devuelve su propia definición y cuatro comentarios, y ni un `import`.**
+ * O sea que es el MISMO defecto que este archivo cablea acá abajo, una capa más
+ * arriba: la pieza existe, se ve bien leída, y no está en la pantalla de nadie.
+ * Se deja cableado igual para que el día que se lo vuelva a colgar no nazca sin
+ * el puente — pero **antes de tocarlo, verificá si se reconecta o se archiva**;
+ * arreglarle detalles a un componente huérfano es trabajo que no llega a la
+ * vendedora. Es el mismo caso que la pestaña «Notas» (ver `PanelDerecho.tsx`).
  */
 
 export function PanelContexto({
   conversacion,
+  onCorreo,
   embebida = false,
 }: {
   conversacion: Conversacion;
+  /**
+   * 🔴 **UNA PROP OPCIONAL QUE ESCONDE LA FEATURE CUANDO FALTA SE ROMPE SIN UN
+   * SOLO SÍNTOMA**, y es la TERCERA vez que muerde alrededor de este mismo
+   * bloque. No hay error, no hay log, no hay test rojo: `BloqueLeadForm` dibuja
+   * «Escribirle» sólo si le llega `onCorreo`, así que el llamador que se olvida
+   * del cable **borra la acción y deja la pantalla perfecta**. Ya pasó con
+   * `FichaContacto` —`grep 'onCorreo=' src/` daba cero durante casi un mes— y
+   * antes con la pestaña «Notas», declarada y sin nadie que la renderizara.
+   *
+   * El candado no es acordarse: es `panel/puenteCorreo.test.ts`, que lee el
+   * árbol y exige que **todo** montaje de un componente que acepta el puente se
+   * lo pase. Una lista de sitios escrita a mano ya quedó corta una vez — fue
+   * justo este montaje el que se salteó.
+   */
+  onCorreo?: (destino: DestinoCorreo) => void;
   /**
    * Dentro del panel multifunción: el marco, el encabezado con la persona y las
    * notas los pone el panel (las notas tienen pestaña propia). `false` = como
@@ -157,6 +183,18 @@ export function PanelContexto({
           telefono={telefonoDe(conversacion)}
           activo={personaEsTelefono(conversacion.canal)}
           pushname={conversacion.persona_nombre}
+          // La `clave` la pone ACÁ el que la tiene (H7): `BloqueLeadForm` sólo
+          // conoce el correo y el nombre del formulario, así que un correo
+          // mandado desde este panel saldría con `clave` NULL — que es
+          // exactamente lo que tienen las 3 filas de `correos` en producción, y
+          // el motivo por el que ninguna aparece en el timeline ni en la
+          // medición (`lib/puente.ts`). El `??` respeta lo que ya viniera
+          // resuelto en vez de pisarlo.
+          onCorreo={
+            onCorreo
+              ? (destino) => onCorreo({ ...destino, clave: destino.clave ?? conversacion.clave })
+              : undefined
+          }
         />
 
         {/* «Le interesa» ya NO va acá cuando esto vive dentro del panel: allá

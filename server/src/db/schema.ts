@@ -719,12 +719,100 @@ export const eventosContacto = pgTable(
 );
 
 /**
+ * REMITENTES DE CORREO — desde qué buzón sale un correo de Hermes.
+ *
+ * 🔴 ES UNA TABLA Y NO UNA VARIABLE DE ENTORNO, y eso es una decisión del dueño
+ * (17-ago-2026). Con la lista en el `.env`, sumar un remitente es editar el
+ * entorno de VPS1 **y reiniciar a mano**: N5 sale VERDE y NO reinicia si el SHA
+ * ya está desplegado, así que el camino normal deja el remitente nuevo sin
+ * existir y **nada en la pantalla lo dice**. Acá el alta la hace un supervisor
+ * (`mandaEnElEquipo`, §Los roles) y surte efecto en el acto, sin deploy.
+ *
+ * ⚠️ **`direccion` tiene que vivir en un dominio VERIFICADO EN SES, y eso se
+ * chequea AL DAR DE ALTA — nunca al mandar** (`correos/verificado.ts`). SES
+ * contesta 554 a un From no verificado, y el peor momento para descubrirlo es
+ * con un lead esperando la cotización. Medido el 17-ago-2026: `goberna.us` está
+ * verificado como dominio (existe el TXT `_amazonses.goberna.us`), así que
+ * cualquier `algo@goberna.us` sale sin verificar nada más;
+ * **`grupogoberna.com` NO está verificado**, o sea que los `ventas1X@` del
+ * equipo no pueden ser From — pero sí `responder_a`, que SES no verifica.
+ */
+export const remitentesCorreo = pgTable(
+  "remitentes_correo",
+  {
+    id: bigserial({ mode: "number" }).primaryKey(),
+    /** El buzón: lo que va entre picos en el From. Tiene que ser de un dominio verificado. */
+    direccion: text("direccion").notNull(),
+    /**
+     * La parte legible del From («Escuela Goberna»). El display name **no lo
+     * verifica nadie**, así que el sobre lo compone con el nombre de la
+     * vendedora adelante (`armarSobre`): quien recibe lee a una persona, no a
+     * una casilla.
+     */
+    nombre: text("nombre").notNull(),
+    /**
+     * A dónde cae la respuesta cuando no se puede usar la de la vendedora.
+     * `null` = sin Reply-To.
+     *
+     * 🔴 Es el RESPALDO de la regla D2, no el caso normal: el Reply-To es la
+     * vendedora que escribió **cuando su `vendedora_id` es un correo**
+     * (`ventas10@grupogoberna.com`…). Media plantilla del equipo tiene ids que
+     * no lo son —`luz`, `alan`, `Sindy`, `Usuario1`—, y para esas la respuesta
+     * del lead caía en un buzón que Hermes no lee. Este campo es lo que evita
+     * que ese caso quede sin destino.
+     */
+    responderA: text("responder_a"),
+    /**
+     * La firma que se pega al pie del cuerpo (`componerCuerpo`). `null` = no se
+     * agrega nada, ni el separador.
+     *
+     * 🔴 La pantalla prometía «con tu firma de siempre» y **no había una sola
+     * línea de código que agregara una firma**. La promesa vive acá o no vive.
+     */
+    firma: text("firma"),
+    /**
+     * Baja lógica: un remitente retirado no se puede volver a elegir, y los
+     * correos que ya salieron por él **conservan su propio `desde`**, así que la
+     * auditoría no se toca.
+     *
+     * ⚠️ Una columna `activo` sin un solo lector es TEATRO — la cicatriz es
+     * `numeros_wa.activo`, donde retirar una línea con un `UPDATE` no retiraba
+     * nada. Acá el lector es quien arma la lista que la pantalla ofrece; si
+     * alguien agrega otra puerta al envío, tiene que preguntar lo mismo.
+     */
+    activo: boolean("activo").notNull().default(true),
+    /** Rastro: qué supervisor lo dio de alta. La grafía que vino, sin reescribir. */
+    creadoPor: text("creado_por").notNull(),
+    creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    /**
+     * 🔴 EL UNIQUE VA SOBRE `lower(direccion)` POR LA MISMA RAZÓN QUE
+     * `espacio_miembro_vendedora_idx`, y acá también es corrección, no perf.
+     *
+     * Un correo no distingue mayúsculas en el dominio y en la práctica tampoco
+     * en el buzón: `Escuela@goberna.us` y `escuela@goberna.us` **son el mismo
+     * lugar**. Con un UNIQUE sobre el texto crudo entran las dos filas, y ahí el
+     * operador retira una, ve que los correos siguen saliendo por «ese mismo»
+     * remitente y no tiene forma de entender por qué «no anda»: no hay error,
+     * no hay fila huérfana, no hay conteo que no cierre.
+     */
+    uniqueIndex("remitentes_correo_direccion_uq").on(sql`lower(${t.direccion})`),
+  ],
+);
+
+/**
  * CORREOS ENVIADOS — la auditoría del canal email.
  *
  * Un correo = UNA vendedora, UN destinatario, una acción humana — la misma
  * filosofía que EnvioControlado. Acá queda quién mandó qué a quién y si salió,
  * incluidos los intentos fallidos. Sin listas, sin campañas: eso es otra
  * herramienta y otra política.
+ *
+ * ⚠️ **«Sin listas» no lo garantiza esta fila: lo garantiza `leerDestinatario`**
+ * (`correos/destinatario.ts`). `para` es una columna de texto y una cadena con
+ * comas la acepta igual; quien tiene que rechazarla es el borde, antes de que
+ * nodemailer la parta en varios destinatarios.
  */
 export const correos = pgTable(
   "correos",
@@ -740,6 +828,41 @@ export const correos = pgTable(
     estado: text("estado").notNull(),
     motivo: text("motivo"),
     creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * De qué fila de `remitentes_correo` salió. `null` = los correos anteriores
+     * a este frente, que salieron todos por el `SMTP_FROM` del entorno.
+     *
+     * ⚠️ **NO es de acá de donde se lee el From**: para eso está `desde`. Esta
+     * columna sirve para agrupar («¿cuánto sale por Escuela?»), no para
+     * reconstruir el sobre.
+     */
+    remitenteId: bigint("remitente_id", { mode: "number" }),
+    /**
+     * 🔴 `desde` Y `responder_a` SE COPIAN EN EL MOMENTO DEL ENVÍO, y por eso no
+     * se leen del remitente por join.
+     *
+     * Un remitente se edita (le cambian el nombre, la firma, el `responder_a`) y
+     * se desactiva. Con el join, la auditoría respondería «con qué saldría hoy»
+     * cuando la única pregunta que vale es **con qué salió ESE correo** — y esa
+     * es exactamente la pregunta del día que un lead diga «me escribieron de una
+     * dirección rara» o que una respuesta caiga en un buzón que nadie lee. Es el
+     * mismo criterio que `envios_wa`, que guarda el texto que salió y no la
+     * plantilla que hoy diría otra cosa (ADR 0022).
+     */
+    desde: text("desde"),
+    responderA: text("responder_a"),
+    /**
+     * El `messageId` que devuelve SES al aceptar el POST.
+     *
+     * 🔴 **TENERLO NO SIGNIFICA QUE LLEGÓ: significa que SES lo aceptó.** Es
+     * exactamente el hueco que tenían los ✓✓ de WhatsApp antes de la migración
+     * 0021 — `estado = 'enviado'` es «salió de acá», no «lo leyó una persona».
+     * Un rebote, un buzón lleno o una queja de spam ocurren DESPUÉS y sin
+     * webhook de bounce no hay forma de enterarse. Sirve para una cosa y hay que
+     * usarlo solo para esa: **cruzar esta fila contra los logs de SES** cuando
+     * alguien pregunta qué pasó con un correo puntual.
+     */
+    idExterno: text("id_externo"),
   },
   (t) => [index("correos_vendedora_idx").on(t.vendedoraId, t.creadoAt)],
 );

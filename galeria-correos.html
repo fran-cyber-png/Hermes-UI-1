@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hermes — Correos (galería de evidencia)</title>
+    <!--
+      Entry APARTE de la app. `vite build` compila solo `index.html`, así que esto NO entra
+      al bundle que usan las vendedoras: se abre a mano para producir las capturas de
+      `docs/evidencia/`. Sin server, sin base, sin red — todo `fetch` lo contesta el stub
+      de `src/features/correos/galeria.tsx`.
+
+          npx vite --port 5199  →  http://localhost:5199/galeria-correos.html
+
+      Un flag por CASO REAL:
+
+          (sin flags)        el caso normal: 3 remitentes, mira `luz`
+          ?sinremitentes=1   la tabla existe y está VACÍA — lo que se ve el día del deploy
+          ?desconectado=1    el SMTP sin configurar
+          ?supervisor=1      con el botón de administrar remitentes
+          ?admin=1           la hoja de administración, con un remitente dado de baja
+          ?techo=1           20 de 20 en la hora: el freno dice el NÚMERO
+          ?varios=1          dos direcciones en «Para»: «va uno por correo»
+          ?correo=1          la vendedora ES un buzón → el sobre dice que le responden a ella
+          ?leer=1            la hoja de lectura de un correo ya enviado (el cuerpo se PIDE)
+
+      🔴 La lista son las TRES filas que existen en la base (`alan → alanmamani@hotmail.com`
+      y las dos `probando` de `ventas10@grupogoberna.com`, del 4 y el 6 de agosto): todo lo
+      que esta pantalla mandó en su vida. No hay una cuarta ni una fallida, y ninguna tiene
+      `desde` — son anteriores a la migración, y ese hueco es lo que hay que poder mirar.
+      Una galería que no sirve los valores reales no es evidencia.
+    -->
+  </head>
+  <body>
+    <div id="galeria"></div>
+    <script type="module" src="/src/features/correos/galeria.tsx"></script>
+  </body>
+</html>
