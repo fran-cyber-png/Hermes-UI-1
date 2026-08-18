@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { montar, reposar, type Montado } from '../../pruebas/dom';
+import { esperarA, montar, type Montado } from '../../pruebas/dom';
 import { Libreta } from './Libreta';
 
 /**
@@ -70,14 +70,6 @@ afterEach(() => {
   montado = null;
   vi.unstubAllGlobals();
 });
-
-async function esperarA(condicion: () => boolean, queEsperaba: string) {
-  for (let i = 0; i < 20; i++) {
-    if (condicion()) return;
-    await reposar();
-  }
-  throw new Error(`nunca pasó: ${queEsperaba}\n\n${document.body.textContent}`);
-}
 
 const barras = () => document.querySelectorAll('[data-libreta-barra]');
 

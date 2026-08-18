@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { montar, reposar, type Montado } from '../../pruebas/dom';
+import { esperarA, montar, reposar, type Montado } from '../../pruebas/dom';
 import { Libreta } from './Libreta';
 
 /**
@@ -84,23 +84,6 @@ function botonQueDice(texto: string): HTMLElement | undefined {
 }
 
 /**
- * Reposa hasta que la condición se cumpla, con techo.
- *
- * Un `reposar()` suelto alcanza para un render, pero acá hay DOS consultas
- * encadenadas (los espacios y después las páginas de ese espacio) y cuántos
- * ciclos tarda eso no es algo que el test deba afirmar. Con `reposar()` a secas,
- * el test pasa o falla según la máquina — un flake que después se lee como un
- * bug del componente.
- */
-async function esperarA(condicion: () => boolean, queEsperaba: string) {
-  for (let i = 0; i < 20; i++) {
-    if (condicion()) return;
-    await reposar();
-  }
-  throw new Error(`nunca pasó: ${queEsperaba}\n\n${document.body.textContent}`);
-}
-
-/**
  * ⚠️ **«Ya no dice Cargando…» NO alcanza como espera**, y por eso esto mira el
  * request. Al tocar el espacio, react-query estrena `queryKey` y tarda un tick en
  * ponerse en `isPending`: en ese hueco la condición se cumple con la pantalla
@@ -142,7 +125,10 @@ test('🔴 cambiar de espacio CIERRA la página abierta', async () => {
   await esperarA(() => Boolean(botonQueDice('mi página privada')), 'llegó la página privada');
 
   botonQueDice('mi página privada')?.click();
-  await reposar();
+  // Un `reposar()` a secas no alcanza: el editor está detrás de una frontera
+  // perezosa (`perezosos.tsx`), así que el primer montaje del test tarda más de
+  // un turno. Es el mismo motivo que documenta `esperarA`.
+  await esperarA(() => Boolean(document.querySelector('[data-libreta-editor]')), 'se montó el editor');
   expect(document.querySelector('[data-libreta-editor]')).toBeTruthy();
 
   // Salto al espacio compartido.

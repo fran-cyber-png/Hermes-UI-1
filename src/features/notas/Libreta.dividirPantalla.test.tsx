@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { montar, reposar, type Montado } from '../../pruebas/dom';
+import { esperarA, montar, reposar, type Montado } from '../../pruebas/dom';
 import { Libreta } from './Libreta';
 import { ESPERA_AUTOGUARDADO_MS } from './useAutoguardado';
 
@@ -133,14 +133,6 @@ function botonEnPanelDividido(texto: string): HTMLElement | undefined {
 /** Los botones de la barra de React Flow son solo ícono: se buscan por `title`. */
 function botonPorTitulo(texto: string): HTMLElement | undefined {
   return [...document.querySelectorAll('button')].find((b) => b.getAttribute('title')?.includes(texto));
-}
-
-async function esperarA(condicion: () => boolean, queEsperaba: string) {
-  for (let i = 0; i < 20; i++) {
-    if (condicion()) return;
-    await reposar();
-  }
-  throw new Error(`nunca pasó: ${queEsperaba}\n\n${document.body.textContent}`);
 }
 
 test('«Dividir pantalla» abre el selector con las otras páginas, sin ella misma', async () => {

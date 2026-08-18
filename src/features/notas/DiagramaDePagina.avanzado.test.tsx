@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test } from 'vitest';
-import { escribir, montar, reposar, teclear, type Montado } from '../../pruebas/dom';
+import { esperarA, escribir, montar, reposar, teclear, type Montado } from '../../pruebas/dom';
 import { DiagramaDePagina } from './DiagramaDePagina';
 
 /**
@@ -25,14 +25,6 @@ function botonPorTitulo(texto: string): HTMLElement | undefined {
 
 function nodosEnPantalla(): Element[] {
   return [...document.querySelectorAll('.react-flow__node')];
-}
-
-async function esperarA(condicion: () => boolean, queEsperaba: string) {
-  for (let i = 0; i < 20; i++) {
-    if (condicion()) return;
-    await reposar();
-  }
-  throw new Error(`nunca pasó: ${queEsperaba}\n\n${document.body.textContent}`);
 }
 
 test('deshacer/rehacer: agregar un nodo se puede revertir y volver a aplicar', async () => {

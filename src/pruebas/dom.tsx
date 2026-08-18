@@ -203,6 +203,68 @@ export async function reposar() {
 }
 
 /**
+ * ESPERAR A QUE ALGO PASE — y el vencimiento va en TIEMPO, no en turnos.
+ *
+ * ══ POR QUÉ NO ALCANZA UN `reposar()` SUELTO ════════════════════════════════
+ *
+ * Alcanza para un render. No alcanza para dos consultas encadenadas (los
+ * espacios y después las páginas de ese espacio), ni para una frontera perezosa
+ * (`notas/perezosos.tsx`). Con `reposar()` a secas el test pasa o falla según la
+ * máquina — un flake que después se lee como un bug del componente.
+ *
+ * ══ 🔴 POR QUÉ EL TECHO NO PUEDE SER UN NÚMERO DE TURNOS ════════════════════
+ *
+ * Porque un tope de turnos **es un acoplamiento oculto al tamaño del bundle**, y
+ * ya mordió: esta misma función vivía copiada CINCO veces en `features/notas`
+ * con `i < 20`, más un `turno < 300` en `App.test.tsx` que había subido de 50
+ * porque la Libreta creció. Agregar UNA frontera perezosa puso rojos **11
+ * tests**, y 10 de los 11 sólo por el número — ninguno por un defecto.
+ *
+ * Un turno del event loop no es una unidad de nada: cuántos hacen falta depende
+ * de cuántos módulos haya que cargar, o sea de una decisión de empaquetado que
+ * el test no debería estar afirmando. Un vencimiento en milisegundos dice lo que
+ * el test quiere decir de verdad: «esto tendría que haber pasado ya».
+ *
+ * El tope de turnos queda **sólo como red anti-cuelgue**, muy por encima de
+ * cualquier espera real, y el mensaje dice cuál de los dos venció: sin eso, «no
+ * pasó» no distingue «tarda» de «está trabado».
+ *
+ * ⚠️ **Quedan cuatro esperas propias afuera de `features/notas`, y NO son copias
+ * de ésta**: `esperarAlCanal` y `esperarAviso` (`correos/VistaCorreos.test.tsx`),
+ * `esperarLista` (`hechos/PantallaHechos.test.tsx`) y el bucle en línea de
+ * `whatsapp/VincularMiWhatsapp.test.tsx`. Cada una espera otra cosa y una a
+ * propósito **no tira** al vencerse. Migrarlas es mecánico pero cambia lo que
+ * afirman, así que va aparte — no se hizo acá para no esconder ese cambio en un
+ * PR de rendimiento. `lib/datos/persistencia.test.ts` no puede usar esto: es un
+ * test puro y este módulo remienda jsdom al importarse.
+ *
+ * ⚠️ **No sirve con `vi.useFakeTimers()`**: `reposar()` espera un `setTimeout`,
+ * así que con el reloj detenido no vuelve nunca. Los tests de DOM de este repo
+ * corren con reloj real.
+ */
+const TOPE_ANTI_CUELGUE = 2000;
+
+export async function esperarA(
+  condicion: () => boolean,
+  queEsperaba: string,
+  limiteMs = 5000,
+): Promise<void> {
+  const arranque = Date.now();
+  let turnos = 0;
+  while (!condicion()) {
+    const vencioElReloj = Date.now() - arranque > limiteMs;
+    if (vencioElReloj || turnos >= TOPE_ANTI_CUELGUE) {
+      const porque = vencioElReloj
+        ? `pasaron ${Date.now() - arranque} ms (tope ${limiteMs})`
+        : `${turnos} turnos sin que el reloj venza: algo está trabado, no lento`;
+      throw new Error(`nunca pasó: ${queEsperaba} — ${porque}\n\n${document.body.textContent}`);
+    }
+    turnos++;
+    await reposar();
+  }
+}
+
+/**
  * Un clic que VIAJA. Mismo motivo que `teclear`: React escucha en la raíz, así que un
  * evento sin `bubbles` no llega a ningún `onClick` y el test daría siempre que no pasó nada.
  *

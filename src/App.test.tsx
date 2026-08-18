@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { montar, reposar, teclear, type Montado } from './pruebas/dom';
+import { esperarA, montar, reposar, teclear, type Montado } from './pruebas/dom';
 import App from './App';
 
 /**
@@ -77,56 +77,29 @@ function vistaActual(m: Montado): string {
 /**
  * IR A LA LIBRETA Y ESPERAR A QUE ESTÉ DE VERDAD.
  *
- * La Libreta se carga PEREZOSA (269 KB de BlockNote), así que después del atajo
- * lo que hay en pantalla es el esqueleto del `Suspense`, no el componente. Un
- * `await reposar()` suelto no alcanza: medido, tarda ~8 turnos del event loop.
+ * La Libreta se carga PEREZOSA, así que después del atajo lo que hay en pantalla
+ * es el esqueleto del `Suspense`, no el componente. Esperar por una marca del
+ * componente REAL —su buscador— y no por un contador de turnos es lo que hace
+ * que estos tests digan lo que prometen: sin esto, el de «Escape sigue llegando
+ * a window» pasaba mirando un `<div>` de carga, que por supuesto no se come
+ * ninguna tecla.
  *
- * Esperar por una marca del componente REAL —su buscador— y no por un contador
- * de turnos es lo que hace que estos tests digan lo que prometen: sin esto, el
- * de «Escape sigue llegando a window» pasaba mirando un `<div>` de carga, que
- * por supuesto no se come ninguna tecla.
- *
- * ⚠️ **El tope subió de 50 a 300 el 18-ago-2026, y no es un flake que se tapa.**
- * El chunk de la Libreta creció con la Ribbon (#409) y el editor de diagramas
- * (React Flow + dagre): el PRIMER montaje pasó de ~8 turnos a **139 medidos**;
- * los siguientes dan 0 porque el módulo ya está en caché. Con 50 el test moría
- * en el `throw`, o sea que **avisó de lo que tenía que avisar** — lo que
- * cambió es cuánto tarda de verdad, no si monta. Si algún día vuelve a rozar
- * este techo, lo que hay que mirar es el TAMAÑO del chunk, no este número.
+ * ⚠️ **Acá vivía un tope de turnos, y había subido de 50 a 300** cuando el chunk
+ * de la vista creció con la Ribbon y el editor de diagramas. Ese número era un
+ * sensor accidental del tamaño del bundle: avisaba tarde, en el archivo
+ * equivocado, y se apagaba subiéndolo. Ahora el vencimiento es en TIEMPO
+ * (`esperarA`, en `pruebas/dom.tsx`) y **el aviso de «el chunk creció» vive en el
+ * build**: `npm run presupuesto` falla si BlockNote o React Flow vuelven al
+ * camino de entrada de la vista.
  */
 async function irALaLibreta(m: Montado, tecla: 'n' | '⌘8' = 'n'): Promise<void> {
   if (tecla === 'n') teclear('n');
   else teclear('8', { meta: true });
 
-  /**
-   * 🔴 **ESTE TOPE ES UN SENSOR ACCIDENTAL DEL TAMAÑO DEL CHUNK, no una
-   * afirmación del test.** Lo que este helper afirma es «⌘8 abre la Libreta»;
-   * cuántos turnos del event loop tarda en montarse es andamio.
-   *
-   * Y 50 quedó corto: entrar a la Libreta trae hoy **377,8 KB gzip** en un solo
-   * chunk perezoso (BlockNote *y* React Flow, arrastrados por una constante de
-   * texto que cruza el borde del módulo). Medido en esta rama el 18-ago-2026:
-   * **79 turnos** el primer montaje.
-   *
-   * ⚠️ **Por eso pasa en local y falla en CI, que es como se ve un flake sin
-   * serlo**: con el caché de transform de Vite caliente el montaje da 0 turnos,
-   * y en el runner —frío, y con VPS1 al 210 % de carga— da los 79. Cualquier PR
-   * que sume archivos al front lo empuja por encima del filo, y el rojo aparece
-   * en un test de la Libreta que ese PR no tocó.
-   *
-   * Se sube a 300 y no a 80: el número no significa nada, y dejarlo pegado al
-   * valor medido garantiza que el próximo archivo lo vuelva a romper.
-   *
-   * ⚠️ **Esto NO es el arreglo, es el andamio.** El arreglo es partir ese chunk
-   * (PR #413: entrar pasa a ~20 KB y el montaje a ~41 turnos); cuando entre, el
-   * tope se puede volver a bajar. Y el aviso de «el chunk creció» va en el
-   * BUILD, no acá — un test no es el lugar donde enterarse del peso del bundle.
-   */
-  for (let turno = 0; turno < 300; turno++) {
-    if (m.contenedor.querySelector('[aria-label="Buscar en tus páginas"]')) return;
-    await reposar();
-  }
-  throw new Error('la Libreta nunca terminó de montarse: el test de abajo no probaría nada');
+  await esperarA(
+    () => Boolean(m.contenedor.querySelector('[aria-label="Buscar en tus páginas"]')),
+    'la Libreta terminó de montarse (si no, el test de abajo no probaría nada)',
+  );
 }
 
 describe('la Libreta como octava vista', () => {
