@@ -12,6 +12,7 @@
     "lint": "oxlint",
     "mapa": "node scripts/mapa.mjs",
     "mapa:verificar": "node scripts/mapa.mjs --verificar",
+    "presupuesto": "node scripts/presupuesto-de-chunks.mjs",
     "test": "vitest run",
     "preview": "vite preview"
   },

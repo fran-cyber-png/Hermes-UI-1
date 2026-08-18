@@ -291,6 +291,13 @@ jobs:
       - name: Build del front
         run: npm run build
 
+      # Va DESPUÉS del build y con poder de corte: mide sobre `dist/` cuánto cuesta
+      # entrar a una vista perezosa y falla si el editor volvió al camino de entrada.
+      # Lo que antes avisaba de esto era el tope de turnos de un test de teclado —
+      # un sensor accidental que se apagaba subiéndole el número.
+      - name: Lo perezoso sigue siendo perezoso (presupuesto de chunks)
+        run: npm run presupuesto
+
       - name: Tests del front
         run: npm test
 
