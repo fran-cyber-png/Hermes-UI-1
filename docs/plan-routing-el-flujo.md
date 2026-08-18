@@ -215,14 +215,30 @@ verdad y es insuficiente.
   Es la información que convierte «no se puede rutear» en «reapuntá este adset o levantá esta línea».
 - El contador de anuncios sin resolver enlaza a «Actualizar desde Meta» en vez de solo informar.
 
-### Fase 5 — Corregir el producto de una pieza
+### ✅ Fase 5 — Corregir el producto de una pieza (18-ago-2026, **ADR 0060**)
 
-El falso positivo del alias (§1.3) hoy solo se ve. Falta poder **sacar una pieza de su producto** o
-mandarla a otro, que es escribir en `alias_curso`.
+El falso positivo del alias (§1.3) ya no solo se ve: se corrige, desde una hoja a la derecha.
 
-- ⚠️ **Es el único punto del plan que edita un diccionario compartido**: `alias_curso` lo leen
-  también el chip de curso de la cola y el Dashboard. Cambiar un alias acá cambia lo que la cola
-  muestra en otras pantallas. Va con su propia confirmación y su propio ADR.
+**Y creció en el camino, porque medir primero cambió el plan**: la mitad de los casos no había que
+corregirlos a mano, había que **dejar de adivinarlos**. La pauta viene escribiendo el SKU adentro del
+nombre (`[MAR] [DIPCIBE004] CIBERDEFENSA`) y nadie lo leía.
+
+| | Antes | Después |
+|---|---|---|
+| Campañas sin producto | 93 de 153 | **70** |
+| Campañas en el producto EQUIVOCADO | 7 | **0** |
+| Formularios en el producto equivocado | 4 | **a mano** (no traen SKU) |
+
+- ⚠️ **Es el único punto del plan que edita un diccionario compartido**, y se resolvió al derecho:
+  la corrección se guarda en `alias_curso`, así que arregla **también** el chip de curso de la cola,
+  el Dashboard y el bot. Decisión del dueño, tomada sabiendo el alcance; la hoja lo dice **antes** de
+  que elijas. La alternativa —una tabla de overrides propia de Routing— dejaba a la cola mostrando el
+  producto viejo, o sea dos pantallas afirmando cosas distintas del mismo lead (#37).
+- 🔴 **Lo que este plan no había previsto**: un override tiene que ganarle **al SKU**, no solo a los
+  otros aliases. Sin eso, corregir a mano una campaña con `[DIPMP0001]` adentro contestaba `ok`, la
+  pantalla mostraba el producto nuevo y la lectura siguiente lo pisaba — **se veía aplicado sin
+  estarlo**, que es la forma de defecto que este frente viene arrastrando desde la auditoría del
+  12-ago.
 
 ---
 
@@ -243,12 +259,13 @@ mandarla a otro, que es escribir en `alias_curso`.
 ## 5. Qué queda, en orden
 
 1. **Fase 4 — los agujeros del flujo, a la vista.** Hoy son un renglón de aviso
-   («otras 42 campañas mandan gente a números que Hermes no atiende»). Es la
-   cifra más cara de la pantalla y merece ser un nodo, no una nota al pie.
-2. **Fase 5 — corregir el producto de una pieza** (editar `alias_curso` desde la
-   app). 25 de 44 campañas de Meta no resuelven familia y hoy solo se pueden
-   cablear sueltas. Necesita ADR propio: toca el catálogo que leen la cola y el
-   Dashboard.
+   («otras **45** campañas mandan gente a números que Hermes no atiende» — la
+   cifra se remidió el 18-ago). Es la más cara de la pantalla y merece ser un
+   nodo, no una nota al pie.
+2. **Las 70 campañas que siguen sin producto** después de ADR 0060. Son nombres
+   de pauta sin SKU ni palabra de curso («[FEB] SEGURIDAD - R»): se corrigen a
+   mano una por una desde la hoja nueva, y **agregarles el SKU al nombre en Meta
+   las arregla a todas de una** — eso es operación, no código.
 3. **Lo chico que la auditoría dejó anotado** y no entró todavía: el arrastre se
    dispara con cualquier botón del mouse; dos dedos a la vez cierran el cable del
    otro; la franja de error se queda pegada y el `??` tapa un error más nuevo; con
