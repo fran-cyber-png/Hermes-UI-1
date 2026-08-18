@@ -428,13 +428,13 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
               </div>
 
               {/* Productos */}
-              <Campo label="Cursos">
+              <Campo label="Carrito">
                 <div className="relative">
                   <Search size={14} className="absolute left-2.5 top-2.5 text-muted-foreground" />
                   <input
                     value={busqueda}
                     onChange={(e) => setBusqueda(e.target.value)}
-                    placeholder="Buscar curso…"
+                    placeholder="Buscar producto…"
                     className="w-full rounded-lg border border-border bg-muted py-2 pl-8 pr-3 text-sm outline-none focus:border-primary"
                   />
                   {prods && busqueda.length >= 2 && prods.productos.length > 0 && (
