@@ -53,7 +53,8 @@
     "guion:consultoria": "tsx src/scripts/sembrarGuionConsultoria.ts",
     "campana": "tsx src/scripts/campana.ts",
     "routing:refrescar": "tsx src/scripts/routingRefrescar.ts",
-    "equipo:campana": "tsx src/scripts/equipoCampana.ts"
+    "equipo:campana": "tsx src/scripts/equipoCampana.ts",
+    "sembrar:desarrollo": "tsx src/scripts/sembrarDesarrollo.ts"
   },
   "dependencies": {
     "@anthropic-ai/bedrock-sdk": "^0.32.0",
