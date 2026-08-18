@@ -56,6 +56,7 @@ import {
 import { laFronteraSeAplica, SIN_IDENTIDAD, type RolResuelto } from "../equipo/cascada.js";
 import { puedeSupervisar } from "../equipo/roles.js";
 import { recorteDeLineas, soloSusLineas } from "./lineas.js";
+import { sinLineaVedadaSql } from "../numeros/campana.js";
 import { lineasDeVendedoraConProposito } from "../numeros/repositorio.js";
 
 /**
@@ -259,8 +260,23 @@ const filtroDeLineas = (lineas: readonly string[]) =>
     ? sql`AND i.numero_propio IN (${sql.join(lineas.map((l) => sql`${l}`), sql`, `)})`
     : sql``;
 
-/** Cada mensaje con su número propio y la CLASE de su media, sacados del evento. */
-const msgCte = (filtroCanal: SQL, incluirPins: boolean, lineas: readonly string[]) => sql`
+/**
+ * Cada mensaje con su número propio y la CLASE de su media, sacados del evento.
+ *
+ * 🔴 **`sinLineaVedadaSql` NO es lo mismo que `filtroDeLineas`, y por eso están
+ * los dos.** Aquél es el recorte que la vendedora ELIGE (el selector, «las
+ * mías»): vacío no recorta nada. Éste es la frontera de los dos planos de
+ * Goberna (`numeros/campana.ts`) y no se puede apagar — ni con un query-param,
+ * ni con un rol. Va acá, en `msg`, por lo mismo que el recorte de línea: poda
+ * ANTES de que el `OR` de pins pueda saltarse la ventana, así una conversación
+ * de campaña fijada tampoco entra por esa puerta.
+ */
+const msgCte = (
+  filtroCanal: SQL,
+  incluirPins: boolean,
+  quienMira: string | undefined,
+  lineas: readonly string[],
+) => sql`
   SELECT i.canal, i.persona_id, i.persona_nombre, i.texto, i.direccion, i.occurred_at,
          COALESCE(e.payload->>'numeroPropio', '') AS numero_propio,
          e.payload->'media'->>'clase'             AS clase,
@@ -274,6 +290,7 @@ const msgCte = (filtroCanal: SQL, incluirPins: boolean, lineas: readonly string[
     )})
     ${filtroCanal}
     ${filtroDeLineas(lineas)}
+    AND ${sinLineaVedadaSql(sql`i.numero_propio`, quienMira)}
 `;
 
 /** Los mensajes agrupados en conversación por (canal, persona, número propio). */
@@ -366,6 +383,15 @@ const conversacionesCte = sql`
 const conTodo = (
   filtroCanal: SQL,
   pins: SQL | null,
+  /**
+   * QUIÉN MIRA — para la frontera de campaña, y **no tiene default a propósito**.
+   *
+   * `undefined` significa «sin identidad» y veda TODA línea de campaña
+   * (`numeros/campana.ts`), o sea que el olvido ve de menos. Pero un default
+   * escrito acá haría que el olvido no se note nunca; sin él, agregar un
+   * llamador obliga a decidir de quién es la consulta.
+   */
+  quienMira: string | undefined,
   lineas: readonly string[] = [],
   canal?: string,
 ) => {
@@ -383,7 +409,7 @@ const conTodo = (
   WITH ${pins ? sql`pins AS (${pins}),
   ` : sql``}${conLeads ? sql`sufijos_con_conversacion AS (${sufijosConConversacionCte}),
   ` : sql``}msg AS (
-    ${msgCte(filtroCanal, pins != null, lineas)}
+    ${msgCte(filtroCanal, pins != null, quienMira, lineas)}
   ),
   todo AS (
     ${lineas.length ? sql`` : sql`${comentariosCte(filtroCanal, pins != null)}
@@ -1153,7 +1179,7 @@ async function ejecutarCola(
    */
   await base.execute(sql`
     CREATE TEMP TABLE todo ON COMMIT DROP AS
-    ${conTodo(filtroCanal, pins, lineas, canal)}
+    ${conTodo(filtroCanal, pins, vendedoraId, lineas, canal)}
     SELECT * FROM todo
   `);
 
@@ -1346,6 +1372,10 @@ async function ejecutarCola(
       conCursos,
       lineas,
       canal,
+      // `undefined` y no `vendedoraId`: acá se comparte la tabla temporal, que ya
+      // se construyó con la frontera de campaña puesta. Nombrarla otra vez sería
+      // la misma regla dos veces sobre las mismas filas.
+      undefined,
       // Acá SÍ: estamos adentro de la transacción y `todo` ya está armado.
       true,
     );
@@ -1400,6 +1430,12 @@ async function desglosarEmbudo(
   // cola esté recortada a WhatsApp, y los conteos dirían otra cosa que la lista.
   canal?: string,
   /**
+   * Quién mira, para la frontera de campaña. Sólo se usa cuando este desglose se
+   * arma su PROPIO `todo`: compartiendo la tabla temporal, el predicado ya se
+   * aplicó al construirla y volver a nombrarlo sería la misma regla dos veces.
+   */
+  quienMira?: string,
+  /**
    * ¿Ya hay una tabla temporal `todo` armada en esta transacción?
    *
    * 🔴 **DOS LLAMADORES CON DOS CONTEXTOS, y confundirlos rompe el Dashboard.**
@@ -1433,7 +1469,7 @@ async function desglosarEmbudo(
   const soloDelEmbudo = [sql`en_ventana`, ...condiciones];
   const donde = sql`WHERE ${sql.join(soloDelEmbudo, sql` AND `)}`;
   const filas = await base.execute<FilaDesglose>(sql`
-    ${desdeTablaCompartida ? sql`WITH` : sql`${conTodo(filtroCanal, null, lineas, canal)},`}
+    ${desdeTablaCompartida ? sql`WITH` : sql`${conTodo(filtroCanal, null, quienMira, lineas, canal)},`}
     ultimas_gestiones AS (${ultimasGestionesSql}),
     ventas AS (${ventaPosteriorCteSql}),
     padron AS (${padronCteSql(conPadron)})
@@ -1489,6 +1525,18 @@ export async function contarPorEtapaEfectiva(
   base: typeof db,
   /** El recorte del Dashboard personal. `null` = el embudo entero, como siempre. */
   soloAsignadasA: string | null = null,
+  /**
+   * QUIÉN MIRA — para la frontera de campaña, y **no es lo mismo que
+   * `soloAsignadasA`**.
+   *
+   * 🔴 Confundirlos abre el agujero justo donde este frente existe para
+   * cerrarlo: `soloAsignadasA` es `null` para un supervisor —«no recortes por
+   * dueña»— y usarlo acá le pasaría `undefined` a la frontera de campaña, que
+   * significa «sin identidad» y vedaría bien… pero al operador de la campaña, que
+   * sí es `soloAsignadasA`, le vedaría su propia línea. Son dos preguntas
+   * distintas: «¿de quién es esta conversación?» y «¿quién está mirando?».
+   */
+  quienMira?: string,
 ): Promise<Record<string, number>> {
   // Sin condiciones no hay nada que preguntarle al padrón, al bot ni al reparto:
   // el join saldría gratis pero igual costaría una pasada. Los `false` dejan la
@@ -1503,5 +1551,7 @@ export async function contarPorEtapaEfectiva(
   // antes mientras nadie pida un recorte.
   const condiciones =
     soloAsignadasA === null ? [] : [soloMisClavesSql(sql`todo.clave`, soloAsignadasA)];
-  return plegarConteos(await desglosarEmbudo(base, sql``, condiciones, false, false, false, false, []));
+  return plegarConteos(
+    await desglosarEmbudo(base, sql``, condiciones, false, false, false, false, [], undefined, quienMira),
+  );
 }

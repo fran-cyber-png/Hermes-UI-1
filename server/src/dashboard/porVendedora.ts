@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import type { db } from "../db/client.js";
 import { corteDiasAtras, diaLimaISO } from "../lib/horaLima.js";
 import { diaLimaSql } from "../lib/horaLimaSql.js";
+import { sinLineaVedadaSql } from "../numeros/campana.js";
 
 /**
  * «HOY» Y «7 DÍAS» POR VENDEDORA — extraído de `routes/dashboard.ts` (mismo
@@ -43,7 +44,25 @@ export type FilaPorVendedora = {
   ventas_7d: number;
 };
 
-export async function consultarPorVendedora(base: typeof db, ahora: Date): Promise<FilaPorVendedora[]> {
+export async function consultarPorVendedora(
+  base: typeof db,
+  ahora: Date,
+  /**
+   * QUIÉN MIRA — la frontera de campaña (`numeros/campana.ts`).
+   *
+   * ⚠️ **Acá no se esconde una conversación, se esconde una PERSONA de un
+   * cuadro.** `envios_wa` sabe por qué línea salió cada mensaje, así que sin
+   * esto el operador del comando de campaña aparece en el panel «Equipo» de la
+   * Escuela con sus 80 envíos (medido el 18-ago-2026) — y las columnas de la
+   * Escuela quedan infladas con trabajo de otro negocio.
+   *
+   * ⚠️ **`conversiones_wa` NO se recorta, porque no tiene línea**: es la venta
+   * que proyecta Cerberus, sin `numero_propio`. Quien vendió y no envió nada por
+   * una línea de la Escuela sigue apareciendo. Es la misma deuda que ya tenía
+   * este cuadro y no la abre este frente.
+   */
+  quienMira?: string,
+): Promise<FilaPorVendedora[]> {
   const hoy = diaLimaISO(ahora);
   const corte7d = corteDiasAtras(ahora, 7).toISOString();
 
@@ -59,6 +78,7 @@ export async function consultarPorVendedora(base: typeof db, ahora: Date): Promi
         count(*) FILTER (WHERE creado_at > ${corte7d}::timestamptz)::int                 AS mensajes_7d
       FROM envios_wa
       WHERE estado = 'enviado'
+        AND ${sinLineaVedadaSql(sql`envios_wa.numero_propio`, quienMira)}
       GROUP BY 1
     ),
     ventas AS (
@@ -96,6 +116,7 @@ export async function consultarPorVendedora(base: typeof db, ahora: Date): Promi
     -- que envejece sola.
     FROM (SELECT DISTINCT lower(btrim(vendedora_id)) AS clave FROM envios_wa
           WHERE estado = 'enviado' AND creado_at > ${corte7d}::timestamptz
+            AND ${sinLineaVedadaSql(sql`envios_wa.numero_propio`, quienMira)}
           UNION SELECT DISTINCT lower(btrim(vendedora_id)) FROM conversiones_wa
           WHERE iniciada_at > ${corte7d}::timestamptz) v
     -- 1-a-1: cada CTE ya trae una sola fila por vendedora_id, así que este JOIN

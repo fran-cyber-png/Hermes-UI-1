@@ -20,6 +20,7 @@ import { familiaDeAnuncio, familiaDeTexto, type AliasCurso } from "../cursos/ali
 import { aliasesActivos } from "../cursos/repositorio.js";
 import { horaDelDiaLimaSql } from "../lib/horaLimaSql.js";
 import { HORA_APERTURA, HORA_CIERRE, horasDelDia } from "./horarioAtencion.js";
+import { sinLineaVedadaSql } from "../numeros/campana.js";
 
 /**
  * EL PANEL DEL NEGOCIO — la otra pregunta del Dashboard (#128, #126).
@@ -169,6 +170,16 @@ export interface OpcionesNegocio {
   dimension: Dimension;
   numeroPropio?: string | null;
   /**
+   * QUIÉN MIRA — la frontera de campaña (`numeros/campana.ts`).
+   *
+   * ⚠️ **«El negocio» ya es sólo del supervisor, y eso NO alcanza acá.** Ese 403
+   * separa a quien pone la plata de quien atiende, dentro de la Escuela; esto
+   * separa la Escuela de la campaña de un candidato, que es otro negocio y otro
+   * cliente. Sin él, la facturación por curso mezclaba las 25 conversaciones de
+   * `51963139984` y su línea se ofrecía en el selector de números.
+   */
+  quienMira?: string;
+  /**
    * El diccionario texto→familia. Por defecto, los alias activos de la base
    * (`alias_curso`, editable sin deploy). El test lo inyecta para no depender de
    * la siembra.
@@ -200,6 +211,7 @@ function conversacionesDelPeriodo(o: OpcionesNegocio): SQL {
       FROM interactions i
       JOIN events e ON e.id = i.event_id
       WHERE i.tipo = 'mensaje' AND i.persona_id IS NOT NULL
+        AND ${sinLineaVedadaSql(sql`i.numero_propio`, o.quienMira)}
       ${filtroNumero}
     ),
     conv AS (
@@ -459,6 +471,7 @@ export async function consultarNegocio(base: typeof db, o: OpcionesNegocio): Pro
       WHERE i.tipo = 'mensaje'
         AND i.occurred_at >= ${desde}::timestamptz
         AND i.occurred_at <  ${hasta}::timestamptz
+        AND ${sinLineaVedadaSql(sql`i.numero_propio`, o.quienMira)}
       ${filtroNumeroCobertura}
     )
     SELECT h.hora,
@@ -494,8 +507,14 @@ export async function consultarNegocio(base: typeof db, o: OpcionesNegocio): Pro
       WHERE i.tipo = 'mensaje'
         AND i.occurred_at >= ${desde}::timestamptz
         AND i.occurred_at <  ${hasta}::timestamptz
+        AND ${sinLineaVedadaSql(sql`i.numero_propio`, o.quienMira)}
       UNION
-      SELECT numero FROM numeros_wa WHERE activo
+      -- ⚠️ LAS DOS RAMAS, y la segunda es la que muerde: numeros_wa es
+      -- justamente donde está declarada la línea de campaña, así que sin el
+      -- predicado acá el selector la ofrecería aunque no tenga una sola fila de
+      -- tráfico visible — y elegirla daría un panel vacío sin decir por qué.
+      SELECT numero FROM numeros_wa
+       WHERE activo AND ${sinLineaVedadaSql(sql`numeros_wa.numero`, o.quienMira)}
     ) x
     WHERE numero IS NOT NULL
     ORDER BY numero

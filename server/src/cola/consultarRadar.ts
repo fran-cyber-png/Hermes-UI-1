@@ -3,6 +3,7 @@ import type { db } from "../db/client.js";
 import { soloMisClavesSql } from "../dashboard/personal.js";
 import { ordenarRadar } from "./radar.js";
 import { preguntoAgrupadoSql, preguntoSql, soloClicAgrupadoSql } from "./pregunta.js";
+import { sinLineaVedadaSql } from "../numeros/campana.js";
 import {
   referenciaSql,
   respondidaSql,
@@ -79,6 +80,16 @@ export async function consultarRadar(
    * `dashboard/personal.ts`.
    */
   soloAsignadasA: string | null = null,
+  /**
+   * QUIÉN MIRA — para la frontera de campaña (`numeros/campana.ts`), y **no es
+   * `soloAsignadasA`**: aquél es `null` para un supervisor («no recortes por
+   * dueña») y ésta pregunta otra cosa, «¿quién está del otro lado de la
+   * pantalla?». Sin él, el radar de un supervisor de ventas incluía las
+   * conversaciones de la línea de campaña, que son de otro negocio.
+   *
+   * `undefined` veda TODA línea de campaña: el olvido ve de menos.
+   */
+  quienMira?: string,
 ): Promise<(ChatRadar & { nivel: number; orden: number })[]> {
   // Lo que cayó por CHAT (misma clave que la cola, para que Estado/Etiquetas
   // matcheen): conversaciones con su último ENTRANTE de los últimos 7 días.
@@ -189,6 +200,11 @@ export async function consultarRadar(
     -- los comentarios queden afuera es una consecuencia visible del criterio
     -- (no tienen dueño posible) y no un filtro escondido en una de las mitades.
     WHERE ${soloMisClavesSql(sql`t.clave`, soloAsignadasA)}
+      -- La frontera de los dos planos de Goberna (numeros/campana.ts). Va acá
+      -- por lo mismo que el recorte de arriba: DESPUÉS del UNION, así alcanza a
+      -- las dos ramas con una sola condición. Los comentarios pasan solos — su
+      -- numero_propio es NULL, o sea que no llegaron por ninguna línea nuestra.
+      AND ${sinLineaVedadaSql(sql`t.numero_propio`, quienMira)}
     -- Este orden NO es el que ve la vendedora: solo elige QUÉ 60 filas viajan.
     -- El orden real lo decide ordenarRadar abajo, con el módulo de urgencia.
     -- El tope de 60 se hereda tal cual: hoy el front ya ordenaba estas mismas 60,

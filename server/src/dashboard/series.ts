@@ -3,6 +3,7 @@ import type { db } from "../db/client.js";
 import { corteDiasAtras, diaLimaISO } from "../lib/horaLima.js";
 import { diaLimaSql } from "../lib/horaLimaSql.js";
 import { clavesAsignadasSql, mismaVendedoraSql } from "./personal.js";
+import { sinLineaVedadaSql } from "../numeros/campana.js";
 
 /**
  * LAS SERIES DE 14 DÍAS DEL DASHBOARD — extraídas de `routes/dashboard.ts` a
@@ -86,6 +87,12 @@ export async function consultarSeriesDashboard(
   base: typeof db,
   ahora: Date,
   soloAsignadasA: string | null = null,
+  /**
+   * QUIÉN MIRA — la frontera de campaña (`numeros/campana.ts`), que **no la abre
+   * ningún rol**. Es otra pregunta que `soloAsignadasA` («¿de quién es esta
+   * conversación?»), y por eso viaja aparte. `undefined` veda toda campaña.
+   */
+  quienMira?: string,
 ): Promise<SeriesDashboard> {
   const hoy = diaLimaISO(ahora);
   // postgres.js serializa un `Date` crudo distinto según el camino: el `sql`
@@ -103,10 +110,11 @@ export async function consultarSeriesDashboard(
   const chatsPorDia =
     soloAsignadasA === null
       ? sql`
-      SELECT ${diaLimaSql("occurred_at")} AS dia, count(DISTINCT (canal, persona_id))::int AS n
-      FROM interactions
-      WHERE tipo = 'mensaje' AND direccion = 'entrante' AND persona_id IS NOT NULL
-        AND occurred_at >= ${corte}::timestamptz
+      SELECT ${diaLimaSql("i.occurred_at")} AS dia, count(DISTINCT (i.canal, i.persona_id))::int AS n
+      FROM interactions i
+      WHERE i.tipo = 'mensaje' AND i.direccion = 'entrante' AND i.persona_id IS NOT NULL
+        AND i.occurred_at >= ${corte}::timestamptz
+        AND ${sinLineaVedadaSql(sql`i.numero_propio`, quienMira)}
       GROUP BY 1`
       : sql`
       SELECT ${diaLimaSql("i.occurred_at")} AS dia, count(DISTINCT (i.canal, i.persona_id))::int AS n
@@ -116,6 +124,7 @@ export async function consultarSeriesDashboard(
         AND i.occurred_at >= ${corte}::timestamptz
         AND ('conv:' || i.canal || ':' || i.persona_id || ':' ||
              COALESCE(e.payload->>'numeroPropio', '')) IN (${clavesAsignadasSql(soloAsignadasA)})
+        AND ${sinLineaVedadaSql(sql`i.numero_propio`, quienMira)}
       GROUP BY 1`;
 
   // Comentarios y formularios NO tienen dueño posible: con recorte, la serie dice
@@ -162,6 +171,10 @@ export async function consultarSeriesDashboard(
       FROM envios_wa
       WHERE estado = 'enviado' AND creado_at >= ${corte}::timestamptz
         AND ${mismaVendedoraSql(sql`vendedora_id`, soloAsignadasA)}
+        -- envios_wa sí sabe por qué línea salió cada mensaje (numero_propio),
+        -- así que la serie de envíos de la Escuela no cuenta los de la campaña.
+        -- Medido el 18-ago-2026: 80 envíos por 51963139984 en 30 días.
+        AND ${sinLineaVedadaSql(sql`envios_wa.numero_propio`, quienMira)}
       GROUP BY 1
     ) e ON e.dia = d.dia
     ORDER BY d.dia

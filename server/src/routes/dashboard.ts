@@ -89,6 +89,10 @@ dashboardRouter.get('/negocio', ruta(async (req, res) => {
     ahora,
     dimension: (q.dimension as Dimension | undefined) ?? 'curso',
     numeroPropio: q.numero?.trim() || null,
+    // 🔴 QUIÉN MIRA, no «si manda». El 403 de arriba ya decidió que es
+    // supervisor; esto decide otra cosa: que ni siquiera un supervisor de la
+    // Escuela ve el negocio de la campaña de un candidato (`numeros/campana.ts`).
+    quienMira: req.vendedoraId,
   });
 
   res.json({ ...negocio, periodo: rango.clave });
@@ -106,7 +110,7 @@ dashboardRouter.get('/', ruta(async (req, res) => {
   //    canónica — recordatorios vencidos incluidos (#38). Un solo `ahora` para
   //    las dos listas: con dos relojes las claves no serían comparables entre sí.
   const ahora = new Date();
-  const chatsOrdenados = await consultarRadar(db, ahora, soloAsignadasA);
+  const chatsOrdenados = await consultarRadar(db, ahora, soloAsignadasA, req.vendedoraId);
 
   // ── Lo que cayó por FORMULARIO: Lead Ads de Meta + landings (webhook Bravo).
   //    El seam decide también si CORRESPONDE traerlos: con recorte personal se
@@ -148,7 +152,7 @@ dashboardRouter.get('/', ruta(async (req, res) => {
   // `null`: el renglón del software es la resta del EQUIPO («salieron 620, el
   // equipo mandó 83»), y al lado de una sola persona no resta nada — diría que
   // el bot es parte de sus números.
-  const equipoCompleto = separarEquipo(await consultarPorVendedora(db, ahora));
+  const equipoCompleto = separarEquipo(await consultarPorVendedora(db, ahora, req.vendedoraId));
   const porVendedora =
     soloAsignadasA === null
       ? equipoCompleto.equipo
@@ -161,7 +165,7 @@ dashboardRouter.get('/', ruta(async (req, res) => {
   //    ventana, que hacía incomparable el «N de M» del kanban. `norm` sigue para
   //    el mapa de chips (`etapas`), que sí es «lo asentado a mano».
   const norm = (e: string) => (e === 'nuevo' ? 'interesado' : e === 'venta' ? 'cierre' : e);
-  const embudo = await contarPorEtapaEfectiva(db, soloAsignadasA);
+  const embudo = await contarPorEtapaEfectiva(db, soloAsignadasA, req.vendedoraId);
 
   // ── Qué cursos pide la gente: el ranking de intereses. Señal de negocio pura. ──
   const cursos = await consultarCursosPedidos(db, soloAsignadasA);
@@ -170,7 +174,7 @@ dashboardRouter.get('/', ruta(async (req, res) => {
   //    los días sin datos van en 0 desde acá (el front no inventa continuidad).
   //    El corte de día es en hora de Lima, no en la del server — #4.
   const { leads_dia: leadsDia, envios_dia: enviosDia, ventas_dia: ventasDia } =
-    await consultarSeriesDashboard(db, ahora, soloAsignadasA);
+    await consultarSeriesDashboard(db, ahora, soloAsignadasA, req.vendedoraId);
 
   res.json({
     chats: chatsOrdenados,
