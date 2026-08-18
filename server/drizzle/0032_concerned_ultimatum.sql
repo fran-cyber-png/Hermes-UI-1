@@ -1,0 +1,1 @@
+ALTER TABLE "envios_wa" ADD COLUMN "estado_entrega_codigo" text;
