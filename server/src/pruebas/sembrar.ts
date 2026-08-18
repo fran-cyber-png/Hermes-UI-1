@@ -535,8 +535,17 @@ export async function sembrarLineaDeVendedora(
   db: DbDePrueba,
   numero: string,
   vendedoras: readonly string[],
+  /**
+   * El propósito de la línea. El default es el de la tabla (`vendedora`), o sea
+   * una línea de la Escuela: así ningún test viejo cambia de significado.
+   * `campana` es el que la saca del mundo de la Escuela (`numeros/campana.ts`).
+   */
+  proposito?: string,
 ): Promise<void> {
-  await db.insert(numerosWa).values({ numero, etiqueta: numero }).onConflictDoNothing();
+  await db
+    .insert(numerosWa)
+    .values({ numero, etiqueta: numero, ...(proposito ? { proposito } : {}) })
+    .onConflictDoNothing();
   if (vendedoras.length) {
     await db
       .insert(numeroVendedora)

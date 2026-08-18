@@ -3,6 +3,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "../db/schema.js";
 import type { DatosUpsert } from "./dominio.js";
 import { esIdentidadFederada, esIdentidadFederadaSql } from "./origenIdentidad.js";
+import { lineasVedadasPara } from "./campana.js";
 
 /**
  * EL REGISTRO DE NÚMEROS PROPIOS — la copia local del mapa que dueña Cerberus.
@@ -254,4 +255,21 @@ export async function marcarVinculado(db: Base, numero: string): Promise<void> {
     .update(schema.numerosWa)
     .set({ vinculadoAt: sql`now()`, actualizadoAt: sql`now()` })
     .where(eq(schema.numerosWa.numero, numero));
+}
+
+/**
+ * LAS LÍNEAS QUE ESTA PERSONA NO PUEDE VER — la lectura que necesitan las rutas
+ * (`numeros/campana.ts` es la regla; esto es quién le pasa los datos).
+ *
+ * Las consultas de la cola y del Dashboard NO usan esto: preguntan en su propio
+ * SQL, adentro de la misma transacción, para no tener una lectura aparte que
+ * pueda fallar por su cuenta. Acá hace falta la lista de verdad porque lo que se
+ * decide es un **403**, no un `WHERE`.
+ *
+ * ⚠️ **No atrapa nada.** Si esto tira, la ruta que lo llamó tira, y `lib/ruta.ts`
+ * la convierte en 500. Es lo correcto en una frontera: un recorte que no se pudo
+ * evaluar no se adivina hacia el lado cómodo.
+ */
+export async function lineasVedadasDe(db: Base, vendedoraId: string | undefined): Promise<string[]> {
+  return lineasVedadasPara(await listarNumeros(db), vendedoraId);
 }
