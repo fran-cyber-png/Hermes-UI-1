@@ -9,6 +9,7 @@ import { personaEsTelefono } from '../../dominio/canal';
 import { quiereFoto } from '../../dominio/fotoVisible';
 import { PersonaUnificada } from '../identidad/PersonaUnificada';
 import { useFicha } from './useFicha';
+import type { DestinoCorreo } from '../../lib/puente';
 
 /**
  * LA FICHA DEL CONTACTO — el DETALLE de Cerberus, dentro de su pestaña.
@@ -77,8 +78,17 @@ export function FichaContacto({
   embebida = false,
 }: {
   conversacion: Conversacion;
-  /** Puente a Correos: prellena el Para con el correo de la ficha. Sin esto, la acción no se muestra. */
-  onCorreo?: (para: string) => void;
+  /**
+   * Puente a Correos: prellena el Para con el correo de la ficha. **Sin esto la
+   * acción no se muestra**, y eso fue exactamente lo que pasó durante casi un
+   * mes — nadie pasaba esta prop (el porqué, en `PanelDerecho.tsx`).
+   *
+   * ⚠️ **Manda un objeto y no el `para` suelto**: un correo que sale de una
+   * ficha viene de una conversación, y esa `clave` es lo que después lo ata al
+   * timeline y a la medición (`lib/puente.ts`). La ficha la conoce porque tiene
+   * la conversación entera; mandarla acá evita que cada llamador se acuerde.
+   */
+  onCorreo?: (destino: DestinoCorreo) => void;
   /**
    * Dentro del panel multifunción: el marco y el encabezado con la persona los
    * pone el panel. `false` = con su propia tarjeta (uso suelto).
@@ -188,7 +198,13 @@ export function FichaContacto({
                   {onCorreo && (
                     <button
                       type="button"
-                      onClick={() => onCorreo(data.correo)}
+                      onClick={() =>
+                        onCorreo({
+                          para: data.correo,
+                          clave: conversacion.clave,
+                          nombre: data.nombre ?? conversacion.persona_nombre ?? undefined,
+                        })
+                      }
                       className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] font-semibold text-primary transition-colors hover:bg-secondary"
                     >
                       <Mail size={10} /> Escribirle
@@ -251,6 +267,19 @@ export function FichaContacto({
           telefono={telefono}
           activo={esTelefono}
           pushname={conversacion.persona_nombre}
+          // ⚠️ EL CASO DEL LEAD DE LANDING (ADR 0051) NO PASA POR EL BLOQUE DE
+          // ARRIBA: ahí `estado` es «nuevo», no «cliente», así que no hay
+          // `data.correo` y el botón de Cerberus no existe. Su correo vive acá,
+          // en lo que llenó el formulario —`/api/contactos/lead` lo devuelve— y
+          // es el único canal con el que se le puede hablar hoy. Cablear solo
+          // la mitad de Cerberus habría dejado «Escribirle» justo en la ficha
+          // donde MÁS falta. La clave va también: un lead tiene conversación en
+          // la cola aunque nadie le haya escrito.
+          onCorreo={
+            onCorreo
+              ? (destino) => onCorreo({ ...destino, clave: destino.clave ?? conversacion.clave })
+              : undefined
+          }
           // Dentro del panel el nombre real ya encabeza la banda de estado: acá
           // sería la tercera vez que se lee el mismo nombre en la misma columna.
           sinNombre={embebida}

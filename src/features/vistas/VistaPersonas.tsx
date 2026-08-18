@@ -8,6 +8,7 @@ import { BotonLlamar } from '../gestion/BotonLlamar';
 import { FormularioVenta } from '../venta/FormularioVenta';
 import { PantallaCampanas } from '../campana/PantallaCampanas';
 import { PantallaPadron } from '../padron/PantallaPadron';
+import type { DestinoCorreo } from '../../lib/puente';
 
 /**
  * PERSONAS — buscar a alguien por teléfono y ver su ficha de Cerberus.
@@ -118,12 +119,15 @@ export function VistaPersonas({
   telefonoInicial,
   onEscribir,
   miVendedora,
+  onMandarCorreo,
 }: {
   telefonoInicial?: string | null;
   /** Puente a Mensajes (Fase 3): abre (o crea) el chat con ese número. */
   onEscribir?: (telefono: string) => void;
   /** Quién mira — la `HojaContacto` del padrón la necesita (ADR 0037). */
   miVendedora?: string | null;
+  /** Puente a Correos: sigue de largo hasta la ficha que abre el padrón. */
+  onMandarCorreo?: (destino: DestinoCorreo) => void;
 }) {
   // Con un teléfono en la mano se abre directo en la ficha: quien llega así ya
   // sabe a quién busca, y mostrarle la tabla primero sería un paso de más.
@@ -159,7 +163,11 @@ export function VistaPersonas({
       </div>
 
       {modo === 'padron' ? (
-        <PantallaPadron onEscribir={onEscribir} miVendedora={miVendedora} />
+        <PantallaPadron
+          onEscribir={onEscribir}
+          miVendedora={miVendedora}
+          onMandarCorreo={onMandarCorreo}
+        />
       ) : modo === 'campanas' ? (
         <PantallaCampanas />
       ) : (

@@ -36,6 +36,19 @@ import { formatoTelefono } from '../formato';
  * `lib/notificaciones/`. El permiso se pide al iniciar sesión, no al primer
  * mensaje: pedirlo desde un tab en segundo plano (el caso en que más se
  * necesita) suele ser justo cuando el navegador lo deniega solo.
+ *
+ * ── 🔴 El evento puede venir RECORTADO, y eso no es un evento roto ──
+ * Desde el 17-ago-2026 el server filtra por dueña (`realtime/visibilidad.ts`):
+ * un mensaje de una conversación que no es tuya llega **sin `telefono` y sin
+ * `direccion`**. Antes llegaban todos enteros, o sea que a Sindy le sonaba la
+ * campanita —y le saltaba un aviso del sistema con el número— cuando le
+ * escribían a un lead de Luz.
+ *
+ * Lo que NO cambia es que la pantalla se refresque: el evento recortado sigue
+ * invalidando la cola, el radar y **el hilo abierto**. Esa última mitad es la
+ * que obliga a las dos ramas de abajo — sin ella, una conversación sin dueña
+ * (todo lo anterior al reparto, y toda línea sin rueda) dejaría de actualizarse
+ * sola con el chat abierto, que es el defecto que este bus vino a arreglar.
  */
 const REINTENTO_MS = 3000;
 
@@ -81,8 +94,13 @@ export function useTiempoReal(sesionActiva: boolean, alNoAutorizado?: () => void
         void qc.invalidateQueries({ queryKey: ['frescura'] });
         // El radar del dashboard también: un mensaje ES un lead cayendo.
         void qc.invalidateQueries({ queryKey: ['dashboard'] });
-        // Y el hilo de esa persona, si está abierto.
+        // Y el hilo de esa persona, si está abierto. Con el evento recortado no
+        // sabemos de quién fue, así que se invalida el PREFIJO: react-query
+        // refetchea solo las queries ACTIVAS, y de hilo hay a lo sumo una montada.
+        // Cuesta un refetch de esa única consulta por cada mensaje ajeno; lo que
+        // compra es que el chat abierto nunca se quede viejo, sin nombrar a nadie.
         if (e.telefono) void qc.invalidateQueries({ queryKey: ['wa', 'conversacion', e.telefono] });
+        else void qc.invalidateQueries({ queryKey: ['wa', 'conversacion'] });
       } else if (e.tipo === 'estado') {
         void qc.invalidateQueries({ queryKey: ['wa', 'sesion'] });
         // El webhook de landing emite 'estado' al persistir: el radar se refresca.

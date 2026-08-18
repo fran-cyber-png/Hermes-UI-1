@@ -19,6 +19,7 @@ import { firmarSesion } from "../auth/sesion.js";
  */
 process.env.DATABASE_URL ??= "postgres://nadie@127.0.0.1:1/no-se-usa";
 const { campanaRouter } = await import("./campana.js");
+const { cargarRol } = await import("../equipo/cargarRol.js");
 
 /**
  * La puerta de la ruta de campañas: que exija supervisor, que distinga «no sos
@@ -52,6 +53,15 @@ async function pedir(
     if (auth === `Bearer ${TOKEN}`) (req as { vendedoraId?: string }).vendedoraId = "ana";
     next();
   });
+  /**
+   * ⚠️ **La puerta ya no lee `process.env` adentro del handler: lee el rol que
+   * `cargarRol` anotó.** Acá se monta con un lector que dice **«la tabla no
+   * está»**, que es el estado real de producción hasta que la migración de
+   * `equipo` se aplique — y en ese estado la cascada cae al CSV, que es
+   * exactamente lo que estos tests fijan. Cuando la tabla exista, quién manda lo
+   * dirá una fila y el candado de eso vive en `equipo/cascada.test.ts`.
+   */
+  app.use(cargarRol(async () => ({ estado: "sin_tabla", fila: null }), process.env));
   app.use("/api/campana", campanaRouter);
   const server = app.listen(0);
   await once(server, "listening");

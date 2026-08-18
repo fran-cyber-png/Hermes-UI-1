@@ -10,6 +10,7 @@ import {
   editarEvento,
   registrarEvento,
 } from "../eventos/registrarEvento.js";
+import { correosDelTimeline } from "../correos/enElTimeline.js";
 
 /**
  * EVENTOS DEL CONTACTO — lo que la vendedora escuchó, en el timeline.
@@ -41,14 +42,43 @@ eventosRouter.get("/vocabulario", (_req, res) => {
   });
 });
 
-/** Los eventos vivos de una conversación — de TODO el equipo, con su autora. */
+/**
+ * TODO LO QUE PASÓ EN ESA CONVERSACIÓN FUERA DEL CHAT — del equipo, con su autora.
+ *
+ * ══ 🔴 ACÁ ES DONDE `correos.clave` SE VOLVIÓ LEGIBLE (H7) ══════════════════
+ *
+ * Esta ruta es la costura: es lo único que el panel derecho le pide al server
+ * para armar el timeline (`PanelDerecho` → `useEventos` → `ensamblarTimeline`).
+ * Hasta acá miraba `eventos_contacto` y nada más, así que un correo mandado
+ * desde la ficha —con su `clave` bien escrita, guardada y todo— **no se veía en
+ * ningún lado**: la vendedora que abría después la conversación no tenía forma de
+ * saber que a esa persona ya le habían pasado el precio por correo.
+ *
+ * ⚠️ **Van en DOS claves y no en un arreglo mezclado.** `eventos_contacto.id` y
+ * `correos.id` son dos secuencias independientes —el evento 7 y el correo 7
+ * existen los dos—, y el front cuelga Editar y Borrar del id; mezclados, tocar
+ * «borrar» sobre un correo archivaba el evento manual de otra persona con un 200
+ * y sin un solo síntoma. El porqué completo está en `correos/enElTimeline.ts`.
+ *
+ * ⚠️ **Una clave NUEVA en la respuesta, nunca un cambio de forma**: el front
+ * viejo la ignora y sigue funcionando igual (N4 y N5 se despliegan aparte, y el
+ * caché de IndexedDB rehidrata respuestas de ayer, ADR 0007).
+ *
+ * ⚠️ Las dos consultas van en paralelo: son dos tablas distintas sin relación
+ * entre sí, y encadenarlas le sumaba un viaje a la base al abrir cada
+ * conversación por nada.
+ */
 eventosRouter.get("/", ruta(async (req, res) => {
   const clave = String(req.query.clave ?? "").trim();
   if (!clave) {
     res.status(400).json({ ok: false, message: "falta la conversación" });
     return;
   }
-  res.json({ eventos: await consultarEventos(db, clave) });
+  const [eventos, correos] = await Promise.all([
+    consultarEventos(db, clave),
+    correosDelTimeline(db, clave),
+  ]);
+  res.json({ eventos, correos });
 }));
 
 /**

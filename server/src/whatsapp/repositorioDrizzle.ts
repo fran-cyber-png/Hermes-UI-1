@@ -1,6 +1,7 @@
 import { db } from '../db/client.js';
 import { events, interactions } from '../db/schema.js';
 import { emitirRT } from '../realtime/bus.js';
+import { claveDeConversacion, duenaDeConversacion } from '../realtime/duenaDeConversacion.js';
 import type { RepositorioInteracciones } from './ingesta.js';
 import type { EventoProyectado, InteraccionProyectada } from './proyectar.js';
 
@@ -57,11 +58,22 @@ export const repositorioDrizzle: RepositorioInteracciones = {
     // La cola y la conversación de esta persona se invalidan al instante en el front.
     // `direccion` viaja para que el front pueda sonar SOLO con lo entrante — sin
     // ella, la campanita sonaría también cuando la vendedora manda un mensaje.
+    //
+    // 🔴 **`duena` decide a QUIÉN se le nombra este teléfono.** El evento se
+    // publica igual para todas (la cola de cada una tiene que refrescarse), pero
+    // sin este dato el stream lo sirve recortado — ver `realtime/visibilidad.ts`.
+    // Es UNA lectura por PK y nunca tira: un fallo devuelve `null`, o sea evento
+    // recortado, y jamás se lleva puesto el mensaje que se acaba de guardar.
+    const duena = await duenaDeConversacion(
+      db,
+      claveDeConversacion(interaccion.canal, interaccion.personaId, interaccion.numeroPropio),
+    );
     emitirRT({
       tipo: 'mensaje',
       canal: interaccion.canal,
       telefono: interaccion.personaId,
       direccion: interaccion.direccion,
+      duena,
     });
 
     return true;

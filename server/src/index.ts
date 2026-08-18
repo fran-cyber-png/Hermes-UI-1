@@ -55,6 +55,7 @@ import { webhookRouter } from "./webhook/ruta.js";
 import { arrancarWhatsapp } from "./whatsapp/wiring.js";
 import { rutaDevWhatsapp } from "./whatsapp/rutaDev.js";
 import { whatsappRouter } from "./routes/whatsapp.js";
+import { miLineaDeProduccion } from "./numeros/miLineaCableado.js";
 import { streamRouter } from "./routes/stream.js";
 import { vincularRouter } from "./routes/vincular.js";
 import { simularRouter } from "./routes/simular.js";
@@ -64,6 +65,9 @@ import { adminRouter } from "./routes/admin.js";
 import { requiereServicio } from "./auth/servicio.js";
 import { db } from "./db/client.js";
 import { sembrarAliasCurso } from "./cursos/repositorio.js";
+import { cargarRol } from "./equipo/cargarRol.js";
+import { leerPersona, sembrarEquipo } from "./equipo/repositorio.js";
+import { EQUIPO_SEMILLA, revisarSemilla } from "./equipo/semilla.js";
 import { arrancarDespachador } from "./bot/despachador.js";
 import { configDesdeEnv, anunciarConfig } from "./bot/config.js";
 import { crearClienteBedrock } from "./bot/clienteBedrock.js";
@@ -80,6 +84,14 @@ app.use(cors());
 // gastarle un parseo de JSON (el perímetro decide por path + header, jamás lee
 // el body — hay un test que lo fija).
 app.use(perimetroApi);
+// EL ROL DE QUIEN PIDE, anotado una vez por request (tabla `equipo`, con el CSV
+// del `.env` de respaldo mientras dure la mudanza). Va DESPUÉS del perímetro
+// —así un anónimo se rebota antes de pagar una consulta— y **resuelve el Bearer
+// por su cuenta**: `/api/auth` es un prefijo abierto y `/yo` valida el suyo
+// adentro, o sea después de todo `app.use`. Leyendo `req.vendedoraId` el rol
+// quedaría `undefined` justo en la ruta por la que baja al front. Ver el
+// docblock de `equipo/cargarRol.ts`; hay test.
+app.use(cargarRol((id) => leerPersona(db, id)));
 // El `verify` guarda el body CRUDO de /webhook/*: la firma HMAC del webhook de
 // la Cloud API se calcula sobre los bytes exactos, no sobre el JSON re-serializado.
 app.use(express.json({ verify: capturarCuerpoCrudo }));
@@ -156,20 +168,47 @@ const gestor = arrancarWhatsapp();
 const hayFalso = gestor.todos().some((l) => l.falso);
 app.use("/api/stream", streamRouter);     // tiempo real: push de cambios (SSE)
 app.use("/api/whatsapp", whatsappRouter); // conversación nativa: hilo + enviar
+app.use("/api/whatsapp/mi-linea", miLineaDeProduccion()); // auto-vinculación: una vendedora trae su propio número (15-ago-2026)
 app.use("/api/autorespuesta", autorespuestaRouter); // el interruptor sin deploy de la auto-respuesta (#125)
 app.use("/api/bot", botRouter); // el kill-switch del bot de primera línea: apagar cuesta un click, no un deploy
 // El chat de prueba (#256): corre el MOTOR REAL sin transporte, así que se puede
 // mirar trabajar al bot sin gastar un solo lead de la pauta.
 app.use("/api/entrenamiento", entrenamientoRouter);
-// ⚠ /vincular queda FUERA del perímetro /api y sigue abierto: la consola del
-// operador no tiene auth propia todavía (su HTML no manda Bearer). Contenerlo
-// es decisión aparte (auth de operador, o bloquear /vincular en nginx) — ver #36.
-app.use("/vincular", vincularRouter);     // consola de operador: enlazar un número (D13)
 app.use("/api/admin", requiereServicio, adminRouter); // administración de números desde Cerberus (#50/#95)
-// Las dos rutas de dev solo se montan fuera de producción; y su exención en el
-// perímetro (auth/perimetro.ts) también es solo-dev — en prod no hay agujero
-// que recordar, aunque alguien las montara igual.
+/**
+ * 🔴 LO SOLO-DEV NO SE MONTA EN PRODUCCIÓN — «en prod no hay agujero que
+ * recordar», que es la única forma de que no haya que acordarse.
+ *
+ * ── Por qué `/vincular` se mudó acá (17-ago-2026) ──
+ *
+ * La consola de operador (D13) queda **fuera del perímetro** —no empieza en
+ * `/api`, así que `esRutaAbierta` ni la mira— y **no tiene auth propia**: su
+ * HTML no manda Bearer. Servía `GET /vincular/estado` **sin credencial**, y eso
+ * publica el **data-URI del QR del pareo en vuelo** más el número y el JID.
+ * Quien lea ese QR antes que la vendedora **se queda con su sesión de WhatsApp**,
+ * y recuperarla exige el teléfono físico.
+ *
+ * ⚠️ Y no era teórico desde que existe la auto-vinculación: `routes/vincular.ts`,
+ * `routes/admin.ts` y `numeros/miLineaCableado.ts` importan **el MISMO singleton**
+ * `vinculador`, así que un pareo iniciado desde la app se leía entero por esta
+ * puerta vieja — derrotando la guarda de dueño de `routes/miLinea.ts`, cuyo
+ * propio docblock ya advertía «si Ana inicia un pareo y Bea consulta
+ * /vincular/estado, Bea vería el QR de Ana».
+ *
+ * 🔴 **Estaba tapada por nginx (403 desde internet) y esa regla NO está
+ * versionada en este repo.** Medido el 17-ago: 403 por el dominio y **200 desde
+ * `127.0.0.1:4110`**, o sea alcanzable por cualquiera de los contenedores que
+ * comparten VPS1. Una protección que no se ve leyendo el código no protege al
+ * próximo que despliegue.
+ *
+ * No se BORRA porque en local sigue siendo la herramienta de trabajo. Lo que se
+ * pierde en producción no deja a nadie sin camino: `POST /api/admin/numeros/:n/vincular`
+ * (credencial de servicio, la usa Cerberus), `npm run wa:vincular` por SSH, y la
+ * auto-vinculación de la vendedora en `/api/whatsapp/mi-linea` — las tres detrás
+ * de una puerta. Auditoría: `docs/auditoria-aislamiento-de-chats-2026-08-17.md`.
+ */
 if (process.env.NODE_ENV !== "production") {
+  app.use("/vincular", vincularRouter); // consola de operador: enlazar un número (D13)
   app.use("/api/whatsapp/_sim", simularRouter); // simular detección de origen (dev)
   if (hayFalso) app.use("/api/whatsapp/_dev", rutaDevWhatsapp(gestor));
 }
@@ -211,6 +250,37 @@ app.listen(port, () => {
         `[cursos] no se pudo sembrar la tabla de alias (¿falta \`npm run db:push\`?): ${(err as Error).message}`,
       ),
     );
+
+  // EL EQUIPO nace sembrado, mismo molde que los alias de curso: sin filas, la
+  // cascada le da `vendedora` a todo el mundo y el panel no tendría a quién
+  // mostrar. Es idempotente y **no pisa lo editado a mano** — con un upsert,
+  // cada restart le devolvería su rol de fábrica a quien el admin acaba de
+  // cambiar, y el síntoma aparecería horas después atado a un deploy que nadie
+  // relaciona. Sin la migración avisa y sigue.
+  //
+  // ⚠️ Va acá y no adentro de un handler a propósito: una escritura dentro de un
+  // GET es la forma que ya quemó al repo dos veces.
+  // 🔴 Y NO SIEMBRA a quien el `.env` de este server hace supervisor con un rol
+  // más bajo: una fila activa le gana al CSV, así que eso le sacaría el padrón y
+  // las campañas en el próximo restart, sin un error. Se nombra en el log.
+  const semilla = revisarSemilla(EQUIPO_SEMILLA, process.env);
+  if (semilla.degradarian.length > 0) {
+    console.warn(
+      `[equipo] NO se siembran ${semilla.degradarian.join(", ")}: el .env les da supervisor y la ` +
+        `semilla les daría menos. Decidí su rol y sembralos con \`npm run equipo:sembrar\`.`,
+    );
+  }
+  sembrarEquipo(db, semilla.aSembrar)
+    .then((r) => {
+      if (r.sinTabla) {
+        console.warn("[equipo] falta la migración de `equipo`: los roles salen del .env por ahora");
+        return;
+      }
+      if (r.personas > 0 || r.grafias > 0) {
+        console.log(`[equipo] ${r.personas} personas y ${r.grafias} grafías sembradas`);
+      }
+    })
+    .catch((err) => console.error(`[equipo] no se pudo sembrar el equipo: ${(err as Error).message}`));
 
   // EL BOT ASESOR COMERCIAL — loop de despacho con debounce, modo sombra.
   // Sin credenciales de AWS, el despachador arranca pero sin LLM:

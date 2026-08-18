@@ -17,7 +17,8 @@ import { separarEquipo } from '../dashboard/equipo.js';
 import { consultarNegocio, DIMENSIONES, type Dimension } from '../dashboard/negocio.js';
 import { rangoLibre, resolverRango } from '../dashboard/periodo.js';
 import { recorteDelDashboard } from '../dashboard/personal.js';
-import { supervisoresConfigurados } from '../padron/supervisor.js';
+import { rolDe } from '../equipo/cargarRol.js';
+import { hayQuienMande } from '../equipo/repositorio.js';
 import { mismaVendedora } from '../reparto/destino.js';
 
 /**
@@ -58,7 +59,11 @@ dashboardRouter.get('/negocio', ruta(async (req, res) => {
   // quien atiende. Va con el mismo motivo y la misma forma que `/api/padron`
   // (`no_es_supervisor`), y NO como un query-param —un `?supervisor=1` sería la
   // frontera entera a un clic de curl.
-  const mando = recorteDelDashboard(req.vendedoraId, process.env);
+  //
+  // El rol lo resolvió `cargarRol` una vez para todo el request (tabla `equipo`,
+  // con el CSV del `.env` de respaldo). Acá no se lee el entorno: dos lugares
+  // decidiendo el mismo permiso son dos que hay que acordarse de apagar.
+  const mando = recorteDelDashboard(req.vendedoraId, rolDe(req).rol);
   if (!mando.supervisor) {
     res.status(403).json({ ok: false, motivo: 'no_es_supervisor', message: 'no ves el negocio' });
     return;
@@ -94,7 +99,7 @@ dashboardRouter.get('/', ruta(async (req, res) => {
   //    ve SOLO sus conversaciones asignadas — y eso recorta las cinco consultas
   //    de abajo, no una. La decisión, su costo y por qué es una frontera y no un
   //    filtro están en `dashboard/personal.ts`.
-  const { supervisor, soloAsignadasA } = recorteDelDashboard(req.vendedoraId, process.env);
+  const { supervisor, soloAsignadasA } = recorteDelDashboard(req.vendedoraId, rolDe(req).rol);
 
   // ── Lo que cayó por CHAT: el seam `cola/consultarRadar.ts` (testeable contra
   //    la base, ADR 0008) trae las conversaciones YA ordenadas por la urgencia
@@ -183,8 +188,10 @@ dashboardRouter.get('/', ruta(async (req, res) => {
     // ceros sin motivo: sin esto, un radar vacío dice «nada cayó con estos
     // filtros», que es falso — cayó, no es tuyo.
     ...(soloAsignadasA !== null ? { soloMisAsignadas: true } : {}),
-    // Fail-closed visible: sin la variable NADIE es supervisor, y eso hay que
-    // decirlo o se lee como que el reparto se comió todo (igual que en el padrón).
-    ...(supervisoresConfigurados(process.env).length === 0 ? { sinSupervisores: true } : {}),
+    // Fail-closed visible: si NADIE manda, eso hay que decirlo o se lee como que
+    // el reparto se comió todo (igual que en el padrón). Se pregunta contra la
+    // tabla `equipo` y, si todavía no está, contra el CSV — la misma cascada que
+    // resolvió el rol, o la pantalla contradiría a la puerta.
+    ...((await hayQuienMande(db, process.env)) ? {} : { sinSupervisores: true }),
   });
 }));

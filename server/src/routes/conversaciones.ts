@@ -4,6 +4,7 @@ import { db } from "../db/client.js";
 import { consultarCola } from "../cola/consultarCola.js";
 import { PinLleno, upsertEstado } from "../cola/estado.js";
 import { ETAPAS_CONSULTABLES } from "../cola/etapaEfectivaSql.js";
+import { rolDe } from "../equipo/cargarRol.js";
 import { porQueFallo } from "../lib/porQueFallo.js";
 import { ruta } from "../lib/ruta.js";
 import { normalizarTelefono } from "../whatsapp/identidadWa.js";
@@ -111,7 +112,15 @@ conversacionesRouter.get("/", ruta(async (req, res) => {
       vendedoraId: req.vendedoraId,
       limit: Number(req.query.limit) || 40,
       offset: Number(req.query.offset) || 0,
-    });
+    },
+    // 🔴 EL ROL VA APARTE DE LAS OPCIONES, Y ESA SEPARACIÓN ES LA FRONTERA.
+    // Todo lo de arriba se arma con el query string; esto lo resolvió `cargarRol`
+    // a partir del Bearer, una vez para todo el request (tabla `equipo`, con el
+    // CSV del `.env` de respaldo). Mezclarlos pondría «no me recortes» a un
+    // parámetro de distancia. Acá no se lee el entorno ni se pregunta nada más:
+    // dos lugares decidiendo el mismo permiso son dos que hay que acordarse de
+    // apagar el día que los CSV se retiren.
+    rolDe(req));
     res.json(r);
   } catch (err) {
     console.error(`la cola de conversaciones falló — ${porQueFallo(err)}`);

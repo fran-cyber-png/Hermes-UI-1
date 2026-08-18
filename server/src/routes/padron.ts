@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
 import { esTablaAusente } from "../cola/estadoSql.js";
@@ -17,7 +17,8 @@ import {
   LOTE_MAX,
   quitar,
 } from "../padron/habilitados.js";
-import { esSupervisor, supervisoresConfigurados } from "../padron/supervisor.js";
+import { mandaEnElEquipo } from "../equipo/cargarRol.js";
+import { hayQuienMande } from "../equipo/repositorio.js";
 import { ruta } from "../lib/ruta.js";
 
 /**
@@ -119,12 +120,14 @@ function fallaDeIcarus(res: Parameters<Parameters<Router["get"]>[1]>[1], e: unkn
  * cuando ya respondió (falta de migración), para que quien llama corte.
  */
 async function recorteDe(
-  req: { vendedoraId?: string; query: unknown },
+  // El `Request` entero y no `{ vendedoraId }`: el rol lo anotó `cargarRol` en el
+  // request, así que el permiso se pregunta sobre el mismo objeto que la ruta.
+  req: Request,
   res: Parameters<Parameters<Router["get"]>[1]>[1],
   filtros: ReturnType<typeof filtrosSchema.parse>,
 ): Promise<{ habilitados: number[]; soloEstos: number[] | null; mando: boolean } | null> {
   const yo = req.vendedoraId ?? "";
-  const mando = esSupervisor(yo, process.env);
+  const mando = mandaEnElEquipo(req);
 
   // Los habilitados salen de la base de Hermes. Si la tabla no está migrada, el
   // supervisor puede seguir MIRANDO el padrón (no hay reparto que cruzar) y la
@@ -190,12 +193,17 @@ padronRouter.get("/contactos", ruta(async (req, res) => {
       porPagina: filtros.porPagina,
       paginaActual: filtros.pagina,
       /**
-       * Sin supervisores configurados NADIE ve el padrón, y eso hay que decirlo:
-       * una lista vacía se lee «se perdieron los contactos» o «no me habilitaron
-       * nada», y las dos son afirmaciones falsas. Mismo criterio que
-       * `sinLineasPropias` y `sinPadron`.
+       * Si NADIE manda, NADIE ve el padrón, y eso hay que decirlo: una lista
+       * vacía se lee «se perdieron los contactos» o «no me habilitaron nada», y
+       * las dos son afirmaciones falsas. Mismo criterio que `sinLineasPropias` y
+       * `sinPadron`.
+       *
+       * ⚠️ Se pregunta contra la tabla `equipo` con el CSV de respaldo — la MISMA
+       * cascada que resolvió el rol. Con dos fuentes, la pantalla podría decir
+       * «no hay ningún supervisor» mientras la puerta le abre a quien está en el
+       * `.env`, y el copy contradiría al 403.
        */
-      sinSupervisores: supervisoresConfigurados(process.env).length === 0,
+      sinSupervisores: !(await hayQuienMande(db, process.env)),
     });
   } catch (e) {
     fallaDeIcarus(res, e);
@@ -233,7 +241,7 @@ padronRouter.get("/facetas", ruta(async (req, res) => {
  * la lista de destinos es justamente lo que hace falta para repartir.
  */
 padronRouter.get("/reparto", ruta(async (req, res) => {
-  if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
+  if (!mandaEnElEquipo(req)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor", message: "no tenés el padrón" });
     return;
   }
@@ -252,7 +260,7 @@ padronRouter.get("/reparto", ruta(async (req, res) => {
 /** REPARTIR un lote. Solo el supervisor, y el destino se VERIFICA. */
 padronRouter.post("/habilitar", ruta(async (req, res) => {
   const yo = req.vendedoraId ?? "";
-  if (!esSupervisor(yo, process.env)) {
+  if (!mandaEnElEquipo(req)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor", message: "no repartís el padrón" });
     return;
   }
@@ -304,7 +312,7 @@ padronRouter.post("/habilitar", ruta(async (req, res) => {
  */
 padronRouter.post("/habilitar-recorte", ruta(async (req, res) => {
   const yo = req.vendedoraId ?? "";
-  if (!esSupervisor(yo, process.env)) {
+  if (!mandaEnElEquipo(req)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor", message: "no repartís el padrón" });
     return;
   }
@@ -367,7 +375,7 @@ padronRouter.post("/habilitar-recorte", ruta(async (req, res) => {
 
 /** DEVOLVER contactos al pozo común. */
 padronRouter.post("/quitar", ruta(async (req, res) => {
-  if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
+  if (!mandaEnElEquipo(req)) {
     res.status(403).json({ ok: false, motivo: "no_es_supervisor", message: "no repartís el padrón" });
     return;
   }

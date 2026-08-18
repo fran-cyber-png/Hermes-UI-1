@@ -8,6 +8,7 @@ import { repositorioDrizzle } from './repositorioDrizzle.js';
 import { registroEnviosDrizzle } from './registroEnviosDrizzle.js';
 import { GestorWhatsapp, numerosConfigurados, type WhatsappArmado } from './gestor.js';
 import { emitirRT } from '../realtime/bus.js';
+import { claveDeConversacion, duenaDeConversacion } from '../realtime/duenaDeConversacion.js';
 import { notificarEntrante } from '../bot/ingesta.js';
 import { configDesdeEnv } from '../bot/config.js';
 import { db } from '../db/client.js';
@@ -15,6 +16,7 @@ import { guardarReaccion } from '../reacciones/repositorio.js';
 import { aplicarRecibo } from '../entrega/repositorio.js';
 import type { TransporteWhatsapp } from './transporte.js';
 import { porQueFallo } from '../lib/porQueFallo.js';
+import { transportePuedeVincular } from '../numeros/autoVinculacion.js';
 
 /**
  * EL ARMADO DE WHATSAPP AL ARRANCAR EL SERVER — ahora de N números (#50).
@@ -118,10 +120,17 @@ function montar(numero: string, cual: string): WhatsappArmado {
    */
   transporte.onReaccion?.((r) => {
     void guardarReaccion(db, r)
-      .then((que) => {
+      .then(async (que) => {
         // El hilo abierto se refresca solo: una reacción que aparece 5 s
         // después de que la pusieron se siente rota.
-        if (que !== 'sin_tabla') emitirRT({ tipo: 'mensaje', canal: 'whatsapp', telefono: r.dePersona });
+        //
+        // Lleva `duena` por lo mismo que el mensaje: el teléfono del lead ajeno
+        // no se le nombra a quien no trabaja esa conversación. Acá NO va
+        // `direccion` —una reacción no es un mensaje nuevo— así que ni siquiera
+        // para la dueña dispara la campanita, que es lo correcto.
+        if (que === 'sin_tabla') return;
+        const duena = await duenaDeConversacion(db, claveDeConversacion('whatsapp', r.dePersona, numero));
+        emitirRT({ tipo: 'mensaje', canal: 'whatsapp', telefono: r.dePersona, duena });
       })
       .catch((err: unknown) => {
         // eslint-disable-next-line no-console
@@ -141,7 +150,9 @@ function montar(numero: string, cual: string): WhatsappArmado {
       .then((filas) => {
         // Solo se avisa si algo cambió de verdad: los recibos repetidos son la
         // mayoría, y un refresco por cada uno castigaría la pantalla.
-        if (filas > 0) emitirRT({ tipo: 'mensaje', canal: 'whatsapp', telefono: null });
+        // `telefono: null` = no identifica ninguna conversación, así que no hay
+        // dueña que resolver: es un «refrescá la pantalla» pelado y sale para todas.
+        if (filas > 0) emitirRT({ tipo: 'mensaje', canal: 'whatsapp', telefono: null, duena: null });
       })
       .catch((err: unknown) => {
         // eslint-disable-next-line no-console
@@ -225,6 +236,61 @@ export function arrancarWhatsapp(): GestorWhatsapp {
 export function gestorWhatsapp(): GestorWhatsapp {
   if (!gestor) throw new Error('WhatsApp no está arrancado todavía.');
   return gestor;
+}
+
+/**
+ * MONTA UNA LÍNEA WHATSMEOW NUEVA EN CALIENTE — sin reiniciar el server.
+ *
+ * Hasta la auto-vinculación, `WHATSAPP_NUMEROS` era la ÚNICA forma de que una
+ * línea recién vinculada empezara a andar: el operador editaba el `.env` de
+ * VPS1 y reiniciaba (`docs`, gotcha «N5 verde no siempre reinicia»). Eso es
+ * aceptable para Cerberus, que vincula de a una y con tiempo — pero rompe el
+ * punto entero de que una vendedora se auto-vincule DESDE LA APP: si la línea
+ * queda vinculada y sigue muda hasta que alguien reinicie el server, el enlace
+ * no sirvió de nada.
+ *
+ * Reusa el MISMO `montar()` que usa `arrancarWhatsapp()` al bootear, así que la
+ * línea nueva queda enganchada a la ingesta, las reacciones, los ✓✓ y
+ * `EnvioControlado` exactamente igual que cualquier otra — no es un camino
+ * aparte, es el mismo camino un rato después.
+ *
+ * 🔴 **ESTO ES SOLO EL PROCESO VIVO — NO SOBREVIVE UN REINICIO.** No toca
+ * `WHATSAPP_NUMEROS`: sigue siendo la ÚNICA lista que `arrancarWhatsapp()` lee
+ * al bootear (`numerosConfigurados()`). Una vendedora que se auto-vincula queda
+ * andando AHORA MISMO, pero si el server reinicia (N5, un crash, un `systemctl
+ * restart`) esa línea no vuelve a montarse sola — `numeros_wa` sigue diciendo
+ * que está vinculada, y nada la levanta hasta que un operador la agregue a mano
+ * al `.env` y reinicie, exactamente como hoy con una línea de Cerberus. Cerrar
+ * esa brecha es sacar el arranque de `WHATSAPP_NUMEROS` y leerlo de
+ * `numeros_wa` — ya está anotado como decisión aparte en `numeros/dominio.ts`
+ * (#194) y no se resuelve acá: la contrapartida (leer `WHATSAPP_NUMEROS` al
+ * bootear) es lo que hoy garantiza que un `.env` sin tocar levanta igual que
+ * ayer, y tocar esa garantía es su propio frente, no un efecto colateral de
+ * este.
+ *
+ * ⚠️ **LA GUARDA DEL TRANSPORTE ESTÁ ACÁ, PERO ACÁ LLEGA TARDE.** Un server que
+ * corre `falso` o `cloud-api` no tiene por qué montar una línea de whatsmeow, y
+ * este `throw` lo impide — pero para cuando alguien llama a esta función, la
+ * credencial de WhatsApp **ya está escrita en disco**: la escribe
+ * `Vinculador.iniciar()` al crear el cliente (`whatsapp/vinculador.ts`), sin
+ * mirar el transporte. El veto que de verdad protege el `.wa-sessions/*.db` vive
+ * **antes de iniciar el pareo**, en `numeros/autoVinculacion.ts`. Esto es la
+ * segunda vuelta de llave, no la primera.
+ */
+export function agregarLineaWhatsmeow(numero: string, env: NodeJS.ProcessEnv = process.env): WhatsappArmado {
+  if (!transportePuedeVincular(env)) {
+    throw new Error(
+      `No monto la línea ${numero} por whatsmeow: este server corre con otro transporte, ` +
+        `así que esa sesión no la iba a atender nadie.`,
+    );
+  }
+  const g = gestorWhatsapp();
+  if (g.de(numero)) {
+    throw new Error(`La línea ${numero} ya está montada: no se monta dos veces.`);
+  }
+  const armado = montar(numero, 'whatsmeow');
+  g.agregar(armado);
+  return armado;
 }
 
 /**

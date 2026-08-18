@@ -1,5 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
-import { esSupervisor } from "../padron/supervisor.js";
+import { puedeSupervisar, type Rol } from "../equipo/roles.js";
 
 /**
  * DE QUIÉN ES EL DASHBOARD — el recorte, decidido UNA vez y en el server.
@@ -68,13 +68,27 @@ export interface RecorteDelDashboard {
   soloAsignadasA: string | null;
 }
 
-/** Quién mira, y cuánto le toca ver. Puro: recibe el entorno, no lo lee del global. */
+/**
+ * Quién mira, y cuánto le toca ver. Puro: recibe el ROL ya resuelto, no lo
+ * averigua.
+ *
+ * ⚠️ **Antes recibía `process.env` y preguntaba `esSupervisor`.** Desde la tabla
+ * `equipo`, quién manda se resuelve UNA vez por request en `cargarRol`
+ * —cascada, break-glass y CSV de respaldo incluidos— y esta función solo traduce
+ * ese rol a un recorte. Si siguiera leyendo el entorno habría dos fuentes del
+ * mismo permiso y la que no se actualice es la que abre el agujero: exactamente
+ * cómo nacieron `HERMES_SUPERVISORES` y `VEN_ROUTING`.
+ *
+ * ⚠️ **Un `admin` también ve todo**, y por eso se pregunta `puedeSupervisar` y no
+ * `rol === 'supervisor'`: con la comparación exacta, el admin abriría un
+ * Dashboard de sus propias asignadas —que son cero— y «El negocio» le daría 403.
+ */
 export function recorteDelDashboard(
   vendedoraId: string | undefined,
-  env: NodeJS.ProcessEnv,
+  rol: Rol,
 ): RecorteDelDashboard {
   const yo = (vendedoraId ?? "").trim();
-  if (esSupervisor(yo, env)) return { supervisor: true, soloAsignadasA: null };
+  if (puedeSupervisar(rol)) return { supervisor: true, soloAsignadasA: null };
   return { supervisor: false, soloAsignadasA: yo };
 }
 

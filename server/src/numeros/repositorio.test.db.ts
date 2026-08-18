@@ -7,6 +7,8 @@ import {
   upsertNumero,
   desactivarNumero,
   marcarVinculado,
+  lineasDeVendedora,
+  lineasDeVendedoraConProposito,
 } from "./repositorio.js";
 
 test("upsert crea, y un segundo PUT sobre el mismo número actualiza sin duplicar", async (t) => {
@@ -82,6 +84,34 @@ test("marcarVinculado setea vinculado_at", async (t) => {
   assert.equal((await obtenerNumero(db, "51900000003"))?.vinculadoAt, null);
   await marcarVinculado(db, "51900000003");
   assert.notEqual((await obtenerNumero(db, "51900000003"))?.vinculadoAt, null);
+});
+
+/**
+ * 🔴 `lineasDeVendedora` COMPARABA EXACTO — encontrado en revisión el
+ * 15-ago-2026, antes de que mordiera en producción.
+ *
+ * Cerberus empuja la grafía que tiene (`Luz`); el `vendedoraId` del token es lo
+ * que se tipeó al entrar (`luz`) — el mismo defecto medido en
+ * `cola/asignadaSql.ts`. Con `eq()` a secas, Luz con una línea YA asignada leía
+ * `[]` acá, y esta consulta es la que decide «¿ya tenés línea?» en la
+ * auto-vinculación (`numeros/autoVinculacion.ts`): hubiera terminado con DOS
+ * números de WhatsApp.
+ */
+test("🔴 lineasDeVendedora encuentra la línea aunque la grafía no coincida en mayúsculas", async (t) => {
+  const db = await baseDePrueba(t);
+  await upsertNumero(db, "51900000009", {
+    etiqueta: "Luz",
+    proposito: "vendedora",
+    referencia: null,
+    activo: true,
+    vendedoras: ["Luz"], // la grafía que empuja Cerberus
+  });
+  assert.deepEqual(await lineasDeVendedora(db, "luz"), ["51900000009"], "con la grafía del login (minúscula)");
+  assert.deepEqual(await lineasDeVendedora(db, "  LUZ  "), ["51900000009"], "y con espacios + mayúsculas");
+  assert.deepEqual(await lineasDeVendedora(db, "otra"), [], "una vendedora sin línea sigue vacía");
+
+  const conProposito = await lineasDeVendedoraConProposito(db, "luz");
+  assert.deepEqual(conProposito, [{ numero: "51900000009", proposito: "vendedora" }]);
 });
 
 /**

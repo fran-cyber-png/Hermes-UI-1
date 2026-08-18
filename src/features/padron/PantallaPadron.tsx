@@ -14,6 +14,7 @@ import {
 import { fechaCorta, formatoTelefono } from '../../lib/formato';
 import { conversacionDeTelefono } from '../../dominio/conversacionNueva';
 import { HojaContacto } from '../panel/HojaContacto';
+import type { DestinoCorreo } from '../../lib/puente';
 import { useSesionWa } from '../whatsapp/conversacionWa';
 import { BarraReparto } from './BarraReparto';
 import { FiltroFaceta } from './FiltroFaceta';
@@ -55,10 +56,20 @@ import {
 export function PantallaPadron({
   onEscribir,
   miVendedora,
+  onMandarCorreo,
 }: {
   onEscribir?: (telefono: string) => void;
   /** Quién mira — la `HojaContacto` la necesita para el timeline (ADR 0037). */
   miVendedora?: string | null;
+  /**
+   * Puente a Correos, de paso hacia la ficha.
+   *
+   * ⚠️ **Acá es donde más se nota que falte**: al padrón se le escribe EN FRÍO,
+   * y el correo es el único canal que no arriesga un ban (regla dura #7). Sin
+   * este cable, la ficha del padrón muestra el correo del contacto y no ofrece
+   * ninguna forma de usarlo.
+   */
+  onMandarCorreo?: (destino: DestinoCorreo) => void;
 }) {
   const [texto, setTexto] = useState('');
   const [filtros, setFiltros] = useState<FiltrosPadron>({ pagina: 1, porPagina: 50 });
@@ -377,6 +388,7 @@ export function PantallaPadron({
           conversacion={conversacionDeLaFicha}
           onCerrar={() => setFicha(null)}
           miVendedora={miVendedora}
+          onMandarCorreo={onMandarCorreo}
         />
       )}
     </div>

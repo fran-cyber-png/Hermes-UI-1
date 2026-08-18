@@ -4,6 +4,7 @@ import { baseDePrueba } from "../pruebas/base.js";
 import { sembrarMensaje } from "../pruebas/sembrar.js";
 import { conversacionAsignada } from "../db/reparto.js";
 import { consultarCola } from "./consultarCola.js";
+import { COMO_SUPERVISORA, COMO_VENDEDORA } from "../pruebas/rol.js";
 
 /**
  * LO QUE TIENE DUEÑA Y NO SOY YO, VA DESPUÉS.
@@ -17,17 +18,37 @@ import { consultarCola } from "./consultarCola.js";
  * iba a contestar nunca, le tapaba sus propios leads del día — y cuanto más
  * abandonada la conversación ajena, más arriba quedaba.
  *
- * ── Lo que este test fija, y lo que NO ──────────────────────────────────────
+ * ── 🔴 QUIÉN VE UNA CONVERSACIÓN AJENA, DESPUÉS DE LA FRONTERA ──────────────
  *
- * Fija que lo ajeno pierda contra lo propio y contra lo que no tiene dueño,
- * **aun teniendo más sin leer**. No fija que desaparezca: el reparto es un
- * filtro y no un permiso, así que la conversación ajena se sigue sirviendo —
- * abajo. Un test que la esperara ausente estaría pidiendo una frontera que
- * Hermes no tiene.
+ * **El docblock que estaba acá afirmaba lo contrario de lo que hoy es cierto**,
+ * y hay que decirlo porque es la clase de comentario al que uno le cree: decía
+ * «el reparto es un filtro y no un permiso, así que la conversación ajena se
+ * sigue sirviendo — abajo», y que «un test que la esperara ausente estaría
+ * pidiendo una frontera que Hermes no tiene». Hermes ahora la tiene: la
+ * frontera de `cola/asignadaSql.ts` **no sirve** lo ajeno a una vendedora, y ese
+ * caso lo fija `fronteraDeAsignacion.test.db.ts`.
+ *
+ * O sea que el orden que este archivo mide sólo lo puede observar quien ve más
+ * de una dueña en la misma mesa: **supervisor y admin**. Por eso los tests
+ * corren con rol de supervisora — no es andamio, es el único escenario donde la
+ * pregunta existe.
+ *
+ * ⚠️ **Y el orden no se puede reemplazar por la frontera.** La supervisora es
+ * quien reparte: necesita ver el trabajo de las seis y necesita que el suyo no
+ * quede sepultado abajo del chat abandonado de otra. Si algún día alguien borra
+ * `ajenaVaDespues` de `bandaPinOrdenSql` «porque ya está la frontera», la
+ * pantalla de quien supervisa vuelve al 14-ago.
  */
 
 const LINEA = "51984429504";
 const YO = "luz";
+
+/**
+ * ✅ Acá había un `comoSupervisora(t, YO)` que escribía `HERMES_SUPERVISORES` con
+ * su `t.after`, y su docblock decía que el día que el rol viviera en la tabla
+ * `equipo` se reemplazaba. Ese día es éste: el rol viaja como tercer parámetro de
+ * `consultarCola` y se arma con `pruebas/rol.ts`.
+ */
 
 async function asignar(
   db: Awaited<ReturnType<typeof baseDePrueba>>,
@@ -45,10 +66,10 @@ async function asignar(
 
 /** Los nombres en el orden en que la cola los devuelve. */
 async function orden(db: Awaited<ReturnType<typeof baseDePrueba>>, vendedoraId?: string) {
-  const r = (await consultarCola(db, { vendedoraId, limite: 20 } as never)) as {
-    conversaciones?: { persona_nombre: string | null }[];
-  };
-  return (r.conversaciones ?? []).map((c) => c.persona_nombre);
+  // Siempre con rol de supervisora: es el único que ve más de una dueña en la
+  // misma mesa, o sea el único donde este orden se puede observar (ver arriba).
+  const r = await consultarCola(db, { vendedoraId, limit: 20 }, COMO_SUPERVISORA);
+  return (r.conversaciones as { persona_nombre: string | null }[]).map((c) => c.persona_nombre);
 }
 
 test("una conversación AJENA con más sin leer queda debajo de la mía", async (t) => {
@@ -68,13 +89,40 @@ test("una conversación AJENA con más sin leer queda debajo de la mía", async 
   );
 });
 
-test("🔴 lo ajeno NO desaparece: sigue en la cola, abajo", async (t) => {
+/**
+ * 🔴 EL TEST QUE CAMBIÓ DE SIGNO, Y ES EL QUE HAY QUE LEER DOS VECES.
+ *
+ * Se llamaba «lo ajeno NO desaparece: sigue en la cola, abajo» y afirmaba que el
+ * reparto era un filtro. Para una vendedora eso **ya no es cierto** y la
+ * frontera existe justamente para que no lo sea. Lo que sigue siendo cierto es
+ * para quien supervisa: ahí lo ajeno se sirve, y va al fondo.
+ */
+test("🔴 para quien SUPERVISA, lo ajeno no desaparece: sigue en la cola, abajo", async (t) => {
   const db = await baseDePrueba(t);
   await sembrarMensaje(db, { personaId: "51900000001", personaNombre: "AJENA", numeroPropio: LINEA });
   await asignar(db, "51900000001", "ventas12");
 
   const nombres = await orden(db, YO);
-  assert.ok(nombres.includes("AJENA"), "el reparto es un filtro, no un permiso: se sigue sirviendo");
+  assert.ok(nombres.includes("AJENA"), "quien reparte tiene que ver lo repartido");
+});
+
+/**
+ * EL CONTRAPUNTO, y va en este archivo a propósito: es la mitad que el docblock
+ * viejo negaba. La MISMA siembra, la MISMA persona, sin el rol.
+ */
+test("🔴 y para una VENDEDORA lo ajeno no se sirve: no hay orden que discutir", async (t) => {
+  const db = await baseDePrueba(t);
+  await sembrarMensaje(db, { personaId: "51900000001", personaNombre: "AJENA", numeroPropio: LINEA });
+  await asignar(db, "51900000001", "ventas12");
+
+  // El ÚNICO cambio respecto del test de arriba es el rol: misma siembra, misma
+  // persona. Sin eso, «lo ajeno va al fondo» y «lo ajeno no se sirve» podrían
+  // estar los dos verdes por motivos que no se cruzan nunca.
+  const r = await consultarCola(db, { vendedoraId: YO, limit: 20 }, COMO_VENDEDORA);
+  const nombres = (r.conversaciones as { persona_nombre: string | null }[]).map(
+    (c) => c.persona_nombre,
+  );
+  assert.ok(!nombres.includes("AJENA"), `la frontera manda — salió: ${nombres.join(", ")}`);
 });
 
 test("lo SIN DUEÑO no se castiga: es de quien lo agarre", async (t) => {

@@ -4,6 +4,7 @@ import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 import express from "express";
 import { firmarSesion } from "../auth/sesion.js";
+import { cargarRol } from "../equipo/cargarRol.js";
 import { dashboardRouter } from "./dashboard.js";
 
 /**
@@ -59,6 +60,14 @@ async function pedir(vendedoraId: string, supervisores: string | null): Promise<
 
   const app = express();
   app.use(express.json());
+  /**
+   * ⚠️ **El rol lo anota `cargarRol`, no lo lee el handler.** Se monta con un
+   * lector que dice «la tabla no está» —el estado real de producción hasta que
+   * la migración de `equipo` se aplique—, y en ese estado la cascada cae al CSV,
+   * que es lo que estos tests manipulan. Sin este middleware el router no vería
+   * ningún rol y los 403 saldrían por omisión: verdes que no significan nada.
+   */
+  app.use(cargarRol(async () => ({ estado: "sin_tabla", fila: null }), process.env));
   app.use("/api/dashboard", dashboardRouter);
 
   const server = app.listen(0, "127.0.0.1");
@@ -117,3 +126,22 @@ test("GET /negocio: una vendedora que no está en la lista tampoco entra por par
 
   assert.equal(r.status, 403);
 });
+
+/**
+ * 🔴 EL CONTROL DEL 403 NO SE PUEDE ESCRIBIR ACÁ, Y ESO SE MIDIÓ.
+ *
+ * Sin un caso que PASE la puerta, los tres de arriba no distinguen «la regla
+ * anda» de «la puerta rechaza a todos». El control obvio —pedir con un
+ * supervisor y exigir que no sea 403— **cuelga la corrida entera**: apenas se
+ * pasa la puerta, el handler consulta el singleton `db`, que es justo lo que
+ * este harness nunca conecta (`baseDePrueba` clona un template y devuelve SOLO
+ * su `db`). Medido el 17-ago-2026: `npm run test:db` quedó parado en este
+ * archivo, sin summary y sin timeout — y un archivo que cuelga en N2b es peor
+ * que un test flojo, porque bloquea el runner de VPS1, que es uno solo.
+ *
+ * Dónde vive el control entonces: en `routes/campana.test.ts`, que tiene la
+ * MISMA puerta (`mandaEnElEquipo`) y sí puede probar el caso positivo porque su
+ * camino de después sale por Meta y no por la base — «la grafía no importa»
+ * termina en un `assert.notEqual(estado, 403)`. Es la misma regla, con un
+ * consumidor que se puede cortar sin colgar nada.
+ */

@@ -166,7 +166,7 @@ el round-robin de hoy.
 | **Pipeline** | Kanban con las 5 etapas del dueño (Interesados→Contactados→Cotizados→Cierre·Perdidos), arrastre, y **compuertas server-side**: a Cotizados con ≥1 curso de interés; a Cierre SOLO registrando la venta (la venta lo mueve sola: cotización→cotizado+intereses, venta→cierre+conversión) |
 | **Mensajes** (chat) | Cola unificada 4 canales + búsqueda + **chat nuevo** · **barra de 3 chips que se ganan el lugar (ADR 0052, 11-ago-2026): «Preguntaron precio» · «Te escribieron» · «Puedo escribirle»** — se retiraron «Piden info» (medía el texto que prellena Meta, no una pregunta), «Sin responder» (505 filas con el 93 % de +7 días) y «Ya compraron» (27 % de la mesa) · el preview ya no finge una pregunta donde hubo un clic de anuncio · avisa cuándo una conversación contestada bajó de lugar · hilo WhatsApp **con media completa** (ver/mandar imágenes, videos, audios, flyers — clip con leyenda) · Messenger read-only · comentarios privado-antes-que-público · **BarraGestion arriba de todo chat**: etapa 1-clic, etiquetas, intereses, Agendar, **Llamar** (tel: + Copiar de respaldo) |
 | **Contactos** | Búsqueda por teléfono → ficha Cerberus 4 estados |
-| **Correos** | Composer 1-a-1 auditado + enviados del equipo. **Fail-closed**: falta el SMTP (ver pendientes) |
+| **Correos** | Composer 1-a-1 auditado + enviados del equipo (se abren para leer el cuerpo). **El SMTP está cargado desde antes del 4-ago-2026** —acá decía «falta el SMTP» y era falso: hay tres envíos exitosos que lo prueban— y es **Amazon SES**, no mail.goberna.us. **ADR 0058** (trae la migración 0029: **todavía sin desplegar, va por N5**): con qué buzón sale se elige (tabla `remitentes_correo` + pantalla de administración), el `From` lleva **el nombre de la vendedora** y el **`Reply-To` es su correo**, así que la respuesta del lead deja de caer en un buzón que Hermes no lee. Uno por correo (garantizado, no prometido) y techo 20/hora · 60/día por vendedora. ⚠️ **Falta el paso de operador**: dar de alta el primer remitente (ver pendientes) |
 | **Agenda** | Calendario estilo GCal (mes/semana/día, chips por tipo, crear en día vacío, detalle flotante). Agendar mueve interesado→**contactado** solo. Badge dorado en el riel |
 | **Infra** | API pública HTTPS + SSE + UI servida (OTA) · WhatsApp vinculado EN el VPS (**desde el 11-ago-2026 corren DOS líneas: `51984429504` Cloud API + `51963139984` whatsmeow**; las otras tres se retiraron por estar caídas — fix `@lid` con 14.7k mapeos) · webhook de landings listo (Bravo→Hermes) · cáscara **Tauri** 3-5 MB (mac+win, permiso tel:) · **Electron archivado el 7-ago-2026 (ADR 0039)**: la cáscara es una sola |
 | **Navegador** (⌘9) | Vive **adentro de la mesa** como webview hijo (**ADR 0043**, enmienda 0040): barra con atrás/adelante/recargar y dirección, y la sesión de trabajo separada del Chrome personal. Medido el 8-ago: **ChatGPT carga y Google NO bloquea el login** en el webview embebido (macOS/WKWebView). Se esconde cuando se abre Ivi o la cabina — es una capa del SO encima del DOM |
@@ -262,8 +262,28 @@ ahora» 25…). Se mapean por `adId` con `cd server && npm run cursos:gaps` (ADR
 tocar código.
 
 ### Del operador (minutos, destraban features ya construidas)
-1. **SMTP para Correos**: cargar `SMTP_HOST/PORT/USER/PASS/FROM` en `server/.env` del VPS (la
-   cuenta sale de mail.goberna.us / VPS2) + `systemctl restart hermes`. La UI se enciende sola.
+1. **El primer remitente de Correos** (después de N5, porque la migración 0029 va con el server):
+   `cd server && npm run correos:remitentes -- --alta <buzón> --nombre "…" --aplicar` (dry-run por
+   default). Mientras no haya ninguno, Correos sale por `SMTP_FROM` — o sea, el mismo remitente para
+   las nueve, que es el agujero que **ADR 0058** vino a tapar. El buzón tiene que estar en un dominio
+   verificado en SES: se listan en `SMTP_DOMINIOS_VERIFICADOS` (default `goberna.us`;
+   **`grupogoberna.com` NO está verificado**, así que los `ventas1X@` sirven de `Reply-To` y nunca de
+   `From`).
+   ~~**SMTP para Correos**: cargar `SMTP_HOST/PORT/USER/PASS/FROM`~~ — **ya está cargado**, y lo
+   estaba desde antes del 4-ago-2026: las tres filas de `correos` son tres envíos que salieron. Acá
+   decía que faltaba y era falso.
+   🔴 **Y decía «la cuenta sale de mail.goberna.us / VPS2», que también era falso** (medido el
+   17-ago-2026): el SMTP es **Amazon SES** (`email-smtp.us-east-1.amazonaws.com`); el MX de
+   `goberna.us` es Google Workspace, o sea que por `mail.goberna.us` no sale nada. Este renglón
+   es lo que un operador lee justo cuando algo falla, y el nombre equivocado lo manda a revisar
+   un buzón de Google mientras el problema está en la consola de SES.
+   ⚠️ En SES el `SMTP_USER` es un **Access Key ID de IAM**, no un buzón: no sirve de `From`.
+   ⚠️ **SPF, el DKIM de SES y DMARC ya están bien montados** (los tres CNAMEs de Easy DKIM existen,
+   resuelven y no están proxied): si un correo cae en spam, no es eso.
+   🔴 **Lo que sigue faltando y NO es un paso de operador**: sin webhook de rebote (SNS),
+   `estado = 'enviado'` significa «SES aceptó el POST», no «llegó». Un correo a una casilla que no
+   existe queda como enviado para siempre y la vendedora concluye «ya le escribí, no me contesta».
+   Es un frente aparte, con sus pasos escritos en **ADR 0058** §«Lo que NO entra».
 2. **Landings al Dashboard**: en Bravo, poner `contact_webhook_url` de cada tenant con la URL de
    `ssh deploy@161.132.39.165 'cat /srv/hermes/.landing-webhook-url'` (runbook §9).
 3. **Cerrar la sesión de WhatsApp de la laptop** (el teléfono tiene 2 dispositivos vinculados;

@@ -154,10 +154,45 @@ npm install && npm run dev:app                     # la cáscara Tauri (arranca 
   -- <numero>`. ⚠️ **Se vincula por QR, no por código de 8 dígitos** (`vincular.ts:47-56` lo renderiza
   a `$TMPDIR/hermes-wa-qr.png` y lo rota cada ~20 s; el pairCode por número daba 400 en este número).
   La sesión queda en `server/.wa-sessions/` — **gitignored: es la credencial de la cuenta, NUNCA se
-  commitea**. La app de la vendedora **no vincula, solo ve**.
+  commitea**.
   ⚠️ **Y esa credencial no va en una laptop**: el 29-jul se encontró la línea de VENTAS en el checkout
   de desarrollo. El `.gitignore` cubre **el nombre exacto** `.wa-sessions/`, así que renombrar ese
   directorio deja 43 MB de credencial a la vista de git. Para desarrollo va `WHATSAPP_TRANSPORTE=falso`.
+  🔴 **Desde el 15-ago-2026, D13 ya NO es absoluto: la app de la vendedora TAMBIÉN vincula.**
+  Decisión del dueño, **enmendada el 18-ago-2026**: **cualquiera del equipo, supervisoras incluidas**,
+  puede traer su propio número — **solo 1**— escaneando el QR desde adentro de Hermes (`PanelUsuario` → «Vincular tu WhatsApp» →
+  `server/src/routes/miLinea.ts`, `POST /api/whatsapp/mi-linea/vincular`). Reusa el MISMO vinculador
+  global de D13 (uno-a-la-vez en todo el server); lo que cambia es quién lo dispara y que la línea se
+  monta **en caliente** (`whatsapp/wiring.ts:agregarLineaWhatsmeow`, sin `WHATSAPP_NUMEROS` ni reinicio).
+  Cerberus sigue siendo la ÚNICA vía para líneas de Escuela o de campaña; esto es solo `proposito:
+  'vendedora'`, y el número queda atado 1:1 a quien lo trajo (`numeros/autoVinculacion.ts`).
+  ⚠️ **El veto que queda es del SERVER, no de la persona**: `numeros/autoVinculacion.ts` pregunta
+  primero **`WHATSAPP_TRANSPORTE=whatsmeow`**, porque `Vinculador.iniciar()` hace
+  `createClient({ store: .wa-sessions/<n>.db })` **sin mirar el transporte** — un botón escribiría
+  43 MB de credencial real en VPS1 para un server que nunca va a montar esa línea.
+  🔴 **Este archivo decía «producción corre `falso`, así que contesta 409» y quedó VIEJO**: medido el
+  18-ago-2026 en el `.env` de VPS1, **`WHATSAPP_TRANSPORTE=whatsmeow`**. O sea que la puerta está
+  abierta de verdad. **Antes de afirmar que este frente está apagado, `grep WHATSAPP_TRANSPORTE` en
+  el `.env` de VPS1** — no lo deduzcas de acá.
+  🔴 **Y el veto por ROL se retiró el 18-ago-2026** (enmienda del dueño). Antes `esSupervisor()`
+  rechazaba con `es_supervisor`, y en producción eso eran tres personas reales
+  (`HERMES_SUPERVISORES` = `ventas10@grupogoberna.com`, `alan`, `Usuario1`). **Lo que NO se tocó es
+  el tope de UNA línea por persona**: se sacó el veto de quién, no el de cuántas — y hay test que se
+  pone rojo si alguien los confunde.
+  ⚠️ **No sobrevive un reinicio.** El montaje en caliente vive solo en el proceso: si el server
+  reinicia (N5, un crash), la línea auto-vinculada no vuelve a montarse sola — sigue siendo
+  `WHATSAPP_NUMEROS` + reinicio manual lo que la trae de vuelta, igual que hoy con una línea de
+  Cerberus. Cerrar esa brecha del todo es sacar el arranque de esa variable y leerlo de `numeros_wa`
+  (anotado como #194 en `numeros/dominio.ts`) — frente aparte, no resuelto acá.
+  🔴 **Y eso NO es una molestia, es la precondición**: medido, producción reinicia **24 veces por
+  semana** con mediana de **1,36 h** entre reinicios. Una línea auto-vinculada tiene vida esperada
+  de HORAS. **Sin #194 esto no se puede prender**, y el workaround «agregala a `WHATSAPP_NUMEROS`»
+  tampoco alcanza mientras el transporte esté en `falso`: ahí `wiring.ts` ni siquiera lee esa lista.
+  ⚠️ **Si el montaje en caliente falla, la fila QUEDA** (no hay `quitar` en `GestorWhatsapp`): la
+  respuesta trae `montada: false` y la pantalla lo dice en vez de festejar. El reintento es **volver
+  a vincular el MISMO número** — «solo 1» es cuántas líneas, no cuántas veces. Una línea que YA está
+  montada se rechaza con `linea_ya_corriendo`: el vinculador y el transporte abrirían el mismo `.db`
+  y SQLite no admite dos escritores.
 - **El webview viejo ya no existe**: `PanelWhatsapp.tsx`, `cuentas.ts`, `whatsapp/tipos.ts` y los tres
   preloads de `electron/` se borraron con ADR 0039.
 - **Nada de automatización, con UNA excepción escrita**: no envío masivo, no warmup, **no anti-ban**.
@@ -606,6 +641,46 @@ expand-only), UI en la línea de la hora de cada saliente.
 - UI: ✓ / ✓✓ / ✓✓ **azul**, el vocabulario que la vendedora ya trae del teléfono. `fallido` rompe el molde
   (triángulo rojo) porque es lo único que pide una acción. `docs/evidencia/entrega-tildes.png`.
 
+## Correos — con qué buzón sale, y a quién le contestan (ADR 0058)
+
+Un correo = UNA vendedora → UN destinatario, auditado. Server en `server/src/correos/` (todo puro
+salvo `repositorio.ts`) + `server/src/routes/correos.ts`, front en `src/features/correos/`, tabla
+`remitentes_correo` + cuatro columnas de `correos` (migración **0029**). Las dos decisiones del
+dueño: los remitentes viven en una tabla y se administran desde la app, y **el `Reply-To` es el
+correo de quien escribió**.
+
+- 🔴 **EL SMTP ES AMAZON SES** (`email-smtp.us-east-1.amazonaws.com`), **no `mail.goberna.us`** —el
+  MX de `goberna.us` es Google Workspace, así que por ahí no sale nada—. La doc lo dijo mal desde el
+  21-jul hasta el 17-ago-2026, y ese nombre de host **es lo que un operador busca justo cuando algo
+  falla**: manda a revisar un buzón de Google mientras el problema está en la consola de SES, con un
+  lead esperando. Una doc que miente sobre un dato de diagnóstico no es doc vieja, es una pista falsa.
+- 🔴 **`grupogoberna.com` NO está verificado en SES: los `ventas1X@` pueden ser `Reply-To` y NUNCA
+  `From`.** Medido mandando de verdad, con dos controles que cortan (`prueba@gmail.com` y
+  `a@gobernaus.com` dan **554 «Email address is not verified»**). `goberna.us` sí está verificado
+  **como dominio y cubre sus subdominios** (`avisos@mail.goberna.us` aceptado). De ahí sale la forma
+  del sobre: el `From` sale por un buzón verificado con el nombre de la vendedora en el display name
+  —que SES no verifica— y el `Reply-To` es la rendija, porque **SES verifica de quién SALE, no a
+  dónde se CONTESTA**. La lista vive en `SMTP_DOMINIOS_VERIFICADOS` y se chequea al **dar de alta**
+  (`correos/verificado.ts`), no al mandar: un remitente mal cargado no se ve mal en ningún lado y
+  aparece días después, en el correo de otra persona.
+- 🔴 **`sinSaltos()` ES LO ÚNICO QUE SEPARA LA CAJA DE ASUNTO DE UNA INYECCIÓN DE CABECERAS.** Una
+  cabecera SMTP termina en CRLF: un `\r` adentro del asunto la cierra y **lo que sigue se manda como
+  una cabecera nueva** — o sea que desde la pantalla se podía agregar un `Bcc:` y mandarle el correo
+  a quien fuera, sin tocar la API y sin dejar rastro en `correos`. Los que inyectan son `\r` y `\n`;
+  los otros cuatro se limpian igual para que la regla no tenga excepciones que alguien deba recordar.
+  ⚠️ Se reemplazan por un espacio, **no se borran**: borrarlos pega las palabras y al lead le llega
+  un asunto que en la pantalla se veía bien.
+- 🔴 **DAR DE ALTA EL PRIMER REMITENTE ES UN PASO MANUAL DEL DEPLOY**: `cd server && npm run
+  correos:remitentes -- --alta <buzón> --nombre "…" --aplicar` (dry-run por default). El front sale
+  por **N4** y el server por **N5**, así que hay una ventana con la tabla creada y vacía en la que la
+  pantalla de administración **todavía no existe del otro lado**. Sin el script eso se destraba con
+  un `INSERT` a mano contra producción, que **se saltea `puedeSerRemitente`** —el único control de
+  dominio verificado del frente— y el defecto sale en el 554 del primer envío. Mientras no haya
+  ninguno, Correos sale por `SMTP_FROM` como el 21-jul (compat, no falla).
+- Sin server: `npx vite --port 5199` → `/galeria-correos.html` (un flag por caso real). ⚠️ Sirve las
+  **tres filas que existen en producción** —las tres pruebas, con `desde` en hueco— y no un caso
+  ideal. Capturas: `docs/evidencia/correos-*.png`.
+
 ## La Libreta se comparte — espacios de trabajo (ADR 0046, revierte 0012 y 0034 §7)
 
 Una página vive en **mi libreta privada** o en un **espacio con miembros elegidos**. Server en
@@ -719,6 +794,117 @@ compartido a propósito: dos cachés servirían una cookie vieja tras un re-logi
 En el cliente, la sesión **se cree el token antes de preguntar** (ADR 0007): si hay uno guardado que no
 venció, la app se pinta ya y `/api/auth/yo` valida por detrás. La firma la verifica el server en cada
 request igual, y un 401 real echa y borra el caché.
+
+### Los roles viven en la tabla `equipo` (migración **0028**)
+
+Tres roles y son una **escalera**, no tres cajones (`server/src/equipo/roles.ts`): `vendedora` <
+`supervisor` < `admin`. El permiso se pregunta con `alcanzaRol`/`puedeSupervisar`, nunca con
+`rol === 'supervisor'` — con la comparación exacta el **admin** se queda afuera del padrón y de «El
+negocio». Reemplaza a `HERMES_SUPERVISORES`, que queda como **respaldo** hasta que se apague. La
+tercera lista de roles —`VEN_ROUTING` en el FRONT (`src/features/vistas/acceso.ts`)— sigue viva.
+
+- 🔴 **`cargarRol` RESUELVE EL BEARER POR SU CUENTA; no puede leer `req.vendedoraId`.** `'/api/auth'`
+  está en `PREFIJOS_ABIERTOS` y `routes/auth.ts` monta `requiereVendedora` como handler **del propio
+  `/yo`**, o sea después de todo `app.use`. Leyendo el request, el rol quedaría `undefined` justo en
+  `/api/auth/yo`, que es el ÚNICO canal por el que baja al front: **el panel invisible para todos,
+  incluido el admin, sin 403 y sin log**. Usa `verificarSesion` (puro), **nunca responde 401** —solo
+  anota— y con `if (!id) return next()` los tokens de servicio (`/api/admin`, `/api/catalogo`) no
+  pagan la consulta. Candado: `equipo/cargarRol.test.ts`.
+- 🔴 **«LA TABLA NO ESTÁ» Y «LA CONSULTA FALLÓ» NO SON LO MISMO, y colapsarlos abre la cola.** Tabla
+  ausente → cascada al `.env`, `sinTablaDeEquipo`, frontera **APAGADA** (como hoy). Blip de Postgres →
+  `vendedora`, `rolNoResuelto`, frontera **ENCENDIDA**. Tratar el blip como falta de migración apagaría
+  la frontera en cada hipo de la base — con los CSV ya apagados, eso es la cola entera servida a
+  cualquier token por unos segundos. Dos banderas, dos ramas, y `equipo/cascada.test.ts` se pone rojo
+  si alguien las unifica.
+- 🔴 **`persona_id` es CANÓNICO y lo garantiza la BASE** (`equipo_id_canonico_ck`): la fila `Luz` no
+  entra. Las grafías crudas viven en `equipo_grafia`. Las tres partidas de producción son `luz`/`Luz`,
+  `usuario1`/`Usuario1` y `usuario2`/`Usuario2` — **`alan` tiene una sola**.
+- **`HERMES_ADMINS` es el martillo detrás del vidrio**: entra como `admin` **antes** de mirar la base,
+  porque una salida de emergencia que depende de la base no es una salida. Marca `porBreakGlass`.
+- **La siembra corre al ARRANQUE** (molde de `sembrarAliasCurso`), es idempotente y **no pisa lo
+  editado a mano**: con un upsert, cada restart le devolvería su rol de fábrica a quien el admin acaba
+  de cambiar. ⚠️ **Y no siembra a quien el `.env` hace supervisor con un rol menor** (`revisarSemilla`):
+  una fila activa le gana al CSV, así que eso le sacaría el padrón en el próximo restart sin un error.
+  · 🔴 **La lista sale de la BASE, no de la cabeza de nadie.** El censo encontró **once** personas
+    donde el análisis nombraba cinco, y la que faltaba —`Tracy`— está activa en la rueda con 10
+    conversaciones. `npm run equipo:sembrar` (dry-run por default) rehace el censo contra la base viva
+    y **dice quién apareció que la semilla no tiene**. Las cadenas de servicio (`campana`,
+    `goberna-admin`, `bot`) no son personas, y `centurion:` se excluye **por prefijo**.
+- ⚠️ **`ventas10@grupogoberna.com` no está en la semilla a propósito**: su rol es una pregunta sin
+  decidir, y sin fila conserva exactamente lo que el `.env` le da hoy.
+
+## El tiempo real se filtra por dueña (**ADR 0059**)
+
+`GET /api/stream` era un **broadcast**: le empujaba a cada vendedora el teléfono de **cada** mensaje
+de todo Hermes, en vivo y sin quedar en ningún log. Server en `server/src/realtime/`.
+Contexto y las 82 fugas: `docs/auditoria-aislamiento-de-chats-2026-08-17.md`.
+
+- **El invariante, y es de todo el frente de aislamiento**: *ve el contenido de una conversación ⟺
+  es su dueña, o supervisa*. «Su supervisor» = **TODOS los supervisores** (decisión del dueño): se
+  pregunta **`mandaEnElEquipo(req)`**, nunca `rol === 'supervisor'`, o el admin queda afuera.
+- 🔴 **DOS TIPOS, y esa ES la frontera** (`realtime/bus.ts`): `EventoRT` se publica adentro y lleva
+  `duena`; `EventoPublico` es lo que sale por el cable y **no tiene dónde ponerla**. El nombre de la
+  dueña es un metadato ajeno («a Luz le escribieron recién»): que no se pueda serializar es más
+  fuerte que acordarse de no hacerlo.
+- 🔴 **`duena` es REQUERIDO aunque casi siempre valga `null`.** Opcional, un emisor nuevo compila sin
+  resolverlo: no fuga (la regla es fail-closed) pero deja **una campanita muerta sin un solo
+  síntoma**. Requerido, el compilador obliga a decidir.
+- 🔴 **La regla FALLA CERRADO y normaliza los DOS lados** (`realtime/visibilidad.ts`, pura). Con
+  `Luz` vs `luz` la comparación exacta no da error: da que **Luz se queda sin su propia campanita**,
+  para siempre. Misma cicatriz que `esMiaSql` y `mismaVendedora`.
+- 🔴 **NO copia `lineaAlcanzableSql`, y eso es deliberado.** La cola además lista **lo huérfano de tus
+  líneas**; acá no. Son dos preguntas —la cola decide qué se LISTA, esto qué se NOMBRA— y traer ese
+  predicado a TypeScript sería #37 **en una frontera**, donde divergir falla hacia ABIERTO.
+  ⚠️ **Lo que cuesta**: una conversación **sin dueña no le suena a nadie**. La fila igual aparece en
+  la cola y el hilo abierto se sigue refrescando; falta el sonido.
+- ⚠️ **El evento recortado SE MANDA igual** (`{tipo, canal}`): callarlo dejaría la cola de quien no es
+  dueña sin refrescar. Y en el front, sin `telefono` se invalida el **prefijo**
+  `['wa','conversacion']` — sin esa rama, toda conversación sin dueña dejaría de actualizarse sola
+  con el chat abierto, que es el defecto que este bus vino a arreglar.
+- 🔴 **EL PRIMER MENSAJE DE UN LEAD NUEVO SALE SIN DUEÑA**, porque `asignarSiHaceFalta` corre
+  **después** de persistir (y ese orden es a propósito: «un lead perdido no vuelve»). Por eso
+  `webhook/whatsapp.ts` avisa **de nuevo** tras asignar, y **sólo si antes no tenía dueña** —
+  `asignarSiHaceFalta` devuelve la dueña exista o no, así que sin esa comparación una conversación ya
+  asignada dispara DOS campanitas por mensaje.
+- **DOS candados, y el segundo es el que importa**: `visibilidad.test.ts` (la regla) y
+  **`routes/stream.test.ts` (el CABLEADO)**, que levanta el montaje real de `index.ts`, conecta dos
+  vendedoras y mira los bytes de cada cable. El defecto no era una regla mal escrita: era que **el
+  handler nunca miraba el request** (lección de ADR 0024). Los dos se verificaron en rojo.
+  ⚠️ Ese test necesita **`server.closeAllConnections()`**: `close()` espera a que las conexiones
+  abiertas terminen y un SSE no termina nunca.
+
+### `/vincular` ya no se monta en producción — y le quedó UN candado, no dos
+
+La consola de operador (D13) vivía montada **fuera del perímetro** y **sin un solo middleware**:
+`GET /vincular/estado` servía el **data-URI del QR** de un pareo en vuelo sin `Authorization` (quien
+lo escanee se queda con la sesión de WhatsApp de esa línea) y `POST /vincular/iniciar` **actuaba sin
+credencial**, abriendo un segundo escritor whatsmeow sobre el mismo SQLite. Leía el MISMO singleton
+`whatsapp/vinculador.ts` que las otras dos puertas, así que **derrotaba la guarda por dueño de
+`routes/miLinea.ts`** — cuyo propio docblock ya advertía «si Ana inicia un pareo y Bea consulta
+`/vincular/estado`, Bea vería el QR de Ana».
+
+Se cerró **moviendo el mount adentro de `if (NODE_ENV !== 'production')`** (PR #400), no borrándolo:
+en local sigue siendo la herramienta de trabajo. Candado: `routes/vincular.montaje.test.ts`.
+
+- 🔴 **TIENE UN SOLO CANDADO Y SUS VECINOS TIENEN DOS.** `_sim` y `_dev` se montan igual sólo fuera de
+  producción **y además** su exención del perímetro es solo-dev (`auth/perimetro.ts`) — es eso lo que
+  respalda la frase «en prod no hay agujero que recordar». **`/vincular` vive fuera de `/api`, así que
+  el perímetro nunca lo mira**: su única defensa es el `NODE_ENV`. Un despliegue con esa variable mal
+  puesta reabre la puerta entera.
+- ⚠️ **La regla de NGINX que la tapaba sigue SIN versionar en el repo** (403 desde internet, 200 desde
+  `127.0.0.1:4110`, medido el 17-ago — y VPS1 corre decenas de contenedores que alcanzan ese puerto).
+  Ya no es la única protección, pero sigue siendo config invisible para quien lea el código.
+- ⚠️ **La lección del método, y vale más que el arreglo**: leer el código da la SUPERFICIE y sólo el
+  sistema vivo da el ALCANCE. Los auditores la reportaron como alcanzable desde internet — lo es en el
+  código y no lo era en producción. Hacen falta los dos.
+
+### Lo que este frente NO cierra
+
+El hilo (`GET /api/whatsapp/conversacion/:telefono`), la ficha y `GET /api/persona/:interactionId`
+—**enumerable**, el id es un `serial`— siguen sirviendo cualquier conversación a cualquier token, y
+con ellas ~40 rutas más. **Lo que NO hay que hacer es parchearlas una por una**: así se llegó acá. La
+forma es el seam único `puedeVerConversacion(rol, vendedoraId, clave)` con su gemelo SQL, su test de
+paridad y un middleware que **rompa el arranque** si una ruta nueva no lo declara (auditoría §7.2).
 
 ## Ivi — el puente al cerebro RAG (proxy)
 
@@ -1249,9 +1435,11 @@ vista **Contactos**, primera solapa (`src/features/padron/`, `server/src/padron/
   **La vendedora no ve el padrón, ve lo que le habilitaron.** Por eso el recorte está en el `WHERE` de la
   ruta y **no** en un `if` del navegador: un recorte dibujado en el front no existe, los datos ya viajaron.
   Lo que NO cambia: el resto de Hermes sigue sin modelo de permisos.
-- **Quién es supervisor sale de `HERMES_SUPERVISORES`** (CSV de `vendedora_id`), no de una tabla.
-  **Fail-closed**, y la pantalla lo **dice** (`sinSupervisores`) en vez de mostrar una lista vacía. Se
-  compara normalizando los dos lados. **No se edita desde la app**, igual que la rueda del reparto.
+- **Quién manda sale de la tabla `equipo`** (§Los roles, migración 0028), con `HERMES_SUPERVISORES`
+  todavía de respaldo. Un **admin** entra igual que un supervisor: se pregunta `mandaEnElEquipo(req)`,
+  nunca `rol === 'supervisor'`. **Fail-closed**, y la pantalla lo **dice** (`sinSupervisores`, que se
+  resuelve con `hayQuienMande` — la MISMA cascada que el rol, o el copy contradice al 403) en vez de
+  mostrar una lista vacía. Se compara normalizando los dos lados.
 - **El reparto se guarda en Hermes** (`contacto_habilitado`, migración `0017`), nunca en icarus: la
   conexión fuerza `default_transaction_read_only=on` y **icarus sirve a un cliente real de consultoría**.
   ⚠️ `icarus.contacts.assigned_to` **parece** esto y no lo es: sus valores son **números de línea**.
@@ -1311,7 +1499,9 @@ vendedora veía el trabajo de las otras cuatro mezclado con el suyo. Server en
 
 - **Quien NO es supervisor ve SOLO sus conversaciones asignadas**, y el recorte baja a las **cinco**
   consultas (radar · embudo · series · «qué piden» · Equipo). Recortar la lista y dejar el riel global
-  daría dos respuestas a la misma pregunta en la misma pantalla. Supervisor sale de `HERMES_SUPERVISORES`.
+  daría dos respuestas a la misma pregunta en la misma pantalla. ⚠️ **`recorteDelDashboard` ya no lee
+  el entorno**: recibe el ROL que `cargarRol` resolvió (§Los roles), y un `admin` ve todo igual que un
+  supervisor.
 - 🔴 **Es una frontera, y hay que decir DE QUÉ**: la del **Dashboard**, no la del dato. El hilo, la ficha y
   el envío siguen sirviendo cualquier conversación a cualquier token. Es la **segunda** frontera del repo;
   el resto sigue siendo **filtro, no permiso**.
@@ -1814,7 +2004,14 @@ Solo en `server/.env` (gitignored). **Se referencian por nombre, jamás se pegan
 `AUTO_RESPUESTA_*`), `ICARUS_DATABASE_URL` (read-only al Postgres de icarus: el padrón de #133 **y** los
 72.923 contactos de ADR 0035), `HERMES_SUPERVISORES` (quién ve el padrón entero **y el Dashboard entero** —
 **no es un secreto, es una lista de `vendedora_id`**, pero fail-closed: sin ella nadie es supervisor y
-**todas ven solo lo suyo**). Ver `server/.env.example` (solo nombres).
+**todas ven solo lo suyo**; desde la tabla `equipo` es el **respaldo**, no la fuente) y **`HERMES_ADMINS`**
+(el break-glass: entra como `admin` aunque la base no conteste — tampoco es un secreto, y vacía = nadie).
+Correos (ADR 0058): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (el buzón de
+compatibilidad, el que se usa mientras no haya ningún remitente dado de alta) y
+`SMTP_DOMINIOS_VERIFICADOS` (**no es un secreto**: la lista de dominios que SES ya aceptó, default
+`goberna.us`). ⚠️ En SES el `SMTP_USER` es un **Access Key ID de IAM**, no un buzón: no sirve de
+`From` y no puede viajar al navegador.
+Ver `server/.env.example` (solo nombres).
 
 ## Reglas duras (Goberna)
 

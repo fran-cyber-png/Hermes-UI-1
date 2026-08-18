@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { AlertTriangle, Check, LogOut, Smartphone, UserRound } from 'lucide-react';
 import { usePopover } from '../../lib/teclado/usePopover';
 import { useLineas } from '../../dominio/lineas';
+import { VincularMiWhatsapp } from '../whatsapp/VincularMiWhatsapp';
 import { tieneSesionDeCerberus } from './identidad';
 import type { Vendedora } from './sesion';
 
@@ -31,10 +32,16 @@ import type { Vendedora } from './sesion';
  *      corresponde: adentro de «quién soy».
  *
  * ── Lo que NO hace ──
- * No edita nada. Es una pantalla de consulta: cambiar quién sos es salir y
- * volver a entrar, y el mapa de líneas lo dueña Cerberus. Un panel de identidad
- * con botones de escritura invita a creer que desde acá se arregla algo que se
- * arregla en otro lado.
+ * No edita nada de la IDENTIDAD: cambiar quién sos es salir y volver a entrar.
+ * El mapa de líneas lo sigue dueñando Cerberus para todo lo demás — Escuela,
+ * campaña, cualquier línea de otra vendedora.
+ *
+ * ── La ÚNICA excepción, desde el 15-ago-2026 ──
+ * Sin líneas asignadas, el panel ofrece «Vincular tu WhatsApp»: la
+ * auto-vinculación (`VincularMiWhatsapp`, D13 deja de ser solo consola de
+ * operador). Es angosta a propósito — solo 1 línea, solo si todavía no tenés
+ * ninguna — y por eso vive acá y no abre la puerta a editar nada más desde
+ * este panel.
  */
 
 export function PanelUsuario({
@@ -48,6 +55,13 @@ export function PanelUsuario({
   onSalir: () => void;
 }) {
   const [abierto, setAbierto] = useState(false);
+  // Vive ACÁ y no en `ContenidoUsuario`: si conviviera con el popover, dos
+  // listeners de Escape en captura sobre `window` (el de `usePopover` y el de
+  // `useEscape` del modal) competirían por la MISMA tecla — `stopPropagation`
+  // no frena a un listener HERMANO en el mismo elemento, solo a los de más
+  // arriba. Al abrir el modal se cierra el popover (`cerrar()`), así que su
+  // listener se desregistra y solo queda uno escuchando.
+  const [vinculando, setVinculando] = useState(false);
   const disparador = useRef<HTMLButtonElement>(null);
   const { lineas } = useLineas();
 
@@ -89,10 +103,21 @@ export function PanelUsuario({
             aria-label="Tu información"
             className="absolute bottom-0 left-full z-40 ml-2 w-64 rounded-xl border border-border bg-card p-3 shadow-panel"
           >
-            <ContenidoUsuario vendedora={vendedora} cerberusVivo={cerberusVivo} mias={mias} onSalir={onSalir} />
+            <ContenidoUsuario
+              vendedora={vendedora}
+              cerberusVivo={cerberusVivo}
+              mias={mias}
+              onSalir={onSalir}
+              onVincular={() => {
+                cerrar();
+                setVinculando(true);
+              }}
+            />
           </div>
         </>
       )}
+
+      {vinculando && <VincularMiWhatsapp onCerrar={() => setVinculando(false)} />}
     </span>
   );
 }
@@ -110,11 +135,14 @@ export function ContenidoUsuario({
   cerberusVivo,
   mias,
   onSalir,
+  onVincular,
 }: {
   vendedora: Vendedora;
   cerberusVivo: boolean | null;
   mias: { numero: string; etiqueta: string }[];
   onSalir: () => void;
+  /** Ausente = la galería, que pinta el panel solo (sin el modal detrás). */
+  onVincular?: () => void;
 }) {
   return (
     <>
@@ -189,12 +217,21 @@ export function ContenidoUsuario({
                   ))}
                 </ul>
               ) : (
-                /* Sin líneas asignadas se ve TODO — es el fail-open de
-                   `cola/lineas.ts`, y decirlo evita que lea la cola de todos
-                   creyendo que es la suya. */
-                <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-                  No tenés ninguna asignada, así que ves las conversaciones de todas.
-                </p>
+                <>
+                  {/* Sin líneas asignadas se ve TODO — es el fail-open de
+                      `cola/lineas.ts`, y decirlo evita que lea la cola de todos
+                      creyendo que es la suya. */}
+                  <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                    No tenés ninguna asignada, así que ves las conversaciones de todas.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onVincular?.()}
+                    className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-1.5 text-[11px] font-bold text-foreground transition-colors hover:border-primary/50 hover:text-primary"
+                  >
+                    <Smartphone size={12} /> Vincular tu WhatsApp
+                  </button>
+                </>
               )}
             </div>
 
