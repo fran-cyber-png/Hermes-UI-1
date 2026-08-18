@@ -12,8 +12,8 @@
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
 | front | 32 | 411 | 55,507 | 17,989 |
-| server | 66 | 768 | 79,999 | 49,493 |
-| **total** | **98** | **1,179** | **135,506** | **67,482** |
+| server | 66 | 769 | 80,198 | 49,493 |
+| **total** | **98** | **1,180** | **135,705** | **67,482** |
 
 ## Front — `src/`
 
@@ -58,7 +58,7 @@
 |---|---|--:|--:|--:|--:|--:|
 | `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. | 62 | 10,408 | 12 | 3 | 48 |
 | `bot` | El bot de primera línea que atiende solo: su agente, sus guardrails, sus frenos y el reenganche. | 56 | 7,997 | 24 | 7 | 13 |
-| `scripts` | Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción. | 34 | 5,623 | 0 | 0 | 33 |
+| `scripts` | Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción. | 35 | 5,822 | 0 | 0 | 35 |
 | `cola` | La consulta que ordena la deuda: a quién se atiende primero y por qué. Cada regla vive pura y con su gemelo SQL. | 57 | 4,894 | 38 | 9 | 6 |
 | `whatsapp` | La costura con WhatsApp: la interfaz de transporte y sus implementaciones, el hilo, y la única puerta por la que sale un envío. | 49 | 4,263 | 23 | 13 | 10 |
 | `db` | El schema y la conexión. Capa base del server: no conoce ninguna regla de negocio. | 20 | 3,862 | 1 | 53 | 0 |
@@ -69,7 +69,7 @@
 | `dashboard` | Los números: radar, embudo, series, y el recorte según quién los pide. Es una frontera. | 19 | 1,551 | 10 | 3 | 8 |
 | `espacios` | Dónde vive cada página de la Libreta y quién la puede ver o escribir. Es una frontera, no un filtro. | 18 | 1,490 | 8 | 2 | 2 |
 | `sdk` | 🪦 Heredado de meta-escuela — el SDK de consulta del dashboard de pauta. | 9 | 1,420 | 1 | 1 | 6 |
-| `numeros` | Los números de WhatsApp de Goberna: su estado de vinculación y de quién es cada uno. | 19 | 1,281 | 9 | 6 | 6 |
+| `numeros` | Los números de WhatsApp de Goberna: su estado de vinculación y de quién es cada uno. | 19 | 1,281 | 9 | 7 | 6 |
 | `cursos` | Traducir el texto con el que llegó una persona a una familia de curso. | 15 | 1,223 | 7 | 8 | 3 |
 | `webhook` | Todo lo que entra de afuera: Meta, WhatsApp, Cerberus y las landings. Ack primero, firma siempre. | 12 | 1,178 | 4 | 1 | 10 |
 | `analisis` | 🪦 Heredado de meta-escuela — los análisis del dashboard de pauta (ROAS, cartera, geo). | 15 | 1,173 | 6 | 5 | 2 |
@@ -89,7 +89,7 @@
 | `catalogo` | El catálogo de piezas que Ivi lee para ELEGIR sin inventar. Solo lectura, y nunca sirve medio catálogo. | 9 | 650 | 4 | 3 | 4 |
 | `senales` | «Cotizado» y «se enfrió»: se derivan en cada consulta, nunca se guardan. | 8 | 642 | 4 | 4 | 2 |
 | `procedencia` | De qué pieza salió cada envío, estampado en la ORDEN de envío y no en un update posterior. | 6 | 625 | 3 | 6 | 3 |
-| `auth` | Quién entra: Cerberus, Centurión, el token HMAC y el perímetro cerrado por default. | 13 | 610 | 7 | 5 | 2 |
+| `auth` | Quién entra: Cerberus, Centurión, el token HMAC y el perímetro cerrado por default. | 13 | 610 | 7 | 6 | 2 |
 | `telefono` | Partir y comparar un teléfono E.164. La llave canónica del repo: vive una sola vez. | 6 | 608 | 3 | 5 | 0 |
 | `reparto` | De quién es cada conversación cuando varias comparten una línea. Round-robin por carga, fail-open. | 6 | 590 | 3 | 7 | 2 |
 | `gestiones` | La bitácora comercial: lo que una persona AFIRMA sobre una conversación. | 8 | 546 | 4 | 5 | 5 |
@@ -142,8 +142,8 @@ Los módulos con más entradas son los que no se pueden tocar sin mirar a todo e
 | `server/autorespuesta` | 7 | `bot` · `campana` · `catalogo` · `index` · `routes` · `scripts` · `whatsapp` |
 | `server/bot` | 7 | `corridas` · `dashboard` · `index` · `routes` · `scripts` · `webhook` · `whatsapp` |
 | `server/gente` | 7 | `atribucion` · `autorespuesta` · `cola` · `cursos` · `dashboard` · `routes` · `scripts` |
+| `server/numeros` | 7 | `cola` · `dashboard` · `gente` · `index` · `routes` · `scripts` · `whatsapp` |
 | `server/reparto` | 7 | `espacios` · `eventos` · `numeros` · `padron` · `routes` · `scripts` · `webhook` |
-| `server/lazo` | 6 | `canales` · `index` · `ontologia` · `scripts` · `sdk` · `webhook` |
 
 ## Los nudos entre módulos (informativo, no es una regla)
 
