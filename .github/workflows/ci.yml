@@ -35,6 +35,25 @@ on:
 # WORKFLOW. Con `cancel-in-progress: true`, dos pushes seguidos (un merge y un hotfix)
 # pueden matar N4 justo entre `mv dist dist.anterior` y `mv dist.nuevo dist`, dejando
 # producción SIN front. En una rama, cancelar solo cuesta minutos de runner.
+# ══ ZONA HORARIA ═════════════════════════════════════════════════════════════
+# Producción corre en `America/Lima` y hay lógica de fechas que depende de la zona
+# del proceso. Mientras el CI vivió solo en VPS1 —también en Lima— esto no hacía
+# falta y por eso no estaba. Al mudar los jobs a VPS2 (`Europe/Berlin`) fallaron
+# tres tests de fecha, los tres por UN día exacto.
+#
+# No es un capricho del runner: es un bug real que el CI no podía ver. El código
+# construye la fecha con componentes LOCALES y la serializa en UTC, así que
+# `new Date(2026, 6, 11).toISOString()` da '2026-07-11' con cualquier offset
+# negativo (todas las Américas) y '2026-07-10' con uno positivo (Europa, Asia).
+# Está anotado como deuda: si Hermes opera algún día fuera de América, hay que
+# arreglar el código, no la variable. Ver hermes#421.
+#
+# Fijarla acá es correcto igual: un CI cuyo resultado dependa de la configuración
+# del host donde le tocó correr no es reproducible, y esta es la zona en la que
+# corre producción — que es lo que el CI tiene que estar probando.
+env:
+  TZ: America/Lima
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
