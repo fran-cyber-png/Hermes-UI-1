@@ -2025,6 +2025,42 @@ dns-cloudflare; el 4110 no se expone).
 (sin sesión desde el 28-jul). Hoy corren **`51963139984` por whatsmeow y `51984429504` por Cloud API** —
 ver §«Administración de números» para cómo se retira una línea de verdad.
 
+### El entorno de PRUEBAS y la rama `desarrollo`
+
+```
+feature/* --PR--> desarrollo --(N3)--> pruebas.hermes.goberna.us  +  pruebas.app.goberna.us
+                      |
+                     PR
+                      v
+                    main   --(N4/N5)--> producción
+```
+
+Detalle y el mapa cruzado con Cerberus: **`docs/entorno-de-pruebas.md`**.
+
+- **N3 es el MISMO entorno con dos propósitos**: en `desarrollo` es donde se previsualiza; en `main`
+  sigue siendo el ensayo que **gatea N4**. N4 y N5 siguen clavados a `main`.
+- 🔴 **Lo peligroso de pruebas no es el código, es la BASE: es una COPIA de producción.** Los teléfonos
+  y las conversaciones de adentro son de gente real y son correctos — un envío de prueba no rebota, llega.
+  Lo único que lo evita es el `.env`, y el inventario vive en **`deploy/vps1/env.pruebas.example`**
+  (🔴 apagada · 🟡 distinta · ⚪ igual). **Al agregar una variable de entorno nueva, decidí a qué grupo
+  pertenece y anotala ahí**, o el próximo que monte el entorno no puede saberlo.
+- 🔴 **Y hasta el 18-ago-2026 staging apuntaba a Cerberus de PRODUCCIÓN** (`CERBERUS_BASE_URL=
+  https://app.goberna.us`): registrar una venta en el ensayo la escribía en el ERP. Ahora apunta a
+  `pruebas.app.goberna.us`.
+- 🔴 **El candado es el `listen` de nginx, no una contraseña**: los vhosts escuchan solo en la IP de
+  Tailscale (`100.85.119.49` VPS1, `100.87.97.7` VPS2) y el DNS público apunta a esa `100.x`, que no se
+  rutea desde internet. Si Tailscale se cae, pruebas queda **inalcanzable**, no abierto. Lo que reabre el
+  agujero es cambiar un `listen` a `0.0.0.0`. Cert por **DNS-01** obligatoriamente (HTTP-01 necesitaría
+  que Let's Encrypt alcance el :80 desde afuera, y no puede).
+- ⚠️ **El front de pruebas se compila con `VITE_API_URL=https://pruebas.hermes.goberna.us`.** Con el
+  `127.0.0.1:4111` de antes el bundle solo servía abierto DENTRO de VPS1 — que era por qué staging existía
+  y no se podía mirar.
+- ⚠️ **La app de escritorio NO puede apuntar a pruebas**: `URL_PROD` está clavada en `lib.rs` sin override
+  por env. Pruebas se mira en el navegador; para la cáscara, `npm run dev:app`.
+- **Refrescar datos**: `deploy/vps1/refrescar-datos-pruebas.sh` (dry-run por default). Restaura producción
+  y **después** corre las migraciones de `desarrollo` encima, así cada refresco ensaya la migración
+  pendiente contra datos reales. A pedido, nunca por cron: pisaría lo que alguien esté probando.
+
 **Hay CD, en cinco niveles** (`docs/despliegue-continuo.md`; ADR 0021 y 0022). Corre en **dos hosts, y
 la división es deliberada** (18-ago-2026):
 
@@ -2055,7 +2091,7 @@ repos/Goberna-Lab/hermes/actions/runners`.
 |---|---|---|
 | **N1** | lint · typecheck · journal monótono · migraciones expand-only | toda corrida |
 | **N2 / N2b** | build · tests puros · secretos · tests con base | toda corrida |
-| **N3** | **staging** (`/srv/hermes-staging`, `:4111`, base en `:5440`): despliega, migra, smoke | push a `main` |
+| **N3** | **pruebas** (`/srv/hermes-staging`, `:4111`, base en `:5440`): despliega, migra, smoke | push a **`desarrollo`** y a `main` |
 | **N4** | front a producción, sin restart — cero downtime | solo si N3 pasó |
 | **N5** | server a producción: respalda, migra, reinicia, smoke, revierte solo si falla | **botón** |
 
@@ -2128,6 +2164,9 @@ run empaquetar:mac` → `src-tauri/target/release/bundle/dmg/`. **El `.exe` NO s
 
 `main` es **producción**: no se commitea ni se pushea directo. El camino es **rama + PR + CI verde**, y el
 merge va con **rebase** (historia lineal, se preservan los commits del PR).
+
+**`desarrollo` es la rama paralela**: los PRs de features caen ahí y se despliegan solos al entorno de
+pruebas. Promover es un PR **`desarrollo` → `main`**. Tampoco se pushea directo.
 
 - **Ramas**: `feat/`, `fix/`, `chore/`, `docs/` + descripción corta.
 - **Commits por unidad de trabajo**: cada uno se lee solo y explica *por qué*, no *qué*.
