@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Notebook, Plus, Search, Workflow, X } from 'lucide-react';
-import { DiagramaDePagina } from './DiagramaDePagina';
-import { EditorDePagina } from './EditorDePagina';
+import { DiagramaPerezoso, EditorPerezoso } from './perezosos';
 import { renglonDeEstado } from './guardado';
 import { useAutoguardado, type DestinoDeGuardado } from './useAutoguardado';
 import {
@@ -151,7 +150,7 @@ export function PantallaDividida({
             de columna de lectura. */}
         {esDiagrama
           ? (fase === 'creando-diagrama' || notaLista) && (
-              <DiagramaDePagina
+              <DiagramaPerezoso
                 key={divididaId !== null ? `div-${divididaId}` : 'div-nueva-diagrama'}
                 contenidoInicial={notaLista?.diagrama ?? undefined}
                 onCambio={(v) => alCambiar(v)}
@@ -159,7 +158,7 @@ export function PantallaDividida({
             )
           : (fase === 'creando' || notaLista) && (
               <div className="px-6 py-8">
-                <EditorDePagina
+                <EditorPerezoso
                   key={divididaId !== null ? `div-${divididaId}` : 'div-nueva'}
                   contenidoInicial={notaLista ? docParaEditor(notaLista) : undefined}
                   soloLectura={false}

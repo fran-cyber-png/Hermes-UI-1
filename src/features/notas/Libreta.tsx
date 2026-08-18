@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ChevronLeft, Link2, Notebook, Pin, PinOff, Plus, Search, Trash2, Undo2 } from 'lucide-react';
-import { TAB_POR_DEFECTO, type TabRibbon } from './ribbon/catalogo';
+import { TAB_POR_DEFECTO, type TabRibbon } from './ribbon/tabs';
 import { AccionesDePagina } from './AccionesDePagina';
-import { DiagramaDePagina } from './DiagramaDePagina';
-import { EditorDePagina } from './EditorDePagina';
+import { DiagramaPerezoso, EditorPerezoso, precargarDiagrama, precargarEditor } from './perezosos';
 import { PantallaDividida } from './PantallaDividida';
 import { mismoUsuario, nombreCorto, useEspacios, type DondeEstoy } from './espacios';
 import { SelectorDeEspacio } from './SelectorDeEspacio';
@@ -265,6 +264,26 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
     seleccion?.tipo === 'nota' ? notas.find((n) => n.id === seleccion.id && n.origen === seleccion.origen) : undefined;
   /** `null`/ausente = pantalla simple. Viene de la nota, así que sobrevive a un reload. */
   const divididaId = paginaAbierta?.paginaDivididaId ?? null;
+
+  /**
+   * PRECARGAR LO QUE SE VA A ABRIR (ver `perezosos.tsx`).
+   *
+   * El editor se pide SIEMPRE y sin esperar: entrar a la Libreta es entrar a
+   * escribir, así que el chunk viaja mientras la vendedora todavía está
+   * eligiendo la página. El diagrama sólo si en la lista hay alguno — son 82 KB
+   * gzip, y quien no usa diagramas no tiene por qué bajarlos.
+   *
+   * ⚠️ El primer diagrama de una libreta que no tiene ninguno SÍ ve el
+   * esqueleto: se crea desde «Nuevo Diagrama» de la pantalla dividida, y
+   * adivinar eso desde acá sería precargarlo para todos.
+   */
+  useEffect(() => {
+    precargarEditor();
+  }, []);
+  const hayDiagramas = notas.some((n) => n.tipo === 'diagrama');
+  useEffect(() => {
+    if (hayDiagramas) precargarDiagrama();
+  }, [hayDiagramas]);
 
   // Cambiar de página apaga el selector de división de la anterior — si no,
   // «Dividir pantalla» quedaría abierto encima de una página que no lo pidió.
@@ -553,7 +572,7 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
                     : 'Se lee, no se edita.'}
                 </div>
               </div>
-              <EditorDePagina
+              <EditorPerezoso
                 key={`link-${deLink.id}`}
                 contenidoInicial={docParaEditor(deLink)}
                 soloLectura={!porLink.data?.puedeEditar}
@@ -623,7 +642,7 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
 
           {!deLink && seleccion?.tipo === 'nueva' && (
             <ColumnaDeEscritura>
-              <EditorDePagina
+              <EditorPerezoso
                 key="nueva"
                 contenidoInicial={undefined}
                 soloLectura={false}
@@ -690,13 +709,13 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
                       </div>
                     )}
                     {esDiagrama ? (
-                      <DiagramaDePagina
+                      <DiagramaPerezoso
                         key={`${paginaAbierta.origen}-${paginaAbierta.id}`}
                         contenidoInicial={paginaAbierta.diagrama ?? undefined}
                         onCambio={(v) => alCambiar(v)}
                       />
                     ) : (
-                      <EditorDePagina
+                      <EditorPerezoso
                         key={`${paginaAbierta.origen}-${paginaAbierta.id}`}
                         contenidoInicial={docParaEditor(paginaAbierta)}
                         soloLectura={paginaAbierta.origen === 'gestion'}
