@@ -113,12 +113,12 @@ function prepararEscena() {
     }
 
     setTimeout(() => {
-      const buscador = document.querySelector<HTMLInputElement>('input[placeholder^="Buscar curso"]');
+      const buscador = document.querySelector<HTMLInputElement>('input[placeholder^="Buscar producto"]');
       if (buscador) escribir(buscador, 'foro');
       setTimeout(() => {
         clic(botones().find((b) => b.textContent?.includes('Foro De Estado')));
         if (CON_DESCUENTO) {
-          const otro = document.querySelector<HTMLInputElement>('input[placeholder^="Buscar curso"]');
+          const otro = document.querySelector<HTMLInputElement>('input[placeholder^="Buscar producto"]');
           if (otro) escribir(otro, 'diploma');
           setTimeout(() => {
             clic(botones().find((b) => b.textContent?.includes('Diploma de Inteligencia')));
