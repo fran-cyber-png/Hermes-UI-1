@@ -107,6 +107,21 @@ if (params.has('detalle')) {
   }, 600);
 }
 
+/**
+ * El tema oscuro de la agenda NO es un prop: lo pone `DarkModeToggle` como una
+ * clase en el contenedor (`agenda-dark-mode`). Para fotografiarlo hay que TOCAR
+ * el botón — el mismo que toca la vendedora. El selector pide el rótulo de
+ * «ir a oscuro» a propósito: si el navegador ya viene en oscuro (localStorage),
+ * el botón dice lo contrario y esto no lo apaga por accidente.
+ *
+ *  - `?oscuro=1` — cualquiera de las vistas, en tema oscuro.
+ */
+if (params.has('oscuro')) {
+  setTimeout(() => {
+    document.querySelector<HTMLButtonElement>('[aria-label="Cambiar a modo oscuro"]')?.click();
+  }, 300);
+}
+
 createRoot(document.getElementById('galeria')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
