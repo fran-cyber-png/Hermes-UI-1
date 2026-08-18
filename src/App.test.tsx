@@ -90,7 +90,31 @@ async function irALaLibreta(m: Montado, tecla: 'n' | '⌘8' = 'n'): Promise<void
   if (tecla === 'n') teclear('n');
   else teclear('8', { meta: true });
 
-  for (let turno = 0; turno < 50; turno++) {
+  /**
+   * 🔴 **ESTE TOPE ES UN SENSOR ACCIDENTAL DEL TAMAÑO DEL CHUNK, no una
+   * afirmación del test.** Lo que este helper afirma es «⌘8 abre la Libreta»;
+   * cuántos turnos del event loop tarda en montarse es andamio.
+   *
+   * Y 50 quedó corto: entrar a la Libreta trae hoy **377,8 KB gzip** en un solo
+   * chunk perezoso (BlockNote *y* React Flow, arrastrados por una constante de
+   * texto que cruza el borde del módulo). Medido en esta rama el 18-ago-2026:
+   * **79 turnos** el primer montaje.
+   *
+   * ⚠️ **Por eso pasa en local y falla en CI, que es como se ve un flake sin
+   * serlo**: con el caché de transform de Vite caliente el montaje da 0 turnos,
+   * y en el runner —frío, y con VPS1 al 210 % de carga— da los 79. Cualquier PR
+   * que sume archivos al front lo empuja por encima del filo, y el rojo aparece
+   * en un test de la Libreta que ese PR no tocó.
+   *
+   * Se sube a 300 y no a 80: el número no significa nada, y dejarlo pegado al
+   * valor medido garantiza que el próximo archivo lo vuelva a romper.
+   *
+   * ⚠️ **Esto NO es el arreglo, es el andamio.** El arreglo es partir ese chunk
+   * (PR #413: entrar pasa a ~20 KB y el montaje a ~41 turnos); cuando entre, el
+   * tope se puede volver a bajar. Y el aviso de «el chunk creció» va en el
+   * BUILD, no acá — un test no es el lugar donde enterarse del peso del bundle.
+   */
+  for (let turno = 0; turno < 300; turno++) {
     if (m.contenedor.querySelector('[aria-label="Buscar en tus páginas"]')) return;
     await reposar();
   }
