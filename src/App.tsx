@@ -57,10 +57,15 @@ import { ConsultaIvi } from './features/ivi/ConsultaIvi';
 
 /**
  * La Libreta se carga PEREZOSA y solo se monta cuando su vista está a la vista.
- * BlockNote pesa **269 KB gzip medidos** (el bundle principal pasa de 222 a 491
- * KB si entra estático). Que ahora sea una vista del riel no cambia el cálculo:
- * seguiría siendo un cuarto del bundle cobrado en el arranque a todas, incluso
- * las que ese día no entran a escribir nada.
+ * El editor no puede entrar al bundle del arranque: se le cobraría a todas,
+ * incluso a las que ese día no escriben nada.
+ *
+ * ⚠️ **Acá había dos números y los dos quedaron viejos** («BlockNote 269 KB
+ * gzip», «el bundle principal pasa de 222 a 491»). Medido el 18-ago-2026 con
+ * `vite build`: el arranque son **317 KB gzip** y este chunk llegó a **391**
+ * antes de partirse. Hoy son tres (ver `notas/perezosos.tsx`): entrar a la vista
+ * **20 KB**, abrir una página de texto **+289**, abrir un diagrama **+82**.
+ * El número no se vuelve a escribir a mano acá: lo mide `npm run presupuesto`.
  *
  * Y como toda vista que no es la Bandeja, se DESMONTA al salir: por eso la
  * Libreta adelanta su autoguardado pendiente en el desmontaje (ver su archivo).

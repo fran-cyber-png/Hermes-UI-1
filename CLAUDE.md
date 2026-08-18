@@ -817,6 +817,39 @@ Una página vive en **mi libreta privada** o en un **espacio con miembros elegid
 - ⚠️ **`/n/` sigue SIN rate limit** — verificado: ni nginx ni Express. Con 128 bits no es fuga, es
   disponibilidad. Es un cambio a mano en VPS1 y va aparte.
 
+### Entrar a la Libreta no es abrir el editor — tres chunks (18-ago-2026)
+
+La vista viaja perezosa desde ADR 0034, pero venía TODA en un chunk: entrar a buscar una nota y
+volverse costaba **377,8 KB gzip** y bajaba React Flow aunque no hubiera un solo diagrama. Ahora son
+tres fronteras (`notas/perezosos.tsx`): **entrar 20 KB · abrir una página +289 · abrir un diagrama
++82**. El editor se **precarga** al montar la Libreta y el diagrama sólo si en la lista hay alguno.
+
+- 🔴 **UNA CONSTANTE DE TEXTO ARRASTRABA EL MOTOR DEL EDITOR.** `Libreta.tsx` pedía
+  `TAB_POR_DEFECTO` —la cadena `'inicio'`— a `ribbon/catalogo.ts`, y ese archivo importa
+  `ESQUEMA_LIBRETA` (deriva «Insertar» del esquema, que es correcto y se queda) → `@blocknote/core`.
+  La identidad de las pestañas vive ahora en **`ribbon/tabs.ts`**, sin una línea de BlockNote, y
+  **`catalogo.ts` NO la re-exporta a propósito**: ese puente sería la recaída, igual de invisible.
+- 🔴 **EL AVISO DE «EL CHUNK CRECIÓ» VIVE EN EL BUILD, NO EN UN TEST.** `npm run presupuesto`
+  (`scripts/presupuesto-de-chunks.mjs`, paso con corte en **N2**) recorre el cierre de imports
+  **estáticos** del chunk de entrada, descuenta el del arranque, y falla si aparece `prosemirror` o
+  `react-flow__`. Verificado en los dos sentidos. ⚠️ Mide el **cierre**, no el archivo: la fuga no
+  engordaba el chunk de la Libreta, le colgaba otro al lado.
+- 🔴 **UN TOPE DE TURNOS EN UN TEST ES UN SENSOR ACCIDENTAL DEL BUNDLE.** Lo que avisó de esto fue el
+  helper de `App.test.tsx`, que había subido de 50 a **300 turnos** del event loop. Esa función
+  estaba **copiada cinco veces** en `features/notas` con `i < 20`: agregar UNA frontera perezosa
+  puso rojos **11 tests**, 10 de ellos sólo por el número. Ahora hay un solo `esperarA` en
+  `pruebas/dom.tsx` y **vence por TIEMPO**; el tope de turnos queda de red anti-cuelgue y el mensaje
+  dice cuál de los dos venció. ⚠️ Quedan cuatro esperas propias afuera de `notas` (`VistaCorreos`,
+  `PantallaHechos`, `VincularMiWhatsapp`) que **no son copias de ésta** y migrarlas cambia lo que
+  afirman: va aparte.
+- ⚠️ **El `key` que remonta el editor sigue andando** (`Suspense` no lo toca) y **sólo el primer
+  montaje muestra esqueleto**: después el módulo está en el registro y saltar de página no parpadea.
+- Evidencia: `docs/evidencia/libreta-tres-chunks-lista.png` (la vista con **19,7 KB**, sin editor
+  cargado) y `libreta-tres-chunks-editor.png` (la misma pantalla con la página abierta). Sin server:
+  `node scratchpad/api-espacios.mjs` + `VITE_API_URL=http://localhost:4199 npx vite --port 5199`.
+  ⚠️ **El esqueleto NO está fotografiado**: con la precarga andando no llega a verse, y forzarlo
+  pedía romper la precarga — o sea fotografiar algo que la app no hace.
+
 ## Auth
 
 Login de vendedoras **contra Cerberus** (Django, sin API REST): `cerberus/auth.ts` hace el handshake CSRF
