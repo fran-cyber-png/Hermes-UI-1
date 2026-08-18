@@ -80,6 +80,23 @@ El certificado sale por **DNS-01** (certbot dns-cloudflare, el mismo camino que
 `hermes-api.goberna.us`). Tiene que ser DNS-01: el desafío HTTP exige que Let's
 Encrypt alcance el puerto 80 desde afuera, y justamente no puede.
 
+## 🔴 Los dos nombres van fijados en `/etc/hosts`, y no es un atajo
+
+El **único** resolver de las dos máquinas es MagicDNS de Tailscale
+(`nameserver 100.100.100.100`). Medido el 18-ago-2026: para estos registros —nuevos,
+DNS-only y con TTL corto— falla **~2 de cada 10** consultas, mientras que
+`app.goberna.us` (proxiado por Cloudflare y cacheado en todos lados) da 0 de 10.
+
+El síntoma no se parece a un problema de DNS: Hermes traduce el `getaddrinfo ENOTFOUND`
+a **503 `cerberus_caido`**, así que se ve como «Cerberus está caído», intermitente y sin
+patrón. Costó un rato encontrarlo justamente por eso.
+
+Como las dos IPs son fijas (son las de la tailnet), fijarlas en `/etc/hosts` no pierde
+nada y saca la dependencia del medio. El TTL se subió además de 120 a 3600.
+
+⚠️ **Si movés una máquina de tailnet o cambia su IP 100.x, hay que tocar `/etc/hosts` en
+las dos** además del DNS. Es el precio de fijarlo.
+
 ## 🔴 Lo que hace peligroso a este entorno es la BASE
 
 No el código: los datos. Pruebas corre sobre una copia de producción, así que los
