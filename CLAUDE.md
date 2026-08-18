@@ -1432,6 +1432,53 @@ formularios** mal enlazados. Se arregló por los dos lados. Detalle: `docs/adr/0
   vite --port 5199` (sirve los 22 cursos y las 2 campañas **reales**, mojibake incluido). Capturas:
   `docs/evidencia/routing-producto-hoja.png`, `routing-producto-lista.png`.
 
+## La campaña no la ve la Escuela — la única frontera que el rol NO abre (**ADR 0061**)
+
+Goberna son DOS planos y no se cruzan: la **Escuela** (lo que Hermes atiende) y la **Consultoría** (el
+comando de campaña de un candidato). `numeros_wa.proposito = 'campana'` es la frontera, y la regla vive
+una vez en `server/src/numeros/campana.ts` con su gemelo SQL y su paridad.
+
+**Una línea de campaña sólo se le sirve a quien la atiende** (`numero_vendedora`). Medido el
+18-ago-2026: `51963139984` («Betto», la atienden `usuario2` y `centurion:betto.romero`) tiene 25
+conversaciones y 80 envíos en 30 días, y los veían enteros `alex` (supervisor), `alan` y `usuario1`
+(admin) — en la cola, el Pipeline, el selector, el Dashboard y el SSE, con teléfono y en vivo.
+
+- 🔴 **EL ROL NO ABRE ESTA PUERTA, Y ES LA ÚNICA ASÍ EN EL REPO.** El padrón (0035), el Dashboard
+  (0036), la cola (`fronteraDeAsignacionSql`) y el SSE (0059) le sirven todo a supervisor y admin
+  porque **quien supervisa es quien reparte**. Acá no: esto no separa el trabajo de un equipo que
+  comparte un negocio, separa **dos negocios**. Por eso `esVedadaParaMi` **no tiene parámetro
+  `veTodo`** — la firma es la garantía, y hay test que se pone rojo si aparece.
+  · ⚠️ **Administrar la línea sigue siendo de admin** (Routing, Equipo, alta y baja). Lo que se corta
+    es LEER sus conversaciones.
+  · ⚠️ **Dos de los tres «supervisores de ventas» son `admin`** (`alan`, `usuario1`). Escribir la
+    regla contra `rol === 'supervisor'` cumplía el pedido a un tercio, sin síntoma en pantalla.
+- 🔴 **EL GEMELO SQL PREGUNTA EN LA MISMA CONSULTA, no recibe una lista leída antes.** Es lo que hace
+  que no haya degradación que discutir: sin `numeros_wa` la consulta falla y no se sirve nada. Con una
+  lista aparte habría un `catch`, y su única respuesta cómoda es servir de más.
+  · Las **rutas** sí necesitan la lista (deciden un 403): `numeros/cargarLineasVedadas.ts`, gemelo de
+    `cargarRol`. Atrapa para que el proceso no se caiga (Express 4), pero **`vedadasDe(req)` TIRA** →
+    500. **No atrapar no es lo mismo que fallar abierto.**
+- ⚠️ **`NULL` y `''` PASAN, y es la mitad del contrato**: los comentarios de FB/IG y los leads de
+  formulario no entraron por ninguna línea nuestra. Un `NOT IN` a secas los tira a todos (`NULL NOT IN
+  (…)` es NULL) y eso se lee como «se cayeron los comentarios», nunca como una frontera de más.
+- 🔴 **EL HILO TIENE DOS MITADES**: con `?numeroPropio=` de campaña es **403 `linea_de_campana`**;
+  **sin** él se sirve igual y lo de campaña se cae adentro — `hiloDe` sin línea junta TODAS las del
+  teléfono, así que un 403 escondería también la conversación de la Escuela con la misma persona.
+- ⚠️ **`hiloDe` NO tiene default fail-closed, a propósito**: tres de sus cinco llamadores son
+  MAQUINARIA (`bot/orquestador.ts`, `bot/contexto.ts`, `corridas/correrCorrida.ts`) y el bot que
+  atiende la campaña ES esa línea. La frontera se resuelve en la RUTA, que es donde hay una persona.
+- ⚠️ **En `/api/persona/*` va como filtro del `WHERE` → 404, no 403**: el id es un `serial`
+  ENUMERABLE (hallazgo C3 de la auditoría), y un 403 confirmaría que existe.
+- ⚠️ **En el SSE, `linea` es un campo REQUERIDO de `EventoRT`** (como `duena`) y se consulta **ANTES**
+  que `esSuya` — que devuelve `true` de entrada para quien supervisa. Ese orden ES la regla.
+- **Una línea SIN registrar no se veda**: no hay propósito que leer, y vedar por las dudas escondería
+  tráfico real (`51987654321`, 2 conversaciones en prod y ninguna fila en `numeros_wa`).
+- **`soloSusLineas` no se toca**: sigue encerrando al operador de campaña en lo suyo. Son las dos
+  mitades de la misma frase — el docblock de `cola/lineas.ts` ya decía «y al revés tampoco», y esta
+  es la mitad que faltaba.
+- Sin server: `node scratchpad/api-campana.mjs` + `VITE_API_URL=http://localhost:4199 npx vite --port
+  5199`. Capturas: `docs/evidencia/campana-selector-sin-betto.png`, `campana-hilo-403.png`.
+
 ## El reparto de leads — de quién es cada conversación
 
 > Plan y decisiones: `docs/plan-reparto-de-leads.md`.
