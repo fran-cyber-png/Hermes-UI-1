@@ -46,7 +46,7 @@ Es el mismo entorno, pisado con el código de `main` — que a esa altura ya pas
 | Hermes — servicio | `hermes` · `:4110` | `hermes-staging` · `:4111` |
 | Hermes — base | `hermes_db` · `127.0.0.1:5438` | `hermes_staging_db` · `127.0.0.1:5440` |
 | Hermes — URL | `https://hermes-api.goberna.us` | `https://pruebas.hermes.goberna.us` |
-| Cerberus — contenedor | `cerberus_app` · `:8001` | `cerberus_pruebas_app` · `:8002` |
+| Cerberus — contenedor | `cerberus_app` · `:8001` | `cerberus_pruebas_app` · `:8003` |
 | Cerberus — URL | `https://app.goberna.us` | `https://pruebas.app.goberna.us` |
 | Máquina | VPS1 (Hermes) · VPS2 (Cerberus) | las mismas |
 
@@ -63,6 +63,18 @@ mantener, y porque el modo de falla es el correcto: si Tailscale se cae, pruebas
 
 ⚠️ **Lo que reabre el agujero es cambiar un `listen` a `0.0.0.0`** «para probar desde
 el celular». Adentro hay una copia de producción.
+
+🔴 **Y hay un modo de falla al revés, que casi muerde al montarlo**: escuchar en una IP
+que todavía no existe. `ip_nonlocal_bind` estaba en **0** en las dos máquinas y nginx no
+declara dependencia de orden con `tailscaled`, así que en un reinicio nginx podía
+arrancar primero, fallar el bind y **no levantar** — llevándose la API de producción en
+VPS1 y los ~40 sitios de clientes en VPS2. Resuelto con
+`/etc/sysctl.d/99-nginx-bind-tailscale.conf` en ambas. Si montás otro vhost sobre la
+tailnet, ese sysctl es parte del trato.
+
+⚠️ **nginx de VPS1 es 1.18 y el de VPS2 es 1.29**: `http2 on;` solo existe de 1.25 en
+adelante. En VPS1 va como parámetro del `listen`. `nginx -t` lo atrapa, pero solo si lo
+corrés antes del reload — y ahí la diferencia es entre no desplegar y tirar el server.
 
 El certificado sale por **DNS-01** (certbot dns-cloudflare, el mismo camino que
 `hermes-api.goberna.us`). Tiene que ser DNS-01: el desafío HTTP exige que Let's
