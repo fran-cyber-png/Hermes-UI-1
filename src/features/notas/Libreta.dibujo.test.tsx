@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { act } from 'react';
-import { montar, reposar, tocar, type Montado } from '../../pruebas/dom';
+import { esperarA, montar, reposar, tocar, type Montado } from '../../pruebas/dom';
 import { Libreta } from './Libreta';
 
 /**
@@ -130,25 +130,35 @@ afterEach(() => {
 
 const barra = () => document.querySelector('[role="toolbar"][aria-label="Herramientas de anotación"]');
 const capa = () => document.querySelector('canvas');
-const herramienta = (rotulo: string) => document.querySelector(`[aria-label="${rotulo}"]`) as HTMLButtonElement | null;
+/**
+ * 🔴 SE BUSCA DENTRO DE LA BARRA, no en todo el documento. La Ribbon del editor
+ * tiene su propio «Deshacer» (`ribbon/catalogo.ts`), así que un `querySelector`
+ * global devolvía EL DE LA RIBBON —habilitado— y el test afirmaba sobre un botón
+ * que no es el que está probando. Dos barras en la misma pantalla es la
+ * situación normal, no un caso raro.
+ */
+const herramienta = (rotulo: string) =>
+  (barra()?.querySelector(`[aria-label="${rotulo}"]`) ?? null) as HTMLButtonElement | null;
 
 function botonQueDice(texto: string): HTMLElement | undefined {
   return [...document.querySelectorAll('button')].find((b) => b.textContent?.includes(texto));
-}
-
-async function esperarA(condicion: () => boolean, queEsperaba: string) {
-  for (let i = 0; i < 20; i++) {
-    if (condicion()) return;
-    await reposar();
-  }
-  throw new Error(`nunca pasó: ${queEsperaba}\n\n${document.body.textContent}`);
 }
 
 async function abrir(titulo: string) {
   montado = montar(<Libreta vendedoraId="luz" />);
   await esperarA(() => Boolean(botonQueDice(titulo)), `llegó «${titulo}»`);
   botonQueDice(titulo)?.click();
-  await reposar();
+  /**
+   * 🔴 SE ESPERA AL EDITOR, no un turno suelto. Desde que el editor entra
+   * perezoso (`perezosos.tsx`), montarlo cuesta una promesa de `import()` y un
+   * `await reposar()` solo no alcanza: la capa y la barra se dibujan CONTRA el
+   * editor, así que sin esto los tests miraban una pantalla todavía vacía y
+   * fallaban con «el editor montó: expected null to be truthy».
+   */
+  await esperarA(
+    () => Boolean(document.querySelector('[data-libreta-editor]')),
+    'el editor perezoso terminó de montarse',
+  );
 }
 
 /* ── Dónde existe la capa ──────────────────────────────────────────────────── */
@@ -316,11 +326,43 @@ test('🔴 «Más colores» abre el selector con sus campos y sus dos botones', 
 
   const panel = document.querySelector('[role="dialog"][aria-label="Selector de color"]');
   expect(panel, 'no se abrió el selector').toBeTruthy();
-  for (const campo of ['Saturación y brillo', 'Matiz', 'R', 'G', 'B', 'Código hexadecimal']) {
+  for (const campo of ['Saturación y brillo', 'Rueda de matiz', 'R', 'G', 'B', 'Código hexadecimal']) {
     expect(panel!.querySelector(`[aria-label="${campo}"]`), `falta «${campo}»`).not.toBeNull();
   }
   expect(botonQueDice('Aceptar'), 'sin Aceptar el color no se aplica nunca').toBeTruthy();
   expect(botonQueDice('Cancelar'), 'sin Cancelar el popup es una trampa').toBeTruthy();
+});
+
+test('🔴 el selector NO cuelga de la barra, que recorta lo que se sale', async () => {
+  await abrir('precios del diplomado');
+  tocar(herramienta('Más colores')!);
+  await reposar();
+
+  /**
+   * EL DEFECTO QUE ESTE TEST ATRAPA, y que un `querySelector` no veía.
+   *
+   * El panel estaba montado ADENTRO de la barra, que lleva `overflow-y-auto`
+   * para poder scrollear sus botones. CSS obliga a `overflow-x: auto` en cuanto
+   * un eje deja de ser `visible`, así que todo lo posicionado fuera de la caja
+   * —el panel va con `right-full`— queda recortado. El elemento existía, el test
+   * lo encontraba, y en pantalla el clic «no hacía nada».
+   *
+   * jsdom no hace layout, así que el recorte no se puede medir. Lo que sí se
+   * puede fijar es el MECANISMO: el panel no puede descender de un contenedor
+   * que scrollea.
+   */
+  const panel = document.querySelector('[role="dialog"][aria-label="Selector de color"]')!;
+  expect(panel, 'no se montó el selector').toBeTruthy();
+  expect(barra()!.contains(panel), 'el selector cuelga de la barra y quedaría recortado').toBe(false);
+});
+
+test('🔴 el panel de capas tampoco cuelga de la barra', async () => {
+  await abrir('precios del diplomado');
+  tocar(herramienta('Panel de capas')!);
+  await reposar();
+
+  const panel = document.querySelector('[role="dialog"][aria-label="Capas"]')!;
+  expect(barra()!.contains(panel)).toBe(false);
 });
 
 test('Cancelar cierra sin tocar el color elegido', async () => {
@@ -426,18 +468,67 @@ test('🔴 el panel de Capas trae el orden Z y la lista de capas', async () => {
   expect(panel!.querySelector('[aria-label="Bloquear Capa 1"]'), 'falta el candado').not.toBeNull();
 });
 
-test('🔴 la última capa no se puede borrar', async () => {
+test('🔴 con una sola capa, «Eliminar» está apagado en su menú', async () => {
   await abrir('precios del diplomado');
   tocar(herramienta('Panel de capas')!);
   await reposar();
 
-  // Sin ninguna capa, las figuras nuevas no tendrían dónde caer.
-  const borrar = document.querySelector('[aria-label="Borrar Capa 1"]') as HTMLButtonElement;
-  expect(borrar.disabled).toBe(true);
-
-  tocar(document.querySelector('[aria-label="Agregar capa"]') as HTMLElement);
+  tocar(document.querySelector('[aria-label="Opciones de la capa"]') as HTMLElement);
   await reposar();
-  expect((document.querySelector('[aria-label="Borrar Capa 1"]') as HTMLButtonElement).disabled).toBe(false);
+
+  const eliminar = [...document.querySelectorAll('[role="menuitem"]')].find((b) =>
+    b.textContent?.includes('Eliminar'),
+  ) as HTMLButtonElement;
+  // Sin ninguna capa, las figuras nuevas no tendrían dónde caer.
+  expect(eliminar.disabled).toBe(true);
+});
+
+test('🔴 cada capa muestra una MINIATURA de su contenido', async () => {
+  await abrir('precios del diplomado');
+  tocar(herramienta('Panel de capas')!);
+  await reposar();
+
+  // Es lo que hace el panel útil: saber qué hay adentro sin encenderla y
+  // apagarla. Un ícono por tipo de capa no diría nada.
+  expect(document.querySelector('[data-miniatura]'), 'no se dibujó la miniatura').toBeTruthy();
+});
+
+test('la capa muestra su opacidad y su cantidad de objetos', async () => {
+  await abrir('precios del diplomado');
+  tocar(herramienta('Panel de capas')!);
+  await reposar();
+
+  const panel = document.querySelector('[role="dialog"][aria-label="Capas"]')!;
+  expect(panel.textContent).toContain('100%');
+  expect(panel.textContent).toContain('0 objetos');
+});
+
+test('🔴 la opacidad DE LA CAPA es un control propio, aparte de la del objeto', async () => {
+  await abrir('precios del diplomado');
+  tocar(herramienta('Panel de capas')!);
+  await reposar();
+
+  // Son dos cosas distintas y se multiplican: objeto 50 % en capa 50 % = 25 %.
+  const deLaCapa = document.querySelector('[aria-label="Opacidad de la capa"]') as HTMLInputElement;
+  expect(deLaCapa, 'falta el deslizador de la capa').toBeTruthy();
+  expect(document.querySelector('[aria-label="Opacidad de la capa en porcentaje"]'), 'falta el campo numérico')
+    .toBeTruthy();
+  // Y el de la barra, que es el del OBJETO, sigue existiendo aparte.
+  expect(document.querySelector('[aria-label="Opacidad"]')).toBeTruthy();
+});
+
+test('«Nueva» agrega una capa y la deja activa', async () => {
+  await abrir('precios del diplomado');
+  tocar(herramienta('Panel de capas')!);
+  await reposar();
+
+  tocar(document.querySelector('[aria-label="Nueva capa"]') as HTMLElement);
+  await reposar();
+
+  const filas = document.querySelectorAll('[role="dialog"][aria-label="Capas"] li');
+  expect(filas).toHaveLength(2);
+  // Arriba va la que se pinta encima, y la nueva queda activa.
+  expect(filas[0].getAttribute('aria-current')).toBe('true');
 });
 
 test('el orden Z está apagado sin selección', async () => {

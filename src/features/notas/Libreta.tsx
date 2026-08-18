@@ -3,9 +3,19 @@ import { AlertTriangle, ChevronLeft, Link2, Notebook, Pin, PinOff, Plus, Search,
 import { TAB_POR_DEFECTO, type TabRibbon } from './ribbon/tabs';
 import { BarraDeDibujo, GROSORES, PALETA, type Herramienta } from './dibujo/BarraDeDibujo';
 import { CapaDeAnotaciones } from './dibujo/CapaDeAnotaciones';
+import { SelectorDeColor } from './dibujo/SelectorDeColor';
 import { useAnotaciones } from './dibujo/useAnotaciones';
 import { CAPA_BASE, paraGuardar, type Figura } from './dibujo/figuras';
-import { CAPAS_INICIALES, agregarCapa, borrarCapa, cambiarCapa, capasNecesarias, type Capa } from './dibujo/capas';
+import {
+  CAPAS_INICIALES,
+  agregarCapa,
+  borrarCapa,
+  cambiarCapa,
+  capasNecesarias,
+  duplicarCapa,
+  moverCapa,
+  type Capa,
+} from './dibujo/capas';
 import { PanelDeCapas } from './dibujo/PanelDeCapas';
 import { agregarReciente, leerRecientes } from './dibujo/coloresRecientes';
 import { AccionesDePagina } from './AccionesDePagina';
@@ -189,6 +199,13 @@ function ZonaDeTrabajo({
   const [capaActiva, setCapaActiva] = useState(CAPA_BASE);
   const [capas, setCapas] = useState<Capa[]>(CAPAS_INICIALES);
   const [panelDeCapas, setPanelDeCapas] = useState(false);
+  const [selectorDeColor, setSelectorDeColor] = useState(false);
+  /**
+   * El color de antes de abrir el selector, para que «Cancelar» pueda volver.
+   * Se toma al ABRIR y no en cada render: durante la vista previa `color` ya
+   * cambió, y leerlo entonces devolvería el color previsualizado.
+   */
+  const [colorAlAbrir, setColorAlAbrir] = useState(PALETA[0] as string);
   const [recientes, setRecientes] = useState<string[]>(leerRecientes);
   const [subiendo, setSubiendo] = useState(false);
   /**
@@ -231,15 +248,28 @@ function ZonaDeTrabajo({
    */
   const capasVivas = capasNecesarias(capas, anotaciones.figuras);
 
-  const cuantasPorCapa = anotaciones.figuras.reduce<Record<string, number>>((acc, f) => {
-    acc[f.capaId] = (acc[f.capaId] ?? 0) + 1;
-    return acc;
-  }, {});
+  /**
+   * LA OPACIDAD HACE LO MISMO QUE EL COLOR, y antes no.
+   *
+   * Con objetos elegidos los atenúa; sin nada elegido queda para los próximos.
+   * El deslizador solo guardaba el valor futuro, así que sobre una selección no
+   * pasaba nada — se veía como un control roto.
+   */
+  const elegirOpacidad = (o: number) => {
+    setOpacidad(o);
+    anotaciones.opacarSeleccion(o);
+  };
 
-  const elegirColor = (c: string) => {
+  /** Mientras se arrastra por el selector: se ve, pero no se anota. */
+  const previsualizarColor = (c: string) => {
     setColor(c);
-    setRecientes(agregarReciente(c));
     anotaciones.pintarSeleccion(c);
+  };
+
+  /** Elegido de verdad (paleta, reciente o «Aceptar»): además va a la lista. */
+  const elegirColor = (c: string) => {
+    previsualizarColor(c);
+    setRecientes(agregarReciente(c));
   };
 
   /**
@@ -286,22 +316,73 @@ function ZonaDeTrabajo({
           <div className="absolute bottom-2 right-2 z-30">
             <PanelDeCapas
               capas={capasVivas}
+              figuras={anotaciones.figuras}
               capaActiva={capaActiva}
               haySeleccion={anotaciones.seleccionadas.length > 0}
-              cuantasPorCapa={cuantasPorCapa}
               onCapaActiva={setCapaActiva}
-              onCambiarCapa={(id, cambios) => setCapas((cs) => cambiarCapa(capasNecesarias(cs, anotaciones.figuras), id, cambios))}
-              onAgregar={() => setCapas((cs) => agregarCapa(capasNecesarias(cs, anotaciones.figuras)))}
-              onBorrar={(id) => {
-                const r = borrarCapa(capasVivas, id);
-                if (!r) return;
-                // Lo que tenía se muda; borrar una capa por error no puede
-                // llevarse el trabajo de una hora.
-                anotaciones.mudarDeCapa(id, r.mudarA);
+              onCambiarCapa={(id, cambios) => setCapas(cambiarCapa(capasVivas, id, cambios))}
+              onRenombrar={(id, nombre) => setCapas(cambiarCapa(capasVivas, id, { nombre }))}
+              onAgregar={() => {
+                const r = agregarCapa(capasVivas, capaActiva);
                 setCapas(r.capas);
-                if (capaActiva === id) setCapaActiva(r.mudarA);
+                // La nueva queda activa: es lo que se espera al apretar «+».
+                setCapaActiva(r.nueva.id);
               }}
+              onDuplicar={(id) => {
+                const r = duplicarCapa(capasVivas, anotaciones.figuras, id);
+                if (!r) return;
+                setCapas(r.capas);
+                setCapaActiva(r.nueva.id);
+                // Las copias van por el hook para que entren al historial: un
+                // ⌘Z tiene que poder deshacer «dupliqué una capa».
+                anotaciones.reemplazar(r.figuras);
+              }}
+              onBorrar={(id) => {
+                const r = borrarCapa(capasVivas, anotaciones.figuras, id);
+                if (!r) return;
+                /**
+                 * 🔴 SE PREGUNTA SOLO SI SE LLEVA ALGO. Un `confirm` sobre una
+                 * capa vacía es una fricción que enseña a apretar «Aceptar» sin
+                 * leer — y entonces el día que la capa tenga ocho objetos, la
+                 * confirmación tampoco se lee.
+                 */
+                if (r.seLleva.length > 0) {
+                  const cuantos = r.seLleva.length;
+                  const ok = window.confirm(
+                    `¿Eliminar esta capa?\n\nTambién se eliminan los ${cuantos} ${cuantos === 1 ? 'elemento' : 'elementos'} que contiene.`,
+                  );
+                  if (!ok) return;
+                }
+                setCapas(r.capas);
+                if (capaActiva === id) setCapaActiva(r.activaNueva);
+                anotaciones.reemplazar(
+                  anotaciones.figuras.filter((f) => f.capaId !== id),
+                  [],
+                );
+              }}
+              onMover={(id, hacia) => setCapas(moverCapa(capasVivas, id, hacia))}
               onOrdenar={anotaciones.ordenarSeleccion}
+            />
+          </div>
+        </div>
+      )}
+
+      {/*
+        EL SELECTOR AVANZADO. Fuera de la barra, por el mismo motivo que el panel
+        de capas: la barra scrollea (`overflow-y-auto`) y recorta todo lo que se
+        posicione fuera de su caja. Adentro se montaba y no se veía.
+      */}
+      {puedeDibujar && selectorDeColor && (
+        <div className="relative">
+          <div className="absolute bottom-2 right-2 z-40">
+            <SelectorDeColor
+              inicial={colorAlAbrir}
+              onVistaPrevia={previsualizarColor}
+              onCancelar={() => setSelectorDeColor(false)}
+              onAceptar={(c) => {
+                elegirColor(c);
+                setSelectorDeColor(false);
+              }}
             />
           </div>
         </div>
@@ -315,6 +396,7 @@ function ZonaDeTrabajo({
           opacidad={opacidad}
           recientes={recientes}
           capasAbiertas={panelDeCapas}
+          selectorAbierto={selectorDeColor}
           puedeDeshacer={anotaciones.puedeDeshacer}
           puedeRehacer={anotaciones.puedeRehacer}
           hayAlgo={anotaciones.hayAlgo}
@@ -322,8 +404,13 @@ function ZonaDeTrabajo({
           onHerramienta={setHerramienta}
           onColor={elegirColor}
           onGrosor={setGrosor}
-          onOpacidad={setOpacidad}
+          onOpacidad={elegirOpacidad}
           onCapas={() => setPanelDeCapas((v) => !v)}
+          onSelector={() => {
+            // Al abrir se recuerda el color actual: es lo que «Cancelar» restaura.
+            if (!selectorDeColor) setColorAlAbrir(color);
+            setSelectorDeColor((v) => !v);
+          }}
           onImagen={() => abrirArchivo?.abrir()}
           onDeshacer={anotaciones.deshacer}
           onRehacer={anotaciones.rehacer}
@@ -567,7 +654,7 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
       // necesita la rama — solo `actualizar`, para cuando se abre acá una que
       // ya existía como diagrama (por búsqueda, por «Mover», o al reabrirla).
       actualizar: (v) =>
-        paginaAbierta?.tipo === 'diagrama' ? autoguardarDiagrama.mutateAsync({ id: v.id, diagrama: v.doc }) : autoguardar.mutateAsync(v),
+        paginaAbierta?.tipo === 'diagrama' ? autoguardarDiagrama.mutateAsync({ id: v.id, diagrama: v.diagrama }) : autoguardar.mutateAsync(v),
       crear: (v) => crear.mutateAsync(v),
     },
     alCrear: (id) => setSeleccion({ tipo: 'nota', id, origen: 'nota' }),

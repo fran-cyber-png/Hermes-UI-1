@@ -19,7 +19,7 @@ import {
   tiradorTocado,
 } from './figuras';
 import { CajaFlotante } from './CajaFlotante';
-import { type Capa, seleccionables, visibles } from './capas';
+import { type Capa, opacidadEfectiva, seleccionables, visibles } from './capas';
 import { LADO_TIRADOR, pintar } from './pintar';
 import type { Anotaciones } from './useAnotaciones';
 
@@ -216,8 +216,12 @@ export function CapaDeAnotaciones({
       // Los recuadros y tiradores solo con la herramienta de selección: con el
       // lápiz en la mano serían cajas azules que no hacen nada.
       conAdornos: herramienta === 'seleccion',
+      // La opacidad final es la del objeto POR la de su capa. Se resuelve acá y
+      // no en el pintor: quien pinta no conoce las capas, y la de la capa es una
+      // lente que no está guardada en la figura (ver `capas.ts`).
+      opacidadDe: (f) => opacidadEfectiva(f, capas),
     });
-  }, [paraVer, enCurso, medida, dpr, seleccionadas, lazo, herramienta, imagenesListas]);
+  }, [paraVer, enCurso, medida, dpr, seleccionadas, lazo, herramienta, imagenesListas, capas]);
 
   /* ── Puntero ───────────────────────────────────────────────────────────── */
 
@@ -728,7 +732,10 @@ export function CapaDeAnotaciones({
         .map((f) => (
           <CajaFlotante
             key={f.id}
-            figura={f}
+            // La caja es DOM, así que su opacidad no pasa por el pintor: se le
+            // entrega ya resuelta, o una capa al 40 % dejaría los trazos
+            // atenuados y los textos opacos.
+            figura={{ ...f, opacidad: opacidadEfectiva(f, capas) }}
             editando={editandoCaja === f.id}
             elegida={seleccionadas.includes(f.id)}
             // Con la capa en reposo, la caja deja pasar el clic al editor.

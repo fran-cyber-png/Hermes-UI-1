@@ -90,8 +90,8 @@ export function PantallaDividida({
   const { estado: estadoGuardado, alCambiar } = useAutoguardado({
     destino,
     puertas: {
-      actualizar: (v) => (esDiagrama ? autoguardarDiagrama.mutateAsync({ id: v.id, diagrama: v.doc }) : editar.mutateAsync(v)),
-      crear: (v) => (esDiagrama ? crearDiagrama.mutateAsync({ diagrama: v.doc }) : crear.mutateAsync(v)),
+      actualizar: (v) => (esDiagrama ? autoguardarDiagrama.mutateAsync({ id: v.id, diagrama: v.diagrama }) : editar.mutateAsync(v)),
+      crear: (v) => (esDiagrama ? crearDiagrama.mutateAsync({ diagrama: v.diagrama }) : crear.mutateAsync(v)),
     },
     alCrear: (id) => {
       // La creación y la división son DOS escrituras, pero desde afuera se ven

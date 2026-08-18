@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   ArrowUpRight,
   Circle,
@@ -18,7 +17,6 @@ import {
   Type,
   Undo2,
 } from 'lucide-react';
-import { SelectorDeColor } from './SelectorDeColor';
 import type { ClaseDeDosPuntos } from './figuras';
 
 /**
@@ -198,6 +196,7 @@ export function BarraDeDibujo({
   opacidad,
   recientes,
   capasAbiertas,
+  selectorAbierto,
   puedeDeshacer,
   puedeRehacer,
   hayAlgo,
@@ -207,6 +206,7 @@ export function BarraDeDibujo({
   onGrosor,
   onOpacidad,
   onCapas,
+  onSelector,
   onImagen,
   onDeshacer,
   onRehacer,
@@ -220,6 +220,7 @@ export function BarraDeDibujo({
   /** Los últimos colores propios. Vacío = todavía no se usó ninguno. */
   recientes: string[];
   capasAbiertas: boolean;
+  selectorAbierto: boolean;
   puedeDeshacer: boolean;
   puedeRehacer: boolean;
   hayAlgo: boolean;
@@ -229,14 +230,22 @@ export function BarraDeDibujo({
   onGrosor: (g: number) => void;
   onOpacidad: (o: number) => void;
   onCapas: () => void;
+  /**
+   * 🔴 Abre el selector avanzado, que se monta FUERA de esta barra.
+   *
+   * Estaba acá adentro y NO SE VEÍA: la barra lleva `overflow-y-auto` para poder
+   * scrollear sus botones, y CSS obliga a `overflow-x: auto` en cuanto un eje
+   * deja de ser `visible`. El popup se posiciona con `right-full`, o sea fuera de
+   * la caja de la barra — así que existía en el DOM, se podía encontrar con un
+   * test, y quedaba recortado. Un clic que «no hace nada» sin un solo error.
+   */
+  onSelector: () => void;
   /** Abre el buscador de archivos. La subida la maneja la capa. */
   onImagen: () => void;
   onDeshacer: () => void;
   onRehacer: () => void;
   onLimpiar: () => void;
 }) {
-  const [abierto, setAbierto] = useState(false);
-
   const boton = ({ id, rotulo, Icono }: Entrada) => (
     <Boton key={id} activo={herramienta === id} rotulo={rotulo} onClick={() => onHerramienta(id)}>
       <Icono className="size-4" />
@@ -317,7 +326,7 @@ export function BarraDeDibujo({
       </div>
 
       {/* MÁS COLORES. El cuentagotas abre el selector completo. */}
-      <Boton rotulo="Más colores" activo={abierto} onClick={() => setAbierto((a) => !a)}>
+      <Boton rotulo="Más colores" activo={selectorAbierto} onClick={onSelector}>
         <Pipette className="size-4" />
       </Boton>
 
@@ -385,24 +394,6 @@ export function BarraDeDibujo({
         <Trash2 className="size-4" />
       </Boton>
 
-      {/*
-        EL POPUP. Va a la IZQUIERDA de la barra (`right-full`) porque la barra ya
-        está pegada al borde derecho de la ventana: hacia afuera se saldría de la
-        pantalla. Y anclado abajo (`bottom-2`) para que el panel, que es más alto
-        que muchos de los botones, no se corte contra el techo.
-      */}
-      {abierto && (
-        <div className="absolute bottom-2 right-full z-30 mr-2">
-          <SelectorDeColor
-            inicial={color}
-            onCancelar={() => setAbierto(false)}
-            onAceptar={(c) => {
-              onColor(c);
-              setAbierto(false);
-            }}
-          />
-        </div>
-      )}
     </div>
   );
 }

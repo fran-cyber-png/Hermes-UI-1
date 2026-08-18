@@ -23,9 +23,12 @@ import { type Hsv, aByte, aHex, desdeHex, hexAHsv, hsvAHex, hsvARgb, rgbAHsv, ti
  * en un solo cambio, que es lo que la vendedora entiende por «cambié el color».
  */
 
-/** El lado del cuadrado y el alto de la barra, en píxeles de CSS. */
-const LADO = 176;
-const ALTO_BARRA = 14;
+/** El diámetro de la rueda, en píxeles de CSS. */
+const RUEDA = 150;
+/** Qué tan gruesa es la corona de la rueda. */
+const GROSOR_RUEDA = 16;
+/** El cuadrado inscripto en el hueco: lado = radio interior × √2. */
+const LADO_INTERIOR = Math.floor(((RUEDA - GROSOR_RUEDA * 2) / 2) * Math.SQRT2);
 
 function recortar(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
@@ -51,6 +54,73 @@ function useArrastre(alMover: (x: number, y: number) => void) {
       alMover(recortar((e.clientX - caja.left) / caja.width, 0, 1), recortar((e.clientY - caja.top) / caja.height, 0, 1));
     },
   };
+}
+
+/**
+ * LA RUEDA DE MATIZ.
+ *
+ * ══ POR QUÉ UN CONO CÓNICO Y NO UN CANVAS ═══════════════════════════════════
+ *
+ * `conic-gradient` con los seis vértices del espectro produce exactamente la
+ * rueda, la pinta el navegador y se redibuja sola al cambiar de tamaño. Un
+ * canvas pediría recorrer 360 sectores a mano en cada render y quedaría pixelado
+ * al escalar. El agujero del medio lo hace un `radial-gradient` de máscara: así
+ * el cuadrado de saturación puede vivir adentro de la corona.
+ *
+ * El ángulo se saca con `atan2` desde el centro. `+90` porque el gradiente
+ * cónico de CSS arranca arriba (las 12) y el matiz 0 —el rojo— tiene que quedar
+ * ahí; sin ese corrimiento, la rueda se ve bien y el color que devuelve está a
+ * un cuarto de vuelta de donde se apuntó.
+ */
+function RuedaDeMatiz({ matiz, onMatiz }: { matiz: number; onMatiz: (h: number) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  const desdeElPuntero = (e: React.PointerEvent) => {
+    const caja = ref.current?.getBoundingClientRect();
+    if (!caja) return;
+    const dx = e.clientX - (caja.left + caja.width / 2);
+    const dy = e.clientY - (caja.top + caja.height / 2);
+    onMatiz((((Math.atan2(dy, dx) * 180) / Math.PI + 90) % 360 + 360) % 360);
+  };
+
+  const radio = (RUEDA - GROSOR_RUEDA) / 2;
+  const rad = ((matiz - 90) * Math.PI) / 180;
+
+  return (
+    <div
+      ref={ref}
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        desdeElPuntero(e);
+      }}
+      onPointerMove={(e) => e.buttons !== 0 && desdeElPuntero(e)}
+      role="slider"
+      tabIndex={0}
+      aria-label="Rueda de matiz"
+      aria-valuemin={0}
+      aria-valuemax={360}
+      aria-valuenow={Math.round(matiz)}
+      className="relative cursor-crosshair touch-none rounded-full"
+      style={{
+        width: RUEDA,
+        height: RUEDA,
+        background:
+          'conic-gradient(from 0deg, #f00, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00)',
+        // La corona: transparente en el centro para que entre el cuadrado.
+        WebkitMaskImage: `radial-gradient(circle, transparent ${radio - GROSOR_RUEDA / 2}px, #000 ${radio - GROSOR_RUEDA / 2 + 1}px)`,
+        maskImage: `radial-gradient(circle, transparent ${radio - GROSOR_RUEDA / 2}px, #000 ${radio - GROSOR_RUEDA / 2 + 1}px)`,
+      }}
+    >
+      <span
+        className="pointer-events-none absolute size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow"
+        style={{
+          left: RUEDA / 2 + radio * Math.cos(rad),
+          top: RUEDA / 2 + radio * Math.sin(rad),
+          backgroundColor: `hsl(${matiz} 100% 50%)`,
+        }}
+      />
+    </div>
+  );
 }
 
 function CampoNumero({
@@ -85,10 +155,17 @@ function CampoNumero({
 
 export function SelectorDeColor({
   inicial,
+  onVistaPrevia,
   onAceptar,
   onCancelar,
 }: {
   inicial: string;
+  /**
+   * Se llama en CADA movimiento: el color se ve aplicado mientras se elige.
+   * `Cancelar` restaura `inicial` por este mismo camino, así que quien lo reciba
+   * no necesita recordar nada.
+   */
+  onVistaPrevia(color: string): void;
   onAceptar(color: string): void;
   onCancelar(): void;
 }) {
@@ -115,20 +192,44 @@ export function SelectorDeColor({
     const alTeclear = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onCancelar();
+        cancelarRef.current();
       }
     };
     // En captura: el `keydown` de la capa de dibujo también escucha Escape, y
     // sin esto los dos responden y se sale del modo dibujo además de cerrar.
     document.addEventListener('keydown', alTeclear, true);
     return () => document.removeEventListener('keydown', alTeclear, true);
-  }, [onCancelar]);
+  }, []);
 
   // El foco entra al panel al abrirlo, para que el teclado sirva sin un clic más.
   useEffect(() => cajaRef.current?.focus(), []);
 
+  /**
+   * LA VISTA PREVIA EN VIVO. Cada cambio del color se aplica ya, sin esperar al
+   * «Aceptar» — es lo que deja elegir mirando el dibujo y no la muestra.
+   *
+   * ⚠️ El efecto NO depende de `onVistaPrevia`: quien lo pasa suele armarlo
+   * inline, así que su identidad cambia en cada render y el efecto se dispararía
+   * en bucle. Se lee de una `ref`, que es la técnica que el resto del módulo ya
+   * usa para los avisos hacia arriba.
+   */
+  const vistaPreviaRef = useRef(onVistaPrevia);
+  vistaPreviaRef.current = onVistaPrevia;
+  useEffect(() => {
+    vistaPreviaRef.current(hex);
+  }, [hex]);
+
+  /** Cancelar devuelve el color de antes de abrir, no solo cierra el panel. */
+  const cancelar = () => {
+    vistaPreviaRef.current(inicial);
+    onCancelar();
+  };
+  // Mismo motivo que arriba: el listener de Escape se registra una sola vez y
+  // no puede quedarse con la primera versión de esta función.
+  const cancelarRef = useRef(cancelar);
+  cancelarRef.current = cancelar;
+
   const cuadrado = useArrastre((x, y) => setHsv((h) => ({ ...h, s: x, v: 1 - y })));
-  const barra = useArrastre((x) => setHsv((h) => ({ ...h, h: x * 360 })));
 
   const aplicarRgb = (canal: 'r' | 'g' | 'b', n: number) => {
     const nuevo = { ...rgb, [canal]: n };
@@ -149,47 +250,37 @@ export function SelectorDeColor({
       // acá dentro también cuenta como un clic en la barra.
       onPointerDown={(e) => e.stopPropagation()}
     >
-      {/* EL CUADRADO: saturación en X, valor en Y, sobre el matiz elegido.
-          Dos degradados encima del color puro es la forma clásica y no necesita
-          un canvas — el navegador los compone y se redibujan solos. */}
-      <div
-        {...cuadrado}
-        role="slider"
-        tabIndex={0}
-        aria-label="Saturación y brillo"
-        aria-valuetext={`saturación ${Math.round(hsv.s * 100)}%, brillo ${Math.round(hsv.v * 100)}%`}
-        className="relative cursor-crosshair touch-none rounded"
-        style={{
-          height: LADO,
-          background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${hsv.h} 100% 50%))`,
-        }}
-      >
-        <span
-          className="pointer-events-none absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow"
-          style={{ left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%`, backgroundColor: hex }}
-        />
-      </div>
+      {/*
+        LA RUEDA CON EL CUADRADO ADENTRO. El matiz se elige en la corona y la
+        saturación/luminosidad en el cuadrado del centro — la disposición de la
+        referencia, y la que deja las dos manos de la elección a la vista sin
+        gastar dos bloques de alto.
+      */}
+      <div className="relative mx-auto" style={{ width: RUEDA, height: RUEDA }}>
+        <RuedaDeMatiz matiz={hsv.h} onMatiz={(h) => setHsv((v) => ({ ...v, h }))} />
 
-      {/* LA BARRA DE MATIZ, con el espectro completo. */}
-      <div
-        {...barra}
-        role="slider"
-        tabIndex={0}
-        aria-label="Matiz"
-        aria-valuemin={0}
-        aria-valuemax={360}
-        aria-valuenow={Math.round(hsv.h)}
-        className="relative mt-2 cursor-crosshair touch-none rounded"
-        style={{
-          height: ALTO_BARRA,
-          background:
-            'linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%)',
-        }}
-      >
-        <span
-          className="pointer-events-none absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow"
-          style={{ left: `${(hsv.h / 360) * 100}%`, backgroundColor: `hsl(${hsv.h} 100% 50%)` }}
-        />
+        <div
+          {...cuadrado}
+          role="slider"
+          tabIndex={0}
+          aria-label="Saturación y brillo"
+          aria-valuetext={`saturación ${Math.round(hsv.s * 100)}%, brillo ${Math.round(hsv.v * 100)}%`}
+          className="absolute cursor-crosshair touch-none rounded"
+          style={{
+            // Inscripto en el hueco de la corona: el lado de un cuadrado dentro
+            // de un círculo de radio r es r·√2.
+            width: LADO_INTERIOR,
+            height: LADO_INTERIOR,
+            left: (RUEDA - LADO_INTERIOR) / 2,
+            top: (RUEDA - LADO_INTERIOR) / 2,
+            background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${hsv.h} 100% 50%))`,
+          }}
+        >
+          <span
+            className="pointer-events-none absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow"
+            style={{ left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%`, backgroundColor: hex }}
+          />
+        </div>
       </div>
 
       {/* LA VISTA PREVIA con su HEX encima. La tinta se elige por contraste, o
@@ -238,7 +329,7 @@ export function SelectorDeColor({
       <div className="mt-3 flex gap-1.5">
         <button
           type="button"
-          onClick={onCancelar}
+          onClick={cancelar}
           className="flex-1 rounded-lg border border-border px-2 py-1.5 text-xs text-foreground transition hover:bg-muted"
         >
           Cancelar

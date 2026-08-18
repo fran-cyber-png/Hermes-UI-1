@@ -4,6 +4,7 @@ import {
   type Figura,
   type Reordenamiento,
   conColor,
+  conOpacidad,
   duplicar,
   moverFigura,
   parsear,
@@ -62,6 +63,16 @@ export interface Anotaciones {
   correrSeleccion(dx: number, dy: number): void;
   /** Aplica un color a lo elegido. Devuelve `true` si tocó algo. */
   pintarSeleccion(color: string): boolean;
+  /**
+   * Aplica una opacidad a lo elegido. Devuelve `true` si tocó algo.
+   *
+   * 🔴 Esto es lo que faltaba y hacía que la opacidad «no funcionara»: el
+   * deslizador guardaba el valor para las figuras FUTURAS y nunca tocaba la
+   * selección, al revés del color. Se veía como un control muerto.
+   */
+  opacarSeleccion(opacidad: number): boolean;
+  /** Reemplaza la lista entera en un solo paso. Lo usan las operaciones de capa. */
+  reemplazar(figuras: Figura[], seleccion?: string[]): void;
   ordenarSeleccion(a: Reordenamiento): void;
   /** Muda de capa todo lo que estaba en una. Lo usa borrar una capa. */
   mudarDeCapa(desde: string, hacia: string): void;
@@ -218,6 +229,26 @@ export function useAnotaciones({
     [operar],
   );
 
+  const opacarSeleccion = useCallback(
+    (opacidad: number) => {
+      // A diferencia del color, la opacidad SÍ vale para una imagen: atenuar una
+      // captura pegada sobre el texto es justo lo que se quiere hacer con ella.
+      if (seleccionadas.length === 0) return false;
+      operar((actuales) => ({
+        figuras: actuales.map((f) => (seleccionadas.includes(f.id) ? conOpacidad(f, opacidad) : f)),
+      }));
+      return true;
+    },
+    [operar, seleccionadas],
+  );
+
+  const reemplazar = useCallback(
+    (nuevas: Figura[], seleccion?: string[]) => {
+      operar(() => ({ figuras: nuevas, ...(seleccion !== undefined ? { seleccion } : {}) }));
+    },
+    [operar],
+  );
+
   const ordenarSeleccion = useCallback(
     (a: Reordenamiento) => {
       operar((actuales) => (seleccionadas.length === 0 ? null : { figuras: reordenar(actuales, seleccionadas, a) }));
@@ -281,6 +312,8 @@ export function useAnotaciones({
     duplicarSeleccion,
     correrSeleccion,
     pintarSeleccion,
+    opacarSeleccion,
+    reemplazar,
     ordenarSeleccion,
     mudarDeCapa,
     deshacer,
