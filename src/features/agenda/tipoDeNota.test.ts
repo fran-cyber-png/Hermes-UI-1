@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { barraDeNota, estiloDeNota, tipoDeNota, tipoDominante } from './tipoDeNota';
+import { barraDeNota, estiloDeNota, tipoDeActividad, tipoDeNota, tipoDominante } from './tipoDeNota';
 import type { Recordatorio } from './agenda';
 
 /**
@@ -51,30 +51,46 @@ describe('tipoDeNota', () => {
   });
 });
 
+describe('tipoDeActividad — el campo elegido gana al prefijo adivinado', () => {
+  it('lo que la vendedora ELIGIÓ manda, aunque la nota diga otra cosa', () => {
+    expect(tipoDeActividad({ tipo: 'reunion', nota: 'llamar antes de la reunión' })).toBe('reunion');
+  });
+
+  it('sin tipo guardado (las filas anteriores a la columna) se sigue adivinando del prefijo', () => {
+    expect(tipoDeActividad({ nota: 'llamada a Ana' })).toBe('llamada');
+    expect(tipoDeActividad({ tipo: null, nota: 'wsp el temario' })).toBe('wsp');
+  });
+
+  it('un tipo que este front todavía no dibuja cae al respaldo, nunca rompe', () => {
+    expect(tipoDeActividad({ tipo: 'videollamada', nota: 'llamada a Ana' })).toBe('llamada');
+    expect(tipoDeActividad({ tipo: 'videollamada', nota: 'ver el presupuesto' })).toBe('otro');
+  });
+});
+
 describe('estiloDeNota y barraDeNota — la precedencia', () => {
   it('lo hecho se apaga aunque esté vencido', () => {
     // No sirve gritarle a la vendedora por algo que ya resolvió.
-    expect(estiloDeNota('llamada a Ana', true, true)).toContain('line-through');
-    expect(barraDeNota('llamada a Ana', true, true)).toBe('bg-muted-foreground/40');
+    expect(estiloDeNota({ nota: 'llamada a Ana' }, true, true)).toContain('line-through');
+    expect(barraDeNota({ nota: 'llamada a Ana' }, true, true)).toBe('bg-muted-foreground/40');
   });
 
   it('lo vencido grita en rojo aunque fuera una llamada', () => {
-    expect(estiloDeNota('llamada a Ana', true, false)).toContain('text-destructive');
-    expect(barraDeNota('llamada a Ana', true, false)).toBe('bg-destructive');
+    expect(estiloDeNota({ nota: 'llamada a Ana' }, true, false)).toContain('text-destructive');
+    expect(barraDeNota({ nota: 'llamada a Ana' }, true, false)).toBe('bg-destructive');
   });
 
   it('sin vencer ni hacer, manda el tipo', () => {
-    expect(estiloDeNota('wsp el temario', false, false)).toBe('bg-success/10 text-success');
-    expect(barraDeNota('wsp el temario', false, false)).toBe('bg-success');
+    expect(estiloDeNota({ nota: 'wsp el temario' }, false, false)).toBe('bg-success/10 text-success');
+    expect(barraDeNota({ nota: 'wsp el temario' }, false, false)).toBe('bg-success');
   });
 
   it('el dorado no aparece nunca — el oro es solo tiempo que se acaba', () => {
     const combinaciones = [
-      estiloDeNota('llamada', false, false),
-      estiloDeNota('reunión', true, false),
-      estiloDeNota('correo', false, true),
-      barraDeNota('wsp', false, false),
-      barraDeNota('otro', true, false),
+      estiloDeNota({ nota: 'llamada' }, false, false),
+      estiloDeNota({ nota: 'reunión' }, true, false),
+      estiloDeNota({ nota: 'correo' }, false, true),
+      barraDeNota({ nota: 'wsp' }, false, false),
+      barraDeNota({ nota: 'otro' }, true, false),
     ];
     for (const clase of combinaciones) expect(clase).not.toContain('gold');
   });

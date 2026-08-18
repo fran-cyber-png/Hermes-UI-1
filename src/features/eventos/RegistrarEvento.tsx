@@ -219,7 +219,7 @@ export function RegistrarEvento({
           setListo(null);
           setAbierto((v) => !v);
         }}
-        title="Registrar algo en el timeline del contacto"
+        title="Anotar algo en el timeline del contacto (E)"
         className={
           'flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold transition-colors ' +
           (listo
@@ -230,7 +230,11 @@ export function RegistrarEvento({
         }
       >
         {listo ? <Check size={11} /> : <NotebookPen size={11} />}
-        {listo ? 'Registrado' : 'Registrar'}
+        {/* «Anotar» y no «Registrar»: al lado quedó el botón que registra el
+            CONTACTO, y dos «Registrar» en la misma barra no se distinguen. Lo
+            que este chip hace no cambió (ADR 0037): un HECHO tipado que cae en
+            el timeline. El pie del popover lo sigue explicando. */}
+        {listo ? 'Anotado' : 'Anotar'}
       </button>
     ) : (
       <button

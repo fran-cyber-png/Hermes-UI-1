@@ -69,3 +69,35 @@ export function agruparProximas(rs: Recordatorio[], ahora: Date, tope = 12): Gru
 export function pendientesFuturas(rs: Recordatorio[], ahora: Date): number {
   return rs.filter((r) => r.estado === 'pendiente' && diasEntre(ahora, new Date(r.cuando)) >= 0).length;
 }
+
+/**
+ * EL PRÓXIMO SEGUIMIENTO DE UNA CONVERSACIÓN — lo que se dibuja arriba del chat.
+ *
+ * De todo lo pendiente de esa conversación, **el más viejo primero**: si hay una
+ * promesa vencida, ésa es la que hay que ver, no la de la semana que viene.
+ * Lo hecho y lo cancelado no cuentan — el banner contesta «¿qué me falta con
+ * esta persona?», y las dos respuestas a eso son «nada».
+ */
+export function proximoDe(rs: Recordatorio[] | undefined, clave: string | null): Recordatorio | null {
+  if (!rs || !clave) return null;
+  const pendientes = rs
+    .filter((r) => r.clave === clave && r.estado === 'pendiente')
+    .sort((a, b) => a.cuando.localeCompare(b.cuando));
+  return pendientes[0] ?? null;
+}
+
+/**
+ * «Mañana · 10:00», «Vencido · ayer 9:00». Se lee de un vistazo, que es todo lo
+ * que se le pide a un banner: la fecha completa está a un clic, en la Agenda.
+ */
+export function cuandoEnCriollo(r: Recordatorio, ahora = new Date()): string {
+  const d = new Date(r.cuando);
+  const dia = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const hora = d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+  return `${etiquetaDeDia(dia, ahora)} · ${hora}`;
+}
+
+/** ¿Se pasó la hora? Es lo que decide si el banner grita o informa. */
+export function estaVencido(r: Recordatorio, ahora = new Date()): boolean {
+  return new Date(r.cuando).getTime() < ahora.getTime();
+}

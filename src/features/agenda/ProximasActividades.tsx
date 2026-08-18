@@ -37,7 +37,7 @@ function Renglon({
       onClick={() => onVer(r)}
       className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-secondary/40"
     >
-      <span aria-hidden className={'h-7 w-1 shrink-0 rounded-full ' + barraDeNota(r.nota, vencido, false)} />
+      <span aria-hidden className={'h-7 w-1 shrink-0 rounded-full ' + barraDeNota(r, vencido, false)} />
       <span className="w-11 shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">{horaDe(r)}</span>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">

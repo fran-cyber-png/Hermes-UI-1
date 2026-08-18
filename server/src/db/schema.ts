@@ -554,9 +554,42 @@ export const recordatorios = pgTable(
     numeroPropio: text("numero_propio"),
     /** Qué prometió hacer: "llamarla", "mandarle el temario"… */
     nota: text("nota").notNull(),
+    /**
+     * QUÉ CLASE DE ACTIVIDAD ES: `llamada`, `whatsapp`, `reunion`,
+     * `seguimiento`, `recordatorio`, `otro`.
+     *
+     * `text` con default y no un enum de Postgres, por la misma razón que
+     * `eventos_contacto.tipo`: el vocabulario crece desde el front, que se
+     * despliega sin reiniciar el server. El default es `seguimiento` porque es
+     * lo que eran TODAS las filas anteriores a esta columna — la agenda nació
+     * como «volver a tocar a alguien», sin distinguir cómo.
+     */
+    tipo: text("tipo").notNull().default("seguimiento"),
     /** Cuándo. Con hora: la agenda es un calendario, no una lista de deseos. */
     cuando: timestamp("cuando", { withTimezone: true }).notNull(),
-    /** pendiente | hecho. Se marca a mano, como todo lo que importa. */
+    /**
+     * Cuánto dura, en minutos. `NULL` = no se dijo, y eso NO es cero: la vista
+     * de semana pinta un bloque de duración estándar cuando no hay dato, y con
+     * cero pintaría una raya invisible.
+     */
+    duracionMin: integer("duracion_min"),
+    /**
+     * `alta` | `media` | `baja`. `NULL` = sin definir, que es el caso normal.
+     *
+     * 🔴 La UI de importancia (`agenda/importancia.ts`, el punto de color del
+     * mini-calendario) se escribió ANTES que esta columna y mandaba
+     * `PATCH {importancia}` contra una ruta que solo miraba `estado`: el color
+     * no se guardaba nunca **y de paso el PATCH devolvía la tarea a
+     * `pendiente`**. Sin la columna, esa mitad del calendario era decorado.
+     */
+    importancia: text("importancia"),
+    /**
+     * pendiente | hecho | cancelado. Se marca a mano, como todo lo que importa.
+     *
+     * `cancelado` no es `hecho`: «la llamé» y «ya no hace falta llamarla» son
+     * cosas distintas, y contarlas juntas convertiría el cumplimiento de la
+     * agenda en un número que no significa nada.
+     */
     estado: text("estado").notNull().default("pendiente"),
     creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -677,6 +710,56 @@ export const intereses = pgTable(
     creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [unique().on(t.clave, t.curso), index("intereses_clave_idx").on(t.clave)],
+);
+
+/**
+ * LA FICHA RÁPIDA DEL CONTACTO — los datos que la vendedora ESCRIBE a mano.
+ *
+ * Hermes es flaco y Cerberus es gordo: el CLIENTE vive en Cerberus, y el padrón
+ * es una copia read-only de icarus. Entre esos dos no había ningún lugar donde
+ * cayera lo que la vendedora AVERIGUA en la conversación —el apellido real, la
+ * empresa, un correo dictado por chat— antes de que exista una venta. Se perdía
+ * en el hilo, o se anotaba en un cuaderno.
+ *
+ * Esta tabla es ese lugar, y **no compite con la ficha de Cerberus**: cuando el
+ * teléfono figura allá, Cerberus manda (`panel/identidad.ts` ya arbitra
+ * Cerberus > formulario > alias de WhatsApp). Acá queda lo que Cerberus no sabe
+ * todavía.
+ *
+ * **Se llavea por `clave`**, como `gestiones`, `intereses`, `etiquetas` y
+ * `eventos_contacto`: la unidad de trabajo de Hermes es la CONVERSACIÓN. El
+ * duplicado por teléfono no se prohíbe con un UNIQUE —una persona puede escribir
+ * por WhatsApp y por Messenger, y las dos conversaciones son ciertas— sino que
+ * se DETECTA al registrar y se contesta con la ficha que ya existe, para abrirla
+ * o actualizarla (`registrarFicha` → 409 con la clave de la otra).
+ */
+export const contactoFicha = pgTable(
+  "contacto_ficha",
+  {
+    /** La conversación. Una ficha por conversación. */
+    clave: text("clave").primaryKey(),
+    /**
+     * El teléfono en dígitos, sin `+` ni espacios: es la llave con la que se
+     * busca el duplicado, así que se guarda ya normalizado o no sirve de llave.
+     */
+    telefono: text("telefono"),
+    nombre: text("nombre"),
+    apellido: text("apellido"),
+    empresa: text("empresa"),
+    email: text("email"),
+    /**
+     * `alta` | `media` | `normal`. `NULL` = sin definir. Es la prioridad del
+     * CONTACTO (a quién atender primero), distinta de `recordatorios.importancia`
+     * (qué tarea del día es la urgente): una persona importante puede tener una
+     * tarea trivial agendada.
+     */
+    prioridad: text("prioridad"),
+    /** Quién la registró, en la grafía que vino (`Luz` y `luz` conviven en prod). */
+    vendedoraId: text("vendedora_id").notNull(),
+    creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+    actualizadoAt: timestamp("actualizado_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("contacto_ficha_telefono_idx").on(t.telefono)],
 );
 
 /**

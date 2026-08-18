@@ -7,6 +7,8 @@ import { useLeadForm } from '../cerberus/BloqueLeadForm';
 import { useIntereses } from '../gestion/Intereses';
 import { useSenales } from '../senales/senales';
 import { useEventos, useMutacionesEventos } from '../eventos/eventos';
+import { useAgenda } from '../agenda/agenda';
+import { useFichaLocal } from './fichaLocal';
 import { RegistrarEvento } from '../eventos/RegistrarEvento';
 import { estadoDelContacto } from './estadoContacto';
 import { nombreDelContacto } from './identidad';
@@ -81,6 +83,8 @@ export function PanelDerecho({
   const { data: senales } = useSenales([conversacion.clave]);
   const { data: intereses } = useIntereses(conversacion.clave);
   const { data: delTimeline } = useEventos(conversacion.clave);
+  const fichaLocal = useFichaLocal(conversacion.clave);
+  const { agenda } = useAgenda();
   const { editar, borrar } = useMutacionesEventos(conversacion.clave);
 
   const padron = marcaDeCliente(conversacion);
@@ -121,6 +125,11 @@ export function PanelDerecho({
     eventos: delTimeline?.eventos ?? [],
     correos: delTimeline?.correos ?? [],
     yo: miVendedora,
+    fichaLocal: fichaLocal.data,
+    // Sólo los de ESTA conversación: `useAgenda` trae la agenda entera de quien
+    // mira (una sola query compartida con el riel y la vista Agenda), y el
+    // timeline es de una persona.
+    seguimientos: agenda.data?.recordatorios.filter((r) => r.clave === conversacion.clave),
   });
 
   const nombre = nombreData.principal ?? 'Sin nombre';

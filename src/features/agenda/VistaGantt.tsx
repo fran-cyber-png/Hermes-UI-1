@@ -3,7 +3,7 @@ import type { Recordatorio } from './agenda';
 import { armarGantt, diasEntre, type BarraGantt } from './gantt';
 import { formatoTelefono } from '../../lib/formato';
 import { mismaFecha } from './fechas';
-import { tipoDeNota, type TipoNota } from './tipoDeNota';
+import { tipoDeActividad, type TipoNota } from './tipoDeNota';
 import { colorPuntoImportancia } from './importancia';
 
 /**
@@ -39,13 +39,15 @@ const COLOR_TIPO: Record<TipoNota, string> = {
   wsp: 'bg-success text-success-foreground',
   correo: 'bg-secondary text-secondary-foreground',
   reunion: 'bg-navy text-white',
+  seguimiento: 'bg-navy-muted text-white',
+  recordatorio: 'bg-muted text-foreground',
   otro: 'bg-muted text-foreground',
 };
 
 function colorDeBarra(b: BarraGantt): string {
   if (b.estado === 'hecha') return 'bg-muted text-muted-foreground line-through';
   if (b.estado === 'vencida') return 'bg-destructive text-white';
-  return COLOR_TIPO[tipoDeNota(b.r.nota)];
+  return COLOR_TIPO[tipoDeActividad(b.r)];
 }
 
 /** Lo que la barra dice de sí misma al pasar el mouse: por qué mide lo que mide. */

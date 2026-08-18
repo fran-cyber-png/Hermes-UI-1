@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { agruparProximas, etiquetaDeDia, pendientesFuturas } from './proximas';
+import {
+  agruparProximas,
+  cuandoEnCriollo,
+  estaVencido,
+  etiquetaDeDia,
+  pendientesFuturas,
+  proximoDe,
+} from './proximas';
 import type { Recordatorio } from './agenda';
 
 /**
@@ -91,5 +98,41 @@ describe('pendientesFuturas', () => {
       rec(new Date(2026, 7, 26), { estado: 'hecho' }),
     ];
     expect(pendientesFuturas(rs, HOY)).toBe(2);
+  });
+});
+
+describe('proximoDe — el banner de arriba del chat', () => {
+  const OTRA = 'conv:whatsapp:51999:51777';
+
+  it('de esa conversación, y el MÁS VIEJO primero: lo vencido es lo que hay que ver', () => {
+    const vencido = rec(new Date(2026, 7, 16, 9, 0));
+    const futuro = rec(new Date(2026, 7, 20, 9, 0));
+    const ajeno = rec(new Date(2026, 7, 15, 9, 0), { clave: OTRA });
+
+    expect(proximoDe([futuro, ajeno, vencido], 'conv:whatsapp:51999:51961')?.id).toBe(vencido.id);
+  });
+
+  it('lo hecho y lo cancelado no son «lo que sigue»', () => {
+    const hecho = rec(new Date(2026, 7, 18, 9, 0), { estado: 'hecho' });
+    const cancelado = rec(new Date(2026, 7, 19, 9, 0), { estado: 'cancelado' });
+
+    expect(proximoDe([hecho, cancelado], 'conv:whatsapp:51999:51961')).toBe(null);
+  });
+
+  it('sin agenda cargada o sin conversación abierta no inventa nada', () => {
+    expect(proximoDe(undefined, 'conv:x')).toBe(null);
+    expect(proximoDe([rec(HOY)], null)).toBe(null);
+  });
+});
+
+describe('cuandoEnCriollo y estaVencido', () => {
+  it('dice el día en criollo y la hora, en ese orden', () => {
+    expect(cuandoEnCriollo(rec(new Date(2026, 7, 18, 10, 0)), HOY)).toBe('Mañana · 10:00');
+    expect(cuandoEnCriollo(rec(new Date(2026, 7, 17, 18, 30)), HOY)).toBe('Hoy · 18:30');
+  });
+
+  it('vencido es que ya pasó la HORA, no el día', () => {
+    expect(estaVencido(rec(new Date(2026, 7, 17, 10, 0)), HOY)).toBe(true);
+    expect(estaVencido(rec(new Date(2026, 7, 17, 18, 0)), HOY)).toBe(false);
   });
 });

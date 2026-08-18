@@ -20,9 +20,17 @@ export interface Recordatorio {
   numeroPropio: string | null;
   nota: string;
   cuando: string;
-  estado: 'pendiente' | 'hecho';
+  /** `llamada` | `wsp` | `reunion` | `seguimiento` | `recordatorio` | `otro`. */
+  tipo?: string | null;
+  /** Minutos. `null` = no se dijo (se pinta el bloque estándar). */
+  duracionMin?: number | null;
+  /** `cancelado` NO es `hecho`: son dos finales distintos. */
+  estado: EstadoRecordatorio;
   importancia?: 'alta' | 'media' | 'baja';
 }
+
+/** Los tres finales de una promesa. */
+export type EstadoRecordatorio = 'pendiente' | 'hecho' | 'cancelado';
 
 export function useAgenda() {
   const qc = useQueryClient();
@@ -49,6 +57,9 @@ export function useAgenda() {
       numeroPropio: string | null;
       nota: string;
       cuando: string;
+      tipo?: string;
+      duracionMin?: number | null;
+      importancia?: 'alta' | 'media' | 'baja' | null;
     }) => api<{ ok: true; recordatorio: Recordatorio }>('/api/agenda', { method: 'POST', body: JSON.stringify(r) }),
     // Agendar puede mover la etapa a 'contactado' (server): el embudo también se refresca.
     onSuccess: () => {
@@ -58,7 +69,7 @@ export function useAgenda() {
   });
 
   const cambiarEstado = useMutation({
-    mutationFn: (v: { id: number; estado: 'pendiente' | 'hecho' }) =>
+    mutationFn: (v: { id: number; estado: EstadoRecordatorio }) =>
       api(`/api/agenda/${v.id}`, { method: 'PATCH', body: JSON.stringify({ estado: v.estado }) }),
     onSuccess: invalidar,
   });
@@ -99,22 +110,50 @@ function a(hora: number, base: Date): Date {
   return d;
 }
 
-export function opcionesRapidas(ahora = new Date()): { etiqueta: string; cuando: Date }[] {
-  const enDosHoras = new Date(ahora.getTime() + 2 * 3600 * 1000);
-  enDosHoras.setMinutes(0, 0, 0);
-
-  const manana = a(9, new Date(ahora.getTime() + 24 * 3600 * 1000));
+/**
+ * LOS DÍAS QUE SE OFRECEN AL AGENDAR, en el orden en que se piensan: hoy,
+ * mañana, pasado mañana largo, la semana que viene.
+ *
+ * ⚠️ **El índice 1 es «Mañana» y hay quien lo lee por posición**
+ * (`VistaAgenda` lo usa de fecha inicial del formulario). Agregá al final o al
+ * medio con cuidado: mover ese elemento cambia con qué abre el modal.
+ *
+ * @param hora Si se pasa, TODAS las opciones caen a esa hora — es lo que hace
+ *   que elegir «10:00» y después «Mañana» sean dos toques y no un formulario.
+ *   Sin ella cada opción usa su hora natural (hoy: dentro de dos horas; el
+ *   resto: 9:00, que es cuando arranca el día de trabajo).
+ */
+export function opcionesRapidas(ahora = new Date(), hora?: number): { etiqueta: string; cuando: Date }[] {
+  const hoy = hora != null ? a(hora, ahora) : redondearADosHoras(ahora);
+  const dentroDe = (dias: number) => {
+    const d = new Date(ahora.getTime() + dias * 24 * 3600 * 1000);
+    return a(hora ?? 9, d);
+  };
 
   const lunes = new Date(ahora);
   lunes.setDate(lunes.getDate() + ((8 - lunes.getDay()) % 7 || 7));
-  const lunes9 = a(9, lunes);
 
   return [
-    { etiqueta: `Hoy ${enDosHoras.getHours()}:00`, cuando: enDosHoras },
-    { etiqueta: 'Mañana 9:00', cuando: manana },
-    { etiqueta: 'Lunes 9:00', cuando: lunes9 },
+    { etiqueta: `Hoy ${hoy.getHours()}:00`, cuando: hoy },
+    { etiqueta: `Mañana ${dentroDe(1).getHours()}:00`, cuando: dentroDe(1) },
+    { etiqueta: 'En 3 días', cuando: dentroDe(3) },
+    { etiqueta: 'Próxima semana', cuando: a(hora ?? 9, lunes) },
   ];
 }
+
+/** «Dentro de dos horas», en punto: la opción de hoy que no obliga a pensar. */
+function redondearADosHoras(ahora: Date): Date {
+  const d = new Date(ahora.getTime() + 2 * 3600 * 1000);
+  d.setMinutes(0, 0, 0);
+  return d;
+}
+
+/**
+ * LAS HORAS QUE SE OFRECEN. Son las de la jornada comercial de Goberna, sin la
+ * hora del almuerzo: ofrecer 24 casilleros es hacer buscar, y la vendedora
+ * agenda casi siempre en una de estas seis.
+ */
+export const HORAS_RAPIDAS = [10, 11, 12, 15, 16, 17];
 
 /** `Conversacion` mínima para reabrir el chat desde un recordatorio. */
 export function conversacionDeRecordatorio(r: Recordatorio): Conversacion {

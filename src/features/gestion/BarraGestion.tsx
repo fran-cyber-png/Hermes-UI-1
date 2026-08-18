@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlarmClock, Check, Loader2, Plus, Tag, X } from 'lucide-react';
+import { Check, ChevronDown, Loader2, Plus, Tag, UserPlus, X } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { usePopover } from '../../lib/teclado/usePopover';
-import { rotuloEtapa } from '../../lib/etapas';
+import { ETAPA_CHIP, rotuloEtapa } from '../../lib/etapas';
 import type { Conversacion } from '../../dominio/conversaciones';
-import { opcionesRapidas, useAgenda } from '../agenda/agenda';
+import { AgendarRapido } from '../agenda/AgendarRapido';
+import { FichaRapida } from '../panel/FichaRapida';
+import { useFichaLocal } from '../panel/fichaLocal';
 import { PasarConversacion } from '../reparto/PasarConversacion';
 import { RegistrarEvento } from '../eventos/RegistrarEvento';
 import { BotonLlamar } from './BotonLlamar';
@@ -61,7 +63,7 @@ const ETAPAS_BARRA = [
  * paleta) y la asigna en dos pasos. Regla dura: la píldora usa BORDE de color,
  * nunca sombra, nunca oro.
  */
-function EtiquetasInline({ clave }: { clave: string }) {
+function EtiquetasInline({ clave, senalAbrir = 0 }: { clave: string; senalAbrir?: number }) {
   const qc = useQueryClient();
   const { data: lista = [] } = useQuery({
     queryKey: ['etiquetas', clave],
@@ -73,6 +75,12 @@ function EtiquetasInline({ clave }: { clave: string }) {
   const [abierto, setAbierto] = useState(false);
   const [nuevo, setNuevo] = useState('');
   const [colorNuevo, setColorNuevo] = useState<ColorCategoria>('azul');
+  /** El atajo `T`: la señal se consume en el render, sin un frame de retraso. */
+  const [visto, setVisto] = useState(senalAbrir);
+  if (senalAbrir !== visto) {
+    setVisto(senalAbrir);
+    setAbierto(true);
+  }
 
   // Antes solo cerraba con clic afuera: con el foco en el «+» (no en el input),
   // Escape no lo tocaba y llegaba al shell, que cerraba la conversación de atrás
@@ -244,93 +252,121 @@ function EtiquetasInline({ clave }: { clave: string }) {
   );
 }
 
-/** Agendar en dos toques, sin salir del chat. */
-function AgendarRapido({ conversacion }: { conversacion: Conversacion }) {
-  const { crear } = useAgenda();
+/**
+ * EN QUÉ ETAPA ESTÁ ESTA CONVERSACIÓN — y cómo cambiarla sin salir del chat.
+ *
+ * Las cuatro que una persona puede DECLARAR, más `perdido`, que vive abajo del
+ * separador porque no es una etapa más: es tirar la toalla, y por eso pide
+ * confirmación adentro del mismo menú (no un modal: la acción es reversible —
+ * se vuelve eligiendo otra etapa).
+ *
+ * ⚠️ Lo que se declara es un PISO, no la verdad: el embudo DERIVA la etapa
+ * efectiva de lo que hizo el comprador (ADR 0044), y lo declarado sólo empuja
+ * hacia arriba. Por eso acá no se ofrece «nunca contestó» — eso no se declara,
+ * se deriva, y deja de ser cierto solo.
+ */
+function SelectorEtapa({
+  etapa,
+  moviendo,
+  onElegir,
+  senalAbrir = 0,
+}: {
+  etapa: string;
+  moviendo: boolean;
+  onElegir: (etapa: string) => void;
+  /** Señal externa (contador): al cambiar, abre el menú. La usa el atajo `E`. */
+  senalAbrir?: number;
+}) {
   const [abierto, setAbierto] = useState(false);
-  const [nota, setNota] = useState('');
-  /** La etiqueta del chip clickeado — el spinner va solo ahí. */
-  const [pendiente, setPendiente] = useState<string | null>(null);
-  /** Qué quedó agendado («Mañana 9:00») — el botón lo confirma hasta el próximo gesto. */
-  const [listo, setListo] = useState<string | null>(null);
-
-  // Mismo agujero que en las etiquetas: sin el foco en la nota, Escape no cerraba
-  // este panel y se lo llevaba el shell (adiós conversación de atrás).
+  const [confirmaPerdido, setConfirmaPerdido] = useState(false);
+  const [visto, setVisto] = useState(senalAbrir);
   const { propsOverlay } = usePopover(abierto, () => setAbierto(false), { z: 'z-20' });
 
-  async function agendar(o: { etiqueta: string; cuando: Date }) {
-    setPendiente(o.etiqueta);
-    try {
-      await crear.mutateAsync({
-        clave: conversacion.clave,
-        canal: conversacion.canal,
-        personaId: conversacion.persona_id,
-        personaNombre: conversacion.persona_nombre,
-        numeroPropio: conversacion.numero_propio,
-        nota: nota.trim() || `Seguimiento a ${conversacion.persona_nombre ?? conversacion.persona_id ?? 'lead'}`,
-        cuando: o.cuando.toISOString(),
-      });
-      setNota('');
-      setAbierto(false);
-      setListo(o.etiqueta);
-    } catch {
-      // El error queda visible en el popover vía crear.isError.
-    } finally {
-      setPendiente(null);
-    }
+  if (senalAbrir !== visto) {
+    setVisto(senalAbrir);
+    setAbierto(true);
+  }
+
+  function elegir(id: string) {
+    onElegir(id);
+    setAbierto(false);
+    setConfirmaPerdido(false);
   }
 
   return (
     <span className="relative">
       <button
         type="button"
-        onClick={() => {
-          setListo(null);
-          setAbierto((v) => !v);
-        }}
-        title="Agendar seguimiento"
+        disabled={moviendo}
+        aria-expanded={abierto}
+        title="Cambiar la etapa (E)"
+        onClick={() => setAbierto((v) => !v)}
         className={
-          'flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold transition-colors ' +
-          (listo ? 'bg-success/10 text-success' : abierto ? 'bg-navy text-white' : 'border border-border text-muted-foreground hover:border-primary hover:text-foreground')
+          'flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-opacity disabled:opacity-50 ' +
+          (ETAPA_CHIP[etapa] ?? 'bg-muted text-foreground')
         }
       >
-        {listo ? <Check size={11} /> : <AlarmClock size={11} />}
-        {listo ? `Agendado · ${listo}` : 'Agendar'}
+        {moviendo ? <Loader2 size={11} className="animate-spin" /> : null}
+        {rotuloEtapa(etapa)}
+        <ChevronDown size={11} className="opacity-70" />
       </button>
+
       {abierto && (
         <>
           <span {...propsOverlay} />
-          <div className="absolute right-0 top-7 z-30 w-60 rounded-xl bg-card p-2.5 shadow-panel">
-            <input
-              value={nota}
-              onChange={(e) => setNota(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') {
-                  e.stopPropagation();
-                  setAbierto(false);
+          <div role="menu" className="absolute left-0 top-8 z-30 w-48 rounded-xl bg-card p-1 shadow-panel">
+            {ETAPAS_BARRA.map((e) => (
+              <button
+                key={e.id}
+                type="button"
+                role="menuitem"
+                onClick={() => elegir(e.id)}
+                className={
+                  'flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-semibold transition-colors hover:bg-muted ' +
+                  (etapa === e.id ? 'text-foreground' : 'text-muted-foreground')
                 }
-              }}
-              autoFocus
-              placeholder="Qué vas a hacer (opcional)…"
-              className="mb-2 w-full rounded-lg border border-border bg-muted/40 px-2 py-1.5 text-[11px] outline-none focus:border-primary"
-            />
-            <div className="flex flex-wrap gap-1.5">
-              {opcionesRapidas().map((o) => (
+              >
+                <span className={'size-2 shrink-0 rounded-full ' + (PUNTO_ETAPA[e.id] ?? 'bg-muted-foreground')} />
+                <span className="flex-1">{e.label}</span>
+                {etapa === e.id && <Check size={11} className="text-success" />}
+              </button>
+            ))}
+
+            <div className="my-1 border-t border-border" />
+
+            {confirmaPerdido ? (
+              <div className="flex items-center gap-1 px-2 py-1.5 text-[11px] font-semibold">
+                <span className="flex-1 text-muted-foreground">¿{rotuloEtapa('perdido')}?</span>
                 <button
-                  key={o.etiqueta}
                   type="button"
-                  disabled={pendiente != null}
-                  onClick={() => void agendar(o)}
-                  className="rounded-full border border-border px-2 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-primary hover:bg-secondary/40 hover:text-foreground disabled:opacity-50"
+                  onClick={() => elegir('perdido')}
+                  className="rounded px-1.5 text-destructive transition-colors hover:bg-destructive/10"
                 >
-                  {pendiente === o.etiqueta ? <Loader2 size={10} className="inline animate-spin" /> : o.etiqueta}
+                  Sí
                 </button>
-              ))}
-            </div>
-            {crear.isError && (
-              <p className="mt-1.5 text-[11px] text-destructive">No se agendó — probá de nuevo.</p>
+                <button
+                  type="button"
+                  onClick={() => setConfirmaPerdido(false)}
+                  className="rounded px-1.5 text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  No
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => setConfirmaPerdido(true)}
+                className={
+                  'flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-semibold transition-colors hover:bg-destructive/10 ' +
+                  (etapa === 'perdido' ? 'text-destructive' : 'text-muted-foreground hover:text-destructive')
+                }
+              >
+                <span className="size-2 shrink-0 rounded-full bg-destructive" />
+                <span className="flex-1">{rotuloEtapa('perdido')}</span>
+                {etapa === 'perdido' && <Check size={11} />}
+              </button>
             )}
-            <p className="mt-1.5 text-[11px] text-muted-foreground">Cae en tu Agenda. Nada se envía solo.</p>
           </div>
         </>
       )}
@@ -338,17 +374,101 @@ function AgendarRapido({ conversacion }: { conversacion: Conversacion }) {
   );
 }
 
+/** El punto de color del menú. Mismo vocabulario que `ETAPA_CHIP`, en sólido. */
+const PUNTO_ETAPA: Record<string, string> = {
+  interesado: 'bg-primary',
+  contactado: 'bg-secondary-foreground',
+  cotizado: 'bg-navy',
+  cierre: 'bg-success',
+  perdido: 'bg-destructive',
+};
+
+/**
+ * EL BOTÓN PRIMARIO DE LA BARRA — y **se adapta al estado del contacto**.
+ *
+ * Sin ficha dice `+ Registrar contacto`, que es la acción; con ficha dice el
+ * NOMBRE, que es la información. La misma tecla (`R`) y el mismo lugar hacen las
+ * dos cosas, porque para la vendedora son una sola: «esta persona, ¿la tengo?».
+ *
+ * ⚠️ **No confundir con «Anotar»** (`RegistrarEvento`, ADR 0037), que está al
+ * lado: eso registra un HECHO de la conversación —«preguntó por el diploma»— en
+ * el timeline. Se llamaba «Registrar» a secas y era exactamente la confusión que
+ * este botón vino a resolver.
+ */
+function ContactoRegistrado({
+  conversacion,
+  onAbrirOtra,
+  senalAbrir = 0,
+}: {
+  conversacion: Conversacion;
+  onAbrirOtra?: (o: { clave: string; telefono: string | null }) => void;
+  /** Señal externa (contador): al cambiar, abre el drawer. La usa el atajo `R`. */
+  senalAbrir?: number;
+}) {
+  const { data: ficha } = useFichaLocal(conversacion.clave);
+  const [abierto, setAbierto] = useState(false);
+  const [visto, setVisto] = useState(senalAbrir);
+
+  // La señal se consume en el render, sin `useEffect`: un efecto para esto
+  // agrega un frame de retraso justo en el gesto que se quiere instantáneo.
+  if (senalAbrir !== visto) {
+    setVisto(senalAbrir);
+    setAbierto(true);
+  }
+
+  const nombre = ficha ? [ficha.nombre, ficha.apellido].filter(Boolean).join(' ').trim() : '';
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setAbierto(true)}
+        title={ficha ? 'Ver la ficha del contacto (R)' : 'Registrar el contacto (R)'}
+        className={
+          'flex max-w-[13rem] items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ' +
+          (ficha
+            ? 'bg-success/10 text-success hover:bg-success/15'
+            : 'bg-primary text-primary-foreground hover:bg-primary-hover')
+        }
+      >
+        {ficha ? <Check size={11} className="shrink-0" /> : <UserPlus size={11} className="shrink-0" />}
+        <span className="truncate">{ficha ? nombre || 'Registrado' : 'Registrar contacto'}</span>
+      </button>
+      {abierto && (
+        <FichaRapida
+          conversacion={conversacion}
+          onCerrar={() => setAbierto(false)}
+          onAbrirOtra={onAbrirOtra}
+        />
+      )}
+    </>
+  );
+}
+
 export function BarraGestion({
   conversacion,
   miVendedora,
+  onAbrirOtra,
+  senalRegistrar = 0,
+  senalEstado = 0,
+  senalEtiqueta = 0,
 }: {
   conversacion: Conversacion;
   /** Quién está mirando — lo necesita el reparto para decir «Vos» (`PasarConversacion`). */
   miVendedora?: string | null;
+  /** Abrir OTRA conversación: la del contacto que ya estaba registrado. */
+  onAbrirOtra?: (o: { clave: string; telefono: string | null }) => void;
+  /**
+   * LAS SEÑALES DE LOS ATAJOS. Son contadores, no booleanos: con un booleano,
+   * cerrar el popover y volver a apretar la tecla no cambia el valor y no
+   * abriría nada. Es el mismo patrón que ya usaba `Intereses.senalAbrir`.
+   */
+  senalRegistrar?: number;
+  senalEstado?: number;
+  senalEtiqueta?: number;
 }) {
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
-  const [confirmaPerdido, setConfirmaPerdido] = useState(false);
   /** La compuerta guía: ring temporal + foco en el buscador de Intereses. */
   const [guiaIntereses, setGuiaIntereses] = useState(false);
   const [senalIntereses, setSenalIntereses] = useState(0);
@@ -394,69 +514,23 @@ export function BarraGestion({
   return (
     <div className="shrink-0 rounded-2xl bg-card px-3 py-2 shadow-panel">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        {/* La etapa: un clic y quedó — las compuertas del server frenan y explican. */}
-        <div className="flex items-center rounded-full border border-border bg-muted/40 p-0.5">
-          {ETAPAS_BARRA.map((e) => (
-            <button
-              key={e.id}
-              type="button"
-              disabled={mover.isPending}
-              onClick={() => etapaActual !== e.id && mover.mutate(e.id)}
-              className={
-                'rounded-full px-2 py-0.5 text-[11px] font-semibold transition-colors ' +
-                (etapaActual === e.id
-                  ? e.id === 'cierre'
-                    ? 'bg-success text-white'
-                    : 'bg-navy text-white'
-                  : 'text-muted-foreground hover:text-foreground')
-              }
-            >
-              {e.label}
-            </button>
-          ))}
-          {/* Perdido, fuera del segmented: no es una etapa más — pide confirmación. */}
-          <span className="ml-1 flex items-center border-l border-border pl-1">
-            {etapaActual === 'perdido' ? (
-              <span className="rounded-full bg-destructive px-2 py-0.5 text-[11px] font-semibold text-white">
-                {rotuloEtapa('perdido')}
-              </span>
-            ) : confirmaPerdido ? (
-              <span className="flex items-center gap-1 px-1 text-[11px] font-semibold">
-                <span className="text-muted-foreground">¿{rotuloEtapa('perdido')}?</span>
-                <button
-                  type="button"
-                  disabled={mover.isPending}
-                  onClick={() => {
-                    setConfirmaPerdido(false);
-                    mover.mutate('perdido');
-                  }}
-                  className="rounded px-1 text-destructive transition-colors hover:bg-destructive/10"
-                >
-                  Sí
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmaPerdido(false)}
-                  className="rounded px-1 text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  No
-                </button>
-              </span>
-            ) : (
-              <button
-                type="button"
-                disabled={mover.isPending}
-                onClick={() => setConfirmaPerdido(true)}
-                className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-destructive"
-              >
-                {rotuloEtapa('perdido')}
-              </button>
-            )}
-          </span>
-        </div>
+        {/* LA ETAPA, EN UN DROPDOWN. Era un segmented de cinco botones que se
+            llevaba media barra a 1280 y dejaba a las acciones peleando el
+            ancho. Como control es igual de directo (se ve en qué etapa está y
+            se cambia sin salir del chat) y devuelve ~180 px al resto.
+
+            🔴 Los RÓTULOS salen de `lib/etapas` (ADR 0049) y los colores de
+            `ETAPA_CHIP`: acá no se escribe ni un nombre ni una clase de etapa.
+            Las compuertas del server siguen frenando y explicando abajo. */}
+        <SelectorEtapa
+          etapa={etapaActual}
+          moviendo={mover.isPending}
+          onElegir={(e) => etapaActual !== e && mover.mutate(e)}
+          senalAbrir={senalEstado}
+        />
 
         <span className="hidden h-4 w-px bg-border sm:block" />
-        <EtiquetasInline clave={conversacion.clave} />
+        <EtiquetasInline clave={conversacion.clave} senalAbrir={senalEtiqueta} />
 
         <span className="hidden h-4 w-px bg-border sm:block" />
         <Intereses clave={conversacion.clave} compacto resaltado={guiaIntereses} senalAbrir={senalIntereses} />
@@ -476,6 +550,11 @@ export function BarraGestion({
               Van pegados porque son los dos gestos de «esto que acaba de pasar,
               que no se pierda» — y separados porque uno mira adelante y el otro
               atrás. Ninguno de los dos envía nada. */}
+          <ContactoRegistrado
+            conversacion={conversacion}
+            onAbrirOtra={onAbrirOtra}
+            senalAbrir={senalRegistrar}
+          />
           <AgendarRapido conversacion={conversacion} />
           <RegistrarEvento clave={conversacion.clave} />
           <MenuHerramientas conversacion={conversacion} />

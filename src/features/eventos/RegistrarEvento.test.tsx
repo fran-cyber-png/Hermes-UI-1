@@ -48,7 +48,7 @@ function chip(m: Montado, texto: string): HTMLButtonElement {
 
 function abrir(m: Montado) {
   const disparador = m.contenedor.querySelector<HTMLButtonElement>(
-    'button[title="Registrar algo en el timeline del contacto"]',
+    'button[title="Anotar algo en el timeline del contacto (E)"]',
   );
   if (!disparador) throw new Error('no encontré el disparador');
   disparador.click();
@@ -61,7 +61,7 @@ function estaAbierto(m: Montado): boolean {
 /**
  * El botón de submit, buscado DENTRO del popover.
  *
- * Ojo: el chip disparador también dice «Registrar» y viene antes en el DOM, así
+ * Ojo: el chip disparador dice «Anotar» y viene antes en el DOM, así
  * que un `find` por texto sobre todo el contenedor devuelve el disparador —que
  * nunca está deshabilitado— y el test pasa mirando el botón equivocado.
  */

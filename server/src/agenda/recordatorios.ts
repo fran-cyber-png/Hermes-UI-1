@@ -27,7 +27,41 @@ export interface NuevoRecordatorio {
   numeroPropio: string | null;
   nota: string;
   cuando: Date;
+  /** `llamada` | `whatsapp` | `reunion` | `seguimiento` | `recordatorio` | `otro`. */
+  tipo?: string;
+  /** Minutos. `null` = no se dijo (la agenda pinta el bloque estándar). */
+  duracionMin?: number | null;
+  /** `alta` | `media` | `baja`. `null` = sin definir, el caso normal. */
+  importancia?: string | null;
 }
+
+/**
+ * LO QUE SE PUEDE CAMBIAR DE UN RECORDATORIO YA CREADO. Todo opcional: el PATCH
+ * toca **sólo lo que viene**.
+ *
+ * 🔴 Esto era `{ estado }` a secas, y por eso reprogramar no reprogramaba: el
+ * front ya mandaba `PATCH {cuando}` y `PATCH {importancia}` (arrastrar en el
+ * calendario, el punto de color) contra una ruta que leía `req.body.estado`,
+ * lo encontraba `undefined`, y **guardaba `pendiente`**. O sea que arrastrar una
+ * tarea no la movía Y de paso des-completaba la que estaba hecha, sin un solo
+ * síntoma. La forma parcial es lo que impide que vuelva a pasar: un campo que
+ * no viaja no se escribe.
+ */
+export interface CambioDeRecordatorio {
+  nota?: string;
+  cuando?: Date;
+  tipo?: string;
+  duracionMin?: number | null;
+  importancia?: string | null;
+  estado?: EstadoRecordatorio;
+}
+
+/**
+ * `cancelado` NO es `hecho`: «la llamé» y «ya no hace falta llamarla» son cosas
+ * distintas, y contarlas juntas vuelve el cumplimiento de la agenda un número
+ * que no significa nada.
+ */
+export type EstadoRecordatorio = 'pendiente' | 'hecho' | 'cancelado';
 
 /** Los pendientes (todos, vencidos incluidos) + los hechos de los últimos 35 días
  *  (una grilla mensual completa, con margen). */
@@ -64,6 +98,12 @@ export async function agendarRecordatorio(
       numeroPropio: o.numeroPropio,
       nota: o.nota,
       cuando: o.cuando,
+      // `undefined` deja que mande el default de la columna (`seguimiento`);
+      // por eso no se escribe `?? 'seguimiento'` acá: el default vive en un
+      // lugar solo, que es el schema.
+      tipo: o.tipo,
+      duracionMin: o.duracionMin ?? null,
+      importancia: o.importancia ?? null,
     })
     .returning();
 
@@ -96,20 +136,28 @@ export async function agendarRecordatorio(
 }
 
 /**
- * Marcar hecho / reabrir. Solo el estado: la promesa no se reescribe.
+ * Editar un recordatorio propio: marcarlo hecho, cancelarlo, reprogramarlo,
+ * cambiarle el tipo o la importancia. **Sólo lo que viene en `cambios`.**
  *
  * `null` cuando no existe o no es de esa vendedora: las dos cosas las decide el
  * MISMO `WHERE`, y por eso la ruta las contesta con un solo 404.
+ *
+ * ⚠️ Con `cambios` vacío devuelve la fila tal cual, sin escribir: un UPDATE con
+ * `set({})` es un error de SQL, y un PATCH que no pide nada no es un error de
+ * la vendedora.
  */
-export async function cambiarEstadoDeRecordatorio(
+export async function actualizarRecordatorio(
   base: typeof db,
-  o: { id: number; vendedoraId: string; estado: 'pendiente' | 'hecho' },
+  o: { id: number; vendedoraId: string; cambios: CambioDeRecordatorio },
 ): Promise<FilaRecordatorio | null> {
-  const [fila] = await base
-    .update(recordatorios)
-    .set({ estado: o.estado })
-    .where(and(eq(recordatorios.id, o.id), eq(recordatorios.vendedoraId, o.vendedoraId)))
-    .returning();
+  const mio = and(eq(recordatorios.id, o.id), eq(recordatorios.vendedoraId, o.vendedoraId));
+
+  if (Object.keys(o.cambios).length === 0) {
+    const [fila] = await base.select().from(recordatorios).where(mio).limit(1);
+    return fila ?? null;
+  }
+
+  const [fila] = await base.update(recordatorios).set(o.cambios).where(mio).returning();
   return fila ?? null;
 }
 

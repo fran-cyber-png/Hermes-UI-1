@@ -3,10 +3,11 @@ import { db } from '../db/client.js';
 import { requiereVendedora } from '../auth/sesion.js';
 import { ruta } from '../lib/ruta.js';
 import {
+  actualizarRecordatorio,
   agendarRecordatorio,
   borrarRecordatorio,
-  cambiarEstadoDeRecordatorio,
   consultarAgenda,
+  type CambioDeRecordatorio,
 } from '../agenda/recordatorios.js';
 
 /**
@@ -42,15 +43,50 @@ agendaRouter.post('/', ruta(async (req, res) => {
     numeroPropio: numeroPropio ? String(numeroPropio) : null,
     nota: String(nota).trim(),
     cuando: fecha,
+    tipo: tipoValido(req.body?.tipo) ?? undefined,
+    duracionMin: minutos(req.body?.duracionMin),
+    importancia: importanciaValida(req.body?.importancia),
   });
 
   res.json({ ok: true, recordatorio: fila });
 }));
 
+/**
+ * 🔴 EL PATCH TOCA SÓLO LO QUE VIENE, y antes no: leía `req.body.estado` y
+ * escribía `pendiente` cuando no venía. Como el front ya mandaba `{cuando}` al
+ * arrastrar en el calendario y `{importancia}` al pintar el punto de color, el
+ * resultado era que reprogramar **no reprogramaba** y encima devolvía a
+ * pendiente una tarea ya hecha. Un campo ausente ahora no se escribe.
+ */
 agendaRouter.patch('/:id', ruta(async (req, res) => {
   const id = Number(req.params.id);
-  const estado = req.body?.estado === 'hecho' ? 'hecho' : 'pendiente';
-  const fila = await cambiarEstadoDeRecordatorio(db, { id, vendedoraId: req.vendedoraId!, estado });
+  const b = req.body ?? {};
+  const cambios: CambioDeRecordatorio = {};
+
+  if (typeof b.nota === 'string' && b.nota.trim()) cambios.nota = b.nota.trim();
+  if (b.cuando !== undefined) {
+    const fecha = new Date(b.cuando);
+    if (Number.isNaN(fecha.getTime())) {
+      res.status(400).json({ ok: false, message: 'fecha inválida' });
+      return;
+    }
+    cambios.cuando = fecha;
+  }
+  if (b.estado !== undefined) {
+    if (!ESTADOS.has(String(b.estado))) {
+      res.status(400).json({ ok: false, message: 'estado inválido' });
+      return;
+    }
+    cambios.estado = String(b.estado) as CambioDeRecordatorio['estado'];
+  }
+  const tipo = tipoValido(b.tipo);
+  if (tipo) cambios.tipo = tipo;
+  // `null` es un valor con sentido en los dos: «sacale la importancia», «no sé
+  // cuánto dura». Por eso se pregunta por `undefined` y no por falsy.
+  if (b.duracionMin !== undefined) cambios.duracionMin = minutos(b.duracionMin);
+  if (b.importancia !== undefined) cambios.importancia = importanciaValida(b.importancia);
+
+  const fila = await actualizarRecordatorio(db, { id, vendedoraId: req.vendedoraId!, cambios });
   if (!fila) {
     res.status(404).json({ ok: false, message: 'no existe o no es tuyo' });
     return;
@@ -63,3 +99,27 @@ agendaRouter.delete('/:id', ruta(async (req, res) => {
   const borrado = await borrarRecordatorio(db, { id, vendedoraId: req.vendedoraId! });
   res.json({ ok: true, borrado });
 }));
+
+/** `hecho` y `cancelado` no son lo mismo (ver `recordatorios.ts`). */
+const ESTADOS = new Set(['pendiente', 'hecho', 'cancelado']);
+
+/**
+ * La FORMA del tipo, no su lista. Misma decisión que `eventos/catalogo.ts`: el
+ * vocabulario crece desde el front, que se despliega sin reiniciar el server
+ * (N4 va solo, N5 es un botón). Rechazar acá un tipo que el front ya sabe
+ * dibujar convierte un deploy escalonado en «no se pudo agendar».
+ */
+function tipoValido(v: unknown): string | null {
+  return typeof v === 'string' && /^[a-z][a-z_]{0,31}$/.test(v) ? v : null;
+}
+
+/** `alta` | `media` | `baja`, o `null` = sin definir. */
+function importanciaValida(v: unknown): string | null {
+  return v === 'alta' || v === 'media' || v === 'baja' ? v : null;
+}
+
+/** Minutos, o `null` si no vino un número usable. Tope de 8 h: es una agenda. */
+function minutos(v: unknown): number | null {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.min(Math.round(n), 480) : null;
+}

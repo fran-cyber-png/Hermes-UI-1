@@ -6,6 +6,7 @@ import { HiloWhatsapp, type SugerenciaEnComposer } from '../whatsapp/HiloWhatsap
 import { HiloMessenger } from './HiloMessenger';
 import ResponderPanel from './ResponderPanel';
 import { BarraGestion } from '../gestion/BarraGestion';
+import { ProximoSeguimiento } from '../agenda/ProximoSeguimiento';
 import type { Interaccion } from './types';
 
 /**
@@ -24,6 +25,8 @@ export function ConversacionActiva({
   onCerrar,
   sugerencia,
   miVendedora,
+  onAbrirOtra,
+  senales,
 }: {
   conversacion: Conversacion | null;
   onCerrar: () => void;
@@ -42,6 +45,14 @@ export function ConversacionActiva({
    * quién decide que hay algo que revisar.
    */
   sugerencia?: SugerenciaEnComposer;
+  /** Abrir el chat del contacto que ya estaba registrado (duplicado). */
+  onAbrirOtra?: (o: { clave: string; telefono: string | null }) => void;
+  /**
+   * LOS ATAJOS DE LA BARRA, como contadores. Los maneja el shell (es donde vive
+   * el teclado global) y bajan hasta el control que abren: `R` el registro
+   * rápido, `E` la etapa, `T` las etiquetas.
+   */
+  senales?: { registrar: number; estado: number; etiqueta: number };
 }) {
   const qc = useQueryClient();
 
@@ -71,10 +82,22 @@ export function ConversacionActiva({
   }
 
   // El embudo entero, manejable desde el chat: etapa, etiquetas, intereses,
-  // agendar — arriba de CUALQUIER conversación, sin soltar el hilo.
+  // registrar, agendar — arriba de CUALQUIER conversación, sin soltar el hilo.
+  //
+  // Debajo de la barra va lo que se DEBE (`ProximoSeguimiento`), que se dibuja
+  // sólo si hay algo pendiente: el orden es «qué puedo hacer» y después «qué
+  // quedé en hacer», que es como se lee un chat que ya se trabajó.
   const conBarra = (contenido: React.ReactNode) => (
     <div className="flex h-full min-h-0 flex-col gap-2">
-      <BarraGestion conversacion={conversacion} miVendedora={miVendedora} />
+      <BarraGestion
+        conversacion={conversacion}
+        miVendedora={miVendedora}
+        onAbrirOtra={onAbrirOtra}
+        senalRegistrar={senales?.registrar}
+        senalEstado={senales?.estado}
+        senalEtiqueta={senales?.etiqueta}
+      />
+      <ProximoSeguimiento clave={conversacion.clave} />
       <div className="min-h-0 flex-1">{contenido}</div>
     </div>
   );

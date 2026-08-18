@@ -1743,6 +1743,58 @@ que pasó en la conversación**. Server en `server/src/eventos/`, front en `src/
   con el foco en el buscador de curso, el Escape hacía `stopPropagation()` y **no cerraba nada** (ADR 0024).
 - Capturas: `docs/evidencia/eventos-*.png` (app real con un stub de ~60 líneas en `:4199`).
 
+## La ficha rápida del contacto y las acciones del chat (ADR 0060)
+
+Lo que la vendedora AVERIGUA en la conversación —apellido real, empresa, correo dictado— no tenía
+dónde caer: el cliente vive en Cerberus (sin API REST) y el padrón es copia **read-only** de icarus.
+Tabla `contacto_ficha` (migración `0030`), seam `server/src/contactos/fichaLocal.ts`, ruta
+`/api/contactos/registro`, front en `panel/FichaRapida.tsx` + `panel/fichaLocal.ts`.
+
+- **Se llavea por `clave`**, como `gestiones`, `intereses`, `etiquetas` y `eventos_contacto`: la
+  unidad de trabajo de Hermes es la CONVERSACIÓN. **Cerberus sigue siendo el dueño del CLIENTE** y
+  `panel/identidad.ts` no cambia — esta ficha completa lo que Cerberus no sabe, nunca lo pisa.
+- 🔴 **EL DUPLICADO SE CONTESTA, NO SE BLOQUEA**, y va como **200 con `ok:false`, no como 409**:
+  `ErrorApi` sólo transporta `message`, así que por la vía del error la otra ficha —lo único que hace
+  accionable el aviso— no llegaría. Con `forzar:true` se guarda igual: la misma persona por WhatsApp
+  y por Messenger son dos conversaciones ciertas.
+- **El drawer COMPONE**: monta el mismo `gestion/Intereses` contra la misma tabla, y **no** toca
+  etiquetas ni asesor. Copiar esos campos sería el #37 otra vez — dos lugares diciendo qué quiere el
+  mismo lead. **El asesor no se toca acá**: eso es del reparto, que tiene rastro de quién lo decidió.
+- **El prellenado es toda la velocidad**: `partirIdentidad` parte el alias de WhatsApp
+  «Jorge Martin - JM RUSH AUTOMOTRIZ» en persona + EMPRESA. ⚠️ El guion va **con espacios a los dos
+  lados**: «Jean-Pierre» no se parte, y ése es el nombre de alguien.
+- **`Registrar` pasó a llamarse `Anotar`** (`RegistrarEvento`). Lo que hace no cambió —ADR 0037 entero
+  sigue vigente—: cambió el rótulo porque al lado quedó el botón que registra el CONTACTO, y dos
+  «Registrar» en la misma barra no se distinguen.
+- **La etapa pasó de segmented a dropdown** (`SelectorEtapa` en `BarraGestion`). ⚠️ **NO reabre ADR
+  0044**: lo declarado sigue siendo un PISO, `perdido` sigue pidiendo confirmación y `sin_respuesta`
+  sigue sin poder declararse. Los rótulos salen de `lib/etapas` y los colores de `ETAPA_CHIP`: acá no
+  se escribe ni un nombre ni una clase de etapa.
+- **`agenda/ProximoSeguimiento`** dibuja la promesa pendiente arriba del hilo, con sus tres salidas
+  (reprogramar · completar · cancelar). **No se dibuja si no hay nada pendiente**: un banner que dice
+  «no hay seguimientos» enseña a no mirarlo. Lee la MISMA query que el riel y la vista Agenda.
+- 🔴 **`PATCH /api/agenda/:id` ESCRIBÍA `pendiente` CUANDO NO VENÍA `estado`.** El front ya mandaba
+  `{cuando}` (arrastrar en el calendario) y `{importancia}` (el punto de color) contra una ruta que
+  sólo leía `estado`: **arrastrar no reprogramaba Y de paso des-completaba una tarea hecha**, con 200
+  y sin síntoma. Ahora el PATCH es parcial de verdad — **un campo que no viaja no se escribe**.
+  ⚠️ La otra mitad del mismo defecto: `importancia` estaba dibujada en el front **sin columna en la
+  base**. Antes de cablear una UI contra un PATCH, mirá que el campo exista del otro lado.
+- 🔴 **EL TIPO ELEGIDO LE GANA AL PREFIJO ADIVINADO** (`agenda/tipoDeNota.ts`, `tipoDeActividad`).
+  Hasta que existió la columna `tipo`, el color del calendario se deducía de que la nota empezara con
+  «llamada»/«wsp». El respaldo **no se saca** (las filas viejas no tienen tipo), y un tipo que este
+  front no dibuja cae al respaldo en vez de romper: el vocabulario crece del lado del front y los dos
+  se despliegan por separado.
+- **`cancelado` NO es `hecho`**: «la llamé» y «ya no hace falta llamarla» contadas juntas vuelven el
+  cumplimiento de la agenda un número sin significado.
+- **Atajos**: `⌘K` abre la paleta de acciones; `r` registra, `e` cambia la etapa, `t` etiqueta —
+  **sólo con una conversación abierta en Mensajes**. 🔴 **`a` (auto-respuestas) y `n` (libreta) no se
+  tocan**: están documentadas en la Cabina y ya están en el dedo del equipo. ⚠️ Las señales que abren
+  cada control son **contadores, no booleanos**: con un booleano, cerrar el drawer y volver a apretar
+  la tecla no cambia el valor y no abriría nada.
+- **El acuse va por `lib/avisos.ts` + `components/Avisos.tsx`** (uno a la vez, el último gana). Lo que
+  se puede DESHACER no va ahí: el «Deshacer» vive donde está la cosa deshecha (ver el pie de la
+  Libreta), no flotando sobre otra pantalla.
+
 ## El panel derecho — ordenado por lo que decide una venta (ADR 0017)
 
 `src/features/panel/PanelDerecho.tsx` (360 px, `w-[22.5rem]`). El orden **no es temático**: es el de las

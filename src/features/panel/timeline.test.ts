@@ -435,3 +435,40 @@ describe('H7 — los correos en el timeline', () => {
     expect(lineas([]).filter((e) => e.tipo === 'correo')).toHaveLength(0);
   });
 });
+
+describe('la ficha y los seguimientos en el timeline', () => {
+  it('la ficha registrada entra como hecho MANUAL, con su autora', () => {
+    const { grupos } = ensamblarTimeline({
+      fichaLocal: { creadoAt: '2026-08-18T16:09:00.000Z', vendedoraId: 'ventas12@grupogoberna.com' },
+    });
+    const e = grupos.flatMap((g) => g.eventos).find((x) => x.tipo === 'ficha');
+
+    expect(e?.rotulo).toBe('Contacto registrado');
+    expect(e?.estado).toBe('manual');
+    expect(e?.autor).toBe('Ventas12');
+  });
+
+  it('un seguimiento pendiente es lo ÚNICO del timeline que todavía no pasó', () => {
+    const { grupos } = ensamblarTimeline({
+      seguimientos: [{ id: 7, nota: 'llamarla', cuando: '2026-08-19T14:00:00.000Z', estado: 'pendiente' }],
+    });
+    const e = grupos.flatMap((g) => g.eventos).find((x) => x.tipo === 'seguimiento');
+
+    expect(e?.rotulo).toBe('Seguimiento agendado');
+    expect(e?.estado).toBe('pendiente');
+    expect(e?.valor).toBe('llamarla');
+  });
+
+  it('cumplido y cancelado no se leen igual — son dos historias distintas', () => {
+    const { grupos } = ensamblarTimeline({
+      seguimientos: [
+        { id: 1, nota: 'la llamé', cuando: '2026-08-17T14:00:00.000Z', estado: 'hecho' },
+        { id: 2, nota: 'ya no hace falta', cuando: '2026-08-17T15:00:00.000Z', estado: 'cancelado' },
+      ],
+    });
+    const rotulos = grupos.flatMap((g) => g.eventos).map((e) => e.rotulo);
+
+    expect(rotulos).toContain('Seguimiento cumplido');
+    expect(rotulos).toContain('Seguimiento cancelado');
+  });
+});

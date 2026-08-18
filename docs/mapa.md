@@ -11,9 +11,9 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 33 | 446 | 59,010 | 19,222 |
-| server | 66 | 782 | 81,957 | 51,247 |
-| **total** | **99** | **1,228** | **140,967** | **70,469** |
+| front | 33 | 456 | 60,571 | 19,575 |
+| server | 66 | 784 | 82,317 | 51,352 |
+| **total** | **99** | **1,240** | **142,888** | **70,927** |
 
 ## Front — `src/`
 
@@ -21,16 +21,16 @@
 |---|---|--:|--:|--:|--:|--:|
 | `notas` | La Libreta: páginas, espacios compartidos, autoguardado y el link público. | 58 | 6,874 | 17 | 5 | 1 |
 | `whatsapp` | La conversación nativa: el hilo, el composer, los adjuntos, las citas y la compresión de video. | 44 | 5,246 | 23 | 9 | 5 |
-| `canales` | La cola unificada, y sólo eso: la lista de conversaciones, su fila, la barra de filtros y el panel de contexto. El modelo que dibuja NO vive acá — vive en `dominio/`. | 32 | 4,562 | 6 | 1 | 11 |
+| `canales` | La cola unificada, y sólo eso: la lista de conversaciones, su fila, la barra de filtros y el panel de contexto. El modelo que dibuja NO vive acá — vive en `dominio/`. | 32 | 4,585 | 6 | 1 | 11 |
+| `panel` | La ficha al costado del chat, en el orden de las preguntas que decide una venta: quién es, qué quiere, qué mandarle, qué hacer. | 26 | 3,501 | 9 | 5 | 8 |
 | `correos` | El correo 1-a-1, auditado. Sin listas ni campañas. | 11 | 3,500 | 5 | 1 | 4 |
-| `panel` | La ficha al costado del chat, en el orden de las preguntas que decide una venta: quién es, qué quiere, qué mandarle, qué hacer. | 22 | 2,956 | 7 | 4 | 7 |
+| `agenda` | Los seguimientos que una vendedora se agendó: cuándo vuelve a tocar a quién. | 29 | 3,114 | 5 | 5 | 4 |
 | `vistas` | El Pipeline: el tablero por etapas, sus tarjetas y las compuertas para mover una. | 15 | 2,927 | 6 | 1 | 10 |
-| `agenda` | Los seguimientos que una vendedora se agendó: cuándo vuelve a tocar a quién. | 26 | 2,632 | 4 | 4 | 4 |
 | `routing` | Qué campaña de Meta le cae a qué vendedora. | 10 | 2,511 | 4 | 1 | 1 |
 | `dashboard` | Los números en pantalla: el radar, el embudo y qué recorte ve quien mira. | 8 | 2,469 | 2 | 3 | 7 |
-| `lib` | Lo que no sabe de negocio: el cliente HTTP con su caché en IndexedDB, el SSE, el teclado, formato y notificaciones. Capa 0 — no puede importar ninguna feature. | 48 | 2,128 | 16 | 30 | 0 |
+| `gestion` | Lo que la vendedora asienta sobre una conversación: etapa, categorías, intereses y sus herramientas. | 12 | 2,236 | 2 | 5 | 9 |
+| `lib` | Lo que no sabe de negocio: el cliente HTTP con su caché en IndexedDB, el SSE, el teclado, formato y notificaciones. Capa 0 — no puede importar ninguna feature. | 49 | 2,163 | 16 | 30 | 0 |
 | `campana` | Armar y mirar una campaña por plantilla aprobada de Meta: listas, corridas e historial. | 11 | 2,100 | 1 | 1 | 2 |
-| `gestion` | Lo que la vendedora asienta sobre una conversación: etapa, categorías, intereses y sus herramientas. | 11 | 1,994 | 2 | 5 | 8 |
 | `padron` | Los contactos que nunca escribieron: filtrarlos por facetas y repartirlos. | 8 | 1,878 | 2 | 2 | 4 |
 | `dominio` | El vocabulario del CRM que más de una vista necesita: qué ES una conversación, las queries que la traen, y las derivaciones puras sobre ella — canal, curso, ventana, antigüedad, cliente, dueño, líneas, la paleta de categorías y el desglose del embudo. Capa 1: importa `lib` y nada más. 🔴 Nació sacando esto de adentro de `features/canales`, donde 58 de los 148 imports cruzados del front entraban a una feature para pedirle el modelo. | 23 | 1,810 | 10 | 20 | 1 |
 | `autorespuesta` | El acuse fuera de horario visto desde la app: el interruptor, la cola de revisión y el modo supervisado. | 13 | 1,711 | 4 | 2 | 3 |
@@ -39,13 +39,13 @@
 | `ivi` | La consulta al cerebro RAG y cómo se presenta lo que contesta: los tres tipos y los ocho errores. | 10 | 1,395 | 4 | 1 | 1 |
 | `auth` | Entrar y salir: login contra Cerberus, el SSO de Centurión, y el token que el cliente cree antes de preguntar. | 18 | 1,300 | 9 | 3 | 4 |
 | `venta` | Registrar la venta contra Cerberus sin salir del chat. | 6 | 1,135 | 1 | 2 | 6 |
+| `app` | El armazón: qué vista está abierta, los ⌘N y qué capa se monta encima de la mesa. Compone features; no tiene regla de negocio propia. | 2 | 1,033 | 0 | 0 | 18 |
 | `hechos` | Los datos recomendados — la munición de una línea. Tocar uno lo pone en el composer; no envía. | 7 | 1,003 | 2 | 2 | 3 |
-| `app` | El armazón: qué vista está abierta, los ⌘N y qué capa se monta encima de la mesa. Compone features; no tiene regla de negocio propia. | 2 | 852 | 0 | 0 | 18 |
 | `navegador` | El navegador embebido: qué peldaño de la escalera corre esta máquina y a dónde se puede ir. | 9 | 843 | 3 | 1 | 1 |
 | `bot` | El interruptor del bot de primera línea visto desde la app: en qué modo está, de dónde sale ese modo (la base o el entorno) y cómo apagarlo sin un deploy. | 5 | 724 | 2 | 1 | 1 |
-| `eventos` | Registrar lo que la vendedora ESCUCHÓ, tipado, en el timeline del contacto. | 4 | 683 | 2 | 2 | 1 |
+| `eventos` | Registrar lo que la vendedora ESCUCHÓ, tipado, en el timeline del contacto. | 4 | 687 | 2 | 2 | 1 |
+| `componentes` | Átomos visuales que usa medio árbol y no son de ninguna feature: la marca, los gráficos, el avatar y la píldora de canal. Capa 0 — no puede importar una feature ni el dominio. | 9 | 634 | 0 | 10 | 1 |
 | `cerberus` | La ficha del contacto: la que trae el ERP y la que dejó el formulario de landing. | 7 | 592 | 2 | 5 | 4 |
-| `componentes` | Átomos visuales que usa medio árbol y no son de ninguna feature: la marca, los gráficos, el avatar y la píldora de canal. Capa 0 — no puede importar una feature ni el dominio. | 8 | 585 | 0 | 10 | 1 |
 | `reparto` | De quién es cada conversación, visto desde la app. | 3 | 565 | 0 | 1 | 2 |
 | `identidad` | «Es la misma persona que…»: buscar contactos y unificar fichas. | 5 | 524 | 1 | 2 | 3 |
 | `sugerencias` | Las dos respuestas listas del panel derecho. | 2 | 333 | 0 | 0 | 4 |
@@ -57,12 +57,12 @@
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
-| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. Capa 3 — nadie la importa: un archivo que otro módulo necesita no es un router y no va acá (fue el caso de `costoPorLead`). | 62 | 10,402 | 12 | 1 | 48 |
+| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. Capa 3 — nadie la importa: un archivo que otro módulo necesita no es un router y no va acá (fue el caso de `costoPorLead`). | 62 | 10,532 | 12 | 1 | 48 |
 | `bot` | El bot de primera línea que atiende solo: su agente, sus guardrails, sus frenos y el reenganche. | 56 | 7,997 | 24 | 7 | 13 |
 | `scripts` | Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción. Capa 3. | 36 | 6,207 | 0 | 0 | 36 |
 | `cola` | La consulta que ordena la deuda: a quién se atiende primero y por qué. Cada regla vive pura y con su gemelo SQL. | 62 | 5,494 | 42 | 9 | 6 |
 | `whatsapp` | La costura con WhatsApp: la interfaz de transporte y sus implementaciones, el hilo, y la única puerta por la que sale un envío. | 49 | 4,263 | 23 | 13 | 10 |
-| `db` | El schema y la conexión. Capa 0: no conoce ninguna regla de negocio y no puede importar a nadie. | 20 | 3,862 | 1 | 53 | 0 |
+| `db` | El schema y la conexión. Capa 0: no conoce ninguna regla de negocio y no puede importar a nadie. | 20 | 3,945 | 1 | 53 | 0 |
 | `autorespuesta` | El acuse fuera de horario del lado del server: a quién corresponde, con qué plantilla y a qué ritmo. Nunca manda solo. | 30 | 2,993 | 13 | 7 | 5 |
 | `campana` | Mandar una campaña por plantilla aprobada de Meta: el público, los vetos, el ritmo y los reintentos. | 27 | 2,907 | 12 | 3 | 6 |
 | `correos` | El correo 1-a-1 y su rastro. Sin listas ni campañas. | 24 | 1,684 | 15 | 2 | 2 |
@@ -91,7 +91,7 @@
 | `senales` | «Cotizado» y «se enfrió»: se derivan en cada consulta, nunca se guardan. | 8 | 642 | 4 | 4 | 2 |
 | `auth` | Quién entra: Cerberus, Centurión, el token HMAC y el perímetro cerrado por default. | 13 | 628 | 7 | 6 | 2 |
 | `procedencia` | De qué pieza salió cada envío, estampado en la ORDEN de envío y no en un update posterior. | 6 | 625 | 3 | 6 | 3 |
-| `telefono` | Partir y comparar un teléfono E.164. La llave canónica del repo: vive una sola vez. Capa 0. | 6 | 608 | 3 | 5 | 0 |
+| `telefono` | Partir y comparar un teléfono E.164. La llave canónica del repo: vive una sola vez. Capa 0. | 6 | 608 | 3 | 6 | 0 |
 | `reparto` | De quién es cada conversación cuando varias comparten una línea. Round-robin por carga, fail-open. | 6 | 590 | 3 | 7 | 2 |
 | `gestiones` | La bitácora comercial: lo que una persona AFIRMA sobre una conversación. | 8 | 546 | 4 | 5 | 5 |
 | `ivi` | El proxy al cerebro RAG: traduce su dialecto y falla ruidoso — nunca disfraza una caída de «no encontró datos». | 3 | 519 | 2 | 1 | 0 |
@@ -115,13 +115,13 @@
 | `interacciones` | Las interacciones crudas de `interactions` como las consulta la app: el listado, los canales y la frescura de la ingesta. | 1 | 224 | 0 | 1 | 3 |
 | `icarus` | Leer la base de icarus, siempre read-only. | 4 | 223 | 2 | 1 | 1 |
 | `negocio` | Las líneas de negocio y el embudo de consultoría. | 4 | 186 | 2 | 2 | 0 |
+| `agenda` | Los recordatorios que una vendedora se agendó sobre una conversación. | 1 | 175 | 0 | 1 | 1 |
+| `contactos` | Lo que se escribe sobre un contacto desde su ficha, empezando por la venta registrada contra Cerberus. | 3 | 168 | 1 | 1 | 3 |
 | `ediciones` | Editar un mensaje ya enviado. Sólo donde el transporte lo permite. | 4 | 164 | 2 | 1 | 3 |
 | `atencion` | Cuánto se tarda en contestar. | 2 | 161 | 1 | 1 | 0 |
 | `responder` | Responder un comentario de Meta: lo que hay que leer de la base para armar y registrar esa respuesta. | 1 | 136 | 0 | 1 | 1 |
 | `entrenamiento` | Las corridas de entrenamiento del bot, sus lecciones y los agujeros que dejan, tal como los lee la pantalla. | 1 | 132 | 0 | 1 | 1 |
-| `agenda` | Los recordatorios que una vendedora se agendó sobre una conversación. | 1 | 127 | 0 | 1 | 1 |
 | `dominio` | 🪦 Heredado de meta-escuela — la máquina de estados de venta. | 2 | 125 | 1 | 3 | 0 |
-| `contactos` | Lo que se escribe sobre un contacto desde su ficha, empezando por la venta registrada contra Cerberus. | 1 | 69 | 0 | 1 | 2 |
 | `pruebas` | El andamio de los tests: base efímera, sembrado y humo end-to-end. | 9 | 0 | 9 | 1 | 0 |
 
 ## Quién depende de quién
@@ -155,7 +155,7 @@ agrupados bajo un módulo que en realidad pertenecen a otra capa. Es el termóme
 los módulos están bien dibujados, y baja sacando el núcleo compartido a su propia capa.
 
 **Qué queda afuera del grafo** (acá y en «Quién depende de quién»): los tests, y las
-**22 galerías** `src/features/*/galeria*.tsx`. Las dos cosas por el mismo
+**23 galerías** `src/features/*/galeria*.tsx`. Las dos cosas por el mismo
 motivo: miran a cualquiera a propósito y ninguna la importa la app — cada galería se sirve por
 su propio `galeria-*.html` y existe para poder fotografiar los casos feos. Contarlas inventaba
 dependencias entre features que el producto no tiene: sacarlas bajó este nudo de 7 a 3.
@@ -163,7 +163,7 @@ Siguen contando en `Líneas`: no son tests, son código del módulo.
 
 - **3 módulos**: `front/autorespuesta` ↔ `front/hechos` ↔ `front/whatsapp`
 - **2 módulos**: `front/cerberus` ↔ `front/identidad`
-- **3 módulos**: `front/dashboard` ↔ `front/panel` ↔ `front/venta`
+- **5 módulos**: `front/dashboard` ↔ `front/gestion` ↔ `front/panel` ↔ `front/senales` ↔ `front/venta`
 - **2 módulos**: `server/analisis` ↔ `server/decisions`
 - **26 módulos**: `server/atribucion` ↔ `server/auth` ↔ `server/autorespuesta` ↔ `server/bot` ↔ `server/campana` ↔ `server/catalogo` ↔ `server/centurion` ↔ `server/cerberus` ↔ `server/clientes` ↔ `server/cola` ↔ `server/cursos` ↔ `server/dashboard` ↔ `server/equipo` ↔ `server/gente` ↔ `server/gestiones` ↔ `server/hechos` ↔ `server/numeros` ↔ `server/padron` ↔ `server/plantillas` ↔ `server/procedencia` ↔ `server/reacciones` ↔ `server/reparto` ↔ `server/resultados` ↔ `server/routing` ↔ `server/sugerencias` ↔ `server/whatsapp`
 - **2 módulos**: `server/lazo` ↔ `server/ontologia`

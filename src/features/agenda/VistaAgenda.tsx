@@ -80,7 +80,7 @@ function Chip({ r, vencido, onVer }: { r: Recordatorio; vencido: boolean; onVer:
       title={r.importancia ? `Importancia: ${r.importancia.toUpperCase()}` : 'Sin importancia definida'}
       className={
         'flex w-full items-center gap-1 truncate rounded-md px-1 py-0.5 text-left text-[11px] font-medium transition-colors hover:brightness-95 ' +
-        estiloDeNota(r.nota, vencido, r.estado === 'hecho')
+        estiloDeNota(r, vencido, r.estado === 'hecho')
       }
     >
       {r.importancia && (
@@ -103,7 +103,7 @@ function FilaDia({ r, vencido, onVer }: { r: Recordatorio; vencido: boolean; onV
       className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-secondary/30"
     >
       <span className="w-12 shrink-0 font-mono text-xs tabular-nums text-muted-foreground">{horaDe(r)}</span>
-      <span aria-hidden className={'h-8 w-1 shrink-0 rounded-full ' + barraDeNota(r.nota, vencido, hecho)} />
+      <span aria-hidden className={'h-8 w-1 shrink-0 rounded-full ' + barraDeNota(r, vencido, hecho)} />
       <span className="min-w-0 flex-1">
         <span
           className={

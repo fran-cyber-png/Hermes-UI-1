@@ -14,7 +14,11 @@ export type TipoEvento = 'llegada' | 'identidad' | 'mensaje' | 'interes_detectad
   /** Lo que una persona registró a mano (`eventos_contacto`). */
   | 'registrado'
   /** Un correo que salió (o no salió) desde Hermes hacia esta persona. */
-  | 'correo';
+  | 'correo'
+  /** La ficha rápida del contacto (`contacto_ficha`). */
+  | 'ficha'
+  /** Una promesa de la agenda (`recordatorios`), pasada o futura. */
+  | 'seguimiento';
 
 /**
  * ⚠️ **`fallido` es el único que pide UNA ACCIÓN, y por eso rompe el molde.**
@@ -106,6 +110,26 @@ interface DatosTimeline {
   correos?: readonly CorreoEnTimeline[];
   /** Quién está mirando — para saber cuáles de esos eventos puede tocar. */
   yo?: string | null;
+  /**
+   * La ficha rápida, si alguien la registró. Estructural a propósito: el
+   * timeline no importa el módulo de la ficha para no atarse a su forma.
+   */
+  fichaLocal?: { creadoAt?: string; vendedoraId?: string } | null;
+  /**
+   * LOS SEGUIMIENTOS DE ESTA CONVERSACIÓN, incluidos los del futuro.
+   *
+   * Es el único evento del timeline que puede tener fecha ADELANTE, y eso es
+   * justamente lo que se quiere ver: «qué quedé en hacer» es tan parte de la
+   * historia comercial como «qué pasó». Se tipa estructuralmente por lo mismo
+   * que la ficha.
+   */
+  seguimientos?: readonly {
+    id: number;
+    nota: string;
+    cuando: string;
+    estado: string;
+    tipo?: string | null;
+  }[];
 }
 
 const idDeEvento = (tipo: TipoEvento, timestamp: string | undefined, valor: string | undefined): string =>
@@ -296,6 +320,48 @@ export function ensamblarTimeline(
       // server manda el id crudo justo para que las dos filas de la misma columna
       // no se acorten con dos reglas distintas (`luz.perez` → «Luz» vs «Luz.perez»).
       autor: nombreCortoVendedora(c.vendedoraId),
+    });
+  }
+
+  /**
+   * LA FICHA DEL CONTACTO, cuando alguien la registró. Es un hecho de la
+   * vendedora —por eso `manual` y con autor— y va con la fecha de creación, no
+   * la de la última edición: el timeline cuenta cuándo pasó algo, y lo que pasó
+   * fue que esta persona dejó de ser un número suelto.
+   */
+  if (datos.fichaLocal) {
+    eventos.push({
+      id: idDeEvento('ficha', datos.fichaLocal.creadoAt, undefined),
+      tipo: 'ficha',
+      rotulo: 'Contacto registrado',
+      timestamp: datos.fichaLocal.creadoAt,
+      estado: 'manual',
+      autor: datos.fichaLocal.vendedoraId ? nombreCortoVendedora(datos.fichaLocal.vendedoraId) : undefined,
+    });
+  }
+
+  /**
+   * LAS PROMESAS. El rótulo dice en qué terminó cada una —agendada, cumplida o
+   * cancelada— porque las tres son historias distintas: «quedó en llamarla y la
+   * llamó» y «quedó en llamarla y lo canceló» no se pueden leer igual.
+   *
+   * Lo pendiente va con `estado: 'pendiente'` (el punto hueco del rail): es lo
+   * único del timeline que todavía no pasó.
+   */
+  for (const s of datos.seguimientos ?? []) {
+    eventos.push({
+      id: `seguimiento:${s.id}`,
+      tipo: 'seguimiento',
+      rotulo:
+        s.estado === 'hecho'
+          ? 'Seguimiento cumplido'
+          : s.estado === 'cancelado'
+            ? 'Seguimiento cancelado'
+            : 'Seguimiento agendado',
+      valor: s.nota,
+      timestamp: s.cuando,
+      estado: s.estado === 'pendiente' ? 'pendiente' : 'manual',
+      fuente: 'Agenda',
     });
   }
 

@@ -18,6 +18,7 @@ import {
   Bot,
 } from 'lucide-react';
 import { Escudo } from './components/Marca';
+import { Avisos } from './components/Avisos';
 import { ColaUnificada } from './features/canales/ColaUnificada';
 import { ConversacionActiva } from './features/canales/ConversacionActiva';
 import type { Conversacion } from './dominio/conversaciones';
@@ -169,6 +170,12 @@ function atajosDe(vistas: readonly { label: string }[]): { tecla: string; que: s
     { tecla: '/', que: 'Buscar en la cola' },
     { tecla: '↑↓ ⏎', que: 'Recorrer la cola' },
     { tecla: 'Esc', que: 'Cerrar la conversación' },
+    // Las tres del chat abierto: no existen sin una conversación adelante, y
+    // por eso se leen juntas y después de las de navegación.
+    { tecla: '⌘K', que: 'Acciones rápidas' },
+    { tecla: 'r', que: 'Registrar el contacto' },
+    { tecla: 'e', que: 'Cambiar la etapa' },
+    { tecla: 't', que: 'Poner una etiqueta' },
     { tecla: 'n', que: 'Tu libreta personal' },
     { tecla: 'i', que: 'Preguntarle a Ivi' },
     { tecla: 'a', que: 'Revisar las auto-respuestas' },
@@ -241,6 +248,106 @@ function Cabina({
   );
 }
 
+/**
+ * LA PALETA DE ACCIONES RÁPIDAS (⌘K) — la puerta única a lo que se hace sobre
+ * la conversación abierta.
+ *
+ * Existe por una razón de teclado, no de moda: las letras sueltas ya están casi
+ * todas tomadas (`n` libreta, `i` Ivi, `a` auto-respuestas) y romper esas tres
+ * para meter cinco nuevas cambiaría atajos que el equipo ya tiene en el dedo.
+ * ⌘K estaba libre, es un acorde (no escribe texto, así que anda con el foco en
+ * el composer) y es lo que Linear, Notion y Slack enseñaron a apretar.
+ *
+ * Es una LISTA DE ATAJOS, no un lugar nuevo: cada acción dispara exactamente el
+ * mismo control que el mouse abre en la barra. Si algo se puede hacer acá y no
+ * ahí, está mal puesto.
+ */
+function PaletaAcciones({
+  acciones,
+  onCerrar,
+}: {
+  acciones: { id: string; que: string; tecla?: string; hacer: () => void }[];
+  onCerrar: () => void;
+}) {
+  const [texto, setTexto] = useState('');
+  const [i, setI] = useState(0);
+
+  const filtradas = acciones.filter((a) => a.que.toLowerCase().includes(texto.trim().toLowerCase()));
+  const elegida = filtradas[Math.min(i, filtradas.length - 1)];
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-navy/20 pt-[18vh]"
+      onClick={onCerrar}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Acciones rápidas"
+    >
+      <div className="w-80 animate-entrar overflow-hidden rounded-2xl bg-card shadow-panel" onClick={(e) => e.stopPropagation()}>
+        <input
+          value={texto}
+          onChange={(e) => {
+            setTexto(e.target.value);
+            setI(0);
+          }}
+          onKeyDown={(e) => {
+            // El teclado de la paleta se atiende ACÁ y se corta: el listener del
+            // shell escucha en burbuja, así que sin esto Escape cerraría además
+            // la conversación de atrás.
+            e.stopPropagation();
+            if (e.key === 'Escape') onCerrar();
+            if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              setI((v) => Math.min(v + 1, filtradas.length - 1));
+            }
+            if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              setI((v) => Math.max(v - 1, 0));
+            }
+            if (e.key === 'Enter' && elegida) {
+              e.preventDefault();
+              onCerrar();
+              elegida.hacer();
+            }
+          }}
+          autoFocus
+          placeholder="Qué querés hacer…"
+          aria-label="Buscar una acción"
+          className="w-full border-b border-border bg-transparent px-4 py-3 text-sm outline-none placeholder:text-muted-foreground"
+        />
+        <ul className="max-h-72 overflow-y-auto p-1">
+          {filtradas.map((a, n) => (
+            <li key={a.id}>
+              <button
+                type="button"
+                onMouseEnter={() => setI(n)}
+                onClick={() => {
+                  onCerrar();
+                  a.hacer();
+                }}
+                className={
+                  'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs transition-colors ' +
+                  (elegida?.id === a.id ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted/60')
+                }
+              >
+                <span className="flex-1">{a.que}</span>
+                {a.tecla && (
+                  <span className="rounded bg-card px-1.5 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground shadow-panel">
+                    {a.tecla}
+                  </span>
+                )}
+              </button>
+            </li>
+          ))}
+          {filtradas.length === 0 && (
+            <li className="px-3 py-6 text-center text-[11px] text-muted-foreground">Nada con ese nombre.</li>
+          )}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const { vendedora, cargando, sinServer, reintentar, entrar, salir, cerberusVivo, errorCenturion } = useSesion();
   const [abierta, setAbierta] = useState<Conversacion | null>(null);
@@ -248,6 +355,15 @@ export default function App() {
   const [direccion, setDireccion] = useState<'abajo' | 'arriba'>('abajo');
   const [telefonoPersonas, setTelefonoPersonas] = useState<string | null>(null);
   const [cabina, setCabina] = useState(false);
+  const [paleta, setPaleta] = useState(false);
+  /**
+   * LAS SEÑALES DE LOS ATAJOS DEL CHAT. Contadores, no booleanos: apretar `R`,
+   * cerrar el drawer y volver a apretar `R` tiene que abrirlo otra vez, y con
+   * un booleano el valor no cambiaría.
+   */
+  const [senales, setSenales] = useState({ registrar: 0, estado: 0, etiqueta: 0 });
+  const senalar = (cual: 'registrar' | 'estado' | 'etiqueta') =>
+    setSenales((s) => ({ ...s, [cual]: s[cual] + 1 }));
   // La consulta a Ivi (H3). Capa aparte, global: se pregunta desde donde sea que estés y
   // el panel derecho —que es de la persona abierta, no del negocio— no se toca.
   const [ivi, setIvi] = useState(false);
@@ -305,6 +421,29 @@ export default function App() {
     setVista(destino);
   }
 
+  /**
+   * LO QUE OFRECE ⌘K. Con una conversación abierta son las acciones sobre ella;
+   * sin ninguna, sólo lo que se puede hacer igual (ir a la Agenda, a la
+   * libreta). **Ninguna acción es exclusiva de la paleta**: todas existen como
+   * botón, y la paleta sólo las alcanza más rápido.
+   */
+  const accionesRapidas = [
+    ...(abierta
+      ? [
+          { id: 'registrar', que: 'Registrar el contacto', tecla: 'r', hacer: () => senalar('registrar') },
+          { id: 'estado', que: 'Cambiar la etapa', tecla: 'e', hacer: () => senalar('estado') },
+          { id: 'etiqueta', que: 'Poner una etiqueta', tecla: 't', hacer: () => senalar('etiqueta') },
+        ]
+      : []),
+    { id: 'agenda', que: 'Ver mi agenda', hacer: () => cambiarVista('agenda') },
+    { id: 'nota', que: 'Abrir mi libreta', tecla: 'n', hacer: () => cambiarVista('libreta') },
+    { id: 'buscar', que: 'Buscar en la cola', tecla: '/', hacer: () => {
+      cambiarVista('bandeja');
+      requestAnimationFrame(() => requestAnimationFrame(() => busquedaRef.current?.focus()));
+    } },
+    { id: 'ivi', que: 'Preguntarle a Ivi', tecla: 'i', hacer: () => setIvi(true) },
+  ];
+
   // ── El teclado global (§2.8): la guarda va antes que todo. ──
   useEffect(() => {
     function alTeclear(e: KeyboardEvent) {
@@ -328,6 +467,10 @@ export default function App() {
         const enElBorrador =
           revision.activo && e.target instanceof HTMLElement && e.target.tagName === 'TEXTAREA';
         if (tecleandoEn(e) && !enElBorrador) return;
+        if (paleta) {
+          setPaleta(false);
+          return;
+        }
         if (cabina) {
           setCabina(false);
           return;
@@ -348,6 +491,11 @@ export default function App() {
       // 🔴 Y se compara el NÚMERO, no la cadena. Con `e.key <= String(n)` y diez
       // vistas, `'2' <= '10'` es false: andaba ⌘1 y se rompían las ocho del
       // medio — o sea que el candado de la ÚLTIMA vista no lo habría visto.
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setPaleta((v) => !v);
+        return;
+      }
       if (e.metaKey || e.ctrlKey) {
         const n = Number(e.key);
         const destino = n >= 1 && n <= Math.min(vistas.length, TECLAS_DE_VISTA) ? vistas[n - 1] : undefined;
@@ -385,6 +533,21 @@ export default function App() {
         e.preventDefault();
         setCabina((v) => !v);
         return;
+      }
+      // ── LAS TRES DEL CHAT ABIERTO ──
+      // Sólo con una conversación adelante, y sólo en Mensajes: son acciones
+      // SOBRE esa conversación, así que fuera de ahí no tienen a quién
+      // aplicarse. Van antes que nada global para que su significado no dependa
+      // de dónde esté el foco, y son las letras que quedaban libres: `a`
+      // (auto-respuestas) y `n` (libreta) ya estaban tomadas y no se tocan —
+      // agendar y anotar entran por ⌘K.
+      if (vista === 'bandeja' && abierta && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const letra = e.key.toLowerCase();
+        if (letra === 'r' || letra === 'e' || letra === 't') {
+          e.preventDefault();
+          senalar(letra === 'r' ? 'registrar' : letra === 'e' ? 'estado' : 'etiqueta');
+          return;
+        }
       }
       // Preguntarle a Ivi: «i» sola. La hoja se cierra sola con Escape (contrato de la
       // casa, `useEscape` en captura), así que acá alcanza con abrir y alternar.
@@ -424,7 +587,7 @@ export default function App() {
     // `vendedora?.id` está acá porque de él sale `vistas`: sin eso, el listener
     // se quedaría con el riel de quien estaba antes y ⌘N abriría otra cosa.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vista, cabina, abierta, revision.activo, revision.actualId, revision.fila, vendedora?.id]);
+  }, [vista, cabina, paleta, abierta, revision.activo, revision.actualId, revision.fila, vendedora?.id]);
 
   if (cargando) {
     // El esqueleto con la anatomía del shell: riel, header, tres placas.
@@ -647,6 +810,15 @@ export default function App() {
               conversacion={abierta}
               onCerrar={() => setAbierta(null)}
               miVendedora={vendedora.id}
+              senales={senales}
+              /* «Abrir contacto» cuando el registro rápido detecta que esa
+                 persona ya está en otra conversación. Se resuelve con la MISMA
+                 fábrica que el + de la cola (`escribirA`), así que la clave la
+                 arma un solo lugar; sin WhatsApp conectado no hay chat que
+                 abrir y el botón no se dibuja. */
+              onAbrirOtra={
+                escribirA ? (o) => o.telefono && escribirA(o.telefono) : undefined
+              }
               sugerencia={
                 revision.activo && revision.actual && revision.actual.clave === abierta?.clave
                   ? {
@@ -800,7 +972,16 @@ export default function App() {
       </div>
 
       {cabina && <Cabina onCerrar={() => setCabina(false)} enRevision={revision.activo} atajos={atajosDe(vistas)} />}
+      {paleta && (
+        <PaletaAcciones
+          onCerrar={() => setPaleta(false)}
+          acciones={accionesRapidas}
+        />
+      )}
       <ConsultaIvi abierta={ivi} onCerrar={() => setIvi(false)} />
+      {/* El acuse de lo que se acaba de hacer. Se monta UNA vez, al final: es lo
+          único que puede aparecer sobre cualquier vista. */}
+      <Avisos />
     </div>
   );
 }
