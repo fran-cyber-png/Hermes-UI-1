@@ -11,9 +11,9 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 33 | 426 | 57,401 | 18,973 |
+| front | 33 | 446 | 58,995 | 19,222 |
 | server | 66 | 782 | 81,957 | 51,247 |
-| **total** | **99** | **1,208** | **139,358** | **70,220** |
+| **total** | **99** | **1,228** | **140,952** | **70,469** |
 
 ## Front — `src/`
 
@@ -25,6 +25,7 @@
 | `correos` | El correo 1-a-1, auditado. Sin listas ni campañas. | 11 | 3,500 | 5 | 1 | 4 |
 | `panel` | La ficha al costado del chat, en el orden de las preguntas que decide una venta: quién es, qué quiere, qué mandarle, qué hacer. | 22 | 2,956 | 7 | 4 | 7 |
 | `vistas` | El Pipeline: el tablero por etapas, sus tarjetas y las compuertas para mover una. | 15 | 2,927 | 6 | 1 | 10 |
+| `agenda` | Los seguimientos que una vendedora se agendó: cuándo vuelve a tocar a quién. | 26 | 2,617 | 4 | 4 | 4 |
 | `routing` | Qué campaña de Meta le cae a qué vendedora. | 10 | 2,511 | 4 | 1 | 1 |
 | `dashboard` | Los números en pantalla: el radar, el embudo y qué recorte ve quien mira. | 8 | 2,469 | 2 | 3 | 7 |
 | `lib` | Lo que no sabe de negocio: el cliente HTTP con su caché en IndexedDB, el SSE, el teclado, formato y notificaciones. Capa 0 — no puede importar ninguna feature. | 48 | 2,128 | 16 | 30 | 0 |
@@ -38,7 +39,6 @@
 | `ivi` | La consulta al cerebro RAG y cómo se presenta lo que contesta: los tres tipos y los ocho errores. | 10 | 1,395 | 4 | 1 | 1 |
 | `auth` | Entrar y salir: login contra Cerberus, el SSO de Centurión, y el token que el cliente cree antes de preguntar. | 18 | 1,300 | 9 | 3 | 4 |
 | `venta` | Registrar la venta contra Cerberus sin salir del chat. | 6 | 1,135 | 1 | 2 | 6 |
-| `agenda` | Los seguimientos que una vendedora se agendó: cuándo vuelve a tocar a quién. | 6 | 1,023 | 2 | 4 | 4 |
 | `hechos` | Los datos recomendados — la munición de una línea. Tocar uno lo pone en el composer; no envía. | 7 | 1,003 | 2 | 2 | 3 |
 | `app` | El armazón: qué vista está abierta, los ⌘N y qué capa se monta encima de la mesa. Compone features; no tiene regla de negocio propia. | 2 | 852 | 0 | 0 | 18 |
 | `navegador` | El navegador embebido: qué peldaño de la escalera corre esta máquina y a dónde se puede ir. | 9 | 843 | 3 | 1 | 1 |
@@ -155,7 +155,7 @@ agrupados bajo un módulo que en realidad pertenecen a otra capa. Es el termóme
 los módulos están bien dibujados, y baja sacando el núcleo compartido a su propia capa.
 
 **Qué queda afuera del grafo** (acá y en «Quién depende de quién»): los tests, y las
-**21 galerías** `src/features/*/galeria*.tsx`. Las dos cosas por el mismo
+**22 galerías** `src/features/*/galeria*.tsx`. Las dos cosas por el mismo
 motivo: miran a cualquiera a propósito y ninguna la importa la app — cada galería se sirve por
 su propio `galeria-*.html` y existe para poder fotografiar los casos feos. Contarlas inventaba
 dependencias entre features que el producto no tiene: sacarlas bajó este nudo de 7 a 3.
