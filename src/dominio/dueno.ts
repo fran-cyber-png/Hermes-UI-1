@@ -89,6 +89,44 @@ export function nombreCorto(vendedoraId: string): string {
   return base.charAt(0).toUpperCase() + base.slice(1);
 }
 
+/**
+ * EL RÓTULO DE UNA PERSONA EN UNA LISTA — su nombre si Hermes lo sabe, y si no
+ * el username recortado.
+ *
+ * ── Por qué existe, y qué se veía antes ──
+ * El selector «Pasar la conversación a» mostraba `Ventas10 · Ventas11 · Ventas12`
+ * sobre gente que se llama Alex, Cielo y James. No estaba leyendo mal un nombre:
+ * **no leía ninguno** — `nombreCorto` recorta el `vendedora_id`, que para media
+ * rueda es el correo de Cerberus (`ventas11@grupogoberna.com`), y de ahí sale un
+ * rótulo que parece una cuenta de sistema en vez de una persona.
+ *
+ * ── De dónde sale el nombre ──
+ * De `equipo.nombre`, que el server sirve en `nombres` (`GET /api/reparto/rueda`)
+ * **ya filtrado**: ahí sólo viajan los nombres de verdad. Acá NO se vuelve a
+ * juzgar cuál es de verdad y cuál es relleno — esa regla vive en el server
+ * (`equipo/nombre.ts`) y tenerla dos veces es #37 sobre un dato que además viaja
+ * normalizado.
+ *
+ * ⚠️ **`nombres` es OPCIONAL y ausente NO es un error.** Un server viejo no lo
+ * manda, y una respuesta rehidratada del caché de IndexedDB (ADR 0007) tampoco:
+ * en los dos casos se ve exactamente como se veía antes de este arreglo, que es
+ * la degradación correcta. Por eso el parámetro admite `undefined` en vez de
+ * exigir un objeto vacío.
+ *
+ * ⚠️ **Se busca por el id CANÓNICO**, no por la grafía que vino. La lista de
+ * destinos sirve la grafía que escribió el operador (`Luz`, `Sindy`, `Tracy`) y
+ * las claves de `nombres` son `lower(btrim(...))`: buscando tal cual, la persona
+ * con el id capitalizado se queda sin nombre y **no hay ningún error que ver**.
+ * Es la misma cicatriz de `mismaVendedora` acá abajo, por el mismo motivo.
+ */
+export function rotuloDePersona(
+  vendedoraId: string,
+  nombres?: Record<string, string>,
+): string {
+  const nombre = nombres?.[vendedoraId.trim().toLowerCase()]?.trim();
+  return nombre || nombreCorto(vendedoraId);
+}
+
 export function marcaDeDueno(fila: FilaConDueno, quien: QuienMira = {}): MarcaDueno | null {
   const dueno = typeof fila.asignada_a === 'string' ? fila.asignada_a.trim() : '';
   // Sin dueño no se dibuja nada. Ausencia de dato NO es «es de nadie, agarrala»:

@@ -29,6 +29,16 @@ interface RespuestaRueda {
    * alguien que el server después rechaza.
    */
   destinos: string[];
+  /**
+   * `id canónico → nombre`, sólo para quien Hermes SABE cómo se llama
+   * (`equipo.nombre`, filtrado en el server por `esNombreDeVerdad`).
+   *
+   * ⚠️ **Opcional a propósito, y ausente no es un error**: falta en un server
+   * anterior a este frente y en una respuesta rehidratada del caché de IndexedDB
+   * (ADR 0007). En los dos casos `rotuloDePersona` cae al username recortado, que
+   * es lo que se veía antes. Nunca se muestra un hueco.
+   */
+  nombres?: Record<string, string>;
 }
 
 /**
@@ -53,6 +63,7 @@ export function useRueda(numeroPropio: string | null | undefined) {
   return {
     rueda: q.data?.rueda ?? [],
     destinos: q.data?.destinos ?? [],
+    nombres: q.data?.nombres,
     /** Hay reparto configurado en esta línea: recién ahí se ofrece pasarla. */
     hayReparto: (q.data?.destinos.length ?? 0) > 0,
     cargando: q.isPending,

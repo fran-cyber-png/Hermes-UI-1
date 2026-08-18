@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { marcaDeDueno, nombreCorto } from './dueno';
+import { marcaDeDueno, nombreCorto, rotuloDePersona } from './dueno';
 
 /**
  * LA MARCA DE DUEÑO. Lo que se protege acá es sobre todo lo que NO se dibuja:
@@ -90,5 +90,31 @@ describe('nombreCorto', () => {
   it('no rompe con basura', () => {
     expect(nombreCorto('  ')).toBe('');
     expect(nombreCorto('.hola')).toBe('.hola');
+  });
+});
+
+describe('rotuloDePersona', () => {
+  it('usa el nombre de la persona cuando el server lo mandó', () => {
+    const nombres = { 'ventas11@grupogoberna.com': 'Cielo Huambo' };
+    expect(rotuloDePersona('ventas11@grupogoberna.com', nombres)).toBe('Cielo Huambo');
+  });
+
+  it('SIN nombre cae al username recortado — que es lo que se veía antes', () => {
+    // Server viejo, o respuesta rehidratada del caché de IndexedDB (ADR 0007).
+    expect(rotuloDePersona('ventas13@grupogoberna.com', undefined)).toBe('Ventas13');
+    expect(rotuloDePersona('ventas13@grupogoberna.com', {})).toBe('Ventas13');
+  });
+
+  it('busca por el id CANÓNICO, no por la grafía que vino', () => {
+    // La lista de destinos sirve la grafía del operador (`Luz`, `Tracy`); las
+    // claves de `nombres` son `lower(btrim(...))`. Sin normalizar, esta persona
+    // se quedaba sin su nombre y no había ningún error que ver.
+    expect(rotuloDePersona('Luz', { luz: 'Luz Salazar' })).toBe('Luz Salazar');
+    expect(rotuloDePersona('  Tracy ', { tracy: 'Tracy Quispe' })).toBe('Tracy Quispe');
+  });
+
+  it('un nombre vacío o de puros espacios NO tapa al username', () => {
+    expect(rotuloDePersona('ventas14@grupogoberna.com', { 'ventas14@grupogoberna.com': '   ' }))
+      .toBe('Ventas14');
   });
 });

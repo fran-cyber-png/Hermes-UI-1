@@ -1,9 +1,10 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import type { db as Base } from "../db/client.js";
 import { equipo, equipoBitacora, equipoGrafia } from "../db/equipo.js";
 import { esTablaAusente } from "../cola/estadoSql.js";
 import { porQueFallo } from "../lib/porQueFallo.js";
 import { supervisoresConfigurados } from "../padron/supervisor.js";
+import { esNombreDeVerdad } from "./nombre.js";
 import { clavePersona, esRol, type Rol } from "./roles.js";
 import type { LecturaDeEquipo } from "./cascada.js";
 
@@ -94,6 +95,50 @@ export async function hayQuienMande(base: typeof Base, env: NodeJS.ProcessEnv): 
   // leer el mismo CSV divergen, y la que se olvide de recortar espacios diría
   // «no hay nadie» sobre una lista que sí tiene gente.
   return supervisoresConfigurados(env).length > 0;
+}
+
+/**
+ * CÓMO SE LLAMAN ESTAS PERSONAS — el `id → nombre` para pintar una lista.
+ *
+ * Devuelve un objeto porque su destino es un JSON que el front indexa por id, y
+ * **solo trae a quien tiene nombre de verdad** (`esNombreDeVerdad`): el resto no
+ * viaja, y del otro lado cae a su `nombreCorto()` de siempre. Un id ausente y un
+ * id cuyo «nombre» es su propio username son el mismo hecho —Hermes no sabe cómo
+ * se llama— y tienen que verse igual.
+ *
+ * ⚠️ **La clave del objeto es el id CANÓNICO** (`lower(btrim)`), y el consumidor
+ * tiene que normalizar antes de buscar. En producción el mismo humano tiene dos
+ * grafías vivas (`Luz` de Cerberus, `luz` del login) y la lista de destinos sirve
+ * la que escribió el operador: con `nombres[id]` a secas, la persona con el id
+ * capitalizado no encuentra su nombre y nadie ve un error.
+ *
+ * ⚠️ **No tira nunca**, igual que todo este módulo: se consulta desde una ruta de
+ * la mesa de trabajo y un nombre que no se pudo leer no puede costar la lista.
+ * Sin tabla o con la consulta caída devuelve `{}` — que es «no sé cómo se llaman»,
+ * o sea exactamente lo que se ve hoy.
+ */
+export async function nombresDe(
+  base: typeof Base,
+  ids: readonly string[],
+): Promise<Record<string, string>> {
+  const canonicos = [...new Set(ids.map(clavePersona).filter(Boolean))];
+  if (canonicos.length === 0) return {};
+  try {
+    const filas = await base
+      .select({ personaId: equipo.personaId, nombre: equipo.nombre })
+      .from(equipo)
+      .where(inArray(equipo.personaId, canonicos));
+    const salida: Record<string, string> = {};
+    for (const f of filas) {
+      if (esNombreDeVerdad(f.personaId, f.nombre)) salida[f.personaId] = f.nombre.trim();
+    }
+    return salida;
+  } catch (e) {
+    if (!esTablaAusente(e)) {
+      console.error(`[equipo] no se pudieron leer los nombres — ${porQueFallo(e)}`);
+    }
+    return {};
+  }
 }
 
 /** Una persona para sembrar: el id ya canónico, con las grafías que se le vieron. */

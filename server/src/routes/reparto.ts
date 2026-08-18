@@ -8,6 +8,7 @@ import { normalizarTelefono } from "../whatsapp/identidadWa.js";
 import { obtenerNumero } from "../numeros/repositorio.js";
 import { comoVaElReparto, reasignar, vendedorasDeLaRueda } from "../reparto/asignar.js";
 import { destinosPosibles, esDestinoValido } from "../reparto/destino.js";
+import { nombresDe } from "../equipo/repositorio.js";
 
 /**
  * EL REPARTO, DESDE LA APP — leer quién tiene qué y pasarle una conversación a
@@ -69,11 +70,22 @@ repartoRouter.get("/rueda", ruta(async (req, res) => {
       // propósito y a la que igual hay que poder pasarle una conversación.
       obtenerNumero(db, linea).catch(() => null),
     ]);
-    res.json({
-      linea,
-      rueda,
-      destinos: destinosPosibles({ rueda: enLaRueda, mapa: numero?.vendedoras ?? [] }),
-    });
+    const destinos = destinosPosibles({ rueda: enLaRueda, mapa: numero?.vendedoras ?? [] });
+    // Cómo se llama cada uno, indexado por su id CANÓNICO. Viaja aparte de
+    // `destinos` —y no como `{id, nombre}[]`— por dos razones:
+    //
+    //  1. **`destinos` es un contrato con dos consumidores** (este selector y el
+    //     lienzo de Routing) y una respuesta cacheada en IndexedDB (ADR 0007).
+    //     Cambiarle la FORMA rompería a los dos en la ventana entre N4 y N5 y a
+    //     cualquiera que rehidrate una respuesta vieja; un campo NUEVO y opcional
+    //     no rompe nada: ausente = server viejo, y ahí se ve como se veía.
+    //  2. Solo trae a quien tiene nombre de verdad, así que es un mapa RALO. Con
+    //     `{id, nombre}[]` habría que inventar un `nombre: null` y cada
+    //     consumidor volvería a decidir qué hacer con él.
+    //
+    // No falla la ruta: `nombresDe` traga lo suyo y devuelve `{}` (ver su docblock).
+    const nombres = await nombresDe(db, destinos);
+    res.json({ linea, rueda, destinos, nombres });
   } catch (e) {
     if (esFaltaDeMigracion(e)) {
       res.status(503).json({

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, UserRound } from 'lucide-react';
 import { usePopover } from '../../lib/teclado/usePopover';
 import { ErrorApi } from '../../lib/datos/cliente';
-import { marcaDeDueno, nombreCorto } from '../../dominio/dueno';
+import { marcaDeDueno, rotuloDePersona } from '../../dominio/dueno';
 import { useRueda, usePasarConversacion } from './reparto';
 import type { Conversacion } from '../../dominio/conversaciones';
 
@@ -42,7 +42,7 @@ export function PasarConversacion({
   const [abierto, setAbierto] = useState(false);
   const disparadorRef = useRef<HTMLButtonElement>(null);
   const numeroPropio = conversacion.numero_propio;
-  const { destinos, rueda, hayReparto } = useRueda(numeroPropio);
+  const { destinos, rueda, nombres, hayReparto } = useRueda(numeroPropio);
   const pasar = usePasarConversacion();
 
   const cerrar = useCallback(() => {
@@ -114,8 +114,15 @@ export function PasarConversacion({
                     'transition-colors hover:bg-secondary/60 disabled:opacity-50 disabled:hover:bg-transparent'
                   }
                 >
-                  <span className="truncate font-medium">
-                    {id === miVendedora ? `${nombreCorto(id)} (vos)` : nombreCorto(id)}
+                  {/* El NOMBRE de la persona cuando Hermes lo sabe; si no, su
+                      username recortado, que es lo que se veía siempre. El
+                      `title` lleva el username completo pase lo que pase: es
+                      contra eso que se escribe la fila, y con dos personas de
+                      nombre parecido es lo único que desempata. */}
+                  <span className="truncate font-medium" title={id}>
+                    {id === miVendedora
+                      ? `${rotuloDePersona(id, nombres)} (vos)`
+                      : rotuloDePersona(id, nombres)}
                   </span>
                   <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
                     {/* La carga de cada uno, a la vista: pasarle la número 40 a
