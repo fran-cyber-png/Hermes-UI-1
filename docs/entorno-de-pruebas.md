@@ -167,6 +167,24 @@ que una base sembrada no puede probar.
   `/srv/hermes-staging` se pierde en el próximo push, sin aviso. Es un destino de
   despliegue, no un escritorio.
 
+## Qué rama sirve cada cosa
+
+| Entorno | Rama | Se despliega con |
+|---|---|---|
+| Hermes pruebas | `desarrollo` | N3 de `ci.yml` |
+| Hermes producción | `main` | N4 (front, auto) · N5 (server, botón) |
+| Cerberus pruebas | `desarrollo` | `deploy-pruebas.yml` |
+| Cerberus producción | `main` | `deploy.yml` |
+
+⚠️ **`desarrollo` nació del entorno de pruebas, no de `main` limpio**, y eso fue
+deliberado: `main` de Cerberus todavía tiene el `EMAIL_BACKEND` hardcodeado, así que un
+`desarrollo` sacado de ahí habría dejado a pruebas —con la copia de producción adentro—
+capaz de mandarle correos a alumnos reales. La rama tiene que nacer con sus candados.
+
+⚠️ **El checkout de Hermes pruebas queda en detached HEAD** después de cada N3 (`git
+checkout --force <sha>`). Eso es normal y no significa que se haya salido de
+`desarrollo`: mirá el commit, no la rama.
+
 ## Montarlo la primera vez
 
 Los dos runbooks están en los repos: `deploy/vps1/` acá (unit, vhost, `.env`, refresco)
