@@ -66,12 +66,32 @@ afterEach(() => vi.unstubAllGlobals());
  * test falla por orden de ejecución y se lee como flake.
  */
 async function esperarOpcion(contenedor: HTMLElement, nombre: string): Promise<HTMLButtonElement> {
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 20; i++) {
     const b = [...contenedor.querySelectorAll('button')].find((x) => x.textContent?.includes(nombre));
     if (b) return b as HTMLButtonElement;
     await reposar();
   }
   throw new Error(`no apareció la opción «${nombre}»`);
+}
+
+/**
+ * 🔴 **LO MISMO PARA UN TEXTO QUE SALE DE LA QUERY, y acá me lo enseñó el CI.**
+ * El aviso de «Cerberus no contestó» se pinta cuando la query resuelve, no al
+ * montar: con un solo `reposar()` el assert leía la hoja todavía sin la lista y
+ * el test pasaba **en mi máquina y fallaba en el runner**, que corre con VPS1 al
+ * 210 % de carga.
+ *
+ * ⚠️ **Un assert sobre `textContent` solo puede ir directo si el texto es
+ * ESTÁTICO** (el título de la pieza, el aviso de alcance, el «por qué»). En
+ * cuanto depende de una respuesta, hay que esperarlo — si no, lo que se mide es
+ * la velocidad de la máquina.
+ */
+async function esperarTexto(contenedor: HTMLElement, texto: string): Promise<void> {
+  for (let i = 0; i < 20; i++) {
+    if (contenedor.textContent?.includes(texto)) return;
+    await reposar();
+  }
+  throw new Error(`nunca apareció «${texto}»`);
 }
 
 test('🔴 el PUT viaja con la CLAVE de la pieza, no con lo que se ve en pantalla', async () => {
@@ -210,9 +230,8 @@ test('⚠️ con Cerberus caído la lista viene corta y la hoja lo avisa', async
   );
 
   const m = montar(<HojaDeLaPieza pieza={CURSO_MAL} onCerrar={() => {}} />);
-  await reposar();
   // Una lista incompleta que no avisa se lee como «ese producto no existe».
-  expect(m.contenedor.textContent).toContain('Cerberus no contestó');
+  await esperarTexto(m.contenedor, 'Cerberus no contestó');
   m.desmontar();
 });
 
