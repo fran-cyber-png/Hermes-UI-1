@@ -203,3 +203,31 @@ describe('el color del cable dice de dónde viene', () => {
     expect(pertenencia.map((c) => c.color)).toEqual(['campana', 'formulario']);
   });
 });
+
+describe('el rótulo de la columna de una pieza sola', () => {
+  const SUELTA: Pieza = {
+    id: 'campana:1', titulo: '[FEB] SEGURIDAD - R', icono: 'campana',
+    pie: 'Pausada · 0 personas', familia: null, volumen: 0, vendedoras: [],
+  };
+  const CON_PRODUCTO: Pieza = { ...SUELTA, id: 'campana:2', familia: 'DIPCPOL' };
+
+  it('«Sin producto» solo cuando de verdad no tiene', () => {
+    expect(columnasDePieza(SUELTA, [])[0]!.titulo).toBe('Sin producto');
+  });
+
+  /**
+   * 🔴 La relación que ningún test veía y que encontró la CAPTURA: con la lista
+   * filtrada por «Campañas» o «Formularios» se puede elegir una pieza que SÍ
+   * pertenece a un producto, y el rótulo clavado afirmaba lo contrario — con la
+   * hoja de al lado diciendo cuál era. Dos pantallas contradiciéndose.
+   */
+  it('🔴 con producto dice CUÁL, nunca «Sin producto»', () => {
+    const t = columnasDePieza(CON_PRODUCTO, [], undefined, 'Diploma Internacional del Consultor Político')[0]!.titulo;
+    expect(t).toBe('Diploma Internacional del Consultor Político');
+    expect(t).not.toBe('Sin producto');
+  });
+
+  it('con familia pero sin nombre resuelto, el código es mejor que una mentira', () => {
+    expect(columnasDePieza(CON_PRODUCTO, [])[0]!.titulo).toBe('DIPCPOL');
+  });
+});

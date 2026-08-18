@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ChevronRight, RefreshCw, Route, Search } from 'lucide-react';
+import { AlertTriangle, Boxes, ChevronRight, RefreshCw, Route, Search } from 'lucide-react';
 import { Lienzo } from './Lienzo';
+import { HojaDeLaPieza } from './HojaDeLaPieza';
 import { conCambio, destinosDe, type CableLienzo } from './reglasDelLienzo';
 import {
   ID,
@@ -74,6 +75,14 @@ export function VistaRouting() {
    * dentro del mismo lienzo, así que el producto y las hermanas no se van.
    */
   const [abierta, setAbierta] = useState<string | null>(null);
+  /**
+   * QUÉ PIEZA TIENE LA HOJA DE PRODUCTO ABIERTA. `null` = ninguna.
+   *
+   * Es aparte de `elegido` porque son dos preguntas: `elegido` es «qué estoy
+   * cableando» y esto es «de qué producto es». Con un solo estado, abrir el
+   * detalle movería el lienzo y cerrar la hoja no tendría a dónde volver.
+   */
+  const [detalle, setDetalle] = useState<string | null>(null);
   const [cables, setCables] = useState<CableLienzo[]>([]);
   const anuncios = useAnunciosDeCampana(abierta ? leerId(abierta).clave : null);
 
@@ -131,9 +140,17 @@ export function VistaRouting() {
     return () => window.removeEventListener('keydown', alTeclear);
   }, []);
 
-  /** `Escape` cierra la campaña abierta. En captura: el foco suele estar en un puerto. */
+  /**
+   * `Escape` cierra la campaña abierta. En captura: el foco suele estar en un puerto.
+   *
+   * 🔴 **Se apaga mientras la hoja de producto está abierta.** `useEscape` de la
+   * hoja registra también en captura y corta la propagación (ADR 0024): con los
+   * dos vivos, un Escape cerraría la hoja **y** la campaña de una, y quien
+   * estaba mirando el detalle perdería además el contexto de atrás. Es el mismo
+   * `escapeActivo` que `HojaContacto` paga en el Pipeline.
+   */
   useEffect(() => {
-    if (!abierta) return;
+    if (!abierta || detalle) return;
     function alTeclear(e: KeyboardEvent) {
       if (e.key !== 'Escape') return;
       e.preventDefault();
@@ -141,7 +158,7 @@ export function VistaRouting() {
     }
     window.addEventListener('keydown', alTeclear, true);
     return () => window.removeEventListener('keydown', alTeclear, true);
-  }, [abierta]);
+  }, [abierta, detalle]);
 
   const piezas = data ? piezasDe(data) : [];
   const productos = data ? productosDe(data, piezas) : [];
@@ -231,7 +248,20 @@ export function VistaRouting() {
   };
   const armado = producto
     ? columnasDeProducto(producto, data.destinos, apertura)
-    : { columnas: pieza ? columnasDePieza(pieza, data.destinos, apertura) : [], pertenencia: [] };
+    : {
+        columnas: pieza
+          ? columnasDePieza(
+              pieza,
+              data.destinos,
+              apertura,
+              // El nombre lindo del producto al que pertenece, si pertenece a
+              // alguno: el rótulo de la columna no puede decir «Sin producto»
+              // sobre una pieza que tiene uno (ver `columnasDePieza`).
+              data.productos?.find((p) => p.familia === pieza.familia)?.nombre,
+            )
+          : [],
+        pertenencia: [],
+      };
 
   /**
    * 🔴 GUARDA EL CONJUNTO COMPLETO DEL ORIGEN, no el cable suelto. El server es
@@ -304,6 +334,14 @@ export function VistaRouting() {
   // returns), así que llega al `aplicar` de este render por acá.
   aplicarRef.current = aplicar;
 
+  /**
+   * La pieza cuya hoja está abierta. Sale de `piezas` (la foto del server) y no
+   * de un estado propio, así que **la hoja se refresca sola** cuando la
+   * corrección vuelve: sin esto habría que sincronizar a mano lo que muestra la
+   * hoja con lo que se acaba de guardar, y ésa es la copia que diverge (#37).
+   */
+  const piezaDelDetalle = detalle ? (piezas.find((p) => p.id === detalle) ?? null) : null;
+
   const enPantalla = new Set(armado.columnas.flatMap((c) => c.nodos.map((n) => n.id)));
   /**
    * El cable del producto entero se DERIVA de los de sus piezas (existe solo si
@@ -356,7 +394,8 @@ export function VistaRouting() {
 
       <Avisos data={data} refrescar={refrescar} huerfanos={cablesHuerfanos(piezas, data.destinos)} />
 
-      <div className="flex min-h-0 flex-1">
+      {/* `relative`: es el ancla de la hoja de producto, que se superpone al lienzo. */}
+      <div className="relative flex min-h-0 flex-1">
         <aside className="flex w-[19rem] shrink-0 flex-col border-r border-border">
           <div className="shrink-0 space-y-2 p-3">
             <div className="flex flex-wrap gap-1">
@@ -434,6 +473,16 @@ export function VistaRouting() {
                       pie={`${p.pie} · ${p.vendedoras.length ? p.vendedoras.join(', ') : 'sin cables'}`}
                       activa={pieza?.id === p.id}
                       onElegir={() => setElegido(p.id)}
+                      /**
+                       * Abrir el detalle TAMBIÉN la elige: la hoja dice de qué
+                       * producto es, y el lienzo de atrás muestra a quién le
+                       * cae. Son las dos mitades de la misma pieza.
+                       */
+                      onDetalle={() => {
+                        setElegido(p.id);
+                        setDetalle(p.id);
+                      }}
+                      detalleAbierto={detalle === p.id}
                     />
                   ))}
                 </Grupo>
@@ -480,6 +529,22 @@ export function VistaRouting() {
             </div>
           )}
         </div>
+
+        {/**
+         * 🔴 **SE MONTA SOLO ABIERTA, y eso no es estilo: es el Escape.**
+         * `useEscape` registra en captura sobre `window` y corta la propagación,
+         * así que una hoja montada-pero-invisible se comería el Escape de toda
+         * la app —dejarían de andar cerrar la conversación, la Cabina y la
+         * libreta— sin un solo síntoma. Es literalmente lo que pasó con Ivi
+         * (ADR 0024).
+         *
+         * ⚠️ **`piezaDelDetalle` puede desaparecer** (un refetch, otro filtro):
+         * ahí la hoja se cierra sola en vez de quedar mostrando una pieza que ya
+         * no existe.
+         */}
+        {piezaDelDetalle && (
+          <HojaDeLaPieza pieza={piezaDelDetalle} onCerrar={() => setDetalle(null)} />
+        )}
       </div>
 
       {(fallo || error) && (
@@ -651,27 +716,45 @@ function Grupo({
   );
 }
 
+/**
+ * ⚠️ **DOS BOTONES HERMANOS, NO UNO ADENTRO DEL OTRO.** Elegir la pieza y abrir
+ * su detalle son dos acciones distintas sobre el mismo renglón, y un `<button>`
+ * anidado en otro es HTML inválido: el navegador lo desanida solo y el clic de
+ * adentro deja de existir. Van al lado, con el fondo activo en el `<li>`.
+ *
+ * 🔴 **Y son dos acciones a propósito.** El clic en el renglón sigue haciendo lo
+ * de siempre —poner la pieza en el lienzo para cablearla—: si además abriera la
+ * hoja, cablear pasaría a costar un Escape cada vez, porque la hoja tapa
+ * justamente la columna de vendedoras donde se sueltan los cables.
+ */
 function Fila({
   titulo,
   pie,
   activa,
   onElegir,
+  onDetalle,
+  detalleAbierto,
 }: {
   titulo: string;
   pie: string;
   activa: boolean;
   onElegir: () => void;
+  /** Solo las PIEZAS lo tienen: un producto no pertenece a otro producto. */
+  onDetalle?: () => void;
+  detalleAbierto?: boolean;
 }) {
   return (
-    <li>
+    <li
+      className={
+        'flex items-center rounded-xl border transition-[background-color,border-color] duration-200 ease-house ' +
+        (activa ? 'border-navy/30 bg-navy/5' : 'border-transparent hover:bg-secondary')
+      }
+    >
       <button
         type="button"
         onClick={onElegir}
         aria-current={activa}
-        className={
-          'flex w-full items-center gap-1 rounded-xl border px-2.5 py-2 text-left transition-[color,background-color,border-color] duration-200 ease-house focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
-          (activa ? 'border-navy/30 bg-navy/5' : 'border-transparent hover:bg-secondary')
-        }
+        className="flex min-w-0 flex-1 items-center gap-1 rounded-xl px-2.5 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
         <span className="min-w-0 flex-1">
           <span className="block truncate text-xs font-medium text-foreground">{titulo}</span>
@@ -679,6 +762,23 @@ function Fila({
         </span>
         {activa && <ChevronRight size={13} strokeWidth={2} className="shrink-0 text-navy" aria-hidden />}
       </button>
+      {onDetalle && (
+        <button
+          type="button"
+          onClick={onDetalle}
+          title="A qué producto pertenece"
+          aria-label={`A qué producto pertenece: ${titulo}`}
+          aria-pressed={detalleAbierto}
+          className={
+            'mr-1 shrink-0 rounded-lg p-1.5 transition-colors duration-200 ease-house focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
+            (detalleAbierto
+              ? 'bg-navy/10 text-navy'
+              : 'text-muted-foreground/70 hover:bg-secondary hover:text-navy')
+          }
+        >
+          <Boxes size={13} strokeWidth={2} aria-hidden />
+        </button>
+      )}
     </li>
   );
 }

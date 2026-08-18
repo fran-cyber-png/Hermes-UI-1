@@ -12,6 +12,9 @@ import { api, ErrorApi } from '../../lib/datos/cliente';
 
 export type EstadoCampana = 'activa' | 'pausada' | 'desconocido';
 
+/** Cómo se resolvió el producto de una pieza. Ver `CampanaEnRouting.origenFamilia`. */
+export type OrigenFamilia = 'manual' | 'sku' | 'alias';
+
 export interface CampanaEnRouting {
   campanaId: string;
   nombre: string;
@@ -21,8 +24,19 @@ export interface CampanaEnRouting {
   /** Cuántas PERSONAS escribieron por ella (no cuántos mensajes). */
   personas: number;
   ultima: string | null;
-  /** Su producto, o `null`. Medido: las campañas resuelven 19 de 44. */
+  /** Su producto, o `null`. Medido el 18-ago-2026: resuelven 83 de 153. */
   familia: string | null;
+  /**
+   * 🔴 **DE DÓNDE SALIÓ ESE PRODUCTO — y sin esto la hoja no puede explicar nada.**
+   * `manual` lo decidió una persona · `sku` lo AFIRMA el código que la pauta
+   * escribió en el nombre · `alias` es una adivinanza por palabras, y es la
+   * única de las tres que puede estar mal.
+   * ⚠️ **Opcional**: ausente = server viejo o caché de IndexedDB (ADR 0007), y
+   * ahí la hoja se calla en vez de inventar un porqué.
+   */
+  origenFamilia?: OrigenFamilia;
+  /** Qué alias enganchó, cuando fue por texto. Es lo que se muestra entre comillas. */
+  aliasFamilia?: string;
   /** LOS CABLES: a quiénes les puede caer. Vacío = a la rueda del reparto. */
   vendedoras: string[];
 }
@@ -35,6 +49,10 @@ export interface CursoEnRouting {
   curso: string;
   /** Su producto, o `null` si no resuelve a ninguno. */
   familia: string | null;
+  /** De dónde salió. Ver `CampanaEnRouting.origenFamilia`. */
+  origenFamilia?: OrigenFamilia;
+  /** Qué alias enganchó, cuando fue por texto. */
+  aliasFamilia?: string;
   leads: number;
   ultimo: string | null;
   /** Vacío = lo ve todo el equipo, como hasta ahora. */
@@ -231,6 +249,85 @@ export function useAnunciosDeCampana(campanaId: string | null) {
     enabled: Boolean(campanaId),
     retry: false,
   });
+}
+
+/** Un producto al que se puede mandar una pieza. */
+export interface FamiliaElegible {
+  familia: string;
+  nombre: string;
+  /** `true` si Hermes ya sabe nombrarlo (tiene aliases). Los demás vienen de Cerberus. */
+  conocida: boolean;
+}
+
+/**
+ * LOS PRODUCTOS A LOS QUE SE PUEDE MANDAR UNA PIEZA.
+ *
+ * ⚠️ **`enabled` y no una llamada suelta**: pregunta a Cerberus, y esa espera no
+ * puede colgarse de la pantalla que hay que abrir justo cuando algo anda mal. Se
+ * pide al abrir la hoja, que es cuando alguien va a elegir.
+ *
+ * ⚠️ **`catalogoCaido` no es un error**: la lista viene con lo que Hermes ya sabe
+ * nombrar y la hoja lo DICE. Una pantalla de configuración que no abre porque el
+ * ERP está lento es peor que una lista incompleta que avisa.
+ */
+export function useProductosElegibles(abierta: boolean) {
+  return useQuery<{ familias: FamiliaElegible[]; catalogoCaido: boolean }, ErrorApi>({
+    queryKey: ['routing', 'productos-elegibles'],
+    queryFn: () => api('/api/routing/productos-elegibles'),
+    enabled: abierta,
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/**
+ * CORREGIR A QUÉ PRODUCTO PERTENECE UNA PIEZA. `familia: null` deshace.
+ *
+ * ⚠️ **No es optimista, y acá menos que en ningún lado**: esto reescribe el
+ * diccionario que también leen la cola, el Dashboard y el bot. Pintar el cambio
+ * antes del sí mostraría la pieza mudada de producto y la revertiría medio
+ * segundo después.
+ *
+ * 🔴 **Invalida `['routing']` Y `['conversaciones']`**: el chip de curso de la
+ * cola sale del MISMO diccionario, así que sin esa segunda invalidación la
+ * corrección se ve acá y la otra pantalla sigue mostrando el producto viejo
+ * hasta que alguien recargue — que es justo la confusión que este frente viene a
+ * cerrar.
+ */
+export function useCorregirProducto() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { tipo: 'campana' | 'curso'; clave: string; familia: string | null }) =>
+      api<{ ok: true; texto: string; familia: string | null; nombreCurso: string | null }>(
+        '/api/routing/pieza-producto',
+        { method: 'PUT', body: JSON.stringify(v) },
+      ),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['routing'] });
+      qc.invalidateQueries({ queryKey: ['conversaciones'] });
+    },
+  });
+}
+
+/**
+ * POR QUÉ ESTA PIEZA ESTÁ EN ESTE PRODUCTO, en criollo.
+ *
+ * Vive fuera del JSX y es pura para poder interrogarla sobre el valor que
+ * todavía no existe: un origen desconocido cae en el texto conservador, nunca en
+ * un throw ni en «lo decidió alguien» (la regla de `presentacion.ts` de Ivi).
+ */
+export function porQueEsteProducto(
+  origen: OrigenFamilia | undefined,
+  alias: string | undefined,
+): { texto: string; sospechoso: boolean } | null {
+  if (!origen) return null;
+  if (origen === 'manual') return { texto: 'Lo decidió alguien del equipo', sospechoso: false };
+  if (origen === 'sku') return { texto: 'Lo dice el código del nombre', sospechoso: false };
+  return {
+    // El ÚNICO de los tres que puede estar mal: es una coincidencia de palabras.
+    texto: alias ? `Coincidió con «${alias}»` : 'Coincidió con una palabra del nombre',
+    sospechoso: true,
+  };
 }
 
 export function rotuloEstado(estado: EstadoCampana): string {

@@ -1,6 +1,7 @@
 # Routing — el mapa del flujo y qué hacemos con él
 
-**Fecha**: 12-ago-2026 · **Estado**: **fases 1, 2 y 3 construidas** (PR #364). Faltan la 4 y la 5.
+**Fecha**: 12-ago-2026 · **Estado**: **fases 1, 2, 3 y 5 construidas**. Falta la 4.
+**Enmienda 18-ago-2026**: la Fase 5 se hizo y creció en el camino — ver **ADR 0060**.
 **Base**: ADR 0053 (el ruteo por campaña) + los tres commits de `feat/routing-cables` (PR #364)
 
 > Este documento existe porque la pantalla que hay hoy **funciona y no se entiende**. El pedido del

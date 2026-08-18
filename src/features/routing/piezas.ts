@@ -1,5 +1,5 @@
 import type { CableLienzo, ColumnaLienzo, NodoLienzo } from './reglasDelLienzo';
-import type { FotoDeRouting } from './routing';
+import type { FotoDeRouting, OrigenFamilia } from './routing';
 
 /**
  * DE LOS DATOS DEL SERVER AL LIENZO — puro, y por eso testeable sin montar nada.
@@ -32,6 +32,10 @@ export interface Pieza {
   pie: string;
   estado?: 'activa' | 'pausada' | 'desconocido';
   familia: string | null;
+  /** De dónde salió `familia`. Lo explica la hoja de la derecha. */
+  origenFamilia?: OrigenFamilia;
+  /** Qué alias enganchó, cuando fue por texto. */
+  aliasFamilia?: string;
   volumen: number;
   vendedoras: string[];
 }
@@ -68,6 +72,8 @@ export function piezasDe(data: FotoDeRouting): Pieza[] {
       pie: `${ROTULO_ESTADO[c.estado]} · ${c.personas} ${c.personas === 1 ? 'persona' : 'personas'}`,
       estado: c.estado,
       familia: c.familia,
+      origenFamilia: c.origenFamilia,
+      aliasFamilia: c.aliasFamilia,
       volumen: c.personas,
       vendedoras: c.vendedoras,
     })),
@@ -77,6 +83,8 @@ export function piezasDe(data: FotoDeRouting): Pieza[] {
       icono: 'formulario' as const,
       pie: `${c.leads} ${c.leads === 1 ? 'formulario' : 'formularios'}`,
       familia: c.familia,
+      origenFamilia: c.origenFamilia,
+      aliasFamilia: c.aliasFamilia,
       volumen: c.leads,
       vendedoras: c.vendedoras,
     })),
@@ -266,19 +274,39 @@ export function columnasDeProducto(
 }
 
 /**
- * Las columnas de una pieza suelta: ella y las vendedoras.
+ * Las columnas de una pieza sola: ella y las vendedoras.
  *
- * ⚠️ Sin columna de producto **a propósito**: acá se cae quien no resuelve
- * ninguna familia (25 de 44 campañas de Meta). Inventarle un producto vacío para
- * que las dos pantallas se vean iguales diría que pertenece a algo.
+ * ⚠️ Sin columna de producto **a propósito**: acá cae quien no resuelve ninguna
+ * familia (70 de 153 campañas). Inventarle un producto vacío para que las dos
+ * pantallas se vean iguales diría que pertenece a algo.
+ *
+ * 🔴 **PERO EL RÓTULO NO PUEDE DECIR «SIN PRODUCTO» SI LA PIEZA TIENE UNO.**
+ * Estaba clavado, y con razón mientras acá solo caían las sueltas; desde que la
+ * lista deja entrar por «Campañas» y «Formularios» —o sea, desde que se puede
+ * elegir una pieza CON producto— el lienzo afirmaba «Sin producto» sobre una
+ * campaña que pertenece a uno, **con la hoja de al lado diciendo cuál**. Dos
+ * pantallas contradiciéndose sobre el mismo hecho.
+ *
+ * ⚠️ **Lo encontró la captura de evidencia, no un test**: cada pieza renderizaba
+ * exactamente lo que su código decía; lo que estaba mal era la relación entre el
+ * rótulo de la columna y lo que mostraba la hoja. Es el mismo caso que los cuatro
+ * componentes que pintaban el identificador crudo de la etapa (ADR 0049).
  */
 export function columnasDePieza(
   pieza: Pieza,
   destinos: readonly string[],
   apertura: Apertura = CERRADO,
+  /** El nombre comercial de su producto, cuando tiene. Lo resuelve el llamador. */
+  nombreDelProducto?: string,
 ): ColumnaLienzo[] {
   return [
-    { id: 'pieza', titulo: 'Sin producto', ancho: 17, nodos: [aNodo(pieza, apertura)] },
+    {
+      id: 'pieza',
+      // Sin nombre pero con familia, el código es mejor que una mentira.
+      titulo: pieza.familia ? (nombreDelProducto ?? pieza.familia) : 'Sin producto',
+      ancho: 17,
+      nodos: [aNodo(pieza, apertura)],
+    },
     COL_VENDEDORAS(destinos),
   ];
 }

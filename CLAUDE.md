@@ -1374,6 +1374,41 @@ migración **0025**. Detalle y lo medido: `docs/adr/0053-el-ruteo-por-campana.md
   whatsmeow no reciben `referral`, así que ahí la decisión no se puede tomar.
 - Capturas: `docs/evidencia/routing-campanas.png`, `routing-campana-elegida.png`.
 
+### De qué producto es una pieza — el SKU manda y se puede corregir (ADR 0060)
+
+Medido el 18-ago-2026: **93 de 153 campañas sin producto y 7 en el equivocado**, más **4 de los 22
+formularios** mal enlazados. Se arregló por los dos lados. Detalle: `docs/adr/0060-*.md`.
+
+- 🔴 **EL SKU QUE LA PAUTA ESCRIBE ENTRE CORCHETES LE GANA AL ALIAS DE TEXTO**
+  (`familiaAfirmadaPorSku` → `resolverFamilia`, `cursos/alias.ts`): `[MAR] [DIPCIBE004] CIBERDEFENSA`
+  es DIPCIBE aunque el alias «ciberdefensa» diga DIPCINTE. Es la regla de ADR 0019 — lo afirmado
+  gana sobre lo inferido. **Los corchetes NO son cosmética**: sin ellos, `CONSULTOR360` y
+  `GOBERNA360` inventaban familias (cero falsos positivos con ellos, sobre las 153 reales).
+  ⚠️ La familia la extrae **`familiaDeSku`**, no un regex nuevo: los `GEN*` son cada uno su propia
+  familia y el prefijo los colapsaría.
+- 🔴 **IDENTIDAD ≠ NOMBRE, y por eso esto no puede empeorar una pantalla.** Nueve familias afirmadas
+  por SKU no tienen alias: `nombreCurso` queda **`null`** y quien muestra texto se queda con el
+  título crudo. **La vendedora nunca puede leer «PKGOSAN» en el chip del curso.**
+- 🔴 **CORREGIR A MANO ESCRIBE EN `alias_curso`, así que CORRIGE EN TODAS LAS PANTALLAS** — la cola,
+  el Dashboard y el bot leen ese diccionario (decisión del dueño). La hoja lo dice **antes** de que
+  elijas. Un override es **un alias que es el TEXTO ENTERO de la pieza** (`decididoAMano`): gana por
+  la regla de especificidad que ya existía, y **al SKU hay que ganarle a propósito** — sin eso,
+  corregir una campaña con `[DIPMP0001]` adentro contestaba `ok` y la lectura siguiente la pisaba.
+- 🔴 **DEL NAVEGADOR VIAJA LA CLAVE, NUNCA EL TEXTO** (`textoDeLaPieza` lo resuelve en el server): el
+  alias se compara por texto exacto normalizado, así que un `×` por una `x` escribe una fila que no
+  matchea nada y **la corrección se ve aplicada sin estarlo**.
+- ⚠️ **El clic del renglón NO abre la hoja** (la abre su botón de producto): si hiciera las dos
+  cosas, cablear costaría un Escape cada vez — la hoja tapa la columna de vendedoras.
+- 🔴 **Y el Escape de `VistaRouting` se APAGA mientras la hoja está montada.** `stopPropagation()` de
+  `useEscape` frena al shell (burbuja) pero **no a un hermano en captura sobre `window`**; sin el
+  apagado explícito, un Escape cerraba la hoja **y** la campaña abierta. Lo descubrió el test.
+- ⚠️ **«Sin producto» solo si de verdad no tiene**: el rótulo de la columna estaba clavado y afirmaba
+  eso sobre piezas que sí pertenecían a uno. **Lo encontró la captura, no un test** — lo que estaba
+  mal era la relación entre el rótulo y lo que decía la hoja al lado.
+- Sin server: `node scratchpad/api-routing-producto.mjs` + `VITE_API_URL=http://localhost:4199 npx
+  vite --port 5199` (sirve los 22 cursos y las 2 campañas **reales**, mojibake incluido). Capturas:
+  `docs/evidencia/routing-producto-hoja.png`, `routing-producto-lista.png`.
+
 ## El reparto de leads — de quién es cada conversación
 
 > Plan y decisiones: `docs/plan-reparto-de-leads.md`.

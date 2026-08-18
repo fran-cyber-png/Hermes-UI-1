@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { haceCuanto, rotuloEstado } from './routing';
+import { haceCuanto, porQueEsteProducto, rotuloEstado } from './routing';
 
 describe('cómo se dice el estado de una campaña', () => {
   it('los dos que Meta afirma', () => {
@@ -38,5 +38,51 @@ describe('hace cuánto llegó alguien', () => {
   it('sin fecha no se inventa un plazo', () => {
     expect(haceCuanto(null, AHORA)).toBeNull();
     expect(haceCuanto('no es una fecha', AHORA)).toBeNull();
+  });
+});
+
+describe('por qué esta pieza está en este producto', () => {
+  /**
+   * 🔴 Los tres orígenes se ven IDÉNTICOS en la lista y solo uno puede estar
+   * mal. Medido el 18-ago-2026: de 22 cursos de formulario, los 4 mal enlazados
+   * son todos `alias` — una coincidencia de palabras. Marcar los tres igual (o
+   * ninguno) devolvería la pantalla a «probá de a una a ver cuál falla».
+   */
+  it('solo la coincidencia por palabras se marca como sospechosa', () => {
+    expect(porQueEsteProducto('alias', 'consultoria politica')?.sospechoso).toBe(true);
+    expect(porQueEsteProducto('sku', undefined)?.sospechoso).toBe(false);
+    expect(porQueEsteProducto('manual', undefined)?.sospechoso).toBe(false);
+  });
+
+  it('la coincidencia dice CUÁL palabra la enganchó', () => {
+    // Sin el alias a la vista no se puede juzgar si la coincidencia es razonable.
+    expect(porQueEsteProducto('alias', 'consultoria politica')?.texto).toContain('consultoria politica');
+  });
+
+  it('sin alias no inventa uno, pero sigue avisando que es una coincidencia', () => {
+    const r = porQueEsteProducto('alias', undefined);
+    expect(r?.sospechoso).toBe(true);
+    expect(r?.texto).not.toContain('«');
+  });
+
+  /**
+   * ⚠️ Ausente = server viejo o respuesta rehidratada del caché de IndexedDB
+   * (ADR 0007). La hoja se calla en vez de afirmar «lo decidió alguien» sobre
+   * algo que no sabe.
+   */
+  it('sin origen no dice nada — nunca inventa un porqué', () => {
+    expect(porQueEsteProducto(undefined, undefined)).toBeNull();
+    expect(porQueEsteProducto(undefined, 'consultoria politica')).toBeNull();
+  });
+
+  /**
+   * 🔴 Un origen que este front no conoce cae en la rama CONSERVADORA (la que
+   * pide revisar), nunca en «lo decidió alguien» ni en un throw. Es la regla de
+   * `presentacion.ts` de Ivi: el valor que todavía no existe tiene que poder
+   * interrogarse.
+   */
+  it('un origen desconocido cae en la rama conservadora, no en un throw', () => {
+    const r = porQueEsteProducto('inventado' as never, undefined);
+    expect(r?.sospechoso).toBe(true);
   });
 });
