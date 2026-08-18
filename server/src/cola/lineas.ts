@@ -1,3 +1,5 @@
+import { atiendeUnaCampana } from "../numeros/campana.js";
+
 /**
  * A QUÉ LÍNEAS SE ACOTA LA COLA — la regla, pura y en un solo lugar (#50 + el
  * frente de `numero_vendedora`).
@@ -54,8 +56,16 @@ export interface PedidoDeLineas {
   exclusivas?: boolean;
 }
 
-/** El propósito que hace exclusiva a una línea. Lo empuja Cerberus. */
-export const PROPOSITO_CAMPANA = "campana";
+/**
+ * El propósito que hace exclusiva a una línea. Lo empuja Cerberus.
+ *
+ * 🔴 **Se RE-EXPORTA, no se declara**: la definición vive en `numeros/campana.ts`
+ * junto con la frontera de ADR 0061. Estaba escrita en los dos archivos con el
+ * mismo valor, que es la forma en que dos reglas empiezan a decidir distinto sin
+ * que nada falle — cambiar una y no la otra deja el recorte de la cola y la
+ * frontera del dato mirando propósitos diferentes (#37).
+ */
+export { PROPOSITO_CAMPANA } from "../numeros/campana.js";
 
 /**
  * ¿La persona que mira ve SOLO sus líneas?
@@ -69,7 +79,10 @@ export const PROPOSITO_CAMPANA = "campana";
 export function soloSusLineas(
   asignadas: readonly { proposito: string }[] | undefined,
 ): boolean {
-  return (asignadas ?? []).some((l) => l.proposito === PROPOSITO_CAMPANA);
+  // Delega en la definición única: es la MISMA pregunta que `atiendeUnaCampana`
+  // —«¿esta persona atiende una campaña?»— con otro nombre, porque acá lo que
+  // importa es la consecuencia (ve sólo lo suyo) y allá el hecho.
+  return atiendeUnaCampana(asignadas);
 }
 
 export interface RecorteDeLineas {

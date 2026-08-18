@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { esVedadaParaMi, lineasVedadasPara, PROPOSITO_CAMPANA } from "./campana.js";
+import { atiendeUnaCampana, esVedadaParaMi, lineasVedadasPara, PROPOSITO_CAMPANA } from "./campana.js";
 
 const campana = (vendedoras: string[]) => ({
   numero: "51963139984",
@@ -58,4 +58,34 @@ describe("una línea de campaña sólo la ve quien la atiende", () => {
     assert.deepEqual(lineasVedadasPara(lineas, "luz"), ["51963139984", "51900000000"]);
     assert.deepEqual(lineasVedadasPara([], "alex"), []);
   });
+});
+
+test("atiendeUnaCampana: una sola línea de campaña alcanza, mezclada con las de la Escuela", () => {
+  assert.equal(atiendeUnaCampana([{ proposito: PROPOSITO_CAMPANA }]), true);
+  assert.equal(atiendeUnaCampana([{ proposito: "vendedora" }, { proposito: PROPOSITO_CAMPANA }]), true);
+});
+
+test("atiendeUnaCampana: sin líneas NO es de campaña — el default se comporta como antes", () => {
+  // Una vendedora nueva, un token de servicio, una lectura vacía: el riel entero,
+  // que es exactamente lo que pasaba antes de este frente.
+  assert.equal(atiendeUnaCampana([]), false);
+  assert.equal(atiendeUnaCampana(undefined), false);
+  assert.equal(atiendeUnaCampana([{ proposito: "vendedora" }, { proposito: "escuela" }]), false);
+});
+
+test("🔴 atiendeUnaCampana y soloSusLineas son LA MISMA respuesta, no dos parecidas", async () => {
+  // Estaban escritas dos veces con `PROPOSITO_CAMPANA` declarado en cada archivo.
+  // Si alguien vuelve a separarlas, el recorte de la cola y las vistas del riel
+  // empiezan a decidir distinto sobre la misma persona, sin que nada falle (#37).
+  const { soloSusLineas } = await import("../cola/lineas.js");
+  const casos = [
+    [] as { proposito: string }[],
+    [{ proposito: PROPOSITO_CAMPANA }],
+    [{ proposito: "vendedora" }],
+    [{ proposito: "vendedora" }, { proposito: PROPOSITO_CAMPANA }],
+    [{ proposito: "escuela" }],
+  ];
+  for (const caso of casos) {
+    assert.equal(soloSusLineas(caso), atiendeUnaCampana(caso), JSON.stringify(caso));
+  }
 });
