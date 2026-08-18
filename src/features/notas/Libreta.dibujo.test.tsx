@@ -131,10 +131,12 @@ afterEach(() => {
 const barra = () => document.querySelector('[role="toolbar"][aria-label="Herramientas de anotación"]');
 const capa = () => document.querySelector('canvas');
 /**
- * 🔴 SE BUSCA DENTRO DE LA BARRA, no en todo el documento. La Ribbon del editor
- * tiene su propio «Deshacer» (`ribbon/catalogo.ts`), así que un `querySelector`
- * global devolvía EL DE LA RIBBON —habilitado— y el test afirmaba sobre un botón
- * que no es el que está probando. Dos barras en la misma pantalla es la
+ * 🔴 SE BUSCA DENTRO DE LA BARRA, no en todo el documento. «Deshacer» no es un
+ * nombre exclusivo de acá: el toast de archivar tiene el suyo (`Libreta.tsx`) y
+ * el diagrama otro (`DiagramaDePagina.tsx`), así que un `querySelector` global
+ * devuelve el PRIMERO del documento —habilitado— y el test terminaría afirmando
+ * sobre un botón que no es el que está probando. Ya pasó una vez, con el
+ * «Deshacer» de la Ribbon que después se retiró: el nombre repetido es la
  * situación normal, no un caso raro.
  */
 const herramienta = (rotulo: string) =>

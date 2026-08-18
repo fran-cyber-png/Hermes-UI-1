@@ -1,6 +1,11 @@
 # ADR 0058 — La barra de formato de la Libreta se vuelve una Ribbon
 
-**Fecha**: 2026-08-18 · **Estado**: aceptado · **Reemplaza**: la barra fija descrita en
+**Fecha**: 2026-08-18 · **Estado**: ⛔ **SUPERADO por [ADR 0063](0063-la-ribbon-se-retira.md)**
+(19-ago-2026: la Ribbon se retiró entera por pedido del dueño y volvió la barrita flotante de
+BlockNote). Se conserva por lo que explica del problema, no como descripción del árbol: los
+archivos que nombra **ya no existen**.
+
+**Reemplazaba**: la barra fija descrita en
 `docs/barra-de-formato-libreta.md` §3 (ese documento sigue vivo como la fuente de verdad de **fuente
 y tamaño**, que es lo único que toca el esquema y no se toca acá)
 
@@ -219,7 +224,7 @@ Hubo que repetirla sin él para verlo caer con el mensaje exacto (`expected '1.1
 ## Evidencia
 
 **5 archivos de test, 40 tests** en `src/features/notas/ribbon/`, más los 4 de
-`src/features/notas/BarraDeFormato.test.tsx`, **que siguen pasando sin tocarse** — el
+el test de la barra de formato (borrado con ADR 0063), **que seguían pasando sin tocarse** — el
 `data-libreta-barra` no se renombró justamente por eso.
 
 Verificado por mutación: zoom sin estado propio → 🔴 · sin bloqueo de modo lectura → 🔴 · Escape sin
