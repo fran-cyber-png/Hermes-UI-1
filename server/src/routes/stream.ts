@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { suscribirRT } from '../realtime/bus.js';
 import { eventoPara, type QuienEscucha } from '../realtime/visibilidad.js';
 import { mandaEnElEquipo } from '../equipo/cargarRol.js';
+import { vedadasDe } from '../numeros/cargarLineasVedadas.js';
 
 /**
  * EL STREAM DE TIEMPO REAL (Server-Sent Events).
@@ -43,6 +44,17 @@ streamRouter.get('/', (req, res) => {
   const quien: QuienEscucha = {
     vendedoraId: req.vendedoraId,
     veTodo: mandaEnElEquipo(req),
+    // Las líneas de campaña que no le tocan (`numeros/campana.ts`). Sale de la
+    // MISMA anotación por request que usan las rutas, así que la regla se
+    // evaluó una sola vez.
+    //
+    // 🔴 **Se lee ACÁ, antes del `writeHead`, y eso es a propósito**: si no se
+    // pudieron resolver, `vedadasDe` tira y el stream **no se abre** (500 y el
+    // navegador reintenta a los 3 s). Leerlo adentro del `suscribirRT` sería un
+    // throw dentro de un callback del EventEmitter, o sea el proceso abajo — y
+    // atraparlo ahí obligaría a elegir un default, que en una frontera es
+    // elegir servir de más.
+    lineasVedadas: vedadasDe(req),
   };
 
   res.writeHead(200, {

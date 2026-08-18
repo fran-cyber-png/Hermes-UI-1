@@ -6,6 +6,8 @@ import express from "express";
 import { firmarSesion } from "../auth/sesion.js";
 import { perimetroApi } from "../auth/perimetro.js";
 import { cargarRol, type LectorDeEquipo } from "../equipo/cargarRol.js";
+import { cargarLineasVedadas } from "../numeros/cargarLineasVedadas.js";
+import { lineasVedadasPara, PROPOSITO_CAMPANA } from "../numeros/campana.js";
 import type { LecturaDeEquipo } from "../equipo/cascada.js";
 import { emitirRT } from "../realtime/bus.js";
 import { streamRouter } from "./stream.js";
@@ -42,6 +44,16 @@ const EQUIPO: Record<string, LecturaDeEquipo> = {
 
 const leer: LectorDeEquipo = async (id) => EQUIPO[id.trim().toLowerCase()] ?? { estado: "ok", fila: null };
 
+/** La línea de campaña de producción y quiénes la atienden (`numeros_wa` + `numero_vendedora`). */
+const CAMPANA = "51963139984";
+const LINEAS = [
+  { numero: "51984429504", proposito: "vendedora", vendedoras: ["Luz", "ventas11@grupogoberna.com"] },
+  { numero: CAMPANA, proposito: PROPOSITO_CAMPANA, vendedoras: ["Usuario2"] },
+];
+/** El mismo cálculo que hace `numeros/repositorio.ts` en producción, sin base. */
+const leerVedadas = async (id: string) => lineasVedadasPara(LINEAS, id);
+const BETTO = firmarSesion("usuario2");
+
 /** Sin `HERMES_SUPERVISORES` ni `HERMES_ADMINS`: el rol sale sólo de la tabla. */
 const ENV: NodeJS.ProcessEnv = {};
 
@@ -57,6 +69,7 @@ async function loQueRecibeCadaUna(
   const app = express();
   app.use(perimetroApi);
   app.use(cargarRol(leer, ENV));
+  app.use(cargarLineasVedadas(leerVedadas));
   app.use("/api/stream", streamRouter);
 
   const server = app.listen(0);
@@ -129,6 +142,7 @@ describe("GET /api/stream — el evento se recorta por dueña", () => {
         telefono: "51987654321",
         direccion: "entrante",
         duena: "luz",
+        linea: "51984429504",
       }),
     );
 
@@ -147,6 +161,7 @@ describe("GET /api/stream — el evento se recorta por dueña", () => {
         telefono: "51987654321",
         direccion: "entrante",
         duena: "luz",
+        linea: "51984429504",
       }),
     );
     assert.equal(deJefa[0].telefono, "51987654321");
@@ -157,17 +172,48 @@ describe("GET /api/stream — el evento se recorta por dueña", () => {
     // comparación exacta esto no da error: da que Luz se queda sin su propia
     // campanita, para siempre y sin síntoma.
     const [deLuz] = await loQueRecibeCadaUna([LUZ], () =>
-      emitirRT({ tipo: "mensaje", canal: "whatsapp", telefono: "51987654321", duena: "luz" }),
+      emitirRT({
+        tipo: "mensaje",
+        canal: "whatsapp",
+        telefono: "51987654321",
+        duena: "luz",
+        linea: "51984429504",
+      }),
     );
     assert.equal(deLuz[0].telefono, "51987654321");
   });
 
   test("sin dueña se recorta para todas menos quien supervisa — falla CERRADO", async () => {
     const [deLuz, deJefa] = await loQueRecibeCadaUna([LUZ, JEFA], () =>
-      emitirRT({ tipo: "mensaje", canal: "whatsapp", telefono: "51987654321", duena: null }),
+      emitirRT({
+        tipo: "mensaje",
+        canal: "whatsapp",
+        telefono: "51987654321",
+        duena: null,
+        linea: "51984429504",
+      }),
     );
     assert.deepEqual(deLuz, [{ tipo: "mensaje", canal: "whatsapp" }]);
     assert.equal(deJefa[0].telefono, "51987654321");
+  });
+
+  test("🔴 el lead de la CAMPAÑA no sale por el cable de quien supervisa la Escuela", async () => {
+    // La única frontera que el rol no abre (`numeros/campana.ts`): Estephano es
+    // supervisor y `esSuya` le daría `true` de entrada. Quien atiende la
+    // campaña —usuario2— sí lo recibe entero, que es lo que prueba que el
+    // recorte es por LÍNEA y no un apagón.
+    const [deJefa, deBetto] = await loQueRecibeCadaUna([JEFA, BETTO], () =>
+      emitirRT({
+        tipo: "mensaje",
+        canal: "whatsapp",
+        telefono: "51900112233",
+        direccion: "entrante",
+        duena: "usuario2",
+        linea: CAMPANA,
+      }),
+    );
+    assert.deepEqual(deJefa, [{ tipo: "mensaje", canal: "whatsapp" }]);
+    assert.equal(deBetto[0].telefono, "51900112233");
   });
 
   test("el evento de estado llega igual a todas: no identifica a nadie", async () => {

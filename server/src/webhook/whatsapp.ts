@@ -263,6 +263,7 @@ export async function recibirWhatsapp(req: Request, res: Response): Promise<void
                 telefono: m.from,
                 direccion: "entrante",
                 duena,
+                linea: numeroLinea,
               });
             }
           }

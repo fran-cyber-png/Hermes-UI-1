@@ -56,6 +56,16 @@ export interface QuienEscucha {
    * se consulta la tabla `equipo` — este archivo es una regla, no una puerta.
    */
   veTodo: boolean;
+  /**
+   * LAS LÍNEAS DE CAMPAÑA QUE NO PUEDE VER (`numeros/campana.ts`), resueltas en
+   * el handshake igual que `veTodo`.
+   *
+   * 🔴 **Se consulta ANTES que `veTodo`, y ese orden ES la regla.** Ésta es la
+   * única frontera de Hermes que el rol NO abre: separa dos NEGOCIOS (la Escuela
+   * y la campaña de un candidato), no el trabajo de un equipo que comparte uno.
+   * Puesta después, un supervisor la saltearía por la primera línea de `esSuya`.
+   */
+  lineasVedadas: readonly string[];
 }
 
 /** `Luz`, ` luz `, `LUZ` son la misma persona. Se aplica a los DOS lados, siempre. */
@@ -94,6 +104,14 @@ export function eventoPara(e: EventoRT, quien: QuienEscucha): EventoPublico {
 
   // Sin teléfono no hay nada que proteger: es el «refrescá la pantalla» pelado
   // de los ✓✓ (`whatsapp/wiring.ts`, que lo manda `null` explícitamente).
+  // 🔴 LA FRONTERA DE CAMPAÑA VA PRIMERO, porque es la que el rol no abre.
+  // `esSuya` devuelve `true` de entrada para quien supervisa; preguntando
+  // después, un supervisor de la Escuela recibiría el teléfono de cada lead de
+  // la campaña — que es exactamente el agujero que este orden cierra.
+  if (e.linea && quien.lineasVedadas.includes(e.linea)) {
+    return { tipo: 'mensaje', canal: e.canal };
+  }
+
   if (e.telefono && esSuya(e.duena, quien)) {
     return { tipo: 'mensaje', canal: e.canal, telefono: e.telefono, direccion: e.direccion };
   }

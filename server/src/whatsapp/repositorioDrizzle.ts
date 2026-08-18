@@ -74,6 +74,10 @@ export const repositorioDrizzle: RepositorioInteracciones = {
       telefono: interaccion.personaId,
       direccion: interaccion.direccion,
       duena,
+      // Por qué línea entró — la frontera de campaña del stream
+      // (`numeros/campana.ts`). Ya está en la interacción que se acaba de
+      // guardar: no cuesta ni una consulta.
+      linea: interaccion.numeroPropio ?? null,
     });
 
     return true;

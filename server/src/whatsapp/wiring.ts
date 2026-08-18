@@ -130,7 +130,7 @@ function montar(numero: string, cual: string): WhatsappArmado {
         // para la dueña dispara la campanita, que es lo correcto.
         if (que === 'sin_tabla') return;
         const duena = await duenaDeConversacion(db, claveDeConversacion('whatsapp', r.dePersona, numero));
-        emitirRT({ tipo: 'mensaje', canal: 'whatsapp', telefono: r.dePersona, duena });
+        emitirRT({ tipo: 'mensaje', canal: 'whatsapp', telefono: r.dePersona, duena, linea: numero });
       })
       .catch((err: unknown) => {
         // eslint-disable-next-line no-console
@@ -152,7 +152,9 @@ function montar(numero: string, cual: string): WhatsappArmado {
         // mayoría, y un refresco por cada uno castigaría la pantalla.
         // `telefono: null` = no identifica ninguna conversación, así que no hay
         // dueña que resolver: es un «refrescá la pantalla» pelado y sale para todas.
-        if (filas > 0) emitirRT({ tipo: 'mensaje', canal: 'whatsapp', telefono: null, duena: null });
+        // `linea: null` como el teléfono: un recibo aplicado no identifica una
+        // conversación, es un «refrescá la pantalla» pelado y sale para todas.
+        if (filas > 0) emitirRT({ tipo: 'mensaje', canal: 'whatsapp', telefono: null, duena: null, linea: null });
       })
       .catch((err: unknown) => {
         // eslint-disable-next-line no-console

@@ -3,13 +3,30 @@ import assert from 'node:assert/strict';
 import { esSuya, eventoPara, type QuienEscucha } from './visibilidad.js';
 import type { EventoRT } from './bus.js';
 
-const LUZ: QuienEscucha = { vendedoraId: 'luz', veTodo: false };
-const SINDY: QuienEscucha = { vendedoraId: 'ventas11@grupogoberna.com', veTodo: false };
-const JEFA: QuienEscucha = { vendedoraId: 'estephano', veTodo: true };
-const SERVICIO: QuienEscucha = { vendedoraId: undefined, veTodo: false };
+/** La línea de campaña de producción, y la de la Escuela con la que se contrasta. */
+const CAMPANA = '51963139984';
+const ESCUELA = '51984429504';
+
+const LUZ: QuienEscucha = { vendedoraId: 'luz', veTodo: false, lineasVedadas: [CAMPANA] };
+const SINDY: QuienEscucha = {
+  vendedoraId: 'ventas11@grupogoberna.com',
+  veTodo: false,
+  lineasVedadas: [CAMPANA],
+};
+const JEFA: QuienEscucha = { vendedoraId: 'estephano', veTodo: true, lineasVedadas: [CAMPANA] };
+const SERVICIO: QuienEscucha = { vendedoraId: undefined, veTodo: false, lineasVedadas: [CAMPANA] };
+/** Quien SÍ atiende la campaña: para ella esa línea no está vedada. */
+const BETTO: QuienEscucha = { vendedoraId: 'usuario2', veTodo: false, lineasVedadas: [] };
 
 function mensaje(over: Partial<Extract<EventoRT, { tipo: 'mensaje' }>> = {}): EventoRT {
-  return { tipo: 'mensaje', canal: 'whatsapp', telefono: '51987654321', duena: 'luz', ...over };
+  return {
+    tipo: 'mensaje',
+    canal: 'whatsapp',
+    telefono: '51987654321',
+    duena: 'luz',
+    linea: ESCUELA,
+    ...over,
+  };
 }
 
 test('la dueña recibe el evento entero: teléfono y dirección', () => {
@@ -49,7 +66,7 @@ test('🔴 las dos grafías del mismo humano son la misma persona (`Luz` vs `luz
   // siempre y nadie sabe por qué.
   assert.equal(esSuya('Luz', LUZ), true);
   assert.equal(esSuya('  LUZ  ', LUZ), true);
-  assert.equal(esSuya('luz', { vendedoraId: ' Luz ', veTodo: false }), true);
+  assert.equal(esSuya('luz', { vendedoraId: ' Luz ', veTodo: false, lineasVedadas: [] }), true);
 });
 
 test('🔴 sin dueña se recorta: falla CERRADO', () => {
@@ -64,7 +81,7 @@ test('🔴 sin dueña se recorta: falla CERRADO', () => {
 test('🔴 dos cadenas vacías NO empatan: un token sin identidad no es dueño de lo no atribuido', () => {
   assert.equal(esSuya(null, SERVICIO), false);
   assert.equal(esSuya('', SERVICIO), false);
-  assert.equal(esSuya('', { vendedoraId: '', veTodo: false }), false);
+  assert.equal(esSuya('', { vendedoraId: '', veTodo: false, lineasVedadas: [] }), false);
 });
 
 test('sin teléfono no hay nada que proteger: el «refrescá la pantalla» de los ✓✓ sale para todas', () => {
@@ -97,4 +114,37 @@ test('🔴 el nombre de la dueña NUNCA sale por el cable', () => {
       assert.equal(JSON.stringify(e).includes('luz'), false);
     }
   }
+});
+
+// ── La frontera de campaña (`numeros/campana.ts`) ────────────────────────────
+
+test('🔴 la línea de campaña se recorta AUNQUE quien escucha supervise', () => {
+  // Es la única frontera que el rol no abre: separa dos NEGOCIOS, no el trabajo
+  // de un equipo. Si `esSuya` se preguntara primero, este test daría el evento
+  // entero — y ese era el agujero.
+  const e = eventoPara(mensaje({ linea: CAMPANA, duena: 'usuario2', direccion: 'entrante' }), JEFA);
+  assert.deepEqual(e, { tipo: 'mensaje', canal: 'whatsapp' });
+});
+
+test('🔴 y se recorta aunque la conversación sea SUYA', () => {
+  // Alguien de la Escuela con una conversación asignada en la línea de campaña
+  // (no debería pasar, pero `conversacion_asignada` no lo impide) tampoco la ve.
+  const e = eventoPara(mensaje({ linea: CAMPANA, duena: 'luz' }), LUZ);
+  assert.deepEqual(e, { tipo: 'mensaje', canal: 'whatsapp' });
+});
+
+test('quien atiende la campaña la recibe entera', () => {
+  const e = eventoPara(mensaje({ linea: CAMPANA, duena: 'usuario2', direccion: 'entrante' }), BETTO);
+  assert.deepEqual(e, {
+    tipo: 'mensaje',
+    canal: 'whatsapp',
+    telefono: '51987654321',
+    direccion: 'entrante',
+  });
+});
+
+test('un evento SIN línea no lo veda nadie: no entró por ningún número nuestro', () => {
+  // Los comentarios de FB/IG y el «refrescá la pantalla» de los ✓✓.
+  const e = eventoPara(mensaje({ linea: null, duena: 'luz', direccion: 'entrante' }), LUZ);
+  assert.equal(e.tipo === 'mensaje' && e.telefono, '51987654321');
 });

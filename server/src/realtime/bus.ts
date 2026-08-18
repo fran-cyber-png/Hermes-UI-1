@@ -53,6 +53,22 @@ import { EventEmitter } from 'node:events';
  */
 export type DuenaDelEvento = string | null;
 
+/**
+ * POR QUÉ LÍNEA NUESTRA ENTRÓ (o salió) ESTE MENSAJE.
+ *
+ * 🔴 **Requerido, por el mismo motivo que `duena`**, y para una frontera
+ * distinta: la de los dos planos de Goberna (`numeros/campana.ts`). Sin este
+ * dato, el stream le nombraba a los supervisores de la Escuela el teléfono de
+ * cada lead de la campaña de un candidato, en vivo. Opcional, un emisor nuevo
+ * compilaría sin resolverlo y su evento saldría **completo** para quien no debe
+ * verlo — al revés que con `duena`, donde el olvido falla cerrado. Requerido, el
+ * compilador obliga a decidir.
+ *
+ * `null` = «no entró por ninguna línea nuestra», y ahí no hay nada que vedar:
+ * los comentarios de FB/IG y el «refrescá la pantalla» pelado de los ✓✓.
+ */
+export type LineaDelEvento = string | null;
+
 /** Lo que se publica en el bus, adentro del proceso. */
 export type EventoRT =
   // `direccion` es OPCIONAL a propósito: reacciones y recibos reusan este mismo
@@ -65,6 +81,7 @@ export type EventoRT =
       telefono: string | null;
       direccion?: 'entrante' | 'saliente';
       duena: DuenaDelEvento;
+      linea: LineaDelEvento;
     }
   | { tipo: 'estado' };
 
