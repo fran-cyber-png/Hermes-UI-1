@@ -215,10 +215,10 @@ Un script de diez líneas se lleva el hilo del equipo entero, en vivo, con un to
 
 #### C17 · `GET /api/correos`
 
-- **Dónde**: `server/src/routes/correos.ts:50-53 → server/src/correos/correos.ts:44-46 (`ultimosCorreos`)`
+- **Dónde**: `server/src/routes/correos.ts:50-53 → el repositorio de correos (`ultimosCorreos`)` — ⚠️ **cerrado desde entonces**: el frente de correos (ADR 0058, `6fc4291`) reescribió esa mitad y hoy la proyección vive en `listarCorreos` (`server/src/correos/repositorio.ts`), recortada. El corte de esta auditoría es `1cb683a`, anterior a eso.
 - **Se reproduce con**: `GET /api/correos Authorization: Bearer <vendedora>`
 - **Qué obtiene**: Los últimos 50 correos 1-a-1 del equipo entero con la fila completa: `vendedora_id`, `para` (el mail del lead ajeno), `asunto`, `cuerpo` (el texto ENTERO), `clave` (que en WhatsApp es `conv:whatsapp:<teléfono del lead>:<línea>`, o sea el teléfono en claro), `estado`, `motivo` y fechas. Contenido puro de la comunicación de otra vendedora con su lead. Está declarado como decisión de producto en el docblock («del equipo — coordinación, no secreto»), pero contradice frontalmente el invariante: correo es un canal 1-a-1 y acá se sirve el cuerpo completo a cualquier token de vendedora. El recorte mínimo compatible con el motivo declarado («no le escribas dos veces») sería `para` + fecha, sin `cuer…
-- **Cómo lo comprobó el escéptico**: `ultimosCorreos` es literalmente `base.select().from(correos).orderBy(desc(correos.creadoAt)).limit(50)` — `select()` sin proyección devuelve todas las columnas, y no hay un solo `.where()`. El handler llama con `_req` (ni siquiera lee `req.vendedoraId`). Verifiqué que `correos` lleva `cuerpo` y `clave` mirando `CorreoAAuditar` (correos/correos.ts:52-58), que es lo que se inserta.
+- **Cómo lo comprobó el escéptico**: `ultimosCorreos` es literalmente `base.select().from(correos).orderBy(desc(correos.creadoAt)).limit(50)` — `select()` sin proyección devuelve todas las columnas, y no hay un solo `.where()`. El handler llama con `_req` (ni siquiera lee `req.vendedoraId`). Verifiqué que `correos` lleva `cuerpo` y `clave` mirando `CorreoAAuditar` (el tipo que se insertaba entonces), que es lo que se inserta.
 
 #### C18 · `GET /vincular/estado (y GET /vincular)`
 
