@@ -11,9 +11,9 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 33 | 446 | 58,995 | 19,222 |
+| front | 33 | 446 | 59,010 | 19,222 |
 | server | 66 | 782 | 81,957 | 51,247 |
-| **total** | **99** | **1,228** | **140,952** | **70,469** |
+| **total** | **99** | **1,228** | **140,967** | **70,469** |
 
 ## Front — `src/`
 
@@ -25,7 +25,7 @@
 | `correos` | El correo 1-a-1, auditado. Sin listas ni campañas. | 11 | 3,500 | 5 | 1 | 4 |
 | `panel` | La ficha al costado del chat, en el orden de las preguntas que decide una venta: quién es, qué quiere, qué mandarle, qué hacer. | 22 | 2,956 | 7 | 4 | 7 |
 | `vistas` | El Pipeline: el tablero por etapas, sus tarjetas y las compuertas para mover una. | 15 | 2,927 | 6 | 1 | 10 |
-| `agenda` | Los seguimientos que una vendedora se agendó: cuándo vuelve a tocar a quién. | 26 | 2,617 | 4 | 4 | 4 |
+| `agenda` | Los seguimientos que una vendedora se agendó: cuándo vuelve a tocar a quién. | 26 | 2,632 | 4 | 4 | 4 |
 | `routing` | Qué campaña de Meta le cae a qué vendedora. | 10 | 2,511 | 4 | 1 | 1 |
 | `dashboard` | Los números en pantalla: el radar, el embudo y qué recorte ve quien mira. | 8 | 2,469 | 2 | 3 | 7 |
 | `lib` | Lo que no sabe de negocio: el cliente HTTP con su caché en IndexedDB, el SSE, el teclado, formato y notificaciones. Capa 0 — no puede importar ninguna feature. | 48 | 2,128 | 16 | 30 | 0 |
