@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { montar, type Montado } from '../../pruebas/dom';
 import { ContenidoUsuario } from './PanelUsuario';
+import { motivoParaVincular } from '../whatsapp/miLinea';
 import type { Vendedora } from './sesion';
 
 /**
@@ -30,13 +31,23 @@ const LUZ: Vendedora = { id: 'luz', nombre: 'Luz' };
 const LINEA_DEL_EQUIPO = { numero: '51984429504', etiqueta: 'Ventas Meta', compartida: true };
 const LINEA_PROPIA = { numero: '51987654321', etiqueta: 'luz', compartida: false };
 
-function panel(mias: { numero: string; etiqueta: string; compartida?: boolean }[], tienePropia: boolean) {
+/**
+ * El panel dibujado a partir de la MISMA regla que usa la app
+ * (`motivoParaVincular`), no de un booleano puesto a mano: lo que hay que fijar
+ * es la relación entre lo que se sabe de la línea y lo que se ofrece. Con la
+ * prop cruda, la regla podía cambiar y estos tests seguían verdes.
+ */
+function panel(
+  mias: { numero: string; etiqueta: string; compartida?: boolean }[],
+  tienePropia: boolean,
+  estadoDeSesion?: string,
+) {
   return (
     <ContenidoUsuario
       vendedora={LUZ}
       cerberusVivo
       mias={mias}
-      tienePropia={tienePropia}
+      motivoVincular={motivoParaVincular(tienePropia, estadoDeSesion)}
       onSalir={() => {}}
       onVincular={() => {}}
     />
@@ -56,13 +67,13 @@ describe('PanelUsuario · a quién se le ofrece traer su línea', () => {
     expect(boton(m)).toBeTruthy();
   });
 
-  it('con una línea PROPIA, el botón NO aparece', () => {
-    m = montar(panel([LINEA_PROPIA], true));
+  it('con una línea PROPIA que ANDA, el botón NO aparece', () => {
+    m = montar(panel([LINEA_PROPIA], true, 'conectado'));
     expect(boton(m)).toBeFalsy();
   });
 
-  it('con las dos —la del equipo y la suya—, tampoco: ya tiene la suya', () => {
-    m = montar(panel([LINEA_DEL_EQUIPO, LINEA_PROPIA], true));
+  it('con las dos —la del equipo y la suya, conectada—, tampoco: ya tiene la suya', () => {
+    m = montar(panel([LINEA_DEL_EQUIPO, LINEA_PROPIA], true, 'conectado'));
     expect(boton(m)).toBeFalsy();
   });
 
@@ -71,20 +82,35 @@ describe('PanelUsuario · a quién se le ofrece traer su línea', () => {
     expect(boton(m)).toBeTruthy();
   });
 
-  it('⚠️ un server viejo no manda `tienePropia`: se ofrece igual, no se esconde', () => {
-    // Fail-open del lado correcto: ofrecerle vincular a quien ya tiene línea
-    // termina en un 409 que se lee; esconderlo a quien no tiene la deja sin
-    // ninguna forma de traerla, que es el defecto que esto arregla.
-    m = montar(
-      <ContenidoUsuario
-        vendedora={LUZ}
-        cerberusVivo
-        mias={[LINEA_DEL_EQUIPO]}
-        onSalir={() => {}}
-        onVincular={() => {}}
-      />,
-    );
+  it('⚠️ sin saber el estado de la sesión, a quien NO tiene propia se le ofrece igual', () => {
+    // Fail-open del lado correcto, y la duda no lo toca: no tener línea no
+    // depende de ningún estado de sesión. Esconderlo acá dejaría a la vendedora
+    // sin ninguna forma de traer la suya, que es el defecto que esto arregla.
+    m = montar(panel([LINEA_DEL_EQUIPO], false, undefined));
     expect(boton(m)).toBeTruthy();
+  });
+
+  /**
+   * 🔴 EL CASO DE BETTO: la línea propia REGISTRADA Y MUDA. El server lo deja
+   * re-parear (`numeroPedido`) y el panel no lo ofrecía, así que la única salida
+   * era `wa:vincular` por SSH — un operador, que es justo lo que este frente vino
+   * a sacar del medio. Medido el 18-ago-2026 en `51963139984`.
+   */
+  it('🔴 con línea propia SIN VINCULAR, ofrece volver a vincular y lo dice', () => {
+    m = montar(panel([LINEA_PROPIA], true, 'sin-vincular'));
+    const b = boton(m);
+    expect(b).toBeTruthy();
+    expect(b?.textContent).toContain('Volver a vincular');
+    expect(m.contenedor.textContent).toContain('no está conectada');
+  });
+
+  /**
+   * 🔴 Un ban se MUESTRA y no se reintenta: ofrecer «volvé a vincular» ahí
+   * empuja a re-parear durante un `temporary_ban`, que es el anti-ban prohibido.
+   */
+  it('🔴 con la línea BANEADA no se ofrece vincular', () => {
+    m = montar(panel([LINEA_PROPIA], true, 'baneado'));
+    expect(boton(m)).toBeFalsy();
   });
 
   it('la línea del equipo se rotula como tal — es lo que explica el botón', () => {

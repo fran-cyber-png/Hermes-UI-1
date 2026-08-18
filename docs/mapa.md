@@ -11,16 +11,16 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 32 | 411 | 55,507 | 17,989 |
+| front | 32 | 412 | 55,581 | 18,066 |
 | server | 66 | 769 | 80,198 | 49,493 |
-| **total** | **98** | **1,180** | **135,705** | **67,482** |
+| **total** | **98** | **1,181** | **135,779** | **67,559** |
 
 ## Front — `src/`
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
 | `notas` | La Libreta: páginas, espacios compartidos, autoguardado y el link público. | 58 | 6,874 | 17 | 5 | 1 |
-| `whatsapp` | La conversación nativa: el hilo, el composer, los adjuntos, las citas y la compresión de video. | 43 | 5,114 | 22 | 10 | 5 |
+| `whatsapp` | La conversación nativa: el hilo, el composer, los adjuntos, las citas y la compresión de video. | 44 | 5,169 | 23 | 10 | 5 |
 | `canales` | La cola unificada, y sólo eso: la lista de conversaciones, su fila, la barra de filtros y el panel de contexto. El modelo que dibuja NO vive acá — vive en `dominio/`. | 30 | 4,399 | 6 | 2 | 11 |
 | `correos` | El correo 1-a-1, auditado. Sin listas ni campañas. | 11 | 3,500 | 5 | 1 | 4 |
 | `panel` | La ficha al costado del chat, en el orden de las preguntas que decide una venta: quién es, qué quiere, qué mandarle, qué hacer. | 22 | 2,956 | 7 | 5 | 7 |
@@ -39,7 +39,7 @@
 | `venta` | Registrar la venta contra Cerberus sin salir del chat. | 6 | 1,127 | 1 | 2 | 6 |
 | `agenda` | Los seguimientos que una vendedora se agendó: cuándo vuelve a tocar a quién. | 6 | 1,023 | 2 | 4 | 4 |
 | `hechos` | Los datos recomendados — la munición de una línea. Tocar uno lo pone en el composer; no envía. | 7 | 1,003 | 2 | 2 | 3 |
-| `auth` | Entrar y salir: login contra Cerberus, el SSO de Centurión, y el token que el cliente cree antes de preguntar. | 13 | 931 | 7 | 4 | 4 |
+| `auth` | Entrar y salir: login contra Cerberus, el SSO de Centurión, y el token que el cliente cree antes de preguntar. | 13 | 950 | 7 | 4 | 4 |
 | `app` | El armazón: qué vista está abierta, los ⌘N y qué capa se monta encima de la mesa. Compone features; no tiene regla de negocio propia. | 2 | 843 | 0 | 0 | 17 |
 | `navegador` | El navegador embebido: qué peldaño de la escalera corre esta máquina y a dónde se puede ir. | 9 | 843 | 3 | 1 | 1 |
 | `eventos` | Registrar lo que la vendedora ESCUCHÓ, tipado, en el timeline del contacto. | 4 | 683 | 2 | 2 | 1 |

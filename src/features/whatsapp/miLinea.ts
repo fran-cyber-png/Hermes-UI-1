@@ -129,3 +129,58 @@ export function useCancelarAutoVinculacion() {
     onSettled: invalidar,
   });
 }
+
+/**
+ * POR QUÉ SE LE OFRECE VINCULAR — la regla, pura y en un solo lugar.
+ *
+ * ══ 🔴 «TENER LÍNEA» NO ES LO MISMO QUE «TENER LÍNEA QUE ANDA» ══════════════
+ *
+ * El panel ofrecía el botón sólo a quien **no tenía ninguna propia**, y con eso
+ * dejaba afuera el caso que el server sí sabe resolver: la línea **registrada y
+ * muda**. `numeros/autoVinculacion.ts` documenta que `numeroPedido` existe
+ * exactamente para eso —«solo 1» es un tope de CUÁNTAS, no una prohibición de
+ * volver a parear la que ya es suya— y menciona el escenario: si el montaje en
+ * caliente falla o el server reinicia, «la vendedora tiene su fila escrita y
+ * ninguna forma de volver a intentarlo desde la app».
+ *
+ * Eso dejó de ser hipotético: medido el 18-ago-2026, `51963139984` («Betto»,
+ * la línea de campaña) arranca en `sin-vincular` con su fila puesta. **El server
+ * lo permitía y el front no lo ofrecía**, así que la única salida era `wa:vincular`
+ * por SSH — o sea, un operador, que es justo lo que la auto-vinculación vino a
+ * sacar del medio.
+ *
+ * ══ LOS DOS ESTADOS QUE LO PIDEN, Y LOS CUATRO QUE NO ═══════════════════════
+ *
+ * Piden vincular los que significan «esta sesión no existe»: `sin-vincular` y
+ * `cerrada` (WhatsApp la cerró; su propio tipo dice «hay que volver a vincular»).
+ *
+ * 🔴 **`baneado` NO lo dispara, y no es un olvido.** Un `temporary_ban` se
+ * muestra y **no se reintenta** — ofrecer «volvé a vincular» ahí sería empujar a
+ * la vendedora a re-parear durante un ban, que es exactamente el anti-ban que
+ * este repo tiene prohibido por escrito. `conectando` y `desconectado` tampoco:
+ * son transitorios y la línea vuelve sola; ofrecer ahí invita a romper una sesión
+ * sana.
+ *
+ * ⚠️ **Sin estado NO se ofrece.** Falta mientras la consulta viaja y en un server
+ * viejo, y las dos veces la respuesta honesta es «no sé»: ofrecer ante la duda
+ * haría parpadear el botón sobre una línea que anda.
+ */
+export const ESTADOS_QUE_PIDEN_VINCULAR = ['sin-vincular', 'cerrada'] as const;
+
+export type MotivoDeVincular = 'sin_linea' | 'linea_muda';
+
+export function motivoParaVincular(
+  tienePropia: boolean,
+  estadoDeSesion: string | undefined,
+): MotivoDeVincular | null {
+  if (!tienePropia) return 'sin_linea';
+  if (!estadoDeSesion) return null;
+  return (ESTADOS_QUE_PIDEN_VINCULAR as readonly string[]).includes(estadoDeSesion)
+    ? 'linea_muda'
+    : null;
+}
+
+/** Lo que dice el botón. Son dos acciones distintas y se llaman distinto. */
+export function rotuloDeVincular(motivo: MotivoDeVincular): string {
+  return motivo === 'sin_linea' ? 'Vincular tu WhatsApp' : 'Volver a vincular tu WhatsApp';
+}

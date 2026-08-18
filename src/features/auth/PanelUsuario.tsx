@@ -3,6 +3,7 @@ import { AlertTriangle, Check, LogOut, Smartphone, UserRound } from 'lucide-reac
 import { usePopover } from '../../lib/teclado/usePopover';
 import { useLineas } from '../../dominio/lineas';
 import { VincularMiWhatsapp } from '../whatsapp/VincularMiWhatsapp';
+import { motivoParaVincular, rotuloDeVincular, useMiLinea, type MotivoDeVincular } from '../whatsapp/miLinea';
 import { tieneSesionDeCerberus } from './identidad';
 import type { Vendedora } from './sesion';
 
@@ -75,6 +76,11 @@ export function PanelUsuario({
   // La del EQUIPO no habilita ni deshabilita nada: lo que decide si puede
   // traer la suya es no tener NINGUNA propia. Misma regla que el server.
   const tienePropia = mias.some((l) => l.compartida !== true);
+  // Y con línea propia todavía puede hacer falta: una registrada y MUDA no la
+  // ofrecía nadie, aunque el server sí la deja re-parear. La regla —incluido
+  // que un ban NO la dispare— vive pura en `whatsapp/miLinea.ts`.
+  const { data: miLinea } = useMiLinea();
+  const motivoVincular = motivoParaVincular(tienePropia, miLinea?.sesion?.estado);
 
   return (
     <span className="relative">
@@ -110,7 +116,7 @@ export function PanelUsuario({
               vendedora={vendedora}
               cerberusVivo={cerberusVivo}
               mias={mias}
-              tienePropia={tienePropia}
+              motivoVincular={motivoVincular}
               onSalir={onSalir}
               onVincular={() => {
                 cerrar();
@@ -138,15 +144,19 @@ export function ContenidoUsuario({
   vendedora,
   cerberusVivo,
   mias,
-  tienePropia,
+  motivoVincular,
   onSalir,
   onVincular,
 }: {
   vendedora: Vendedora;
   cerberusVivo: boolean | null;
   mias: { numero: string; etiqueta: string; compartida?: boolean }[];
-  /** ¿Tiene alguna línea que NO comparta? Si no, se le ofrece traer la suya. */
-  tienePropia?: boolean;
+  /**
+   * Por qué se le ofrece vincular, o `null`/ausente si no hace falta. Lo resuelve
+   * `motivoParaVincular` (`whatsapp/miLinea.ts`), que es donde vive la regla —
+   * acá sólo se dibuja.
+   */
+  motivoVincular?: MotivoDeVincular | null;
   onSalir: () => void;
   /** Ausente = la galería, que pinta el panel solo (sin el modal detrás). */
   onVincular?: () => void;
@@ -241,14 +251,23 @@ export function ContenidoUsuario({
                   rechazo: no veían nada. Es la misma regla que el tope del
                   server (`numeros/autoVinculacion.ts`); si divergen, el botón
                   aparece y el POST contesta 409. */}
-              {tienePropia !== true && (
+              {motivoVincular && (
                 <button
                   type="button"
                   onClick={() => onVincular?.()}
                   className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-1.5 text-[11px] font-bold text-foreground transition-colors hover:border-primary/50 hover:text-primary"
                 >
-                  <Smartphone size={12} /> Vincular tu WhatsApp
+                  <Smartphone size={12} /> {rotuloDeVincular(motivoVincular)}
                 </button>
+              )}
+              {/* La línea está registrada y no atiende: decirlo importa tanto
+                  como el botón — sin esto, «tengo mi línea puesta» y «mi línea
+                  anda» se ven igual, y la vendedora escribe contra un número
+                  muerto sin entender por qué nadie contesta. */}
+              {motivoVincular === 'linea_muda' && (
+                <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                  Tu línea está registrada pero no está conectada.
+                </p>
               )}
             </div>
 
