@@ -11,16 +11,16 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 32 | 417 | 56,072 | 18,256 |
-| server | 66 | 773 | 80,575 | 49,680 |
-| **total** | **98** | **1,190** | **136,647** | **67,936** |
+| front | 32 | 417 | 56,149 | 18,303 |
+| server | 66 | 774 | 80,858 | 49,680 |
+| **total** | **98** | **1,191** | **137,007** | **67,983** |
 
 ## Front — `src/`
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
 | `notas` | La Libreta: páginas, espacios compartidos, autoguardado y el link público. | 58 | 6,874 | 17 | 5 | 1 |
-| `whatsapp` | La conversación nativa: el hilo, el composer, los adjuntos, las citas y la compresión de video. | 44 | 5,169 | 23 | 10 | 5 |
+| `whatsapp` | La conversación nativa: el hilo, el composer, los adjuntos, las citas y la compresión de video. | 44 | 5,246 | 23 | 10 | 5 |
 | `canales` | La cola unificada, y sólo eso: la lista de conversaciones, su fila, la barra de filtros y el panel de contexto. El modelo que dibuja NO vive acá — vive en `dominio/`. | 30 | 4,399 | 6 | 2 | 11 |
 | `correos` | El correo 1-a-1, auditado. Sin listas ni campañas. | 11 | 3,500 | 5 | 1 | 4 |
 | `panel` | La ficha al costado del chat, en el orden de las preguntas que decide una venta: quién es, qué quiere, qué mandarle, qué hacer. | 22 | 2,956 | 7 | 5 | 7 |
@@ -58,7 +58,7 @@
 |---|---|--:|--:|--:|--:|--:|
 | `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. | 62 | 10,493 | 12 | 3 | 48 |
 | `bot` | El bot de primera línea que atiende solo: su agente, sus guardrails, sus frenos y el reenganche. | 56 | 7,997 | 24 | 7 | 13 |
-| `scripts` | Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción. | 35 | 5,822 | 0 | 0 | 35 |
+| `scripts` | Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción. | 36 | 6,105 | 0 | 0 | 36 |
 | `cola` | La consulta que ordena la deuda: a quién se atiende primero y por qué. Cada regla vive pura y con su gemelo SQL. | 57 | 4,894 | 38 | 9 | 6 |
 | `whatsapp` | La costura con WhatsApp: la interfaz de transporte y sus implementaciones, el hilo, y la única puerta por la que sale un envío. | 49 | 4,263 | 23 | 13 | 10 |
 | `db` | El schema y la conexión. Capa base del server: no conoce ninguna regla de negocio. | 20 | 3,862 | 1 | 53 | 0 |
@@ -121,7 +121,7 @@
 | `agenda` | Los recordatorios que una vendedora se agendó sobre una conversación. | 1 | 127 | 0 | 1 | 1 |
 | `dominio` | 🪦 Heredado de meta-escuela — la máquina de estados de venta. | 2 | 125 | 1 | 3 | 0 |
 | `contactos` | Lo que se escribe sobre un contacto desde su ficha, empezando por la venta registrada contra Cerberus. | 1 | 69 | 0 | 1 | 2 |
-| `pruebas` | El andamio de los tests: base efímera, sembrado y humo end-to-end. | 9 | 0 | 9 | 0 | 0 |
+| `pruebas` | El andamio de los tests: base efímera, sembrado y humo end-to-end. | 9 | 0 | 9 | 1 | 0 |
 
 ## Quién depende de quién
 
@@ -165,7 +165,6 @@ los módulos están bien dibujados, y baja sacando el núcleo compartido a su pr
 No significa que estén muertos —pueden ser puntos de entrada o scripts—, pero es la lista donde mirar primero.
 
 - `front/pruebas` — 1 archivos, 0 líneas
-- `server/pruebas` — 9 archivos, 0 líneas
 
 ## Las reglas y cómo están hoy
 
