@@ -91,7 +91,11 @@ ventaRouter.post('/crear', requiereVendedora, ruta(async (req, res) => {
     monedaId: String(b.monedaId ?? ''),
     paisId: String(b.paisId ?? ''),
     localId: String(b.localId ?? ''),
-    preventa: b.preventa !== false, // por defecto preventa (cursos sin stock)
+    // NO por defecto: Cerberus solo salta la reserva de stock con esto en
+    // Merchandising/Físico (las únicas categorías con stock real) — para
+    // cursos/eventos no protegía nada y solo mandaba la venta a la cola de
+    // Preventa, que nunca sincroniza sola a Pagado.
+    preventa: b.preventa === true,
     medio: String(b.medio ?? 'organico'),
     origen: String(b.origen ?? 'whatsapp'),
     montoTotal: Number(b.montoTotal ?? 0),

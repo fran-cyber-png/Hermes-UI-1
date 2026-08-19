@@ -121,7 +121,15 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
   const [monedaId, setMonedaId] = useState('');
   const [paisId, setPaisId] = useState('');
   const [localId, setLocalId] = useState('');
-  const [preventa, setPreventa] = useState(true);
+  /**
+   * NO arranca tildado. Cerberus marcaba TODA venta de Hermes como "Preventa"
+   * sin importar el producto — hasta un Foro (categoría Evento, sin relación
+   * con stock) quedaba en esa cola separada, que además nunca sincroniza sola
+   * a Pagado. El flag solo tiene efecto real para Merchandising/Físico (las
+   * únicas categorías con stock en Cerberus); para todo lo demás no protegía
+   * nada. La vendedora lo tilda a mano si el caso lo amerita.
+   */
+  const [preventa, setPreventa] = useState(false);
   const [lineas, setLineas] = useState<Linea[]>([]);
   /**
    * EL CRONOGRAMA — arranca en UNA cuota que vence hoy.

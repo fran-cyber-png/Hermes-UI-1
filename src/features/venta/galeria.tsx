@@ -14,7 +14,7 @@ import '../../index.css';
  * 🔴 **Sirve los valores REALES de producción, no un caso lindo.** En este repo
  * una galería con el caso ideal ya escondió tres defectos (ver el frente del
  * radar de leads): acá los datos son los de la captura con la que el dueño
- * reportó el problema —Julio Patricio Quijano Villaorduña, PEN, Perú, preventa,
+ * reportó el problema —Julio Patricio Quijano Villaorduña, PEN, Perú,
  * «Foro De Estado Perú 2026» a 199.00— y los locales son los que Cerberus
  * filtra por país.
  *
