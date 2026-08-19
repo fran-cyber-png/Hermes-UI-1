@@ -47,7 +47,7 @@ import { VistaRouting } from './features/routing/VistaRouting';
 import { noEsDeCampana, veRouting, type QuienMira } from './features/vistas/acceso';
 import { pendientesQueApuran, useAgenda } from './features/agenda/agenda';
 import { Login } from './features/auth/Login';
-import { useSesion } from './features/auth/sesion';
+import { useSesion, type Vendedora } from './features/auth/sesion';
 import { AvisoCerberus } from './features/auth/AvisoCerberus';
 import { PanelUsuario } from './features/auth/PanelUsuario';
 import { useSesionWa } from './features/whatsapp/conversacionWa';
@@ -359,8 +359,82 @@ function PaletaAcciones({
   );
 }
 
+/**
+ * LA PUERTA — y NADA MÁS que la puerta.
+ *
+ * ══ 🔴 POR QUÉ ESTÁ PARTIDO EN DOS ═══════════════════════════════════════════
+ *
+ * Hasta el 19-ago-2026 esto era un solo componente de ~670 líneas, con los
+ * `useSesionWa`, `useAutoRespuesta`, `useAgenda`, `useDashboard` y el SSE
+ * declarados ARRIBA de los early returns. Las reglas de los hooks obligan a
+ * eso: un `return` temprano no puede saltearse una llamada. Consecuencia
+ * medida: **con la pantalla de Login adelante, cuatro polls seguían corriendo
+ * contra el server** —el de la sesión de WhatsApp cada 10 s, el de la
+ * auto-respuesta cada 30, el de la agenda cada 60, el del dashboard cada 30—
+ * todos contestando 401 y ninguno visible para nadie. Una máquina abierta en el
+ * Login le pegaba a producción para siempre.
+ *
+ * `enabled` en cada hook lo tapaba, pero es una lista que hay que acordarse de
+ * mantener: el hook que se agregue mañana no lo lleva y nadie se entera. Partir
+ * el componente lo hace **imposible de olvidar**, porque el hook nuevo se
+ * escribe adentro de `AppAutenticada`, que no existe hasta que hay sesión.
+ *
+ * El candado es `src/App.polls.test.tsx`: monta `<App/>` SIN token, deja correr
+ * 90 s de reloj falso y cuenta los `fetch`. Tienen que ser cero.
+ */
 export default function App() {
   const { vendedora, cargando, sinServer, reintentar, entrar, salir, cerberusVivo, errorCenturion } = useSesion();
+
+  if (cargando) {
+    // El esqueleto con la anatomía del shell: riel, header, tres placas.
+    return (
+      <div className="flex h-dvh bg-background">
+        <div className="w-[4.75rem] shrink-0 border-r border-border bg-card" />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="h-14 shrink-0 border-b border-border bg-card" />
+          <div className="flex-1 space-y-3 p-6">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-28 animate-pulse rounded-2xl bg-card" style={{ animationDelay: `${i * 120}ms` }} />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (!vendedora) {
+    return <Login entrar={entrar} sinServer={sinServer} reintentar={reintentar} errorCenturion={errorCenturion} />;
+  }
+
+  // Con sesión, la app de verdad. Se monta acá y no arriba a propósito: todo lo
+  // que pregunta al server vive adentro, así que sin sesión no hay nada que
+  // preguntar — ver el bloque de arriba.
+  return (
+    <AppAutenticada
+      vendedora={vendedora}
+      reintentar={reintentar}
+      entrar={entrar}
+      salir={salir}
+      cerberusVivo={cerberusVivo}
+    />
+  );
+}
+
+/** Lo que `AppAutenticada` necesita de la sesión, ya resuelta. */
+interface PropsAutenticada {
+  vendedora: Vendedora;
+  /** Vuelve a validar el token (lo dispara un 401 del stream). */
+  reintentar: () => void;
+  /** Reconectar con Cerberus desde el aviso, sin salir de la app. */
+  entrar: (username: string, password: string) => Promise<void>;
+  salir: () => void;
+  cerberusVivo: boolean | null;
+}
+
+/**
+ * LA APP CON SESIÓN — el shell entero. Todo lo que le pregunta algo al server
+ * cuelga de acá, así que nada de esto existe mientras la vendedora no entró.
+ */
+function AppAutenticada({ vendedora, reintentar, entrar, salir, cerberusVivo }: PropsAutenticada) {
   const [abierta, setAbierta] = useState<Conversacion | null>(null);
   /**
    * EL PANEL DERECHO SE PUEDE CONTRAER (`PanelDerecho`, la ficha de al lado del
@@ -420,7 +494,10 @@ export default function App() {
   // Solo con sesión (el stream está detrás del perímetro, #36); si el stream
   // recibe un 401, corta y dispara la re-validación — que echa si el token
   // murió de verdad, en vez de martillar cada 3 segundos.
-  useTiempoReal(Boolean(vendedora), reintentar);
+  // `true` fijo y no `Boolean(vendedora)`: acá adentro la sesión ya existe —
+  // este componente no se monta sin ella. El parámetro se conserva porque el
+  // hook también lo usa para pedir el permiso de notificaciones.
+  useTiempoReal(true, reintentar);
 
   // El badge de la Agenda: cuántas promesas apuran (vencidas + de hoy).
   // Dorado, porque es TIEMPO — la única acepción del oro en Hermes.
@@ -603,30 +680,11 @@ export default function App() {
     }
     window.addEventListener('keydown', alTeclear);
     return () => window.removeEventListener('keydown', alTeclear);
-    // `vendedora?.id` está acá porque de él sale `vistas`: sin eso, el listener
+    // `vendedora.id` está acá porque de él sale `vistas`: sin eso, el listener
     // se quedaría con el riel de quien estaba antes y ⌘N abriría otra cosa.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vista, cabina, paleta, abierta, revision.activo, revision.actualId, revision.fila, vendedora?.id]);
+  }, [vista, cabina, paleta, abierta, revision.activo, revision.actualId, revision.fila, vendedora.id]);
 
-  if (cargando) {
-    // El esqueleto con la anatomía del shell: riel, header, tres placas.
-    return (
-      <div className="flex h-dvh bg-background">
-        <div className="w-[4.75rem] shrink-0 border-r border-border bg-card" />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="h-14 shrink-0 border-b border-border bg-card" />
-          <div className="flex-1 space-y-3 p-6">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-28 animate-pulse rounded-2xl bg-card" style={{ animationDelay: `${i * 120}ms` }} />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-  if (!vendedora) {
-    return <Login entrar={entrar} sinServer={sinServer} reintentar={reintentar} errorCenturion={errorCenturion} />;
-  }
 
   // Abrir una conversación desde cualquier vista te trae a la Bandeja: es la
   // única vista donde se conversa. Las demás miran, esta trabaja.
