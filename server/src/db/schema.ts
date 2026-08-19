@@ -199,6 +199,31 @@ export const interactions = pgTable(
      */
     numeroPropio: text("numero_propio"),
 
+    /**
+     * LOS PREDICADOS DEL TEXTO, CALCULADOS AL ESCRIBIR (`cola/predicadosDelTexto.ts`).
+     *
+     * Medido el 19-ago-2026 contra producción: el `GroupAggregate` que arma el
+     * universo de la cola quemaba 1.339–1.541 ms de CPU propia corriendo 19 regex
+     * sobre 16.254 filas, y neutralizando SÓLO los regex ese mismo nodo baja a
+     * 70–79 ms. Son preguntas sobre el texto de un mensaje —que no cambia nunca—
+     * recalculadas 13.152 veces por día para 220 mensajes que se escriben una vez.
+     * Es el mismo movimiento que #185 hizo con `numero_propio`.
+     *
+     * 🔴 **`NULL` NO ES «false»: ES «esta fila es anterior al backfill».** Las
+     * cuatro funciones puras contestan `false` a un texto vacío, así que una foto
+     * se guarda con los cuatro en `false`. `NULL` es el único disparador del
+     * fallback al regex en el SQL (`COALESCE(columna, <el regex de siempre>)`), y
+     * si significara también «sin texto» esas filas pagarían regex para siempre.
+     *
+     * ⚠️ **Nullable a propósito y para siempre**: la migración es expand-only y
+     * entre el N5 y el backfill toda la tabla está en `NULL`. Un `NOT NULL` con
+     * default `false` habría contestado «nadie preguntó nada» a 15.898 filas.
+     */
+    mencionaPrecio: boolean("menciona_precio"),
+    preguntaPrecio: boolean("pregunta_precio"),
+    pideDatos: boolean("pide_datos"),
+    esTextoDeAnuncio: boolean("es_texto_de_anuncio"),
+
     /** Dónde ocurrió: la publicación comentada, o la conversación. */
     pageId: text("page_id"),
     contextoId: text("contexto_id"),

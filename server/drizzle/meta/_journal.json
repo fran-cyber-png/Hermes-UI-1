@@ -267,6 +267,13 @@
       "when": 1788178368155,
       "tag": "0037_big_strong_guy",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1788264768155,
+      "tag": "0038_careful_tombstone",
+      "breakpoints": true
     }
   ]
 }
