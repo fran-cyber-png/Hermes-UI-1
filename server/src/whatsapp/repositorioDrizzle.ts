@@ -1,3 +1,4 @@
+import { predicadosDelTexto } from '../cola/predicadosDelTexto.js';
 import { db } from '../db/client.js';
 import { events, interactions } from '../db/schema.js';
 import { emitirRT } from '../realtime/bus.js';
@@ -42,6 +43,11 @@ export const repositorioDrizzle: RepositorioInteracciones = {
         personaId: interaccion.personaId,
         personaNombre: interaccion.personaNombre,
         texto: interaccion.texto,
+        // Los predicados del texto, calculados al ESCRIBIR y no en cada lectura
+        // (cola/predicadosDelTexto.ts). Este es el escritor de WhatsApp, o sea el
+        // que llena las 16.254 filas que la cola vuelve a leer todo el día: sin
+        // esta línea, la materialización no toca el camino que importa.
+        ...predicadosDelTexto(interaccion.texto),
         // De qué línea propia. Lo que en Meta se deduciría de `page_id`, en
         // WhatsApp es el número: sin esto, dos vendedoras quedan en un solo pozo.
         numeroPropio: interaccion.numeroPropio,

@@ -1,4 +1,5 @@
 import type { db } from "../db/client.js";
+import { predicadosDelTexto } from "../cola/predicadosDelTexto.js";
 import { events, interactions } from "../db/schema.js";
 
 /**
@@ -88,7 +89,11 @@ export async function guardarInteraccion(
 
   await base
     .insert(interactions)
-    .values({ eventId: event.id, ...proyeccion })
+    // Los predicados del texto se calculan ACÁ, una vez, en vez de 13.152 veces
+    // por día dentro del `GroupAggregate` de la cola (cola/predicadosDelTexto.ts).
+    // No es una copia de la regla: es la MISMA función pura de `cola/precio.ts` y
+    // `cola/pregunta.ts`, corrida al escribir.
+    .values({ eventId: event.id, ...proyeccion, ...predicadosDelTexto(proyeccion.texto) })
     .onConflictDoNothing({ target: interactions.externalId });
 
   return true;
