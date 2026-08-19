@@ -12,7 +12,11 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
-import { useConversaciones, type Conversacion } from '../../dominio/conversaciones';
+import {
+  useTablero,
+  type ColumnaDelTablero,
+  type Conversacion,
+} from '../../dominio/conversaciones';
 import { ETAPA_ROTULO, type Etapa } from '../../lib/etapas';
 import { decidirDrop, decidirRebote, reintentoTrasInteres } from './compuertas';
 import { ModalInteresCotizado, ModalVentaCierre } from './ModalesCompuerta';
@@ -151,19 +155,10 @@ export function VistaEmbudo({
   const ponerRecorte = (etapa: EtapaTrabajo, r: Recorte) =>
     setRecortes((v) => ({ ...v, [etapa]: r }));
 
-  /** Los tres recortes traducidos a lo que la cola entiende, para una columna. */
-  const opcionesDe = (etapa: EtapaTrabajo) => {
+  /** El recorte de una columna, como lo pide el tablero. `todas` = sin recorte. */
+  const pedidoDe = (etapa: EtapaTrabajo): ColumnaDelTablero => {
     const r = recorteDe(etapa);
-    return {
-      tab: 'todo' as const,
-      filtroSec: '' as const,
-      categoria: null,
-      etapa,
-      precio: r === 'precio',
-      ventana: r === 'ventana',
-      seguir: r === 'seguir',
-      seCallo: r === 'seCallo',
-    };
+    return { etapa, recorte: r === 'todas' ? undefined : r };
   };
 
   // Cada columna carga LO SUYO (#89) y ahora también SU recorte. El nombre real y
@@ -174,33 +169,28 @@ export function VistaEmbudo({
   /**
    * ══ QUÉ TABLERO SE DIBUJA (ADR 0063) ══════════════════════════════════════
    *
-   * 🔴 **LAS CINCO CONSULTAS SON FIJAS Y LO QUE CAMBIA ES SU ARGUMENTO**, y no
-   * es estilo: React prohíbe que la CANTIDAD de hooks varíe entre renders, así
-   * que un `columnas.map(c => useConversaciones(...))` rompería la app el día
-   * que los dos tableros dejaran de tener el mismo número de columnas — y lo
-   * haría con el error opaco de React, no con uno que se lea.
+   * El juego de columnas lo decide el módulo; **la cantidad ya no ata a los
+   * hooks**. Antes acá había cinco `useConversaciones` desenrollados a mano
+   * porque React prohíbe que la cantidad de hooks varíe entre renders — y esas
+   * cinco consultas eran cinco veces la más cara del repo, con el `todo` del
+   * server rearmado cinco veces por refresco (2.226 ms cada uno, medido).
    *
-   * Por eso los dos juegos tienen exactamente CINCO, y eso es un invariante con
-   * test (`tablero.test.ts`), no una casualidad. Si algún módulo necesita seis,
-   * lo que hay que cambiar es esto, no agregarle una columna a la lista.
+   * Ahora es **un** hook que recibe la lista, así que una sexta columna se
+   * agrega en `tablero.ts` y nada más. Lo que sigue siendo invariante es que los
+   * dos juegos tengan el mismo largo (`tablero.test.ts`), pero por lo que ese
+   * test dice —el ancho de la mesa a 1280— y ya no por una restricción de React.
    */
   const columnas = columnasDe(esDeCampana ? 'campana' : 'ventas');
-  const col0 = useConversaciones(opcionesDe(columnas[0]!.id));
-  const col1 = useConversaciones(opcionesDe(columnas[1]!.id));
-  const col2 = useConversaciones(opcionesDe(columnas[2]!.id));
-  const col3 = useConversaciones(opcionesDe(columnas[3]!.id));
-  const col4 = useConversaciones(opcionesDe(columnas[4]!.id));
-  const consultas = [col0, col1, col2, col3, col4];
-  const porColumna = Object.fromEntries(
-    columnas.map((c, i) => [c.id, consultas[i]!]),
-  ) as Record<EtapaTrabajo, ReturnType<typeof useConversaciones>>;
+  const tablero = useTablero(columnas.map((c) => pedidoDe(c.id)));
+  const porColumna = tablero.porColumna as Record<
+    EtapaTrabajo,
+    (typeof tablero.porColumna)[string]
+  >;
 
-  // El desglose (conteos reales por etapa × turno × precio) viene en la primera
-  // página de cualquier columna: es la MISMA foto, contada una vez.
-  const desglose = consultas.find((c) => c.desglose)?.desglose;
-  // El respaldo mientras el server desplegado no sirva el desglose: el front sale
-  // a producción sin reinicio (N4) y el server recién en el botón (N5).
-  const conteos = consultas.find((c) => c.conteos)?.conteos;
+  // El desglose (conteos reales por etapa × turno × precio) viene UNA vez para
+  // todo el tablero: es la misma foto, y contarla por columna era contarla cinco.
+  const desglose = tablero.desglose;
+  const conteos = tablero.conteos;
 
   /**
    * El desglose de «Te esperan» — los dos trabajos que la tira mostraba y que

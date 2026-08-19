@@ -1,4 +1,5 @@
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/datos/cliente';
 import { intervaloDeCola, streamVivo } from '../lib/datos/latido';
 import { esFiltroSec, parametrosDeCola, type EstadoCola } from './cola';
@@ -380,4 +381,162 @@ export function useEstadoConversacion() {
       void qc.invalidateQueries({ queryKey: ['conversaciones'] });
     },
   });
+}
+
+
+/** El recorte de UNA columna del tablero. Uno por columna, nunca dos (ADR 0044). */
+export type RecorteDeColumna = 'precio' | 'ventana' | 'seguir' | 'seCallo';
+
+/** Qué columna se pide y con qué recorte. El orden es el que se dibuja. */
+export interface ColumnaDelTablero {
+  etapa: string;
+  recorte?: RecorteDeColumna;
+}
+
+/** Lo que el server sirve por columna en `/api/conversaciones/tablero`. */
+interface ColumnaServida {
+  conversaciones: Conversacion[];
+  total: number;
+  hayMas: boolean;
+}
+
+type RespuestaTablero = Pick<Pagina, 'conteos' | 'desglose' | 'colaRecortada' | 'conLineaPropia'> & {
+  columnas?: Record<string, ColumnaServida>;
+};
+
+/** `interesado,cotizado:seguir,cierre` — lo que el server sabe leer. */
+export function claveDeColumnas(columnas: readonly ColumnaDelTablero[]): string {
+  return columnas.map((c) => (c.recorte ? `${c.etapa}:${c.recorte}` : c.etapa)).join(',');
+}
+
+/** Sin repetidas y conservando el orden: la primera aparición de cada clave manda. */
+function sinRepetir(filas: readonly Conversacion[]): Conversacion[] {
+  const vistas = new Set<string>();
+  const salida: Conversacion[] = [];
+  for (const f of filas) {
+    if (vistas.has(f.clave)) continue;
+    vistas.add(f.clave);
+    salida.push(f);
+  }
+  return salida;
+}
+
+/**
+ * ══ EL TABLERO ENTERO EN UN PEDIDO ═══════════════════════════════════════════
+ *
+ * 🔴 **CINCO `useConversaciones` ERAN CINCO VECES LA CONSULTA MÁS CARA DEL
+ * REPO.** El Pipeline montaba un hook por columna y cada uno pedía
+ * `/api/conversaciones?etapa=…`; del lado del server, cada pedido rearmaba desde
+ * cero la tabla temporal `todo` — 2.226 ms medidos en producción el 19-ago-2026.
+ * Con DOS vendedoras adentro eso fueron **4.431 materializaciones en 100
+ * minutos**, load 15 sobre 8 núcleos y la API devolviendo 504 durante minutos
+ * enteros. Acá el tablero pide UNA vez y el server recorta las cinco columnas
+ * sobre el mismo `todo`.
+ *
+ * ⚠️ **Y baja el costo de cada mensaje que entra, no sólo el del reloj.** El SSE
+ * invalida `['conversaciones']` por cada mensaje (`lib/datos/tiempoReal.ts`), y
+ * esa clave la comparten los cinco hooks: un solo mensaje disparaba **cinco**
+ * consultas. Por eso la clave de acá arranca igual —el tiempo real la tiene que
+ * seguir alcanzando— pero ahora es UNA.
+ *
+ * ⚠️ **«Cargar más» sigue yendo por `/api/conversaciones?etapa=&offset=`**, y es
+ * a propósito: sobre 13.285 pedidos de una mañana el **97 %** son `offset=0`.
+ * Darle paginación por columna al endpoint nuevo sería complicar el contrato
+ * para el 3 % — y ese 3 % paga un `todo` que ya pagaba antes.
+ */
+export function useTablero(columnas: readonly ColumnaDelTablero[]) {
+  const clave = claveDeColumnas(columnas);
+
+  const q = useQuery({
+    // 🔴 ARRANCA CON `conversaciones` PORQUE EL SSE INVALIDA ESE PREFIJO. Con una
+    // clave propia el tablero dejaría de refrescarse al llegar un mensaje y sólo
+    // se enteraría por el reloj — que con el push vivo son 5 minutos.
+    queryKey: ['conversaciones', 'tablero', clave],
+    queryFn: () =>
+      api<RespuestaTablero>(
+        `/api/conversaciones/tablero?columnas=${encodeURIComponent(clave)}&limit=30`,
+      ),
+    // El mismo ritmo que la cola de Mensajes, por la misma razón: con el stream
+    // vivo el poll es la red y no la fuente (`lib/datos/latido.ts`).
+    refetchOnWindowFocus: true,
+    refetchInterval: () => intervaloDeCola(streamVivo(), Math.random()),
+  });
+
+  /**
+   * Las páginas que «Cargar más» trajo, por columna. Viven acá y no en la query
+   * porque son de OTRO endpoint: mezclarlas en la caché del tablero haría que un
+   * refresco del tablero las borrara sin avisar.
+   */
+  const [extra, setExtra] = useState<Record<string, { filas: Conversacion[]; hayMas: boolean }>>({});
+  const [trayendo, setTrayendo] = useState<string | null>(null);
+
+  /**
+   * ⚠️ **Cambiar un recorte tira las páginas extra**, y no es prolijidad: son
+   * filas del recorte ANTERIOR. Sin esto, tocar «Para seguir» en una columna con
+   * dos páginas cargadas dejaría 30 tarjetas que el chip nuevo excluye, debajo de
+   * un encabezado que promete otra cosa.
+   */
+  useEffect(() => {
+    setExtra({});
+  }, [clave]);
+
+  const cargarMas = useCallback(
+    async (col: ColumnaDelTablero, yaTengo: number) => {
+      setTrayendo(col.etapa);
+      try {
+        const p = new URLSearchParams({ etapa: col.etapa, limit: '30', offset: String(yaTengo) });
+        if (col.recorte) p.set(col.recorte, '1');
+        const r = await api<Pagina>(`/api/conversaciones?${p}`);
+        setExtra((e) => ({
+          ...e,
+          [col.etapa]: {
+            filas: [...(e[col.etapa]?.filas ?? []), ...r.conversaciones],
+            hayMas: r.hayMas,
+          },
+        }));
+      } finally {
+        setTrayendo(null);
+      }
+    },
+    [],
+  );
+
+  const porColumna = Object.fromEntries(
+    columnas.map((col) => {
+      const servida = q.data?.columnas?.[col.etapa];
+      const mas = extra[col.etapa];
+      /**
+       * ⚠️ **Se deduplica por clave y no es defensivo.** La página 0 la trae el
+       * tablero y las siguientes otro endpoint, en otro momento: entre las dos, un
+       * mensaje nuevo puede correr una fila de la página 1 a la 0 y quedaría dos
+       * veces — con la misma tarjeta arrastrable duplicada en la misma columna.
+       */
+      const items = sinRepetir([...(servida?.conversaciones ?? []), ...(mas?.filas ?? [])]);
+      return [
+        col.etapa,
+        {
+          items,
+          /** El total de la columna ENTERA (recorte incluido), no el de la página. */
+          total: servida?.total ?? 0,
+          hayMas: mas ? mas.hayMas : (servida?.hayMas ?? false),
+          cargando: q.isPending,
+          cargandoMas: trayendo === col.etapa,
+          cargarMas: () => void cargarMas(col, items.length),
+        },
+      ];
+    }),
+  );
+
+  return {
+    porColumna,
+    /** La foto del embudo, contada UNA vez para todas las columnas. */
+    desglose: q.data?.desglose,
+    conteos: q.data?.conteos,
+    cargando: q.isPending,
+    actualizando: q.isFetching,
+    traidoEn: q.dataUpdatedAt,
+    /** El server aplicó la frontera del rol: la pantalla lo DICE (ver `Pagina`). */
+    colaRecortada: q.data?.colaRecortada === true,
+    conLineaPropia: q.data?.conLineaPropia === true,
+  };
 }
