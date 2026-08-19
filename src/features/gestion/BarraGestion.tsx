@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronDown, Loader2, Plus, Tag, UserPlus, X } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { usePopover } from '../../lib/teclado/usePopover';
-import { ETAPA_CHIP, rotuloEtapa } from '../../lib/etapas';
+import { ETAPA_CHIP, etapasDeclarablesDe, rotuloEtapa } from '../../lib/etapas';
 import type { Conversacion } from '../../dominio/conversaciones';
 import { AgendarRapido } from '../agenda/AgendarRapido';
 import { FichaRapida } from '../panel/FichaRapida';
@@ -45,12 +45,8 @@ import {
  * que se unificaron, y con dos listas el Pipeline decía «Saben el precio»
  * mientras esta barra decía «Cotizado» sobre la misma conversación.
  */
-const ETAPAS_BARRA = [
-  { id: 'interesado', label: rotuloEtapa('interesado') },
-  { id: 'contactado', label: rotuloEtapa('contactado') },
-  { id: 'cotizado', label: rotuloEtapa('cotizado') },
-  { id: 'cierre', label: rotuloEtapa('cierre') },
-] as const;
+const etapasBarraDe = (modulo: 'ventas' | 'campana') =>
+  etapasDeclarablesDe(modulo).map((id) => ({ id, label: rotuloEtapa(id) }));
 
 /**
  * Etiquetas inline: las CATEGORÍAS (con color) asignadas a esta conversación.
@@ -267,11 +263,22 @@ function EtiquetasInline({ clave, senalAbrir = 0 }: { clave: string; senalAbrir?
  */
 function SelectorEtapa({
   etapa,
+  etapas,
   moviendo,
   onElegir,
   senalAbrir = 0,
 }: {
   etapa: string;
+  /**
+   * Los peldaños que se OFRECEN, ya resueltos por módulo (ADR 0063).
+   *
+   * ⚠️ **Llegan como prop y no se calculan acá**: este componente es
+   * presentación —decide cómo se ve el menú, no qué peldaños existen— y quien
+   * sabe de qué embudo es la conversación es `BarraGestion`, que tiene la
+   * sesión. Con el cálculo adentro habría que pasarle igual el módulo, y
+   * entonces son dos lugares decidiendo lo mismo.
+   */
+  etapas: readonly { id: string; label: string }[];
   moviendo: boolean;
   onElegir: (etapa: string) => void;
   /** Señal externa (contador): al cambiar, abre el menú. La usa el atajo `E`. */
@@ -315,7 +322,7 @@ function SelectorEtapa({
         <>
           <span {...propsOverlay} />
           <div role="menu" className="absolute left-0 top-8 z-30 w-48 rounded-xl bg-card p-1 shadow-panel">
-            {ETAPAS_BARRA.map((e) => (
+            {etapas.map((e) => (
               <button
                 key={e.id}
                 type="button"
@@ -449,6 +456,7 @@ export function BarraGestion({
   conversacion,
   miVendedora,
   onAbrirOtra,
+  esDeCampana,
   senalRegistrar = 0,
   senalEstado = 0,
   senalEtiqueta = 0,
@@ -466,7 +474,14 @@ export function BarraGestion({
   senalRegistrar?: number;
   senalEstado?: number;
   senalEtiqueta?: number;
+  /**
+   * ¿De qué embudo es esta conversación? (ADR 0063). Decide QUÉ PELDAÑOS se
+   * ofrecen: con los de ventas clavados, un operador de campaña podía declarar
+   * «Sabe el precio» y su tablero lo devolvía a «Contestaron», mudo.
+   */
+  esDeCampana?: boolean;
 }) {
+  const ETAPAS_BARRA = etapasBarraDe(esDeCampana ? 'campana' : 'ventas');
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   /** La compuerta guía: ring temporal + foco en el buscador de Intereses. */
@@ -524,6 +539,7 @@ export function BarraGestion({
             Las compuertas del server siguen frenando y explicando abajo. */}
         <SelectorEtapa
           etapa={etapaActual}
+          etapas={ETAPAS_BARRA}
           moviendo={mover.isPending}
           onElegir={(e) => etapaActual !== e && mover.mutate(e)}
           senalAbrir={senalEstado}

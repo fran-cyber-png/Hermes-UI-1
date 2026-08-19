@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   COLUMNAS_TRABAJO,
+  columnasDe,
   etapaDeTarjeta,
   quedanPorTraer,
   repartirColumnas,
@@ -250,5 +251,60 @@ describe('quedanPorTraer — el «Ver más» honesto por columna', () => {
 
   test('sin total todavía, no se promete nada', () => {
     expect(quedanPorTraer(undefined, 30)).toBe(0);
+  });
+});
+
+/**
+ * EL TABLERO DE CAMPAÑA (ADR 0063).
+ *
+ * 🔴 **El primer test es el que sostiene `VistaEmbudo` entero.** Esa vista llama
+ * a `useConversaciones` CINCO veces con nombre fijo, porque React prohíbe que la
+ * cantidad de hooks varíe entre renders. Un sexto elemento en cualquiera de los
+ * dos juegos rompe la app con el error opaco de React —«rendered more hooks than
+ * during the previous render»— justo al cambiar de módulo, o sea en la máquina
+ * de otra persona. Acá se rompe primero, y con un mensaje que se entiende.
+ */
+describe('las columnas de campaña', () => {
+  test('🔴 los dos tableros tienen EXACTAMENTE cinco columnas — los hooks son fijos', () => {
+    expect(columnasDe('ventas')).toHaveLength(5);
+    expect(columnasDe('campana')).toHaveLength(5);
+  });
+
+  test('comparten el arranque y difieren en la escalera', () => {
+    expect(columnasDe('campana').map((c) => c.id)).toEqual([
+      'interesado',
+      'contactado',
+      'simpatiza',
+      'comprometido',
+      'voluntario',
+    ]);
+  });
+
+  /**
+   * ⚠️ La etapa SIGUE EXISTIENDO: se deriva, se ve en Mensajes y se puede pedir
+   * con `?etapa=sin_respuesta`. Lo que no tiene en campaña es columna, porque
+   * seis no entran a 1280 y había que elegir cuál se cae. El porqué de que sea
+   * ésta y no un peldaño está en `tablero.ts`.
+   */
+  test('«Nunca contestaron» no es columna en campaña, y sí en ventas', () => {
+    expect(columnasDe('campana').map((c) => c.id)).not.toContain('sin_respuesta');
+    expect(columnasDe('ventas').map((c) => c.id)).toContain('sin_respuesta');
+  });
+
+  test('🔴 ninguna columna de campaña deriva de plata', () => {
+    // `cotizado` sale de un precio en el hilo y `cierre` de una venta en
+    // Cerberus: los dos son hechos del módulo de ventas, y el server ni siquiera
+    // los deriva para campaña (`etapaDerivada`). Una columna acá estaría siempre
+    // vacía y nadie sabría por qué.
+    const ids = columnasDe('campana').map((c) => c.id);
+    expect(ids).not.toContain('cotizado');
+    expect(ids).not.toContain('cierre');
+  });
+
+  test('cada columna dice cómo se llena cuando está vacía', () => {
+    for (const col of columnasDe('campana')) {
+      expect(col.vacio.length, `«${col.id}» sin texto de vacío`).toBeGreaterThan(10);
+      expect(col.pista.length, `«${col.id}» sin pista`).toBeGreaterThan(10);
+    }
   });
 });

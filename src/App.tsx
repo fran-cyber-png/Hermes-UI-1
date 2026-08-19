@@ -840,6 +840,7 @@ export default function App() {
               onAbrirOtra={
                 escribirA ? (o) => o.telefono && escribirA(o.telefono) : undefined
               }
+              esDeCampana={vendedora.esDeCampana}
               sugerencia={
                 revision.activo && revision.actual && revision.actual.clave === abierta?.clave
                   ? {

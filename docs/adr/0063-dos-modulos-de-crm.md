@@ -67,6 +67,56 @@ Front: `PanelDerecho` recibe `esDeCampana` y **apaga las consultas**, no sólo e
   así que el padre montado primero atiende la subruta y el candado no corre nunca — sin error y sin
   log. Hay test.
 
+## El embudo de campaña (fase 2)
+
+`Te esperan → Contestaron → Simpatizan → Se comprometieron → Son voluntarios`, y
+`Dijeron que no` al costado. Decisión del dueño del 19-ago-2026.
+
+- 🔴 **LOS TRES PRIMEROS PELDAÑOS SE COMPARTEN, Y NO ES AHORRO.** `sin_respuesta`,
+  `interesado` y `contactado` derivan de **quién habló** —no de plata—, así que son
+  igual de ciertos en los dos módulos. Lo que cambia es la cola.
+- 🔴 **LA COLA SE DECLARA, NO SE DERIVA — y eso invierte ADR 0044.** El embudo de
+  ventas se deriva porque el comprador deja huellas verificables: un precio en el
+  hilo, una venta en Cerberus. Un votante no deja ninguna. Que alguien «se
+  comprometió» sólo lo puede afirmar quien habló con él.
+- 🔴 **EL MODO DE FALLAR QUE ESTO TENÍA ARMADO ERA MUDO.** `ESCALA_ETAPAS` no es una
+  lista: es una **tabla de rangos**, y `etapaEfectiva` resuelve con
+  `escala.indexOf(manual) >= escala.indexOf(derivada)`, donde **`indexOf` da -1** para
+  lo que no está. Con las etapas de campaña fuera de la escala, la vendedora declaraba
+  «Se comprometió» y la tarjeta volvía sola a «Contestaron»: sin error, sin log, y sin
+  forma de distinguirlo de «todavía no la moví».
+- 🔴 **LA ESCALA SE ELIGE POR CONSULTA, y es correcto por construcción**: una consulta
+  **nunca mezcla los dos módulos**. La mitad de arriba la garantiza
+  `cola/lineas.ts:soloSusLineas` —un operador de campaña sólo ve sus líneas— y la de
+  abajo, ADR 0061, que le veda esa línea a todo el que no la atiende. ⚠️ Si alguna de
+  las dos se relajara, esto pasa a tener que resolverse **por fila** (join a
+  `numeros_wa.proposito`), y el docblock de `escalaDe` es la única advertencia que hay.
+- 🔴 **EN CAMPAÑA NO SE DERIVAN `cierre` NI `cotizado`**, y los dos vetos son por
+  motivos distintos: `cierre` sale de `conversiones_wa`, que dice «esta persona compró
+  alguna vez» —un teléfono que además le compró un diplomado a la Escuela ascendería a
+  un peldaño que en campaña no existe—, y `cotizado` sale de un monto en el hilo, donde
+  hablar de plata no es haber cotizado nada.
+- 🔴 **SON CINCO COLUMNAS Y «NUNCA CONTESTARON» ES LA QUE SE CAE.** Seis no entran a
+  1280 —medido al armar ADR 0050, con la captura de la última columna cortada contra el
+  borde—, así que había que elegir. Se saca ésa y no un peldaño porque un comando
+  contacta gente en frío por definición (el silencio es el caso normal, no una venta
+  enfriándose) y porque **una escalera con un escalón faltante no se puede subir**.
+  ⚠️ La etapa sigue existiendo: se deriva, se ve en Mensajes y se puede pedir con
+  `?etapa=sin_respuesta`. Si en campaña pasa lo que pasó en ventas —«se me están
+  desapareciendo los leads», Luz, 11-ago— esto se revierte y sale otra.
+- 🔴 **LOS DOS TABLEROS TIENEN EXACTAMENTE CINCO COLUMNAS, Y ES UN INVARIANTE CON
+  TEST.** `VistaEmbudo` llama a `useConversaciones` cinco veces con nombre fijo porque
+  React prohíbe que la cantidad de hooks varíe entre renders. Un sexto elemento rompe la
+  app con el error opaco de React, justo al cambiar de módulo.
+- 🔴 **LA BARRA DEL CHAT PREGUNTA QUÉ SE PUEDE DECLARAR, no qué se dibuja.** Con la
+  lista de ventas clavada, un operador de campaña podía declarar «Sabe el precio»: la
+  gestión se guardaba y su propio tablero la devolvía al piso. `etapasDeclarablesDe` y
+  `columnasDe` son dos preguntas distintas — `sin_respuesta` es columna y no se declara,
+  `perdido` se declara y no es columna.
+- ⚠️ **`ETAPAS_CONSULTABLES` pasa a ser la UNIÓN de los dos módulos**: la ruta
+  `?etapa=` es compartida y resolver el módulo ahí costaría otra consulta para ganar
+  nada — pedir `?etapa=comprometido` desde ventas no es una fuga, es una lista vacía.
+
 ## Lo que esto NO resuelve, y hay que decirlo
 
 - 🔴 **NO aísla una campaña de OTRA campaña.** Separa `ventas` de `campana`; dos candidatos rivales
@@ -79,13 +129,12 @@ Front: `PanelDerecho` recibe `esDeCampana` y **apaga las consultas**, no sólo e
 - ⚠️ **`eventos.ts` es residuo conocido**: `POST /` consulta el catálogo de Cerberus si el evento
   trae `curso`. No se veda el router entero porque el timeline es genérico. Se cierra con el
   vocabulario de campaña.
-- **El embudo sigue siendo el de ventas.** Deriva sus etapas de haber mandado un precio y de que
-  exista una venta en Cerberus (ADR 0044), dos hechos que del lado de campaña no ocurren nunca.
-
-🔴 **Y el embudo de campaña no se va a poder DERIVAR como el de la Escuela** — invierte la regla de
-ADR 0044. Allá funciona porque el comprador deja huellas verificables: un precio enviado, una venta.
-Un votante no deja ninguna; que alguien «se comprometió» sólo lo puede afirmar quien habló con él.
-Es un embudo **declarado**, y esa asimetría es la decisión de diseño de la fase siguiente.
+- ⚠️ **El TERRITORIO no está.** Distrito y local de votación son lo que ningún CRM de ventas
+  necesita y toda campaña sí, y Hermes no tiene dónde guardarlos. Es el frente siguiente, con
+  catálogo de distritos por candidatura (decisión del dueño del 19-ago).
+- ⚠️ **El test de paridad con base de campaña se escribió y NO se ejecutó**
+  (`etapaCampana.paridad.test.db.ts`): Docker estaba apagado en la máquina donde se armó el frente.
+  Compila con el typecheck y corre en N2b. **La paridad SQL ≡ TS no está verificada localmente.**
 
 ## El costo que se acepta
 

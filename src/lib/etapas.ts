@@ -24,7 +24,29 @@ export const ETAPAS = ['interesado', 'contactado', 'cotizado', 'cierre', 'perdid
  */
 export const SIN_RESPUESTA = 'sin_respuesta';
 
-export type Etapa = (typeof ETAPAS)[number] | typeof SIN_RESPUESTA;
+/**
+ * ══ LAS ETAPAS DE CAMPAÑA (ADR 0063) ═══════════════════════════════════════
+ *
+ * Espejo de `ETAPAS_CAMPANA` del server. **Aparte de `ETAPAS`** por lo mismo que
+ * allá: esa lista la iteran el embudo del Dashboard y el recibo de venta, que
+ * son de ventas, y ahí estos tres serían tres segmentos clavados en cero.
+ *
+ * ⚠️ Los tres se DECLARAN y ninguno se deriva — es la asimetría que invierte
+ * ADR 0044: un votante no deja huellas verificables.
+ */
+export const ETAPAS_CAMPANA = ['simpatiza', 'comprometido', 'voluntario'] as const;
+
+/**
+ * ⚠️ **El tipo es la UNIÓN de los dos módulos, no uno por módulo.** Los tipos que
+ * lo usan —`decidirDrop`, la tarjeta, la barra de gestión— son los MISMOS
+ * componentes en los dos tableros; partirlo obligaría a duplicarlos. Qué etapa
+ * se le OFRECE a cada quien lo decide `vistas/tablero.ts:columnasDe`, que es
+ * donde vive el tablero, no el tipo.
+ */
+export type Etapa =
+  | (typeof ETAPAS)[number]
+  | (typeof ETAPAS_CAMPANA)[number]
+  | typeof SIN_RESPUESTA;
 
 /**
  * ══ CÓMO SE LLAMA CADA ETAPA — UNA SOLA VEZ, PARA TODA LA APP ══════════════
@@ -83,6 +105,24 @@ export const ETAPA_ROTULO: Record<string, { uno: string; varios: string }> = {
   contactado: { uno: 'Contestó', varios: 'Contestaron' },
   cotizado: { uno: 'Sabe el precio', varios: 'Saben el precio' },
   cierre: { uno: 'Compró', varios: 'Compraron' },
+  /**
+   * ══ LOS TRES PELDAÑOS DE CAMPAÑA (ADR 0063) ═══════════════════════════════
+   *
+   * Misma regla que los de arriba —el hecho, en pasado, del lado de la persona—
+   * y una diferencia que hay que tener presente al leerlos: **estos NO se
+   * derivan de nada, los afirma quien habló**. Un comprador deja huellas
+   * (un precio, una venta); un votante no deja ninguna.
+   *
+   * ⚠️ **Viven en el MISMO mapa que los de ventas, no en uno paralelo.** Los ids
+   * no se pisan y el candado que importa es el de `etapas.test.ts` —dos etapas
+   * no pueden compartir rótulo—, que con dos mapas dejaría de ver los choques
+   * entre módulos. «Simpatiza» y «Te espera» tienen que sonar distinto aunque
+   * nunca aparezcan en la misma pantalla: la ficha de una persona sí puede
+   * mostrar cualquiera de los dos.
+   */
+  simpatiza: { uno: 'Simpatiza', varios: 'Simpatizan' },
+  comprometido: { uno: 'Se comprometió', varios: 'Se comprometieron' },
+  voluntario: { uno: 'Es voluntario', varios: 'Son voluntarios' },
   // Terminal humano. Se llama por lo que la persona dijo, y así queda a la vista
   // por qué en toda la historia hay CERO: nadie dice que no, se callan.
   perdido: { uno: 'Dijo que no', varios: 'Dijeron que no' },
@@ -99,6 +139,29 @@ export function rotuloEtapa(etapa: string, numero: 'uno' | 'varios' = 'uno'): st
   return ETAPA_ROTULO[etapa]?.[numero] ?? etapa;
 }
 
+/**
+ * LOS PELDAÑOS QUE UNA PERSONA PUEDE DECLARAR, por módulo (ADR 0063).
+ *
+ * ⚠️ **No es lo mismo que las COLUMNAS del tablero, y confundirlos deja un
+ * defecto mudo en cada punta**: `sin_respuesta` es columna en ventas y **no** se
+ * puede declarar (se deriva de un hecho), y `perdido` se puede declarar y **no**
+ * es columna en ninguno de los dos (pide confirmación, vive aparte). Son dos
+ * preguntas distintas —qué se DIBUJA vs. qué se AFIRMA— y por eso hay dos
+ * funciones.
+ *
+ * 🔴 **Y la barra del chat tiene que preguntar ÉSTA.** Con la lista de ventas
+ * clavada, un operador de campaña podía declarar «Sabe el precio»: la gestión se
+ * guardaba, y su propio tablero la devolvía a «Contestaron» porque `cotizado` no
+ * está en la escala de campaña (`indexOf` da -1 y manda el piso). Sin error y
+ * sin log — la vendedora aprieta, ve que no pasa nada, y no tiene forma de saber
+ * por qué.
+ */
+export function etapasDeclarablesDe(modulo: 'ventas' | 'campana'): readonly string[] {
+  return modulo === 'campana'
+    ? ['interesado', 'contactado', ...ETAPAS_CAMPANA]
+    : ETAPAS.filter((e) => e !== 'perdido');
+}
+
 /** Chip de etapa (fondo + tinta). */
 export const ETAPA_CHIP: Record<string, string> = {
   // Tinta apagada y sin borde: es un estado de espera, no un peldaño ganado.
@@ -109,6 +172,12 @@ export const ETAPA_CHIP: Record<string, string> = {
   cotizado: 'bg-navy text-white',
   cierre: 'bg-success/10 text-success',
   perdido: 'bg-destructive/10 text-destructive',
+  // Los tres de campaña, en la misma progresión de peso que ventas y **sin oro**
+  // (acá no corre ningún plazo). `voluntario` toma el verde de `cierre`: es el
+  // peldaño ganado de su embudo.
+  simpatiza: 'bg-primary/10 text-primary',
+  comprometido: 'bg-navy text-white',
+  voluntario: 'bg-success/10 text-success',
 };
 
 /** Color de segmento para la barra del embudo (índice = posición en ETAPAS). */

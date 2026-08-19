@@ -27,6 +27,7 @@ export function ConversacionActiva({
   miVendedora,
   onAbrirOtra,
   senales,
+  esDeCampana,
 }: {
   conversacion: Conversacion | null;
   onCerrar: () => void;
@@ -38,6 +39,8 @@ export function ConversacionActiva({
    * segunda llamada sería un request más por cada conversación que se abre.
    */
   miVendedora?: string | null;
+  /** ¿De qué embudo es? Decide los peldaños de la barra (ADR 0063). */
+  esDeCampana?: boolean;
   /**
    * MODO REVISIÓN (ADR 0018): la auto-respuesta que Hermes preparó para ESTA
    * conversación, para que el composer la muestre como borrador aprobable.
@@ -92,6 +95,7 @@ export function ConversacionActiva({
       <BarraGestion
         conversacion={conversacion}
         miVendedora={miVendedora}
+        esDeCampana={esDeCampana}
         onAbrirOtra={onAbrirOtra}
         senalRegistrar={senales?.registrar}
         senalEstado={senales?.estado}

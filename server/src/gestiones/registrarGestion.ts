@@ -19,7 +19,49 @@ import { gestiones, recordatorios } from '../db/schema.js';
  * la validación vive acá, del lado del server, y no se relaja.
  */
 
+/**
+ * LAS ETAPAS QUE UNA PERSONA PUEDE DECLARAR EN **VENTAS**.
+ *
+ * ⚠️ **El ORDEN es la escala**, no una lista: `cola/etapaEfectivaSql.ts` deriva
+ * de acá su tabla de rangos, y ahí «lo declarado más avanzado gana». Reordenar
+ * esto cambia qué etapa se muestra, sin que falle nada.
+ */
 export const ETAPAS = ['interesado', 'contactado', 'cotizado', 'cierre', 'perdido'] as const;
+
+/**
+ * LAS ETAPAS DE **CAMPAÑA** — decisión del dueño del 19-ago-2026 (ADR 0063).
+ *
+ * ══ 🔴 POR QUÉ ES UNA LISTA APARTE Y NO TRES VALORES MÁS EN `ETAPAS` ═════════
+ *
+ * Porque `ETAPAS` es la escala de VENTAS y `etapaEfectivaSql` la usa como tabla
+ * de rangos. Metidas ahí, `simpatiza` y compañía quedarían *por encima* de
+ * `cierre` para todo el mundo: una conversación de la Escuela con una gestión
+ * vieja rara pasaría a mostrarse en una etapa que en su embudo no existe.
+ *
+ * ══ 🔴 LOS TRES PRIMEROS PELDAÑOS SE COMPARTEN, Y NO ES AHORRO ══════════════
+ *
+ * `sin_respuesta`, `interesado` y `contactado` derivan de **quién habló** —no de
+ * plata—, así que son igual de ciertos en los dos módulos y se escriben una sola
+ * vez. Lo que cambia es la cola: ventas sube por `cotizado → cierre`, que salen
+ * de un precio en el hilo y de una venta en Cerberus; campaña sube por lo que
+ * una persona AFIRMA.
+ *
+ * ══ 🔴 Y ESA ES LA ASIMETRÍA QUE INVIERTE ADR 0044 ══════════════════════════
+ *
+ * El embudo de ventas se DERIVA porque el comprador deja huellas verificables.
+ * Un votante no deja ninguna: que alguien «se comprometió» sólo lo puede afirmar
+ * quien habló con él. Por eso los tres peldaños de campaña son **declarados** y
+ * ninguno se deriva — y por eso `derivadaSqlDe('campana')` no puede devolver
+ * ninguno de los tres.
+ */
+export const ETAPAS_CAMPANA = [
+  'interesado',
+  'contactado',
+  'simpatiza',
+  'comprometido',
+  'voluntario',
+  'perdido',
+] as const;
 export const ACCIONES = ['wsp', 'llamada', 'correo', 'reunion'] as const;
 
 export type EtapaGestion = (typeof ETAPAS)[number];

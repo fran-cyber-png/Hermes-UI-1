@@ -22,7 +22,7 @@ import { TarjetaEmbudo } from './TarjetaEmbudo';
 import { cotizarEnUnClic } from './tarjeta';
 import {
   cifrasDeColumna,
-  COLUMNAS_TRABAJO,
+  columnasDe,
   etapaDeTarjeta,
   quedanPorTraer,
   recortesDeColumna,
@@ -171,35 +171,36 @@ export function VistaEmbudo({
   // «Te esperan» es una columna más desde el 10-ago: el server ya la sabía servir
   // (`interesado` está en ETAPAS_CONSULTABLES), así que no hizo falta tocar nada
   // del lado de allá — lo que había era una pantalla que no la pedía.
-  const teEsperan = useConversaciones(opcionesDe('interesado'));
-  const sinRespuesta = useConversaciones(opcionesDe('sin_respuesta'));
-  const contactados = useConversaciones(opcionesDe('contactado'));
-  const cotizados = useConversaciones(opcionesDe('cotizado'));
-  const cierres = useConversaciones(opcionesDe('cierre'));
-  const porColumna: Record<EtapaTrabajo, ReturnType<typeof useConversaciones>> = {
-    interesado: teEsperan,
-    sin_respuesta: sinRespuesta,
-    contactado: contactados,
-    cotizado: cotizados,
-    cierre: cierres,
-  };
+  /**
+   * ══ QUÉ TABLERO SE DIBUJA (ADR 0063) ══════════════════════════════════════
+   *
+   * 🔴 **LAS CINCO CONSULTAS SON FIJAS Y LO QUE CAMBIA ES SU ARGUMENTO**, y no
+   * es estilo: React prohíbe que la CANTIDAD de hooks varíe entre renders, así
+   * que un `columnas.map(c => useConversaciones(...))` rompería la app el día
+   * que los dos tableros dejaran de tener el mismo número de columnas — y lo
+   * haría con el error opaco de React, no con uno que se lea.
+   *
+   * Por eso los dos juegos tienen exactamente CINCO, y eso es un invariante con
+   * test (`tablero.test.ts`), no una casualidad. Si algún módulo necesita seis,
+   * lo que hay que cambiar es esto, no agregarle una columna a la lista.
+   */
+  const columnas = columnasDe(esDeCampana ? 'campana' : 'ventas');
+  const col0 = useConversaciones(opcionesDe(columnas[0]!.id));
+  const col1 = useConversaciones(opcionesDe(columnas[1]!.id));
+  const col2 = useConversaciones(opcionesDe(columnas[2]!.id));
+  const col3 = useConversaciones(opcionesDe(columnas[3]!.id));
+  const col4 = useConversaciones(opcionesDe(columnas[4]!.id));
+  const consultas = [col0, col1, col2, col3, col4];
+  const porColumna = Object.fromEntries(
+    columnas.map((c, i) => [c.id, consultas[i]!]),
+  ) as Record<EtapaTrabajo, ReturnType<typeof useConversaciones>>;
 
   // El desglose (conteos reales por etapa × turno × precio) viene en la primera
   // página de cualquier columna: es la MISMA foto, contada una vez.
-  const desglose =
-    teEsperan.desglose ??
-    sinRespuesta.desglose ??
-    contactados.desglose ??
-    cotizados.desglose ??
-    cierres.desglose;
+  const desglose = consultas.find((c) => c.desglose)?.desglose;
   // El respaldo mientras el server desplegado no sirva el desglose: el front sale
   // a producción sin reinicio (N4) y el server recién en el botón (N5).
-  const conteos =
-    teEsperan.conteos ??
-    sinRespuesta.conteos ??
-    contactados.conteos ??
-    cotizados.conteos ??
-    cierres.conteos;
+  const conteos = consultas.find((c) => c.conteos)?.conteos;
 
   /**
    * El desglose de «Te esperan» — los dos trabajos que la tira mostraba y que
@@ -235,18 +236,18 @@ export function VistaEmbudo({
   /** La conversación soltada en Cierre: abre el formulario de Registrar venta. */
   const [ventaPara, setVentaPara] = useState<Conversacion | null>(null);
 
-  const cargando = COLUMNAS_TRABAJO.every((c) => porColumna[c.id].cargando);
+  const cargando = columnas.every((c) => porColumna[c.id]!.cargando);
 
   // El server desplegado todavía no habla de etapas (#88/#89 sin deploy): sin
   // `etapa_efectiva` cada columna traería el feed entero y el tablero MENTIRÍA
   // con cara de honesto. Mejor decirlo que pintarlo.
-  const servidorSinEtapas = COLUMNAS_TRABAJO.some((col) => {
-    const primera = porColumna[col.id].items[0];
+  const servidorSinEtapas = columnas.some((col) => {
+    const primera = porColumna[col.id]!.items[0];
     return primera != null && primera.etapa_efectiva === undefined;
   });
 
   const repartidas = repartirColumnas(
-    COLUMNAS_TRABAJO.map((col) => [col.id, porColumna[col.id].items] as const),
+    columnas.map((col) => [col.id, porColumna[col.id]!.items] as const),
     overrides,
   );
 
@@ -493,7 +494,7 @@ export function VistaEmbudo({
         </div>
       ) : (
         <div className={GRID}>
-          {COLUMNAS_TRABAJO.map((col) => {
+          {columnas.map((col) => {
             const enEtapa = repartidas.get(col.id) ?? [];
             const columna = porColumna[col.id];
             const resumen = resumirColumna(desglose, col.id, conteos);

@@ -1,13 +1,14 @@
 import { sql, type SQL } from "drizzle-orm";
 import {
-  derivadaSql,
+  derivadaSqlDe,
   etapaDerivada,
   etapaEfectiva,
-  etapaEfectivaSql,
+  etapaEfectivaSqlDe,
   manualNormalizadaSql,
   SIN_RESPUESTA,
 } from "./etapaEfectivaSql.js";
 import { normalizarEtapa } from "../gestiones/registrarGestion.js";
+import type { Modulo } from "../modulos/modulo.js";
 
 /**
  * ¿DESDE CUÁNDO ESTÁ DONDE ESTÁ? — el dato que faltaba para PLANIFICAR.
@@ -183,7 +184,7 @@ export function paraSeguir(h: HechosDeEtapa, ahora: Date): boolean {
  * MISMO CASE que la etapa efectiva— y no sobre una copia: agregar un peldaño allá
  * tiene que llegar acá o la fecha queda de la etapa vieja, sin error ni log.
  */
-const HECHO_DERIVADO = sql`(CASE ${derivadaSql}
+const hechoDerivado = (modulo: Modulo): SQL => sql`(CASE ${derivadaSqlDe(modulo)}
   WHEN ${SIN_RESPUESTA} THEN primer_saliente_at
   WHEN 'cotizado'       THEN primer_precio_at
   WHEN 'contactado'     THEN respuesta_at
@@ -198,18 +199,37 @@ END)`;
  * devuelve NULL, que es «no se pudo determinar». No hace falta ningún COALESCE
  * defensivo, y meterlo convertiría el hueco honesto en una fecha inventada.
  */
-export const etapaDesdeSql: SQL = sql`LEAST(
-  (CASE WHEN ${manualNormalizadaSql} = (${etapaEfectivaSql}) THEN gestion_at END),
-  (CASE WHEN ${derivadaSql} = (${etapaEfectivaSql}) THEN ${HECHO_DERIVADO} END)
+export function etapaDesdeSqlDe(modulo: Modulo = "ventas"): SQL {
+  /**
+   * 🔴 **EL MÓDULO TIENE QUE SER EL MISMO QUE EL DE LA ETAPA, o esto se calla.**
+   * Las dos ramas comparan contra `etapaEfectivaSql`: con el embudo equivocado
+   * ninguna matchea, `LEAST` devuelve NULL y la tarjeta pierde su «hace N días».
+   * No miente —es un hueco honesto— pero desaparece justo en las columnas
+   * nuevas, que son las que nadie sabe todavía cómo se comportan.
+   */
+  const efectiva = etapaEfectivaSqlDe(modulo);
+  return sql`LEAST(
+  (CASE WHEN ${manualNormalizadaSql} = (${efectiva}) THEN gestion_at END),
+  (CASE WHEN ${derivadaSqlDe(modulo)} = (${efectiva}) THEN ${hechoDerivado(modulo)} END)
 )`;
+}
+
+/** ⚠️ El de VENTAS. Los consumidores compartidos llaman a la función. */
+export const etapaDesdeSql: SQL = etapaDesdeSqlDe("ventas");
 
 /** «Para seguir» — espejo verificado de `paraSeguir(...)`. El reloj es `now()` de la base. */
-export const paraSeguirSql: SQL = sql`(
+export function paraSeguirSqlDe(modulo: Modulo = "ventas"): SQL {
+  const desde = etapaDesdeSqlDe(modulo);
+  return sql`(
   respondida
-  AND (${etapaDesdeSql}) IS NOT NULL
-  AND (${etapaDesdeSql}) <= now() - make_interval(days => ${SEGUIR_DESDE_DIAS})
-  AND (${etapaDesdeSql}) >  now() - make_interval(days => ${SEGUIR_HASTA_DIAS})
+  AND (${desde}) IS NOT NULL
+  AND (${desde}) <= now() - make_interval(days => ${SEGUIR_DESDE_DIAS})
+  AND (${desde}) >  now() - make_interval(days => ${SEGUIR_HASTA_DIAS})
 )`;
+}
+
+/** ⚠️ El de VENTAS, como arriba. */
+export const paraSeguirSql: SQL = paraSeguirSqlDe("ventas");
 
 /**
  * ══ «SE CALLÓ CON EL PRECIO» — la objeción que nadie dijo en voz alta ═══════

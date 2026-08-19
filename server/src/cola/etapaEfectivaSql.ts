@@ -1,5 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
-import { ETAPAS, normalizarEtapa, type EtapaGestion } from "../gestiones/registrarGestion.js";
+import { ETAPAS, ETAPAS_CAMPANA, normalizarEtapa, type EtapaGestion } from "../gestiones/registrarGestion.js";
+import type { Modulo } from "../modulos/modulo.js";
 
 /**
  * LA ETAPA EFECTIVA — la política del embudo, dicha UNA vez (#88, ADR 0013).
@@ -102,7 +103,44 @@ export const ESCALA_ETAPAS: readonly string[] = [
  * Son dos listas y tienen que seguir siendo dos: se DECLARA lo que una persona
  * afirma, se CONSULTA todo lo que el embudo puede mostrar.
  */
-export const ETAPAS_CONSULTABLES: readonly string[] = [...ESCALA_ETAPAS, "perdido"];
+/**
+ * LA ESCALA DE **CAMPAÑA** (ADR 0063). Mismo arranque compartido, otra cola.
+ *
+ * ⚠️ `perdido` se saca igual que en la de ventas: no es un peldaño, es terminal
+ * humano y se compara aparte (`WHEN MANUAL = 'perdido' THEN 'perdido'`).
+ */
+export const ESCALA_CAMPANA: readonly string[] = [
+  SIN_RESPUESTA,
+  ...ETAPAS_CAMPANA.filter((e) => e !== "perdido"),
+];
+
+/**
+ * QUÉ ESCALA LE TOCA A CADA MÓDULO.
+ *
+ * 🔴 **Una consulta NUNCA mezcla los dos módulos, y eso es lo que hace correcto
+ * elegir la escala por CONSULTA en vez de por fila.** No es suerte: la mitad de
+ * arriba la garantiza `cola/lineas.ts:soloSusLineas` —un operador de campaña
+ * sólo ve sus líneas— y la de abajo, ADR 0061, que le veda esa línea a todo el
+ * que no la atiende. Si alguna de las dos se relajara, esto pasa a tener que
+ * resolverse **por fila** (join a `numeros_wa.proposito`) y este comentario es
+ * la única advertencia que va a haber.
+ */
+export function escalaDe(modulo: Modulo): readonly string[] {
+  return modulo === "campana" ? ESCALA_CAMPANA : ESCALA_ETAPAS;
+}
+
+/**
+ * 🔴 LO QUE `?etapa=` PUEDE PEDIR — la UNIÓN de los dos módulos, a propósito.
+ *
+ * La regla que fija el candado de ADR 0044 es *toda etapa que el embudo puede
+ * DEVOLVER se tiene que poder pedir*, y con dos módulos eso son las de los dos.
+ * Validar contra el módulo de quien pide costaría resolverlo en la ruta —otra
+ * consulta— para ganar nada: pedir `?etapa=comprometido` desde ventas no es una
+ * fuga, es una lista vacía, y una lista vacía es la respuesta correcta.
+ */
+export const ETAPAS_CONSULTABLES: readonly string[] = [
+  ...new Set([...ESCALA_ETAPAS, ...ESCALA_CAMPANA, "perdido"]),
+];
 
 /**
  * EL PISO DERIVADO, solo — el peldaño que sale de los HECHOS, sin mirar ninguna
@@ -133,7 +171,29 @@ export function etapaDerivada(
    * un cierre.
    */
   ventaPosterior = false,
+  /**
+   * De qué EMBUDO se está hablando (ADR 0063). `ventas` por default: los
+   * llamadores de siempre no cambian una letra.
+   */
+  modulo: Modulo = "ventas",
 ): string {
+  /**
+   * 🔴 EN CAMPAÑA LA DERIVACIÓN SE CORTA EN `contactado`, y los dos vetos son
+   * por motivos distintos:
+   *
+   * · `cierre` sale de `conversiones_wa`, que dice «esta persona compró alguna
+   *   vez» — un teléfono que además le compró un diplomado a la Escuela
+   *   ascendería a un peldaño que en el embudo de campaña **no existe**.
+   * · `cotizado` sale de un monto en el hilo, y en una conversación de campaña
+   *   hablar de plata no es haber cotizado nada.
+   *
+   * Y el modo de fallar si esto no estuviera es MUDO: los dos derivarían una
+   * etapa fuera de `ESCALA_CAMPANA`, ahí `indexOf` da -1 y manda el piso.
+   */
+  if (modulo === "campana") {
+    if (!hablo && yaLeHablamos) return SIN_RESPUESTA;
+    return respondida ? "contactado" : "interesado";
+  }
   if (ventaPosterior) return "cierre";
   if (!hablo && yaLeHablamos) return SIN_RESPUESTA;
   return precioEnviado ? "cotizado" : respondida ? "contactado" : "interesado";
@@ -152,22 +212,24 @@ export function etapaEfectiva(
   hablo = true,
   yaLeHablamos = false,
   ventaPosterior = false,
+  modulo: Modulo = "ventas",
 ): string {
-  const derivada = etapaDerivada(respondida, precioEnviado, hablo, yaLeHablamos, ventaPosterior);
+  const derivada = etapaDerivada(respondida, precioEnviado, hablo, yaLeHablamos, ventaPosterior, modulo);
   if (etapaManual == null) return derivada;
   const manual = normalizarEtapa(etapaManual);
   if (manual === "perdido") return "perdido";
+  const escala = escalaDe(modulo);
   // Una manual fuera de la escala (dato viejo o basura) rankea -1: manda el piso.
-  const rangoManual = ESCALA_ETAPAS.indexOf(manual);
-  return rangoManual >= ESCALA_ETAPAS.indexOf(derivada) ? ESCALA_ETAPAS[rangoManual] : derivada;
+  const rangoManual = escala.indexOf(manual);
+  return rangoManual >= escala.indexOf(derivada) ? escala[rangoManual] : derivada;
 }
 
 // ── La MISMA regla, dicha en SQL ─────────────────────────────────────────────
 
 /** El rango de una etapa en la escala, generado DESDE la constante compartida. */
-const rango = (etapa: SQL): SQL =>
+const rango = (etapa: SQL, modulo: Modulo = "ventas"): SQL =>
   sql`(CASE ${etapa} ${sql.join(
-    ESCALA_ETAPAS.map((e, i) => sql`WHEN ${e} THEN ${i}`),
+    escalaDe(modulo).map((e, i) => sql`WHEN ${e} THEN ${i}`),
     sql` `,
   )} ELSE -1 END)`;
 
@@ -201,13 +263,34 @@ const rango = (etapa: SQL): SQL =>
  * PROPIO más pobre; se unificó contra `cola/precio.ts` en el mismo commit —
  * con dos criterios, cada pantalla armaría un embudo distinto.
  */
-export const derivadaSql = sql`(CASE
+export function derivadaSqlDe(modulo: Modulo = "ventas"): SQL {
+  // 🔴 En campaña no se derivan `cierre` ni `cotizado`. El porqué de cada veto
+  // está en `etapaDerivada`, del que esto es el gemelo exacto.
+  if (modulo === "campana") {
+    return sql`(CASE
+  WHEN NOT hablo AND ya_le_hablamos THEN ${SIN_RESPUESTA}
+  WHEN respondida THEN 'contactado'
+  ELSE 'interesado'
+END)`;
+  }
+  return sql`(CASE
   WHEN v.venta_at IS NOT NULL THEN 'cierre'
   WHEN NOT hablo AND ya_le_hablamos THEN ${SIN_RESPUESTA}
   WHEN precio_enviado THEN 'cotizado'
   WHEN respondida THEN 'contactado'
   ELSE 'interesado'
 END)`;
+}
+
+/**
+ * ⚠️ **EL DE VENTAS, CON SU NOMBRE PUESTO.** Los consumidores de una superficie
+ * declarada `ventas` (`dashboard/negocio.ts`, `resultados/`) lo usan tal cual;
+ * los COMPARTIDOS —la cola, `tiempoEnEtapa`— tienen que llamar a la función con
+ * su módulo. Que la constante siga existiendo es conveniencia; el riesgo que
+ * queda es usarla en una consulta compartida, y ahí serviría el embudo
+ * equivocado sin fallar. Por eso la función se llama distinto y no igual.
+ */
+export const derivadaSql = derivadaSqlDe("ventas");
 const DERIVADA = derivadaSql;
 
 /**
@@ -219,12 +302,19 @@ export const manualNormalizadaSql = sql`(CASE etapa_manual WHEN 'nuevo' THEN 'in
 const MANUAL = manualNormalizadaSql;
 
 /** La etapa efectiva — espejo verificado de `etapaEfectiva(...)`. */
-export const etapaEfectivaSql: SQL = sql`CASE
-  WHEN etapa_manual IS NULL THEN ${DERIVADA}
-  WHEN ${MANUAL} = 'perdido' THEN 'perdido'
-  WHEN ${rango(MANUAL)} >= ${rango(DERIVADA)} THEN ${MANUAL}
-  ELSE ${DERIVADA}
-END`;
+/** La etapa efectiva del módulo que se le pida. Gemelo de `etapaEfectiva`. */
+export function etapaEfectivaSqlDe(modulo: Modulo = "ventas"): SQL {
+  const derivada = derivadaSqlDe(modulo);
+  return sql`CASE
+    WHEN etapa_manual IS NULL THEN ${derivada}
+    WHEN ${MANUAL} = 'perdido' THEN 'perdido'
+    WHEN ${rango(MANUAL, modulo)} >= ${rango(derivada, modulo)} THEN ${MANUAL}
+    ELSE ${derivada}
+  END`;
+}
+
+/** ⚠️ El de VENTAS — mismo criterio que `derivadaSql`: los compartidos usan la función. */
+export const etapaEfectivaSql: SQL = etapaEfectivaSqlDe("ventas");
 
 /**
  * De dónde sale `etapa_manual`: la ÚLTIMA gestión asentada por conversación

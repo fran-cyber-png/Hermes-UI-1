@@ -13,7 +13,8 @@ import {
   ventanaDiasSql,
   vivaSql,
 } from "./urgenciaSql.js";
-import { etapaEfectivaSql, ultimasGestionesSql, ventaPosteriorCteSql } from "./etapaEfectivaSql.js";
+import { etapaEfectivaSqlDe, ultimasGestionesSql, ventaPosteriorCteSql } from "./etapaEfectivaSql.js";
+import { moduloDe, type Modulo } from "../modulos/modulo.js";
 import { precioEnviadoSql, primerPrecioAtSql } from "./precio.js";
 import {
   DIAS_DEUDA_VIVA,
@@ -25,8 +26,8 @@ import {
 } from "./pregunta.js";
 import { leadsCte, sufijosConConversacionCte } from "./leadsCte.js";
 import {
-  etapaDesdeSql,
-  paraSeguirSql,
+  etapaDesdeSqlDe,
+  paraSeguirSqlDe,
   respuestaAtSql,
   seCalloConElPrecioSql,
 } from "./tiempoEnEtapa.js";
@@ -723,6 +724,16 @@ export async function consultarCola(
       })
     : [];
 
+  /**
+   * DE QUÉ EMBUDO ES ESTA CONSULTA (ADR 0063) — de la MISMA lectura que decide
+   * `exclusivas`, que es la que garantiza que la respuesta valga para todas las
+   * filas: un operador de campaña sólo ve sus líneas, y ADR 0061 le veda esa
+   * línea a todos los demás. Por eso el embudo se puede elegir por CONSULTA.
+   *
+   * ⚠️ Sin líneas cae en `ventas`, que es el comportamiento de siempre.
+   */
+  const modulo = moduloDe(misAsignadasConProposito);
+
   const { lineas, sinLineasPropias } = recorteDeLineas({
     linea: opciones.linea,
     misLineas: opciones.misLineas,
@@ -829,7 +840,7 @@ export async function consultarCola(
       const r = await base.transaction((tx) =>
         ejecutarCola(
           tx,
-          { ...opciones, veTodo, conLineaPropia },
+          { ...opciones, veTodo, conLineaPropia, modulo },
           lineas,
           conEstado,
           conPadron,
@@ -986,6 +997,15 @@ type OpcionesResueltas = OpcionesCola & {
    * proponerlo.
    */
   conLineaPropia: boolean;
+  /**
+   * 🔴 **VIAJA RESUELTO, no se vuelve a preguntar acá adentro** (ADR 0063). Sale
+   * de las MISMAS líneas con las que se decide `exclusivas` —una sola lectura— y
+   * con él `ejecutarCola` elige el embudo. Sin esto, una conversación de campaña
+   * con `comprometido` declarado rankearía **-1** contra la escala de ventas y
+   * se mostraría como «Contestaron»: sin error, sin log, y con la vendedora
+   * viendo una etapa que ella misma no puso.
+   */
+  modulo: Modulo;
 };
 
 async function ejecutarCola(
@@ -1006,6 +1026,10 @@ async function ejecutarCola(
   const vendedoraId = opciones.vendedoraId;
   const limit = Math.min(opciones.limit || 40, 100);
   const offset = opciones.offset || 0;
+  /** El embudo de ESTA consulta (ADR 0063). `ventas` es el de siempre. */
+  const etapaEfectivaSql = etapaEfectivaSqlDe(opciones.modulo);
+  const etapaDesdeSql = etapaDesdeSqlDe(opciones.modulo);
+  const paraSeguirSql = paraSeguirSqlDe(opciones.modulo);
 
   const filtroCanal = canal ? sql`AND canal = ${canal}` : sql``;
   // Solo hay pins que respetar si hay vendedora Y la tabla existe.
@@ -1479,6 +1503,9 @@ async function ejecutarCola(
       undefined,
       // Acá SÍ: estamos adentro de la transacción y `todo` ya está armado.
       true,
+      // El MISMO embudo que la página. Con dos distintos, la cabecera contaría
+      // columnas que la lista no puede devolver.
+      opciones.modulo,
     );
     conteos = plegarConteos(desglose);
   }
@@ -1551,7 +1578,17 @@ async function desglosarEmbudo(
    * encontró el test de paridad con el Dashboard, no el typecheck.
    */
   desdeTablaCompartida = false,
+  /**
+   * De qué embudo es este desglose (ADR 0063). ⚠️ **Va como parámetro y no se
+   * deduce acá**: el desglose se arma con las MISMAS condiciones que la página,
+   * así que si las dos no eligieran el mismo embudo, la cabecera del Pipeline
+   * contaría columnas que la lista no puede devolver — el defecto de
+   * `frontera.conteos`, otra vez.
+   */
+  modulo: Modulo = "ventas",
 ): Promise<FilaDesglose[]> {
+  const etapaEfectivaSql = etapaEfectivaSqlDe(modulo);
+  const paraSeguirSql = paraSeguirSqlDe(modulo);
   /**
    * 🔴 `en_ventana` ES LO QUE LE PERMITE COMPARTIR LA TABLA TEMPORAL DE LA COLA.
    *

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ETAPAS,
+  etapasDeclarablesDe,
   ETAPA_CHIP,
   ETAPA_ROTULO,
   SIN_RESPUESTA,
@@ -143,5 +144,49 @@ describe('rotuloEtapa', () => {
 
   it('pluraliza cuando se le pide, que es lo que necesitan las columnas', () => {
     expect(rotuloEtapa('cotizado', 'varios')).toBe(ETAPA_ROTULO.cotizado.varios);
+  });
+});
+
+/**
+ * QUÉ SE PUEDE DECLARAR EN CADA MÓDULO (ADR 0063).
+ *
+ * 🔴 **El defecto que esto atrapa no da error**: si la barra del chat ofrece una
+ * etapa que la escala del módulo no tiene, la gestión SE GUARDA y el tablero la
+ * devuelve al piso —`escala.indexOf` da -1— así que la vendedora aprieta, ve que
+ * no pasa nada, y no tiene forma de saber por qué. El gemelo del server es
+ * `cola/etapaCampana.test.ts`.
+ */
+describe('las etapas declarables por módulo', () => {
+  it('ventas ofrece las cuatro de siempre, sin «perdido»', () => {
+    expect(etapasDeclarablesDe('ventas')).toEqual(['interesado', 'contactado', 'cotizado', 'cierre']);
+  });
+
+  it('campaña ofrece su escalera y NINGUNA de plata', () => {
+    expect(etapasDeclarablesDe('campana')).toEqual([
+      'interesado',
+      'contactado',
+      'simpatiza',
+      'comprometido',
+      'voluntario',
+    ]);
+  });
+
+  it('🔴 ninguna declarable queda sin rótulo — se vería el identificador crudo', () => {
+    for (const modulo of ['ventas', 'campana'] as const) {
+      for (const etapa of etapasDeclarablesDe(modulo)) {
+        expect(ETAPA_ROTULO[etapa], `«${etapa}» no tiene rótulo`).toBeDefined();
+      }
+    }
+  });
+
+  it('⚠️ «perdido» no está en ninguna: vive aparte porque pide confirmación', () => {
+    expect(etapasDeclarablesDe('ventas')).not.toContain('perdido');
+    expect(etapasDeclarablesDe('campana')).not.toContain('perdido');
+    expect(ETAPA_ROTULO.perdido, 'pero sigue teniendo rótulo, y se declara').toBeDefined();
+  });
+
+  it('⚠️ «sin_respuesta» tampoco: se deriva de un hecho y no se afirma', () => {
+    expect(etapasDeclarablesDe('ventas')).not.toContain('sin_respuesta');
+    expect(etapasDeclarablesDe('campana')).not.toContain('sin_respuesta');
   });
 });

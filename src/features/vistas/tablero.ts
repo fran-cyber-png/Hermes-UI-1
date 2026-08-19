@@ -109,7 +109,98 @@ export const COLUMNAS_TRABAJO = [
   },
 ] as const;
 
-export type EtapaTrabajo = (typeof COLUMNAS_TRABAJO)[number]['id'];
+/**
+ * ══ LAS COLUMNAS DE CAMPAÑA (ADR 0063) ══════════════════════════════════════
+ *
+ * Mismo arranque —«Te esperan» y «Contestaron» son igual de ciertos de los dos
+ * lados— y otra cola: tres peldaños que **una persona AFIRMA**, porque un
+ * votante no deja huellas verificables como las deja un comprador.
+ *
+ * 🔴 **SON CINCO, Y «NUNCA CONTESTARON» ES LA QUE SE CAE.** No es preferencia:
+ * seis columnas **no entran a 1280** —se midió al armar ADR 0050, y la captura
+ * mostró la última cortada contra el borde con las tarjetas desbordadas—, así
+ * que había que elegir. Se saca ésa y no un peldaño de la escalera por dos
+ * razones:
+ *
+ * · **Es la que menos se parece al trabajo del día en una campaña.** Un comando
+ *   contacta gente en frío por definición: el silencio es el caso normal, no una
+ *   venta que se está enfriando. La escalera —simpatiza → se comprometió → es
+ *   voluntario— sí es lo que se trabaja.
+ * · **Sacar un peldaño dejaría la escalera con un salto**, y una escalera con un
+ *   escalón faltante no se puede subir: la vendedora tendría que declarar
+ *   «comprometido» sobre alguien al que nunca pudo marcar como simpatizante.
+ *
+ * ⚠️ **Y LO QUE SE APRENDIÓ EN VENTAS APLICA IGUAL**: sacar «Nunca contestaron»
+ * allá hizo que el trabajo del día desapareciera de la mesa («se me están
+ * desapareciendo los leads», Luz, 11-ago) y hubo que reponerla. Acá la etapa
+ * **sigue existiendo** —se deriva, se ve en Mensajes y se puede pedir con
+ * `?etapa=sin_respuesta`—; lo que no tiene es columna. Si en campaña pasa lo
+ * mismo que pasó allá, esto se revierte y lo que sale es otra.
+ */
+export const COLUMNAS_CAMPANA = [
+  {
+    id: 'interesado',
+    titulo: ETAPA_ROTULO.interesado.varios,
+    pista: 'Escribieron y nadie les contestó todavía. La pelota es tuya.',
+    vacio: 'Nadie esperando respuesta. Cuando alguien escriba, aparece acá.',
+  },
+  {
+    id: 'contactado',
+    titulo: ETAPA_ROTULO.contactado.varios,
+    pista: 'Te contestaron. Todavía no sabés si te apoyan.',
+    vacio: 'Cuando alguien te conteste, aparece acá.',
+  },
+  {
+    id: 'simpatiza',
+    titulo: ETAPA_ROTULO.simpatiza.varios,
+    pista: 'Dijeron que les gusta la propuesta. Todavía no prometieron nada.',
+    vacio: 'Arrastrá acá a quien te haya dicho que apoya.',
+  },
+  {
+    id: 'comprometido',
+    titulo: ETAPA_ROTULO.comprometido.varios,
+    pista: 'Dijeron que van a votar. Es lo que se cuenta el día de la elección.',
+    vacio: 'Arrastrá acá a quien te haya prometido su voto.',
+  },
+  {
+    id: 'voluntario',
+    titulo: ETAPA_ROTULO.voluntario.varios,
+    pista: 'Aceptaron hacer algo: volantear, prestar un local, sumar contactos.',
+    vacio: 'Arrastrá acá a quien se haya ofrecido a ayudar.',
+  },
+] as const;
+
+/**
+ * QUÉ COLUMNAS DIBUJA EL TABLERO DE ESTA PERSONA.
+ *
+ * ⚠️ **Es una función y no un `if` en la vista**: el Pipeline usa la lista para
+ * el GRID, para los recortes y para las compuertas del arrastre. Con la decisión
+ * repartida, agregar una columna a un módulo dejaría a los otros dos lugares
+ * dibujando el tablero viejo.
+ */
+export function columnasDe(modulo: 'ventas' | 'campana'): readonly ColumnaTablero[] {
+  return modulo === 'campana' ? COLUMNAS_CAMPANA : COLUMNAS_TRABAJO;
+}
+
+/** Lo que una columna del tablero necesita decir de sí misma. */
+export interface ColumnaTablero {
+  id: EtapaTrabajo;
+  titulo: string;
+  pista: string;
+  vacio: string;
+}
+
+/**
+ * Una etapa que ALGÚN tablero dibuja como columna.
+ *
+ * ⚠️ **Es la unión de los dos módulos, no una por módulo** (mismo criterio que
+ * `Etapa` en `lib/etapas.ts`): los componentes del Pipeline —la tarjeta, el
+ * recorte, el arrastre— son los MISMOS en los dos tableros. Qué columnas ve cada
+ * quien lo decide `columnasDe`, que es donde vive esa decisión.
+ */
+export type EtapaTrabajo =
+  | (typeof COLUMNAS_TRABAJO)[number]['id']
+  | (typeof COLUMNAS_CAMPANA)[number]['id'];
 
 const ETAPAS_TRABAJO: readonly string[] = COLUMNAS_TRABAJO.map((c) => c.id);
 

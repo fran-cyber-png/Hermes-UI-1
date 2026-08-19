@@ -1554,6 +1554,44 @@ La regla vive en `server/src/modulos/`: `modulo.ts` (el tipo, `moduloDe(lineas)`
   único con candado que rompa el arranque**, nunca parchear ruta por ruta.
 - Auditoría que lo origina: `docs/auditoria-frontera-campana-escuela.md`.
 
+### El embudo de campaña — se DECLARA, no se deriva (ADR 0063)
+
+`Te esperan → Contestaron → Simpatizan → Se comprometieron → Son voluntarios`, y `Dijeron que no`
+al costado. Los tres primeros peldaños **se comparten con ventas** porque derivan de quién habló,
+no de plata; la cola es propia y la afirma una persona.
+
+- 🔴 **`ESCALA_ETAPAS` NO ES UNA LISTA: ES UNA TABLA DE RANGOS**, y `etapaEfectiva` resuelve con
+  `escala.indexOf(manual) >= escala.indexOf(derivada)` — donde **`indexOf` da -1** para lo que no
+  está. Con las etapas de campaña afuera, la vendedora declaraba «Se comprometió» y la tarjeta
+  volvía sola a «Contestaron»: **sin error, sin log**, y sin poder distinguirlo de «no la moví».
+  Por eso `ETAPAS_CAMPANA` es una lista APARTE y `escalaDe(modulo)` elige.
+- 🔴 **LA ESCALA SE ELIGE POR CONSULTA, y es correcto por construcción: una consulta NUNCA mezcla
+  los dos módulos.** Lo garantizan `soloSusLineas` (arriba) y ADR 0061 (abajo). ⚠️ **Si alguna de
+  las dos se relaja, esto pasa a resolverse POR FILA** (join a `numeros_wa.proposito`) — el
+  docblock de `escalaDe` es la única advertencia que hay.
+- 🔴 **EN CAMPAÑA NO SE DERIVAN `cierre` NI `cotizado`.** `cierre` sale de `conversiones_wa` («esta
+  persona compró alguna vez»): un teléfono que además le compró un diplomado a la Escuela subiría a
+  un peldaño que en campaña no existe. `cotizado` sale de un monto en el hilo, y hablar de plata en
+  una campaña no es haber cotizado nada. Los dos derivarían **fuera de la escala** ⇒ -1 ⇒ mudo.
+- 🔴 **SON CINCO COLUMNAS Y SE CAE «NUNCA CONTESTARON»** — seis no entran a 1280 (medido en ADR
+  0050, con la captura de la última cortada contra el borde). Se saca ésa y no un peldaño porque un
+  comando contacta en frío por definición, y porque **una escalera con un escalón faltante no se
+  puede subir**. ⚠️ La etapa sigue existiendo (se deriva, se ve en Mensajes, se pide con
+  `?etapa=`); si acá pasa lo que pasó en ventas —«se me están desapareciendo los leads»— se revierte.
+- 🔴 **LOS DOS TABLEROS TIENEN EXACTAMENTE CINCO COLUMNAS, con test.** `VistaEmbudo` llama a
+  `useConversaciones` **cinco veces con nombre fijo**: React prohíbe que la cantidad de hooks varíe
+  entre renders, así que un sexto elemento rompe la app con el error opaco de React justo al
+  cambiar de módulo. **Si un módulo necesita seis, se cambia esa vista, no la lista.**
+- 🔴 **`etapasDeclarablesDe` y `columnasDe` SON DOS PREGUNTAS DISTINTAS**: `sin_respuesta` es
+  columna y **no** se declara (se deriva), `perdido` se declara y **no** es columna (pide
+  confirmación). La barra del chat pregunta la primera — con la lista de ventas clavada, un
+  operador de campaña declaraba «Sabe el precio» y su tablero lo devolvía al piso.
+- ⚠️ **`ETAPAS_CONSULTABLES` es la UNIÓN de los dos módulos**: la ruta `?etapa=` es compartida y
+  resolver el módulo ahí costaría otra consulta para ganar nada — pedir `?etapa=comprometido` desde
+  ventas no es una fuga, es una lista vacía.
+- ⚠️ **`etapaCampana.paridad.test.db.ts` se escribió y NO se ejecutó** (Docker apagado): compila y
+  corre en N2b. **La paridad SQL ≡ TS del embudo de campaña no está verificada localmente.**
+
 ## La campaña no la ve la Escuela — la única frontera que el rol NO abre (**ADR 0061**)
 
 Goberna son DOS planos y no se cruzan: la **Escuela** (lo que Hermes atiende) y la **Consultoría** (el

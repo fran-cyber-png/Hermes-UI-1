@@ -1,7 +1,12 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { ETAPAS_CONSULTABLES, ESCALA_ETAPAS, SIN_RESPUESTA } from "../cola/etapaEfectivaSql.js";
-import { ETAPAS } from "../gestiones/registrarGestion.js";
+import {
+  ESCALA_CAMPANA,
+  ESCALA_ETAPAS,
+  ETAPAS_CONSULTABLES,
+  SIN_RESPUESTA,
+} from "../cola/etapaEfectivaSql.js";
+import { ETAPAS, ETAPAS_CAMPANA } from "../gestiones/registrarGestion.js";
 
 /**
  * 🔴 EL HUECO DE LA COSTURA — lo que se puede CONSULTAR no es lo que se puede
@@ -31,11 +36,23 @@ describe("las dos listas de etapas: declarables vs. consultables", () => {
     }
   });
 
+  test("todo lo declarable EN CAMPAÑA también se puede consultar", () => {
+    // ADR 0063: el segundo embudo tiene sus propios peldaños declarados, y la
+    // ruta es COMPARTIDA — si no los aceptara, el tablero de campaña pediría su
+    // propia columna y comería un 400.
+    for (const etapa of ETAPAS_CAMPANA) {
+      assert.ok(
+        ETAPAS_CONSULTABLES.includes(etapa),
+        `«${etapa}» se puede declarar en campaña y la ruta la rechazaría`,
+      );
+    }
+  });
+
   test("🔴 toda etapa que el embudo puede DEVOLVER se puede pedir", () => {
     // La invariante que se rompió: si `etapaEfectiva` puede devolver un valor,
-    // el tablero tiene que poder cargar esa columna. Al agregar un peldaño a la
-    // escala, este test falla hasta que la ruta lo acepte.
-    for (const etapa of [...ESCALA_ETAPAS, "perdido"]) {
+    // el tablero tiene que poder cargar esa columna. Al agregar un peldaño a
+    // cualquiera de las dos escalas, este test falla hasta que la ruta lo acepte.
+    for (const etapa of [...ESCALA_ETAPAS, ...ESCALA_CAMPANA, "perdido"]) {
       assert.ok(
         ETAPAS_CONSULTABLES.includes(etapa),
         `el embudo puede devolver «${etapa}» y la ruta la rechazaría con un 400`,
@@ -51,10 +68,16 @@ describe("las dos listas de etapas: declarables vs. consultables", () => {
     );
   });
 
-  test("no hay consultables de más: cada una la puede devolver el embudo", () => {
+  test("no hay consultables de más: cada una la puede devolver ALGÚN embudo", () => {
     // La otra dirección, para que la lista no se llene de valores muertos que
     // devolverían una columna vacía sin explicación.
-    const posibles = new Set([...ESCALA_ETAPAS, "perdido"]);
+    //
+    // ⚠️ **«Algún» embudo, no «el»**, y ese matiz es la decisión de ADR 0063:
+    // `ETAPAS_CONSULTABLES` es la UNIÓN de los dos módulos porque la ruta es
+    // compartida y resolver el módulo ahí costaría otra consulta. Pedir
+    // `?etapa=comprometido` desde ventas no es una fuga: es una lista vacía, y
+    // una lista vacía es la respuesta correcta.
+    const posibles = new Set([...ESCALA_ETAPAS, ...ESCALA_CAMPANA, "perdido"]);
     for (const etapa of ETAPAS_CONSULTABLES) {
       assert.ok(posibles.has(etapa), `«${etapa}» se puede pedir y el embudo no la devuelve nunca`);
     }
