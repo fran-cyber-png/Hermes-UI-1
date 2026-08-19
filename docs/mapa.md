@@ -11,9 +11,9 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 34 | 480 | 66,760 | 22,808 |
+| front | 34 | 480 | 66,765 | 22,808 |
 | server | 68 | 803 | 84,843 | 52,878 |
-| **total** | **102** | **1,283** | **151,603** | **75,686** |
+| **total** | **102** | **1,283** | **151,608** | **75,686** |
 
 ## Front — `src/`
 
@@ -26,7 +26,7 @@
 | `correos` | El correo 1-a-1, auditado. Sin listas ni campañas. | 11 | 3,500 | 5 | 1 | 4 |
 | `agenda` | Los seguimientos que una vendedora se agendó: cuándo vuelve a tocar a quién. | 29 | 3,114 | 5 | 5 | 4 |
 | `vistas` | El Pipeline: el tablero por etapas, sus tarjetas y las compuertas para mover una. | 15 | 3,027 | 6 | 1 | 10 |
-| `lib` | Lo que no sabe de negocio: el cliente HTTP con su caché en IndexedDB, el SSE, el teclado, formato y notificaciones. Capa 0 — no puede importar ninguna feature. | 54 | 2,549 | 19 | 31 | 0 |
+| `lib` | Lo que no sabe de negocio: el cliente HTTP con su caché en IndexedDB, el SSE, el teclado, formato y notificaciones. Capa 0 — no puede importar ninguna feature. | 54 | 2,555 | 19 | 31 | 0 |
 | `dashboard` | Los números en pantalla: el radar, el embudo y qué recorte ve quien mira. | 9 | 2,520 | 3 | 3 | 7 |
 | `routing` | Qué campaña de Meta le cae a qué vendedora. | 10 | 2,511 | 4 | 1 | 1 |
 | `gestion` | Lo que la vendedora asienta sobre una conversación: etapa, categorías, intereses y sus herramientas. | 12 | 2,258 | 2 | 5 | 9 |
@@ -37,7 +37,7 @@
 | `entrenamiento` | Entrenar el bot: sus corridas, sus lecciones y los agujeros que deja. | 9 | 1,604 | 2 | 1 | 2 |
 | `plantillas` | Las secuencias de venta: editarlas, aprobar una propuesta y mandarlas paso a paso. | 7 | 1,429 | 1 | 2 | 2 |
 | `ivi` | La consulta al cerebro RAG y cómo se presenta lo que contesta: los tres tipos y los ocho errores. | 10 | 1,395 | 4 | 1 | 1 |
-| `auth` | Entrar y salir: login contra Cerberus, el SSO de Centurión, y el token que el cliente cree antes de preguntar. | 18 | 1,300 | 9 | 3 | 4 |
+| `auth` | Entrar y salir: login contra Cerberus, el SSO de Centurión, y el token que el cliente cree antes de preguntar. | 18 | 1,299 | 9 | 3 | 4 |
 | `app` | El armazón: qué vista está abierta, los ⌘N y qué capa se monta encima de la mesa. Compone features; no tiene regla de negocio propia. | 2 | 1,160 | 0 | 0 | 18 |
 | `venta` | Registrar la venta contra Cerberus sin salir del chat. | 6 | 1,135 | 1 | 2 | 6 |
 | `hechos` | Los datos recomendados — la munición de una línea. Tocar uno lo pone en el composer; no envía. | 7 | 1,003 | 2 | 2 | 3 |

@@ -56,7 +56,14 @@ function archivosDe(dir, acc = []) {
   return acc
 }
 
-const esTest = (p) => /\.test\.|\.test$|\/pruebas\//.test(p) || p.includes('.test.')
+// 🔴 MISMO DEFECTO QUE `relPosix` (arriba), en otro punto: `p` viene de `join()`
+// y en Windows trae backslashes, así que `\/pruebas\//` nunca matchea — un
+// archivo de `src/pruebas/` se contaba como código del módulo en vez de
+// excluirse del grafo. Medido corriendo el generador en Windows: 22 galerías
+// pasaban a 0 y varios módulos ganaban aristas de más. Se normaliza acá,
+// igual que `relPosix`, en vez de tocar cada regex.
+const enPosix = (p) => p.split(sep).join('/')
+const esTest = (p) => /\.test\.|\.test$|\/pruebas\//.test(enPosix(p)) || p.includes('.test.')
 
 // Las galerías (`src/features/<x>/galeria*.tsx`) son ARTEFACTOS DE EVIDENCIA, la misma
 // categoría que los tests: cada una se sirve por su propio `galeria-*.html` y NINGUNA la
@@ -67,7 +74,7 @@ const esTest = (p) => /\.test\.|\.test$|\/pruebas\//.test(p) || p.includes('.tes
 // del front de 7 a 3. O sea que más de la mitad de ese nudo eran pantallas de demo.
 // ⚠️ Siguen contando en `lineas`: no son tests, son código del módulo. Lo que se excluye
 //    son las ARISTAS, no el módulo.
-const esGaleria = (p) => /\/src\/features\/[^/]+\/galeria[^/]*\.tsx$/.test(p)
+const esGaleria = (p) => /\/src\/features\/[^/]+\/galeria[^/]*\.tsx$/.test(enPosix(p))
 
 const fueraDelGrafo = (p) => esTest(p) || esGaleria(p)
 
