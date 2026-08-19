@@ -4,6 +4,7 @@ import { tokenGuardado } from '../../lib/datos/token';
 import { API_URL } from '../../config';
 import type { PiezaDeclarada } from './procedenciaComposer';
 import type { CitaHilo } from './cita';
+import { esLineaQueNoCorre, intervaloDelHilo, intervaloDeLaSesion } from './cadencia';
 
 /** Un adjunto del hilo: el archivo ya vive en el server, esto es la referencia. */
 export interface MediaHilo {
@@ -146,12 +147,57 @@ export type EstadoSesionWa = {
   | { estado: 'baneado'; codigo: string; expira: string }
 );
 
+/**
+ * EL ESTADO DE LA LÍNEA — y por qué este poll es la RED del SSE, no la fuente.
+ *
+ * Cuando el estado de una línea cambia de verdad (conectada, caída, baneada, o
+ * recién montada), el server lo empuja por el bus: `whatsapp/wiring.ts` llama a
+ * `emitirRT({tipo:'estado'})` en cada `onEstado`, y `lib/datos/tiempoReal.ts`
+ * traduce ese evento a `invalidateQueries(['wa','sesion'])`. **Eso es la
+ * fuente.** Este intervalo es lo que queda cuando el stream no está.
+ *
+ * Era `10_000` fijo, y con ~6 observadores montados a la vez eso fueron
+ * **58.429 pedidos el 18-ago-2026** para un endpoint que contesta en 6 ms sin
+ * tocar la base — o sea, trabajo que no le sirve a nadie.
+ *
+ * ⚠️ **Los ~6 observadores siguen ahí y cada uno pone su propio timer**:
+ * `refetchInterval` vive en el OBSERVADOR, no en la query, así que seis
+ * componentes montados sobre `['wa','sesion','']` son seis timers sobre la
+ * misma query. Bajar de 10 s a 60 s divide eso por seis; **hacer que sólo uno
+ * sondee es otro frente** y no se hace acá, porque elegir «cuál» crea un
+ * acoplamiento nuevo: el día que ese componente se desmonte, nadie pollea y
+ * nada lo dice.
+ *
+ * ⚠️ **`['wa','sesion','']` y `['wa','sesion',numeroPropio]` son claves
+ * DISTINTAS a propósito y no se colapsan**: la primera es el semáforo global
+ * («¿alguna línea puede mandar?») y la segunda gobierna si el composer de ESA
+ * conversación deja mandar. Con una sola, el composer de una línea caída
+ * quedaría habilitado porque otra está viva.
+ */
 export function useSesionWa(numeroPropio?: string | null) {
   const params = numeroPropio ? `?numeroPropio=${encodeURIComponent(numeroPropio)}` : '';
   return useQuery({
     queryKey: ['wa', 'sesion', numeroPropio ?? ''],
     queryFn: () => api<EstadoSesionWa>(`/api/whatsapp/sesion${params}`),
-    refetchInterval: 10_000,
+    /**
+     * 🔴 **UN 404 SE DEJA DE PEDIR.** `esa línea no está corriendo`
+     * (`server/src/routes/whatsapp.ts`) es una respuesta ESTABLE: sólo cambia
+     * cuando alguien monta la línea, y **cuando eso pasa el server emite un
+     * `estado`** que invalida esta clave. Repreguntarlo cada 10 s fueron
+     * **19.313 pedidos el 18-ago** que nunca podían contestar otra cosa.
+     *
+     * La red no es `refetchOnWindowFocus` —está APAGADO globalmente en Hermes
+     * (`lib/datos/cliente.ts`)—: son las dos invalidaciones de
+     * `lib/datos/tiempoReal.ts`, la del evento `estado` y la del **reconecte**
+     * del stream. Sin esa segunda, una línea montada mientras el front estaba
+     * desconectado se quedaría en 404 para siempre.
+     */
+    refetchInterval: (query) => intervaloDeLaSesion(query.state.error),
+    /**
+     * Y tampoco se REINTENTA el 404: el default global es `retry: 1`, así que
+     * cada 404 costaba dos pedidos. Los demás errores conservan su reintento.
+     */
+    retry: (intentos, error) => !esLineaQueNoCorre(error) && intentos < 1,
   });
 }
 
@@ -161,15 +207,51 @@ export type OrigenLead =
   | { fuente: 'landing'; ref: string }
   | null;
 
+/** Lo que devuelve `GET /api/whatsapp/conversacion/:telefono`. */
+type HiloWa = { telefono: string; mensajes: MensajeHilo[]; origen: OrigenLead };
+
+/**
+ * Cuándo pasó lo último en este hilo — lo que decide su cadencia.
+ *
+ * El server sirve los mensajes en orden ASCENDENTE (`whatsapp/hilo.ts` aplica
+ * el `LIMIT` sobre el orden DESC y devuelve ASC), así que el último del arreglo
+ * es el más reciente. Sin hilo todavía, o con un hilo vacío, devuelve `null` —
+ * y `intervaloDelHilo` lee eso como el escalón más rápido.
+ */
+function ultimoMensajeDelHilo(hilo: HiloWa | undefined): string | null {
+  return hilo?.mensajes.at(-1)?.occurred_at ?? null;
+}
+
 export function useConversacionWa(telefono: string | null) {
   const qc = useQueryClient();
 
   const hilo = useQuery({
     queryKey: ['wa', 'conversacion', telefono],
-    queryFn: () =>
-      api<{ telefono: string; mensajes: MensajeHilo[]; origen: OrigenLead }>(`/api/whatsapp/conversacion/${telefono}`),
+    queryFn: () => api<HiloWa>(`/api/whatsapp/conversacion/${telefono}`),
     enabled: Boolean(telefono),
-    refetchInterval: telefono ? 5_000 : false, // mientras está abierta, se refresca sola
+    /**
+     * EL RITMO DEPENDE DE QUÉ TAN VIVA ESTÁ LA CONVERSACIÓN, no del reloj.
+     *
+     * Era `5_000` fijo, y el 18-ago-2026 eso fueron **41.973 pedidos con 98,8 %
+     * de 304** — de los cuales **19.234 (46 %) eran cinco conversaciones de
+     * líneas apagadas con DIEZ mensajes entre todas** (`989270836`: 6.644
+     * pedidos para UN mensaje, en una línea muerta hacía 28 días). Un 304 no es
+     * gratis: el ETag es el hash del cuerpo, así que la consulta corre entera y
+     * recién al final se descubre que no cambió.
+     *
+     * La regla y su porqué —incluido el 🔴 de por qué el escalón lento no puede
+     * pasar de 60 s— viven en `cadencia.ts`, puras y con test. Acá sólo se le
+     * pasa el último mensaje del hilo: el server lo sirve ASC
+     * (`whatsapp/hilo.ts`: `ORDER BY occurred_at ASC` sobre el `LIMIT` DESC),
+     * así que el último del arreglo es el más reciente.
+     *
+     * Sin `data` todavía —el primer render, o el hilo recién abierto— cae en el
+     * escalón más rápido: la regla degrada hacia MÁS frecuente, siempre.
+     */
+    refetchInterval: (query) =>
+      telefono
+        ? intervaloDelHilo(ultimoMensajeDelHilo(query.state.data), Date.now())
+        : false,
   });
 
   // Marcar leído al abrir (ticks azules — decisión de Estephano). Sin bloquear la vista.
