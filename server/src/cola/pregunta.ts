@@ -216,7 +216,9 @@ export function pregunto(texto: string | null | undefined): boolean {
 const cita = (fuente: string): string => `'${fuente}'`;
 
 /**
- * EL ÚLTIMO ENTRANTE CON TEXTO, dentro del `GROUP BY` de la cola.
+ * EL ÚLTIMO ENTRANTE CON TEXTO, dentro del `GROUP BY` de la cola — agregando el
+ * VEREDICTO de cada fila en vez de su texto. Es lo que hace que el `GROUP BY` deje
+ * de correr regex.
  *
  * `FILTER (... AND texto IS NOT NULL)`: un audio, una foto o un sticker POSTERIOR
  * no borran lo que la persona pidió — la última palabra es el último mensaje que
@@ -225,8 +227,20 @@ const cita = (fuente: string): string => `'${fuente}'`;
  * siendo el de #49: **manda lo último que dijo**, o una persona que preguntó el
  * precio hace tres semanas se lleva el chip para siempre aunque ya haya dicho que
  * no.
+ *
+ * Medido el 19-ago-2026 contra producción, con el SQL real de la tabla temporal y
+ * neutralizando **sólo** las aplicaciones de regex: el `GroupAggregate` pasa de
+ * **1.339–1.541 ms** de CPU propia a **70–79 ms**. Los 19 regex son el 95 % de ese
+ * nodo y el 58 % del pedido entero de la cola.
+ *
+ * ⚠️ **El orden de las operaciones se da vuelta, y eso es lo que hay que mirar al
+ * leerlo**: antes se agregaba el TEXTO y después se le aplicaba el predicado; ahora
+ * se aplica el predicado a cada fila y se agrega el BOOLEANO. La fila elegida es la
+ * misma (mismo `ORDER BY`, mismo `FILTER`), así que la respuesta es la misma —
+ * `predicadosMaterializados.paridad.test.db.ts` lo corre por los dos caminos sobre
+ * el mismo corpus y compara la cola entera.
  */
-const ULTIMO_ENTRANTE = sql`(array_agg(texto ORDER BY occurred_at DESC)
+const ultimoEntranteDe = (veredicto: SQL): SQL => sql`(array_agg(${veredicto} ORDER BY occurred_at DESC)
   FILTER (WHERE direccion = 'entrante' AND texto IS NOT NULL))[1]`;
 
 /**
@@ -254,17 +268,40 @@ const anuncioDe = (t: SQL): SQL => sql`(
   AND ${t} !~* ${sql.raw(cita(CONCRETO))}
 )`;
 
+/**
+ * LOS TRES PREDICADOS DE UNA FILA, LEYENDO LA COLUMNA CON EL REGEX DE RESPALDO.
+ *
+ * 🔴 **El fallback no es opcional.** La migración es expand-only: entre el N5 y el
+ * backfill las 15.898 filas viejas tienen las columnas en `NULL`, y sin
+ * `COALESCE` la cola contestaría «nadie preguntó nada» — que no es degradar hacia
+ * lo de hoy, es una respuesta distinta.
+ *
+ * ⚠️ **`NULL` significa «anterior al backfill», nunca «sin texto».** Un audio o una
+ * foto se guardan con los tres en `false` (es lo que contestan las funciones
+ * puras), así que no pagan regex. Si `NULL` significara las dos cosas, esas filas
+ * lo pagarían para siempre.
+ *
+ * ⚠️ **Por FILA y no por grupo, a propósito.** El fallback a nivel de grupo pediría
+ * agregar por separado el veredicto y el texto con el mismo `ORDER BY`: dos
+ * ordenamientos distintos pueden desempatar distinto y quedaría el predicado de una
+ * fila con el texto de otra. Acá, mientras la columna esté llena, `COALESCE` corta
+ * antes y el regex no se ejecuta nunca.
+ */
+const precioDeFila: SQL = sql`COALESCE(pregunta_precio, ${precioDe(sql`texto`)})`;
+const datosDeFila: SQL = sql`COALESCE(pide_datos, ${datosDe(sql`texto`)})`;
+const anuncioDeFila: SQL = sql`COALESCE(es_texto_de_anuncio, ${anuncioDe(sql`texto`)})`;
+
 /** `pregunto_precio` de una conversación agrupada — espejo de `preguntoPrecio`. */
-export const preguntoPrecioAgrupadoSql: SQL = sql`COALESCE(${precioDe(ULTIMO_ENTRANTE)}, false)`;
+export const preguntoPrecioAgrupadoSql: SQL = sql`COALESCE(${ultimoEntranteDe(precioDeFila)}, false)`;
 
 /** `pregunto` de una conversación agrupada — espejo de `pregunto` (los tres niveles). */
 export const preguntoAgrupadoSql: SQL = sql`COALESCE(
-  ${precioDe(ULTIMO_ENTRANTE)} OR ${datosDe(ULTIMO_ENTRANTE)},
+  ${ultimoEntranteDe(sql`(${precioDeFila}) OR (${datosDeFila})`)},
   false
 )`;
 
 /** `solo_clic` de una conversación agrupada — espejo de `esTextoDeAnuncio`. */
-export const soloClicAgrupadoSql: SQL = sql`COALESCE(${anuncioDe(ULTIMO_ENTRANTE)}, false)`;
+export const soloClicAgrupadoSql: SQL = sql`COALESCE(${ultimoEntranteDe(anuncioDeFila)}, false)`;
 
 /**
  * EL MISMO PREDICADO SOBRE UN TEXTO SUELTO — para un comentario de FB/IG, que es

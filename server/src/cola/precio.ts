@@ -86,16 +86,37 @@ export function precioEnviado(mensajes: readonly MensajeParaPrecio[]): boolean {
 const PRECIO_REGEX_SQL = `'${PRECIO_REGEX_FUENTE}'`;
 
 /**
+ * ¿ESTE MENSAJE MENCIONA PRECIO? — leyendo la columna, con el regex de respaldo.
+ *
+ * 🔴 **EL FALLBACK NO ES OPCIONAL Y NO ES PROVISORIO EN EL CÓDIGO.** La migración
+ * es expand-only: entre el N5 y el backfill la columna está en `NULL` para las
+ * 15.898 filas viejas, y el fallback es lo que hace que en esa ventana la cola
+ * conteste **exactamente lo de hoy** en vez de «nadie cotizó nunca».
+ *
+ * ⚠️ Se evalúa **por FILA y no por grupo**, y eso tiene un costo mientras haya
+ * `NULL`: `COALESCE` corta en el primer argumento no nulo, así que con la columna
+ * llena el regex no se ejecuta jamás, pero con la columna vacía se ejecuta una vez
+ * por mensaje. Es a propósito: la alternativa —fallback a nivel de grupo— exige
+ * dos agregados con el mismo `ORDER BY` y dos ordenamientos distintos pueden
+ * desempatar distinto, o sea leer el predicado de una fila y el texto de otra.
+ * Correcto siempre le gana a barato durante media hora.
+ *
+ * `menciona_precio` la escriben los dos escritores de `interactions` vía
+ * `cola/predicadosDelTexto.ts`, que corre esta misma `mencionaPrecio`.
+ */
+const mencionaPrecioSql: SQL = sql`COALESCE(menciona_precio, texto ~* ${sql.raw(PRECIO_REGEX_SQL)})`;
+
+/**
  * `precio_enviado` de una CONVERSACIÓN agrupada — espejo de `precioEnviado(...)`.
  * Vive dentro del `GROUP BY` de la cola (como `respondidaSql`), sobre las columnas
- * `direccion` y `texto` sin calificar.
+ * `direccion`, `texto` y `menciona_precio` sin calificar.
  *
  * OJO CON EL ALCANCE: mira los mensajes de la MISMA ventana de 30 días que la
  * cola. Una cotización de hace dos meses no cuenta — y está bien: el tablero
  * habla del trabajo de este ciclo de venta, no de la historia.
  */
 export const precioEnviadoSql: SQL = sql`COALESCE(
-  bool_or(direccion = 'saliente' AND texto ~* ${sql.raw(PRECIO_REGEX_SQL)}),
+  bool_or(direccion = 'saliente' AND ${mencionaPrecioSql}),
   false
 )`;
 
@@ -114,5 +135,5 @@ export const precioEnviadoSql: SQL = sql`COALESCE(
  * primera cotización; mandar el precio otra vez no la vuelve más nueva.
  */
 export const primerPrecioAtSql: SQL = sql`min(occurred_at) FILTER (
-  WHERE direccion = 'saliente' AND texto ~* ${sql.raw(PRECIO_REGEX_SQL)}
+  WHERE direccion = 'saliente' AND ${mencionaPrecioSql}
 )`;

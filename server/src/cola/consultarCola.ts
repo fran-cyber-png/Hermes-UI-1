@@ -280,6 +280,12 @@ const msgCte = (
   lineas: readonly string[],
 ) => sql`
   SELECT i.canal, i.persona_id, i.persona_nombre, i.texto, i.direccion, i.occurred_at,
+         -- Los predicados del texto, YA CALCULADOS al escribir la fila
+         -- (cola/predicadosDelTexto.ts). Viajan crudos hasta el GROUP BY, que es
+         -- quien los lee vía precioEnviadoSql y los tres de cola/pregunta.ts.
+         -- NULL = fila anterior al backfill: ahí, y sólo ahí, corre el regex.
+         -- (Sin backticks: esto vive dentro de un template literal.)
+         i.menciona_precio, i.pregunta_precio, i.pide_datos, i.es_texto_de_anuncio,
          COALESCE(e.payload->>'numeroPropio', '') AS numero_propio,
          e.payload->'media'->>'clase'             AS clase,
          e.payload->'origen'                      AS origen

@@ -106,6 +106,11 @@ export async function consultarRadar(
       -- entrante es siempre POSTERIOR a ese entrante: si el último entrante entra
       -- en 7 días, su respuesta entra en 30. Medido con EXPLAIN ANALYZE.
       SELECT i.canal, i.persona_id, i.persona_nombre, i.texto, i.direccion, i.occurred_at,
+             -- Los predicados del texto ya materializados (cola/predicadosDelTexto.ts):
+             -- los leen preguntoAgrupadoSql y soloClicAgrupadoSql acá abajo, igual
+             -- que en la cola. NULL = fila anterior al backfill, y ahí corre el regex.
+             -- (Sin backticks: esto vive dentro de un template literal.)
+             i.menciona_precio, i.pregunta_precio, i.pide_datos, i.es_texto_de_anuncio,
              COALESCE(e.payload->>'numeroPropio', '') AS numero_propio,
              -- Para el caso «llegó una foto, no texto» (#20). Salen del payload
              -- del evento, que ya se lee acá arriba: no agregan ni un JOIN.
