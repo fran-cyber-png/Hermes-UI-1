@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Bot, Check, CheckCheck, Copy, CornerDownRight, CornerUpLeft, CornerUpRight, FileText, SmilePlus, Loader2, Megaphone, Paperclip, Pencil, Phone, Play, QrCode, Send, Link2, Trash2, WifiOff, X } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
 import { esDeCampana } from './campanaAjena';
@@ -1513,6 +1513,39 @@ function ComposerWa({
   telefonoActualRef.current = telefono;
   const vistaPrevia = useVistaPreviaAdjunto(adjunto);
 
+  /**
+   * LA CAJA CRECE HACIA ARRIBA CON LO QUE SE ESCRIBE.
+   *
+   * `rows={1}` deja el alto fijo por HTML: sin esto, pasar la primera línea
+   * escondía el texto viejo adentro de un scroll de 40 px imposible de leer
+   * mientras se escribe. `scrollHeight` mide lo que el contenido OCUPA —el
+   * `height:auto` previo es necesario para que, al borrar texto, esa medición
+   * no quede pisada por el alto anterior, más grande—, y el `max-h-*` del
+   * className (no tocado acá) es el techo: pasado eso, la caja vuelve a
+   * scrollear adentro en vez de comerse la pantalla.
+   *
+   * ⚠️ Depende de `texto`, la MISMA fuente que llena el `value` del textarea:
+   * cubre escribir, pegar, `/respuesta`, una plantilla insertada y un
+   * `Ctrl+Z` del navegador —todo pasa por `setTexto`—, así que no hace falta
+   * un handler aparte por cada camino que cambia la caja.
+   *
+   * En modo revisión (`sugerencia`) el alto NO se toca: esa caja arranca alta
+   * a propósito por `rows` (ver más abajo, y su propio comentario) y no es
+   * "escribir", es "leer para aprobar". Se limpia el alto en línea por si el
+   * mismo nodo vino de un composer normal (no debería, por el `key` del hilo,
+   * pero un alto fijo que sobreviva sería un defecto silencioso).
+   */
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    if (sugerencia) {
+      el.style.height = '';
+      return;
+    }
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [texto, sugerencia]);
+
   const enviando = enviar.isPending || enviarMedia.isPending;
 
   // Red de seguridad, no el mecanismo principal (ver el comentario de arriba
@@ -1931,6 +1964,9 @@ function ComposerWa({
           se va a mandar, después qué hacer con eso. */}
       {/* `relative` para que el selector se cuelgue de ESTA fila: así queda del
           ancho de la caja y no del pie entero. */}
+      {/* `items-end`: adjuntar y enviar quedan pegados al borde de ABAJO del
+          pie —el mismo lugar donde ya estaban con la caja de una sola
+          línea— aunque la caja crezca hacia arriba por encima de ellos. */}
       <div className={'relative ' + (sugerencia ? 'flex flex-col gap-2' : 'flex items-end gap-2')}>
         {comando && (
           <SelectorRapido
@@ -1942,7 +1978,11 @@ function ComposerWa({
             onAdministrar={() => setHechosAbiertos(true)}
           />
         )}
-        {hechosAbiertos && <PantallaHechos onCerrar={() => setHechosAbiertos(false)} />}
+        {/* `enModal`: mismo diálogo centrado que abre «Configurar Respuestas
+            Rápidas» desde la Libreta — un solo look para las dos puertas al
+            mismo catálogo de `hechos` (#37: dos apariencias del mismo
+            administrador terminan divergiendo). */}
+        {hechosAbiertos && <PantallaHechos enModal onCerrar={() => setHechosAbiertos(false)} />}
         <input
           ref={archivoRef}
           type="file"
@@ -2076,8 +2116,13 @@ function ComposerWa({
                 : `Escribile a ${personaNombre ?? telefono}…`
           }
           className={
-            'min-h-[2.5rem] flex-1 resize-none rounded-xl border bg-muted px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50 ' +
-            (sugerencia ? 'max-h-56 border-navy/30 bg-card leading-relaxed' : 'max-h-28 border-border')
+            'min-h-[2.5rem] flex-1 resize-none overflow-y-auto rounded-xl border bg-muted px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50 ' +
+            // El techo del composer normal subió de 7rem a 12rem: con
+            // `rows={1}` de arranque, 7rem apenas dejaba crecer tres líneas
+            // antes de volver a esconder texto en un scroll interno — la
+            // misma queja que este cambio vino a resolver, con un techo
+            // apenas más bajo. 12rem entran ~9 líneas en `text-sm`.
+            (sugerencia ? 'max-h-56 border-navy/30 bg-card leading-relaxed' : 'max-h-48 border-border')
           }
         />
         {sugerencia ? (

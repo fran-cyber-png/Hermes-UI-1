@@ -61,10 +61,15 @@ export function SelectorRapido({ consulta, respuestas, indice, onIndice, onElegi
       aria-label="Respuestas rápidas"
       className="absolute bottom-full left-0 right-0 z-30 mb-2 overflow-hidden rounded-xl border border-border bg-card shadow-panel"
     >
-      <div className="flex items-center gap-1.5 border-b border-border bg-muted/60 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground">
-        <MessageSquareQuote size={12} className="shrink-0" />
+      {/* La cabecera y el pie llevan la MISMA colorimetría azul que
+          «Configurar Respuestas Rápidas» de la Libreta (`--secondary` de
+          fondo, `--primary`/`--navy` de texto e ícono): son dos puertas al
+          mismo catálogo de `hechos`, y hasta acá una se veía gris y la otra
+          azul — el mismo dato con dos apariencias que iban a divergir (#37). */}
+      <div className="flex items-center gap-1.5 border-b border-border bg-secondary/40 px-3 py-1.5 text-[11px] font-semibold text-navy">
+        <MessageSquareQuote size={12} className="shrink-0 text-primary" />
         Respuestas rápidas
-        <span className="ml-auto font-normal">
+        <span className="ml-auto font-normal text-muted-foreground">
           {respuestas.length > 0 ? '↑↓ para elegir · Enter para ponerla en la caja' : ''}
         </span>
       </div>
@@ -76,7 +81,7 @@ export function SelectorRapido({ consulta, respuestas, indice, onIndice, onElegi
           Ninguna respuesta coincide con <span className="font-mono text-foreground">/{consulta}</span>.
         </p>
       ) : (
-        <div ref={listaRef} className="max-h-64 overflow-y-auto">
+        <div ref={listaRef} className="max-h-64 space-y-0.5 overflow-y-auto p-1.5">
           {respuestas.map((h, i) => (
             <button
               key={h.clave}
@@ -91,13 +96,24 @@ export function SelectorRapido({ consulta, respuestas, indice, onIndice, onElegi
                 onElegir(h);
               }}
               onMouseEnter={() => onIndice(i)}
+              // Molde de `Fila` (`PantallaHechos.tsx`) y de `FilaPagina`
+              // (`Libreta.tsx`): fila con borde propio, azul cuando está
+              // marcada y un hover más suave del MISMO azul — no gris.
               className={
-                'block w-full px-3 py-2 text-left transition-colors ' +
-                (i === indice ? 'bg-secondary' : 'hover:bg-secondary/60')
+                'block w-full rounded-lg border px-2.5 py-1.5 text-left transition-colors ' +
+                (i === indice
+                  ? 'border-primary bg-secondary'
+                  : 'border-transparent hover:border-primary/30 hover:bg-secondary/60')
               }
             >
               <div className="flex items-baseline gap-2">
-                <span className="truncate text-xs font-bold text-foreground">{h.rotulo}</span>
+                <span
+                  className={
+                    'truncate text-xs font-bold ' + (i === indice ? 'text-navy' : 'text-foreground')
+                  }
+                >
+                  {h.rotulo}
+                </span>
                 {/* La clave ES el atajo, y mostrarla es lo que lo enseña: la
                     próxima vez se escribe directo. */}
                 <span className="shrink-0 font-mono text-[10px] text-muted-foreground">/{h.clave}</span>
@@ -108,14 +124,14 @@ export function SelectorRapido({ consulta, respuestas, indice, onIndice, onElegi
         </div>
       )}
 
-      <div className="border-t border-border px-3 py-1.5">
+      <div className="border-t border-border p-1.5">
         <button
           type="button"
           onMouseDown={(e) => {
             e.preventDefault();
             onAdministrar();
           }}
-          className="flex items-center gap-1.5 text-[11px] font-semibold text-navy transition-colors hover:text-primary"
+          className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-semibold text-navy transition-colors hover:bg-secondary hover:text-primary"
         >
           <Settings2 size={12} />
           Crear o editar respuestas
