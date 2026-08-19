@@ -478,7 +478,7 @@ function AppAutenticada({ vendedora, reintentar, entrar, salir, cerberusVivo }: 
   // El puente (§2.9): una vista le pasa el mando a otra; la destinataria lo consume y lo limpia.
   const [puente, setPuente] = useState<Puente | null>(null);
   const busquedaRef = useRef<HTMLInputElement>(null);
-  const { lineas, hayVarias } = useLineas();
+  const { lineas } = useLineas();
   const [escribirPendiente, setEscribirPendiente] = useState<string | null>(null);
 
   // Objeto estable: la Agenda re-dispararía su efecto si la identidad cambiara por render.
@@ -707,22 +707,15 @@ function AppAutenticada({ vendedora, reintentar, entrar, salir, cerberusVivo }: 
     cambiarVista('personas');
   }
 
-  // «Escribirle» desde una ficha: el chat nuevo. Con UNA línea se usa directo;
-  // con VARIAS se abre el selector antes de armar la conversación. La clave se
-  // arma en `conversacionDeTelefono` y no acá: desde que el padrón abre la ficha
-  // al costado hay un SEGUNDO llamador, y dos copias de la clave `conv:…` son
-  // dos claves distintas el día que una cambie.
+  // «Escribirle» desde una ficha: el chat nuevo. Siempre se abre el selector
+  // antes de armar la conversación, aunque haya una sola línea: la vendedora
+  // tiene que ver desde qué número va a salir el mensaje. La clave se arma en
+  // `conversacionDeTelefono` y no acá: desde que el padrón abre la ficha al
+  // costado hay un SEGUNDO llamador, y dos copias de la clave `conv:…` son dos
+  // claves distintas el día que una cambie.
   const puedeEscribir = lineas.length > 0;
   const escribirA = puedeEscribir
-    ? (telefono: string) => {
-        if (hayVarias) {
-          setEscribirPendiente(telefono);
-        } else {
-          abrirConversacion(
-            conversacionDeTelefono({ telefono, numeroPropio: lineas[0]?.numero ?? null }),
-          );
-        }
-      }
+    ? (telefono: string) => setEscribirPendiente(telefono)
     : undefined;
 
   /**
