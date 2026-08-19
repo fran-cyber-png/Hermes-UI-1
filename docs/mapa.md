@@ -12,8 +12,8 @@
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
 | front | 34 | 469 | 65,809 | 21,621 |
-| server | 68 | 798 | 84,133 | 52,360 |
-| **total** | **102** | **1,267** | **149,942** | **73,981** |
+| server | 68 | 800 | 84,420 | 52,568 |
+| **total** | **102** | **1,269** | **150,229** | **74,189** |
 
 ## Front — `src/`
 
@@ -62,8 +62,8 @@
 | `bot` | El bot de primera línea que atiende solo: su agente, sus guardrails, sus frenos y el reenganche. | 56 | 7,997 | 24 | 7 | 13 |
 | `scripts` | Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción. Capa 3. | 37 | 6,303 | 0 | 0 | 37 |
 | `cola` | La consulta que ordena la deuda: a quién se atiende primero y por qué. Cada regla vive pura y con su gemelo SQL. | 64 | 5,641 | 44 | 9 | 7 |
+| `db` | El schema y la conexión. Capa 0: no conoce ninguna regla de negocio y no puede importar a nadie. | 23 | 4,440 | 2 | 54 | 0 |
 | `whatsapp` | La costura con WhatsApp: la interfaz de transporte y sus implementaciones, el hilo, y la única puerta por la que sale un envío. | 49 | 4,263 | 23 | 13 | 10 |
-| `db` | El schema y la conexión. Capa 0: no conoce ninguna regla de negocio y no puede importar a nadie. | 21 | 4,153 | 1 | 54 | 0 |
 | `autorespuesta` | El acuse fuera de horario del lado del server: a quién corresponde, con qué plantilla y a qué ritmo. Nunca manda solo. | 30 | 2,993 | 13 | 7 | 5 |
 | `campana` | Mandar una campaña por plantilla aprobada de Meta: el público, los vetos, el ritmo y los reintentos. | 27 | 2,907 | 12 | 3 | 6 |
 | `correos` | El correo 1-a-1 y su rastro. Sin listas ni campañas. | 24 | 1,684 | 15 | 2 | 2 |
