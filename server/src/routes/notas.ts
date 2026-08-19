@@ -307,10 +307,16 @@ notasRouter.get('/:id', ruta(async (req, res) => {
 }));
 
 /**
- * EL TÍTULO FIJO de toda página de diagrama nueva — nunca se deriva de su
- * contenido (React Flow no tiene «texto», tiene nodos) y nunca se edita: es lo
- * que hace que `tituloDeNota` y la búsqueda tengan algo que mostrar sin que el
- * server tenga que inventar un aplanador de grafos.
+ * EL TÍTULO POR DEFECTO de toda página de diagrama nueva — nunca se deriva de
+ * su contenido (React Flow no tiene «texto», tiene nodos), así que hace falta
+ * algo con lo que `tituloDeNota` y la búsqueda arranquen sin que el server
+ * tenga que inventar un aplanador de grafos.
+ *
+ * ⚠️ SÍ SE EDITA (19-ago-2026, a pedido del dueño) — esto dejó de ser cierto:
+ * `TituloEditable` (`AccionesDePagina.tsx`, `PantallaDividida.tsx`) manda un
+ * `texto` nuevo por el MISMO `PATCH /:id` de siempre, sin ruta aparte: acá
+ * abajo nunca hubo un chequeo de `tipo` que lo bloqueara (`editarNota` no
+ * distingue), así que no hizo falta tocar el server para habilitarlo.
  */
 const TITULO_DIAGRAMA = 'Diagrama de flujo';
 

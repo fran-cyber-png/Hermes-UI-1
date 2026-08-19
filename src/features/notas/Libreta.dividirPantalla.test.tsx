@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { esperarA, montar, reposar, type Montado } from '../../pruebas/dom';
+import { escribir, esperarA, montar, reposar, type Montado } from '../../pruebas/dom';
 import { Libreta } from './Libreta';
 import { ESPERA_AUTOGUARDADO_MS } from './useAutoguardado';
 
@@ -76,6 +76,11 @@ beforeEach(() => {
         store[id] = {
           ...store[id],
           ...(cuerpo.doc !== undefined ? { doc: cuerpo.doc, texto: 'editada' } : {}),
+          // `texto` SOLO (sin `doc`) es el camino de `TituloEditable` — nombrar
+          // un diagrama. Con `doc` presente, el texto lo deriva el server del
+          // documento (rama de arriba) y el que mande el llamador se descarta,
+          // como en el server de verdad (`prepararContenido`).
+          ...(cuerpo.doc === undefined && cuerpo.texto !== undefined ? { texto: cuerpo.texto } : {}),
           ...(cuerpo.fijada !== undefined ? { fijada: cuerpo.fijada } : {}),
           ...(cuerpo.diagrama !== undefined ? { diagrama: cuerpo.diagrama } : {}),
         };
@@ -151,20 +156,44 @@ test('«Dividir pantalla» abre el selector con las otras páginas, sin ella mis
   expect(botonEnPanelDividido('Contenido de A')).toBeFalsy();
 });
 
-test('elegir una página existente la divide, y el botón pasa a «Pantalla dividida»', async () => {
+test('elegir una página existente la divide, y el editor de la derecha se monta', async () => {
   montado = montar(<Libreta vendedoraId="luz" />);
   await esperarA(() => Boolean(botonQueDice('Página A')), 'llegó la lista');
   botonQueDice('Página A')?.click();
   await esperarA(() => Boolean(botonQueDice('Dividir pantalla')), 'se abrió la página');
   botonQueDice('Dividir pantalla')?.click();
+  // El botón YA dice «Pantalla dividida» acá — es un toggle real (ver el test
+  // de más abajo), así que no sirve para esperar la persistencia. Lo que SÍ
+  // la marca es el segundo editor: el picker se va y el de la nota elegida
+  // se monta recién cuando el server confirmó.
   await esperarA(() => Boolean(botonEnPanelDividido('Página B')), 'apareció la opción');
 
   botonEnPanelDividido('Página B')?.click();
-  await esperarA(() => Boolean(botonQueDice('Pantalla dividida')), 'se persistió la división');
+  await esperarA(() => document.querySelectorAll('[data-libreta-editor]').length === 2, 'se montaron los dos editores');
 
   expect(store[1].paginaDivididaId).toBe(2);
-  // El editor de la derecha ya no es el picker: hay DOS editores montados.
-  await esperarA(() => document.querySelectorAll('[data-libreta-editor]').length === 2, 'se montaron los dos editores');
+});
+
+test('un segundo toque sobre «Pantalla dividida», TODAVÍA ELIGIENDO, vuelve a una sola pantalla', async () => {
+  // El toggle tiene que cerrar desde CUALQUIER momento de la división, no
+  // solo después de persistida — antes el botón se quedaba mudo acá (era
+  // `nota.paginaDivididaId`, que sigue null mientras se elige) y solo la ✕ de
+  // adentro del panel cerraba.
+  montado = montar(<Libreta vendedoraId="luz" />);
+  await esperarA(() => Boolean(botonQueDice('Página A')), 'llegó la lista');
+  botonQueDice('Página A')?.click();
+  await esperarA(() => Boolean(botonQueDice('Dividir pantalla')), 'se abrió la página');
+
+  botonQueDice('Dividir pantalla')?.click();
+  await esperarA(() => Boolean(botonQueDice('Pantalla dividida')), 'el botón ya se lee como dividido');
+  expect(document.querySelector('[aria-label="Pantalla dividida"]')).toBeTruthy();
+
+  botonQueDice('Pantalla dividida')?.click();
+  await esperarA(() => !document.querySelector('[aria-label="Pantalla dividida"]'), 'el panel se cerró');
+
+  expect(botonQueDice('Dividir pantalla')).toBeTruthy();
+  // Nada se creó ni se dividió de verdad: no había nada que cortar en el server.
+  expect(store[1].paginaDivididaId).toBeNull();
 });
 
 test('el botón corta la división — «Pantalla dividida» vuelve a «Dividir pantalla»', async () => {
@@ -184,6 +213,27 @@ test('el botón corta la división — «Pantalla dividida» vuelve a «Dividir 
   expect(store[1].paginaDivididaId).toBeNull();
   // Y la página B sigue existiendo — cortar no la toca.
   expect(store[2].archivadoAt).toBeNull();
+});
+
+test('🔴 la ✕ del panel corta una división YA persistida — antes se veía y no hacía nada', async () => {
+  // El bug reportado (19-ago-2026): con `divididaId` ya persistido, `onCerrar`
+  // solo apagaba `mostrarSelectorDivision`, que `dividiendo` ya no miraba —
+  // la ✕ no tenía ningún efecto visible. Arranca YA dividida, como el otro
+  // test del botón, pero esta vez se cierra por la ✕ de ADENTRO del panel.
+  store[1] = { ...store[1], paginaDivididaId: 2 };
+  montado = montar(<Libreta vendedoraId="luz" />);
+  await esperarA(() => Boolean(botonQueDice('Página A')), 'llegó la lista');
+
+  botonQueDice('Página A')?.click();
+  await esperarA(() => Boolean(document.querySelector('[aria-label="Pantalla dividida"]')), 'arrancó dividida');
+
+  const cerrar = document.querySelector<HTMLButtonElement>('[aria-label="Cerrar la pantalla dividida"]');
+  expect(cerrar).toBeTruthy();
+  cerrar?.click();
+  await esperarA(() => !document.querySelector('[aria-label="Pantalla dividida"]'), 'el panel se cerró de verdad');
+
+  expect(botonQueDice('Dividir pantalla')).toBeTruthy();
+  expect(store[1].paginaDivididaId).toBeNull();
 });
 
 test('«Página nueva» monta un editor en blanco al lado, sin pasar por el picker', async () => {
@@ -270,4 +320,31 @@ test('reabrir una página ya dividida con un diagrama lo muestra directo, sin pa
   // El diagrama persistido se ve con su nodo, y la barra de herramientas está.
   await esperarA(() => Boolean(botonPorTitulo('Nodo de inicio')), 'se montó el lienzo del diagrama');
   expect(document.body.textContent).toContain('Arranca');
+});
+
+test('nombrar un diagrama, desde el panel de la derecha, le cambia el título', async () => {
+  // Un diagrama no tiene «primera línea de texto» de la que sacar un título
+  // solo (React Flow tiene nodos, no prosa) — por eso hace falta poder
+  // ponérselo a mano (19-ago-2026).
+  store[1] = { ...store[1], paginaDivididaId: 9 };
+  store[9] = { ...pagina(9, 'Diagrama de flujo'), tipo: 'diagrama', diagrama: { nodes: [], edges: [] } };
+
+  montado = montar(<Libreta vendedoraId="luz" />);
+  await esperarA(() => Boolean(botonQueDice('Página A')), 'llegó la lista');
+  botonQueDice('Página A')?.click();
+  await esperarA(() => Boolean(botonPorTitulo('Nodo de inicio')), 'se montó el lienzo del diagrama');
+
+  const campo = document.querySelector<HTMLInputElement>('[aria-label="Nombrá el diagrama"]');
+  expect(campo).toBeTruthy();
+  expect(campo!.value).toBe('Diagrama de flujo');
+
+  // `blur()` sin foco previo no dispara nada — hace falta `focus()` primero
+  // para que jsdom lo cuente como el elemento activo de verdad.
+  campo!.focus();
+  escribir(campo!, 'Embudo de ventas');
+  campo!.blur();
+  await esperarA(() => store[9].texto === 'Embudo de ventas', 'se guardó el nombre nuevo');
+
+  // Y se ve en la propia barra, no solo en el store.
+  await esperarA(() => campo!.value === 'Embudo de ventas', 'el campo refleja lo guardado');
 });

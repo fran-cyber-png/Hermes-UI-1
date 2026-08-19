@@ -65,14 +65,18 @@ export function precargarDiagrama(): void {
  * dorado significa tiempo que se acaba, y acá no se acaba nada). Tiene la FORMA
  * de lo que viene —una barra arriba y el papel debajo— para que el contenido no
  * entre corriendo la pantalla.
+ *
+ * ⚠️ SIN CAJA PROPIA. Antes centraba y acotaba su propio ancho; ahora quien lo
+ * monta (`EditorPerezoso`, siempre adentro de `ColumnaDeEscritura` o de un
+ * contenedor equivalente) ya puso la caja —a veces la hoja A4, a veces el
+ * ancho fluido de la pantalla dividida—, y duplicarla acá adentro dibujaría
+ * una caja más chica DENTRO de la caja de verdad mientras carga.
  */
 function EsqueletoDeEditor() {
   return (
-    <div className="px-6 py-4" aria-hidden>
-      <div className="mx-auto max-w-3xl space-y-4">
-        <div className="h-9 animate-pulse rounded-lg bg-muted" />
-        <div className="h-40 animate-pulse rounded-lg bg-muted" />
-      </div>
+    <div className="space-y-4" aria-hidden>
+      <div className="h-9 animate-pulse rounded-lg bg-muted" />
+      <div className="h-40 animate-pulse rounded-lg bg-muted" />
     </div>
   );
 }
@@ -81,6 +85,38 @@ function EsqueletoDeDiagrama() {
   return (
     <div className="p-3" aria-hidden>
       <div className="h-96 animate-pulse rounded-lg bg-muted" />
+    </div>
+  );
+}
+
+/**
+ * LA HOJA — el texto envuelto como una página A4 de verdad (19-ago-2026, a
+ * pedido del dueño): 21 × 29,7cm, con los márgenes que trae Word por default
+ * (2,5cm). El tamaño y el fondo viven en `.hoja-a4` (`index.css`) — acá solo
+ * se centra la hoja en el panel.
+ *
+ * ⚠️ SOLO PARA TEXTO. Un diagrama arma su propia barra y necesita todo el
+ * ancho del panel (ver `esDiagrama` en `Libreta.tsx`), así que
+ * `DiagramaPerezoso` nunca pasa por acá.
+ *
+ * ⚠️ MISMO TOPE DE ANCHO (21cm) DIVIDIENDO O NO. Hubo una variante angosta
+ * acá (`dividida` recortando el ANCHO a 15cm) el mismo día que se sacó:
+ * dividir la pantalla YA angosta cada mitad, y una hoja más chica todavía
+ * encima de eso dejaba MENOS lugar para escribir del que el panel realmente
+ * tenía — al revés de lo que se pedía. `.hoja-a4` ya se encoge sola (`width:
+ * 100%`) hasta lo que el panel le deje, sin que haga falta un tope aparte.
+ *
+ * `dividida` (mismo día, otro pedido) SÍ angosta algo — el MARGEN, no el
+ * ancho: `.hoja-a4--dividida` en `index.css` baja el padding de 2,5cm a
+ * 1,27cm (el preset «Estrecho» de Word). Con dos hojas de por sí más chicas
+ * (comparten pantalla), el margen fijo de 2,5cm se comía una tajada más
+ * grande del ancho disponible que en la vista simple — achicarlo le
+ * devuelve ese espacio al TEXTO sin tocar el tamaño de la hoja.
+ */
+export function ColumnaDeEscritura({ children, dividida }: { children: React.ReactNode; dividida?: boolean }) {
+  return (
+    <div className="pb-8">
+      <div className={`hoja-a4 mx-auto ${dividida ? 'hoja-a4--dividida' : ''}`}>{children}</div>
     </div>
   );
 }
