@@ -28,6 +28,8 @@ import type { Conversacion } from './dominio/conversaciones';
 import { conversacionDeTelefono } from './dominio/conversacionNueva';
 import BarraFrescura from './features/canales/BarraFrescura';
 import { EstadoWhatsapp } from './features/whatsapp/EstadoWhatsapp';
+import { useLineas } from './dominio/lineas';
+import { ElegirLinea } from './features/canales/ElegirLinea';
 import { InterruptorAutoRespuesta } from './features/autorespuesta/InterruptorAutoRespuesta';
 import { InterruptorBot } from './features/bot/InterruptorBot';
 import { ColaRevision } from './features/autorespuesta/ColaRevision';
@@ -50,7 +52,7 @@ import { Login } from './features/auth/Login';
 import { useSesion, type Vendedora } from './features/auth/sesion';
 import { AvisoCerberus } from './features/auth/AvisoCerberus';
 import { PanelUsuario } from './features/auth/PanelUsuario';
-import { useSesionWa } from './features/whatsapp/conversacionWa';
+
 import { useTiempoReal } from './lib/datos/tiempoReal';
 import { SELECTOR_CAMPOS } from './lib/teclado/escapeDePopover';
 import type { DestinoCorreo, Puente } from './lib/puente';
@@ -476,7 +478,8 @@ function AppAutenticada({ vendedora, reintentar, entrar, salir, cerberusVivo }: 
   // El puente (§2.9): una vista le pasa el mando a otra; la destinataria lo consume y lo limpia.
   const [puente, setPuente] = useState<Puente | null>(null);
   const busquedaRef = useRef<HTMLInputElement>(null);
-  const { data: sesionWa } = useSesionWa();
+  const { lineas, hayVarias } = useLineas();
+  const [escribirPendiente, setEscribirPendiente] = useState<string | null>(null);
 
   // Objeto estable: la Agenda re-dispararía su efecto si la identidad cambiara por render.
   const crearInicialAgenda = useMemo(
@@ -704,19 +707,23 @@ function AppAutenticada({ vendedora, reintentar, entrar, salir, cerberusVivo }: 
     cambiarVista('personas');
   }
 
-  // «Escribirle» desde una ficha: el chat nuevo, con el número propio de la
-  // sesión WA (la misma fábrica que el + de la cola). Solo existe con WA conectado.
-  //
-  // La `Conversacion` se arma en `conversacionDeTelefono` y no acá: desde que el
-  // padrón abre la ficha al costado hay un SEGUNDO llamador, y dos copias de la
-  // clave `conv:…` son dos claves distintas el día que una cambie.
-  const escribirA =
-    sesionWa?.estado === 'conectado'
-      ? (telefono: string) =>
+  // «Escribirle» desde una ficha: el chat nuevo. Con UNA línea se usa directo;
+  // con VARIAS se abre el selector antes de armar la conversación. La clave se
+  // arma en `conversacionDeTelefono` y no acá: desde que el padrón abre la ficha
+  // al costado hay un SEGUNDO llamador, y dos copias de la clave `conv:…` son
+  // dos claves distintas el día que una cambie.
+  const puedeEscribir = lineas.length > 0;
+  const escribirA = puedeEscribir
+    ? (telefono: string) => {
+        if (hayVarias) {
+          setEscribirPendiente(telefono);
+        } else {
           abrirConversacion(
-            conversacionDeTelefono({ telefono, numeroPropio: sesionWa.telefono }),
-          )
-      : undefined;
+            conversacionDeTelefono({ telefono, numeroPropio: lineas[0]?.numero ?? null }),
+          );
+        }
+      }
+    : undefined;
 
   /**
    * IR A CORREOS CON EL DESTINATARIO PUESTO — y con la conversación de la que
@@ -1000,6 +1007,7 @@ function AppAutenticada({ vendedora, reintentar, entrar, salir, cerberusVivo }: 
                 onAgendarBienvenida={agendarBienvenida}
                 // La bandeja de Interesados no se trabaja en el kanban: se responde en Mensajes.
                 onIrAMensajes={() => cambiarVista('bandeja')}
+                onEscribir={escribirA}
                 miVendedora={vendedora.id}
                 esDeCampana={vendedora.esDeCampana}
                 // La hoja del Pipeline es el MISMO `PanelDerecho` que Mensajes:
@@ -1091,6 +1099,20 @@ function AppAutenticada({ vendedora, reintentar, entrar, salir, cerberusVivo }: 
         />
       )}
       <ConsultaIvi abierta={ivi} onCerrar={() => setIvi(false)} />
+      {escribirPendiente && (
+        <ElegirLinea
+          telefono={escribirPendiente}
+          lineas={lineas}
+          onElegir={(numeroPropio) => {
+            abrirConversacion(
+              conversacionDeTelefono({ telefono: escribirPendiente, numeroPropio }),
+            );
+            setEscribirPendiente(null);
+          }}
+          onCerrar={() => setEscribirPendiente(null)}
+        />
+      )}
+
       {/* El acuse de lo que se acaba de hacer. Se monta UNA vez, al final: es lo
           único que puede aparecer sobre cualquier vista. */}
       <Avisos />

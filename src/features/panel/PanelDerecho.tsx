@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { MessageCircle } from 'lucide-react';
 import type { Conversacion } from '../../dominio/conversaciones';
 import { marcaDeCliente } from '../../dominio/cliente';
 import { useFicha } from '../cerberus/useFicha';
@@ -42,6 +43,7 @@ export function PanelDerecho({
   miVendedora,
   esDeCampana = false,
   onMandarCorreo,
+  onEscribir,
 }: {
   conversacion: Conversacion;
   /**
@@ -72,6 +74,8 @@ export function PanelDerecho({
    * invisible).
    */
   onMandarCorreo?: (destino: DestinoCorreo) => void;
+  /** Puente a Mensajes para iniciar un chat nuevo desde la ficha. */
+  onEscribir?: (telefono: string) => void;
 }) {
   /**
    * El registro de la venta. Vive acá y no adentro del pie porque el pie es
@@ -206,6 +210,15 @@ export function PanelDerecho({
             en ventas no se monta ni pide nada. */}
         <BloqueTerritorio clave={conversacion.clave} activo={esDeCampana} />
         <div className="px-4 py-2.5">
+          {onEscribir && telefono && tieneTelefono && conversacion.n === 0 && (
+            <button
+              type="button"
+              onClick={() => onEscribir(telefono)}
+              className="mb-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-navy px-3 py-2 text-xs font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <MessageCircle size={13} /> Escribirle
+            </button>
+          )}
           <ZonaPendientes pendientes={timeline.pendientes} progreso={timeline.progreso} />
           <h3 className="text-xs font-semibold text-muted-foreground">Timeline</h3>
           <ol className="mt-1">

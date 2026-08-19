@@ -114,6 +114,7 @@ export function VistaEmbudo({
   onAbrir,
   onAgendarBienvenida,
   onIrAMensajes,
+  onEscribir,
   miVendedora,
   esDeCampana,
   onMandarCorreo,
@@ -123,6 +124,8 @@ export function VistaEmbudo({
   onAgendarBienvenida?: (telefono: string | null) => void;
   /** La bandeja no se trabaja acá: este botón lleva a Mensajes. */
   onIrAMensajes?: () => void;
+  /** Puente a Mensajes para iniciar un chat nuevo desde la ficha. */
+  onEscribir?: (telefono: string) => void;
   /** Quién mira — la `HojaContacto` la necesita para el timeline (ADR 0037). */
   miVendedora?: string | null;
   /**
@@ -719,6 +722,7 @@ export function VistaEmbudo({
           miVendedora={miVendedora}
           esDeCampana={esDeCampana}
           onMandarCorreo={onMandarCorreo}
+          onEscribir={onEscribir}
         />
       )}
 

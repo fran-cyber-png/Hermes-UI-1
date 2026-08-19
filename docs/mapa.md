@@ -11,9 +11,9 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 34 | 476 | 66,491 | 22,567 |
+| front | 34 | 478 | 66,641 | 22,666 |
 | server | 68 | 803 | 84,843 | 52,878 |
-| **total** | **102** | **1,279** | **151,334** | **75,445** |
+| **total** | **102** | **1,281** | **151,484** | **75,544** |
 
 ## Front — `src/`
 
@@ -21,11 +21,11 @@
 |---|---|--:|--:|--:|--:|--:|
 | `notas` | La Libreta: páginas, espacios compartidos, autoguardado y el link público. | 65 | 11,555 | 21 | 5 | 1 |
 | `whatsapp` | La conversación nativa: el hilo, el composer, los adjuntos, las citas y la compresión de video. | 47 | 5,504 | 25 | 9 | 5 |
-| `canales` | La cola unificada, y sólo eso: la lista de conversaciones, su fila, la barra de filtros y el panel de contexto. El modelo que dibuja NO vive acá — vive en `dominio/`. | 33 | 4,586 | 7 | 1 | 11 |
-| `panel` | La ficha al costado del chat, en el orden de las preguntas que decide una venta: quién es, qué quiere, qué mandarle, qué hacer. | 27 | 3,574 | 10 | 5 | 9 |
+| `canales` | La cola unificada, y sólo eso: la lista de conversaciones, su fila, la barra de filtros y el panel de contexto. El modelo que dibuja NO vive acá — vive en `dominio/`. | 35 | 4,685 | 8 | 1 | 11 |
+| `panel` | La ficha al costado del chat, en el orden de las preguntas que decide una venta: quién es, qué quiere, qué mandarle, qué hacer. | 27 | 3,599 | 10 | 5 | 10 |
 | `correos` | El correo 1-a-1, auditado. Sin listas ni campañas. | 11 | 3,500 | 5 | 1 | 4 |
 | `agenda` | Los seguimientos que una vendedora se agendó: cuándo vuelve a tocar a quién. | 29 | 3,114 | 5 | 5 | 4 |
-| `vistas` | El Pipeline: el tablero por etapas, sus tarjetas y las compuertas para mover una. | 15 | 3,023 | 6 | 1 | 10 |
+| `vistas` | El Pipeline: el tablero por etapas, sus tarjetas y las compuertas para mover una. | 15 | 3,027 | 6 | 1 | 10 |
 | `dashboard` | Los números en pantalla: el radar, el embudo y qué recorte ve quien mira. | 9 | 2,520 | 3 | 3 | 7 |
 | `routing` | Qué campaña de Meta le cae a qué vendedora. | 10 | 2,511 | 4 | 1 | 1 |
 | `lib` | Lo que no sabe de negocio: el cliente HTTP con su caché en IndexedDB, el SSE, el teclado, formato y notificaciones. Capa 0 — no puede importar ninguna feature. | 52 | 2,423 | 18 | 31 | 0 |
@@ -38,7 +38,7 @@
 | `plantillas` | Las secuencias de venta: editarlas, aprobar una propuesta y mandarlas paso a paso. | 7 | 1,429 | 1 | 2 | 2 |
 | `ivi` | La consulta al cerebro RAG y cómo se presenta lo que contesta: los tres tipos y los ocho errores. | 10 | 1,395 | 4 | 1 | 1 |
 | `auth` | Entrar y salir: login contra Cerberus, el SSO de Centurión, y el token que el cliente cree antes de preguntar. | 18 | 1,300 | 9 | 3 | 4 |
-| `app` | El armazón: qué vista está abierta, los ⌘N y qué capa se monta encima de la mesa. Compone features; no tiene regla de negocio propia. | 2 | 1,145 | 0 | 0 | 18 |
+| `app` | El armazón: qué vista está abierta, los ⌘N y qué capa se monta encima de la mesa. Compone features; no tiene regla de negocio propia. | 2 | 1,167 | 0 | 0 | 18 |
 | `venta` | Registrar la venta contra Cerberus sin salir del chat. | 6 | 1,135 | 1 | 2 | 6 |
 | `hechos` | Los datos recomendados — la munición de una línea. Tocar uno lo pone en el composer; no envía. | 7 | 1,003 | 2 | 2 | 3 |
 | `navegador` | El navegador embebido: qué peldaño de la escalera corre esta máquina y a dónde se puede ir. | 9 | 843 | 3 | 1 | 1 |
@@ -46,7 +46,7 @@
 | `eventos` | Registrar lo que la vendedora ESCUCHÓ, tipado, en el timeline del contacto. | 4 | 687 | 2 | 2 | 1 |
 | `componentes` | Átomos visuales que usa medio árbol y no son de ninguna feature: la marca, los gráficos, el avatar y la píldora de canal. Capa 0 — no puede importar una feature ni el dominio. | 9 | 634 | 0 | 10 | 1 |
 | `cerberus` | La ficha del contacto: la que trae el ERP y la que dejó el formulario de landing. | 7 | 592 | 2 | 5 | 4 |
-| `reparto` | De quién es cada conversación, visto desde la app. | 3 | 565 | 0 | 1 | 2 |
+| `reparto` | De quién es cada conversación, visto desde la app. | 3 | 565 | 0 | 2 | 2 |
 | `identidad` | «Es la misma persona que…»: buscar contactos y unificar fichas. | 5 | 524 | 1 | 2 | 3 |
 | `sugerencias` | Las dos respuestas listas del panel derecho. | 2 | 333 | 0 | 0 | 4 |
 | `territorio` | Dónde vota cada contacto de una campaña: el selector de distrito del panel y su lectura. | 3 | 187 | 1 | 1 | 1 |

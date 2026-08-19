@@ -3,6 +3,7 @@ import { useEscape } from '../../lib/teclado/useEscape';
 import type { Conversacion } from '../../dominio/conversaciones';
 import { PanelDerecho } from './PanelDerecho';
 import type { DestinoCorreo } from '../../lib/puente';
+import { PasarConversacion } from '../reparto/PasarConversacion';
 
 /**
  * LA FICHA, AL COSTADO DE DONDE ESTABAS — el panel derecho fuera de Mensajes.
@@ -52,6 +53,7 @@ export function HojaContacto({
   miVendedora,
   esDeCampana,
   onMandarCorreo,
+  onEscribir,
 }: {
   conversacion: Conversacion;
   onCerrar: () => void;
@@ -84,6 +86,8 @@ export function HojaContacto({
    * tercera, sobre la misma ficha y sin ningún síntoma.
    */
   onMandarCorreo?: (destino: DestinoCorreo) => void;
+  /** Puente a Mensajes para iniciar un chat nuevo desde la ficha. */
+  onEscribir?: (telefono: string) => void;
 }) {
   useEscape(onCerrar, escapeActivo);
 
@@ -94,10 +98,17 @@ export function HojaContacto({
     >
       {/* La barra propia existe porque el encabezado del panel no tiene dónde
           poner una X: su esquina derecha es la pastilla de estado (Cliente /
-          Lead nuevo), que es justamente lo que no se puede tapar. */}
+          Lead nuevo), que es justamente lo que no se puede tapar.
+
+          El botón de asignación va acá porque es una decisión del EQUIPO sobre
+          esta conversación, no una marca personal; antes solo existía en la
+          barra del chat. */}
       <header className="flex shrink-0 items-center gap-2 rounded-xl bg-card px-3 py-2 shadow-panel">
         <IdCard size={14} strokeWidth={2.1} className="shrink-0 text-navy" />
         <h2 className="font-heading text-xs font-bold text-navy">Ficha</h2>
+        <span className="ml-2">
+          <PasarConversacion conversacion={conversacion} miVendedora={miVendedora} />
+        </span>
         <kbd className="ml-auto rounded bg-muted px-1.5 font-mono text-[10px] font-semibold text-muted-foreground">
           Esc
         </kbd>
@@ -120,6 +131,7 @@ export function HojaContacto({
           miVendedora={miVendedora}
           esDeCampana={esDeCampana}
           onMandarCorreo={onMandarCorreo}
+          onEscribir={onEscribir}
         />
       </div>
     </aside>
