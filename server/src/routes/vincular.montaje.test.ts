@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
  * Quien lea ese QR antes que la vendedora se queda con su sesión de WhatsApp, y
  * recuperarla exige el teléfono físico. Con la auto-vinculación viva el agujero
  * dejó de ser teórico: `routes/vincular.ts`, `routes/admin.ts` y
- * `numeros/miLineaCableado.ts` importan **el mismo singleton** `vinculador`, así
+ * `routes/miLineaCableado.ts` importan **el mismo singleton** `vinculador`, así
  * que un pareo arrancado desde la app se leía entero por esta puerta.
  *
  * ── Por qué el test lee el archivo en vez de probar un booleano ──

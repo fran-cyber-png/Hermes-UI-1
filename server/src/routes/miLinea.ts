@@ -35,7 +35,7 @@ import {
  * la conexión a Postgres y el binario Go de whatsmeow. Los seams entran por
  * parámetro, con el molde que el repo ya usa (`iviRouter(preguntar)` en
  * `routes/ivi.ts`), y el cableado real vive aparte en
- * `numeros/miLineaCableado.ts`. Lo que gana no es cobertura: es que las cuatro
+ * `routes/miLineaCableado.ts`. Lo que gana no es cobertura: es que las cuatro
  * decisiones que este router toma —de quién es el pareo, qué número se deja
  * parear, qué pasa si el montaje falla— se pueden interrogar sin base.
  *
@@ -164,7 +164,7 @@ export function miLineaRouter(deps: DependenciasMiLinea): Router {
 
   /**
    * El candado es POR ROUTER, no por módulo: dos instancias en dos tests no se
-   * pisan el estado. En producción hay una sola (`numeros/miLineaCableado.ts`),
+   * pisan el estado. En producción hay una sola (`routes/miLineaCableado.ts`),
    * así que sigue siendo global como el vinculador que protege.
    */
   let pareoActual: PareoPropio | null = null;

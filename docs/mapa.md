@@ -57,7 +57,7 @@
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
-| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. Capa 3 — nadie la importa: un archivo que otro módulo necesita no es un router y no va acá (fue el caso de `costoPorLead`). | 61 | 10,314 | 12 | 2 | 48 |
+| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. Capa 3 — nadie la importa: un archivo que otro módulo necesita no es un router y no va acá (fue el caso de `costoPorLead`). | 62 | 10,353 | 12 | 1 | 48 |
 | `bot` | El bot de primera línea que atiende solo: su agente, sus guardrails, sus frenos y el reenganche. | 56 | 7,997 | 24 | 7 | 13 |
 | `scripts` | Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción. Capa 3. | 36 | 6,105 | 0 | 0 | 36 |
 | `cola` | La consulta que ordena la deuda: a quién se atiende primero y por qué. Cada regla vive pura y con su gemelo SQL. | 57 | 4,894 | 38 | 9 | 6 |
@@ -72,7 +72,7 @@
 | `sdk` | 🪦 Heredado de meta-escuela — el SDK de consulta del dashboard de pauta. | 9 | 1,420 | 1 | 1 | 6 |
 | `pauta` | 🪦 Heredado de meta-escuela — recolectar gasto, fatiga y engagement de la pauta publicitaria, y el costo REAL por lead (leads capturados contra lo que Meta dice que costó traerlos, todo en dólares). | 14 | 1,349 | 4 | 4 | 5 |
 | `cerberus` | Hablarle al ERP: login, ficha, productos, ventas — y el latin1 que revienta con emojis. | 14 | 1,313 | 7 | 10 | 3 |
-| `numeros` | Los números de WhatsApp de Goberna: su estado de vinculación y de quién es cada uno. | 19 | 1,281 | 9 | 7 | 6 |
+| `numeros` | Los números de WhatsApp de Goberna: su estado de vinculación y de quién es cada uno. | 18 | 1,242 | 9 | 7 | 5 |
 | `cursos` | Traducir el texto con el que llegó una persona a una familia de curso. | 15 | 1,223 | 7 | 8 | 3 |
 | `webhook` | Todo lo que entra de afuera: Meta, WhatsApp, Cerberus y las landings. Ack primero, firma siempre. Capa 3 — es una entrada, nadie lo importa. | 12 | 1,178 | 4 | 1 | 10 |
 | `analisis` | 🪦 Heredado de meta-escuela — los análisis del dashboard de pauta (ROAS, cartera, geo). | 15 | 1,173 | 6 | 5 | 2 |
@@ -165,7 +165,7 @@ Siguen contando en `Líneas`: no son tests, son código del módulo.
 - **2 módulos**: `front/cerberus` ↔ `front/identidad`
 - **3 módulos**: `front/dashboard` ↔ `front/panel` ↔ `front/venta`
 - **2 módulos**: `server/analisis` ↔ `server/decisions`
-- **36 módulos**: `server/atribucion` ↔ `server/auth` ↔ `server/autorespuesta` ↔ `server/bot` ↔ `server/campana` ↔ `server/canales` ↔ `server/catalogo` ↔ `server/centurion` ↔ `server/cerberus` ↔ `server/clientes` ↔ `server/cola` ↔ `server/contactos` ↔ `server/corridas` ↔ `server/cursos` ↔ `server/dashboard` ↔ `server/ediciones` ↔ `server/equipo` ↔ `server/espacios` ↔ `server/eventos` ↔ `server/gente` ↔ `server/gestiones` ↔ `server/hechos` ↔ `server/interacciones` ↔ `server/notas` ↔ `server/numeros` ↔ `server/padron` ↔ `server/plantillas` ↔ `server/procedencia` ↔ `server/reacciones` ↔ `server/reparto` ↔ `server/resultados` ↔ `server/routes` ↔ `server/routing` ↔ `server/sdk` ↔ `server/sugerencias` ↔ `server/whatsapp`
+- **25 módulos**: `server/atribucion` ↔ `server/auth` ↔ `server/autorespuesta` ↔ `server/bot` ↔ `server/campana` ↔ `server/catalogo` ↔ `server/centurion` ↔ `server/cerberus` ↔ `server/clientes` ↔ `server/cola` ↔ `server/cursos` ↔ `server/dashboard` ↔ `server/equipo` ↔ `server/gente` ↔ `server/gestiones` ↔ `server/hechos` ↔ `server/numeros` ↔ `server/padron` ↔ `server/plantillas` ↔ `server/procedencia` ↔ `server/reacciones` ↔ `server/reparto` ↔ `server/routing` ↔ `server/sugerencias` ↔ `server/whatsapp`
 - **2 módulos**: `server/lazo` ↔ `server/ontologia`
 
 ## Módulos que no importan a nadie y nadie importa
@@ -200,9 +200,7 @@ No significa que estén muertos —pueden ser puntos de entrada o scripts—, pe
 
 > Un módulo sin responsabilidad escrita es un módulo del que nadie puede decir si un archivo nuevo le corresponde. Es la pregunta que decide dónde va cada cosa.
 
-### 🔴 `capas` — 1 violación
+### ✅ `capas` — sin violaciones
 
 > Un módulo no puede importar de una capa más alta que la suya: el núcleo compartido no puede depender de una pantalla. Declaradas: `front/lib`=0 · `front/componentes`=0 · `front/dominio`=1 · `front/app`=3 · `server/db`=0 · `server/lib`=0 · `server/telefono`=0 · `server/routes`=3 · `server/webhook`=3 · `server/scripts`=3 · `server/index`=4. Y por zona, el piso de lo no declarado: `server`=2 — sin eso un módulo sin nivel queda sin restricción, y la regla vigilaría los extremos sin poder ponerse roja nunca.
-
-- server/numeros (capa 2) importa de server/routes (capa 3)
 

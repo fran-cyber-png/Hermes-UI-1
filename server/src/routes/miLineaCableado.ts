@@ -2,9 +2,9 @@ import type { Router } from "express";
 import { db } from "../db/client.js";
 import { vinculador } from "../whatsapp/vinculador.js";
 import { agregarLineaWhatsmeow, gestorWhatsappSiActivo } from "../whatsapp/wiring.js";
-import { miLineaRouter } from "../routes/miLinea.js";
-import { sesionDeNumero } from "./estadoSesion.js";
-import { lineasDeVendedoraConDuenas, marcarVinculado, obtenerNumero, upsertNumero } from "./repositorio.js";
+import { miLineaRouter } from "./miLinea.js";
+import { sesionDeNumero } from "../numeros/estadoSesion.js";
+import { lineasDeVendedoraConDuenas, marcarVinculado, obtenerNumero, upsertNumero } from "../numeros/repositorio.js";
 
 /**
  * EL CABLEADO REAL DE «MI LÍNEA» — el único lugar que ata el router a la base,

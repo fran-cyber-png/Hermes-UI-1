@@ -55,7 +55,7 @@ import { webhookRouter } from "./webhook/ruta.js";
 import { arrancarWhatsapp } from "./whatsapp/wiring.js";
 import { rutaDevWhatsapp } from "./whatsapp/rutaDev.js";
 import { whatsappRouter } from "./routes/whatsapp.js";
-import { miLineaDeProduccion } from "./numeros/miLineaCableado.js";
+import { miLineaDeProduccion } from "./routes/miLineaCableado.js";
 import { streamRouter } from "./routes/stream.js";
 import { vincularRouter } from "./routes/vincular.js";
 import { simularRouter } from "./routes/simular.js";
@@ -200,7 +200,7 @@ app.use("/api/admin", requiereServicio, adminRouter); // administración de núm
  * y recuperarla exige el teléfono físico.
  *
  * ⚠️ Y no era teórico desde que existe la auto-vinculación: `routes/vincular.ts`,
- * `routes/admin.ts` y `numeros/miLineaCableado.ts` importan **el MISMO singleton**
+ * `routes/admin.ts` y `routes/miLineaCableado.ts` importan **el MISMO singleton**
  * `vinculador`, así que un pareo iniciado desde la app se leía entero por esta
  * puerta vieja — derrotando la guarda de dueño de `routes/miLinea.ts`, cuyo
  * propio docblock ya advertía «si Ana inicia un pareo y Bea consulta
