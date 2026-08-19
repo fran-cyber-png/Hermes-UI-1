@@ -150,22 +150,32 @@ describe('lo que se perdió mientras el stream estuvo cortado', () => {
   });
 
   /**
-   * Y la cola también se recupera — con jitter, porque un deploy corta el
-   * stream de las ~8 pestañas a la vez y sin el delay reconectarían todas
-   * disparando juntas la consulta más cara del sistema.
+   * Y la cola también se recupera — pero NO en el acto: pasa por la misma
+   * ventana agrupada que los mensajes (`lib/datos/agrupador.ts`), que es lo que
+   * la bajó de ~36 invalidaciones por minuto a 4.
+   *
+   * ⚠️ **Que la recuperación pague la ventana es deliberado y es el caso que
+   * más la necesita**: un deploy corta el stream de las ~8 pestañas a la vez, o
+   * sea que todas reconectan dentro de la misma ventana de 3 s y sin esto
+   * dispararían juntas la consulta más cara del sistema — justo cuando el
+   * server acaba de arrancar y está frío. El jitter las separa entre sí; la
+   * ventana acota a cada una.
    */
-  it('la cola se recupera también, y no en el mismo instante que el resto', async () => {
+  it('la cola se recupera también, al vencer la ventana agrupada', async () => {
     montado = montar(<AnfitrionConCola />);
     await correrElReloj(0);
-    const antes = espia.mock.calls.filter(([u]) => String(u).includes('/api/conversaciones')).length;
+    const cuantas = () =>
+      espia.mock.calls.filter(([u]) => String(u).includes('/api/conversaciones')).length;
+    const antes = cuantas();
 
-    // Primera apertura + corte + reintento de 3 s + segunda apertura, y después
-    // el jitter, que corre la invalidación de la cola hasta 4 s.
-    await correrElReloj(2 * TARDANZA_DEL_STREAM_MS + 3_000 + 4_100);
+    // Primera apertura + corte + reintento de 3 s + segunda apertura. Con eso
+    // el reconecte ya PIDIÓ la invalidación, pero la ventana no venció.
+    await correrElReloj(2 * TARDANZA_DEL_STREAM_MS + 3_000 + 100);
+    expect(cuantas()).toBe(antes);
 
-    expect(
-      espia.mock.calls.filter(([u]) => String(u).includes('/api/conversaciones')).length,
-    ).toBeGreaterThan(antes);
+    // Y al vencer (15 s de ventana + hasta 4 de jitter), sí.
+    await correrElReloj(19_100);
+    expect(cuantas()).toBeGreaterThan(antes);
   });
 });
 
