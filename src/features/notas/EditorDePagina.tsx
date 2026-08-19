@@ -2,7 +2,7 @@ import { useCallback, useEffect } from 'react';
 import { BlockNoteView } from '@blocknote/mantine';
 import { SuggestionMenuController, getDefaultReactSlashMenuItems, useCreateBlockNote } from '@blocknote/react';
 import { filterSuggestionItems, insertOrUpdateBlockForSlashMenu } from '@blocknote/core/extensions';
-import { FileText } from 'lucide-react';
+import { FileText, MessageSquareQuote } from 'lucide-react';
 import '@blocknote/mantine/style.css';
 import {
   DICCIONARIO_LIBRETA,
@@ -28,6 +28,7 @@ export function EditorDePagina({
   soloLectura,
   onCambio,
   onAbrirPlantillas,
+  onAbrirRespuestasRapidas,
   registrarPegado,
 }: {
   contenidoInicial: unknown[] | undefined;
@@ -39,6 +40,12 @@ export function EditorDePagina({
    * de la pantalla dividida, donde el modal no tiene dueño.
    */
   onAbrirPlantillas?: () => void;
+  /**
+   * Igual que `onAbrirPlantillas`, pero para el catálogo de `hechos` (#153) —
+   * el mismo que administra «Configurar Respuestas Rápidas» y el `/` del
+   * composer de WhatsApp (`SelectorRapido`). OPCIONAL por el mismo motivo.
+   */
+  onAbrirRespuestasRapidas?: () => void;
   /** Le presta al padre CÓMO pegar en ESTA instancia del editor (o `null` al desmontarse). */
   registrarPegado?: (fn: ((texto: string) => void) | null) => void;
 }) {
@@ -76,27 +83,46 @@ export function EditorDePagina({
    */
   const getItemsDelSlash = useCallback(
     async (query: string) => {
-      const propios = onAbrirPlantillas
-        ? [
-            {
-              title: 'Plantillas',
-              onItemClick: () => {
-                // Limpia el «/plantillas» que quedó escrito — la misma puerta que
-                // usa cada ítem por default, para no reimplementar la regla de «si
-                // el bloque está vacío, lo convierte» (ver `comandos.ts`).
-                insertOrUpdateBlockForSlashMenu(editor, { type: 'paragraph' });
-                onAbrirPlantillas();
+      const propios = [
+        ...(onAbrirPlantillas
+          ? [
+              {
+                title: 'Plantillas',
+                onItemClick: () => {
+                  // Limpia el «/plantillas» que quedó escrito — la misma puerta que
+                  // usa cada ítem por default, para no reimplementar la regla de «si
+                  // el bloque está vacío, lo convierte» (ver `comandos.ts`).
+                  insertOrUpdateBlockForSlashMenu(editor, { type: 'paragraph' });
+                  onAbrirPlantillas();
+                },
+                aliases: ['plantilla', 'plantillas', 'snippet', 'texto guardado'],
+                group: 'Tu libreta',
+                subtext: 'Guardá un texto y pegalo cuando quieras',
+                icon: <FileText className="size-4" />,
               },
-              aliases: ['plantilla', 'plantillas', 'snippet', 'texto guardado'],
-              group: 'Tu libreta',
-              subtext: 'Guardá un texto y pegalo cuando quieras',
-              icon: <FileText className="size-4" />,
-            },
-          ]
-        : [];
+            ]
+          : []),
+        // Debajo de «Plantillas», mismo grupo: son las dos formas de pegar un
+        // texto guardado, y la búsqueda del `/` las tiene que encontrar juntas.
+        ...(onAbrirRespuestasRapidas
+          ? [
+              {
+                title: 'Respuestas rápidas',
+                onItemClick: () => {
+                  insertOrUpdateBlockForSlashMenu(editor, { type: 'paragraph' });
+                  onAbrirRespuestasRapidas();
+                },
+                aliases: ['respuesta', 'respuestas', 'rapida', 'rapidas', 'hechos', 'dato', 'datos'],
+                group: 'Tu libreta',
+                subtext: 'Elige tus respuestas predefinidas',
+                icon: <MessageSquareQuote className="size-4" />,
+              },
+            ]
+          : []),
+      ];
       return filterSuggestionItems([...propios, ...getDefaultReactSlashMenuItems(editor)], query);
     },
-    [editor, onAbrirPlantillas],
+    [editor, onAbrirPlantillas, onAbrirRespuestasRapidas],
   );
 
   /**
@@ -143,6 +169,12 @@ export function EditorDePagina({
     return () => registrarPegado(null);
   }, [registrarPegado, pegarPlantilla]);
 
+  // Cualquiera de los dos alcanza para necesitar el menú propio: sin esto,
+  // pasar SOLO `onAbrirRespuestasRapidas` dejaría prendido el `slashMenu` del
+  // paquete a la vez que el de acá abajo, y vuelve el bug de los dos menús
+  // superpuestos que el comentario de más abajo ya documenta.
+  const menuPropio = Boolean(onAbrirPlantillas || onAbrirRespuestasRapidas);
+
   return (
     <BlockNoteView
       editor={editor}
@@ -159,9 +191,10 @@ export function EditorDePagina({
       // TAMBIÉN registrado para el mismo `triggerCharacter`, quedan dos.
       //
       // Se apaga sólo cuando ponemos el nuestro: sin `registrarPegado` ni
-      // `onAbrirPlantillas` —la mitad derecha de la pantalla dividida— el menú
-      // del paquete es el ÚNICO que hay, y apagarlo dejaría el `/` muerto ahí.
-      slashMenu={!onAbrirPlantillas}
+      // `onAbrirPlantillas`/`onAbrirRespuestasRapidas` —la mitad derecha de la
+      // pantalla dividida— el menú del paquete es el ÚNICO que hay, y apagarlo
+      // dejaría el `/` muerto ahí.
+      slashMenu={!menuPropio}
       onChange={() => onCambio(editor.document)}
       data-libreta-editor
     >
@@ -175,7 +208,7 @@ export function EditorDePagina({
       {/* Montar el controlador propio es la ÚNICA forma de sumarle un ítem al
           menú del `/`: el catálogo del paquete no es extensible desde afuera.
           En solo lectura no va — ofrecería insertar sobre algo que no se edita. */}
-      {onAbrirPlantillas && !soloLectura && (
+      {menuPropio && !soloLectura && (
         <SuggestionMenuController triggerCharacter="/" getItems={getItemsDelSlash} />
       )}
     </BlockNoteView>

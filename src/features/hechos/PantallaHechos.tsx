@@ -386,7 +386,25 @@ function Editor({
   );
 }
 
-export function PantallaHechos({ onCerrar }: { onCerrar: () => void }) {
+export function PantallaHechos({
+  onCerrar,
+  enModal = false,
+}: {
+  onCerrar: () => void;
+  /**
+   * `true`: se dibuja como un diálogo CENTRADO sobre lo que había atrás —el
+   * mismo molde que `ModalDePlantillas`/`ModalDeRespuestasRapidas` de la
+   * Libreta (backdrop `bg-navy/25`, tarjeta `bg-card` redondeada). Lo pide la
+   * Libreta: abrir «Configurar Respuestas Rápidas» ahí no puede tapar del
+   * todo la página que se estaba editando, que es justo lo que el molde de
+   * pantalla completa hacía.
+   *
+   * `false` (default): pantalla completa, como la sigue abriendo el composer
+   * de WhatsApp (`HiloWhatsapp.tsx`) — ahí atrás no hay una página propia que
+   * valga la pena dejar ver, así que el molde viejo se queda para ese caso.
+   */
+  enModal?: boolean;
+}) {
   const [seleccion, setSeleccion] = useState<Seleccion>(null);
   const { data, isPending, isError, error } = useCatalogoHechos();
 
@@ -422,13 +440,11 @@ export function PantallaHechos({ onCerrar }: { onCerrar: () => void }) {
     if (!data.hechos.some((h) => h.clave === claveElegida)) setSeleccion(null);
   }, [claveElegida, data]);
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex flex-col bg-background"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Datos recomendados"
-    >
+  // El contenido es el MISMO pase lo que pase — cabecera, lista y detalle no
+  // cambian con `enModal`. Lo único que cambia es el molde que lo envuelve,
+  // así que se arma una vez y los dos `return` de abajo lo reusan.
+  const contenido = (
+    <>
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
         <Lightbulb className="size-4 shrink-0 text-primary" />
         <h2 className="shrink-0 text-sm font-semibold text-foreground">Datos recomendados</h2>
@@ -569,6 +585,42 @@ export function PantallaHechos({ onCerrar }: { onCerrar: () => void }) {
           )}
         </main>
       </div>
+    </>
+  );
+
+  // MOLDE MODAL — el de `ModalDePlantillas`/`ModalDeRespuestasRapidas` de la
+  // Libreta: backdrop translúcido en `navy` (deja ver lo de atrás, apagado) y
+  // tarjeta `bg-card` redondeada con sombra, en vez de tapar la pantalla
+  // entera. El clic afuera cierra, como en esos dos moldes; adentro no
+  // propaga para no cerrar por un clic que solo quería tocar la lista.
+  if (enModal) {
+    return (
+      <div
+        className="fixed inset-0 z-40 flex items-center justify-center bg-navy/25 p-4"
+        onClick={onCerrar}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Datos recomendados"
+      >
+        <div
+          className="flex h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-card shadow-panel"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {contenido}
+        </div>
+      </div>
+    );
+  }
+
+  // MOLDE PANTALLA COMPLETA — el de siempre, para el composer de WhatsApp.
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-background"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Datos recomendados"
+    >
+      {contenido}
     </div>
   );
 }

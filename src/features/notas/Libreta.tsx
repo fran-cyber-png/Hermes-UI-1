@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ChevronLeft, Link2, Notebook, Pin, PinOff, Plus, Search, Trash2, Undo2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  ChevronLeft,
+  Link2,
+  Notebook,
+  Pin,
+  PinOff,
+  Plus,
+  Search,
+  Settings2,
+  Trash2,
+  Undo2,
+} from 'lucide-react';
 import { BarraDeDibujo, GROSORES, PALETA, type Herramienta } from './dibujo/BarraDeDibujo';
 import { CapaDeAnotaciones } from './dibujo/CapaDeAnotaciones';
 import { SelectorDeColor } from './dibujo/SelectorDeColor';
@@ -18,6 +30,8 @@ import {
 import { PanelDeCapas } from './dibujo/PanelDeCapas';
 import { agregarReciente, leerRecientes } from './dibujo/coloresRecientes';
 import { ModalDePlantillas } from './ModalDePlantillas';
+import { ModalDeRespuestasRapidas } from './ModalDeRespuestasRapidas';
+import { PantallaHechos } from '../hechos/PantallaHechos';
 import { AccionesDePagina } from './AccionesDePagina';
 import { DiagramaPerezoso, EditorPerezoso, precargarDiagrama, precargarEditor } from './perezosos';
 import { PantallaDividida } from './PantallaDividida';
@@ -543,6 +557,18 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
   const registrarPegado = useCallback((fn: ((texto: string) => void) | null) => {
     pegarPlantillaRef.current = fn;
   }, []);
+  /**
+   * RESPUESTAS RÁPIDAS — mismo molde que el modal de arriba, mismo `ref` de
+   * pegado (pegar es genérico: no le importa si el texto vino de una
+   * plantilla propia o del catálogo de `hechos`). Dos estados aparte porque
+   * son dos catálogos distintos con su propio ciclo de abrir/cerrar.
+   */
+  const [respuestasAbierto, setRespuestasAbierto] = useState(false);
+  const abrirRespuestasRapidas = useCallback(() => setRespuestasAbierto(true), []);
+  /** El botón «Configurar Respuestas Rápidas» al pie de la lista abre la MISMA
+   * pantalla de administración que ya usa el composer de WhatsApp — no hay
+   * una segunda forma de crear o editar una respuesta (#37). */
+  const [configurarRespuestasAbierto, setConfigurarRespuestasAbierto] = useState(false);
 
   const termino = busqueda.trim();
   const lista = useNotas(CLAVE_LIBRETA, donde);
@@ -942,6 +968,32 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
               </button>
             </div>
           )}
+
+          {/* CONFIGURAR RESPUESTAS RÁPIDAS — al final del todo, como una acción
+              de la libreta y no de una página puntual: no depende de haber
+              elegido ninguna. Abre la MISMA pantalla que ya administra el
+              catálogo de `hechos` desde el composer de WhatsApp (#37: un
+              catálogo, no dos formularios que puedan divergir). */}
+          <div className="shrink-0 border-t border-border p-2">
+            <button
+              type="button"
+              onClick={() => setConfigurarRespuestasAbierto(true)}
+              // El azul es el de `FilaPagina` cuando está activa (`border-primary
+              // bg-secondary`, el mismo `--secondary` celeste de la marca): acá no
+              // hay estado activo que marcar, así que el hover toma esos DOS
+              // colores para que quede reconocible como el mismo azul de la
+              // Libreta y no como el gris genérico de una fila cualquiera.
+              className="group flex w-full items-center gap-2 rounded-lg border border-transparent px-2 py-2 text-left transition-colors hover:border-primary/30 hover:bg-secondary"
+            >
+              <Settings2 className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium text-foreground transition-colors group-hover:text-navy">
+                  Configurar Respuestas Rápidas
+                </span>
+                <span className="block text-xs text-muted-foreground">Crea o edita tus respuestas</span>
+              </span>
+            </button>
+          </div>
         </aside>
 
         {/* EL EDITOR */}
@@ -999,6 +1051,7 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
                 soloLectura={!porLink.data?.puedeEditar}
                 onCambio={alCambiarDoc}
                 onAbrirPlantillas={abrirPlantillas}
+                onAbrirRespuestasRapidas={abrirRespuestasRapidas}
                 registrarPegado={registrarPegado}
               />
             </ColumnaDeEscritura>
@@ -1070,6 +1123,7 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
                 soloLectura={false}
                 onCambio={alCambiarDoc}
                 onAbrirPlantillas={abrirPlantillas}
+                onAbrirRespuestasRapidas={abrirRespuestasRapidas}
                 registrarPegado={registrarPegado}
               />
             </ColumnaDeEscritura>
@@ -1144,6 +1198,7 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
                         soloLectura={paginaAbierta.origen === 'gestion'}
                         onCambio={alCambiarDoc}
                         onAbrirPlantillas={abrirPlantillas}
+                        onAbrirRespuestasRapidas={abrirRespuestasRapidas}
                         registrarPegado={registrarPegado}
                       />
                     )}
@@ -1178,6 +1233,24 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
             setPlantillasAbierto(false);
           }}
         />
+      )}
+
+      {/* Igual molde que arriba: elegir una respuesta la pega y cierra en el
+          mismo clic. Se abre desde el `/` del editor y desde ningún otro
+          lugar — administrar es una pantalla aparte, ver más abajo. */}
+      {respuestasAbierto && (
+        <ModalDeRespuestasRapidas
+          onCerrar={() => setRespuestasAbierto(false)}
+          onElegir={(texto) => {
+            pegarPlantillaRef.current?.(texto);
+            setRespuestasAbierto(false);
+          }}
+        />
+      )}
+
+      {/* «Configurar Respuestas Rápidas», al pie de la lista de páginas. */}
+      {configurarRespuestasAbierto && (
+        <PantallaHechos enModal onCerrar={() => setConfigurarRespuestasAbierto(false)} />
       )}
     </section>
   );
