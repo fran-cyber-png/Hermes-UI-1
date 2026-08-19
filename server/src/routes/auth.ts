@@ -5,6 +5,8 @@ import { requiereVendedora } from '../auth/sesion.js';
 import { ssoDeCenturionConfigurado } from '../auth/centurion.js';
 import { canjearTokenDeCenturion, MENSAJE_SIN_LINEA } from '../auth/sesionCenturion.js';
 import { resolverLogin } from '../auth/loginCascada.js';
+import { cambiarClaveEnCerberus } from '../cerberus/cambiarClave.js';
+import { esIdentidadFederada } from '../numeros/origenIdentidad.js';
 import { lineasDeVendedora, lineasDeVendedoraConProposito } from '../numeros/repositorio.js';
 import { atiendeUnaCampana } from '../numeros/campana.js';
 import { porQueFallo } from '../lib/porQueFallo.js';
@@ -170,4 +172,71 @@ authRouter.get('/yo', requiereVendedora, ruta(async (req, res) => {
     },
     cerberus: Boolean(await obtenerSesionCerberus(req.vendedoraId!)),
   });
+}));
+
+/**
+ * CAMBIAR MI CONTRASEÑA — la de Cerberus, que es la única que hay.
+ *
+ * Detrás de `requiereVendedora`: quién es sale del token, nunca del body, así
+ * que nadie le cambia la clave a otra. El trabajo lo hace
+ * `cerberus/cambiarClave.ts` (entra de nuevo con la actual, pide el cambio,
+ * guarda la sesión que sobrevive); acá solo se traduce a HTTP.
+ *
+ * Los estados, y por qué cada uno:
+ *   · **400 `clave_actual_incorrecta`** y NO 401: un 401 acá se leería como
+ *     «tu token murió» —el front borra la sesión de Hermes ante un 401 real— y
+ *     la que está mal es la clave que TIPEÓ, no la sesión con la que entró.
+ *   · **400 `clave_nueva_rechazada` + `errores[]`**: lo que dijo Django, en
+ *     castellano y tal cual, para que la pantalla lo muestre sin traducir.
+ *   · **409 `sin_cuenta_de_cerberus`**: una identidad federada (Centurión) no
+ *     tiene clave en Cerberus; su clave se cambia en su sistema. Se decide por
+ *     el prefijo, la misma regla de `numeros/origenIdentidad.ts`.
+ *   · **503 `cerberus_no_responde`** / **503 `cerberus_sin_soporte`**: no se
+ *     pudo juzgar. El segundo es el 404 de un Cerberus que todavía no tiene la
+ *     ruta —la ventana entre el deploy de Hermes y el de Cerberus— y se dice
+ *     aparte para que nadie lo lea como una caída.
+ */
+authRouter.post('/cambiar-clave', requiereVendedora, ruta(async (req, res) => {
+  const { claveActual, claveNueva } = (req.body ?? {}) as { claveActual?: unknown; claveNueva?: unknown };
+  if (typeof claveActual !== 'string' || !claveActual || typeof claveNueva !== 'string' || !claveNueva) {
+    res.status(400).json({ ok: false, type: 'faltan_claves', message: 'Hacen falta la contraseña actual y la nueva.' });
+    return;
+  }
+  const vendedoraId = req.vendedoraId!;
+  if (esIdentidadFederada(vendedoraId)) {
+    res.status(409).json({
+      ok: false,
+      type: 'sin_cuenta_de_cerberus',
+      message: 'Esta cuenta entra con Centurión: la contraseña se cambia allá, no en Hermes.',
+    });
+    return;
+  }
+
+  const r = await cambiarClaveEnCerberus(vendedoraId, claveActual, claveNueva);
+  if (r.ok) {
+    res.json({ ok: true });
+    return;
+  }
+  switch (r.tipo) {
+    case 'clave_actual_incorrecta':
+      res.status(400).json({ ok: false, type: r.tipo, message: 'La contraseña actual no es correcta.' });
+      return;
+    case 'clave_nueva_rechazada':
+      res.status(400).json({ ok: false, type: r.tipo, message: r.errores.join(' '), errores: r.errores });
+      return;
+    case 'cerberus_sin_soporte':
+      res.status(503).json({
+        ok: false,
+        type: r.tipo,
+        message: 'Cerberus todavía no permite cambiar la contraseña desde Hermes. Avisá a sistemas.',
+      });
+      return;
+    case 'cerberus_caido':
+      res.status(503).json({
+        ok: false,
+        type: 'cerberus_no_responde',
+        message: 'Cerberus no responde en este momento. Probá de nuevo en un rato.',
+      });
+      return;
+  }
 }));
