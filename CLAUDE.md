@@ -2542,6 +2542,28 @@ Ver `server/.env.example` (solo nombres).
     `shared_buffers` no tiene nada que ganar (100 % de aciertos, cero lecturas de disco). **Para
     medir un cambio, corré el SEAM COMPLETO contra datos reales** — hay un A/B listo en
     `server/scratchpad/medir-cola.ts`, que va por un túnel SSH a la base de producción.
+- 🔴 **LOS PREDICADOS DE TEXTO YA NO SE CALCULAN AL LEER: SE LEEN DE UNA COLUMNA** (**ADR 0064**).
+  Medido el 19-ago-2026 con el SQL real de la tabla temporal: los 19 regex eran el **95 %** del
+  `GroupAggregate` (1.339–1.541 ms) y el 58 % del pedido entero, recalculados 13.152 veces por día
+  para 220 mensajes que se escriben una vez. Ahora `interactions` lleva `menciona_precio` ·
+  `pregunta_precio` · `pide_datos` · `es_texto_de_anuncio`, y `cola/precio.ts` y `cola/pregunta.ts`
+  las **leen** con `COALESCE(columna, <el regex de siempre>)`. Pareado sobre una copia de prod:
+  GroupAggregate **502→31 ms**, cola **860→370 ms**.
+  · 🔴 **TOCAR EL REGEX DEJA LAS 16.494 FILAS VIEJAS CON EL PREDICADO VIEJO, SIN ERROR Y SIN LOG.**
+    Esos dos archivos dejaron de ser «la regla que corre siempre» y son «la regla que corrió cuando
+    se escribió la fila». Si cambiás una palabra:
+    `npx tsx src/scripts/backfillPredicados.ts --aplicar --todo`.
+  · 🔴 **HAY DOS ESCRITORES DE `interactions`, no uno**: `meta/proyectarInteraccion.ts` y
+    `whatsapp/repositorioDrizzle.ts` — y el segundo es el que escribe el 100 % de lo que la cola
+    agrupa. Llenar sólo uno deja el frente **sin efecto y con todos los tests en verde**, porque el
+    regex de respaldo tapa el hueco. Candado: `cola/escritoresDePredicados.paridad.test.ts`.
+  · ⚠️ **`NULL` significa «anterior al backfill», nunca «sin texto»**: una foto se guarda con los
+    cuatro en `false`. Y **el backfill es un paso del deploy**, después del N5 (1,2 s para 16.494
+    filas); hasta que corra, la cola contesta lo mismo y cuesta un 7 % más.
+  · ⚠️ **`pruebas/sembrar.ts` NO llena las columnas, a propósito**: los ~40 `.test.db.ts` del repo
+    corren así por el camino del **regex de respaldo**, y eso es la prueba de que el fallback
+    contesta lo de siempre. El camino de la columna llena lo cubre
+    `predicadosMaterializados.paridad.test.db.ts`, que compara la cola entera por los dos caminos.
 - ⚠️ **`err.message` de una consulta de drizzle NO dice por qué falló: dice el SQL.** postgres.js lo
   arma como «Failed query: …» y guarda la causa en `err.cause`. Por eso el webhook escupió **96 «no
   se pudo aplicar el recibo» en una hora sin explicar ninguno**. Para loguear un `catch` de base va
