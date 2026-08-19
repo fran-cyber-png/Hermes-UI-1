@@ -378,13 +378,10 @@
 
 /* La página se apoya en el fondo de la app: la superficie ya es la Libreta.
 
-   Y ACÁ VIVE LA COLUMNA DE ESCRITURA. El contenedor ocupa el ancho del panel
-   para que la barra de formato lo cruce como la de Word (ver
-   `ColumnaDeEscritura` en `Libreta.tsx`), así que la restricción de ancho está
-   sobre el TEXTO y no sobre el contenedor. Los `48rem` son `max-w-3xl` y el
-   `1.5rem` es el `px-6` que tenían los envoltorios: si cambia uno, mirar el
-   otro — la cabecera de la página (mover, compartir) sigue en un `max-w-3xl` de
-   Tailwind y las dos columnas tienen que quedar alineadas. */
+   EL ANCHO YA NO SE PONE ACÁ (19-ago-2026): antes `.bn-editor` se acotaba y
+   centraba solo — ahora lo hace `.hoja-a4`, más abajo, y esto se estira a
+   llenar lo que esa caja (o, en la pantalla dividida, el panel fluido) le
+   deje. Ponerle OTRO ancho acá encima volvería a acotar por partida doble. */
 .bn-container .bn-editor.bn-default-styles {
   background-color: transparent;
   /* 🔴 LO QUE EL SELECTOR DE FUENTE Y EL DE TAMAÑO AFIRMAN CUANDO NO HAY ESTILO
@@ -399,13 +396,86 @@
      (`TAMANO_POR_DEFECTO`) y hay un test que cruza los dos. */
   font-family: Arial, Helvetica, sans-serif;
   font-size: 16px;
-  max-width: 48rem;
-  margin-inline: auto;
-  padding-inline: 1.5rem;
   /* Alto disponible, para que el clic en el vacío de abajo entre al editor en
      vez de caer en el contenedor y no hacer nada. */
   min-height: 60vh;
 }
+
+/* LA HOJA A4 (19-ago-2026, a pedido del dueño; achicada a proporción para la
+   PANTALLA DIVIDIDA el mismo día): la forma real de una hoja de Word —210:297,
+   la proporción de A4— con sus márgenes por default —2,5cm—, no una
+   aproximación en rem.
+
+   ⚠️ `aspect-ratio`, NO `width: 21cm` fijo. Dos hojas de 21cm de ancho no
+   entran una al lado de la otra en casi ninguna laptop — por eso la pantalla
+   dividida pide «tamaños CASI A4 que aprovechen el espacio libre», no A4
+   literal. `width: 100%; max-width: 21cm` le da el tamaño real de Word
+   cuando hay sitio (la vista simple, casi siempre) y la encoge MANTENIENDO
+   LA FORMA cuando no (cada mitad de la pantalla dividida) — nunca se
+   deforma en una columna angosta y alta, ni se desborda del panel.
+
+   Si el texto no entra en una hoja, la caja CRECE más alta que el `aspect-
+   ratio` en vez de recortarlo — es el comportamiento estándar de un bloque
+   con `height: auto` y contenido más largo que la proporción preferida.
+
+   El fondo es `--secondary`, EL MISMO que ya usa «Mi libreta» cuando está
+   activa (`SelectorDeEspacio.tsx`): la superficie de «acá se escribe»,
+   reusada en vez de inventar un color nuevo. Y SOLO ella lo lleva — el resto
+   del panel (la cabecera de Mover/Compartir, el margen alrededor de la hoja)
+   se queda con el fondo de la vista, como pidió el dueño.
+
+   ⚠️ AL 60% Y NO SÓLIDO: ese mismo color, de pared a pared en una hoja
+   entera, pesa mucho más que en un renglón de 2rem de alto — la misma
+   «opacidad» que se ve suave en el botón se leía sólida y pesada acá.
+   `color-mix(..., transparent)` trasluce hacia lo que sea que haya detrás
+   (el fondo de la vista) en vez de mezclar contra un color fijo, así que
+   sigue funcionando igual en claro y en oscuro.
+
+   La monta `ColumnaDeEscritura` (`perezosos.tsx`), en las dos mitades de la
+   pantalla dividida y en la vista simple por igual — MISMO tope de 21cm en
+   los dos casos (19-ago-2026: hubo una variante angosta acá, `.hoja-a4--
+   dividida` a 15cm, y se sacó el mismo día — dividir ya angosta el panel a
+   la mitad, y una hoja MÁS angosta todavía encima de eso dejaba menos lugar
+   para escribir que el que el panel realmente tenía. `width: 100%` es lo
+   que hace el trabajo solo: llena lo que el panel le deje, hasta 21cm).
+
+   ⚠️ El ancho (21cm) y el margen (2.5cm) se repiten en la cabecera de
+   acciones de `Libreta.tsx` (`anchoDeAcciones`: `w-[21cm]` + `px-[2.5cm]`) y
+   en la de `PantallaDividida.tsx`, para que «Mover / Compartir / Dividir» y
+   el título de la mitad derecha queden alineados con el borde del TEXTO, no
+   con el de la hoja — si cambia uno, mirar los otros. */
+.hoja-a4 {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 21cm;
+  aspect-ratio: 210 / 297;
+  padding: 2.5cm;
+  background-color: color-mix(in srgb, var(--secondary) 60%, transparent);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14), 0 10px 24px rgba(0, 0, 0, 0.08);
+}
+
+/* MARGEN ANGOSTO PARA LA PANTALLA DIVIDIDA (19-ago-2026, a pedido del
+   dueño): 1,27cm en vez de 2,5 — el preset «Estrecho» que el propio Word
+   trae de fábrica (0,5 pulgada), no un número inventado.
+
+   ⚠️ SOLO EL MARGEN, no el ancho — a diferencia del intento anterior
+   (`.hoja-a4--dividida` achicando el ANCHO, revertido el mismo día): la
+   hoja de cada mitad ya ocupa lo que el panel le da, hasta 21cm; lo que
+   sobraba era el margen FIJO de 2,5cm comiéndose una tajada pareja de un
+   ancho que ya era la mitad de la pantalla — con dos hojas divididas, dos
+   márgenes de 2,5cm de sobra pesan el doble que en una sola hoja. Achicar
+   SOLO el padding le devuelve ese ancho al texto sin tocar el tamaño de la
+   hoja ni desbordar el panel — la oración deja de partirse antes de tiempo.
+
+   ⚠️ El 1,27cm se repite en la cabecera de acciones de `Libreta.tsx`
+   (`anchoDeAcciones`, rama `dividiendo`: `px-[1.27cm]`) y en la de
+   `PantallaDividida.tsx`, para que la barra de arriba se quede alineada con
+   el borde del texto — si cambia uno, mirar los otros. */
+.hoja-a4--dividida {
+  padding: 1.27cm;
+}
+
 
 /* EL MENÚ DE «/» — tamaño fijo, en vez de estirarse hasta llenar la pantalla.
    `SuggestionMenuController` del paquete pone en el DIV de afuera (el que

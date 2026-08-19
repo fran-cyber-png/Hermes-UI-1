@@ -72,6 +72,8 @@ test('🔴 traer una página del espacio a mi libreta AVISA con los nombres, y n
       donde={7}
       espacios={[ESPACIO]}
       vendedoraId="luz"
+      dividiendo={false}
+      onRenombrar={() => {}}
       onMover={(d) => movido.push(d)}
       onAbrirLink={() => {}}
       onCortarLink={() => {}}
@@ -107,6 +109,8 @@ test('«Dejarla acá» no mueve nada', async () => {
       donde={7}
       espacios={[ESPACIO]}
       vendedoraId="luz"
+      dividiendo={false}
+      onRenombrar={() => {}}
       onMover={(d) => movido.push(d)}
       onAbrirLink={() => {}}
       onCortarLink={() => {}}
@@ -134,6 +138,8 @@ test('mover HACIA un espacio no pregunta nada: no le saca nada a nadie', async (
       donde={null}
       espacios={[ESPACIO]}
       vendedoraId="luz"
+      dividiendo={false}
+      onRenombrar={() => {}}
       onMover={(d) => movido.push(d)}
       onAbrirLink={() => {}}
       onCortarLink={() => {}}
@@ -160,6 +166,8 @@ test('🔴 el modal del link DICE que se abre sin entrar a Hermes', async () => 
       donde={7}
       espacios={[ESPACIO]}
       vendedoraId="luz"
+      dividiendo={false}
+      onRenombrar={() => {}}
       onMover={() => {}}
       onAbrirLink={() => {}}
       onCortarLink={() => {}}
@@ -186,6 +194,8 @@ test('una página SIN link muestra las opciones ANTES de crearlo', async () => {
       donde={7}
       espacios={[ESPACIO]}
       vendedoraId="luz"
+      dividiendo={false}
+      onRenombrar={() => {}}
       onMover={() => {}}
       onAbrirLink={() => {}}
       onCortarLink={() => {}}
@@ -216,6 +226,8 @@ test('🔴 elegir «cualquiera con el link» APAGA el permiso de editar', async 
       donde={7}
       espacios={[ESPACIO]}
       vendedoraId="luz"
+      dividiendo={false}
+      onRenombrar={() => {}}
       onMover={() => {}}
       onAbrirLink={() => {}}
       onCortarLink={() => {}}
@@ -250,6 +262,8 @@ test('«Todavía no lo abrió nadie» es la respuesta cuando el link no se usó'
       donde={7}
       espacios={[ESPACIO]}
       vendedoraId="luz"
+      dividiendo={false}
+      onRenombrar={() => {}}
       onMover={() => {}}
       onAbrirLink={() => {}}
       onCortarLink={() => {}}

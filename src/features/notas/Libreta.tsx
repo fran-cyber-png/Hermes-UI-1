@@ -33,7 +33,7 @@ import { ModalDePlantillas } from './ModalDePlantillas';
 import { ModalDeRespuestasRapidas } from './ModalDeRespuestasRapidas';
 import { PantallaHechos } from '../hechos/PantallaHechos';
 import { AccionesDePagina } from './AccionesDePagina';
-import { DiagramaPerezoso, EditorPerezoso, precargarDiagrama, precargarEditor } from './perezosos';
+import { ColumnaDeEscritura, DiagramaPerezoso, EditorPerezoso, precargarDiagrama, precargarEditor } from './perezosos';
 import { PantallaDividida } from './PantallaDividida';
 import { mismoUsuario, nombreCorto, useEspacios, type DondeEstoy } from './espacios';
 import { SelectorDeEspacio } from './SelectorDeEspacio';
@@ -97,27 +97,6 @@ function mismaSeleccion(a: Seleccion, b: Seleccion): boolean {
 }
 
 /**
- * EL EDITOR OCUPA EL ANCHO DEL PANEL; EL TEXTO SIGUE EN COLUMNA.
- *
- * La barra tiene que cruzar la pantalla como la de Word, y vive adentro de
- * `BlockNoteView` (es el patrón oficial: `FormattingToolbar` necesita el
- * contexto que ese componente provee). Si el contenedor estuviera en una columna
- * de `max-w-3xl`, la barra terminaría al ancho del texto.
- *
- * Así que la restricción de ancho se mudó del CONTENEDOR al TEXTO: acá no hay
- * `max-w`, y `.bn-editor` se centra en `index.css`. Se evita levantar la
- * instancia del editor y envolver todo con `BlockNoteContext` a mano, que es API
- * bastante menos transitada que ésta.
- *
- * ⚠️ El `pb-8` va acá y no en `.bn-editor`: ese elemento tiene `min-height: 60vh`
- * para que el clic en el vacío de abajo entre al editor, y sumarle padding
- * empujaría esa zona fuera de la vista.
- */
-function ColumnaDeEscritura({ children }: { children: React.ReactNode }) {
-  return <div className="pb-8">{children}</div>;
-}
-
-/**
  * LA HOJA: el documento con su capa de anotaciones encima.
  *
  * ══ POR QUÉ ESTE ENVOLTORIO EXISTE ══════════════════════════════════════════
@@ -130,6 +109,12 @@ function ColumnaDeEscritura({ children }: { children: React.ReactNode }) {
  * También es el punto donde el texto y el dibujo se juntan y siguen separados:
  * el editor no sabe que hay una capa encima, y la capa no sabe qué dice el
  * texto. Lo único que comparten es este rectángulo.
+ *
+ * ⚠️ SIN `max-w` ACÁ, A PROPÓSITO (19-ago-2026). Esto envuelve TODO lo que
+ * `ZonaDeTrabajo` reciba, pantalla dividida incluida: un `max-w-3xl` en este
+ * nivel encajonaba las DOS mitades adentro de un mismo cajón de 768 px, en vez
+ * de dejarlas repartirse el ancho real entre la lista y la barra de dibujo. El
+ * ancho de lectura de una página simple lo pone `.bn-editor` en `index.css`.
  */
 function Hoja({
   children,
@@ -157,7 +142,7 @@ function Hoja({
   onSalirDelDibujo(): void;
 }) {
   return (
-    <div className="relative mx-auto max-w-3xl px-6 py-8">
+    <div className="relative px-6 py-8">
       {children}
       {anotaciones && (
         <CapaDeAnotaciones
@@ -296,10 +281,16 @@ function ZonaDeTrabajo({
   const herramientaEfectiva: Herramienta = puedeDibujar ? herramienta : 'puntero';
 
   return (
-    <div className="flex min-h-0 flex-1">
+    // 🔴 `min-w-0` en LOS DOS niveles (19-ago-2026): sin esto, cada flex item
+    // vale `min-width: auto` (el ancho mínimo de su CONTENIDO, no cero) y se
+    // niega a encogerse por debajo de lo que la hoja/una tabla ancha pidan —
+    // empujando la barra de dibujo (fija, `w-12`) fuera de la pantalla en vez
+    // de dejar que `overflow-y-auto`, más abajo, se ocupe. Mismo arreglo un
+    // nivel más afuera, en el `<main>` de `Libreta.tsx`.
+    <div className="flex min-h-0 min-w-0 flex-1">
       {/* EL SCROLL ES DE ESTA COLUMNA, no de la fila: la barra tiene que quedarse
           quieta mientras la página se desplaza debajo. */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
         {hoja ? (
           <Hoja
             anotaciones={anotaciones}
@@ -998,7 +989,15 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
 
         {/* EL EDITOR */}
         <main
-          className={`flex min-h-0 flex-1 flex-col md:flex ${
+          // 🔴 `min-w-0` (19-ago-2026): sin esto, un flex item vale `min-width:
+          // auto` por default — el ANCHO MÍNIMO de su CONTENIDO, no cero. Con una
+          // hoja A4 que preferiría 21cm o una tabla ancha adentro del editor, este
+          // `<main>` se negaba a encogerse por debajo de eso y empujaba TODO —
+          // la barra de dibujo, el riel, la ventana entera — a un scroll
+          // horizontal en vez de dejar que `.hoja-a4` se achique como ya sabe
+          // hacer (`width: 100%`). Mismo arreglo, un nivel más adentro, en
+          // `ZonaDeTrabajo` (más abajo en este archivo).
+          className={`flex min-h-0 min-w-0 flex-1 flex-col md:flex ${
             seleccion === null && !enBienvenida ? 'hidden' : 'flex'
           }`}
         >
@@ -1036,8 +1035,13 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
             archivarla, y desaparece sola en cuanto hay una página de verdad.
           */}
           {deLink && (
-            <ColumnaDeEscritura>
-              <div className="mx-auto max-w-3xl px-6 pt-8">
+            <>
+              {/* El aviso queda AFUERA de la hoja A4, alineado con el borde del
+                  texto (`w-[21cm]` + `px-[2.5cm]`, el mismo par que usa
+                  `anchoDeAcciones` más abajo): es un dato sobre la página, no
+                  parte de ella — meterlo adentro le pondría el fondo de la hoja
+                  a un aviso que no es lo que la vendedora escribió. */}
+              <div className="mx-auto box-border w-[21cm] max-w-full px-[2.5cm] pt-8">
                 <div className="mb-4 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
                   Llegaste por un link.{' '}
                   {porLink.data?.puedeEditar
@@ -1045,16 +1049,18 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
                     : 'Se lee, no se edita.'}
                 </div>
               </div>
-              <EditorPerezoso
-                key={`link-${deLink.id}`}
-                contenidoInicial={docParaEditor(deLink)}
-                soloLectura={!porLink.data?.puedeEditar}
-                onCambio={alCambiarDoc}
-                onAbrirPlantillas={abrirPlantillas}
-                onAbrirRespuestasRapidas={abrirRespuestasRapidas}
-                registrarPegado={registrarPegado}
-              />
-            </ColumnaDeEscritura>
+              <ColumnaDeEscritura>
+                <EditorPerezoso
+                  key={`link-${deLink.id}`}
+                  contenidoInicial={docParaEditor(deLink)}
+                  soloLectura={!porLink.data?.puedeEditar}
+                  onCambio={alCambiarDoc}
+                  onAbrirPlantillas={abrirPlantillas}
+                  onAbrirRespuestasRapidas={abrirRespuestasRapidas}
+                  registrarPegado={registrarPegado}
+                />
+              </ColumnaDeEscritura>
+            </>
           )}
 
           {porLink.isError && (
@@ -1141,57 +1147,100 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
             // lado, para cuando un diagrama se abre acá directo (por
             // búsqueda, por «Mover», o al reabrirlo) y no solo desde el panel.
             const esDiagrama = paginaAbierta.origen === 'nota' && paginaAbierta.tipo === 'diagrama';
-            // 🔴 LA COLUMNA ANGOSTA ES DE LAS ACCIONES, NUNCA DEL EDITOR. La
-            // Ribbon vive adentro de `BlockNoteView` y tiene que cruzar el panel
-            // como la de Word; el ancho del TEXTO lo pone `.bn-editor` en
-            // `index.css`. Un `max-w-3xl` acá arriba volvería a encajonar la
-            // barra — que es exactamente lo que se deshizo al traerla.
-            const anchoDeAcciones = dividiendo ? 'px-6 pt-8' : 'mx-auto max-w-3xl px-6 pt-8';
+            /**
+             * 🔴 LA COLUMNA ANGOSTA ES DE LAS ACCIONES, NUNCA DEL EDITOR — y AFUERA
+             * de la hoja A4, no adentro: «Mover / Compartir / Dividir» es una barra
+             * sobre la página, no texto escrito en ella, así que no lleva el fondo
+             * de `.hoja-a4`. `w-[21cm]` + `px-[2.5cm]` es EL MISMO par que usa
+             * `.hoja-a4` en `index.css` (ancho total + margen), para que la barra
+             * quede alineada con el borde del TEXTO — si cambia uno, mirar el otro.
+             *
+             * MISMA CLASE DIVIDIENDO O NO (19-ago-2026): `.hoja-a4` ahora se achica
+             * a proporción en vez de desbordar (`aspect-ratio`, ver `index.css`), así
+             * que la cabecera puede alinearse con ella en los dos casos por igual —
+             * `max-w-full` la acompaña cuando el panel de la mitad es más angosto que
+             * el ancho pedido.
+             *
+             * ⚠️ `pb-4`, NO EL `mb-4` QUE TENÍA `AccionesDePagina` (19-ago-2026): con
+             * el margen puesto ACÁ, en el wrapper, la cabecera de la mitad derecha
+             * (`PantallaDividida.tsx`) puede usar EXACTO el mismo par `pt-8 pb-4` y
+             * las dos hojas A4 arrancan a la misma altura — antes cada lado medía
+             * el espacio de arriba a su manera y no coincidían (issue reportado
+             * 19-ago-2026).
+             *
+             * ⚠️ MISMO `w-[21cm]` DIVIDIENDO O NO. Hubo un `w-[15cm]` acá para
+             * dividiendo, el mismo día que se sacó: dividir ya angosta el panel a
+             * la mitad, y una hoja más chica encima de eso achicaba el lugar para
+             * escribir más de lo que el pedido pedía — al revés de lo que se quería.
+             *
+             * ⚠️ `px-[1.27cm]` DIVIDIENDO, `px-[2.5cm]` SIN DIVIDIR (mismo día, otro
+             * pedido): acompaña al margen angosto de `.hoja-a4--dividida`
+             * (`ColumnaDeEscritura`, más abajo) — la barra tiene que alinearse con
+             * el borde del texto, y ese borde se corrió al achicarse el margen.
+             */
+            const anchoDeAcciones = dividiendo
+              ? 'mx-auto box-border w-[21cm] max-w-full px-[1.27cm] pt-8 pb-4'
+              : 'mx-auto box-border w-[21cm] max-w-full px-[2.5cm] pt-8 pb-4';
+            // Cierra la pantalla dividida — eligiendo o ya persistida, las dos, y
+            // desde CUALQUIER disparador: el botón de arriba (`AccionesDePagina`)
+            // o la ✕ de adentro del panel (`PantallaDividida`). Antes la ✕ llamaba
+            // solo a `setMostrarSelectorDivision(false)`, que no alcanza una vez
+            // que `divididaId` ya existe (`dividiendo` sigue leyendo TRUE desde
+            // ahí) — la ✕ se veía pero no hacía nada. Ver el mismo arreglo en el
+            // botón de `AccionesDePagina`.
+            const cerrarDivision = () => {
+              if (divididaId !== null) cortarDivision.mutate(paginaAbierta.id);
+              setMostrarSelectorDivision(false);
+            };
             return (
               <div className={dividiendo ? 'flex flex-col items-stretch md:flex-row' : ''}>
                 <div className={dividiendo ? 'min-w-0 md:w-1/2' : ''}>
-                  <ColumnaDeEscritura>
-                    {/* Mover, compartir y dividir van sobre una página GUARDADA y
-                        editable: una histórica de `gestiones` no se puede mover (vive
-                        en otra tabla) ni compartir, y una página en blanco todavía no
-                        tiene id. */}
-                    {paginaAbierta.origen === 'nota' && (
-                      <div className={esDiagrama ? 'px-3 pt-3' : anchoDeAcciones}>
-                        <AccionesDePagina
-                          nota={paginaAbierta}
-                          donde={donde}
-                          espacios={espacios.data ?? []}
-                          vendedoraId={vendedoraId}
-                          onMover={(destino) => {
-                            mover.mutate({ id: paginaAbierta.id, destino });
-                            // La página se fue de esta lista: dejarla abierta mostraría —y
-                            // autoguardaría— algo que ya no está acá.
-                            setSeleccion(null);
-                          }}
-                          onAbrirLink={(v) => abrirLink.mutate({ id: paginaAbierta.id, ...v })}
-                          onCortarLink={() => cortarLink.mutate(paginaAbierta.id)}
-                          onTocarDividir={() => setMostrarSelectorDivision(true)}
-                          onCortarDivision={() => {
-                            cortarDivision.mutate(paginaAbierta.id);
-                            setMostrarSelectorDivision(false);
-                          }}
-                        />
-                      </div>
-                    )}
-                    {paginaAbierta.origen === 'gestion' && (
-                      <div className={anchoDeAcciones}>
-                        <p className="mb-4 rounded-lg border border-dashed border-border bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-                          Esta quedó de una gestión vieja. Se lee, no se edita — la etapa de esa conversación se apoya en ella.
-                        </p>
-                      </div>
-                    )}
-                    {esDiagrama ? (
-                      <DiagramaPerezoso
-                        key={`${paginaAbierta.origen}-${paginaAbierta.id}`}
-                        contenidoInicial={paginaAbierta.diagrama ?? undefined}
-                        onCambio={alCambiarDiagrama}
+                  {/* Mover, compartir y dividir van sobre una página GUARDADA y
+                      editable: una histórica de `gestiones` no se puede mover (vive
+                      en otra tabla) ni compartir, y una página en blanco todavía no
+                      tiene id. */}
+                  {paginaAbierta.origen === 'nota' && (
+                    <div className={esDiagrama ? 'px-3 py-3' : anchoDeAcciones}>
+                      <AccionesDePagina
+                        nota={paginaAbierta}
+                        donde={donde}
+                        espacios={espacios.data ?? []}
+                        vendedoraId={vendedoraId}
+                        // El botón se apoya en ESTO, no en `nota.paginaDivididaId` a
+                        // secas: recién apretado «Dividir pantalla» ya está
+                        // dividiendo (eligiendo, todavía sin persistir), y un
+                        // segundo toque tiene que volver a una sola pantalla desde
+                        // ahí también — no solo después de que el server confirme.
+                        dividiendo={dividiendo}
+                        onMover={(destino) => {
+                          mover.mutate({ id: paginaAbierta.id, destino });
+                          // La página se fue de esta lista: dejarla abierta mostraría —y
+                          // autoguardaría— algo que ya no está acá.
+                          setSeleccion(null);
+                        }}
+                        onAbrirLink={(v) => abrirLink.mutate({ id: paginaAbierta.id, ...v })}
+                        onCortarLink={() => cortarLink.mutate(paginaAbierta.id)}
+                        onTocarDividir={() => setMostrarSelectorDivision(true)}
+                        onCortarDivision={cerrarDivision}
+                        onRenombrar={(texto) => editar.mutate({ id: paginaAbierta.id, texto })}
                       />
-                    ) : (
+                    </div>
+                  )}
+                  {paginaAbierta.origen === 'gestion' && (
+                    <div className={anchoDeAcciones}>
+                      <p className="rounded-lg border border-dashed border-border bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+                        Esta quedó de una gestión vieja. Se lee, no se edita — la etapa de esa conversación se apoya en ella.
+                      </p>
+                    </div>
+                  )}
+                  {esDiagrama ? (
+                    <DiagramaPerezoso
+                      key={`${paginaAbierta.origen}-${paginaAbierta.id}`}
+                      contenidoInicial={paginaAbierta.diagrama ?? undefined}
+                      onCambio={alCambiarDiagrama}
+                    />
+                  ) : (
+                    <ColumnaDeEscritura dividida={dividiendo}>
                       <EditorPerezoso
                         key={`${paginaAbierta.origen}-${paginaAbierta.id}`}
                         contenidoInicial={docParaEditor(paginaAbierta)}
@@ -1201,8 +1250,8 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
                         onAbrirRespuestasRapidas={abrirRespuestasRapidas}
                         registrarPegado={registrarPegado}
                       />
-                    )}
-                  </ColumnaDeEscritura>
+                    </ColumnaDeEscritura>
+                  )}
                 </div>
 
                 {dividiendo && (
@@ -1213,7 +1262,7 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
                       divididaId={divididaId}
                       notasDisponibles={notas}
                       mutaciones={{ crear, editar, dividir, crearDiagrama, autoguardarDiagrama }}
-                      onCerrar={() => setMostrarSelectorDivision(false)}
+                      onCerrar={cerrarDivision}
                     />
                   </div>
                 )}

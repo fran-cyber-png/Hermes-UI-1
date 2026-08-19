@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Check, Columns2, Link2, Lock, MoveRight, Users } from 'lucide-react';
 import { AuditoriaDeLink } from './AuditoriaDeLink';
 import { ModalDeLink } from './ModalDeLink';
+import { TituloEditable } from './TituloEditable';
 import type { DondeEstoy, Espacio } from './espacios';
 import type { Alcance, Nota, Permiso } from './notas';
 
@@ -63,23 +64,42 @@ export function AccionesDePagina({
   donde,
   espacios,
   vendedoraId,
+  dividiendo,
   onMover,
   onAbrirLink,
   onCortarLink,
   onTocarDividir,
   onCortarDivision,
+  onRenombrar,
 }: {
   nota: Nota;
   donde: DondeEstoy;
   espacios: Espacio[];
   vendedoraId?: string | null;
+  /**
+   * ¿HAY UNA PANTALLA DIVIDIDA A LA VISTA AHORA MISMO? No es lo mismo que
+   * `nota.paginaDivididaId`: esto también es `true` mientras se está ELIGIENDO
+   * con qué dividir (el server todavía no confirmó nada). El botón necesita
+   * ESTO para ser un toggle de verdad — «Dividir pantalla» tiene que volver a
+   * una sola pantalla en cualquiera de los dos momentos, no solo después de
+   * persistida (ver `Libreta.tsx`).
+   */
+  dividiendo: boolean;
   onMover: (destino: DondeEstoy) => void;
   onAbrirLink: (v: { alcance: Alcance; permiso: Permiso; venceAt: string | null }) => void;
   onCortarLink: () => void;
   /** Abre el selector de la pantalla dividida, en el panel de al lado. */
   onTocarDividir: () => void;
-  /** Deshace la división — se ofrece en el propio botón cuando ya hay una. */
+  /** Cierra la pantalla dividida — eligiendo o ya persistida, las dos. */
   onCortarDivision: () => void;
+  /**
+   * NOMBRAR UN DIAGRAMA (19-ago-2026). Un diagrama no tiene «primera línea de
+   * texto» de la que sacar un título solo (React Flow tiene nodos, no prosa),
+   * así que es la única clase de página que necesita ponerlo a mano. Manda
+   * `texto` por el mismo `PATCH /api/notas/:id` que ya usa todo lo demás —el
+   * server no distingue por `tipo` al editar, ver `editarNota`.
+   */
+  onRenombrar: (texto: string) => void;
 }) {
   /**
    * `link` abre el modal de configuración y `registro` el Audit Log. Son estados
@@ -105,7 +125,20 @@ export function AccionesDePagina({
   }
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-1.5">
+    // 🔴 SIN `mb-4` PROPIO (19-ago-2026): el espacio antes de la hoja lo pone
+    // el wrapper de `Libreta.tsx`/`PantallaDividida.tsx` (`pb-4`), para que
+    // las dos cabeceras —esta y la de la mitad derecha en la pantalla
+    // dividida— midan EXACTO lo mismo y sus hojas A4 arranquen a la misma
+    // altura. `min-h-7` es la otra mitad de ese acuerdo: el renglón mide lo
+    // mismo tenga botones (con borde, más altos) o solo texto.
+    <div className="flex min-h-7 flex-wrap items-center gap-1.5">
+      {/* NOMBRAR EL DIAGRAMA — la única clase de página sin un primer
+          renglón de texto del que sacar un título solo. `flex-1` para que
+          empuje los botones a la derecha, como el título de la mitad
+          derecha en la pantalla dividida. */}
+      {nota.tipo === 'diagrama' && (
+        <TituloEditable valor={nota.texto} placeholder="Nombrá el diagrama" onGuardar={onRenombrar} />
+      )}
       <button
         type="button"
         onClick={() => setAbierto(abierto === 'mover' ? null : 'mover')}
@@ -132,26 +165,28 @@ export function AccionesDePagina({
       </button>
 
       {/*
-        DIVIDIR PANTALLA (17-ago-2026). Un clic sobre «por nota, una vez»: la
-        columna del server es escalar, así que ya hay como máximo UNA
-        contraparte — este botón no abre un submenú a elegir cuál, es un
-        toggle. Sin contraparte, ABRE el selector en el panel de al lado (vive
-        en `Libreta.tsx`, no acá: es una columna entera, no un dropdown de
-        19rem). Con una, el botón mismo la CORTA — el mismo molde que
+        DIVIDIR PANTALLA (17-ago-2026). Un TOGGLE, y de verdad: un segundo
+        toque vuelve a una sola pantalla desde CUALQUIER momento de la
+        división —eligiendo con qué, o ya persistida— porque los dos se leen
+        en `dividiendo`, no solo `nota.paginaDivididaId` (antes el botón se
+        quedaba mudo mientras se elegía: un segundo toque no hacía nada, y
+        solo la ✕ de adentro del panel cerraba). Sin nada abierto, ABRE el
+        selector en el panel de al lado (vive en `Libreta.tsx`, no acá: es
+        una columna entera, no un dropdown de 19rem). El mismo molde que
         «Compartida con link», que también se dice siempre y no se esconde.
       */}
       <button
         type="button"
-        onClick={() => (nota.paginaDivididaId ? onCortarDivision() : onTocarDividir())}
-        aria-pressed={Boolean(nota.paginaDivididaId)}
+        onClick={() => (dividiendo ? onCortarDivision() : onTocarDividir())}
+        aria-pressed={dividiendo}
         className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition ${
-          nota.paginaDivididaId
+          dividiendo
             ? 'border-primary bg-secondary text-foreground'
             : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'
         }`}
       >
         <Columns2 className="size-3.5" />
-        {nota.paginaDivididaId ? 'Pantalla dividida' : 'Dividir pantalla'}
+        {dividiendo ? 'Pantalla dividida' : 'Dividir pantalla'}
       </button>
 
       {confirmar !== 'no' && espacioActual && (

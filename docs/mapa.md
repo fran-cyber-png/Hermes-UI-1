@@ -11,15 +11,15 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 34 | 481 | 67,088 | 22,808 |
-| server | 68 | 803 | 84,843 | 52,878 |
-| **total** | **102** | **1,284** | **151,931** | **75,686** |
+| front | 34 | 482 | 67,322 | 22,899 |
+| server | 68 | 803 | 84,849 | 52,878 |
+| **total** | **102** | **1,285** | **152,171** | **75,777** |
 
 ## Front — `src/`
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
-| `notas` | La Libreta: páginas, espacios compartidos, autoguardado y el link público. | 66 | 11,765 | 21 | 5 | 2 |
+| `notas` | La Libreta: páginas, espacios compartidos, autoguardado y el link público. | 67 | 11,999 | 21 | 5 | 2 |
 | `whatsapp` | La conversación nativa: el hilo, el composer, los adjuntos, las citas y la compresión de video. | 47 | 5,565 | 25 | 9 | 5 |
 | `canales` | La cola unificada, y sólo eso: la lista de conversaciones, su fila, la barra de filtros y el panel de contexto. El modelo que dibuja NO vive acá — vive en `dominio/`. | 35 | 4,685 | 8 | 1 | 11 |
 | `panel` | La ficha al costado del chat, en el orden de las preguntas que decide una venta: quién es, qué quiere, qué mandarle, qué hacer. | 27 | 3,599 | 10 | 5 | 10 |
@@ -58,7 +58,7 @@
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
-| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. Capa 3 — nadie la importa: un archivo que otro módulo necesita no es un router y no va acá (fue el caso de `costoPorLead`). | 64 | 11,122 | 12 | 1 | 49 |
+| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. Capa 3 — nadie la importa: un archivo que otro módulo necesita no es un router y no va acá (fue el caso de `costoPorLead`). | 64 | 11,128 | 12 | 1 | 49 |
 | `bot` | El bot de primera línea que atiende solo: su agente, sus guardrails, sus frenos y el reenganche. | 56 | 7,997 | 24 | 7 | 13 |
 | `scripts` | Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción. Capa 3. | 37 | 6,303 | 0 | 0 | 37 |
 | `cola` | La consulta que ordena la deuda: a quién se atiende primero y por qué. Cada regla vive pura y con su gemelo SQL. | 67 | 5,987 | 46 | 9 | 7 |

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Notebook, Plus, Search, Workflow, X } from 'lucide-react';
-import { DiagramaPerezoso, EditorPerezoso } from './perezosos';
+import { ColumnaDeEscritura, DiagramaPerezoso, EditorPerezoso } from './perezosos';
+import { TituloEditable } from './TituloEditable';
 import { renglonDeEstado } from './guardado';
 import { useAutoguardado, type DestinoDeGuardado } from './useAutoguardado';
 import {
@@ -56,7 +57,13 @@ export function PantallaDividida({
     ReturnType<typeof useMutacionesNotas>,
     'crear' | 'editar' | 'dividir' | 'crearDiagrama' | 'autoguardarDiagrama'
   >;
-  /** Cierra el panel — solo tiene efecto ANTES de elegir algo. */
+  /**
+   * Cierra el panel — eligiendo o ya persistida, las dos (`Libreta.tsx` lo
+   * arma para cubrir ambas). ⚠️ Antes de 19-ago-2026 esto solo servía ANTES
+   * de elegir algo: con una división ya persistida, la ✕ se veía pero no
+   * hacía nada — el llamador solo apagaba un estado local que `dividiendo`
+   * ya no miraba una vez que `divididaId` existía.
+   */
   onCerrar: () => void;
 }) {
   const [fase, setFase] = useState<'eligiendo' | 'creando' | 'creando-diagrama'>('eligiendo');
@@ -118,36 +125,65 @@ export function PantallaDividida({
 
     return (
       <div role="region" aria-label="Pantalla dividida">
-        <div className="flex h-11 items-center gap-2 border-b border-border px-4">
-          <p className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground">{titulo}</p>
-          {(() => {
-            const r = renglonDeEstado(estadoGuardado, Boolean(notaLista?.editadoAt));
-            if (!r.texto) return null;
-            return (
-              <span
-                className={'shrink-0 text-xs ' + (r.hayFallo ? 'font-medium text-destructive' : 'text-muted-foreground')}
-                aria-live="polite"
-              >
-                {r.texto}
-              </span>
-            );
-          })()}
-          <button
-            type="button"
-            onClick={onCerrar}
-            aria-label="Cerrar la pantalla dividida"
-            className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <X className="size-3.5" />
-          </button>
+        {/*
+          EL MISMO PAR `pt-8 pb-4` + `w-[21cm]` QUE `anchoDeAcciones` EN
+          `Libreta.tsx` (19-ago-2026) — antes esto era `h-11 border-b px-4` y
+          la mitad izquierda usaba `pt-8` + botones con borde: dos cajas
+          distintas, dos alturas distintas, y la hoja de cada lado arrancaba
+          a una altura diferente. `min-h-7` en el renglón de abajo es la otra
+          mitad de ESE acuerdo — mide lo mismo tenga un botón (con borde, más
+          alto) o solo texto.
+
+          `px-[1.27cm]` y no `px-[2.5cm]`: esta mitad SIEMPRE está dividida
+          (es la que arma `PantallaDividida`), así que acompaña siempre al
+          margen angosto de `.hoja-a4--dividida` — el mismo acuerdo que
+          `anchoDeAcciones` en `Libreta.tsx`, rama `dividiendo`.
+        */}
+        <div className="mx-auto box-border w-[21cm] max-w-full px-[1.27cm] pt-8 pb-4">
+          <div className="flex min-h-7 items-center gap-2">
+            {/* NOMBRAR EL DIAGRAMA desde acá también — mismo campo que en la
+                mitad izquierda (`AccionesDePagina`). Solo cuando ya existe de
+                verdad: uno recién creado sin id todavía no tiene qué
+                editar (`notaLista` es `undefined` hasta que el server confirma). */}
+            {esDiagrama && notaLista ? (
+              <TituloEditable
+                valor={notaLista.texto}
+                placeholder="Nombrá el diagrama"
+                onGuardar={(texto) => mutaciones.editar.mutate({ id: notaLista.id, texto })}
+                className="h-7 min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-1.5 text-xs font-medium text-muted-foreground outline-none hover:border-input focus:border-ring focus:text-foreground"
+              />
+            ) : (
+              <p className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground">{titulo}</p>
+            )}
+            {(() => {
+              const r = renglonDeEstado(estadoGuardado, Boolean(notaLista?.editadoAt));
+              if (!r.texto) return null;
+              return (
+                <span
+                  className={'shrink-0 text-xs ' + (r.hayFallo ? 'font-medium text-destructive' : 'text-muted-foreground')}
+                  aria-live="polite"
+                >
+                  {r.texto}
+                </span>
+              );
+            })()}
+            <button
+              type="button"
+              onClick={onCerrar}
+              aria-label="Cerrar la pantalla dividida"
+              className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
         </div>
 
         {cargando && <p className="px-6 py-8 text-sm text-muted-foreground">Cargando…</p>}
         {fallo && <p className="px-6 py-8 text-sm text-destructive">No se pudo traer esa página.</p>}
 
         {/* El diagrama arma su PROPIA barra de herramientas y necesita todo el
-            ancho — a diferencia del editor de texto, no lleva el `px-6 py-8`
-            de columna de lectura. */}
+            ancho — a diferencia del editor de texto, no pasa por la hoja A4
+            de `ColumnaDeEscritura`. */}
         {esDiagrama
           ? (fase === 'creando-diagrama' || notaLista) && (
               <DiagramaPerezoso
@@ -157,14 +193,20 @@ export function PantallaDividida({
               />
             )
           : (fase === 'creando' || notaLista) && (
-              <div className="px-6 py-8">
+              // Misma hoja A4 que la mitad izquierda (`.hoja-a4` se achica a
+              // proporción, no se desborda): las dos mitades quedan del
+              // mismo tamaño, aprovechando el ancho que el panel realmente
+              // tiene. `dividida` le da el margen angosto (1,27cm en vez de
+              // 2,5) — más ancho para el texto en una hoja que ya comparte
+              // pantalla con otra.
+              <ColumnaDeEscritura dividida>
                 <EditorPerezoso
                   key={divididaId !== null ? `div-${divididaId}` : 'div-nueva'}
                   contenidoInicial={notaLista ? docParaEditor(notaLista) : undefined}
                   soloLectura={false}
                   onCambio={(doc) => alCambiar({ doc })}
                 />
-              </div>
+              </ColumnaDeEscritura>
             )}
       </div>
     );
