@@ -14,6 +14,7 @@ import { decisionsRouter } from "./routes/decisions.js";
 import { interactionsRouter } from "./routes/interactions.js";
 import { conversacionesRouter } from "./routes/conversaciones.js";
 import { repartoRouter } from "./routes/reparto.js";
+import { territorioRouter } from "./routes/territorio.js";
 import { routingRouter } from "./routes/routing.js";
 import { padronRouter } from "./routes/padron.js";
 import { campanaRouter } from "./routes/campana.js";
@@ -122,6 +123,12 @@ app.use(express.json({ verify: capturarCuerpoCrudo }));
  * con la lista diciendo que está cubierto.
  */
 const deVentas = deEsteModulo("ventas", (id) => lineasDeVendedoraConProposito(db, id));
+/**
+ * ⚠️ **El gemelo, y el que hace que esto sea una frontera y no un veto.** Hasta
+ * ADR 0063 el candado sólo sabía negar en un sentido; con los dos módulos, las
+ * superficies propias de campaña se niegan igual del otro lado.
+ */
+const deCampana = deEsteModulo("campana", (id) => lineasDeVendedoraConProposito(db, id));
 app.use("/api/gestiones/intereses", deVentas);
 app.use("/api/dashboard/negocio", deVentas);
 
@@ -159,6 +166,7 @@ app.use("/n", publicoRouter);
 app.use("/api/venta", deVentas, ventaRouter); // el formulario de venta dentro de Hermes
 app.use("/api/interactions", interactionsRouter);
 app.use("/api/conversaciones", conversacionesRouter); // la cola unificada: una fila por conversación
+app.use("/api/territorio", deCampana, territorioRouter); // dónde vota cada quien: el catálogo de distritos de una campaña (ADR 0063)
 app.use("/api/reparto", repartoRouter); // de quién es cada conversación cuando 7 comparten una línea
 app.use("/api/routing", deVentas, routingRouter); // qué campaña de Meta cae en qué vendedora (solo la línea de Cloud API)
 app.use("/api/campana", deVentas, campanaRouter); // el catálogo de plantillas de Meta con su salud (solo lectura, supervisor)

@@ -130,6 +130,19 @@ export const SUPERFICIES: Record<string, Modulo> = {
   "/api/routing": "ventas",
   "/api/ivi": "ventas",
   "/api/dashboard/negocio": "ventas",
+  /**
+   * ══ LA PRIMERA SUPERFICIE DE `campana` DEL REPO ═══════════════════════════
+   *
+   * El territorio (ADR 0063): un CRM de ventas no necesita saber dónde vota
+   * nadie y una campaña no puede trabajar sin eso. **Estrena el candado en el
+   * sentido contrario** — hasta acá el middleware sólo sabía negarle a la
+   * campaña lo de la Escuela, y esta lista era una lista de una sola dirección.
+   *
+   * ⚠️ Una vendedora de la Escuela come 403 acá, y no es porque el dato sea
+   * secreto: un distrito electoral no significa nada en su embudo, y ofrecerlo
+   * sería ruido en la única pantalla donde decide a quién le escribe.
+   */
+  "/api/territorio": "campana",
 };
 
 /**

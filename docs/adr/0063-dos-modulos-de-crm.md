@@ -117,6 +117,48 @@ Front: `PanelDerecho` recibe `esDeCampana` y **apaga las consultas**, no sólo e
   `?etapa=` es compartida y resolver el módulo ahí costaría otra consulta para ganar
   nada — pedir `?etapa=comprometido` desde ventas no es una fuga, es una lista vacía.
 
+## El territorio (fase 3)
+
+Distrito y local de votación son lo que ningún CRM de ventas necesita y toda campaña sí. Tablas
+`distrito` + `contacto_territorio` (migración **0037**), server en `server/src/territorio/`, ruta
+`/api/territorio`, bloque en el panel y catálogo por CLI (`npm run territorio:distritos`).
+
+- 🔴 **CATÁLOGO Y NO TEXTO LIBRE.** Un `zona` de texto era la opción barata y es exactamente la
+  deuda que `eventos_contacto` existe para no repetir (ADR 0037): **texto libre no se agrupa, no se
+  cuenta y no se cruza**. La pregunta que una campaña se hace todos los días —«¿cuántos
+  comprometidos tengo en San Juan de Lurigancho?»— no se contesta con un `LIKE`.
+- 🔴 **ES LA PRIMERA SUPERFICIE DE `campana` DEL REPO, y estrena el candado en el otro sentido.**
+  Hasta acá el middleware sólo sabía negarle a la campaña lo de la Escuela. Una vendedora de ventas
+  come 403 acá, y no porque el dato sea secreto: un distrito electoral no significa nada en su
+  embudo y ofrecerlo sería ruido en la única pantalla donde decide a quién le escribe.
+- 🔴 **LA LÍNEA SALE DE `numero_vendedora`, NUNCA DE UN `?linea=`.** Con el query string, cualquier
+  operador de campaña leería el catálogo —y los conteos— de otra candidatura. Es justo lo que la
+  fase de `entorno` viene a impedir entre rivales, cerrado acá por construcción antes de que el
+  problema exista.
+- 🔴 **EL DESTINO SE VERIFICA** (`distritoAjeno`), como en `reparto/destino.ts`: un `distritoId` de
+  otra campaña es un número válido, escribe una fila válida y **nadie se entera** — la persona
+  quedaría anotada en un distrito que su propia pantalla no muestra y del otro lado engordaría un
+  conteo ajeno.
+- 🔴 **El UNIQUE va sobre `lower(btrim(nombre))` y `claveDistrito` dice lo MISMO.** Con dos recetas
+  entran «San Isidro» y «san isidro», que en la pantalla se ven iguales, y la campaña reparte su
+  gente entre las dos — la cicatriz de `Luz`/`luz`.
+- 🔴 **La FK es `restrict`, no `cascade`.** Con cascade, apagar mal un distrito se lleva en silencio
+  el territorio de cada persona anotada ahí: el trabajo de campo de quien salió a caminar. El
+  catálogo se apaga (`activo = false`), no se borra.
+- ⚠️ **LEER degrada y ESCRIBIR no.** Sin la migración el catálogo viene vacío y el bloque lo dice;
+  `anotarTerritorio` deja subir el error, porque un «guardado» que no guardó es peor que un error —
+  la operadora sigue caminando y da el dato por tomado.
+- ⚠️ **Los tres vacíos dicen cosas distintas y cada uno lo arregla otra persona**: «no tenés línea»
+  (un admin), «no hay distritos cargados» (quien maneja la campaña, con el CLI), «todavía no le
+  preguntaste» (ella misma, ahora).
+- ⚠️ **El catálogo NO se edita desde la app**, como la rueda del reparto y los roles: qué distritos
+  tiene una candidatura es decisión de quien la maneja, no una acción de la mesa de trabajo.
+- ⚠️ **`local_votacion` NO entró.** Catalogar centros de votación es un import del padrón de la
+  ONPE, y ponerlo como texto libre sería la misma deuda que el catálogo vino a evitar.
+- ⚠️ **La clave es la CONVERSACIÓN**, como `gestiones` y `eventos_contacto`, porque Hermes no tiene
+  tabla de personas. Hoy da igual —una campaña, una línea— y el día que tenga dos números la misma
+  persona tendría que declarar su distrito dos veces.
+
 ## Lo que esto NO resuelve, y hay que decirlo
 
 - 🔴 **NO aísla una campaña de OTRA campaña.** Separa `ventas` de `campana`; dos candidatos rivales
@@ -129,9 +171,6 @@ Front: `PanelDerecho` recibe `esDeCampana` y **apaga las consultas**, no sólo e
 - ⚠️ **`eventos.ts` es residuo conocido**: `POST /` consulta el catálogo de Cerberus si el evento
   trae `curso`. No se veda el router entero porque el timeline es genérico. Se cierra con el
   vocabulario de campaña.
-- ⚠️ **El TERRITORIO no está.** Distrito y local de votación son lo que ningún CRM de ventas
-  necesita y toda campaña sí, y Hermes no tiene dónde guardarlos. Es el frente siguiente, con
-  catálogo de distritos por candidatura (decisión del dueño del 19-ago).
 - ⚠️ **El test de paridad con base de campaña se escribió y NO se ejecutó**
   (`etapaCampana.paridad.test.db.ts`): Docker estaba apagado en la máquina donde se armó el frente.
   Compila con el typecheck y corre en N2b. **La paridad SQL ≡ TS no está verificada localmente.**

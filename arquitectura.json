@@ -259,6 +259,8 @@
     "server/notas": "Las páginas de la Libreta y su texto plano.",
     "server/numeros": "Los números de WhatsApp de Goberna: su estado de vinculación y de quién es cada uno.",
     "server/modulos": "Los dos módulos de CRM (ventas y campañas): de cuál es cada persona y de cuál es cada superficie de la API.",
+    "server/territorio": "El territorio de una campaña: el catálogo de distritos de una candidatura y dónde vota cada contacto.",
+    "front/territorio": "Dónde vota cada contacto de una campaña: el selector de distrito del panel y su lectura.",
     "server/padron": "Los contactos de icarus que nunca escribieron: el WHERE que los recorta, sus facetas, y a quién se le habilitan. Es una frontera.",
     "server/piezas": "Cómo se direcciona una pieza y cómo se calcula su versión. Un solo lugar — con dos recetas, el join da cero filas en silencio.",
     "server/plantillas": "Las secuencias de venta: catálogo, expansión de `{variables}` y aprobación de una propuesta minada.",

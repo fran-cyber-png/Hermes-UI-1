@@ -1592,6 +1592,32 @@ no de plata; la cola es propia y la afirma una persona.
 - ⚠️ **`etapaCampana.paridad.test.db.ts` se escribió y NO se ejecutó** (Docker apagado): compila y
   corre en N2b. **La paridad SQL ≡ TS del embudo de campaña no está verificada localmente.**
 
+### El territorio de una campaña — dónde vota cada quien (ADR 0063)
+
+Tablas `distrito` + `contacto_territorio` (migración **0037**), `server/src/territorio/`,
+`/api/territorio`, bloque en el panel y catálogo por **`npm run territorio:distritos`** (dry-run por
+default). Es lo que ningún CRM de ventas necesita y toda campaña sí.
+
+- 🔴 **ES LA PRIMERA SUPERFICIE DE `campana`, y estrena el candado en el otro sentido**: hasta acá
+  el middleware sólo sabía negarle a la campaña lo de la Escuela. Una vendedora de ventas come 403
+  — no porque sea secreto, sino porque un distrito electoral no significa nada en su embudo.
+- 🔴 **LA LÍNEA SALE DE `numero_vendedora`, NUNCA DE UN `?linea=`.** Con el query string cualquier
+  operador de campaña leería el catálogo y los conteos de OTRA candidatura.
+- 🔴 **EL DESTINO SE VERIFICA** (`distritoAjeno`, como `reparto/destino.ts`): un `distritoId` de
+  otra campaña es un número válido, escribe una fila válida y **nadie se entera**.
+- 🔴 **UNIQUE sobre `lower(btrim(nombre))`, y `claveDistrito` dice lo MISMO** — con dos recetas
+  entran «San Isidro» y «san isidro» y la campaña reparte su gente entre dos filas que en pantalla
+  se ven iguales (la cicatriz de `Luz`/`luz`).
+- 🔴 **La FK es `restrict`, no `cascade`**: con cascade, apagar mal un distrito se lleva en silencio
+  el trabajo de campo de quien salió a caminar. El catálogo se apaga, no se borra.
+- ⚠️ **LEER degrada, ESCRIBIR no**: sin la migración el bloque lo dice; anotar deja subir el error,
+  porque un «guardado» que no guardó le hace perder a la operadora el único momento en que tenía el
+  dato delante.
+- ⚠️ **Los tres vacíos dicen cosas distintas** («no tenés línea» · «no hay distritos» · «todavía no
+  le preguntaste») porque **cada uno lo arregla otra persona**.
+- ⚠️ **`local_votacion` no entró**: catalogar centros de votación es un import del padrón de la
+  ONPE, y como texto libre sería la deuda que el catálogo vino a evitar.
+
 ## La campaña no la ve la Escuela — la única frontera que el rol NO abre (**ADR 0061**)
 
 Goberna son DOS planos y no se cruzan: la **Escuela** (lo que Hermes atiende) y la **Consultoría** (el

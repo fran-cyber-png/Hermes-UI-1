@@ -111,6 +111,24 @@ describe('el panel derecho en campaña', () => {
    * derivan del hilo, sin tocar Cerberus. Apagarla de rebote le sacaría a la
    * campaña una señal que le sirve igual.
    */
+  /**
+   * LA SIMETRÍA, del otro lado: `/api/territorio` es superficie de **campaña**
+   * (`modulos/modulo.ts`), así que pedirla desde ventas sería un 403 garantizado
+   * en cada ficha que se abre — el mismo defecto que este archivo cierra, con el
+   * signo cambiado.
+   */
+  it('🔴 el territorio se pide en campaña y NO en ventas', async () => {
+    vista = montar(<PanelDerecho conversacion={CONTACTO} miVendedora="centurion:betto.romero" esDeCampana />);
+    await reposar();
+    expect(pedidos.filter((p) => p.includes('/api/territorio')).length).toBeGreaterThan(0);
+    vista.desmontar();
+
+    pedidos = [];
+    vista = montar(<PanelDerecho conversacion={CONTACTO} miVendedora="luz" />);
+    await reposar();
+    expect(pedidos.filter((p) => p.includes('/api/territorio'))).toHaveLength(0);
+  });
+
   it('las señales del hilo siguen andando en los dos módulos', async () => {
     vista = montar(<PanelDerecho conversacion={CONTACTO} miVendedora="centurion:betto.romero" esDeCampana />);
     await reposar();

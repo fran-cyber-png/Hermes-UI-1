@@ -1842,6 +1842,8 @@ export { lecciones } from "./lecciones.js";
 // El reparto de leads: quién está en la rueda y de quién es cada conversación.
 // Es un FILTRO, no un permiso — ver `db/reparto.ts`.
 export { repartoRueda, conversacionAsignada } from "./reparto.js";
+// El territorio de una campaña (ADR 0063): el catálogo de distritos y dónde vota cada quien.
+export { distrito, contactoTerritorio } from "./territorio.js";
 
 // El ruteo por campaña: qué campaña de Meta cae en qué vendedora. Se apoya en el
 // de arriba (misma tabla de asignaciones, otro `motivo`) y arranca vacío: sin

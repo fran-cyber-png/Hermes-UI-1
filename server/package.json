@@ -34,6 +34,7 @@
     "cursos:gaps": "tsx src/scripts/gapsDeCurso.ts",
     "hechos:sembrar": "tsx src/scripts/sembrarHechos.ts",
     "reparto:rueda": "tsx src/scripts/repartoRueda.ts",
+    "territorio:distritos": "tsx src/scripts/territorioDistritos.ts",
     "correos:remitentes": "tsx src/scripts/remitentesCorreo.ts",
     "equipo:sembrar": "tsx src/scripts/sembrarEquipo.ts",
     "frontera:preflight": "tsx src/scripts/preflightFrontera.ts",

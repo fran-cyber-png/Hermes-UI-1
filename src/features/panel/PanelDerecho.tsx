@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Conversacion } from '../../dominio/conversaciones';
 import { marcaDeCliente } from '../../dominio/cliente';
 import { useFicha } from '../cerberus/useFicha';
+import { BloqueTerritorio } from '../territorio/BloqueTerritorio';
 import type { Ficha } from '../cerberus/ficha';
 import { useLeadForm } from '../cerberus/BloqueLeadForm';
 import { useIntereses } from '../gestion/Intereses';
@@ -198,6 +199,12 @@ export function PanelDerecho({
         resumenIa={null}
       />
       <div className="min-h-0 flex-1 overflow-y-auto border-t border-border">
+        {/* ══ DÓNDE VOTA (ADR 0063) ═══════════════════════════════════════════
+            Sólo en campaña, y ARRIBA del timeline: el timeline narra qué pasó y
+            esto decide qué hacer — es el equivalente de «Qué quiere» en el panel
+            de ventas. El componente se apaga solo con `activo={false}`, así que
+            en ventas no se monta ni pide nada. */}
+        <BloqueTerritorio clave={conversacion.clave} activo={esDeCampana} />
         <div className="px-4 py-2.5">
           <ZonaPendientes pendientes={timeline.pendientes} progreso={timeline.progreso} />
           <h3 className="text-xs font-semibold text-muted-foreground">Timeline</h3>

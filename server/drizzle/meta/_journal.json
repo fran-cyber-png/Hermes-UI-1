@@ -260,6 +260,13 @@
       "when": 1788091968155,
       "tag": "0036_familiar_bruce_banner",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1788178368155,
+      "tag": "0037_big_strong_guy",
+      "breakpoints": true
     }
   ]
 }
