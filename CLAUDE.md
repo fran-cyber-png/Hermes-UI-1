@@ -2542,7 +2542,7 @@ Ver `server/.env.example` (solo nombres).
     `shared_buffers` no tiene nada que ganar (100 % de aciertos, cero lecturas de disco). **Para
     medir un cambio, corré el SEAM COMPLETO contra datos reales** — hay un A/B listo en
     `server/scratchpad/medir-cola.ts`, que va por un túnel SSH a la base de producción.
-- 🔴 **LOS PREDICADOS DE TEXTO YA NO SE CALCULAN AL LEER: SE LEEN DE UNA COLUMNA** (**ADR 0064**).
+- 🔴 **LOS PREDICADOS DE TEXTO YA NO SE CALCULAN AL LEER: SE LEEN DE UNA COLUMNA** (**ADR 0065**).
   Medido el 19-ago-2026 con el SQL real de la tabla temporal: los 19 regex eran el **95 %** del
   `GroupAggregate` (1.339–1.541 ms) y el 58 % del pedido entero, recalculados 13.152 veces por día
   para 220 mensajes que se escriben una vez. Ahora `interactions` lleva `menciona_precio` ·

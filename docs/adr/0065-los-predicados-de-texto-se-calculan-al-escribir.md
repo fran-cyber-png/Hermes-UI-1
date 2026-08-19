@@ -1,4 +1,4 @@
-# ADR 0064 — Los predicados de texto se calculan al escribir, no en cada lectura
+# ADR 0065 — Los predicados de texto se calculan al escribir, no en cada lectura
 
 **Fecha**: 19-ago-2026
 **Estado**: aceptado — server, **necesita N5** y un paso de backfill después del N5.
