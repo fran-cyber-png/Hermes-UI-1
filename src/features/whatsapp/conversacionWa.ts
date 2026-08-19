@@ -217,9 +217,33 @@ type HiloWa = { telefono: string; mensajes: MensajeHilo[]; origen: OrigenLead };
  * el `LIMIT` sobre el orden DESC y devuelve ASC), así que el último del arreglo
  * es el más reciente. Sin hilo todavía, o con un hilo vacío, devuelve `null` —
  * y `intervaloDelHilo` lee eso como el escalón más rápido.
+ *
+ * ══ 🔴 POR QUÉ ESTO ES TOTAL Y NO CONFÍA EN EL TIPO ═════════════════════════
+ *
+ * Porque lo consume un `refetchInterval`, y **TanStack lo evalúa adentro del
+ * RENDER** (`QueryObserver.setOptions`, desde `useBaseQuery`): una excepción
+ * ahí no degrada el poll, se lleva puesta la pantalla entera.
+ *
+ * Y el tipo no alcanza para garantizar que no la haya. `query.state.data` está
+ * declarado `HiloWa | undefined` y en runtime puede ser otra cosa: una
+ * respuesta rehidratada del caché de IndexedDB (ADR 0007) escrita por una
+ * versión anterior del front, o un server que contesta otro cuerpo. La primera
+ * versión de esta función era `hilo?.mensajes.at(-1)` —el `?.` cubría `hilo` y
+ * no `mensajes`— y **tumbó un candado que no tiene nada que ver con este
+ * frente**: `leidoInstantaneo.test.tsx` usa un stub que contesta
+ * `{ok:true,cursor:true}` a TODA URL, incluida la del hilo, y el render murió
+ * con «Cannot read properties of undefined (reading 'at')».
+ *
+ * Cualquier forma que no se entienda cae en `null`, que es el escalón más
+ * rápido: la misma regla de `cadencia.ts`, degradar hacia MÁS frecuente.
  */
 function ultimoMensajeDelHilo(hilo: HiloWa | undefined): string | null {
-  return hilo?.mensajes.at(-1)?.occurred_at ?? null;
+  const mensajes: unknown = hilo?.mensajes;
+  if (!Array.isArray(mensajes)) return null;
+  const ultimo: unknown = mensajes.at(-1);
+  if (typeof ultimo !== 'object' || ultimo === null) return null;
+  const cuando = (ultimo as { occurred_at?: unknown }).occurred_at;
+  return typeof cuando === 'string' ? cuando : null;
 }
 
 export function useConversacionWa(telefono: string | null) {

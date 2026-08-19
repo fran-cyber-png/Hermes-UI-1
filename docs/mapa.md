@@ -11,16 +11,16 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 34 | 476 | 66,312 | 22,521 |
+| front | 34 | 476 | 66,336 | 22,567 |
 | server | 68 | 800 | 84,420 | 52,568 |
-| **total** | **102** | **1,276** | **150,732** | **75,089** |
+| **total** | **102** | **1,276** | **150,756** | **75,135** |
 
 ## Front — `src/`
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
 | `notas` | La Libreta: páginas, espacios compartidos, autoguardado y el link público. | 65 | 11,555 | 21 | 5 | 1 |
-| `whatsapp` | La conversación nativa: el hilo, el composer, los adjuntos, las citas y la compresión de video. | 47 | 5,480 | 25 | 9 | 5 |
+| `whatsapp` | La conversación nativa: el hilo, el composer, los adjuntos, las citas y la compresión de video. | 47 | 5,504 | 25 | 9 | 5 |
 | `canales` | La cola unificada, y sólo eso: la lista de conversaciones, su fila, la barra de filtros y el panel de contexto. El modelo que dibuja NO vive acá — vive en `dominio/`. | 33 | 4,586 | 7 | 1 | 11 |
 | `panel` | La ficha al costado del chat, en el orden de las preguntas que decide una venta: quién es, qué quiere, qué mandarle, qué hacer. | 27 | 3,574 | 10 | 5 | 9 |
 | `correos` | El correo 1-a-1, auditado. Sin listas ni campañas. | 11 | 3,500 | 5 | 1 | 4 |

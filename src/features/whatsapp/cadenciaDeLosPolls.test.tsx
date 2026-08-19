@@ -174,6 +174,52 @@ describe('el hilo se pide según qué tan viva está la conversación', () => {
   });
 
   /**
+   * 🔴 UN `refetchInterval` NO PUEDE TIRAR: CORRE ADENTRO DEL RENDER.
+   *
+   * TanStack lo evalúa en `QueryObserver.setOptions`, que `useBaseQuery` llama
+   * **durante el render** — así que una excepción ahí no degrada el poll: se
+   * lleva puesta la pantalla entera.
+   *
+   * Y el tipo no alcanza para garantizarlo. `query.state.data` está declarado
+   * `HiloWa | undefined`, pero en runtime puede ser cualquier cosa: una
+   * respuesta rehidratada del caché de IndexedDB (ADR 0007) escrita por una
+   * versión anterior, o un server que contesta otro cuerpo. Acá se sirve el
+   * caso mínimo —un objeto SIN `mensajes`— porque es el que ya rompió: el
+   * candado del marcado optimista (`leidoInstantaneo.test.tsx`) usa un stub que
+   * contesta `{ok:true,cursor:true}` a TODA URL, incluida la del hilo, y este
+   * cableado se cayó con `Cannot read properties of undefined (reading 'at')`.
+   *
+   * Lo que se fija es que **la sonda sigue viva** y en el escalón más rápido,
+   * que es la degradación que la regla promete cuando no se sabe nada.
+   */
+  it('un cuerpo sin `mensajes` no tumba el render: cae al escalón más rápido', async () => {
+    const espia = servidor(() => json({ ok: true, cursor: true }));
+    montado = montar(<AnfitrionHilo />);
+    await correrElReloj(0);
+
+    // Sigue montada: si `refetchInterval` tirara, el árbol se habría caído.
+    expect(montado.contenedor.textContent).toContain('hilo');
+
+    await correrElReloj(30_000);
+
+    expect(pedidos(espia, '/api/whatsapp/conversacion/')).toBeGreaterThan(4);
+    expect(montado.contenedor.textContent).toContain('hilo');
+  });
+
+  it.each([
+    ['`mensajes` en null', { telefono: TELEFONO, origen: null, mensajes: null }],
+    ['`mensajes` que no es un arreglo', { telefono: TELEFONO, origen: null, mensajes: 'dos' }],
+    ['un cuerpo que no es un objeto', 'listo'],
+  ])('%s tampoco', async (_que, cuerpo) => {
+    servidor(() => json(cuerpo));
+    montado = montar(<AnfitrionHilo />);
+    await correrElReloj(0);
+    await correrElReloj(10_000);
+
+    expect(montado.contenedor.textContent).toContain('hilo');
+  });
+
+  /**
    * 🔴 SIN DATOS, EL ESCALÓN MÁS RÁPIDO. Con el server caído el hilo nunca trae
    * `data`, y ahí la cadencia tiene que degradar hacia MÁS frecuente: quedarse
    * en 60 s dejaría el chat sin recuperarse durante un minuto entero después de
