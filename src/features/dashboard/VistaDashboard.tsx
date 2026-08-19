@@ -6,7 +6,7 @@ import { hace } from '../../lib/datos/frescura';
 import { iniciales } from '../../lib/iniciales';
 import { useSelloDeViejo } from '../../lib/datos/useSelloDeViejo';
 import { SelloDeAntes } from '../../components/SelloDeAntes';
-import { tempBorde, tempClass } from '../../lib/formato';
+import { horasDesde, tempBorde, tempClass } from '../../lib/formato';
 import { kicker, sectionLabel } from '../../lib/styles';
 import { ETAPAS, ETAPA_CHIP, colorSegmento, rotuloEtapa } from '../../lib/etapas';
 import { Columnas } from '../../components/graficos/Columnas';
@@ -283,7 +283,7 @@ export function VistaDashboard({
     }
     return {
       nCalientes: esperan.length,
-      masViejaHoras: masVieja === null ? null : (Date.now() - masVieja) / 3_600_000,
+      masViejaHoras: masVieja === null ? null : horasDesde(masVieja),
     };
   }, [data]);
 
@@ -488,7 +488,7 @@ export function VistaDashboard({
                 >
                   {r.personaNombre ?? r.nota} ·{' '}
                   {vencida
-                    ? hace((Date.now() - new Date(r.cuando).getTime()) / 3_600_000)
+                    ? hace(horasDesde(r.cuando))
                     : new Date(r.cuando).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
                 </button>
               ))}
@@ -554,7 +554,7 @@ export function VistaDashboard({
 
             <div className="ml-auto flex flex-wrap items-center gap-1">
               {fuentesVisibles.map((f) => {
-                const ult = f.id && ultimaPor[f.id] ? (Date.now() - ultimaPor[f.id]) / 3_600_000 : null;
+                const ult = f.id && ultimaPor[f.id] ? horasDesde(ultimaPor[f.id]) : null;
                 return (
                   <button
                     key={f.id}
@@ -632,7 +632,7 @@ export function VistaDashboard({
                   const alta = esDeuda(fila.nivel);
                   const tags = data!.etiquetas[clave] ?? [];
                   const pais = paisDe(base.pais_dato, esChat ? fila.chat.telefono : fila.form.telefono);
-                  const horas = (Date.now() - new Date(base.cayo_at).getTime()) / 3_600_000;
+                  const horas = horasDesde(base.cayo_at);
                   // Por qué esta fila está donde está (#22, #23). Un formulario no
                   // tiene Ventana —no hay comentario público del que colgarse— ni
                   // agenda, así que no tiene nada que explicar.

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type Ref } from 'react';
 import { Bot, Check, Clock, Pin, Star, UserRound } from 'lucide-react';
 import { temperatureOf, TEMPERATURE_META } from '../leads/temperature';
 import { hace } from '../../lib/datos/frescura';
-import { formatoTelefono } from '../../lib/formato';
+import { formatoTelefono, horasDesde } from '../../lib/formato';
 import { textoDePreview } from '../../lib/preview';
 import { ETAPA_CHIP, rotuloEtapa } from '../../lib/etapas';
 import {
@@ -171,7 +171,7 @@ export function FilaConversacion({
   const nombre = c.persona_nombre ?? (esTelefono ? formatoTelefono(c.persona_id!) : 'Usuario');
   // Horas reales desde la referencia — `c.dias` son días enteros, así que abajo
   // de un día daba siempre 0 → "hace 1 min". Con las horas, "hace 3 horas" es cierto.
-  const horas = (Date.now() - new Date(c.referencia).getTime()) / 3_600_000;
+  const horas = horasDesde(c.referencia);
 
   // Peso invertido: lo pendiente en tinta plena, lo resuelto en gris.
   const pesoNombre = esTelefono

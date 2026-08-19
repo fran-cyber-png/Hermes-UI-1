@@ -3,7 +3,7 @@ import { AlertTriangle, Bot, Check, CheckCheck, Copy, CornerDownRight, CornerUpL
 import { ErrorApi } from '../../lib/datos/cliente';
 import { esDeCampana } from './campanaAjena';
 import { useBlobAutenticado } from '../../lib/datos/blobAutenticado';
-import { formatoTelefono, tempClass } from '../../lib/formato';
+import { formatoTelefono, horasDesde, tempClass } from '../../lib/formato';
 import { usePopover } from '../../lib/teclado/usePopover';
 import { ejecutarEnvioComposer, guardarBorrador, leerBorrador } from './borradorComposer';
 import { ponerEnComposer } from './puenteComposer';
@@ -78,7 +78,7 @@ export function agruparPorDia<T extends { occurred_at: string }>(
  */
 export function tintaSeparador(esUltimoGrupo: boolean, ultimaFecha: string): string {
   if (!esUltimoGrupo) return 'text-muted-foreground';
-  const h = (Date.now() - new Date(ultimaFecha).getTime()) / 3_600_000;
+  const h = horasDesde(ultimaFecha);
   if (h < 24) return 'text-muted-foreground';
   if (h < 72) return 'text-gold-ink';
   return tempClass(ultimaFecha);

@@ -7,9 +7,15 @@
  * conoce la ventana, no esta rampa.
  */
 
+/** Horas transcurridas desde una fecha hasta ahora. Acepta ISO, epoch ms o Date. */
+export function horasDesde(fecha: string | number | Date): number {
+  const t = typeof fecha === 'number' ? fecha : new Date(fecha).getTime();
+  return (Date.now() - t) / 3_600_000;
+}
+
 /** Tinta para el "hace X" según la edad del dato. Fresco y tibio callan. */
 export function tempClass(fecha: string | Date): string {
-  const h = (Date.now() - new Date(fecha).getTime()) / 3_600_000;
+  const h = horasDesde(fecha);
   if (h < 72) return 'text-muted-foreground';
   if (h < 336) return 'text-temp-frio';
   return 'text-temp-helado';
@@ -17,7 +23,7 @@ export function tempClass(fecha: string | Date): string {
 
 /** Filete izquierdo (border-l) de temperatura para tarjetas del kanban. */
 export function tempBorde(fecha: string | Date): string {
-  const h = (Date.now() - new Date(fecha).getTime()) / 3_600_000;
+  const h = horasDesde(fecha);
   if (h < 24) return 'border-l-temp-fresco';
   if (h < 72) return 'border-l-temp-tibio';
   if (h < 336) return 'border-l-temp-frio';
