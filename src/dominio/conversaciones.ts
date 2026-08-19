@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/datos/cliente';
+import { intervaloDeCola, streamVivo } from '../lib/datos/latido';
 import { esFiltroSec, parametrosDeCola, type EstadoCola } from './cola';
 import type { FilaDesglose } from './desglose';
 
@@ -258,14 +259,33 @@ export function useConversaciones(
     },
     getNextPageParam: (ultima, todas) =>
       ultima.hayMas ? todas.reduce((n, p) => n + p.conversaciones.length, 0) : undefined,
-    // El tiempo real lo maneja el SSE (invalida al instante). Esto es la red de
-    // seguridad: si el stream se cae, la cola igual se refresca al volver a la app
-    // y cada ~20-30s. Con SSE vivo, esto casi nunca dispara.
-    // ⚠️ El intervalo lleva jitter (no un número fijo): con ~8 vendedoras conectadas,
-    // un valor clavado las sincroniza y las 8 pestañas repiten la consulta más cara
-    // de la cola en el mismo segundo (medido: load average 16 en un VPS de 8 núcleos).
+    /**
+     * EL RITMO DEPENDE DE SI EL PUSH ESTÁ VIVO — no de un número fijo.
+     *
+     * El tiempo real lo maneja el SSE, que invalida esta clave al instante por
+     * cada mensaje (`lib/datos/tiempoReal.ts`). Este intervalo es la RED: lo
+     * que queda cuando el stream no está. Y hasta el 19-ago-2026 corría a
+     * 20–30 s **aunque el stream estuviera perfecto**: 13.152 pedidos el 18-ago
+     * a la consulta más cara del sistema (2,4 s) contra **220 mensajes reales
+     * en todo el día**.
+     *
+     * `streamVivo()` responde con el latido del stream —bytes recibidos hace
+     * menos de 60 s, o sea dos keep-alives— y la decisión vive pura en
+     * `lib/datos/latido.ts`. Con el push vivo: 5 minutos. Sin él: el ritmo de
+     * hoy, jitter incluido.
+     *
+     * ⚠️ **El intervalo se recalcula recién cuando su timer vence**, así que si
+     * el stream se cae con la cola en 300 s, el ritmo corto puede tardar hasta
+     * 5 minutos en entrar. Lo que cubre ese hueco NO es este intervalo: es la
+     * invalidación explícita que `tiempoReal.ts` dispara **al reconectar**.
+     *
+     * ⚠️ **`refetchOnWindowFocus: true` se queda**: es la única de todo Hermes
+     * (el default global está en `false`) y con el poll espaciado pasa a ser
+     * más importante, no menos — volver a la pestaña es cuando la vendedora
+     * mira la cola.
+     */
     refetchOnWindowFocus: true,
-    refetchInterval: () => 20_000 + Math.random() * 10_000,
+    refetchInterval: () => intervaloDeCola(streamVivo(), Math.random()),
   });
 
   return {

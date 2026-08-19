@@ -49,8 +49,23 @@ import { formatoTelefono } from '../formato';
  * que obliga a las dos ramas de abajo — sin ella, una conversación sin dueña
  * (todo lo anterior al reparto, y toda línea sin rueda) dejaría de actualizarse
  * sola con el chat abierto, que es el defecto que este bus vino a arreglar.
+ *
+ * ── 🔴 EL STREAM NO TIENE REPLAY, ASÍ QUE RECONECTAR ES RECUPERAR ──
+ * Desde el 19-ago-2026 los polls de la cola, del hilo y de la sesión bajaron
+ * mucho el ritmo **porque este bus es la fuente**. Lo que pagaba el hueco antes
+ * era el poll rápido: mientras el stream estuvo cortado no llegó ni un aviso, y
+ * `routes/stream.ts` no reenvía lo perdido al reconectar.
+ *
+ * ⚠️ Y **`refetchOnWindowFocus` está APAGADO globalmente** en Hermes
+ * (`lib/datos/cliente.ts`), así que «al volver a la pestaña se refresca solo»
+ * es FALSO acá. Sacar ritmo del poll obliga a poner una red explícita, y ésta
+ * es: al **reconectar** se invalida todo lo que el bus habría empujado.
+ * `alReconectar` no corre en la PRIMERA conexión —ahí las queries recién se
+ * montan y piden solas—, sólo cuando el stream volvió.
  */
 const REINTENTO_MS = 3000;
+/** Cuánto se reparten las pestañas para no invalidar la cola todas juntas. */
+const JITTER_COLA_MS = 4000;
 
 export function useTiempoReal(sesionActiva: boolean, alNoAutorizado?: () => void) {
   const qc = useQueryClient();
@@ -63,6 +78,21 @@ export function useTiempoReal(sesionActiva: boolean, alNoAutorizado?: () => void
     if (!sesionActiva) return;
     const control = new AbortController();
     let reintento: ReturnType<typeof setTimeout> | undefined;
+    /** La primera conexión no recupera nada: las queries recién se montan. */
+    let primeraConexion = true;
+
+    /**
+     * ⚠️ JITTER en la cola, y no en las demás: el SSE empuja el mismo evento a
+     * TODAS las pestañas conectadas en el mismo instante, y sin este delay las
+     * ~8 vendedoras invalidan `['conversaciones']` juntas — la consulta más
+     * cara del sistema, disparada 8 veces en el mismo segundo (medido: load
+     * average 16 en un VPS de 8 núcleos). `frescura`/`dashboard`/el hilo son
+     * baratas y no lo necesitan.
+     */
+    const invalidarColaConJitter = () =>
+      setTimeout(() => {
+        if (!control.signal.aborted) void qc.invalidateQueries({ queryKey: ['conversaciones'] });
+      }, Math.random() * JITTER_COLA_MS);
 
     const manejar = (data: string) => {
       let e: { tipo?: string; telefono?: string | null; direccion?: string };
@@ -81,16 +111,11 @@ export function useTiempoReal(sesionActiva: boolean, alNoAutorizado?: () => void
       }
 
       if (e.tipo === 'mensaje') {
-        // La cola cambió (fila nueva o reordenada) y la frescura también.
-        // ⚠️ JITTER en la cola, y no en las demás: el SSE empuja el mismo evento a
-        // TODAS las pestañas conectadas en el mismo instante, y sin este delay las
-        // ~8 vendedoras invalidan `['conversaciones']` juntas — la consulta más
-        // cara del sistema, disparada 8 veces en el mismo segundo (medido: load
-        // average 16 en un VPS de 8 núcleos). `frescura`/`dashboard`/el hilo son
-        // baratas y no lo necesitan.
-        setTimeout(() => {
-          if (!control.signal.aborted) void qc.invalidateQueries({ queryKey: ['conversaciones'] });
-        }, Math.random() * 4000);
+        // La cola cambió (fila nueva o reordenada) y la frescura también. El
+        // jitter vive en `invalidarColaConJitter` y lo comparte con el
+        // reconecte: dos delays distintos sobre la misma consulta serían la
+        // misma regla escrita dos veces.
+        invalidarColaConJitter();
         void qc.invalidateQueries({ queryKey: ['frescura'] });
         // El radar del dashboard también: un mensaje ES un lead cayendo.
         void qc.invalidateQueries({ queryKey: ['dashboard'] });
@@ -108,12 +133,43 @@ export function useTiempoReal(sesionActiva: boolean, alNoAutorizado?: () => void
       }
     };
 
+    /**
+     * LA RECUPERACIÓN DE LO QUE PASÓ MIENTRAS EL STREAM ESTUVO CAÍDO.
+     *
+     * Se invalida lo mismo que invalidaría un evento `mensaje` más un `estado`,
+     * porque no se sabe cuál de los dos se perdió: la cola, la frescura, el
+     * radar, el hilo abierto y el estado de las líneas.
+     *
+     * ⚠️ **La cola lleva el MISMO jitter que la rama de `mensaje`**, y por el
+     * mismo motivo elevado al cuadrado: un deploy corta el stream de las ~8
+     * pestañas a la vez, así que todas reconectan en la misma ventana de 3 s y
+     * sin el delay dispararían juntas la consulta más cara del sistema —
+     * exactamente cuando el server acaba de arrancar.
+     */
+    function alReconectar() {
+      invalidarColaConJitter();
+      void qc.invalidateQueries({ queryKey: ['frescura'] });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
+      void qc.invalidateQueries({ queryKey: ['wa', 'conversacion'] });
+      // 🔴 Y el estado de las líneas: sin esto, una línea que se montó mientras
+      // el front estaba desconectado se queda en su 404 congelado para siempre
+      // (`useSesionWa` deja de repreguntarlo a propósito — ver `cadencia.ts`).
+      void qc.invalidateQueries({ queryKey: ['wa', 'sesion'] });
+    }
+
     async function conectar() {
       const fin = await consumirStream({
         url: `${API_URL}/api/stream`,
         token: tokenGuardado(),
         senal: control.signal,
         onData: manejar,
+        onAbierto: () => {
+          if (primeraConexion) {
+            primeraConexion = false;
+            return;
+          }
+          alReconectar();
+        },
       });
       if (control.signal.aborted) return;
       if (fin === 'no-autorizado') {
