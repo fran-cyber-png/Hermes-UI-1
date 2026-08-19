@@ -810,6 +810,25 @@ En el cliente, la sesión **se cree el token antes de preguntar** (ADR 0007): si
 venció, la app se pinta ya y `/api/auth/yo` valida por detrás. La firma la verifica el server en cada
 request igual, y un 401 real echa y borra el caché.
 
+### «Cambiar contraseña» en el perfil — la de Cerberus, entrando de nuevo con la actual (**ADR 0062**)
+
+El botón vive en `PanelUsuario` (el avatar de abajo a la izquierda) y abre `CambiarClave`;
+el server (`cerberus/cambiarClave.ts`, `POST /api/auth/cambiar-clave`) le pide el cambio a
+**Cerberus** (`POST /perfil/clave/`, `miweb/auth_views.py`) — es la única clave que hay.
+
+- 🔴 **CAMBIAR LA CLAVE MATA TODAS LAS OTRAS SESIONES DE CERBERUS DE ESA PERSONA**, incluida
+  la de `sesiones_cerberus`. Sobrevive **sólo la de la request que hizo el cambio, CICLADA**
+  (viene en el `Set-Cookie` de esa respuesta), y ésa es la que se guarda — nunca la que
+  entró. Por eso el server **entra de nuevo con la clave actual** en vez de usar la
+  guardada, y por eso `guardarSesion` va DESPUÉS del 200. Fijado en `cambiarClave.test.ts`.
+- 🔴 **La clave actual mal es 400, NO 401**: el front borra la sesión de Hermes ante un 401
+  real, y lo que está mal es lo que tipeó. El token de Hermes **no depende de la clave** y
+  no se toca: la pantalla dice «seguís adentro».
+- ⚠️ **Sólo para quien tiene cuenta de Cerberus**: una identidad `centurion:` no ve el botón
+  y el server contesta 409. **Deploy: Cerberus primero**; al revés el server dice
+  `503 cerberus_sin_soporte` (el 404 de la ruta que todavía no existe), no «caído».
+- Sin server: `/galeria-cambiar-clave.html?paso=panel|formulario|rechazo_django|listo`.
+
 ### Los roles viven en la tabla `equipo` (migración **0028**)
 
 Tres roles y son una **escalera**, no tres cajones (`server/src/equipo/roles.ts`): `vendedora` <
