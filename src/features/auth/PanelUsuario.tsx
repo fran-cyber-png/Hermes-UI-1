@@ -1,9 +1,10 @@
 import { useCallback, useRef, useState } from 'react';
-import { AlertTriangle, Check, LogOut, Smartphone, UserRound } from 'lucide-react';
+import { AlertTriangle, Check, KeyRound, LogOut, Smartphone, UserRound } from 'lucide-react';
 import { usePopover } from '../../lib/teclado/usePopover';
 import { useLineas } from '../../dominio/lineas';
 import { VincularMiWhatsapp } from '../whatsapp/VincularMiWhatsapp';
 import { motivoParaVincular, rotuloDeVincular, useMiLinea, type MotivoDeVincular } from '../whatsapp/miLinea';
+import { CambiarClave } from './CambiarClave';
 import { tieneSesionDeCerberus } from './identidad';
 import type { Vendedora } from './sesion';
 
@@ -37,12 +38,16 @@ import type { Vendedora } from './sesion';
  * El mapa de líneas lo sigue dueñando Cerberus para todo lo demás — Escuela,
  * campaña, cualquier línea de otra vendedora.
  *
- * ── La ÚNICA excepción, desde el 15-ago-2026 ──
- * Sin líneas asignadas, el panel ofrece «Vincular tu WhatsApp»: la
- * auto-vinculación (`VincularMiWhatsapp`, D13 deja de ser solo consola de
- * operador). Es angosta a propósito — solo 1 línea, solo si todavía no tenés
- * ninguna — y por eso vive acá y no abre la puerta a editar nada más desde
- * este panel.
+ * ── Las DOS excepciones ──
+ * · Desde el 15-ago-2026, sin líneas asignadas el panel ofrece «Vincular tu
+ *   WhatsApp»: la auto-vinculación (`VincularMiWhatsapp`, D13 deja de ser solo
+ *   consola de operador). Angosta a propósito — solo 1 línea, solo si todavía
+ *   no tenés ninguna.
+ * · Desde el 18-ago-2026, «Cambiar contraseña» (`CambiarClave`): la de
+ *   Cerberus, que es la única que hay. No es editar la identidad —quién sos no
+ *   cambia—, es la única cosa de la cuenta que la persona tiene que poder
+ *   hacer sola. Solo para quien TIENE cuenta de Cerberus: una identidad de
+ *   Centurión no tiene clave acá, y ofrecerle el botón sería ofrecerle un 409.
  */
 
 export function PanelUsuario({
@@ -63,6 +68,8 @@ export function PanelUsuario({
   // arriba. Al abrir el modal se cierra el popover (`cerrar()`), así que su
   // listener se desregistra y solo queda uno escuchando.
   const [vinculando, setVinculando] = useState(false);
+  // Mismo motivo que `vinculando`: el modal vive acá, afuera del popover.
+  const [cambiandoClave, setCambiandoClave] = useState(false);
   const disparador = useRef<HTMLButtonElement>(null);
   const { lineas } = useLineas();
 
@@ -122,12 +129,17 @@ export function PanelUsuario({
                 cerrar();
                 setVinculando(true);
               }}
+              onCambiarClave={() => {
+                cerrar();
+                setCambiandoClave(true);
+              }}
             />
           </div>
         </>
       )}
 
       {vinculando && <VincularMiWhatsapp onCerrar={() => setVinculando(false)} />}
+      {cambiandoClave && <CambiarClave onCerrar={() => setCambiandoClave(false)} />}
     </span>
   );
 }
@@ -147,6 +159,7 @@ export function ContenidoUsuario({
   motivoVincular,
   onSalir,
   onVincular,
+  onCambiarClave,
 }: {
   vendedora: Vendedora;
   cerberusVivo: boolean | null;
@@ -160,6 +173,8 @@ export function ContenidoUsuario({
   onSalir: () => void;
   /** Ausente = la galería, que pinta el panel solo (sin el modal detrás). */
   onVincular?: () => void;
+  /** Ídem. El botón se dibuja igual: lo que decide si existe es la IDENTIDAD, no el handler. */
+  onCambiarClave?: () => void;
 }) {
   return (
     <>
@@ -271,10 +286,29 @@ export function ContenidoUsuario({
               )}
             </div>
 
+      {/* Solo para quien tiene cuenta de Cerberus: es ESA clave la que se
+          cambia (no hay otra), y una identidad de Centurión no la tiene. Misma
+          pregunta que decide el aviso de sesión de arriba, y por la identidad,
+          no por si la sesión está viva: cambiar la clave anda aunque Hermes
+          haya perdido la cookie —el server vuelve a entrar con la actual—, y
+          justamente ahí es cuando más falta hace. */}
+      {tieneSesionDeCerberus(vendedora.id) && (
+        <button
+          type="button"
+          onClick={() => onCambiarClave?.()}
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-1.5 text-[11px] font-bold text-foreground transition-colors hover:border-primary/50 hover:text-primary"
+        >
+          <KeyRound size={12} /> Cambiar contraseña
+        </button>
+      )}
+
       <button
         type="button"
         onClick={onSalir}
-        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-1.5 text-[11px] font-bold text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive"
+        className={
+          'flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-1.5 text-[11px] font-bold text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive ' +
+          (tieneSesionDeCerberus(vendedora.id) ? 'mt-1.5' : 'mt-3')
+        }
       >
         <LogOut size={12} /> Cerrar sesión
       </button>
