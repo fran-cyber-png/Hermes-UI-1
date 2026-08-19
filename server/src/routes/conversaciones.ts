@@ -1,7 +1,8 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
-import { consultarCola } from "../cola/consultarCola.js";
+import { consultarCola, type OpcionesCola } from "../cola/consultarCola.js";
+import { parsearColumnas } from "../cola/columnasPedidas.js";
 import { PinLleno, upsertEstado } from "../cola/estado.js";
 import { ETAPAS_CONSULTABLES } from "../cola/etapaEfectivaSql.js";
 import { rolDe } from "../equipo/cargarRol.js";
@@ -58,6 +59,56 @@ import { normalizarTelefono } from "../whatsapp/identidadWa.js";
  */
 export const conversacionesRouter = Router();
 
+/**
+ * ══ LO QUE LAS DOS PUERTAS DE LA COLA LEEN IGUAL ══════════════════════════════
+ *
+ * `GET /` y `GET /tablero` sirven la MISMA cola con el mismo universo: canal,
+ * línea, «mías», «míos», tab y categoría. Lo único que cambia es qué recorte se
+ * pide y cuántos. Se lee acá una vez porque dos lecturas del mismo query string
+ * divergen —y cuando divergen, el Pipeline y Mensajes contestan distinto sobre
+ * las mismas conversaciones sin que nadie lo note (#37).
+ *
+ * Devuelve un error en vez de escribir la respuesta: quién contesta el 400 es la
+ * ruta, y una función que a veces responde y a veces devuelve es la forma más
+ * fácil de mandar dos respuestas al mismo request.
+ */
+type Comunes = Pick<
+  OpcionesCola,
+  "canal" | "intencion" | "tab" | "categoria" | "linea" | "misLineas" | "misAsignadas" | "vendedoraId"
+>;
+
+function comunesDelQuery(req: Request): { ok: true; comunes: Comunes } | { ok: false; message: string } {
+  // Un `?linea=` que no es un teléfono es un 400, NO una línea vacía que se cae
+  // sola. Si cayera, el filtro desaparecería y la cola mostraría TODAS las
+  // líneas: quien pidió ver solo lo de Walter estaría mirando lo de todos, sin
+  // un solo síntoma en pantalla. Un filtro que no filtra tiene que romper.
+  const lineaCruda = typeof req.query.linea === "string" ? req.query.linea.trim() : "";
+  const lineaNormalizada = lineaCruda ? normalizarTelefono(lineaCruda) : "";
+  if (lineaCruda && !lineaNormalizada) {
+    return { ok: false, message: `línea inválida (${lineaCruda}): se espera un teléfono` };
+  }
+
+  return {
+    ok: true,
+    comunes: {
+      canal: typeof req.query.canal === "string" ? req.query.canal : "",
+      intencion: typeof req.query.intencion === "string" ? req.query.intencion : "",
+      tab: typeof req.query.tab === "string" ? req.query.tab : "",
+      categoria: typeof req.query.categoria === "string" ? req.query.categoria : "",
+      // Después de la guarda solo quedan dos casos: sin filtro (`""`) o un número
+      // ya canónico. El `?? ""` es para el tipo, no para un caso que pueda pasar.
+      linea: lineaNormalizada ?? "",
+      // LOS DOS RECORTES «MÍOS», JUNTOS Y A LA VISTA (ver el docblock): `mias` son
+      // LÍNEAS y `mios` son CONVERSACIONES asignadas. Se leen acá, uno al lado del
+      // otro y con nombres que no se parecen, para que la diferencia sea imposible
+      // de pasar por alto al agregar el próximo filtro.
+      misLineas: req.query.mias === "1",
+      misAsignadas: req.query.mios === "1",
+      vendedoraId: req.vendedoraId,
+    },
+  };
+}
+
 conversacionesRouter.get("/", ruta(async (req, res) => {
   const etapa = typeof req.query.etapa === "string" ? req.query.etapa : "";
   // ⚠️ Se valida contra las CONSULTABLES, no contra las declarables: `sin_respuesta`
@@ -69,34 +120,16 @@ conversacionesRouter.get("/", ruta(async (req, res) => {
     return;
   }
 
-  // Un `?linea=` que no es un teléfono es un 400, NO una línea vacía que se cae
-  // sola. Si cayera, el filtro desaparecería y la cola mostraría TODAS las
-  // líneas: quien pidió ver solo lo de Walter estaría mirando lo de todos, sin
-  // un solo síntoma en pantalla. Un filtro que no filtra tiene que romper.
-  const lineaCruda = typeof req.query.linea === "string" ? req.query.linea.trim() : "";
-  const lineaNormalizada = lineaCruda ? normalizarTelefono(lineaCruda) : "";
-  if (lineaCruda && !lineaNormalizada) {
-    res.status(400).json({ ok: false, message: `línea inválida (${lineaCruda}): se espera un teléfono` });
+  const comunes = comunesDelQuery(req);
+  if (!comunes.ok) {
+    res.status(400).json({ ok: false, message: comunes.message });
     return;
   }
-  // Después de la guarda solo quedan dos casos: sin filtro (`""`) o un número ya
-  // canónico. El `?? ""` es para el tipo, no para un caso que pueda pasar.
-  const linea = lineaNormalizada ?? "";
-
-  // LOS DOS RECORTES «MÍOS», JUNTOS Y A LA VISTA (ver el docblock): `mias` son
-  // LÍNEAS y `mios` son CONVERSACIONES asignadas. Se leen acá, uno al lado del
-  // otro y con nombres que no se parecen, para que la diferencia sea imposible de
-  // pasar por alto al agregar el próximo filtro.
-  const misLineas = req.query.mias === "1";
-  const misAsignadas = req.query.mios === "1";
 
   try {
     const r = await consultarCola(db, {
-      canal: typeof req.query.canal === "string" ? req.query.canal : "",
-      intencion: typeof req.query.intencion === "string" ? req.query.intencion : "",
+      ...comunes.comunes,
       etapa,
-      tab: typeof req.query.tab === "string" ? req.query.tab : "",
-      categoria: typeof req.query.categoria === "string" ? req.query.categoria : "",
       precio: req.query.precio === "1",
       // `?ventana=1`: el recorte del Pipeline por ventana de conversación abierta
       // (ADR 0041) — a quién se le puede escribir ahora sin pagar una plantilla.
@@ -106,10 +139,6 @@ conversacionesRouter.get("/", ruta(async (req, res) => {
       seguir: req.query.seguir === "1",
       // `?seCallo=1`: los que conversaban y se callaron al recibir el precio.
       seCallo: req.query.seCallo === "1",
-      linea,
-      misLineas,
-      misAsignadas,
-      vendedoraId: req.vendedoraId,
       limit: Number(req.query.limit) || 40,
       offset: Number(req.query.offset) || 0,
     },
@@ -129,6 +158,54 @@ conversacionesRouter.get("/", ruta(async (req, res) => {
 }));
 
 /**
+ * ══ EL TABLERO ENTERO, EN UN SOLO PEDIDO ══════════════════════════════════════
+ *
+ *     GET /api/conversaciones/tablero?columnas=interesado,cotizado:seguir,cierre
+ *
+ * 🔴 **POR QUÉ EXISTE, MEDIDO.** El Pipeline dibuja cinco columnas y pedía una
+ * por etapa a `GET /`. Cada uno de esos pedidos rearmaba desde cero la tabla
+ * temporal `todo` —2.226 ms en producción el 19-ago-2026—, así que un refresco
+ * del tablero costaba cinco. Con dos vendedoras adentro fueron **4.431
+ * materializaciones en 100 minutos**: 2,7 h de CPU de base en 1,7 h de reloj,
+ * load 15 sobre 8 núcleos y el 34 % de los pedidos devolviendo 504. Acá el `todo`
+ * se arma UNA vez y las cinco columnas se recortan encima.
+ *
+ * ⚠️ **No reemplaza a `GET /`: convive.** «Cargar más» de una columna sigue
+ * yendo por ahí con `?etapa=&offset=`, y está bien que así sea — medido sobre
+ * 13.285 pedidos de una mañana, el **97 %** son `offset=0`. Pagar el `todo` en el
+ * 3 % que pagina es más barato que inventarle paginación por columna a esto.
+ *
+ * ⚠️ **No sirve `conteosFiltro`**, a propósito: son los chips de Mensajes y el
+ * Pipeline no los dibuja. Es la segunda pasada más cara de las cuatro y se
+ * ahorra entera.
+ */
+conversacionesRouter.get("/tablero", ruta(async (req, res) => {
+  const crudo = typeof req.query.columnas === "string" ? req.query.columnas : "";
+  const pedidas = parsearColumnas(crudo, ETAPAS_CONSULTABLES);
+  if (!pedidas.ok) {
+    res.status(400).json({ ok: false, message: pedidas.motivo });
+    return;
+  }
+
+  const comunes = comunesDelQuery(req);
+  if (!comunes.ok) {
+    res.status(400).json({ ok: false, message: comunes.message });
+    return;
+  }
+
+  try {
+    const r = await consultarCola(db, {
+      ...comunes.comunes,
+      columnas: pedidas.columnas,
+      limit: Number(req.query.limit) || 40,
+    },
+    rolDe(req));
+    res.json(r);
+  } catch (err) {
+    console.error(`el tablero de conversaciones falló — ${porQueFallo(err)}`);
+    res.status(500).json({ ok: false, message: "No se pudo completar la operación." });
+  }
+}));/**
  * El estado personal de una conversación (pin / favorita / leído). Upsert por
  * (vendedora, clave). `leido:true` avanza el cursor al último mensaje visible;
  * `leido:false` lo deja justo antes del último entrante (vuelve a «sin leer»).

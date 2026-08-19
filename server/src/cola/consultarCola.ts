@@ -481,12 +481,76 @@ export interface OpcionesCola {
   misAsignadas?: boolean;
   limit?: number;
   offset?: number;
+  /**
+   * ══ EL TABLERO ENTERO EN UN SOLO PEDIDO (perf) ════════════════════════════
+   *
+   * 🔴 **CINCO COLUMNAS ERAN CINCO `todo`, Y EL `todo` ES TODO EL COSTO.**
+   * El Pipeline pide una columna por etapa, y cada pedido rearmaba desde cero la
+   * tabla temporal de `ejecutarCola` — el hash join de `interactions` contra
+   * `events`, el sort que cae a disco y los ~20 agregados con regex. Medido en
+   * producción el 19-ago-2026: **2.226 ms por `todo`**, y el tablero lo pagaba
+   * cinco veces por refresco. En una ventana de 100 minutos con DOS vendedoras
+   * adentro fueron **4.431 materializaciones** (976 · 969 · 837 · 835 · 815, el
+   * reparto parejo que delata que salen en grupo) = 2,7 h de CPU de base en 1,7 h
+   * de reloj, sobre un VPS de 8 núcleos que quedó en load 15 y devolviendo 504.
+   *
+   * Con las columnas acá, el `todo` se arma **una vez** y se le pasan N recortes
+   * por encima. Las cinco páginas siguen siendo cinco consultas —devuelven filas
+   * distintas, no hay cómo evitarlo— pero el desglose y los totales pasan a ser
+   * uno solo: de 20 pasadas por refresco a 8.
+   *
+   * ⚠️ **Cada columna trae SU recorte**, no uno global: desde ADR 0044 el chip de
+   * «Para seguir» / «Se callaron con el precio» es por columna, y colapsarlo a
+   * uno solo cambiaría en silencio lo que la vendedora eligió ver.
+   *
+   * ⚠️ Ausente = el modo de siempre (una página, la de `etapa`/`precio`/…). Lo
+   * que decide es la PRESENCIA del campo, no su largo: `columnas: []` es un
+   * tablero sin columnas, no la cola de siempre.
+   */
+  columnas?: readonly ColumnaPedida[];
+}
+
+/**
+ * Una columna del tablero: qué etapa y con qué recorte. Son los MISMOS campos
+ * que `OpcionesCola` ya tiene sueltos —y a propósito: el recorte de una columna
+ * es exactamente el recorte de una consulta de la cola, así que el predicado se
+ * arma con la misma función y no hay una segunda definición que pueda divergir.
+ */
+export interface ColumnaPedida {
+  etapa: string;
+  precio?: boolean;
+  ventana?: boolean;
+  seguir?: boolean;
+  seCallo?: boolean;
+}
+
+/** Lo que el tablero devuelve por columna: su página y su total ya recortado. */
+export interface ColumnaServida {
+  conversaciones: unknown[];
+  /** El tamaño de LO RECORTADO — la cifra chica de la cabecera («82 · de 3.051»). */
+  total: number;
+  hayMas: boolean;
 }
 
 export interface ResultadoCola {
+  /**
+   * La página de la cola. **En modo tablero viene VACÍA** y lo que hay que leer
+   * es `columnas`: servirle acá la primera columna sería mandar sus 30 filas dos
+   * veces y dejar al consumidor eligiendo entre dos verdades.
+   */
   conversaciones: unknown[];
   total?: number;
   hayMas: boolean;
+  /**
+   * UNA PÁGINA POR COLUMNA, sobre UN SOLO `todo` (ver `OpcionesCola.columnas`).
+   * Presente **solo** cuando se pidieron columnas; la clave es la etapa.
+   *
+   * ⚠️ **Una etapa pedida siempre tiene entrada, aunque no tenga filas.** Con la
+   * clave ausente el front no puede distinguir «esa columna está vacía» de «el
+   * server no la sabe servir», y ésa es justo la diferencia que `servidorSinEtapas`
+   * existe para no confundir.
+   */
+  columnas?: Record<string, ColumnaServida>;
   /**
    * Conteos REALES por etapa efectiva sobre la MISMA ventana y el MISMO filtro
    * de canal/intención (sin el de etapa: son el total de cada columna). Solo en
@@ -1020,7 +1084,6 @@ async function ejecutarCola(
 ): Promise<ResultadoCola> {
   const canal = opciones.canal ?? "";
   const intencion = opciones.intencion ?? "";
-  const etapa = opciones.etapa ?? "";
   const tab = opciones.tab ?? "";
   const categoria = (opciones.categoria ?? "").trim().toLowerCase();
   const vendedoraId = opciones.vendedoraId;
@@ -1121,11 +1184,26 @@ async function ejecutarCola(
   // El RECORTE (tab, categoría, etapa, precio) es lo que sigue valiendo cuando se
   // apaga el filtro secundario: por eso va aparte, y por eso los conteos de los
   // chips pueden decir «cuántas habría si tocás esto» sin una consulta más.
+  /**
+   * ══ EL RECORTE, COMO FUNCIÓN — porque el tablero pide CINCO ═══════════════
+   *
+   * Era un bloque suelto que leía `opciones` directo. Ahora es una función de
+   * UNA columna, y el caso de siempre es esa función aplicada a `opciones`: así
+   * la cola de Mensajes y cada columna del Pipeline arman su `WHERE` con **el
+   * mismo código**, que es lo único que garantiza que el chip «Para seguir»
+   * signifique lo mismo en los dos lados (#37).
+   *
+   * ⚠️ `tab` y `categoría` NO son de la columna: son del pedido, y por eso se
+   * leen de `opciones` acá adentro. Un tablero con cinco columnas comparte el
+   * tab; lo que cambia por columna son la etapa y los cuatro recortes.
+   */
+  const recorteDe = (col: ColumnaPedida | OpcionesCola): SQL[] => {
+  const etapa = col.etapa ?? "";
   const condicionesRecorte: SQL[] = [];
   if (etapa) condicionesRecorte.push(sql`(${etapaEfectivaSql}) = ${etapa}`);
   // El recorte «Con precio» del Pipeline: es una columna más del tablero, no un
   // filtro secundario — el total tiene que decir el tamaño de LO RECORTADO.
-  if (opciones.precio) condicionesRecorte.push(sql`precio_enviado`);
+  if (col.precio) condicionesRecorte.push(sql`precio_enviado`);
   /**
    * El recorte «En ventana» del Pipeline — a quién se le puede escribir AHORA
    * sin pagar una plantilla (`cola/ventana.ts`). Va como RECORTE y no como
@@ -1136,25 +1214,29 @@ async function ejecutarCola(
    * MISMO predicado que el chip de la cola. Con dos, el Pipeline ofrecería un
    * número y Mensajes otro para la misma pregunta (#37).
    */
-  if (opciones.ventana) condicionesRecorte.push(PUEDO_ESCRIBIRLE);
+  if (col.ventana) condicionesRecorte.push(PUEDO_ESCRIBIRLE);
   /**
    * El recorte «Para seguir» — el que convierte 3.051 Cotizados en una lista de
    * trabajo (`cola/tiempoEnEtapa.ts`, donde está el porqué medido). Recorte y no
    * intención, por lo mismo que los otros dos: con él puesto, el total de la
    * columna tiene que decir el tamaño de LO RECORTADO.
    */
-  if (opciones.seguir) condicionesRecorte.push(paraSeguirSql);
+  if (col.seguir) condicionesRecorte.push(paraSeguirSql);
   /**
    * El recorte «Se calló con el precio»: los 540 que conversaban y dejaron de
    * hacerlo justo al ver el número. Recorte y no intención, por lo mismo que los
    * otros tres — define el universo del que la columna informa el total.
    */
-  if (opciones.seCallo) condicionesRecorte.push(seCalloConElPrecioSql);
+  if (col.seCallo) condicionesRecorte.push(seCalloConElPrecioSql);
   // Los tabs personales (#49) solo con la tabla presente; la categoría vive en
   // `etiquetas`, así que filtra igual aunque el estado personal no exista.
   if (conEstado && tab === "no-leidos") condicionesRecorte.push(sql`(${noLeidoSql})`);
   if (conEstado && tab === "favoritos") condicionesRecorte.push(sql`COALESCE(ec.favorita, false)`);
   if (categoria) condicionesRecorte.push(sql`${categoria} = ANY(COALESCE(cats.categorias, '{}'::text[]))`);
+    return condicionesRecorte;
+  };
+  /** El recorte del pedido: el de siempre, y el de la única columna cuando no hay tablero. */
+  const condicionesRecorte = recorteDe(opciones);
 
   /**
    * «MÍOS» VA APARTE DE LOS OTROS RECORTES, y no por prolijidad.
@@ -1261,12 +1343,18 @@ async function ejecutarCola(
       )
     : null;
 
-  const condiciones = [
+  /**
+   * TODO LO QUE FILTRA LA PÁGINA DE UNA COLUMNA, junto. Lo de afuera (base,
+   * «míos», frontera) es del pedido y no cambia entre columnas; lo único que
+   * varía es el recorte, que es el argumento.
+   */
+  const condicionesDe = (recorte: SQL[]): SQL[] => [
     ...condicionesBase,
-    ...condicionesRecorte,
+    ...recorte,
     ...soloMias,
     ...(frontera ? [frontera] : []),
   ];
+  const condiciones = condicionesDe(condicionesRecorte);
 
   const donde = (c: SQL[]) => (c.length ? sql`WHERE ${sql.join(c, sql` AND `)}` : sql``);
   const yTodas = (c: SQL[]) => (c.length ? sql.join(c, sql` AND `) : sql`true`);
@@ -1312,7 +1400,16 @@ async function ejecutarCola(
   // encima (#49): las fijadas arriba de todo, dentro de la banda sigue mandando
   // el nivel 0–5. `etapa_manual` llega de la última gestión (etapaEfectivaSql.ts);
   // el estado personal, del LEFT JOIN a `estado_conversacion`.
-  const filas = await base.execute(sql`
+  /**
+   * ══ LA PÁGINA DE UNA COLUMNA, COMO FUNCIÓN ════════════════════════════════
+   *
+   * La consulta más grande del repo, dicha UNA vez y aplicada N veces sobre la
+   * MISMA tabla temporal. Antes era una sentencia suelta porque había un solo
+   * recorte por pedido; el tablero pide cinco, y con la consulta suelta la única
+   * forma de servirlos era cinco pedidos — o sea cinco `todo`.
+   */
+  const paginaDe = (condiciones: SQL[], limit: number, offset: number) =>
+    base.execute(sql`
     WITH seguimientos AS (
       ${seguimientosPendientesSql}
     ),
@@ -1392,6 +1489,136 @@ async function ejecutarCola(
     ORDER BY ${bandaPinOrdenSql(opciones.vendedoraId, duenoSql)}, nivel ASC, orden ASC
     LIMIT ${limit} OFFSET ${offset}
   `);
+
+  /**
+   * ══════════ MODO TABLERO: N RECORTES SOBRE UN SOLO `todo` ═════════════════
+   *
+   * 🔴 **ACÁ ESTÁ EL AHORRO ENTERO DEL FRENTE, Y ES UNA RESTA.** El Pipeline
+   * pedía esta función cinco veces —una por columna— y cada pedido rearmaba la
+   * tabla temporal de arriba, que es donde vive el costo (2.226 ms medidos en
+   * producción el 19-ago-2026). Ahora la arma una y le pasa cinco recortes.
+   *
+   * Qué se paga después de compartirla:
+   *  · **cinco páginas**, y no hay cómo evitarlo: devuelven filas distintas;
+   *  · **un** desglose, porque no depende de la etapa — es la foto entera del
+   *    embudo, y de ahí sale el conteo de CADA columna (`plegarConteos`);
+   *  · **cero o una** consulta de totales (ver abajo).
+   * De 20 pasadas por refresco a 8, y de 5 `todo` a 1.
+   *
+   * ⚠️ **Sale ANTES del bloque de `offset === 0`, y no es un atajo**: el tablero
+   * no pagina —el 97 % de los pedidos de la cola son `offset=0`, medido— y
+   * `conteosFiltro` son los chips de Mensajes, que el Pipeline no dibuja. Pedirlo
+   * igual sería la pasada más cara de las cuatro por una respuesta que nadie lee.
+   */
+  if (opciones.columnas) {
+    const pedidas = opciones.columnas;
+    const recortes = pedidas.map((c) => recorteDe(c));
+
+    /**
+     * EL DESGLOSE VA PRIMERO PORQUE ES DE DONDE SALEN LOS CONTEOS DE TODAS.
+     * Mismo llamado, mismos argumentos y misma tabla compartida que el de la
+     * cola de siempre: si divergieran, el Pipeline y Mensajes contarían el
+     * mismo embudo con dos definiciones (#37).
+     */
+    const desglose = await desglosarEmbudo(
+      base,
+      filtroCanal,
+      [...condicionesBase, ...soloMias, ...(frontera ? [frontera] : [])],
+      conPadron,
+      conBot,
+      conAsignacion,
+      conCursos,
+      lineas,
+      canal,
+      undefined,
+      true,
+      opciones.modulo,
+    );
+    const conteos = plegarConteos(desglose);
+
+    /**
+     * 🔴 UNA COLUMNA SIN RECORTE **NO CUESTA UNA CONSULTA**: su total ya está en
+     * `conteos`.
+     *
+     * El desglose cuenta por etapa efectiva sobre `base ∧ míos ∧ frontera`, que
+     * es exactamente el universo de la página de una columna cuyo único recorte
+     * es su propia etapa. O sea que en el caso normal —los cinco chips en
+     * «todas», que es como arranca el tablero— la consulta de totales no se
+     * ejecuta ni una vez.
+     *
+     * ⚠️ **La igualdad es una AFIRMACIÓN, no una observación**, y por eso tiene
+     * candado propio: `consultarCola.tablero.test.db.ts` compara el tablero
+     * contra las N llamadas sueltas, con y sin recorte. Si el desglose cambiara
+     * de universo, acá el total de una columna empezaría a mentir en silencio.
+     */
+    const conRecorte = pedidas
+      .map((col, i) => ({ col, i }))
+      .filter(({ col }) => col.precio || col.ventana || col.seguir || col.seCallo);
+    let totalRecortado: Record<string, number> = {};
+    if (conRecorte.length) {
+      /**
+       * Los totales de las columnas recortadas, en UNA pasada. Es la consulta de
+       * `conteosFiltro` con los conjuntos dichos al revés: allá el recorte va en
+       * el `WHERE` y lo demás en el `FILTER`, acá al revés porque el recorte es
+       * lo que cambia entre columnas. El `AND` es conmutativo y el test de
+       * paridad lo fija fila por fila.
+       */
+      const celdas = conRecorte.map(
+        ({ i }) =>
+          sql`count(*) FILTER (WHERE ${yTodas(recortes[i]!)})::int AS ${sql.raw(`c${i}`)}`,
+      );
+      const [fila] = await base.execute<Record<string, number>>(sql`
+        WITH ultimas_gestiones AS (${ultimasGestionesSql}),
+        ventas AS (${ventaPosteriorCteSql}),
+        cats AS (${categoriasCteSql}),
+        padron AS (${padronCteSql(conPadron)})
+        SELECT ${sql.join(celdas, sql`, `)}
+        FROM todo
+        LEFT JOIN ultimas_gestiones USING (clave)
+        ${VENTA_JOIN}
+        ${estadoJoinSql(vendedoraId, conEstado)}
+        LEFT JOIN cats ON cats.clave = todo.clave
+        ${padronJoinSql(conPadron)}
+        ${botJoinSql(conBot)}
+        ${asignadaJoinSql(conAsignacion)}
+        ${cursoRuteoJoinSql(conCursos)}
+        ${donde([...condicionesBase, ...soloMias, ...(frontera ? [frontera] : [])])}
+      `);
+      totalRecortado = (fila ?? {}) as Record<string, number>;
+    }
+
+    /**
+     * ⚠️ **Las páginas van EN SERIE, no con `Promise.all`.** Comparten una sola
+     * conexión —es la transacción que hace posible `todo`— y postgres.js
+     * serializa igual lo que se le mande junto; lanzarlas en paralelo no gana
+     * nada y esconde cuál de las cinco falló.
+     */
+    const columnas: Record<string, ColumnaServida> = {};
+    for (const [i, col] of pedidas.entries()) {
+      const filasCol = await paginaDe(condicionesDe(recortes[i]!), limit, 0);
+      columnas[col.etapa] = {
+        conversaciones: filasCol as unknown[],
+        total: conRecorte.some((r) => r.i === i)
+          ? (totalRecortado[`c${i}`] ?? 0)
+          : (conteos[col.etapa] ?? 0),
+        hayMas: filasCol.length === limit,
+      };
+    }
+
+    return {
+      // Vacía a propósito: en modo tablero la verdad está en `columnas`. Ver el
+      // campo en `ResultadoCola`.
+      conversaciones: [],
+      hayMas: false,
+      columnas,
+      conteos,
+      desglose,
+      ...(frontera ? { colaRecortada: true } : {}),
+      ...(frontera && opciones.conLineaPropia === true ? { conLineaPropia: true } : {}),
+    };
+  }
+
+  const filas = await paginaDe(condiciones, limit, offset);
 
   // El total y los conteos solo en la primera página: recontar en cada scroll
   // no aporta. Con `?etapa=`/tab/categoría el total ES el del recorte — la carga

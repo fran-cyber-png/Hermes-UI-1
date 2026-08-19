@@ -12,8 +12,8 @@
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
 | front | 34 | 476 | 66,342 | 22,567 |
-| server | 68 | 800 | 84,420 | 52,568 |
-| **total** | **102** | **1,276** | **150,762** | **75,135** |
+| server | 68 | 803 | 84,843 | 52,878 |
+| **total** | **102** | **1,279** | **151,185** | **75,445** |
 
 ## Front — `src/`
 
@@ -58,10 +58,10 @@
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
-| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. Capa 3 — nadie la importa: un archivo que otro módulo necesita no es un router y no va acá (fue el caso de `costoPorLead`). | 64 | 11,045 | 12 | 1 | 49 |
+| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. Capa 3 — nadie la importa: un archivo que otro módulo necesita no es un router y no va acá (fue el caso de `costoPorLead`). | 64 | 11,122 | 12 | 1 | 49 |
 | `bot` | El bot de primera línea que atiende solo: su agente, sus guardrails, sus frenos y el reenganche. | 56 | 7,997 | 24 | 7 | 13 |
 | `scripts` | Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción. Capa 3. | 37 | 6,303 | 0 | 0 | 37 |
-| `cola` | La consulta que ordena la deuda: a quién se atiende primero y por qué. Cada regla vive pura y con su gemelo SQL. | 64 | 5,641 | 44 | 9 | 7 |
+| `cola` | La consulta que ordena la deuda: a quién se atiende primero y por qué. Cada regla vive pura y con su gemelo SQL. | 67 | 5,987 | 46 | 9 | 7 |
 | `db` | El schema y la conexión. Capa 0: no conoce ninguna regla de negocio y no puede importar a nadie. | 23 | 4,440 | 2 | 54 | 0 |
 | `whatsapp` | La costura con WhatsApp: la interfaz de transporte y sus implementaciones, el hilo, y la única puerta por la que sale un envío. | 49 | 4,263 | 23 | 13 | 10 |
 | `autorespuesta` | El acuse fuera de horario del lado del server: a quién corresponde, con qué plantilla y a qué ritmo. Nunca manda solo. | 30 | 2,993 | 13 | 7 | 5 |
