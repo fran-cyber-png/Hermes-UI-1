@@ -98,7 +98,11 @@ const NO_ARRASTRABLE = { WebkitAppRegion: 'no-drag' } as CSSProperties;
 const VISTAS = [
   { id: 'dashboard', label: 'Dashboard', icono: LayoutDashboard },
   { id: 'embudo', label: 'Pipeline', icono: Columns3 },
-  { id: 'personas', label: 'Contactos', icono: Users },
+  // 🔴 CONTACTOS ES DE VENTAS, ENTERA: sus dos solapas son el padrón de icarus
+  // (ADR 0035) y el buscador de Cerberus por teléfono. Las dos rutas ya son 403
+  // para campaña (`modulos/modulo.ts`), así que dejarla en el riel sería un
+  // ícono que no abre nada.
+  { id: 'personas', label: 'Contactos', icono: Users, soloPara: noEsDeCampana },
   { id: 'bandeja', label: 'Mensajes', icono: MessagesSquare },
   { id: 'correos', label: 'Correos', icono: Mail, soloPara: noEsDeCampana },
   { id: 'agenda', label: 'Agenda', icono: AlarmClock },
@@ -123,7 +127,7 @@ const VISTAS = [
   // ⚠️ Lo que `soloPara` hace es ESCONDER, no proteger, y ésta es la ÚNICA que se
   // puede dar ese lujo: mientras la vista no pida nada al server no hay
   // diferencia. Las cuatro de arriba sí piden, así que su recorte vive en el
-  // `WHERE` de sus rutas (`numeros/soloEscuela.ts`, ADR 0035/0036) y el
+  // `WHERE` de sus rutas (`modulos/deEsteModulo.ts`, ADR 0035/0036) y el
   // `soloPara` es sólo la mitad que se ve.
   { id: 'routing', label: 'Routing', icono: Route, soloPara: (q: QuienMira) => veRouting(q.id) },
 ] as const;
@@ -904,6 +908,7 @@ export default function App() {
                     <PanelDerecho
                       conversacion={abierta}
                       miVendedora={vendedora.id}
+                      esDeCampana={vendedora.esDeCampana}
                       onMandarCorreo={mandarCorreoA}
                     />
                   </div>
@@ -921,6 +926,7 @@ export default function App() {
                 onBuscarPersona={buscarPersona}
                 onIrAgenda={() => cambiarVista('agenda')}
                 miVendedora={vendedora.id}
+                esDeCampana={vendedora.esDeCampana}
                 onMandarCorreo={mandarCorreoA}
               />
             )}
@@ -933,6 +939,7 @@ export default function App() {
                 // La bandeja de Interesados no se trabaja en el kanban: se responde en Mensajes.
                 onIrAMensajes={() => cambiarVista('bandeja')}
                 miVendedora={vendedora.id}
+                esDeCampana={vendedora.esDeCampana}
                 // La hoja del Pipeline es el MISMO `PanelDerecho` que Mensajes:
                 // sin este cable, «Escribirle» aparecería en una pantalla y no
                 // en la otra sobre la misma ficha.

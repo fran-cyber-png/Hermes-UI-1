@@ -164,12 +164,19 @@ export function VistaDashboard({
   onBuscarPersona,
   onIrAgenda,
   miVendedora,
+  esDeCampana,
   onMandarCorreo,
 }: {
   onAbrir: (c: Conversacion) => void;
   onBuscarPersona: (telefono: string) => void;
   onIrAgenda: () => void;
   miVendedora: string;
+  /**
+   * ¿Quien mira trabaja en el módulo de CAMPAÑAS? Baja hasta `PanelDerecho`,
+   * que apaga con esto las tres consultas que van contra Cerberus (`modulos/
+   * modulo.ts`). Opcional: sin él se comporta como el panel de siempre.
+   */
+  esDeCampana?: boolean;
   /**
    * Puente a Correos (§2.9): prellena el Para.
    *
@@ -1111,6 +1118,7 @@ export function VistaDashboard({
           conversacion={ficha}
           onCerrar={() => setFicha(null)}
           miVendedora={miVendedora}
+          esDeCampana={esDeCampana}
           onMandarCorreo={onMandarCorreo}
         />
       )}

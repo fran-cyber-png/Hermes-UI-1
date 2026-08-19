@@ -111,6 +111,7 @@ export function VistaEmbudo({
   onAgendarBienvenida,
   onIrAMensajes,
   miVendedora,
+  esDeCampana,
   onMandarCorreo,
 }: {
   onAbrir: (c: Conversacion) => void;
@@ -120,6 +121,12 @@ export function VistaEmbudo({
   onIrAMensajes?: () => void;
   /** Quién mira — la `HojaContacto` la necesita para el timeline (ADR 0037). */
   miVendedora?: string | null;
+  /**
+   * ¿Quien mira trabaja en el módulo de CAMPAÑAS? Baja hasta `PanelDerecho`,
+   * que apaga con esto las tres consultas que van contra Cerberus (`modulos/
+   * modulo.ts`). Opcional: sin él se comporta como el panel de siempre.
+   */
+  esDeCampana?: boolean;
   /** Puente a Correos: baja hasta la ficha de la hoja. Sin esto, ahí no hay «Escribirle». */
   onMandarCorreo?: (destino: DestinoCorreo) => void;
 }) {
@@ -719,6 +726,7 @@ export function VistaEmbudo({
           onCerrar={() => setFicha(null)}
           escapeActivo={pendienteInteres == null && ventaPara == null}
           miVendedora={miVendedora}
+          esDeCampana={esDeCampana}
           onMandarCorreo={onMandarCorreo}
         />
       )}

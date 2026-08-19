@@ -34,8 +34,14 @@ import {
  * La línea de tiempo es HISTORIA, no urgencia: neutro, SIN oro.
  */
 
-export function useIntereses(clave: string) {
+/**
+ * ⚠️ **`activo` por default `true`**: los seis llamadores de siempre no cambian.
+ * Lo apaga el panel en el módulo de CAMPAÑAS, donde `/api/gestiones/intereses`
+ * contesta 403 — el catálogo de cursos sale de Cerberus (`modulos/modulo.ts`).
+ */
+export function useIntereses(clave: string, activo = true) {
   return useQuery({
+    enabled: activo,
     queryKey: ['intereses', clave],
     queryFn: () =>
       api<RespuestaIntereses>(`/api/gestiones/intereses?claves=${encodeURIComponent(clave)}`),

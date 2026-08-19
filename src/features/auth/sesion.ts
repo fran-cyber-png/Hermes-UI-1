@@ -40,7 +40,7 @@ export interface Vendedora {
    * y en el atajo de `quienDiceSer` —que arma la vendedora leyendo el token, sin
    * preguntarle nada a nadie—, y en los dos casos el riel completo es el
    * comportamiento de siempre. Que el default sea «no es de campaña» no abre
-   * nada: las cuatro superficies las niega el server (`numeros/soloEscuela.ts`),
+   * nada: las superficies de ventas las niega el server (`modulos/deEsteModulo.ts`),
    * así que lo peor que pasa es ver un ícono que contesta 403.
    */
   esDeCampana?: boolean;

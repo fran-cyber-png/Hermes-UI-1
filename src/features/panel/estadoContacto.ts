@@ -46,6 +46,20 @@ export interface EntradaEstadoContacto {
    * viaja; en cuanto Cerberus contesta —lo que sea que conteste— manda Cerberus.
    */
   padron?: NivelCliente | null;
+  /**
+   * ¿Esta persona trabaja en el módulo de CAMPAÑAS? Ahí Cerberus no existe
+   * —es el ERP de la Escuela— y su ficha ni siquiera se pide.
+   *
+   * 🔴 **Va como rama propia y NO reusando `conTelefono: false`.** Con esa
+   * mentira piadosa el panel diría «la ficha se busca por teléfono, y este
+   * canal no lo trae» al lado de un teléfono perfectamente válido: el mismo
+   * defecto que costó un mes en la ficha de los leads de formulario.
+   *
+   * ⚠️ Y tampoco puede caer en la rama de «no figura»: sin ficha y sin error
+   * ése es el estado que sale, cierto por casualidad y engañoso — nadie
+   * preguntó.
+   */
+  sinCerberus?: boolean;
 }
 
 export interface EstadoContacto {
@@ -62,6 +76,16 @@ export interface EstadoContacto {
 
 export function estadoDelContacto(e: EntradaEstadoContacto): EstadoContacto {
   const base = { compras: null, enfriada: e.enfriada } as const;
+
+  if (e.sinCerberus) {
+    return {
+      ...base,
+      tono: 'otro-canal',
+      acento: 'neutro',
+      titulo: 'Sin ficha',
+      detalle: 'La ficha de Cerberus es del módulo de ventas.',
+    };
+  }
 
   if (!e.conTelefono) {
     return {

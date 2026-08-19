@@ -40,14 +40,20 @@ export interface QuienMira {
 }
 
 /**
- * LAS CUATRO VISTAS QUE UN OPERADOR DE CAMPAÑA NO TIENE — Navegador, Libreta,
- * Correos y Entrenar bot. Decisión del dueño del 18-ago-2026.
+ * LAS CINCO VISTAS QUE UN OPERADOR DE CAMPAÑA NO TIENE — Navegador, Libreta,
+ * Correos, Entrenar bot y **Contactos**. Decisión del dueño del 18-ago-2026,
+ * ampliada el 19-ago (ADR 0063: son dos módulos de CRM, no una excepción).
+ *
+ * ⚠️ **Contactos entró por un motivo distinto al de las otras cuatro**: no es
+ * una herramienta de la Escuela que la campaña no necesite — es que sus DOS
+ * solapas (el padrón de icarus y el buscador de Cerberus por teléfono) leen
+ * datos del negocio educativo. La vista entera es del módulo de ventas.
  *
  * 🔴 **ESTO ESCONDE, NO PROTEGE — y acá esa distinción sí muerde.** Routing se
  * podía dar el lujo de vivir sólo en el riel porque su vista está vacía; estas
- * cuatro tienen datos. Lo que de verdad las niega es `numeros/soloEscuela.ts`,
- * montado sobre `/api/correos`, `/api/notas`, `/api/espacios` y
- * `/api/entrenamiento`. Si alguien saca este `soloPara`, el operador de campaña
+ * cinco tienen datos. Lo que de verdad las niega es `modulos/deEsteModulo.ts`,
+ * montado sobre las dieciséis superficies que `modulos/modulo.ts` declara.
+ * Si alguien saca este `soloPara`, el operador de campaña
  * ve los íconos y come 403; si alguien saca el del server, **la frontera
  * desaparece y la pantalla sigue diciendo que está** — que es la peor de las dos
  * mitades para perder.

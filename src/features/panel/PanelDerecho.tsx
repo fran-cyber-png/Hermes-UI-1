@@ -39,6 +39,7 @@ function formatearTelefono(raw: string): string {
 export function PanelDerecho({
   conversacion,
   miVendedora,
+  esDeCampana = false,
   onMandarCorreo,
 }: {
   conversacion: Conversacion;
@@ -49,6 +50,21 @@ export function PanelDerecho({
    * que es la degradación correcta (nunca al revés).
    */
   miVendedora?: string | null;
+  /**
+   * ¿Quien mira trabaja en el módulo de CAMPAÑAS? (`modulos/modulo.ts`).
+   *
+   * 🔴 **Apaga las consultas, no sólo el dibujo.** Tres de los bloques de este
+   * panel —la ficha de Cerberus, el lead del formulario y los intereses— salen
+   * de rutas que para campaña son **403**: sin esto la pantalla se llenaría de
+   * errores por pedir cosas que el server ya decidió que no le tocan.
+   *
+   * ⚠️ Viaja como PROP y no llamando a `useSesion()` acá: ese hook hace su
+   * propio fetch al montar, y este panel se monta en tres lugares.
+   *
+   * ⚠️ Opcional y `false` por default — la galería lo monta sin sesión, y ahí
+   * lo correcto es el panel de siempre.
+   */
+  esDeCampana?: boolean;
   /**
    * Puente a Correos. Sin esto, «Escribirle» no se dibuja (ver el cableado
    * abajo, donde está el porqué de que eso ya haya costado un mes de feature
@@ -78,10 +94,20 @@ export function PanelDerecho({
   const tieneTelefono = personaEsTelefono(conversacion.canal, conversacion.persona_id);
   const telefono = conversacion.persona_id;
 
-  const ficha = useFicha(telefono, tieneTelefono);
-  const lead = useLeadForm(telefono, tieneTelefono);
+  /**
+   * 🔴 LAS TRES DE CERBERUS SE APAGAN EN CAMPAÑA, y `senales` NO.
+   *
+   * `/api/contactos` y `/api/gestiones/intereses` son superficies de `ventas`
+   * (`modulos/modulo.ts`): pedirlas desde campaña es un 403 garantizado.
+   * `/api/senales` no lo es —«ya le mandaron el precio», «se enfrió» se derivan
+   * del hilo y no tocan Cerberus— así que sigue andando para los dos módulos.
+   * Que la línea esté acá y no en cada hook es a propósito: es UNA decisión.
+   */
+  const conCerberus = !esDeCampana;
+  const ficha = useFicha(telefono, tieneTelefono && conCerberus);
+  const lead = useLeadForm(telefono, tieneTelefono && conCerberus);
   const { data: senales } = useSenales([conversacion.clave]);
-  const { data: intereses } = useIntereses(conversacion.clave);
+  const { data: intereses } = useIntereses(conversacion.clave, conCerberus);
   const { data: delTimeline } = useEventos(conversacion.clave);
   const fichaLocal = useFichaLocal(conversacion.clave);
   const { agenda } = useAgenda();
@@ -106,6 +132,7 @@ export function PanelDerecho({
      */
     enfriada: senales?.senales?.[conversacion.clave]?.enfriamiento?.enfriada ?? false,
     padron: padron?.nivel ?? null,
+    sinCerberus: esDeCampana,
   });
 
   const cliente = fichaDeCliente(ficha.data);
@@ -221,6 +248,7 @@ export function PanelDerecho({
 
               `embebida`: el marco y el encabezado los pone el panel; sin esto
               dibujaría una segunda tarjeta con el nombre repetido. */}
+          {conCerberus && (
           <div className="mt-3 border-t border-border pt-3">
             <h3 className="mb-1.5 text-xs font-semibold text-muted-foreground">Ficha de Cerberus</h3>
             {/* 🔴 EL SEGUNDO PUENTE MUERTO DE ESTE MISMO COMPONENTE, y el
@@ -258,12 +286,18 @@ export function PanelDerecho({
               }
             />
           </div>
+          )}
         </div>
       </div>
       {/* ⚠️ EL `onVender` ES LO QUE FALTABA. Sin él, `PieAccionTimeline` no
           dibuja nada —por diseño: nunca un no-op— y el botón de registrar la
           venta era invisible en TODOS los estados, no solo en algunos. */}
-      <PieAccionTimeline estado={estado} onVender={() => setVendiendo(true)} />
+      {/* ⚠️ En campaña NO se le pasa `onVender`, y con eso el pie no dibuja el
+          botón — es su diseño («nunca un no-op»), así que no hace falta un `if`
+          nuevo. Registrar una venta escribe en el ERP de la Escuela
+          (`/api/venta`, superficie de `ventas`): ahí el botón existiría para
+          contestar 403. */}
+      <PieAccionTimeline estado={estado} onVender={conCerberus ? () => setVendiendo(true) : undefined} />
       {vendiendo && (
         <VentaDesdeElPanel conversacion={conversacion} onCerrar={() => setVendiendo(false)} />
       )}

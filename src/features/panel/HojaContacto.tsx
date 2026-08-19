@@ -50,6 +50,7 @@ export function HojaContacto({
   onCerrar,
   escapeActivo = true,
   miVendedora,
+  esDeCampana,
   onMandarCorreo,
 }: {
   conversacion: Conversacion;
@@ -67,6 +68,12 @@ export function HojaContacto({
    * hacer desde Mensajes y no desde acá.
    */
   miVendedora?: string | null;
+  /**
+   * ¿Quien mira trabaja en el módulo de CAMPAÑAS? Baja hasta `PanelDerecho`,
+   * que apaga con esto las tres consultas que van contra Cerberus (`modulos/
+   * modulo.ts`). Opcional: sin él se comporta como el panel de siempre.
+   */
+  esDeCampana?: boolean;
   /**
    * Puente a Correos, de paso hacia `PanelDerecho`. Va acá y no adentro porque
    * quién sabe cambiar de vista es el shell, no la hoja.
@@ -111,6 +118,7 @@ export function HojaContacto({
         <PanelDerecho
           conversacion={conversacion}
           miVendedora={miVendedora}
+          esDeCampana={esDeCampana}
           onMandarCorreo={onMandarCorreo}
         />
       </div>

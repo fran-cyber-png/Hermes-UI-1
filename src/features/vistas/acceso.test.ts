@@ -56,7 +56,7 @@ describe('las cuatro vistas que un operador de campaña no tiene', () => {
    * ⚠️ El campo es OPCIONAL: falta en un server viejo y en el atajo de
    * `quienDiceSer`, que arma la vendedora leyendo el token sin preguntar nada.
    * En los dos casos el riel completo es lo correcto — negar de verdad es
-   * trabajo del server (`numeros/soloEscuela.ts`), no de este booleano.
+   * trabajo del server (`modulos/deEsteModulo.ts`), no de este booleano.
    */
   it('ausente se lee como «no es de campaña», nunca como «sí»', () => {
     expect(noEsDeCampana({ id: 'luz' })).toBe(true);
@@ -74,9 +74,14 @@ describe('las cuatro vistas que un operador de campaña no tiene', () => {
    * Sacarle el `soloPara` a una no rompe ningún test de componente —el riel
    * renderiza lo que su lista diga— y el síntoma es que un operador de campaña
    * ve un ícono de la Escuela. Su gemelo del server, que es el que de verdad
-   * niega, es `numeros/superficiesDeEscuela.paridad.test.ts`.
+   * niega, es `modulos/superficies.paridad.test.ts`.
+   *
+   * ⚠️ **`personas` se sumó el 19-ago-2026 y NO es una vista más**: sus dos
+   * solapas son el padrón de icarus (ADR 0035) y el buscador de Cerberus por
+   * teléfono, o sea que la vista ENTERA es del módulo de ventas. Las dos rutas
+   * ya contestan 403, así que dejarla en el riel era un ícono que no abre nada.
    */
-  it.each(['correos', 'entrenamiento', 'libreta', 'navegador'])(
+  it.each(['correos', 'entrenamiento', 'libreta', 'navegador', 'personas'])(
     'la vista «%s» está marcada con noEsDeCampana en App.tsx',
     (id) => {
       const renglon = APP.split('\n').find((l) => l.includes(`id: '${id}'`));
@@ -86,7 +91,10 @@ describe('las cuatro vistas que un operador de campaña no tiene', () => {
   );
 
   it('y las que SÍ son de todos no la llevan', () => {
-    for (const id of ['dashboard', 'embudo', 'personas', 'bandeja', 'agenda']) {
+    // Las cuatro del MOTOR: sirven igual a ventas y a campaña (`modulos/modulo.ts`
+    // no las declara, y ese default —«lo que no está declarado es compartido»—
+    // es lo que este test fija del lado del riel).
+    for (const id of ['dashboard', 'embudo', 'bandeja', 'agenda']) {
       const renglon = APP.split('\n').find((l) => l.includes(`id: '${id}'`));
       expect(renglon).toBeDefined();
       expect(renglon).not.toContain('soloPara');
