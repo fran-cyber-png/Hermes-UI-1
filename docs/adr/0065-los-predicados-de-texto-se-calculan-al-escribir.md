@@ -131,7 +131,7 @@ Copia de producción restaurada en local (16.494 `interactions`, 43.833 `events`
    lo de siempre (+7 %).
 2. **El backfill, enseguida** (~1,2 s):
    ```
-   ssh deploy@161.132.39.165 'cd /srv/hermes/server && npx tsx src/scripts/backfillPredicados.ts --aplicar'
+   ssh deploy@161.132.39.165 'cd /srv/hermes/server && npm run predicados:backfill -- --aplicar'
    ```
    Dry-run por default; sin `--aplicar` sólo cuenta.
 3. Verificar **contando filas**, nunca por el color del workflow:

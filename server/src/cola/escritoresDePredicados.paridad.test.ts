@@ -16,8 +16,10 @@ import { fileURLToPath } from "node:url";
  * error sino que la cola sigue costando lo mismo.
  *
  * Por eso el candado no nombra los archivos que hay hoy: busca **cualquiera** que
- * inserte en `interactions` y exige que en el mismo archivo aparezca
- * `predicadosDelTexto`. Un tercer escritor nace con este test rojo.
+ * escriba en `interactions` —por drizzle o por SQL crudo— y exige que en el mismo
+ * archivo se LLAME a `predicadosDelTexto`. Un tercer escritor nace con este test
+ * rojo. ⚠️ Lo que se lee es el archivo **sin comentarios ni cadenas**
+ * (`codigoDe`): una llamada comentada no llena una sola fila.
  *
  * ⚠️ **`pruebas/sembrar.ts` está exceptuado a propósito, y no es comodidad.** Los
  * ~40 `.test.db.ts` del repo siembran con él; dejando las columnas en `NULL`, esa
@@ -35,6 +37,83 @@ const RAIZ = fileURLToPath(new URL("..", import.meta.url));
 /** Los que insertan en `interactions` sin ser escritores de producción. */
 const EXCEPCIONES = ["pruebas/sembrar.ts"];
 
+/**
+ * EL ARCHIVO SIN COMENTARIOS — y esto NO es prolijidad.
+ *
+ * 🔴 Verificado poniéndolo en rojo: con el texto crudo, **COMENTAR la llamada
+ * dejaba este candado en VERDE**, porque la línea comentada sigue conteniendo
+ * `predicadosDelTexto(`. O sea que la forma más natural de desactivar algo
+ * —anteponerle `//` para probar una cosa y olvidarse— era justo la que este test
+ * no veía. Es la misma clase de agujero que su versión anterior tenía con el
+ * `import` suelto, un escalón más adentro.
+ *
+ * ⚠️ **Las CADENAS se CONSERVAN, y descartarlas fue un intento fallido que vale
+ * la pena dejar escrito**: parecía higiene («mencionar la tabla en un texto no es
+ * escribirla»), pero el SQL crudo VIVE adentro de un template — un
+ * `db.execute(sql\`INSERT INTO interactions …\`)` desaparecía entero y el escritor
+ * futuro volvía a esquivar el candado. Se prefiere el falso positivo: a un archivo
+ * que nombra esa escritura en una cadena se le va a exigir la llamada, y eso falla
+ * hacia EXIGIR, que es el lado correcto para un candado.
+ *
+ * El escáner distingue cadena de comentario en vez de recortar desde el primer
+ * `//`, porque `'https://…'` aparece en este árbol y ese recorte se comería el
+ * resto de la línea.
+ */
+function sinComentarios(fuente: string): string {
+  let salida = "";
+  let i = 0;
+  while (i < fuente.length) {
+    const c = fuente[i];
+    const par = fuente.slice(i, i + 2);
+    if (par === "//") {
+      while (i < fuente.length && fuente[i] !== "\n") i++;
+      continue;
+    }
+    if (par === "/*") {
+      i += 2;
+      while (i < fuente.length && fuente.slice(i, i + 2) !== "*/") i++;
+      i += 2;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      // La cadena se copia TAL CUAL: acá adentro puede vivir un INSERT.
+      const cierre = c;
+      salida += c;
+      i++;
+      while (i < fuente.length && fuente[i] !== cierre) {
+        if (fuente[i] === "\\") {
+          salida += fuente.slice(i, i + 2);
+          i += 2;
+          continue;
+        }
+        salida += fuente[i];
+        i++;
+      }
+      salida += cierre;
+      i++;
+      continue;
+    }
+    salida += c;
+    i++;
+  }
+  return salida;
+}
+
+/** El código de un archivo, sin lo que no se ejecuta. */
+function codigoDe(ruta: string): string {
+  return sinComentarios(readFileSync(ruta, "utf8"));
+}
+
+/**
+ * ⚠️ **Las DOS formas de escribir cuentan.** El drizzle (`.insert(interactions)`)
+ * y el SQL crudo — que en este repo no es hipotético: `cola/backfillPredicados.ts`
+ * escribe con `UPDATE interactions` a mano. Un escritor futuro que use
+ * `db.execute(sql\`INSERT INTO interactions …\`)` esquivaba el candado entero.
+ */
+function esEscritor(codigo: string): boolean {
+  return codigo.includes(".insert(interactions)") || /insert\s+into\s+interactions/i.test(codigo);
+}
+
 function fuentes(dir: string, acumulado: string[] = []): string[] {
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
     const ruta = join(dir, entrada.name);
@@ -51,8 +130,8 @@ describe("los escritores de `interactions` llenan los predicados del texto", () 
     assert.ok(archivos.length > 200, `sólo ${archivos.length} fuentes: la raíz está mal`);
   });
 
-  test("cada `.insert(interactions)` de producción corre `predicadosDelTexto`", () => {
-    const escritores = archivos.filter((ruta) => readFileSync(ruta, "utf8").includes(".insert(interactions)"));
+  test("cada escritura en `interactions` de producción corre `predicadosDelTexto`", () => {
+    const escritores = archivos.filter((ruta) => esEscritor(codigoDe(ruta)));
     assert.ok(escritores.length >= 2, "esperaba al menos los dos escritores conocidos");
 
     const relativos = escritores.map((r) => r.slice(RAIZ.length));
@@ -69,10 +148,11 @@ describe("los escritores de `interactions` llenan los predicados del texto", () 
       const relativo = ruta.slice(RAIZ.length);
       if (EXCEPCIONES.includes(relativo)) continue;
       assert.ok(
-        // La LLAMADA, no el import: con `includes("predicadosDelTexto")` a secas,
-        // borrar la línea que la invoca y dejar el import pasaba en verde —
-        // verificado poniéndolo en rojo antes de arreglarlo.
-        readFileSync(ruta, "utf8").includes("predicadosDelTexto("),
+        // La LLAMADA VIVA. Dos escalones, los dos verificados en rojo: con
+        // `includes("predicadosDelTexto")` a secas alcanzaba con dejar el import;
+        // sobre el texto crudo alcanzaba con COMENTAR la llamada. Por eso se mira
+        // el código sin comentarios (`codigoDe`).
+        codigoDe(ruta).includes("predicadosDelTexto("),
         `${relativo} escribe en interactions y no llena los predicados del texto: ` +
           "esas filas van a pagar regex en cada lectura de la cola, sin un solo error",
       );

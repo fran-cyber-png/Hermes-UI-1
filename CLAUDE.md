@@ -2552,7 +2552,7 @@ Ver `server/.env.example` (solo nombres).
   · 🔴 **TOCAR EL REGEX DEJA LAS 16.494 FILAS VIEJAS CON EL PREDICADO VIEJO, SIN ERROR Y SIN LOG.**
     Esos dos archivos dejaron de ser «la regla que corre siempre» y son «la regla que corrió cuando
     se escribió la fila». Si cambiás una palabra:
-    `npx tsx src/scripts/backfillPredicados.ts --aplicar --todo`.
+    `cd server && npm run predicados:backfill -- --aplicar --todo`.
   · 🔴 **HAY DOS ESCRITORES DE `interactions`, no uno**: `meta/proyectarInteraccion.ts` y
     `whatsapp/repositorioDrizzle.ts` — y el segundo es el que escribe el 100 % de lo que la cola
     agrupa. Llenar sólo uno deja el frente **sin efecto y con todos los tests en verde**, porque el
