@@ -101,7 +101,7 @@ del caño, y a un metro son indistinguibles. A dos centímetros, «Chats 57 · s
 **Qué se hace**
 - El server publica `ultimoSalienteAt` en `GET /api/dashboard` (**campo opcional**: N4 y N5 se
   despliegan separados, así que el front lo lee como ausente sin romperse).
-- La lectura vive **pura y aparte**, `src/features/dashboard/frescuraDelCano.ts`, con reloj
+- La lectura vive **pura y aparte**, `features/dashboard/frescuraDelCano.ts` (**a crear**), con reloj
   inyectado: qué se dice y con qué tinta según cuánto hace. Un componente no se puede interrogar
   sobre el umbral.
 - El «en vivo» se subordina: dice el último movimiento **del negocio**, no del caché.
@@ -113,7 +113,7 @@ dice siempre cuánto hace, en tinta neutra abajo de 24 h y en roja por encima. N
 **Cómo se verifica**: test puro del umbral + galería con las dos puntas (caño vivo / caño de tres
 días) y captura.
 
-**Archivos**: `server/src/routes/dashboard.ts` · `src/features/dashboard/frescuraDelCano.ts` ·
+**Archivos**: `server/src/routes/dashboard.ts` · `features/dashboard/frescuraDelCano.ts` (nuevo) ·
 `VistaDashboard.tsx`
 
 ---
@@ -143,7 +143,7 @@ porcentajes: **sin SVG, sin escalas, ~60 líneas**.
 **Cómo se verifica**: tests puros sobre `embudo.ts` (las cinco reglas) + `/galeria-embudo.html`
 con los valores reales y captura.
 
-**Archivos**: `src/components/graficos/Embudo.tsx` · `src/components/graficos/embudo.ts`
+**Archivos**: `components/graficos/Embudo.tsx` · `components/graficos/embudo.ts` (los dos, nuevos)
 
 ---
 

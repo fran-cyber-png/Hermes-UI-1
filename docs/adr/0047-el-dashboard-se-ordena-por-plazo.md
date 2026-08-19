@@ -149,7 +149,9 @@ Lo que un Dashboard sí puede hacer, y hoy ninguno hace, es **mostrarlas**.
 ## Dónde vive
 
 - `src/features/dashboard/` — las tres bandas y el conmutador.
-- `src/components/graficos/Embudo.tsx` + `embudo.ts` — la primitiva y su módulo puro (§2).
+- `components/graficos/` — `Embudo.tsx` + `embudo.ts`, la primitiva y su módulo puro (§2).
+  ⚠️ **A CREAR**: los dos nacen con este frente. Se citan sin el `src/` de adelante porque
+  `docsSinRutasMuertas` (ADR 0057) lee una ruta completa como una afirmación sobre el presente.
 - `src/lib/etapas.ts`, `server/src/cola/etapaEfectivaSql.ts` — el contrato de etapas (§3).
 - `server/src/dashboard/` — los seams; `personal.ts` no se toca.
 - `server/src/cerberus/productos.ts` — los tres campos de la Banda 1 (§1).
