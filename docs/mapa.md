@@ -11,16 +11,16 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 34 | 480 | 66,765 | 22,808 |
+| front | 34 | 481 | 67,088 | 22,808 |
 | server | 68 | 803 | 84,843 | 52,878 |
-| **total** | **102** | **1,283** | **151,608** | **75,686** |
+| **total** | **102** | **1,284** | **151,931** | **75,686** |
 
 ## Front — `src/`
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
-| `notas` | La Libreta: páginas, espacios compartidos, autoguardado y el link público. | 65 | 11,555 | 21 | 5 | 1 |
-| `whatsapp` | La conversación nativa: el hilo, el composer, los adjuntos, las citas y la compresión de video. | 47 | 5,504 | 25 | 9 | 5 |
+| `notas` | La Libreta: páginas, espacios compartidos, autoguardado y el link público. | 66 | 11,765 | 21 | 5 | 2 |
+| `whatsapp` | La conversación nativa: el hilo, el composer, los adjuntos, las citas y la compresión de video. | 47 | 5,565 | 25 | 9 | 5 |
 | `canales` | La cola unificada, y sólo eso: la lista de conversaciones, su fila, la barra de filtros y el panel de contexto. El modelo que dibuja NO vive acá — vive en `dominio/`. | 35 | 4,685 | 8 | 1 | 11 |
 | `panel` | La ficha al costado del chat, en el orden de las preguntas que decide una venta: quién es, qué quiere, qué mandarle, qué hacer. | 27 | 3,599 | 10 | 5 | 10 |
 | `correos` | El correo 1-a-1, auditado. Sin listas ni campañas. | 11 | 3,500 | 5 | 1 | 4 |
@@ -40,7 +40,7 @@
 | `auth` | Entrar y salir: login contra Cerberus, el SSO de Centurión, y el token que el cliente cree antes de preguntar. | 18 | 1,299 | 9 | 3 | 4 |
 | `app` | El armazón: qué vista está abierta, los ⌘N y qué capa se monta encima de la mesa. Compone features; no tiene regla de negocio propia. | 2 | 1,160 | 0 | 0 | 18 |
 | `venta` | Registrar la venta contra Cerberus sin salir del chat. | 6 | 1,135 | 1 | 2 | 6 |
-| `hechos` | Los datos recomendados — la munición de una línea. Tocar uno lo pone en el composer; no envía. | 7 | 1,003 | 2 | 2 | 3 |
+| `hechos` | Los datos recomendados — la munición de una línea. Tocar uno lo pone en el composer; no envía. | 7 | 1,055 | 2 | 3 | 3 |
 | `navegador` | El navegador embebido: qué peldaño de la escalera corre esta máquina y a dónde se puede ir. | 9 | 843 | 3 | 1 | 1 |
 | `bot` | El interruptor del bot de primera línea visto desde la app: en qué modo está, de dónde sale ese modo (la base o el entorno) y cómo apagarlo sin un deploy. | 5 | 724 | 2 | 1 | 1 |
 | `eventos` | Registrar lo que la vendedora ESCUCHÓ, tipado, en el timeline del contacto. | 4 | 687 | 2 | 2 | 1 |
