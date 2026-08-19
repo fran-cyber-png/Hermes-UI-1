@@ -66,7 +66,7 @@ export function SelectorRapido({ consulta, respuestas, indice, onIndice, onElegi
           fondo, `--primary`/`--navy` de texto e ícono): son dos puertas al
           mismo catálogo de `hechos`, y hasta acá una se veía gris y la otra
           azul — el mismo dato con dos apariencias que iban a divergir (#37). */}
-      <div className="flex items-center gap-1.5 border-b border-border bg-secondary/40 px-3 py-1.5 text-[11px] font-semibold text-navy">
+      <div className="flex items-center gap-1.5 border-b border-border bg-secondary/40 px-3 py-1.5 text-[11px] font-semibold text-navy-ink">
         <MessageSquareQuote size={12} className="shrink-0 text-primary" />
         Respuestas rápidas
         <span className="ml-auto font-normal text-muted-foreground">
@@ -109,7 +109,7 @@ export function SelectorRapido({ consulta, respuestas, indice, onIndice, onElegi
               <div className="flex items-baseline gap-2">
                 <span
                   className={
-                    'truncate text-xs font-bold ' + (i === indice ? 'text-navy' : 'text-foreground')
+                    'truncate text-xs font-bold ' + (i === indice ? 'text-navy-ink' : 'text-foreground')
                   }
                 >
                   {h.rotulo}
