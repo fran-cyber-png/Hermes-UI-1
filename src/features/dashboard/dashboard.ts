@@ -158,12 +158,51 @@ export interface DatosDashboard {
   sinSupervisores?: boolean;
 }
 
-export function useDashboard() {
+/**
+ * ══ EL DASHBOARD SE PIDE DONDE SE MIRA, Y LATE DONDE SE MIRA ═══════════════
+ *
+ * 🔴 **Hasta acá vivía en la RAÍZ de la app, o sea en las diez vistas.**
+ * `App.tsx` lo montaba antes de decidir qué se dibuja, así que la consulta más
+ * cara del repo —14 consultas, la CTE del embudo corriendo el 29 % del tiempo
+ * de Postgres— corría cada 30 s toda la jornada, para todas, mirando el chat.
+ * Medido el 18-ago-2026 en producción: **12.751 pedidos en un día con 203
+ * mensajes reales**, o sea 63 corridas por mensaje. El único consumidor fuera
+ * del Dashboard era un lookup roto (ver `ColaUnificada`), así que ese costo no
+ * compraba nada.
+ *
+ * ── POR QUÉ LA LIVENESS ES UN PARÁMETRO Y NO UNA CONSTANTE ───────────────
+ * Es el issue #5: `ColaUnificada` tenía su propio `useQuery` sobre la MISMA
+ * `queryKey` con `staleTime` en vez de `refetchInterval`, y cuál ganaba
+ * dependía de qué componente montó primero. Con dos definiciones eso no se
+ * puede arreglar, solo empatar. Ahora la query se declara UNA vez y quien la
+ * usa dice si además la quiere VIVA — que es lo que de verdad los diferencia:
+ * el radar se mira fijo y se refresca solo; el recibo de una venta y la cifra
+ * del día se leen una vez y se cierran.
+ *
+ * ⚠️ **No colapsar `activa` con `vivo`.** Una pantalla puede querer el dato y
+ * no querer el latido (es el caso de los dos consumidores de afuera); apagar
+ * el latido apagando la query los dejaría sin dato.
+ */
+export function useDashboard({ activa = true, vivo = false }: OpcionesDashboard = {}) {
   return useQuery({
     queryKey: ['dashboard'],
     queryFn: () => api<DatosDashboard>('/api/dashboard'),
-    refetchInterval: 30_000, // red de seguridad; el SSE lo invalida al instante
+    enabled: activa,
+    // Red de seguridad del radar; el SSE lo invalida al instante. `false` y no
+    // un número grande: un intervalo apagado no programa un timer.
+    refetchInterval: vivo ? 30_000 : false,
+    // El mismo número que el latido, así el radar no cambia de comportamiento
+    // en régimen: lo que evita es la ráfaga de re-pedidos al ir y volver de la
+    // vista, que es tráfico sin dato nuevo.
+    staleTime: 30_000,
   });
+}
+
+export interface OpcionesDashboard {
+  /** ¿Se pide? Apagado no consulta y no cachea nada (el default es que sí). */
+  activa?: boolean;
+  /** ¿Se refresca solo cada 30 s? Solo la pantalla que se queda mirándolo. */
+  vivo?: boolean;
 }
 
 // ── País desde el código telefónico (códigos LATAM + los usuales) ──────────

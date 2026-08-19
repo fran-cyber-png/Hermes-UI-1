@@ -10,7 +10,7 @@ import { useSesionWa } from '../whatsapp/conversacionWa';
 import { pendientesQueApuran, useAgenda } from '../agenda/agenda';
 import { useCategorias } from '../gestion/categorias';
 import { GestorCategorias } from '../gestion/GestorCategorias';
-import type { DatosDashboard } from '../dashboard/dashboard';
+import { useDashboard } from '../dashboard/dashboard';
 import {
   KEY_TAB,
   KEY_LINEA,
@@ -56,7 +56,6 @@ export function ColaUnificada({
   seleccionada,
   onSeleccionar,
   conversacionAbierta,
-  etapas,
   miVendedora,
   onIrAgenda,
   inputRef,
@@ -65,8 +64,6 @@ export function ColaUnificada({
   onSeleccionar: (c: Conversacion) => void;
   /** La conversación abierta completa (para la fila pin cuando el filtro la esconde). */
   conversacionAbierta?: Conversacion | null;
-  /** Etapa del embudo por persona (teléfono/id) — chip en cada fila si llega. */
-  etapas?: Record<string, string>;
   /** Username de la vendedora, para el «Respondiste a {n} personas hoy». */
   miVendedora?: string;
   /** Siguiente jugada del vacío despachado cuando no hay pide-info pendiente. */
@@ -186,12 +183,12 @@ export function ColaUnificada({
   const sinFiltros = tab === 'todo' && !filtroSec && !categoriaActiva;
   const despachada = !cargando && visibles.length === 0 && !busqueda && sinFiltros && frescura?.fresca === true;
 
-  const statsDia = useQuery({
-    queryKey: ['dashboard'],
-    queryFn: () => api<DatosDashboard>('/api/dashboard'),
-    enabled: despachada && miVendedora != null,
-    staleTime: 30_000,
-  });
+  // La cifra del día sale del MISMO hook que el radar (issue #5): acá vivía un
+  // `useQuery` a mano sobre la misma `queryKey` con `staleTime` donde el hook
+  // usaba `refetchInterval`, y cuál ganaba dependía de qué componente montó
+  // primero. Se pide sin latido y solo con la cola despachada: es una cifra que
+  // se lee una vez, no un radar.
+  const statsDia = useDashboard({ activa: despachada && miVendedora != null });
   const nHoy = miVendedora
     ? statsDia.data?.porVendedora.find((v) => v.vendedora === miVendedora)?.conversaciones_hoy
     : undefined;
@@ -757,7 +754,7 @@ export function ColaUnificada({
                 c={c}
                 seleccionada={seleccionada === c.clave}
                 onAbrir={onSeleccionar}
-                etapa={etapas?.[c.persona_id ?? '']}
+                etapa={c.etapa_manual}
                 mostrarPregunto={filtroSec !== 'pregunto-precio'}
                 catalogoCategorias={catalogo}
                 miVendedora={miVendedora}

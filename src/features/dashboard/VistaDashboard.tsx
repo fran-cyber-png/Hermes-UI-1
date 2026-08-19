@@ -201,7 +201,11 @@ export function VistaDashboard({
 
   // Renombrados como en la cola (`conversaciones.ts`): el vocabulario de
   // react-query no cruza hacia las vistas.
-  const { data, isPending, dataUpdatedAt: traidoEn, isFetching: actualizando } = useDashboard();
+  // `vivo`: ÉSTA es la pantalla que se queda mirando el radar, así que es la
+  // única que lo refresca sola. Las otras dos consumidoras lo leen y se cierran.
+  const { data, isPending, dataUpdatedAt: traidoEn, isFetching: actualizando } = useDashboard({
+    vivo: true,
+  });
   // Al abrir la app el radar viene del caché persistido. Mientras eso sea lo que
   // se ve, «en vivo» sería mentira: el sello dice de cuándo es hasta que llega
   // lo fresco (ver `lib/datos/persistencia.ts`).

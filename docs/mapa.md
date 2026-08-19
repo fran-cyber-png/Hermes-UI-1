@@ -11,9 +11,9 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 34 | 467 | 65,772 | 21,413 |
+| front | 34 | 469 | 65,809 | 21,621 |
 | server | 68 | 798 | 84,133 | 52,360 |
-| **total** | **102** | **1,265** | **149,905** | **73,773** |
+| **total** | **102** | **1,267** | **149,942** | **73,981** |
 
 ## Front — `src/`
 
@@ -21,13 +21,13 @@
 |---|---|--:|--:|--:|--:|--:|
 | `notas` | La Libreta: páginas, espacios compartidos, autoguardado y el link público. | 65 | 11,555 | 21 | 5 | 1 |
 | `whatsapp` | La conversación nativa: el hilo, el composer, los adjuntos, las citas y la compresión de video. | 44 | 5,246 | 23 | 9 | 5 |
-| `canales` | La cola unificada, y sólo eso: la lista de conversaciones, su fila, la barra de filtros y el panel de contexto. El modelo que dibuja NO vive acá — vive en `dominio/`. | 32 | 4,589 | 6 | 1 | 11 |
+| `canales` | La cola unificada, y sólo eso: la lista de conversaciones, su fila, la barra de filtros y el panel de contexto. El modelo que dibuja NO vive acá — vive en `dominio/`. | 33 | 4,586 | 7 | 1 | 11 |
 | `panel` | La ficha al costado del chat, en el orden de las preguntas que decide una venta: quién es, qué quiere, qué mandarle, qué hacer. | 27 | 3,574 | 10 | 5 | 9 |
 | `correos` | El correo 1-a-1, auditado. Sin listas ni campañas. | 11 | 3,500 | 5 | 1 | 4 |
 | `agenda` | Los seguimientos que una vendedora se agendó: cuándo vuelve a tocar a quién. | 29 | 3,114 | 5 | 5 | 4 |
 | `vistas` | El Pipeline: el tablero por etapas, sus tarjetas y las compuertas para mover una. | 15 | 3,033 | 6 | 1 | 10 |
+| `dashboard` | Los números en pantalla: el radar, el embudo y qué recorte ve quien mira. | 9 | 2,520 | 3 | 3 | 7 |
 | `routing` | Qué campaña de Meta le cae a qué vendedora. | 10 | 2,511 | 4 | 1 | 1 |
-| `dashboard` | Los números en pantalla: el radar, el embudo y qué recorte ve quien mira. | 8 | 2,477 | 2 | 3 | 7 |
 | `gestion` | Lo que la vendedora asienta sobre una conversación: etapa, categorías, intereses y sus herramientas. | 12 | 2,258 | 2 | 5 | 9 |
 | `lib` | Lo que no sabe de negocio: el cliente HTTP con su caché en IndexedDB, el SSE, el teclado, formato y notificaciones. Capa 0 — no puede importar ninguna feature. | 49 | 2,232 | 16 | 31 | 0 |
 | `campana` | Armar y mirar una campaña por plantilla aprobada de Meta: listas, corridas e historial. | 11 | 2,100 | 1 | 1 | 2 |
@@ -39,7 +39,7 @@
 | `ivi` | La consulta al cerebro RAG y cómo se presenta lo que contesta: los tres tipos y los ocho errores. | 10 | 1,395 | 4 | 1 | 1 |
 | `auth` | Entrar y salir: login contra Cerberus, el SSO de Centurión, y el token que el cliente cree antes de preguntar. | 18 | 1,300 | 9 | 3 | 4 |
 | `venta` | Registrar la venta contra Cerberus sin salir del chat. | 6 | 1,135 | 1 | 2 | 6 |
-| `app` | El armazón: qué vista está abierta, los ⌘N y qué capa se monta encima de la mesa. Compone features; no tiene regla de negocio propia. | 2 | 1,084 | 0 | 0 | 18 |
+| `app` | El armazón: qué vista está abierta, los ⌘N y qué capa se monta encima de la mesa. Compone features; no tiene regla de negocio propia. | 2 | 1,081 | 0 | 0 | 18 |
 | `hechos` | Los datos recomendados — la munición de una línea. Tocar uno lo pone en el composer; no envía. | 7 | 1,003 | 2 | 2 | 3 |
 | `navegador` | El navegador embebido: qué peldaño de la escalera corre esta máquina y a dónde se puede ir. | 9 | 843 | 3 | 1 | 1 |
 | `bot` | El interruptor del bot de primera línea visto desde la app: en qué modo está, de dónde sale ese modo (la base o el entorno) y cómo apagarlo sin un deploy. | 5 | 724 | 2 | 1 | 1 |

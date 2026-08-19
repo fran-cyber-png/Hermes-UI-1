@@ -51,7 +51,6 @@ import { useSesion } from './features/auth/sesion';
 import { AvisoCerberus } from './features/auth/AvisoCerberus';
 import { PanelUsuario } from './features/auth/PanelUsuario';
 import { useSesionWa } from './features/whatsapp/conversacionWa';
-import { useDashboard } from './features/dashboard/dashboard';
 import { useTiempoReal } from './lib/datos/tiempoReal';
 import { SELECTOR_CAMPOS } from './lib/teclado/escapeDePopover';
 import type { DestinoCorreo, Puente } from './lib/puente';
@@ -398,7 +397,6 @@ export default function App() {
   const [puente, setPuente] = useState<Puente | null>(null);
   const busquedaRef = useRef<HTMLInputElement>(null);
   const { data: sesionWa } = useSesionWa();
-  const { data: dash } = useDashboard();
 
   // Objeto estable: la Agenda re-dispararía su efecto si la identidad cambiara por render.
   const crearInicialAgenda = useMemo(
@@ -819,7 +817,6 @@ export default function App() {
                 seleccionada={abierta?.clave ?? null}
                 onSeleccionar={setAbierta}
                 conversacionAbierta={abierta}
-                etapas={dash?.etapas}
                 miVendedora={vendedora.id}
                 onIrAgenda={() => cambiarVista('agenda')}
                 inputRef={busquedaRef}
