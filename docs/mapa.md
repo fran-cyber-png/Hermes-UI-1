@@ -11,9 +11,9 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 33 | 422 | 56,882 | 18,691 |
-| server | 66 | 774 | 80,867 | 49,680 |
-| **total** | **99** | **1,196** | **137,749** | **68,371** |
+| front | 33 | 424 | 57,206 | 18,935 |
+| server | 66 | 777 | 81,200 | 50,069 |
+| **total** | **99** | **1,201** | **138,406** | **69,004** |
 
 ## Front — `src/`
 
@@ -28,10 +28,10 @@
 | `routing` | Qué campaña de Meta le cae a qué vendedora. | 10 | 2,511 | 4 | 1 | 1 |
 | `dashboard` | Los números en pantalla: el radar, el embudo y qué recorte ve quien mira. | 8 | 2,469 | 2 | 3 | 7 |
 | `lib` | Lo que no sabe de negocio: el cliente HTTP con su caché en IndexedDB, el SSE, el teclado, formato y notificaciones. Capa 0 — no puede importar ninguna feature. | 48 | 2,128 | 16 | 30 | 0 |
+| `campana` | Armar y mirar una campaña por plantilla aprobada de Meta: listas, corridas e historial. | 11 | 2,100 | 1 | 1 | 2 |
 | `gestion` | Lo que la vendedora asienta sobre una conversación: etapa, categorías, intereses y sus herramientas. | 11 | 1,994 | 2 | 5 | 8 |
 | `padron` | Los contactos que nunca escribieron: filtrarlos por facetas y repartirlos. | 8 | 1,878 | 2 | 2 | 4 |
 | `dominio` | El vocabulario del CRM que más de una vista necesita: qué ES una conversación, las queries que la traen, y las derivaciones puras sobre ella — canal, curso, ventana, antigüedad, cliente, dueño, líneas, la paleta de categorías y el desglose del embudo. Capa 1: importa `lib` y nada más. 🔴 Nació sacando esto de adentro de `features/canales`, donde 58 de los 148 imports cruzados del front entraban a una feature para pedirle el modelo. | 23 | 1,778 | 10 | 20 | 1 |
-| `campana` | Armar y mirar una campaña por plantilla aprobada de Meta: listas, corridas e historial. | 9 | 1,776 | 0 | 1 | 2 |
 | `autorespuesta` | El acuse fuera de horario visto desde la app: el interruptor, la cola de revisión y el modo supervisado. | 13 | 1,711 | 4 | 2 | 3 |
 | `entrenamiento` | Entrenar el bot: sus corridas, sus lecciones y los agujeros que deja. | 9 | 1,604 | 2 | 1 | 2 |
 | `plantillas` | Las secuencias de venta: editarlas, aprobar una propuesta y mandarlas paso a paso. | 7 | 1,429 | 1 | 2 | 2 |
@@ -57,14 +57,14 @@
 
 | Módulo | De qué es responsable | Arch. | Líneas | Tests | Lo usan | Usa |
 |---|---|--:|--:|--:|--:|--:|
-| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. Capa 3 — nadie la importa: un archivo que otro módulo necesita no es un router y no va acá (fue el caso de `costoPorLead`). | 62 | 10,353 | 12 | 1 | 48 |
+| `routes` | La capa HTTP: valida con Zod, llama a un seam del dominio y serializa. No escribe SQL. Capa 3 — nadie la importa: un archivo que otro módulo necesita no es un router y no va acá (fue el caso de `costoPorLead`). | 62 | 10,402 | 12 | 1 | 48 |
 | `bot` | El bot de primera línea que atiende solo: su agente, sus guardrails, sus frenos y el reenganche. | 56 | 7,997 | 24 | 7 | 13 |
 | `scripts` | Los comandos de operación, dry-run por default. Ninguno es parte del proceso que corre en producción. Capa 3. | 36 | 6,105 | 0 | 0 | 36 |
 | `cola` | La consulta que ordena la deuda: a quién se atiende primero y por qué. Cada regla vive pura y con su gemelo SQL. | 57 | 4,894 | 38 | 9 | 6 |
 | `whatsapp` | La costura con WhatsApp: la interfaz de transporte y sus implementaciones, el hilo, y la única puerta por la que sale un envío. | 49 | 4,263 | 23 | 13 | 10 |
 | `db` | El schema y la conexión. Capa 0: no conoce ninguna regla de negocio y no puede importar a nadie. | 20 | 3,862 | 1 | 53 | 0 |
 | `autorespuesta` | El acuse fuera de horario del lado del server: a quién corresponde, con qué plantilla y a qué ritmo. Nunca manda solo. | 30 | 2,993 | 13 | 7 | 5 |
-| `campana` | Mandar una campaña por plantilla aprobada de Meta: el público, los vetos, el ritmo y los reintentos. | 24 | 2,623 | 10 | 3 | 5 |
+| `campana` | Mandar una campaña por plantilla aprobada de Meta: el público, los vetos, el ritmo y los reintentos. | 27 | 2,907 | 12 | 3 | 6 |
 | `correos` | El correo 1-a-1 y su rastro. Sin listas ni campañas. | 24 | 1,684 | 15 | 2 | 2 |
 | `routing` | Qué campaña de Meta le cae a qué vendedora, y resolver el anuncio contra la Graph API. | 13 | 1,587 | 6 | 3 | 6 |
 | `dashboard` | Los números: radar, embudo, series, y el recorte según quién los pide. Es una frontera. | 19 | 1,551 | 10 | 3 | 8 |
@@ -82,7 +82,7 @@
 | `canales` | 🪦 Heredado de meta-escuela — las consultas de salud y tesorería del dashboard de pauta. ⚠️ No confundir con `front/canales`, que es la cola y sí se usa. | 6 | 1,021 | 0 | 2 | 4 |
 | `atribucion` | Que una venta encuentre su conversación: la llave determinista y la cascada etiquetada de respaldo. | 10 | 996 | 4 | 4 | 5 |
 | `meta` | Traer de Meta lo que pasó —interacciones, leads, anuncios— por los dos caminos (polling y webhook), que escriben igual. | 8 | 843 | 2 | 5 | 1 |
-| `resultados` | Qué pasó DESPUÉS de mandar una pieza. Deriva el veredicto; los nombres no prometen causa. | 9 | 840 | 4 | 2 | 5 |
+| `resultados` | Qué pasó DESPUÉS de mandar una pieza. Deriva el veredicto; los nombres no prometen causa. | 9 | 840 | 4 | 3 | 5 |
 | `notas` | Las páginas de la Libreta y su texto plano. | 8 | 780 | 5 | 1 | 2 |
 | `equipo` | Quién es quién: los tres roles, de dónde sale el de quien pide, y con qué degrada cuando la tabla no está o la base no contesta. | 12 | 772 | 6 | 5 | 5 |
 | `lazo` | 🪦 Heredado de meta-escuela — el outbox que le contaría las conversiones a Meta por CAPI. Apagado (`LAZO_RELOJ`). | 7 | 747 | 2 | 6 | 3 |
@@ -165,7 +165,7 @@ Siguen contando en `Líneas`: no son tests, son código del módulo.
 - **2 módulos**: `front/cerberus` ↔ `front/identidad`
 - **3 módulos**: `front/dashboard` ↔ `front/panel` ↔ `front/venta`
 - **2 módulos**: `server/analisis` ↔ `server/decisions`
-- **25 módulos**: `server/atribucion` ↔ `server/auth` ↔ `server/autorespuesta` ↔ `server/bot` ↔ `server/campana` ↔ `server/catalogo` ↔ `server/centurion` ↔ `server/cerberus` ↔ `server/clientes` ↔ `server/cola` ↔ `server/cursos` ↔ `server/dashboard` ↔ `server/equipo` ↔ `server/gente` ↔ `server/gestiones` ↔ `server/hechos` ↔ `server/numeros` ↔ `server/padron` ↔ `server/plantillas` ↔ `server/procedencia` ↔ `server/reacciones` ↔ `server/reparto` ↔ `server/routing` ↔ `server/sugerencias` ↔ `server/whatsapp`
+- **26 módulos**: `server/atribucion` ↔ `server/auth` ↔ `server/autorespuesta` ↔ `server/bot` ↔ `server/campana` ↔ `server/catalogo` ↔ `server/centurion` ↔ `server/cerberus` ↔ `server/clientes` ↔ `server/cola` ↔ `server/cursos` ↔ `server/dashboard` ↔ `server/equipo` ↔ `server/gente` ↔ `server/gestiones` ↔ `server/hechos` ↔ `server/numeros` ↔ `server/padron` ↔ `server/plantillas` ↔ `server/procedencia` ↔ `server/reacciones` ↔ `server/reparto` ↔ `server/resultados` ↔ `server/routing` ↔ `server/sugerencias` ↔ `server/whatsapp`
 - **2 módulos**: `server/lazo` ↔ `server/ontologia`
 
 ## Módulos que no importan a nadie y nadie importa

@@ -132,12 +132,12 @@ campanaRouter.get("/plantillas", ruta(async (req, res) => {
  * llevan a decisiones opuestas —una invita a mandar la campaña de nuevo—. Por
  * eso esto contesta 502 con su motivo, y la pantalla no dibuja nada.
  */
-campanaRouter.get("/plantillas/envios", async (req, res) => {
-  if (!esSupervisor(req.vendedoraId ?? "", process.env)) {
+campanaRouter.get("/plantillas/envios", ruta(async (req, res) => {
+  if (!mandaEnElEquipo(req)) {
     res.status(403).json({
       ok: false,
       motivo: "no_es_supervisor",
-      sinSupervisores: supervisoresConfigurados(process.env).length === 0,
+      sinSupervisores: !(await hayQuienMande(db, process.env)),
       message: "las campañas las arma un supervisor",
     });
     return;
@@ -162,7 +162,7 @@ campanaRouter.get("/plantillas/envios", async (req, res) => {
       message: "No se pudieron contar los envíos de las plantillas.",
     });
   }
-});
+}));
 
 /**
  * CÓMO VAN LAS CAMPAÑAS — lo que la pantalla dibuja.
