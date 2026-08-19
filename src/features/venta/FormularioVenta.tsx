@@ -14,6 +14,7 @@ import {
   useProductos,
   type Opcion,
   type ProductoCurso,
+  type ProductoElegido,
 } from './useVenta';
 import { repartirEnCuotas } from './cuotas';
 import { VentaSinCerberus } from '../auth/AvisoCerberus';
@@ -74,6 +75,14 @@ interface Props {
   paisNombre?: string | null;
   /** La siguiente jugada del recibo: agendar la bienvenida (cae en la Agenda vía puente). Sin esto, el botón no se muestra. */
   onAgendarBienvenida?: (telefono: string | null) => void;
+  /**
+   * Lo que ya se eligió en el «Carrito» de la ficha (`panel/CarritoDeseado`),
+   * si eligió algo — arranca el carrito de acá con esos productos ya puestos,
+   * al precio de promoción (editable, como cualquier línea). Solo importa al
+   * MONTAR: no hay `useEffect` que la vuelva a aplicar si cambia después,
+   * porque eso pisaría lo que la vendedora ya esté editando acá.
+   */
+  lineasIniciales?: ProductoElegido[];
 }
 
 interface Linea {
@@ -97,7 +106,7 @@ interface Recibo {
   embudo: Record<string, number> | null;
 }
 
-export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, clave, personaNombre, numeroPropio, paisNombre, onAgendarBienvenida, onCerrar }: Props) {
+export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, clave, personaNombre, numeroPropio, paisNombre, onAgendarBienvenida, onCerrar, lineasIniciales }: Props) {
   const { data: form, isPending: cargandoForm } = useFormularioVenta(true);
   const crear = useCrearVenta();
   const { data: dash } = useDashboard();
@@ -130,7 +139,13 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
    * nada. La vendedora lo tilda a mano si el caso lo amerita.
    */
   const [preventa, setPreventa] = useState(false);
-  const [lineas, setLineas] = useState<Linea[]>([]);
+  const [lineas, setLineas] = useState<Linea[]>(() =>
+    (lineasIniciales ?? []).map((l) => ({
+      producto: l.producto,
+      cantidad: l.cantidad,
+      precio: String(l.producto.precioPromocion),
+    })),
+  );
   /**
    * EL CRONOGRAMA — arranca en UNA cuota que vence hoy.
    *

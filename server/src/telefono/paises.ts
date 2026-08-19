@@ -184,7 +184,7 @@ export function variantesLocales(crudo: string | null | undefined): string[] {
  * El número tal como lo identifica la persona: sin código de país y sin el
  * dígito heredado. `null` si no se deja leer como E.164 conocido.
  */
-function nucleo(digitos: string): { codigoPais: string; local: string } | null {
+export function nucleo(digitos: string): { codigoPais: string; local: string } | null {
   const partido = partirE164(digitos);
   if (!partido) return null;
   const { pais, local } = partido;

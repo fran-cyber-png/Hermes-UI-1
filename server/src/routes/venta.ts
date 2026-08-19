@@ -9,6 +9,12 @@ import {
   type CuotaVenta,
   type OrdenVenta,
 } from '../cerberus/venta.js';
+import {
+  cargarFormularioCliente,
+  crearCliente,
+  motivoParaNoCrearCliente,
+  type DatosCliente,
+} from '../cerberus/crearCliente.js';
 import { buscarProductos } from '../cerberus/productos.js';
 import { aLatin1 } from '../cerberus/latin1.js';
 import { porQueFallo } from '../lib/porQueFallo.js';
@@ -151,4 +157,66 @@ ventaRouter.post('/crear', requiereVendedora, ruta(async (req, res) => {
   }
 
   res.json({ ok: true, folio: r.folio, mensaje: r.mensaje });
+}));
+
+/**
+ * El formulario de alta de cliente: países, los choices estáticos de
+ * teléfono/correo, y lo que ADIVINAMOS por el prefijo del número de esta
+ * conversación — la vendedora lo puede cambiar, nunca es un hecho. Mismo
+ * criterio que `/formulario`: un 409 si la sesión murió, nunca una lista
+ * vacía disfrazada de «no hay países».
+ */
+ventaRouter.get('/cliente/formulario', requiereVendedora, ruta(async (req, res) => {
+  const telefono = typeof req.query.telefono === 'string' ? req.query.telefono : '';
+  try {
+    const f = await cargarFormularioCliente(req.vendedoraId!, telefono);
+    if (!f) {
+      res.status(409).json({ ok: false, message: 'La sesión de Cerberus expiró — volvé a entrar a Hermes.' });
+      return;
+    }
+    res.json(f);
+  } catch (err) {
+    console.error(`GET /api/venta/cliente/formulario falló — ${porQueFallo(err)}`);
+    res.status(502).json({ ok: false, message: 'Cerberus no respondió el formulario.' });
+  }
+}));
+
+/**
+ * Crea el cliente en Cerberus. Nombre + apellido + país + teléfono son lo
+ * único que exige `ClienteForm`/`TelefonoForm`; fecha de nacimiento, DNI,
+ * tratamiento, ocupación y correo son opcionales y quedan tal como los llenó
+ * la vendedora (vacíos, si no los tocó).
+ */
+ventaRouter.post('/cliente', requiereVendedora, ruta(async (req, res) => {
+  const b = req.body ?? {};
+  const correo =
+    b.correo && (String(b.correo.tipo ?? '').trim() || String(b.correo.valor ?? '').trim())
+      ? { tipo: String(b.correo.tipo ?? ''), valor: String(b.correo.valor ?? '') }
+      : undefined;
+  const datos: DatosCliente = {
+    nombre: String(b.nombre ?? ''),
+    apellido: String(b.apellido ?? ''),
+    paisId: String(b.paisId ?? ''),
+    fechaNacimiento: b.fechaNacimiento ? String(b.fechaNacimiento) : undefined,
+    dni: b.dni ? String(b.dni) : undefined,
+    tratamiento: b.tratamiento ? String(b.tratamiento) : undefined,
+    ocupacion: b.ocupacion ? String(b.ocupacion) : undefined,
+    telefonoTipo: String(b.telefonoTipo ?? ''),
+    telefonoPrefijo: String(b.telefonoPrefijo ?? ''),
+    telefonoNumero: String(b.telefonoNumero ?? '').replace(/\D/g, ''),
+    correo,
+  };
+
+  const motivo = motivoParaNoCrearCliente(datos);
+  if (motivo) {
+    res.status(400).json({ ok: false, message: motivo });
+    return;
+  }
+
+  const r = await crearCliente(req.vendedoraId!, datos);
+  if (!r.ok) {
+    res.status(409).json({ ok: false, message: r.motivo });
+    return;
+  }
+  res.json({ ok: true, clienteId: r.clienteId });
 }));

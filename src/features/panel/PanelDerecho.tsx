@@ -21,6 +21,8 @@ import { PieAccionTimeline } from './PieAccionTimeline';
 import { ZonaPendientes } from './ZonaPendientes';
 import { FichaContacto } from '../cerberus/FichaContacto';
 import { VentaDesdeElPanel } from '../venta/VentaDesdeElPanel';
+import { CarritoDeseado } from './CarritoDeseado';
+import type { ProductoElegido } from '../venta/useVenta';
 import { origenDeLead } from '../cerberus/leadForm';
 import { personaEsTelefono } from '../../dominio/canal';
 import type { DestinoCorreo } from '../../lib/puente';
@@ -82,6 +84,27 @@ export function PanelDerecho({
    * presentación: decide cómo se ve el botón, no qué pasa al tocarlo.
    */
   const [vendiendo, setVendiendo] = useState(false);
+  /**
+   * El carrito de la ficha (`CarritoDeseado`): qué quiere llevarse el cliente,
+   * armado ANTES de registrar la venta. Vive acá y no en `CarritoDeseado`
+   * porque `VentaDesdeElPanel`/`FormularioVenta` lo necesitan como carga
+   * inicial — el mismo motivo por el que `vendiendo` vive acá y no en el pie.
+   *
+   * 🔴 **UNO POR CONVERSACIÓN, no uno solo** — y es a propósito: `PanelDerecho`
+   * NO SE REMONTA al cambiar de conversación (sigue siendo el mismo
+   * componente, solo cambia la prop `conversacion`), así que un único
+   * `useState` habría mostrado el carrito de UN contacto en la ficha de
+   * cualquier otro. Se guarda por `clave` —la identidad real de una
+   * conversación, no por `persona_id`: dos números propios pueden
+   * compartirlo— y cada conversación mantiene el suyo: entrar, salir y volver
+   * no lo pierde. Sigue siendo de la SESIÓN nada más (decisión del 19-ago): se
+   * pierde si se cierra Hermes, igual que el carrito de `FormularioVenta` hoy.
+   */
+  const [carritosPorConversacion, setCarritosPorConversacion] = useState<Record<string, ProductoElegido[]>>({});
+  const carrito = carritosPorConversacion[conversacion.clave] ?? [];
+  function setCarrito(productos: ProductoElegido[]) {
+    setCarritosPorConversacion((prev) => ({ ...prev, [conversacion.clave]: productos }));
+  }
   /**
    * 🔴 ACÁ LA PREGUNTA ES «¿HAY TELÉFONO?», NO «¿ES WHATSAPP?» — y se llamaba
    * `esWa`, que es lo que rompió la ficha de los leads de formulario.
@@ -305,6 +328,14 @@ export function PanelDerecho({
                   : undefined
               }
             />
+            {/* ══ EL CARRITO DE LA FICHA ════════════════════════════════════
+                Solo cuando YA es cliente en Cerberus (`cliente` truthy):
+                pedir «qué va a comprar» antes de que la venta pueda existir
+                sería la misma trampa que el alta de cliente vino a resolver —
+                acá el orden real es al revés (primero está creado, después
+                arma qué se lleva). Va DENTRO del mismo bloque con borde para
+                leerse como una unidad con la ficha, no como algo suelto. */}
+            {cliente && <CarritoDeseado productos={carrito} onCambiar={setCarrito} />}
           </div>
           )}
         </div>
@@ -319,7 +350,11 @@ export function PanelDerecho({
           contestar 403. */}
       <PieAccionTimeline estado={estado} onVender={conCerberus ? () => setVendiendo(true) : undefined} />
       {vendiendo && (
-        <VentaDesdeElPanel conversacion={conversacion} onCerrar={() => setVendiendo(false)} />
+        <VentaDesdeElPanel
+          conversacion={conversacion}
+          onCerrar={() => setVendiendo(false)}
+          carritoInicial={carrito}
+        />
       )}
     </div>
   );

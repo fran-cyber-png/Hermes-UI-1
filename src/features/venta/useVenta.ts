@@ -41,6 +41,18 @@ export interface ProductoCurso {
   moneda: string;
 }
 
+/**
+ * UN PRODUCTO ELEGIDO, SIN PRECIO — lo que la vendedora arma en el «Carrito»
+ * del panel de la ficha (`panel/CarritoDeseado.tsx`), antes de llegar al
+ * formulario de venta. El precio no viaja acá a propósito: se define recién
+ * en `FormularioVenta` (parte del catálogo, y ahí es donde se negocia un
+ * descuento) — acá es solo «qué se quiere llevar y cuántos».
+ */
+export interface ProductoElegido {
+  producto: ProductoCurso;
+  cantidad: number;
+}
+
 /** Las opciones del formulario (monedas, países, medios, orígenes). */
 export function useFormularioVenta(activo: boolean) {
   return useQuery({
@@ -87,6 +99,69 @@ export interface ItemVenta {
   cantidad: number;
   precioRegular: number;
   precioVenta: number;
+}
+
+export interface SugerenciaTelefono {
+  /** `null` cuando el código es ambiguo (`+1`: EE. UU./Canadá/Rep. Dominicana) — solo el número se sugiere. */
+  prefijo: string | null;
+  numero: string;
+}
+
+export interface FormularioCliente {
+  paises: Opcion[];
+  prefijosTelefono: Opcion[];
+  tiposTelefono: Opcion[];
+  tiposCorreo: Opcion[];
+  paisIdSugerido: string | null;
+  telefonoSugerido: SugerenciaTelefono | null;
+}
+
+/**
+ * El formulario de alta de cliente: países, los choices de teléfono/correo
+ * (estáticos del lado de Cerberus, `crearCliente.ts`), y lo que Hermes
+ * ADIVINÓ por el prefijo del teléfono de esta conversación — la vendedora lo
+ * puede cambiar, nunca es un hecho. `enabled` solo con teléfono: sin él no
+ * hay qué adivinar.
+ */
+export function usePaisesCliente(telefono: string, activo: boolean) {
+  return useQuery({
+    queryKey: ['venta', 'cliente', 'formulario', telefono],
+    queryFn: () => api<FormularioCliente>(`/api/venta/cliente/formulario?telefono=${encodeURIComponent(telefono)}`),
+    enabled: activo && Boolean(telefono),
+    staleTime: 10 * 60_000, // los países y los choices no cambian seguido
+  });
+}
+
+export interface CorreoCliente {
+  tipo: string;
+  valor: string;
+}
+
+/**
+ * Crea el cliente en Cerberus. Al terminar invalida la ficha: es lo que hace
+ * que `VentaDesdeElPanel` pase sola de «creálo» al formulario de venta, sin
+ * que nadie tenga que refrescar nada a mano.
+ */
+export function useCrearCliente() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: {
+      nombre: string;
+      apellido: string;
+      paisId: string;
+      fechaNacimiento?: string;
+      dni?: string;
+      tratamiento?: string;
+      ocupacion?: string;
+      telefonoTipo: string;
+      telefonoPrefijo: string;
+      telefonoNumero: string;
+      correo?: CorreoCliente;
+    }) => api<{ ok: true; clienteId: number }>('/api/venta/cliente', { method: 'POST', body: JSON.stringify(v) }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['ficha'] });
+    },
+  });
 }
 
 export function useCrearVenta() {

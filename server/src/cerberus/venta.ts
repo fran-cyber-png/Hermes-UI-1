@@ -1,4 +1,5 @@
 import { armarLlaveAtribucion } from '../atribucion/llave.js';
+import { parseCsrf, parseOpciones } from './htmlCerberus.js';
 import { cuerpoParaCerberus } from './latin1.js';
 import { borrarSesionCerberus, obtenerSesionCerberus } from './sesionStore.js';
 
@@ -125,15 +126,6 @@ const ORIGENES: Opcion[] = [
   { id: 'llamada', nombre: 'Llamada' },
   { id: 'correo', nombre: 'Correo' },
 ];
-
-function parseOpciones(html: string, name: string): Opcion[] {
-  const sel = html.match(new RegExp(`<select[^>]*name="${name}"[\\s\\S]*?</select>`))?.[0] ?? '';
-  return [...sel.matchAll(/<option value="(\d+)"[^>]*>([^<]+)</g)].map((m) => ({ id: m[1], nombre: m[2].trim() }));
-}
-
-function parseCsrf(html: string): string {
-  return html.match(/name="csrfmiddlewaretoken"\s+value="([^"]+)"/)?.[1] ?? '';
-}
 
 /** Las opciones del formulario (para armar los dropdowns en Hermes). */
 export async function cargarFormulario(vendedoraId: string): Promise<FormularioVenta | null> {
