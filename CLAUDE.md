@@ -1506,6 +1506,54 @@ formularios** mal enlazados. Se arregló por los dos lados. Detalle: `docs/adr/0
   vite --port 5199` (sirve los 22 cursos y las 2 campañas **reales**, mojibake incluido). Capturas:
   `docs/evidencia/routing-producto-hoja.png`, `routing-producto-lista.png`.
 
+## Los DOS MÓDULOS DE CRM: ventas y campañas (**ADR 0063**)
+
+Decisión del dueño del 19-ago-2026: **Hermes maneja los dos negocios con entornos separados
+adentro**. `ventas` (hoy la Escuela, mañana otros clientes) y `campana` (hoy Betto, mañana otras
+candidaturas). **Ninguno es la excepción del otro** — ADR 0061 trataba a la campaña como una
+excepción, y eso alcanzaba con un solo candidato.
+
+La regla vive en `server/src/modulos/`: `modulo.ts` (el tipo, `moduloDe(lineas)` y el mapa
+`SUPERFICIES`) + `deEsteModulo.ts` (el middleware, que generaliza el borrado `numeros/soloEscuela.ts`).
+
+- 🔴 **EL DEFAULT DEL MAPA ES «COMPARTIDO», al revés de un perímetro** — y lo que lo compensa es el
+  **barrido del árbol** (`modulos/superficies.paridad.test.ts`): cruza cada router contra sus
+  `import` de `cerberus/` e icarus y se pone rojo si aparece uno sin declarar. Los dos primeros
+  tests vigilan lo ya decidido; **éste vigila lo que todavía no se decidió**, que es exactamente
+  cómo nacieron abiertas las once rutas que encontró la auditoría.
+- 🔴 **`moduloDe` SALE DE LAS LÍNEAS, NUNCA DEL NAMESPACE DE LA IDENTIDAD.** Hoy coinciden al 100 %
+  (17 identidades `centurion:*` atienden la campaña y ninguna de Cerberus), pero hasta el 15-ago la
+  atendía `usuario2`, que es de Cerberus. Un segundo criterio que hoy da lo mismo decide distinto
+  mañana sin que nada falle (#37).
+- 🔴 **FAIL-CLOSED EN EL MIDDLEWARE, NO EN `moduloDe`.** Esa función tiene un default (`ventas`) que
+  existe para la vendedora sin líneas; ante un error de lectura el middleware **no la llama**:
+  contesta 500 y no deja pasar. Confundir los dos casos es cómo un fail-closed se vuelve fail-open.
+- 🔴 **LAS DOS SUBRUTAS VAN MONTADAS ANTES QUE SU ROUTER PADRE.** `/api/gestiones/intereses` y
+  `/api/dashboard/negocio` (el resto de esos routers es CRM genérico y se comparte). `app.use`
+  matchea en orden: con el padre primero, el candado **no corre nunca** — sin error y sin log, y la
+  lista diciendo que está cubierto. Hay test.
+- **En el front, `esDeCampana` APAGA LAS CONSULTAS, no sólo el dibujo** (`PanelDerecho`): la ficha,
+  el lead-form y los intereses son 403 para campaña. `/api/senales` **no** se apaga: se deriva del
+  hilo y le sirve a los dos. Candado: `PanelDerecho.campana.test.tsx`, con **las dos mitades** (en
+  ventas SÍ se piden — si no, el test pasaría con el panel roto).
+- ⚠️ **La vista Contactos salió del riel**, y por un motivo distinto al de las otras cuatro: sus dos
+  solapas son el padrón de icarus y el buscador de Cerberus, o sea que **la vista entera es de
+  ventas**.
+- 🔴 **LO QUE ESTO NO RESUELVE, Y HAY QUE DECIRLO**: (1) **no aísla una campaña de OTRA** — dos
+  rivales caen los dos en `campana`; eso va por **entorno**, en el `WHERE`. (2) **El rol sigue
+  cruzando los planos**: `centurion:betto.romero` es `admin` en la MISMA tabla `equipo` que la
+  Escuela, así que `mandaEnElEquipo` le dice `true`. Las once rutas quedaron tapadas por superficie,
+  pero **mientras el rol no conozca el módulo, la próxima ruta de supervisor nace abierta**.
+  (3) `eventos.ts` es **residuo conocido** (`POST /` consulta Cerberus si el evento trae `curso`).
+- 🔴 **Y EL EMBUDO DE CAMPAÑA NO SE VA A PODER DERIVAR** (invierte ADR 0044): el comprador deja
+  huellas verificables —un precio, una venta—; un votante no deja ninguna. «Se comprometió» sólo lo
+  puede afirmar quien habló con él. Es un embudo **declarado**.
+- ⚠️ **El costo que se acepta**: esto convierte el aislamiento en un `WHERE`, cuando la decisión del
+  13-ago lo había puesto en instancias separadas porque dos candidatos pueden ser rivales. La
+  garantía pasa a ser que ninguna consulta se olvide del recorte — por eso la forma es **un seam
+  único con candado que rompa el arranque**, nunca parchear ruta por ruta.
+- Auditoría que lo origina: `docs/auditoria-frontera-campana-escuela.md`.
+
 ## La campaña no la ve la Escuela — la única frontera que el rol NO abre (**ADR 0061**)
 
 Goberna son DOS planos y no se cruzan: la **Escuela** (lo que Hermes atiende) y la **Consultoría** (el

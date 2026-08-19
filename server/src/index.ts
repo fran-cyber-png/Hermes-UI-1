@@ -69,7 +69,7 @@ import { sembrarAliasCurso } from "./cursos/repositorio.js";
 import { cargarRol } from "./equipo/cargarRol.js";
 import { cargarLineasVedadas } from "./numeros/cargarLineasVedadas.js";
 import { lineasDeVendedoraConProposito, lineasVedadasDe } from "./numeros/repositorio.js";
-import { soloEscuela } from "./numeros/soloEscuela.js";
+import { deEsteModulo } from "./modulos/deEsteModulo.js";
 import { leerPersona, sembrarEquipo } from "./equipo/repositorio.js";
 import { EQUIPO_SEMILLA, revisarSemilla } from "./equipo/semilla.js";
 import { arrancarDespachador } from "./bot/despachador.js";
@@ -105,6 +105,26 @@ app.use(express.json({ verify: capturarCuerpoCrudo }));
 
 // EL BFF: una sola llamada con todo lo que la home necesita. Solo Postgres, cero Meta.
 // Reemplaza las 4 llamadas que la pantalla hacía al montar — una de ellas de 4 minutos.
+/**
+ * 🔴 EL CANDADO DE MÓDULO — las superficies de `ventas` que un operador de
+ * campaña no tiene (decisión del dueño del 19-ago-2026; generaliza ADR 0061).
+ *
+ * La lista canónica vive en `modulos/modulo.ts §SUPERFICIES` y
+ * `modulos/superficies.paridad.test.ts` se pone rojo si una se declara y no se
+ * monta acá, o si acá se monta una que la lista no declara. Lo que NO está
+ * declarado es compartido a propósito: el motor de Hermes —la cola, el hilo, el
+ * envío, el reparto, la agenda, el tiempo real— sirve igual a los dos módulos.
+ *
+ * ⚠️ **LAS DOS SUBRUTAS VAN ANTES QUE SU ROUTER PADRE, y no es estilo.**
+ * `app.use` matchea en orden: con `/api/gestiones` montado primero, ese router
+ * atiende `/api/gestiones/intereses` y el candado no llega a correr nunca. El
+ * defecto no daría error ni log — devolvería el catálogo de cursos de Cerberus
+ * con la lista diciendo que está cubierto.
+ */
+const deVentas = deEsteModulo("ventas", (id) => lineasDeVendedoraConProposito(db, id));
+app.use("/api/gestiones/intereses", deVentas);
+app.use("/api/dashboard/negocio", deVentas);
+
 app.use("/api/overview", overviewRouter);
 app.use("/api/config", configRouter); // cuentas de pauta: en la base, no en localStorage
 app.use("/webhook", webhookRouter);   // Cerberus manda cada venta acá → ontología → Meta, en vivo
@@ -116,43 +136,33 @@ app.use("/api/ads", adsRouter); //            3. anuncio
 
 app.use("/api/leads", leadsRouter);
 app.use("/api/auth", authRouter); // login de vendedoras contra Cerberus
-app.use("/api/contactos", contactosRouter); // la ficha del contacto contra Cerberus
+app.use("/api/contactos", deVentas, contactosRouter); // la ficha del contacto contra Cerberus
 app.use("/api/agenda", agendaRouter); // los seguimientos agendados de cada vendedora
 app.use("/api/gestiones", gestionesRouter); // bitácora comercial: etapas, próximas acciones, etiquetas
 app.use("/api/eventos", eventosRouter); // lo que la vendedora ESCUCHÓ, en el timeline del contacto — con autora
 app.use("/api/categorias", categoriasRouter); // catálogo de categorías con color, por vendedora (#48)
 app.use("/api/senales", senalesRouter); // cotizado / se enfrió: etiquetas derivadas, no guardadas (ADR 0016)
-app.use("/api/resultados", resultadosRouter); // el lazo: qué pieza cierra ventas y cuál solo gasta mensajes (#169)
-app.use("/api/plantillas", plantillasRouter); // secuencias de venta: un paso por llamada, nunca un bucle en el server
-app.use("/api/sugerencias", sugerenciasRouter); // las dos respuestas listas del panel derecho
-app.use("/api/hechos", hechosRouter); // los datos recomendados: la munición de una línea (#153)
+app.use("/api/resultados", deVentas, resultadosRouter); // el lazo: qué pieza cierra ventas y cuál solo gasta mensajes (#169)
+app.use("/api/plantillas", deVentas, plantillasRouter); // secuencias de venta: un paso por llamada, nunca un bucle en el server
+app.use("/api/sugerencias", deVentas, sugerenciasRouter); // las dos respuestas listas del panel derecho
+app.use("/api/hechos", deVentas, hechosRouter); // los datos recomendados: la munición de una línea (#153)
 app.use("/api/dashboard", dashboardRouter); // el radar: leads cayendo + números por vendedora
 app.use("/webhook/landing", landingRouter); // los leads de las landings, reenviados por Bravo
-// 🔴 LAS TRES SUPERFICIES DE LA ESCUELA QUE UN OPERADOR DE CAMPAÑA NO TIENE.
-// El riel las esconde (`App.tsx`, `soloPara`) y esto las NIEGA: esconder no
-// protege, y las tres tienen datos propios. La cuarta —el Navegador— es un
-// comando de la cáscara y no pasa por acá. Ver `numeros/campana.ts`.
-//
-// ⚠️ `plantillas-texto` entra por la MISMA puerta y no es una excepción: son las
-// piezas de texto de la Libreta, o sea la superficie de `/api/notas` con otra
-// forma. Dejarla afuera le daría al operador de campaña justo lo que las otras
-// tres le niegan, y por un router que se agregó después.
-const deLaEscuela = soloEscuela((id) => lineasDeVendedoraConProposito(db, id));
-app.use("/api/correos", deLaEscuela, correosRouter); // email 1-a-1, auditado — sin listas, sin campañas
-app.use("/api/notas", deLaEscuela, notasRouter); // el «Notion» a una tecla — editable, no deriva nada
-app.use("/api/plantillas-texto", deLaEscuela, plantillasTextoRouter); // snippets de la Libreta que se pegan desde el `/` — no confundir con /api/plantillas (secuencias de WhatsApp)
-app.use("/api/espacios", deLaEscuela, espaciosRouter); // dónde vive cada página: mi libreta o un espacio del equipo (ADR 0046)
+app.use("/api/correos", deVentas, correosRouter); // email 1-a-1, auditado — sin listas, sin campañas
+app.use("/api/notas", deVentas, notasRouter); // el «Notion» a una tecla — editable, no deriva nada
+app.use("/api/plantillas-texto", deVentas, plantillasTextoRouter); // snippets de la Libreta que se pegan desde el `/` — no confundir con /api/plantillas (secuencias de WhatsApp)
+app.use("/api/espacios", deVentas, espaciosRouter); // dónde vive cada página: mi libreta o un espacio del equipo (ADR 0046)
 // 🔴 LA ÚNICA RUTA QUE SIRVE CONTENIDO SIN CREDENCIAL (ADR 0047), y por eso vive
 // FUERA de `/api`: una excepción adentro del perímetro es un prefijo que el
 // próximo router hereda sin que nadie lo note — la forma exacta que tuvo el #36.
 app.use("/n", publicoRouter);
-app.use("/api/venta", ventaRouter); // el formulario de venta dentro de Hermes
+app.use("/api/venta", deVentas, ventaRouter); // el formulario de venta dentro de Hermes
 app.use("/api/interactions", interactionsRouter);
 app.use("/api/conversaciones", conversacionesRouter); // la cola unificada: una fila por conversación
 app.use("/api/reparto", repartoRouter); // de quién es cada conversación cuando 7 comparten una línea
-app.use("/api/routing", routingRouter); // qué campaña de Meta cae en qué vendedora (solo la línea de Cloud API)
-app.use("/api/campana", campanaRouter); // el catálogo de plantillas de Meta con su salud (solo lectura, supervisor)
-app.use("/api/padron", padronRouter); // los 72.923 contactos de icarus: el supervisor reparte, la vendedora ve lo suyo
+app.use("/api/routing", deVentas, routingRouter); // qué campaña de Meta cae en qué vendedora (solo la línea de Cloud API)
+app.use("/api/campana", deVentas, campanaRouter); // el catálogo de plantillas de Meta con su salud (solo lectura, supervisor)
+app.use("/api/padron", deVentas, padronRouter); // los 72.923 contactos de icarus: el supervisor reparte, la vendedora ve lo suyo
 app.use("/api/responder", responderRouter);
 app.use("/api/persona", personaRouter);
 app.use("/api/gente", genteRouter); // la persona canónica del grafo: su 360 y la búsqueda
@@ -166,7 +176,7 @@ app.use("/api/structure", structureRouter); // las 3 etapas anidadas, con la pla
 // en /api/sdk/catalogo. Lo consumen el verificador de CQs hoy, Ivi y MCP después.
 app.use("/api/sdk", sdkRouter);
 
-app.use("/api/ivi", iviRouter()); // el proxy al cerebro RAG en geografo (issue #61)
+app.use("/api/ivi", deVentas, iviRouter()); // el proxy al cerebro RAG en geografo (issue #61)
 
 // EL CATÁLOGO DE PIEZAS, para que Ivi pueda ELEGIR sin inventar (H8/H9, ADR 0023).
 // Solo lectura, detrás de su propia credencial de servicio: lo consume una máquina,
@@ -191,7 +201,7 @@ app.use("/api/autorespuesta", autorespuestaRouter); // el interruptor sin deploy
 app.use("/api/bot", botRouter); // el kill-switch del bot de primera línea: apagar cuesta un click, no un deploy
 // El chat de prueba (#256): corre el MOTOR REAL sin transporte, así que se puede
 // mirar trabajar al bot sin gastar un solo lead de la pauta.
-app.use("/api/entrenamiento", deLaEscuela, entrenamientoRouter);
+app.use("/api/entrenamiento", deVentas, entrenamientoRouter);
 app.use("/api/admin", requiereServicio, adminRouter); // administración de números desde Cerberus (#50/#95)
 /**
  * 🔴 LO SOLO-DEV NO SE MONTA EN PRODUCCIÓN — «en prod no hay agujero que

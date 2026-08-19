@@ -193,50 +193,11 @@ export function atiendeUnaCampana(
 }
 
 /**
- * LAS SUPERFICIES DE LA ESCUELA QUE UN OPERADOR DE CAMPAÑA NO TIENE — decisión
- * del dueño del 18-ago-2026.
+ * ⚠️ **LA LISTA DE SUPERFICIES SE MUDÓ A `modulos/modulo.ts §SUPERFICIES`** el
+ * 19-ago-2026, cuando la campaña dejó de ser la excepción de la Escuela y las
+ * dos pasaron a ser módulos de CRM con el mismo peso.
  *
- * Las cuatro son herramientas del negocio educativo, no del comando de un
- * candidato: la **Libreta** (`notas` + `espacios`) es el playbook de venta del
- * equipo, los **Correos** salen del remitente de Goberna, **Entrenar bot** es el
- * bot de la Escuela, y el **Navegador** abre la web con la sesión de trabajo de
- * la Escuela.
- *
- * ══ 🔴 ESTO ES UNA FRONTERA, NO UN RIEL ══════════════════════════════════════
- *
- * Sacarlas del riel (`App.tsx`, `soloPara`) **esconde y no protege** — lo dice el
- * propio comentario de la décima vista, y ahí podía darse ese lujo porque Routing
- * está vacía. Estas cuatro **tienen datos y rutas propias**, así que el corte va
- * en el server y el riel es sólo la mitad que se ve. Es la lección de ADR
- * 0035/0036: un recorte dibujado en el navegador no existe, los datos ya
- * viajaron.
- *
- * ⚠️ **El Navegador no está en esta lista y no es un olvido**: es un comando de
- * la cáscara Tauri (`navegador_*`, ADR 0043), no una ruta del server. Se le quita
- * la vista y con eso no hay por dónde llegar; el candado del ACL es otro y vive
- * en las capabilities.
- *
- * Los prefijos se comparan con `startsWith` sobre el path montado, así que
- * `/api/notas/por-link/:token` cae adentro sin tener que enumerarlo.
+ * Este archivo se queda con lo que sigue siendo cierto de una LÍNEA —quién la
+ * puede ver, y si quien mira atiende una campaña—; qué SUPERFICIE le toca a
+ * cada módulo es otra pregunta y vive con el middleware que la contesta.
  */
-export const PREFIJOS_VEDADOS_A_CAMPANA = [
-  "/api/notas",
-  "/api/espacios",
-  "/api/correos",
-  "/api/entrenamiento",
-  // Las piezas de texto de la Libreta (ADR 0057 §plantillas): es la superficie
-  // de `/api/notas` con otra forma —mismo dueño, mismos datos—, así que entra
-  // por la misma puerta. Dejarla afuera le daría al operador de campaña justo
-  // lo que las otras cuatro le niegan, y por un router agregado después.
-  //
-  // ⚠️ NO confundir con `/api/plantillas` (las secuencias de WhatsApp), que es
-  // otra cosa y NO está vedada: `esSuperficieDeEscuela` compara el prefijo
-  // completo, así que «/api/plantillas» no cae adentro de esto por compartir
-  // el comienzo (hay test).
-  "/api/plantillas-texto",
-] as const;
-
-/** ¿Este path es una superficie de la Escuela? `startsWith`, no igualdad. */
-export function esSuperficieDeEscuela(path: string): boolean {
-  return PREFIJOS_VEDADOS_A_CAMPANA.some((p) => path === p || path.startsWith(`${p}/`));
-}
