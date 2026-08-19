@@ -103,7 +103,7 @@ const ERROR_TRANSITORIO_DE_IVI = new ErrorApi(
 function Caja({ titulo, nota, children }: { titulo: string; nota: string; children: React.ReactNode }) {
   return (
     <section data-caja={titulo} className="w-[26rem] max-w-full">
-      <h3 className="font-heading text-[11px] font-bold uppercase tracking-wide text-navy">{titulo}</h3>
+      <h3 className="font-heading text-[11px] font-bold uppercase tracking-wide text-navy-ink">{titulo}</h3>
       <p className="mb-1.5 mt-0.5 text-[10px] leading-snug text-muted-foreground">{nota}</p>
       {children}
     </section>
@@ -135,7 +135,7 @@ function BancoDeTeclado() {
   return (
     <QueryClientProvider client={queryClient}>
       <div className="min-h-dvh bg-background p-6">
-        <h1 className="font-heading text-lg font-bold text-navy">
+        <h1 className="font-heading text-lg font-bold text-navy-ink">
           ¿La hoja cerrada le roba el Escape al shell?
         </h1>
         <p className="mt-1 max-w-2xl text-xs leading-snug text-muted-foreground">
@@ -146,7 +146,7 @@ function BancoDeTeclado() {
         </p>
         <p className="mt-4 text-sm text-foreground">
           Escapes que llegaron al shell:{' '}
-          <strong data-banco="llegaron" className="font-heading text-2xl font-bold text-navy">
+          <strong data-banco="llegaron" className="font-heading text-2xl font-bold text-navy-ink">
             {llegaron}
           </strong>
         </p>
@@ -175,7 +175,7 @@ function Galeria() {
     return (
       <QueryClientProvider client={queryClient}>
         <div className="h-dvh bg-background p-6">
-          <p className="font-heading text-sm font-bold text-navy">Hermes · la mesa de siempre, detrás</p>
+          <p className="font-heading text-sm font-bold text-navy-ink">Hermes · la mesa de siempre, detrás</p>
           <p className="mt-1 text-xs text-muted-foreground">
             La hoja de Ivi es una capa: el panel derecho no cambia y «Registrar venta» sigue clavado.
           </p>
@@ -186,7 +186,7 @@ function Galeria() {
   }
   return (
     <div className="min-h-dvh bg-background p-5">
-      <h1 className="font-heading text-lg font-bold text-navy">La superficie de Ivi — los seis estados</h1>
+      <h1 className="font-heading text-lg font-bold text-navy-ink">La superficie de Ivi — los seis estados</h1>
       <p className="mt-1 max-w-3xl text-xs leading-snug text-muted-foreground">
         Tres formas distintas, no tres colores del mismo cuadrado: filete sólido + blanco es un dato;
         filete punteado + hundido es una cita; borde punteado y sin relleno es «no sé». Sin oro — el oro

@@ -432,7 +432,7 @@ export function VistaDashboard({
                 aria-pressed={lecturaEfectiva === id}
                 className={
                   'rounded-full px-3 py-1 text-xs font-bold transition-[background-color,color] duration-200 ease-house ' +
-                  (lecturaEfectiva === id ? 'bg-card text-navy shadow-panel' : 'text-muted-foreground hover:text-foreground')
+                  (lecturaEfectiva === id ? 'bg-card text-navy-ink shadow-panel' : 'text-muted-foreground hover:text-foreground')
                 }
               >
                 {label}
@@ -440,7 +440,7 @@ export function VistaDashboard({
             ))}
           </div>
         ) : (
-          <h2 className="shrink-0 font-heading text-xs font-bold text-navy">Mi turno</h2>
+          <h2 className="shrink-0 font-heading text-xs font-bold text-navy-ink">Mi turno</h2>
         )}
         <span className="h-7 w-px shrink-0 bg-border" aria-hidden="true" />
 
@@ -803,7 +803,7 @@ export function VistaDashboard({
                             : (fila.form.producto ?? fila.form.campana ?? 'sin campaña')}
                         </p>
                         <span className="ml-auto flex shrink-0 items-center gap-1">
-                          <span className="flex items-center gap-1.5 text-muted-foreground transition-colors focus-within:text-navy group-hover:text-navy">
+                          <span className="flex items-center gap-1.5 text-muted-foreground transition-colors focus-within:text-navy-ink group-hover:text-navy-ink">
                             {(esChat ? fila.chat.telefono : fila.form.telefono) && (
                               <BotonLlamar telefono={(esChat ? fila.chat.telefono : fila.form.telefono)!} compacto />
                             )}
@@ -823,7 +823,7 @@ export function VistaDashboard({
                                     e.stopPropagation();
                                     onAbrir(conversacionDeChat(fila.chat));
                                   }}
-                                  className="rounded p-0.5 transition-colors hover:text-navy focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                                  className="rounded p-0.5 transition-colors hover:text-navy-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                                 >
                                   <MessageSquareText size={13} />
                                 </button>
@@ -921,7 +921,7 @@ export function VistaDashboard({
                       onClick={() => setEtapaFiltro(etapaFiltro === e ? null : e)}
                       className={
                         'font-mono text-[11px] tabular-nums transition-colors ' +
-                        (etapaFiltro === e ? 'font-bold text-navy' : 'text-muted-foreground hover:text-foreground')
+                        (etapaFiltro === e ? 'font-bold text-navy-ink' : 'text-muted-foreground hover:text-foreground')
                       }
                     >
                       {/* La leyenda del riel: contaba montones y decía el IDENTIFICADOR
@@ -1013,7 +1013,7 @@ export function VistaDashboard({
                     etiqueta={`Mensajes enviados por día, últimos 14 días: hoy ${enviosValores[enviosValores.length - 1] ?? 0}`}
                     ancho={64}
                     alto={20}
-                    className="text-navy"
+                    className="text-navy-ink"
                   />
                 )}
               </div>
@@ -1066,7 +1066,7 @@ export function VistaDashboard({
                       <span
                         title={soyYo ? 'vos' : undefined}
                         className={
-                          'flex size-7 shrink-0 items-center justify-center rounded-[8px] bg-secondary font-heading text-[11px] font-bold text-navy' +
+                          'flex size-7 shrink-0 items-center justify-center rounded-[8px] bg-secondary font-heading text-[11px] font-bold text-navy-ink' +
                           (soyYo ? ' ring-2 ring-navy' : '')
                         }
                       >

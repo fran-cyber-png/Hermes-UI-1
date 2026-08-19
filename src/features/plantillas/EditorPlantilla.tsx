@@ -172,7 +172,7 @@ export function EditorPlantilla({
             {pasos.map((p, i) => (
               <li key={i} className="rounded-xl border border-border bg-card p-2">
                 <div className="mb-1.5 flex items-center gap-1">
-                  <span className="flex size-4 items-center justify-center rounded bg-secondary font-mono text-[10px] font-bold text-navy">
+                  <span className="flex size-4 items-center justify-center rounded bg-secondary font-mono text-[10px] font-bold text-navy-ink">
                     {i + 1}
                   </span>
                   <div className="ml-auto flex items-center gap-0.5">

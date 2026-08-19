@@ -46,8 +46,30 @@
   --ring: #2563EB;
   --radius: 0.75rem;
 
+  /* El riel de las barras de scroll. Token y no literal: en el tema oscuro un
+     gris claro sobre #0F1419 es una cicatriz que cruza la pantalla. */
+  --riel: #C9D4E5;
+  --riel-activo: var(--navy);
+
+  /* La tinta del resalte de selección — el porqué está en el bloque
+     `::selection`, abajo. */
+  --selection-ink: #FFFFFF;
+
   /* Marca */
   --navy: #0E2A52;
+  /* EL MISMO AZUL, CON EL PAPEL ESCRITO EN EL NOMBRE. `--navy` es SUPERFICIE
+     (`bg-navy text-white`, el velo `bg-navy/20` de los modales, el borde de una
+     chapa); `--navy-ink` es TINTA (`text-navy-ink`, el título de cada pantalla).
+     En el tema claro valen exactamente lo mismo y por eso durante meses fueron
+     un solo token — no había con qué notar la diferencia. En oscuro se separan,
+     y no un poco: una superficie oscura SIGUE oscura, y una tinta oscura
+     desaparece. Un token con dos papeles no se puede cambiar de tema; dos
+     tokens, sí.
+     Elegir el papel es de quien escribe el marcado, no de una regla que adivine
+     por él: `text-navy-ink` para lo que se lee, `text-navy` para la excepción
+     rara —hoy una sola— de tinta oscura sobre una chapa que en oscuro sigue
+     clara (la chapa de pendientes, `bg-gold`). */
+  --navy-ink: #0E2A52;
   --navy-muted: #CDDCF2;
   --gold: #FFC800;
   --gold-ink: #CAA106;
@@ -80,38 +102,30 @@
   --temp-helado: #64748B;   /* 14+ días — prácticamente perdido */
 }
 
-/* Dark mode — solo redefine los tokens, el resto hereda */
+/* ── EL TEMA OSCURO — UNA SOLA LISTA ──────────────────────────────────────────
+   Vive bajo `[data-theme="dark"]` y en ningún otro lado. El atributo lo estampa
+   `src/lib/tema.ts` sobre `<html>`, y `main.tsx` lo llama ANTES de montar React:
+   para cuando hay algo que pintar, el tema ya está resuelto.
+
+   🔴 POR QUÉ NO HAY UNA SEGUNDA COPIA ADENTRO DE `@media`. La había. El commit
+   546645f dejó la paleta oscura DUPLICADA —una copia en la media query y otra
+   en el atributo— y las dos había que mantener a mano. Nadie las mantuvo: el
+   `::selection` se arregló para el tema claro (14b97bd) y la copia oscura quedó
+   con 2.3:1, o sea invisible otra vez. Dos listas que tienen que decir lo mismo
+   terminan diciendo cosas distintas. Acá hay UNA.
+
+   La media query de abajo NO es la paleta: son los dos únicos tokens que se
+   pintan antes de que corra un byte de JS (el fondo del `<body>` todavía
+   vacío). Sin ella, quien tiene el sistema en oscuro abre Hermes con un
+   fogonazo blanco. Todo lo demás espera al atributo, que llega antes que el
+   contenido. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --background: #0F1419;
     --foreground: #F1F5F9;
-
-    --card: #1A2332;
-    --card-foreground: #F1F5F9;
-    --popover: #1A2332;
-    --popover-foreground: #F1F5F9;
-
-    --primary: #3B82F6;
-    --primary-hover: #60A5FA;
-    --primary-foreground: #F1F5F9;
-
-    --secondary: #1E293B;
-    --secondary-foreground: #CBD5E1;
-
-    --muted: #334155;
-    --muted-foreground: #94A3B8;
-
-    --accent: #1E293B;
-    --accent-foreground: #CBD5E1;
-
-    --border: #2D3A4A;
-    --input: #2D3A4A;
-
-    --navy-muted: #334155;
   }
 }
 
-/* Tema dark explícito (cuando el usuario lo activa manualmente) */
 :root[data-theme="dark"] {
   --background: #0F1419;
   --foreground: #F1F5F9;
@@ -138,6 +152,20 @@
   --input: #2D3A4A;
 
   --navy-muted: #334155;
+
+  /* 🔴 `--navy` NO SE INVIERTE, y es a propósito: sus más de 200 usos son
+     superficie (`bg-navy text-white`, los velos de los modales, bordes y
+     anillos) y ahí tiene que seguir siendo oscuro. El que se da vuelta es el
+     token de TINTA: sin esto, los `text-navy-ink` de la app —empezando por el
+     título de CADA pantalla, que va sobre `bg-card`— darían #0E2A52 sobre
+     #1A2332, contraste 1.1:1. Un título que ocupa su lugar y no se lee.
+     Lo mide `src/temaOscuroLegible.test.ts`. */
+  --navy-ink: #DCE7F7;
+
+  --riel: #334155;
+  --riel-activo: #64748B;
+
+  --selection-ink: #0E2A52;
 }
 
 @theme inline {
@@ -166,6 +194,7 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-navy: var(--navy);
+  --color-navy-ink: var(--navy-ink);
   --color-navy-muted: var(--navy-muted);
   --color-gold: var(--gold);
   --color-gold-ink: var(--gold-ink);
@@ -237,12 +266,25 @@
     border-color: var(--border);
   }
 
+  /* `color-scheme` no es cosmética: de esto dependen los controles que dibuja el
+     SISTEMA y no nosotros — el desplegable de un `<select>`, el calendario de un
+     `<input type=date>`, el autocompletado, la barra de scroll por defecto.
+     Cuando la app se puso oscura y esto quedó en `light`, esos controles seguían
+     saliendo blancos adentro de una pantalla negra. */
   html {
     color-scheme: light;
   }
 
   html[data-theme="dark"] {
     color-scheme: dark;
+  }
+
+  /* Antes de que JS estampe el atributo manda el sistema, igual que con el fondo
+     del `<body>`. */
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) {
+      color-scheme: dark;
+    }
   }
 
   body {
@@ -287,10 +329,12 @@
 /* ── OFICIO DE ESCRITORIO: los detalles que separan una app de una página ── */
 
 /* Scrollbars de la casa: finas, calladas, navy al agarrarlas. Nada delata
-   "web genérica" más rápido que la scrollbar cruda del navegador. */
+   "web genérica" más rápido que la scrollbar cruda del navegador.
+   Por token y no por literal: el gris claro de acá era el único color de este
+   archivo que no se enteraba del tema oscuro. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #C9D4E5 transparent;
+  scrollbar-color: var(--riel) transparent;
 }
 *::-webkit-scrollbar {
   width: 9px;
@@ -300,13 +344,13 @@
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background: #C9D4E5;
+  background: var(--riel);
   border-radius: 999px;
   border: 2.5px solid transparent;
   background-clip: content-box;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: var(--navy);
+  background: var(--riel-activo);
   background-clip: content-box;
 }
 
@@ -339,12 +383,17 @@
      `--primary-hover` es el azul de marca más oscuro que NO es fondo en reposo de
      ningún contenedor —solo estado de hover—, así que se despega de las dos
      burbujas y de la mesa. Sin oro: el oro es tiempo que se acaba.
-     El contraste lo fija `src/seleccionVisible.test.ts`; una sola declaración
-     alcanza porque este archivo no tiene tokens de tema oscuro (`color-scheme:
-     light`), y el día que los tenga la regla hay que repetirla ahí. */
+     Ese día llegó: el archivo YA tiene tema oscuro. Y la regla no se repitió —
+     con la paleta oscura, `--primary-hover` se aclara a #60A5FA y el blanco
+     encima daba 2.3:1, el mismo defecto invisible, de vuelta.
+     La salida no fue repetir la regla sino sacarle la tinta a un token propio:
+     una sola declaración, dos temas, y `--selection-ink` es el único valor que
+     cambia (blanco sobre el azul oscuro; navy sobre el azul claro, 5.6:1).
+     El contraste lo fija `src/seleccionVisible.test.ts`, que ahora mide LOS DOS
+     temas — el bug anterior existió justamente porque medía uno. */
   ::selection {
     background: var(--primary-hover);
-    color: var(--primary-foreground);
+    color: var(--selection-ink);
   }
 
   /* El foco de teclado, uno solo y visible, en toda la app. El outline sigue el
@@ -498,26 +547,4 @@
    techo dependería de un orden de imports que nadie declaró a propósito. */
 .bn-mantine .bn-suggestion-menu {
   max-height: 22rem !important;
-}
-
-/* ── DARK MODE PARA AGENDA SOLO ────────────────────────────────────────── */
-.agenda-dark-mode {
-  --background: #0F1419;
-  --foreground: #F1F5F9;
-  --card: #1A2332;
-  --card-foreground: #F1F5F9;
-  --popover: #1A2332;
-  --popover-foreground: #F1F5F9;
-  --primary: #3B82F6;
-  --primary-hover: #60A5FA;
-  --primary-foreground: #F1F5F9;
-  --secondary: #1E293B;
-  --secondary-foreground: #CBD5E1;
-  --muted: #334155;
-  --muted-foreground: #94A3B8;
-  --accent: #1E293B;
-  --accent-foreground: #CBD5E1;
-  --border: #2D3A4A;
-  --input: #2D3A4A;
-  --navy-muted: #334155;
 }

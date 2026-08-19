@@ -1,7 +1,7 @@
 /**
  * CHISPA — sparkline de 2px sin ejes: el pulso de una serie, no su análisis.
  * Hereda el color de la tinta (currentColor): el consumidor la tiñe con
- * text-navy (u otra tinta de marca — nunca oro: el oro es tiempo, no historia).
+ * text-navy-ink (u otra tinta de marca — nunca oro: el oro es tiempo, no historia).
  */
 export function Chispa({
   valores,

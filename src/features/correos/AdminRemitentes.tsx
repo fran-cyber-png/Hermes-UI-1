@@ -214,9 +214,9 @@ export function AdminRemitentes({ onCerrar }: { onCerrar: () => void }) {
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
-          <AtSign size={16} strokeWidth={2.1} className="shrink-0 text-navy" />
+          <AtSign size={16} strokeWidth={2.1} className="shrink-0 text-navy-ink" />
           <div className="min-w-0 flex-1">
-            <h2 className="font-heading text-sm font-bold leading-tight text-navy">Remitentes</h2>
+            <h2 className="font-heading text-sm font-bold leading-tight text-navy-ink">Remitentes</h2>
             <p className="truncate text-[10px] leading-tight text-muted-foreground">
               Con qué correo sale lo que manda el equipo, y a dónde vuelven las respuestas.
             </p>
@@ -292,7 +292,7 @@ export function AdminRemitentes({ onCerrar }: { onCerrar: () => void }) {
                     setEditando(null);
                     setAlta(true);
                   }}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs font-semibold text-navy transition-colors duration-200 ease-house hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs font-semibold text-navy-ink transition-colors duration-200 ease-house hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
                   <Plus size={14} />
                   Nuevo remitente
@@ -677,7 +677,7 @@ function FilaRemitente(p: FilaProps) {
                     ? undefined
                     : `SES no tiene verificado el dominio de ${r.direccion}: volver a prenderlo haría que cada correo muera en un 554.`
                 }
-                className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-navy transition-colors hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-navy-ink transition-colors hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
                 {p.enVuelo ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
                 Volver a usarlo
@@ -724,7 +724,7 @@ function FormularioRemitente(p: FormularioProps) {
 
   return (
     <section className="rounded-xl border border-border bg-card p-3">
-      <h3 className="truncate font-heading text-xs font-bold text-navy">{p.titulo}</h3>
+      <h3 className="truncate font-heading text-xs font-bold text-navy-ink">{p.titulo}</h3>
 
       <div className="mt-2.5 flex flex-col gap-2">
         <label className="flex flex-col gap-1">

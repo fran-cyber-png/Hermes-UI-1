@@ -113,7 +113,7 @@ function Fila({ p }: { p: PlantillaConEstado }) {
           {p.idioma}
         </span>
         {p.categoria && (
-          <span className="rounded-full bg-navy/10 px-2 py-0.5 text-[11px] font-semibold text-navy">
+          <span className="rounded-full bg-navy/10 px-2 py-0.5 text-[11px] font-semibold text-navy-ink">
             {p.categoria}
           </span>
         )}
@@ -290,7 +290,7 @@ function Formulario({ onCerrar }: { onCerrar: () => void }) {
             <button
               type="button"
               onClick={() => setB({ ...b, nombre: sugerido })}
-              className="mt-1 text-[11px] font-bold text-navy hover:underline"
+              className="mt-1 text-[11px] font-bold text-navy-ink hover:underline"
             >
               usar «{sugerido}»
             </button>

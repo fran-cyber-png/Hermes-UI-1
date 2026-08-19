@@ -161,7 +161,7 @@ function FilaCategoria({
             className={
               // El oro es SOLO tiempo que se acaba: la favorita se marca en navy, no en dorado.
               'rounded-md p-1 transition-colors ' +
-              (categoria.esFavorito ? 'text-navy' : 'text-muted-foreground/50 hover:text-foreground')
+              (categoria.esFavorito ? 'text-navy-ink' : 'text-muted-foreground/50 hover:text-foreground')
             }
           >
             <Star size={14} fill={categoria.esFavorito ? 'currentColor' : 'none'} />
@@ -259,7 +259,7 @@ export function GestorCategorias({ onCerrar }: { onCerrar: () => void }) {
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-center justify-between border-b border-border px-4 py-3">
-          <span className="flex items-center gap-2 font-heading text-sm font-bold text-navy">
+          <span className="flex items-center gap-2 font-heading text-sm font-bold text-navy-ink">
             <Tag size={15} /> Etiquetas
           </span>
           <button

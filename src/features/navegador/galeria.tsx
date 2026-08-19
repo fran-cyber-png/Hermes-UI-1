@@ -53,7 +53,7 @@ createRoot(document.getElementById('galeria')!).render(
           `VISTAS` y la vista NO lo repite (por eso no tiene título propio). Sin
           esta franja, la captura se leería como una pantalla sin nombre. */}
       <header className="flex shrink-0 items-center gap-3 border-b border-border bg-card px-3 pb-2 pt-4">
-        <h1 className="font-heading text-sm font-bold tracking-tight text-navy">Navegador</h1>
+        <h1 className="font-heading text-sm font-bold tracking-tight text-navy-ink">Navegador</h1>
       </header>
       {/* `?ir=<sitio>` abre ese destino al entrar. Es la ÚNICA forma de
           fotografiar el navegador embebido: es una capa del sistema operativo,

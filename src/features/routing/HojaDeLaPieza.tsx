@@ -95,7 +95,7 @@ export function HojaDeLaPieza({
       aria-label="Producto de esta pieza"
     >
       <header className="flex shrink-0 items-start gap-2 border-b border-border px-4 py-3">
-        <Icono size={15} strokeWidth={1.9} className="mt-0.5 shrink-0 text-navy" aria-hidden />
+        <Icono size={15} strokeWidth={1.9} className="mt-0.5 shrink-0 text-navy-ink" aria-hidden />
         <div className="min-w-0 flex-1">
           <p className="text-xs font-medium leading-snug text-foreground">{pieza.titulo}</p>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
@@ -153,7 +153,7 @@ export function HojaDeLaPieza({
               type="button"
               onClick={() => mandar(null)}
               disabled={corregir.isPending}
-              className="mt-2 flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-[color,border-color] duration-200 ease-house hover:border-navy/40 hover:text-navy disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="mt-2 flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-[color,border-color] duration-200 ease-house hover:border-navy/40 hover:text-navy-ink disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               <Undo2 size={12} strokeWidth={2} aria-hidden />
               Volver al automático
@@ -271,7 +271,7 @@ function Opcion({
         className={
           'flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left transition-colors duration-200 ease-house focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
           (actual
-            ? 'bg-navy/5 text-navy'
+            ? 'bg-navy/5 text-navy-ink'
             : 'text-foreground hover:bg-secondary disabled:opacity-50')
         }
       >

@@ -137,7 +137,7 @@ export function RegistrarGestion({
         setGuardado(false);
       }}
       className={
-        'flex items-center justify-center gap-1.5 rounded-xl border border-border bg-card font-bold text-navy transition-[background-color,transform] duration-200 ease-house hover:bg-muted active:scale-[0.98] ' +
+        'flex items-center justify-center gap-1.5 rounded-xl border border-border bg-card font-bold text-navy-ink transition-[background-color,transform] duration-200 ease-house hover:bg-muted active:scale-[0.98] ' +
         (compacta ? 'ml-auto shrink-0 px-2.5 py-1 text-[11px]' : 'w-full py-2 text-xs')
       }
     >

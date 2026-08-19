@@ -51,7 +51,7 @@ export function HiloMessenger({ conversacion }: { conversacion: Conversacion }) 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
       <header className="flex shrink-0 items-center gap-2.5 border-b border-border px-4 py-3">
-        <span className="flex size-8 items-center justify-center rounded-[11px] bg-secondary font-heading text-xs font-bold text-navy">
+        <span className="flex size-8 items-center justify-center rounded-[11px] bg-secondary font-heading text-xs font-bold text-navy-ink">
           {nombre.slice(0, 2).toUpperCase()}
         </span>
         <div className="min-w-0">
@@ -105,7 +105,7 @@ export function HiloMessenger({ conversacion }: { conversacion: Conversacion }) 
                     className={
                       'max-w-[75%] rounded-2xl px-3.5 py-2 text-sm ' +
                       (m.direccion === 'saliente'
-                        ? 'rounded-br-md bg-secondary text-navy shadow-[0_1px_2px_rgba(14,42,82,0.06)]'
+                        ? 'rounded-br-md bg-secondary text-navy-ink shadow-[0_1px_2px_rgba(14,42,82,0.06)]'
                         : 'rounded-bl-md bg-card text-foreground ring-1 ring-border')
                     }
                   >

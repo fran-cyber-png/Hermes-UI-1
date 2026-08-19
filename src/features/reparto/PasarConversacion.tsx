@@ -80,7 +80,7 @@ export function PasarConversacion({
         className={
           'flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ' +
           'transition-colors hover:border-primary/60 hover:text-foreground ' +
-          (dueno ? 'border-navy/40 text-navy' : 'border-dashed border-border text-muted-foreground')
+          (dueno ? 'border-navy/40 text-navy-ink' : 'border-dashed border-border text-muted-foreground')
         }
       >
         <UserRound size={11} className="shrink-0" aria-hidden="true" />

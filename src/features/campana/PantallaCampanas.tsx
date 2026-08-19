@@ -64,7 +64,7 @@ export function PantallaCampanas({ seccionInicial }: { seccionInicial?: string }
             onClick={() => setSeccion(s.id)}
             className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-bold transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
               seccion === s.id
-                ? 'bg-card text-navy shadow-sm'
+                ? 'bg-card text-navy-ink shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >

@@ -246,8 +246,8 @@ export function RegistrarEvento({
         className={
           'flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed py-2 text-xs font-bold transition-colors ' +
           (abierto
-            ? 'border-primary bg-muted/40 text-navy'
-            : 'border-border text-muted-foreground hover:border-primary hover:text-navy')
+            ? 'border-primary bg-muted/40 text-navy-ink'
+            : 'border-border text-muted-foreground hover:border-primary hover:text-navy-ink')
         }
       >
         {listo ? <Check size={13} className="text-success" /> : <Plus size={13} />}

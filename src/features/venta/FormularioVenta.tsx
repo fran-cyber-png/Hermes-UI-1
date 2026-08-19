@@ -470,7 +470,7 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
                           className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs hover:bg-muted"
                         >
                           <span className="truncate">{p.nombre}</span>
-                          <span className="flex items-center gap-1 font-semibold text-navy">
+                          <span className="flex items-center gap-1 font-semibold text-navy-ink">
                             {p.precioPromocion} <Plus size={12} />
                           </span>
                         </button>
@@ -519,7 +519,7 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
                         value={l.precio}
                         onChange={(e) => ponerPrecio(l.producto.id, e.target.value)}
                         aria-label={`Precio de ${l.producto.nombre}`}
-                        className="w-16 shrink-0 rounded-md border border-border bg-card px-1.5 py-1 text-right font-semibold tabular-nums text-navy outline-none focus:border-primary"
+                        className="w-16 shrink-0 rounded-md border border-border bg-card px-1.5 py-1 text-right font-semibold tabular-nums text-navy-ink outline-none focus:border-primary"
                       />
                       {/* El subtotal solo cuando hay más de uno: con cantidad 1 repetiría
                           el número de al lado. */}
@@ -538,7 +538,7 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
 
               <div className="flex items-baseline justify-between border-t border-border pt-3">
                 <span className={sectionLabel}>Monto total</span>
-                <span className="font-heading text-2xl font-bold tabular-nums text-navy">
+                <span className="font-heading text-2xl font-bold tabular-nums text-navy-ink">
                   {monedaNombre && <span className="mr-1.5 text-sm font-semibold text-muted-foreground">{monedaNombre}</span>}
                   {monto.toFixed(2)}
                 </span>
@@ -572,7 +572,7 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
                         aria-label={`Vencimiento de la cuota ${i + 1}`}
                         className="min-w-0 flex-1 rounded-md border border-border bg-card px-1.5 py-1 text-xs tabular-nums outline-none focus:border-primary"
                       />
-                      <span className="w-16 shrink-0 text-right font-semibold tabular-nums text-navy">
+                      <span className="w-16 shrink-0 text-right font-semibold tabular-nums text-navy-ink">
                         {(montosCuota[i] ?? 0).toFixed(2)}
                       </span>
                       {cuotas.length > 1 && (

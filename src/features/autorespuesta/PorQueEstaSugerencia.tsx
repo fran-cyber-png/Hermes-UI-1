@@ -53,7 +53,7 @@ export function PorQueEstaSugerencia({
       className="shrink-0 overflow-hidden rounded-2xl border border-navy/25 bg-card shadow-panel"
     >
       <header className="border-b border-border bg-secondary/60 px-3 py-1.5">
-        <h2 className="font-heading text-[11px] font-bold uppercase tracking-wide text-navy">Por qué esta respuesta</h2>
+        <h2 className="font-heading text-[11px] font-bold uppercase tracking-wide text-navy-ink">Por qué esta respuesta</h2>
       </header>
 
       <div className="space-y-3 px-3 py-2.5">
@@ -128,7 +128,7 @@ function LoQuePregunto({ dijo, cargando }: { dijo: LoQueDijo; cargando: boolean 
   return (
     <div>
       <p className="flex items-baseline gap-1.5 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-        <span className="font-sans font-bold not-italic tracking-normal text-navy">
+        <span className="font-sans font-bold not-italic tracking-normal text-navy-ink">
           {esCopy ? 'Lo que llegó' : 'Lo que preguntó'}
         </span>
         <span className="tabular-nums">{horaCorta(cuando)}</span>
@@ -165,7 +165,7 @@ function CuandoApruebes({ limites }: { limites?: LimitesRitmo }) {
 
   return (
     <div>
-      <p className="font-sans text-[11px] font-bold text-navy">Cuando apruebes</p>
+      <p className="font-sans text-[11px] font-bold text-navy-ink">Cuando apruebes</p>
       <ul className="mt-1 space-y-0.5 text-[10px] leading-relaxed text-muted-foreground">
         <li>
           · <b className="font-semibold text-foreground">no sale ahora</b>: entra a la cola, una cada{' '}
@@ -194,7 +194,7 @@ function CuandoApruebes({ limites }: { limites?: LimitesRitmo }) {
 function Dato({ icono, rotulo, children }: { icono: React.ReactNode; rotulo: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="flex items-center gap-1 font-sans text-[11px] font-bold text-navy">
+      <p className="flex items-center gap-1 font-sans text-[11px] font-bold text-navy-ink">
         <span className="shrink-0 text-muted-foreground">{icono}</span>
         {rotulo}
       </p>
@@ -215,7 +215,7 @@ function Nota({ tono, children }: { tono: 'calmo' | 'atento'; children: React.Re
         (tono === 'atento' ? 'bg-navy/[0.06] text-foreground' : 'text-muted-foreground')
       }
     >
-      {tono === 'atento' && <Clock size={11} className="mt-px shrink-0 text-navy" aria-hidden="true" />}
+      {tono === 'atento' && <Clock size={11} className="mt-px shrink-0 text-navy-ink" aria-hidden="true" />}
       <span>{children}</span>
     </p>
   );

@@ -91,7 +91,7 @@ function AccionesFicha({ telefono, onEscribir, onVenta }: { telefono: string; on
         <button
           type="button"
           onClick={onVenta}
-          className={`flex items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs font-bold text-navy transition-[background-color,transform] duration-200 ease-house hover:bg-muted active:scale-[0.98] ${FOCO_ANILLO}`}
+          className={`flex items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs font-bold text-navy-ink transition-[background-color,transform] duration-200 ease-house hover:bg-muted active:scale-[0.98] ${FOCO_ANILLO}`}
         >
           <ShoppingCart size={13} /> Registrar venta
         </button>
@@ -361,7 +361,7 @@ function BuscarPorTelefono({
                     </span>
                     <h2 className="mt-2 font-heading text-2xl font-bold text-foreground">{data.nombre}</h2>
                     {cifraCompras(data.ventas, data.ventasCount) && (
-                      <div className="mt-1 font-heading text-xl font-bold tabular-nums text-navy">
+                      <div className="mt-1 font-heading text-xl font-bold tabular-nums text-navy-ink">
                         {cifraCompras(data.ventas, data.ventasCount)}
                       </div>
                     )}
@@ -400,7 +400,7 @@ function BuscarPorTelefono({
                         <li key={v.folio} className="rounded-xl border border-border bg-muted/40 px-3 py-2 text-xs">
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-mono font-semibold text-foreground">{v.folio}</span>
-                            <span className="font-mono font-bold tabular-nums text-navy">
+                            <span className="font-mono font-bold tabular-nums text-navy-ink">
                               {v.moneda} {v.monto}
                             </span>
                           </div>

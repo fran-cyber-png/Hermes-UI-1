@@ -102,7 +102,7 @@ export function PanelUsuario({
           'flex size-9 items-center justify-center rounded-lg font-heading text-[11px] font-bold ' +
           'transition-[background-color,transform] duration-200 ease-house active:scale-[0.96] ' +
           'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
-          (abierto ? 'bg-navy text-white' : 'bg-secondary text-navy hover:bg-navy hover:text-white')
+          (abierto ? 'bg-navy text-white' : 'bg-secondary text-navy-ink hover:bg-navy hover:text-white')
         }
       >
         {iniciales(vendedora.nombre)}

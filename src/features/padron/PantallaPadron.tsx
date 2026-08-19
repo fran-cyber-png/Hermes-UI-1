@@ -265,7 +265,7 @@ export function PantallaPadron({
             <button
               type="button"
               onClick={() => setSeleccion(todoElRecorte())}
-              className="font-bold text-navy underline underline-offset-2 hover:text-navy/80"
+              className="font-bold text-navy-ink underline underline-offset-2 hover:text-navy-ink/80"
             >
               Elegir los {total.toLocaleString('es')} de este filtro
             </button>
@@ -274,7 +274,7 @@ export function PantallaPadron({
 
         {soySupervisor && seleccion.modo === 'recorte' && (
           <div className="flex flex-wrap items-center justify-center gap-2 border-b border-border bg-navy/5 px-4 py-2 text-xs">
-            <span className="font-semibold text-navy">
+            <span className="font-semibold text-navy-ink">
               Están elegidos los {elegidos.toLocaleString('es')} contactos de este filtro
               {seleccion.excluidos.length > 0 &&
                 ` (sacaste ${seleccion.excluidos.length})`}
@@ -283,7 +283,7 @@ export function PantallaPadron({
             <button
               type="button"
               onClick={() => setSeleccion(NADA)}
-              className="font-bold text-navy underline underline-offset-2 hover:text-navy/80"
+              className="font-bold text-navy-ink underline underline-offset-2 hover:text-navy-ink/80"
             >
               Elegir solo esta página
             </button>
@@ -432,7 +432,7 @@ function ChipsActivos({
       {puestos.map((p) => (
         <span
           key={p.llave}
-          className="flex items-center gap-1 rounded-full bg-navy/10 py-0.5 pl-2.5 pr-1 text-[11px] font-semibold text-navy"
+          className="flex items-center gap-1 rounded-full bg-navy/10 py-0.5 pl-2.5 pr-1 text-[11px] font-semibold text-navy-ink"
         >
           {p.rotulo}
           <button

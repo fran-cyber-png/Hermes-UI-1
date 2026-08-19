@@ -322,7 +322,7 @@ export function PanelNegocio({
       <section aria-label={textos.titulo} className="flex min-h-0 flex-1 flex-col rounded-2xl bg-card shadow-panel">
         <header className="shrink-0 border-b border-border px-4 py-2.5">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <h3 className="font-heading text-sm font-bold text-navy">{textos.titulo}</h3>
+            <h3 className="font-heading text-sm font-bold text-navy-ink">{textos.titulo}</h3>
             <div className="flex items-center gap-3">
               {ESTADOS.map((e) => (
                 <span key={e.id} className="flex items-center gap-1.5 text-[11px] text-muted-foreground" title={e.ayuda}>
@@ -458,7 +458,7 @@ function Encabezado({
         onClick={() => onOrden(col)}
         className={
           'rounded px-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ' +
-          (activo ? 'font-bold text-navy' : 'hover:text-foreground')
+          (activo ? 'font-bold text-navy-ink' : 'hover:text-foreground')
         }
       >
         {label}

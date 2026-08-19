@@ -185,7 +185,7 @@ function SelectorDeModo({
               'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:cursor-default ' +
               (activo
                 ? colorActivo(m)
-                : 'text-muted-foreground hover:bg-card hover:text-navy disabled:opacity-60')
+                : 'text-muted-foreground hover:bg-card hover:text-navy-ink disabled:opacity-60')
             }
           >
             {NOMBRE_MODO[m]}
@@ -203,7 +203,7 @@ function SelectorDeModo({
  */
 function colorActivo(m: ModoBot): string {
   if (m === 'automatico') return 'bg-navy text-white shadow-[0_1px_2px_rgba(14,42,82,0.10)]';
-  if (m === 'sombra') return 'bg-card text-navy ring-1 ring-navy shadow-[0_1px_2px_rgba(14,42,82,0.10)]';
+  if (m === 'sombra') return 'bg-card text-navy-ink ring-1 ring-navy shadow-[0_1px_2px_rgba(14,42,82,0.10)]';
   return 'bg-card text-foreground shadow-[0_1px_2px_rgba(14,42,82,0.10)]';
 }
 
@@ -238,7 +238,7 @@ function Icono({ clase }: { clase: ClaseBot }) {
   return (
     <Bot
       size={14}
-      className={'shrink-0 ' + (clase === 'automatico' || clase === 'sombra' ? 'text-navy' : 'text-muted-foreground')}
+      className={'shrink-0 ' + (clase === 'automatico' || clase === 'sombra' ? 'text-navy-ink' : 'text-muted-foreground')}
     />
   );
 }

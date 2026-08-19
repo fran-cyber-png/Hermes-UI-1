@@ -148,7 +148,7 @@ function Grupo({
     <section>
       <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-secondary/95 px-3 py-1.5 backdrop-blur-sm">
         <div className="min-w-0 flex-1">
-          <h3 className="truncate font-heading text-[11px] font-bold text-navy">{grupo.campana}</h3>
+          <h3 className="truncate font-heading text-[11px] font-bold text-navy-ink">{grupo.campana}</h3>
           <p className="font-mono text-[10px] tabular-nums text-muted-foreground">
             {ordenados.length} {ordenados.length === 1 ? 'persona' : 'personas'}
           </p>
@@ -161,7 +161,7 @@ function Grupo({
             type="button"
             onClick={() => onElegir(primera)}
             title={`Revisar las ${ordenados.length} de ${grupo.campana}, una por una. Empieza por la que más esperó.`}
-            className="flex shrink-0 items-center gap-1 rounded-lg bg-navy/10 px-2 py-1 text-[10px] font-bold text-navy transition-[background-color,color,transform] duration-200 ease-house hover:bg-navy hover:text-white active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+            className="flex shrink-0 items-center gap-1 rounded-lg bg-navy/10 px-2 py-1 text-[10px] font-bold text-navy-ink transition-[background-color,color,transform] duration-200 ease-house hover:bg-navy hover:text-white active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
           >
             Revisar {ordenados.length} <ChevronRight size={11} />
           </button>
@@ -229,7 +229,7 @@ function Fila({ m, activa, onElegir }: { m: MensajeBandeja; activa: boolean; onE
 function Vacio() {
   return (
     <div className="flex flex-col items-center gap-2 px-4 py-12 text-center">
-      <div className="flex size-10 items-center justify-center rounded-full bg-secondary text-navy">
+      <div className="flex size-10 items-center justify-center rounded-full bg-secondary text-navy-ink">
         <Inbox size={18} />
       </div>
       <p className="text-sm font-bold text-foreground">No queda nada por revisar.</p>

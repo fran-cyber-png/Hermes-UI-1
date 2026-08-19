@@ -105,7 +105,7 @@ function Corrida({ c, abierta, onAbrir }: { c: ComoVaLaCorrida; abierta: boolean
     <section className="rounded-2xl border border-border bg-card">
       {/* ── Cabecera: qué campaña, y si sigue saliendo ── */}
       <header className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
-        <Megaphone size={15} className="shrink-0 text-navy" />
+        <Megaphone size={15} className="shrink-0 text-navy-ink" />
         <h3 className="font-heading text-sm font-bold text-foreground">{c.pieza}</h3>
         {c.enCurso && (
           /* Verde y con el ícono latiendo: «esto está pasando AHORA». Sin oro —
@@ -197,7 +197,7 @@ function Corrida({ c, abierta, onAbrir }: { c: ComoVaLaCorrida; abierta: boolean
             {c.porDuena.map((d) => (
               <span
                 key={d.duena}
-                className="inline-flex items-center gap-1 rounded-full bg-navy/10 px-2.5 py-0.5 text-[11px] font-semibold text-navy"
+                className="inline-flex items-center gap-1 rounded-full bg-navy/10 px-2.5 py-0.5 text-[11px] font-semibold text-navy-ink"
                 title={`${d.enviados} enviados · ${d.respondieron} respondieron · ${d.sinAtender} sin atender`}
               >
                 {nombreCorto(d.duena)}
@@ -216,7 +216,7 @@ function Corrida({ c, abierta, onAbrir }: { c: ComoVaLaCorrida; abierta: boolean
           <button
             type="button"
             onClick={onAbrir}
-            className="text-xs font-bold text-navy underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            className="text-xs font-bold text-navy-ink underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           >
             {abierta ? 'Ocultar' : `Ver quiénes esperan (${c.sinAtender.n}) →`}
           </button>

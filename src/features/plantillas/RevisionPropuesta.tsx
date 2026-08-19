@@ -50,7 +50,7 @@ function PasoDeLaPropuesta({
 }) {
   return (
     <li className="flex gap-2 border-t border-border/70 py-2 first:border-t-0">
-      <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded bg-secondary font-mono text-[10px] font-bold text-navy">
+      <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded bg-secondary font-mono text-[10px] font-bold text-navy-ink">
         {orden}
       </span>
       <div className="min-w-0 flex-1">

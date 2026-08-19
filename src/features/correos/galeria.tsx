@@ -603,7 +603,7 @@ createRoot(document.getElementById('galeria')!).render(
           </h1>
           <p className="mt-0.5 max-w-4xl text-xs leading-relaxed text-muted-foreground">{ROTULO.nota}</p>
           {frase && (
-            <p className="mt-1 max-w-4xl font-mono text-[11px] leading-relaxed text-navy">«{frase}»</p>
+            <p className="mt-1 max-w-4xl font-mono text-[11px] leading-relaxed text-navy-ink">«{frase}»</p>
           )}
         </header>
         {/*

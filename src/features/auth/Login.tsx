@@ -114,7 +114,7 @@ export function Login({
             <Escudo size={44} />
           </span>
           <div className="mt-3 font-heading text-4xl font-extrabold tracking-[0.06em] text-white">HERMES</div>
-          <p className="mt-1.5 text-xs text-navy-muted">La mesa de la vendedora</p>
+          <p className="mt-1.5 text-xs text-navy-ink-muted">La mesa de la vendedora</p>
         </div>
 
         {errorCenturion && (
@@ -148,7 +148,7 @@ export function Login({
         )}
 
         <form onSubmit={onSubmit} className="flex flex-col gap-4 rounded-2xl bg-card p-6 shadow-panel">
-          {ultimo && <p className="font-heading text-base font-bold text-navy">Hola de nuevo</p>}
+          {ultimo && <p className="font-heading text-base font-bold text-navy-ink">Hola de nuevo</p>}
 
           <label className="flex flex-col gap-1.5">
             <span className={sectionLabel}>Usuario</span>

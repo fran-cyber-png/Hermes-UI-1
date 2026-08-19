@@ -560,7 +560,7 @@ function CitaEnBurbuja({
   const base = 'mb-1 block w-full overflow-hidden rounded-lg border-l-4 border-navy bg-navy/[0.07] px-2 py-1 text-left';
   const contenido = (
     <>
-      <div className="truncate text-[11px] font-bold text-navy">{autor ?? extracto}</div>
+      <div className="truncate text-[11px] font-bold text-navy-ink">{autor ?? extracto}</div>
       {autor && <div className="truncate text-[11px] text-muted-foreground">{extracto}</div>}
     </>
   );
@@ -664,9 +664,9 @@ function ReproducirBajoDemanda({ media }: { media: MediaHilo }) {
       className="flex w-56 max-w-full items-center gap-2.5 rounded-lg border border-border bg-muted/60 px-3 py-2.5 text-left transition-colors hover:bg-muted disabled:cursor-wait"
     >
       {bajando ? (
-        <Loader2 size={18} className="shrink-0 animate-spin text-navy" />
+        <Loader2 size={18} className="shrink-0 animate-spin text-navy-ink" />
       ) : (
-        <Play size={18} className="shrink-0 text-navy" />
+        <Play size={18} className="shrink-0 text-navy-ink" />
       )}
       <span className="min-w-0">
         <span className="block truncate text-xs font-semibold text-foreground">
@@ -711,9 +711,9 @@ function DocumentoBajoDemanda({ media }: { media: MediaHilo }) {
   const cuerpo = (
     <>
       {bajando ? (
-        <Loader2 size={18} className="shrink-0 animate-spin text-navy" />
+        <Loader2 size={18} className="shrink-0 animate-spin text-navy-ink" />
       ) : (
-        <FileText size={18} className="shrink-0 text-navy" />
+        <FileText size={18} className="shrink-0 text-navy-ink" />
       )}
       <span className="min-w-0">
         <span className="block truncate text-xs font-semibold text-foreground">{media.nombre ?? 'Documento'}</span>
@@ -888,7 +888,7 @@ export function HiloWhatsapp({
           telefono={telefono}
           numeroPropio={numeroPropio}
           conFoto
-          className="size-8 rounded-[11px] bg-secondary font-heading text-xs font-bold text-navy"
+          className="size-8 rounded-[11px] bg-secondary font-heading text-xs font-bold text-navy-ink"
         />
         <div className="min-w-0">
           <div className="truncate font-heading text-sm font-bold text-foreground">
@@ -1061,7 +1061,7 @@ export function HiloWhatsapp({
                               ? ''
                               : 'ring-1 ring-border ') +
                           (m.direccion === 'saliente'
-                            ? 'rounded-br-md bg-secondary text-navy shadow-[0_1px_2px_rgba(14,42,82,0.06)]'
+                            ? 'rounded-br-md bg-secondary text-navy-ink shadow-[0_1px_2px_rgba(14,42,82,0.06)]'
                             : 'rounded-bl-md bg-card text-foreground')
                         }
                       >
@@ -1104,7 +1104,7 @@ export function HiloWhatsapp({
                             <TextoWhatsapp texto={textoVigente} />
                           </div>
                         ) : m.media ? null : m.origen?.fuente === 'anuncio' ? (
-                          <span className="inline-flex items-center gap-1.5 text-navy">
+                          <span className="inline-flex items-center gap-1.5 text-navy-ink">
                             <Megaphone size={13} className="shrink-0" />
                             Vino del anuncio{m.origen.titulo ? `: ${m.origen.titulo}` : ''}
                           </span>
@@ -1129,7 +1129,7 @@ export function HiloWhatsapp({
                             <span
                               className={
                                 'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide ' +
-                                (m.aprobada_por ? 'bg-navy text-white' : 'bg-navy/10 text-navy')
+                                (m.aprobada_por ? 'bg-navy text-white' : 'bg-navy/10 text-navy-ink')
                               }
                               title={
                                 m.aprobada_por
@@ -1153,7 +1153,7 @@ export function HiloWhatsapp({
                             {conRespuesta.has(m.external_id) && (
                               <CornerDownRight
                                 size={11}
-                                className="shrink-0 text-navy"
+                                className="shrink-0 text-navy-ink"
                                 aria-label="Respondieron a este mensaje"
                               >
                                 <title>Respondieron a este mensaje</title>
@@ -1835,8 +1835,8 @@ function ComposerWa({
           «Aprobar» en vez de «Enviar»: tres señales para un solo hecho. */}
       {sugerencia && (
         <div className="mb-2 flex items-center gap-2 rounded-xl border border-navy/25 bg-card px-2.5 py-1.5">
-          <Bot size={13} className="shrink-0 text-navy" />
-          <p className="min-w-0 flex-1 truncate text-[11px] font-semibold text-navy">
+          <Bot size={13} className="shrink-0 text-navy-ink" />
+          <p className="min-w-0 flex-1 truncate text-[11px] font-semibold text-navy-ink">
             Preparada por Hermes
             {sugerencia.campana ? <span className="font-normal text-muted-foreground"> · {sugerencia.campana}</span> : null}
             {editado && (
@@ -1905,7 +1905,7 @@ function ComposerWa({
               const { autor, extracto } = rotuloDeCita(cita, personaNombre);
               return (
                 <>
-                  <div className="truncate text-[11px] font-bold text-navy">
+                  <div className="truncate text-[11px] font-bold text-navy-ink">
                     {autor ? `Respondiendo a ${autor}` : 'Respondiendo a un mensaje anterior'}
                   </div>
                   <div className="truncate text-[11px] text-muted-foreground">{extracto}</div>
@@ -1938,7 +1938,7 @@ function ComposerWa({
           {vistaPrevia ? (
             <img src={vistaPrevia} alt="" className="size-10 rounded-lg object-cover" />
           ) : (
-            <FileText size={18} className="shrink-0 text-navy" />
+            <FileText size={18} className="shrink-0 text-navy-ink" />
           )}
           <div className="min-w-0 flex-1">
             <div className="truncate text-xs font-semibold text-foreground">{adjunto.name}</div>
@@ -2183,7 +2183,7 @@ function BadgeOrigen({ origen }: { origen: OrigenLead }) {
   if (origen.fuente === 'anuncio') {
     return (
       <div className="flex items-center gap-2 border-b border-border bg-secondary px-4 py-2 text-xs text-secondary-foreground">
-        <Megaphone size={13} className="shrink-0 text-navy" />
+        <Megaphone size={13} className="shrink-0 text-navy-ink" />
         <span>
           Vino del anuncio{origen.anuncio ? <b> “{origen.anuncio}”</b> : ''}
           {origen.campana ? <> · campaña <b>{origen.campana}</b></> : ''}

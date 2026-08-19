@@ -54,7 +54,7 @@ const CASOS: { rotulo: string; total: number; recortada?: boolean; lineaPropia?:
 function Galeria() {
   return (
     <div className="min-h-screen bg-background p-8 font-sans">
-      <h1 className="font-heading text-2xl font-bold text-navy">El rótulo de la cola</h1>
+      <h1 className="font-heading text-2xl font-bold text-navy-ink">El rótulo de la cola</h1>
       <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
         Vive en la cabecera de la cola, a la derecha de los tabs. <strong>Sin oro</strong>: acá no
         corre ningún plazo.
@@ -100,7 +100,7 @@ function Galeria() {
           ninguna conversación asignada todavía (medido el 18-ago-2026). Va acá y
           no en una galería nueva porque responde la MISMA pregunta que el
           rótulo —«¿de quién es lo que estoy viendo?»— y se juzgan juntas. */}
-      <h2 className="mt-10 font-heading text-lg font-bold text-navy">Y cuando no hay nada</h2>
+      <h2 className="mt-10 font-heading text-lg font-bold text-navy-ink">Y cuando no hay nada</h2>
       <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
         Sin este texto, la cola vacía de alguien que trajo su línea se lee «se perdieron las
         conversaciones». Se dicen las dos fuentes de su cola y no se afirma ningún conteo: el front

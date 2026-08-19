@@ -162,7 +162,7 @@ function Galeria() {
     <div className="min-h-screen bg-background p-6">
       <div className="mx-auto max-w-4xl space-y-6">
         <header>
-          <h1 className="font-heading text-2xl font-bold text-navy">Los filtros de la cola</h1>
+          <h1 className="font-heading text-2xl font-bold text-navy-ink">Los filtros de la cola</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Censo de producción del 11-ago-2026 · 3.995 conversaciones · los textos y los números son reales.
           </p>
@@ -208,7 +208,7 @@ function Galeria() {
         <section className="space-y-3">
           {CASOS.map(({ rotulo, nota, c }) => (
             <div key={c.clave}>
-              <p className="px-1 text-xs font-bold text-navy">{rotulo}</p>
+              <p className="px-1 text-xs font-bold text-navy-ink">{rotulo}</p>
               <p className="mb-1 px-1 text-xs text-muted-foreground">{nota}</p>
               <div className="overflow-hidden rounded-xl border border-border bg-card">
                 <FilaConversacion c={c} seleccionada={false} onAbrir={() => {}} indice={0} />

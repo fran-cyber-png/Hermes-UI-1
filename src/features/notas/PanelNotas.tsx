@@ -171,7 +171,7 @@ function FilaNota({
                 aria-label={nota.fijada ? 'Desfijar nota' : 'Fijar nota arriba'}
                 className={
                   'rounded-md p-1 transition-colors disabled:opacity-40 ' +
-                  (nota.fijada ? 'text-navy hover:text-navy/70' : 'text-muted-foreground hover:text-foreground')
+                  (nota.fijada ? 'text-navy-ink hover:text-navy-ink/70' : 'text-muted-foreground hover:text-foreground')
                 }
               >
                 {nota.fijada ? <Pin size={12} fill="currentColor" /> : <PinOff size={12} />}
@@ -339,7 +339,7 @@ export function PanelNotas({
       <button
         type="button"
         onClick={() => setAbierto((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-xs font-bold text-navy transition-colors hover:bg-muted"
+        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-xs font-bold text-navy-ink transition-colors hover:bg-muted"
       >
         <span className="flex items-center gap-2">
           <StickyNote size={14} />
@@ -401,7 +401,7 @@ export function LibretaPersonal({ abierta, onCerrar }: { abierta: boolean; onCer
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-3">
-          <div className="flex items-center gap-2 font-heading text-sm font-bold text-navy">
+          <div className="flex items-center gap-2 font-heading text-sm font-bold text-navy-ink">
             <Notebook size={15} /> Tu libreta
           </div>
           <button

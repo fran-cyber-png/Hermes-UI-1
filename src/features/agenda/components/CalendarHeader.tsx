@@ -1,5 +1,4 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { DarkModeToggle } from './DarkModeToggle';
 import { MODOS, MODO_ROTULO, type Modo } from '../modos';
 
 /**
@@ -23,7 +22,6 @@ interface CalendarHeaderProps {
   onNext: () => void;
   onModoChange: (modo: Modo) => void;
   onCreateClick: () => void;
-  containerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 export function CalendarHeader({
@@ -36,7 +34,6 @@ export function CalendarHeader({
   onNext,
   onModoChange,
   onCreateClick,
-  containerRef,
 }: CalendarHeaderProps) {
   return (
     <div className="flex flex-col gap-3 border-b border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -87,7 +84,8 @@ export function CalendarHeader({
         )}
       </div>
 
-      {/* Derecha: modo, tema y crear */}
+      {/* Derecha: modo y crear. El tema se elige en la barra de la app —no acá:
+          no es una preferencia de la Agenda, es de toda la mesa. */}
       <div className="flex items-center gap-2">
         <div className="flex gap-1 rounded-lg border border-border p-1">
           {MODOS.map((m) => (
@@ -106,7 +104,6 @@ export function CalendarHeader({
             </button>
           ))}
         </div>
-        <DarkModeToggle containerRef={containerRef} />
         <button
           type="button"
           onClick={onCreateClick}

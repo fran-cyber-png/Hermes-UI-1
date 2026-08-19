@@ -156,7 +156,7 @@ function QueVeLaVendedora({
       <ul className="mt-4 space-y-2.5">
         {MOMENTOS.map((m) => (
           <li key={m} className="rounded-lg border border-border bg-card px-3 py-2.5">
-            <p className="text-xs font-semibold text-navy">{PORQUE_DEL_MOMENTO[m]}</p>
+            <p className="text-xs font-semibold text-navy-ink">{PORQUE_DEL_MOMENTO[m]}</p>
             {vistaPrevia[m]?.length ? (
               <div className="mt-1.5 flex flex-wrap gap-1">
                 {vistaPrevia[m].map((clave) => (
@@ -313,7 +313,7 @@ function Editor({
                 className={
                   'rounded-lg border px-2 py-1 text-[11px] transition-colors disabled:opacity-60 ' +
                   (puesto
-                    ? 'border-primary bg-secondary text-navy'
+                    ? 'border-primary bg-secondary text-navy-ink'
                     : 'border-border text-muted-foreground hover:bg-muted')
                 }
               >

@@ -161,7 +161,7 @@ export function RespuestaDeIvi({ respuesta }: { respuesta: RespuestaIvi }) {
           }}
           title="Copiar el texto"
           aria-label="Copiar la respuesta de Ivi"
-          className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors duration-200 ease-house hover:bg-secondary hover:text-navy active:scale-[0.94] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+          className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors duration-200 ease-house hover:bg-secondary hover:text-navy-ink active:scale-[0.94] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
         >
           {copiado ? <Check size={12} className="text-success" /> : <Copy size={12} />}
         </button>

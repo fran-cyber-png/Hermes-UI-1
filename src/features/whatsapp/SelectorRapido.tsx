@@ -131,7 +131,7 @@ export function SelectorRapido({ consulta, respuestas, indice, onIndice, onElegi
             e.preventDefault();
             onAdministrar();
           }}
-          className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-semibold text-navy transition-colors hover:bg-secondary hover:text-primary"
+          className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-semibold text-navy-ink transition-colors hover:bg-secondary hover:text-primary"
         >
           <Settings2 size={12} />
           Crear o editar respuestas

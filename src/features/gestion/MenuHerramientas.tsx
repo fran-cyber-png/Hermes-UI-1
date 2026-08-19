@@ -118,7 +118,7 @@ export function MenuHerramientas({ conversacion }: { conversacion: Conversacion 
           />
           <aside className="fixed right-0 top-0 z-50 flex h-full w-[22rem] max-w-[92vw] flex-col bg-card p-3 shadow-panel">
             <div className="mb-2 flex shrink-0 items-center gap-2">
-              <h2 className="font-heading text-sm font-bold text-navy">Mensajes predeterminados</h2>
+              <h2 className="font-heading text-sm font-bold text-navy-ink">Mensajes predeterminados</h2>
               <button
                 type="button"
                 onClick={() => setPlantillasAbiertas(false)}

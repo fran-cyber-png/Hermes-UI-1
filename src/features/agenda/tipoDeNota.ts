@@ -86,7 +86,7 @@ export function tipoDeNota(nota: string): TipoNota {
  * Fondo y texto del chip, por tipo.
  *
  * 🔴 **Cada par tiene que estar definido en LOS DOS temas.** `otro` era
- * `bg-secondary text-navy`, y `--navy` es color de MARCA: no se redefine en el
+ * `bg-secondary text-navy-ink`, y `--navy` es color de MARCA: no se redefine en el
  * bloque oscuro de `index.css` (ahí sigue siendo `#0E2A52`) mientras
  * `--secondary` sí pasa a `#1E293B`. O sea que en modo oscuro el chip quedaba
  * navy sobre navy —contraste ~1,3:1— y **un seguimiento existía sin poder
@@ -98,7 +98,7 @@ export const CHIP_TIPO: Record<TipoNota, string> = {
   wsp: 'bg-success/10 text-success',
   correo: 'bg-secondary text-secondary-foreground',
   reunion: 'bg-navy text-white',
-  seguimiento: 'bg-navy-muted/15 text-navy-muted',
+  seguimiento: 'bg-navy-muted/15 text-navy-ink-muted',
   recordatorio: 'bg-muted text-muted-foreground',
   otro: 'bg-muted text-foreground',
 };
