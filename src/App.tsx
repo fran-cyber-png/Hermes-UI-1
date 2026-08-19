@@ -365,14 +365,14 @@ function PaletaAcciones({
  * ══ 🔴 POR QUÉ ESTÁ PARTIDO EN DOS ═══════════════════════════════════════════
  *
  * Hasta el 19-ago-2026 esto era un solo componente de ~670 líneas, con los
- * `useSesionWa`, `useAutoRespuesta`, `useAgenda`, `useDashboard` y el SSE
- * declarados ARRIBA de los early returns. Las reglas de los hooks obligan a
+ * `useSesionWa`, `useAutoRespuesta`, `useAgenda`, el radar del Dashboard y el
+ * SSE declarados ARRIBA de los early returns. Las reglas de los hooks obligan a
  * eso: un `return` temprano no puede saltearse una llamada. Consecuencia
  * medida: **con la pantalla de Login adelante, cuatro polls seguían corriendo
  * contra el server** —el de la sesión de WhatsApp cada 10 s, el de la
- * auto-respuesta cada 30, el de la agenda cada 60, el del dashboard cada 30—
- * todos contestando 401 y ninguno visible para nadie. Una máquina abierta en el
- * Login le pegaba a producción para siempre.
+ * auto-respuesta cada 30, el de la agenda cada 60, el del radar cada 30— todos
+ * contestando 401 y ninguno visible para nadie. Una máquina abierta en el Login
+ * le pegaba a producción para siempre.
  *
  * `enabled` en cada hook lo tapaba, pero es una lista que hay que acordarse de
  * mantener: el hook que se agregue mañana no lo lleva y nadie se entera. Partir
@@ -381,6 +381,12 @@ function PaletaAcciones({
  *
  * El candado es `src/App.polls.test.tsx`: monta `<App/>` SIN token, deja correr
  * 90 s de reloj falso y cuenta los `fetch`. Tienen que ser cero.
+ *
+ * ⚠️ **Y el radar del Dashboard se nombra en criollo, sin escribir el nombre de
+ * su hook**: `dashboardFueraDeLaRaiz.test.ts` fija que ese identificador no
+ * aparezca en este archivo —ni siquiera en un comentario— porque lo que vigila
+ * es que la consulta más cara no cuelgue de la raíz, y un `grep` no distingue
+ * una llamada de una anécdota. El candado tiene razón: la prosa se adapta.
  */
 export default function App() {
   const { vendedora, cargando, sinServer, reintentar, entrar, salir, cerberusVivo, errorCenturion } = useSesion();

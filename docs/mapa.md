@@ -11,9 +11,9 @@
 
 | Zona | Módulos | Archivos | Líneas de código | Líneas de test |
 |---|--:|--:|--:|--:|
-| front | 34 | 476 | 66,336 | 22,567 |
+| front | 34 | 476 | 66,342 | 22,567 |
 | server | 68 | 800 | 84,420 | 52,568 |
-| **total** | **102** | **1,276** | **150,756** | **75,135** |
+| **total** | **102** | **1,276** | **150,762** | **75,135** |
 
 ## Front — `src/`
 
@@ -38,7 +38,7 @@
 | `plantillas` | Las secuencias de venta: editarlas, aprobar una propuesta y mandarlas paso a paso. | 7 | 1,429 | 1 | 2 | 2 |
 | `ivi` | La consulta al cerebro RAG y cómo se presenta lo que contesta: los tres tipos y los ocho errores. | 10 | 1,395 | 4 | 1 | 1 |
 | `auth` | Entrar y salir: login contra Cerberus, el SSO de Centurión, y el token que el cliente cree antes de preguntar. | 18 | 1,300 | 9 | 3 | 4 |
-| `app` | El armazón: qué vista está abierta, los ⌘N y qué capa se monta encima de la mesa. Compone features; no tiene regla de negocio propia. | 2 | 1,139 | 0 | 0 | 18 |
+| `app` | El armazón: qué vista está abierta, los ⌘N y qué capa se monta encima de la mesa. Compone features; no tiene regla de negocio propia. | 2 | 1,145 | 0 | 0 | 18 |
 | `venta` | Registrar la venta contra Cerberus sin salir del chat. | 6 | 1,135 | 1 | 2 | 6 |
 | `hechos` | Los datos recomendados — la munición de una línea. Tocar uno lo pone en el composer; no envía. | 7 | 1,003 | 2 | 2 | 3 |
 | `navegador` | El navegador embebido: qué peldaño de la escalera corre esta máquina y a dónde se puede ir. | 9 | 843 | 3 | 1 | 1 |
