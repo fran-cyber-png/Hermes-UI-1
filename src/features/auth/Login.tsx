@@ -2,7 +2,7 @@ import { useState, type FormEvent, type KeyboardEvent } from 'react';
 import { AlertTriangle, Loader2, LogIn } from 'lucide-react';
 import { Escudo } from '../../components/Marca';
 import { ErrorApi } from '../../lib/datos/cliente';
-import { sectionLabel } from '../../lib/styles';
+import { fieldClass, sectionLabel } from '../../lib/styles';
 import { CLAVE_ULTIMO_USUARIO } from './sesion';
 
 /**
@@ -12,8 +12,7 @@ import { CLAVE_ULTIMO_USUARIO } from './sesion';
  * vez al montar, último usuario precargado. Ritual de 3 segundos, no un form.
  */
 
-const CLASE_INPUT =
-  'rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25';
+const CLASE_INPUT = `${fieldClass} outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25`;
 
 /**
  * Cuatro causas distintas, cuatro mensajes — y ninguno es el error crudo.

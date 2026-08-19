@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { montar, teclear, tocar, type Montado } from '../../pruebas/dom';
+import { montar, reposar, teclear, tocar, type Montado } from '../../pruebas/dom';
 import type { Conversacion } from '../../dominio/conversaciones';
 import { HojaContacto } from './HojaContacto';
 
@@ -37,11 +37,34 @@ const CONTACTO: Conversacion = {
 
 let vista: Montado | null = null;
 
+function fetchPorDefecto(): typeof fetch {
+  return vi.fn((input) => {
+    const url = typeof input === 'string' ? input : input.url;
+    if (url.includes('/api/reparto/rueda')) {
+      return Promise.resolve(
+        new Response(JSON.stringify({ linea: '51986394450', rueda: [], destinos: ['ana', 'luz'] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    }
+    if (url.includes('/api/whatsapp/lineas')) {
+      return Promise.resolve(
+        new Response(JSON.stringify({ lineas: [{ numero: '51986394450', etiqueta: 'Ventas', estado: 'conectado' }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    }
+    // El panel pregunta por la ficha de Cerberus, el lead-form, las señales y los
+    // intereses. Acá no se está probando ninguno: que fallen todos es el estado
+    // más parecido a la app sin server, y react-query los absorbe (retry: false).
+    return Promise.reject(new Error('sin server en el test'));
+  }) as unknown as typeof fetch;
+}
+
 beforeEach(() => {
-  // El panel pregunta por la ficha de Cerberus, el lead-form, las señales y los
-  // intereses. Acá no se está probando ninguno: que fallen todos es el estado
-  // más parecido a la app sin server, y react-query los absorbe (retry: false).
-  vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('sin server en el test'))));
+  vi.stubGlobal('fetch', fetchPorDefecto());
 });
 
 afterEach(() => {
@@ -113,5 +136,39 @@ describe('HojaContacto — el Escape', () => {
     tocar(boton!);
 
     expect(cerrar).toHaveBeenCalledTimes(1);
+  });
+
+  it('muestra el selector de asignación cuando la línea tiene reparto', async () => {
+    vista = montar(<HojaContacto conversacion={CONTACTO} onCerrar={vi.fn()} miVendedora="ana" />);
+    await reposar();
+
+    const boton = vista.contenedor.querySelector('button[title*="asignar"]');
+    expect(boton).not.toBeNull();
+    expect(boton?.textContent).toContain('Sin asignar');
+  });
+
+  it('muestra "Escribirle" cuando no hay hilo y hay puente', async () => {
+    const escribir = vi.fn();
+    vista = montar(<HojaContacto conversacion={CONTACTO} onCerrar={vi.fn()} onEscribir={escribir} />);
+    await reposar();
+
+    const boton = Array.from(vista.contenedor.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Escribirle'),
+    );
+    expect(boton).not.toBeNull();
+    tocar(boton!);
+    expect(escribir).toHaveBeenCalledWith('51987654321');
+  });
+
+  it('NO muestra "Escribirle" cuando la conversación ya tiene hilo', async () => {
+    const escribir = vi.fn();
+    const conHilo = { ...CONTACTO, n: 5 };
+    vista = montar(<HojaContacto conversacion={conHilo} onCerrar={vi.fn()} onEscribir={escribir} />);
+    await reposar();
+
+    const boton = Array.from(vista.contenedor.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Escribirle'),
+    );
+    expect(boton).toBeUndefined();
   });
 });

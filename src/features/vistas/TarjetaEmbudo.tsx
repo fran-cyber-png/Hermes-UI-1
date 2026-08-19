@@ -21,7 +21,7 @@ import { hace } from '../../lib/datos/frescura';
 import { lecturaDeVentana } from '../../dominio/ventana';
 import { lecturaDeAntiguedad } from '../../dominio/antiguedad';
 import { etiquetaDeMedia } from '../../lib/etiquetaMedia';
-import { tempBorde, tempClass } from '../../lib/formato';
+import { horasDesde, tempBorde, tempClass } from '../../lib/formato';
 import { cotizarEnUnClic, cursoDeTarjeta, haceCorto, nombreDeTarjeta, turnoDeTarjeta } from './tarjeta';
 
 /**
@@ -154,7 +154,7 @@ export function TarjetaEmbudo({
   const { turno, apremia } = turnoDeTarjeta(c);
   const curso = cursoDeTarjeta(c);
   const unClic = cotizarEnUnClic(c);
-  const horas = (Date.now() - new Date(c.referencia).getTime()) / 3_600_000;
+  const horas = horasDesde(c.referencia);
 
   // El preview solo cuando la pelota es NUESTRA: si el último mensaje es el
   // nuestro, lo que se lee es la plantilla que mandamos — la misma en decenas de

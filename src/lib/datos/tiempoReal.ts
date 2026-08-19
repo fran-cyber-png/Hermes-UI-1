@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { API_URL } from '../../config';
+import { crearAgrupador } from './agrupador';
 import { consumirStream } from './streamAutenticado';
 import { tokenGuardado } from './token';
 import { esMensajeEntrante } from '../notificaciones/decidir';
@@ -66,6 +67,30 @@ import { formatoTelefono } from '../formato';
 const REINTENTO_MS = 3000;
 /** Cuánto se reparten las pestañas para no invalidar la cola todas juntas. */
 const JITTER_COLA_MS = 4000;
+/**
+ * ══ LA VENTANA EN LA QUE SE JUNTAN LAS DOS CONSULTAS CARAS ═══════════════════
+ *
+ * 🔴 **EL JITTER REPARTÍA Y NADA MÁS.** Cada mensaje que entra invalidaba la
+ * cola, y en producción entran **7 a 18 por minuto** (medido el 19-ago-2026 en
+ * el log del proceso: whatsmeow, no el webhook — por eso contar `POST /webhook`
+ * daba cero y los números no cerraban). Con tres vendedoras conectadas eso eran
+ * ~36 invalidaciones por minuto de la consulta más cara del sistema. Resultado:
+ * `hermes_db` al 747 % de ocho núcleos y el 100 % de los pedidos en 504.
+ *
+ * Con la ventana, ese mismo minuto son **4 invalidaciones**, no 36.
+ *
+ * ⚠️ **15 s no es un número de confort: es lo que la pantalla puede tolerar sin
+ * mentir.** Lo que la vendedora mira mientras le escriben es el HILO, y ése se
+ * invalida al instante (abajo, sin agrupar). La campanita y el aviso de
+ * escritorio también son inmediatos. Lo que espera hasta 15 s es el ORDEN de la
+ * lista — y aun así queda veinte veces más fresco que la red del poll, que con
+ * el stream vivo son 5 minutos (`lib/datos/latido.ts`).
+ *
+ * ⚠️ **La ventana NO reemplaza al jitter, lo contiene**: la ventana acota el
+ * RITMO de una pestaña, el jitter desincroniza las PESTAÑAS entre sí. Sacar el
+ * segundo devuelve las ~8 vendedanas disparando en el mismo segundo.
+ */
+const VENTANA_CARAS_MS = 15_000;
 
 export function useTiempoReal(sesionActiva: boolean, alNoAutorizado?: () => void) {
   const qc = useQueryClient();
@@ -89,10 +114,23 @@ export function useTiempoReal(sesionActiva: boolean, alNoAutorizado?: () => void
      * average 16 en un VPS de 8 núcleos). `frescura`/`dashboard`/el hilo son
      * baratas y no lo necesitan.
      */
-    const invalidarColaConJitter = () =>
-      setTimeout(() => {
+    /**
+     * Las dos caras van AGRUPADAS y con jitter; el resto, al instante.
+     *
+     * Se separan en dos agrupadores y no en uno solo porque el reconecte
+     * invalida el dashboard sin pasar por la cola, y con un agrupador
+     * compartido un mensaje se habría comido esa recuperación.
+     */
+    const agCola = crearAgrupador(() => VENTANA_CARAS_MS + Math.random() * JITTER_COLA_MS);
+    const agDashboard = crearAgrupador(() => VENTANA_CARAS_MS + Math.random() * JITTER_COLA_MS);
+    const invalidarColaAgrupada = () =>
+      agCola.pedir(() => {
         if (!control.signal.aborted) void qc.invalidateQueries({ queryKey: ['conversaciones'] });
-      }, Math.random() * JITTER_COLA_MS);
+      });
+    const invalidarDashboardAgrupado = () =>
+      agDashboard.pedir(() => {
+        if (!control.signal.aborted) void qc.invalidateQueries({ queryKey: ['dashboard'] });
+      });
 
     const manejar = (data: string) => {
       let e: { tipo?: string; telefono?: string | null; direccion?: string };
@@ -115,10 +153,12 @@ export function useTiempoReal(sesionActiva: boolean, alNoAutorizado?: () => void
         // jitter vive en `invalidarColaConJitter` y lo comparte con el
         // reconecte: dos delays distintos sobre la misma consulta serían la
         // misma regla escrita dos veces.
-        invalidarColaConJitter();
+        invalidarColaAgrupada();
         void qc.invalidateQueries({ queryKey: ['frescura'] });
-        // El radar del dashboard también: un mensaje ES un lead cayendo.
-        void qc.invalidateQueries({ queryKey: ['dashboard'] });
+        // El radar del dashboard también: un mensaje ES un lead cayendo. Va
+        // agrupado como la cola: son las dos que pesan (~2 s cada una medidas
+        // en producción), y el resto de esta función cuesta milisegundos.
+        invalidarDashboardAgrupado();
         // Y el hilo de esa persona, si está abierto. Con el evento recortado no
         // sabemos de quién fue, así que se invalida el PREFIJO: react-query
         // refetchea solo las queries ACTIVAS, y de hilo hay a lo sumo una montada.
@@ -129,7 +169,7 @@ export function useTiempoReal(sesionActiva: boolean, alNoAutorizado?: () => void
       } else if (e.tipo === 'estado') {
         void qc.invalidateQueries({ queryKey: ['wa', 'sesion'] });
         // El webhook de landing emite 'estado' al persistir: el radar se refresca.
-        void qc.invalidateQueries({ queryKey: ['dashboard'] });
+        invalidarDashboardAgrupado();
       }
     };
 
@@ -147,9 +187,9 @@ export function useTiempoReal(sesionActiva: boolean, alNoAutorizado?: () => void
      * exactamente cuando el server acaba de arrancar.
      */
     function alReconectar() {
-      invalidarColaConJitter();
+      invalidarColaAgrupada();
       void qc.invalidateQueries({ queryKey: ['frescura'] });
-      void qc.invalidateQueries({ queryKey: ['dashboard'] });
+      invalidarDashboardAgrupado();
       void qc.invalidateQueries({ queryKey: ['wa', 'conversacion'] });
       // 🔴 Y el estado de las líneas: sin esto, una línea que se montó mientras
       // el front estaba desconectado se queda en su 404 congelado para siempre
@@ -186,6 +226,11 @@ export function useTiempoReal(sesionActiva: boolean, alNoAutorizado?: () => void
     return () => {
       control.abort();
       if (reintento !== undefined) clearTimeout(reintento);
+      // Las ventanas abiertas se tiran: la guarda del `signal` ya evitaba
+      // invalidar sobre un cliente desmontado, pero dejar dos timers de 15 s
+      // vivos por cada montaje es una fuga que en un `StrictMode` se duplica.
+      agCola.cancelar();
+      agDashboard.cancelar();
     };
   }, [qc, sesionActiva, alNoAutorizado]);
 }
