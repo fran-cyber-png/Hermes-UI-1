@@ -76,9 +76,9 @@ export function LecturaDeCorreo({
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
-          <Mail size={16} strokeWidth={2.1} className="shrink-0 text-navy" />
+          <Mail size={16} strokeWidth={2.1} className="shrink-0 text-navy-ink" />
           <div className="min-w-0 flex-1">
-            <h2 className="truncate font-heading text-sm font-bold leading-tight text-navy" title={fila.asunto}>
+            <h2 className="truncate font-heading text-sm font-bold leading-tight text-navy-ink" title={fila.asunto}>
               {fila.asunto}
             </h2>
             <p className="truncate text-[10px] leading-tight text-muted-foreground" title={fila.vendedoraId}>

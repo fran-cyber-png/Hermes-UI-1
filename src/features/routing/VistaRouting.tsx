@@ -356,7 +356,7 @@ export function VistaRouting() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-6 py-3">
-        <Route size={16} strokeWidth={1.9} className="text-navy" aria-hidden />
+        <Route size={16} strokeWidth={1.9} className="text-navy-ink" aria-hidden />
         <p className="text-xs font-medium text-foreground">
           {data.etiqueta ?? 'Línea de Meta'}{' '}
           <span className="font-mono text-[11px] text-muted-foreground">{data.linea}</span>
@@ -384,7 +384,7 @@ export function VistaRouting() {
             type="button"
             onClick={() => refrescar.mutate()}
             disabled={refrescar.isPending}
-            className="flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-[color,border-color,transform] duration-200 ease-house hover:border-primary/40 hover:text-navy active:scale-[0.97] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-[color,border-color,transform] duration-200 ease-house hover:border-primary/40 hover:text-navy-ink active:scale-[0.97] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             <RefreshCw size={12} strokeWidth={2} className={refrescar.isPending ? 'animate-spin' : ''} />
             {refrescar.isPending ? 'Preguntando…' : 'Actualizar desde Meta'}
@@ -416,7 +416,7 @@ export function VistaRouting() {
                     'flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors duration-200 ease-house focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
                     (filtro === id
                       ? 'border-navy bg-navy text-white'
-                      : 'border-border text-muted-foreground hover:border-primary/40 hover:text-navy')
+                      : 'border-border text-muted-foreground hover:border-primary/40 hover:text-navy-ink')
                   }
                 >
                   {rotulo}
@@ -760,7 +760,7 @@ function Fila({
           <span className="block truncate text-xs font-medium text-foreground">{titulo}</span>
           <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{pie}</span>
         </span>
-        {activa && <ChevronRight size={13} strokeWidth={2} className="shrink-0 text-navy" aria-hidden />}
+        {activa && <ChevronRight size={13} strokeWidth={2} className="shrink-0 text-navy-ink" aria-hidden />}
       </button>
       {onDetalle && (
         <button
@@ -772,8 +772,8 @@ function Fila({
           className={
             'mr-1 shrink-0 rounded-lg p-1.5 transition-colors duration-200 ease-house focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
             (detalleAbierto
-              ? 'bg-navy/10 text-navy'
-              : 'text-muted-foreground/70 hover:bg-secondary hover:text-navy')
+              ? 'bg-navy/10 text-navy-ink'
+              : 'text-muted-foreground/70 hover:bg-secondary hover:text-navy-ink')
           }
         >
           <Boxes size={13} strokeWidth={2} aria-hidden />

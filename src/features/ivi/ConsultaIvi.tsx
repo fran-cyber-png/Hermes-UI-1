@@ -254,9 +254,9 @@ export function ConsultaIvi({ abierta, onCerrar }: { abierta: boolean; onCerrar:
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
-          <BrainCircuit size={16} strokeWidth={2.1} className="shrink-0 text-navy" />
+          <BrainCircuit size={16} strokeWidth={2.1} className="shrink-0 text-navy-ink" />
           <div className="min-w-0 flex-1">
-            <h2 className="font-heading text-sm font-bold leading-tight text-navy">Preguntarle a Ivi</h2>
+            <h2 className="font-heading text-sm font-bold leading-tight text-navy-ink">Preguntarle a Ivi</h2>
             <p className="truncate text-[10px] leading-tight text-muted-foreground">
               El cerebro de Goberna. Responde con datos del negocio.
             </p>

@@ -44,7 +44,7 @@
 | `navegador` | El navegador embebido: qué peldaño de la escalera corre esta máquina y a dónde se puede ir. | 9 | 843 | 3 | 1 | 1 |
 | `bot` | El interruptor del bot de primera línea visto desde la app: en qué modo está, de dónde sale ese modo (la base o el entorno) y cómo apagarlo sin un deploy. | 5 | 724 | 2 | 1 | 1 |
 | `eventos` | Registrar lo que la vendedora ESCUCHÓ, tipado, en el timeline del contacto. | 4 | 687 | 2 | 2 | 1 |
-| `componentes` | Átomos visuales que usa medio árbol y no son de ninguna feature: la marca, los gráficos, el avatar y la píldora de canal. Capa 0 — no puede importar una feature ni el dominio. | 9 | 634 | 0 | 10 | 1 |
+| `componentes` | Átomos visuales que usa medio árbol y no son de ninguna feature: la marca, los gráficos, el avatar y la píldora de canal. Capa 0 — no puede importar una feature ni el dominio. | 10 | 667 | 0 | 10 | 1 |
 | `cerberus` | La ficha del contacto: la que trae el ERP y la que dejó el formulario de landing. | 7 | 592 | 2 | 5 | 4 |
 | `reparto` | De quién es cada conversación, visto desde la app. | 3 | 565 | 0 | 2 | 2 |
 | `identidad` | «Es la misma persona que…»: buscar contactos y unificar fichas. | 5 | 524 | 1 | 2 | 3 |
@@ -52,7 +52,7 @@
 | `territorio` | Dónde vota cada contacto de una campaña: el selector de distrito del panel y su lectura. | 3 | 187 | 1 | 1 | 1 |
 | `senales` | Las etiquetas derivadas —cotizado, se enfrió— que no se guardan en ningún lado. | 2 | 119 | 0 | 1 | 3 |
 | `leads` | Qué tan caliente está un lead. | 1 | 26 | 0 | 1 | 0 |
-| `pruebas` | El andamio de los tests con DOM: `montar`, `teclear`, `reposar`. | 1 | 0 | 1 | 0 | 0 |
+| `pruebas` | El andamio de los tests con DOM: `montar`, `teclear`, `reposar`. | 2 | 0 | 2 | 0 | 0 |
 
 ## Server — `server/src/`
 
@@ -175,7 +175,7 @@ Siguen contando en `Líneas`: no son tests, son código del módulo.
 
 No significa que estén muertos —pueden ser puntos de entrada o scripts—, pero es la lista donde mirar primero.
 
-- `front/pruebas` — 1 archivos, 0 líneas
+- `front/pruebas` — 2 archivos, 0 líneas
 
 ## Las reglas y cómo están hoy
 

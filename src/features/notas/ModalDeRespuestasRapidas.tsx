@@ -86,7 +86,7 @@ export function ModalDeRespuestasRapidas({
               className="group block w-full rounded-lg border border-transparent px-3 py-2 text-left transition-colors hover:border-primary/30 hover:bg-secondary/60"
             >
               <div className="flex items-baseline gap-2">
-                <span className="truncate text-sm font-medium text-foreground transition-colors group-hover:text-navy">
+                <span className="truncate text-sm font-medium text-foreground transition-colors group-hover:text-navy-ink">
                   {h.rotulo}
                 </span>
                 <span className="shrink-0 font-mono text-[10px] text-muted-foreground">/{h.clave}</span>

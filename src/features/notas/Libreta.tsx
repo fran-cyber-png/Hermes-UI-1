@@ -978,7 +978,7 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
             >
               <Settings2 className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium text-foreground transition-colors group-hover:text-navy">
+                <span className="block text-sm font-medium text-foreground transition-colors group-hover:text-navy-ink">
                   Configurar Respuestas Rápidas
                 </span>
                 <span className="block text-xs text-muted-foreground">Crea o edita tus respuestas</span>

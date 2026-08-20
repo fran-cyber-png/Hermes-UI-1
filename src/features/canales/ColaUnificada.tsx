@@ -673,14 +673,14 @@ export function ColaUnificada({
             <div className="px-6 py-14 text-center">
               {typeof nHoy === 'number' && nHoy > 0 ? (
                 <>
-                  <p className="font-heading text-3xl font-bold tabular-nums text-navy">
+                  <p className="font-heading text-3xl font-bold tabular-nums text-navy-ink">
                     Respondiste a {nHoy} {nHoy === 1 ? 'persona' : 'personas'} hoy
                   </p>
                   <p className="mt-1.5 text-sm text-muted-foreground">Estás al día: no queda deuda en la cola.</p>
                 </>
               ) : (
                 <>
-                  <p className="font-heading text-3xl font-bold text-navy">Estás al día</p>
+                  <p className="font-heading text-3xl font-bold text-navy-ink">Estás al día</p>
                   <p className="mt-1.5 text-sm text-muted-foreground">No queda deuda en la cola ahora mismo.</p>
                 </>
               )}

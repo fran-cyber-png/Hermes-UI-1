@@ -54,7 +54,7 @@ function Tarjeta({
       }
     >
       <div className="flex items-baseline gap-1.5">
-        <span className="font-heading text-xs font-bold text-navy">{s.rotulo}</span>
+        <span className="font-heading text-xs font-bold text-navy-ink">{s.rotulo}</span>
         <span className="ml-auto shrink-0 font-mono text-[10px] text-muted-foreground">
           {s.totalPasos > 1 ? `${s.totalPasos} mensajes` : '1 mensaje'}
         </span>
@@ -217,7 +217,7 @@ export function DosRespuestas({
       <div className="rounded-xl border border-primary/35 bg-secondary/40 p-2.5">
         <div className="flex items-center gap-2">
           {corriendo && <Loader2 size={13} className="shrink-0 animate-spin text-primary" />}
-          <span className="min-w-0 flex-1 text-[11px] font-bold text-navy">{rotulo(envio.estado)}</span>
+          <span className="min-w-0 flex-1 text-[11px] font-bold text-navy-ink">{rotulo(envio.estado)}</span>
           {envio.estado.fase === 'enviando' ? (
             <button
               type="button"

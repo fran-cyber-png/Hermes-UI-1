@@ -67,7 +67,7 @@ function TirasDePasos({ plantilla }: { plantilla: Plantilla }) {
 function PasoPreparadoFila({ paso }: { paso: PasoPreparado }) {
   return (
     <li className="flex gap-2 border-t border-border/70 py-2 first:border-t-0">
-      <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded bg-secondary font-mono text-[10px] font-bold text-navy">
+      <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded bg-secondary font-mono text-[10px] font-bold text-navy-ink">
         {paso.orden}
       </span>
       <div className="min-w-0 flex-1">
@@ -277,7 +277,7 @@ export function PanelPlantillas({
                              todas cambia si la editás o la dejás quieta. */
                           <span
                             title={`Del equipo — la ven y la mandan las cinco. La edita ${p.vendedoraId ?? 'su dueña'}.`}
-                            className="flex shrink-0 items-center gap-0.5 rounded-full border border-navy/40 px-1.5 py-px text-[10px] font-semibold text-navy"
+                            className="flex shrink-0 items-center gap-0.5 rounded-full border border-navy/40 px-1.5 py-px text-[10px] font-semibold text-navy-ink"
                           >
                             <Users size={9} aria-hidden="true" /> Equipo
                           </span>
@@ -379,8 +379,8 @@ export function PanelPlantillas({
                                 className={
                                   'ml-auto rounded-lg p-1.5 transition-colors disabled:opacity-50 ' +
                                   (p.alcance === 'equipo'
-                                    ? 'text-navy hover:bg-navy/10'
-                                    : 'text-muted-foreground hover:bg-muted hover:text-navy')
+                                    ? 'text-navy-ink hover:bg-navy/10'
+                                    : 'text-muted-foreground hover:bg-muted hover:text-navy-ink')
                                 }
                                 title={
                                   p.alcance === 'equipo'

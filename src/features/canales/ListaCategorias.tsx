@@ -21,8 +21,8 @@ export function ListaCategorias({
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-3">
-        <Tag size={15} className="text-navy" />
-        <span className="font-heading text-sm font-bold text-navy">Listas</span>
+        <Tag size={15} className="text-navy-ink" />
+        <span className="font-heading text-sm font-bold text-navy-ink">Listas</span>
         <button
           type="button"
           onClick={onGestionar}

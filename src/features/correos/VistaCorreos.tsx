@@ -338,7 +338,7 @@ export function VistaCorreos({ correoInicial, claveInicial, nombreInicial, onCon
         {/* ── El composer ── */}
         <section className="rounded-2xl bg-card p-5 shadow-panel">
           <div className="flex items-center gap-2">
-            <Mail size={16} className="text-navy" />
+            <Mail size={16} className="text-navy-ink" />
             <h1 className="font-heading text-lg font-bold text-foreground">Nuevo correo</h1>
             <div className="ml-auto flex items-center gap-3">
               {/* 🔴 **El contador se dibujaba IDÉNTICO quemado que sano.** «20/20 esta

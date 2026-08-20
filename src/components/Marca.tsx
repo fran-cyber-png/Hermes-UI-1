@@ -24,7 +24,7 @@ export function Marca({ escudo = 24 }: { escudo?: number }) {
     <div className="flex items-center gap-2.5">
       <Escudo size={escudo} />
       <span className="h-5 w-px bg-border" aria-hidden="true" />
-      <span className="font-heading text-sm font-extrabold tracking-[0.04em] text-navy">HERMES</span>
+      <span className="font-heading text-sm font-extrabold tracking-[0.04em] text-navy-ink">HERMES</span>
     </div>
   );
 }

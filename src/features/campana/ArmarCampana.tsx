@@ -79,7 +79,7 @@ export function ArmarCampana({ onCerrar }: { onCerrar: () => void }) {
                           <span className="text-[11px] text-muted-foreground">🖼 pide imagen</span>
                         )}
                         {plantilla?.nombre === p.nombre && (
-                          <Check size={14} className="ml-auto text-navy" />
+                          <Check size={14} className="ml-auto text-navy-ink" />
                         )}
                       </span>
                       {p.cuerpo && (
@@ -118,7 +118,7 @@ export function ArmarCampana({ onCerrar }: { onCerrar: () => void }) {
                       <span className="flex items-center gap-2">
                         <Users2 size={13} className="text-muted-foreground" />
                         <span className="text-sm font-bold">{l.nombre}</span>
-                        {lista?.id === l.id && <Check size={14} className="ml-auto text-navy" />}
+                        {lista?.id === l.id && <Check size={14} className="ml-auto text-navy-ink" />}
                       </span>
                       <span className="mt-0.5 block text-[11px] text-muted-foreground">
                         {resumirFiltros(l.filtros).join(' · ')}

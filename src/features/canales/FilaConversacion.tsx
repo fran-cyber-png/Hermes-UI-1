@@ -284,7 +284,7 @@ export function FilaConversacion({
           telefono={c.canal === 'whatsapp' ? c.persona_id : null}
           numeroPropio={c.numero_propio}
           conFoto={conFoto}
-          className="size-9 rounded-full bg-secondary text-xs font-bold text-navy"
+          className="size-9 rounded-full bg-secondary text-xs font-bold text-navy-ink"
         />
         <span className="absolute -bottom-0.5 -right-0.5">
           <BadgeCanal canal={c.canal} />
@@ -296,7 +296,7 @@ export function FilaConversacion({
         <div className="flex items-start justify-between gap-2">
           <span className="flex min-w-0 items-center gap-1.5">
             {/* Pin: por qué esta fila está en la banda de arriba. Navy, no oro. */}
-            {c.fijada && <Pin size={12} fill="currentColor" className="shrink-0 text-navy" aria-label="Fijada" />}
+            {c.fijada && <Pin size={12} fill="currentColor" className="shrink-0 text-navy-ink" aria-label="Fijada" />}
             {/* Sin leer: punto azul. Distinto del check de respondida y del conteo. */}
             {c.no_leido && (
               <span className="size-2 shrink-0 rounded-full bg-primary" role="img" aria-label="Sin leer" title="Sin leer" />
@@ -341,7 +341,7 @@ export function FilaConversacion({
               </span>
             )}
             {/* Favorita: estrella navy (el oro es SOLO tiempo que se acaba). */}
-            {c.favorita && <Star size={12} fill="currentColor" className="shrink-0 text-navy" aria-label="Favorita" />}
+            {c.favorita && <Star size={12} fill="currentColor" className="shrink-0 text-navy-ink" aria-label="Favorita" />}
             {/* UNA conversación, así que singular — y por el rótulo canónico:
                 esta píldora pintaba el IDENTIFICADOR crudo con un `capitalize`
                 de CSS, que con ids de una palabra se veía bien de casualidad. */}

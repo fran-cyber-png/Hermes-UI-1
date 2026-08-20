@@ -127,7 +127,7 @@ function Renglon({
       type="button"
       onClick={onAbrir}
       title={`Revisar las ${cuantas} en el chat, con la conversación a la vista · tecla A`}
-      className="group -mx-1 flex items-center gap-1 rounded-md px-1 py-0.5 text-left font-mono text-[10px] font-bold leading-none text-navy transition-colors duration-200 ease-house hover:bg-navy hover:text-white focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+      className="group -mx-1 flex items-center gap-1 rounded-md px-1 py-0.5 text-left font-mono text-[10px] font-bold leading-none text-navy-ink transition-colors duration-200 ease-house hover:bg-navy hover:text-white focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
     >
       <span className="truncate tabular-nums">{texto}</span>
       <ChevronRight
@@ -174,7 +174,7 @@ function SelectorDeModo({
               'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:cursor-default ' +
               (activo
                 ? colorActivo(m)
-                : 'text-muted-foreground hover:bg-card hover:text-navy disabled:opacity-60')
+                : 'text-muted-foreground hover:bg-card hover:text-navy-ink disabled:opacity-60')
             }
           >
             {NOMBRE_MODO[m]}
@@ -191,7 +191,7 @@ function SelectorDeModo({
  * ningún estado «sólido»: ninguno de los dos que quedan habla solo.
  */
 function colorActivo(m: ModoAutoRespuesta): string {
-  if (m === 'supervisada') return 'bg-card text-navy ring-1 ring-navy shadow-[0_1px_2px_rgba(14,42,82,0.10)]';
+  if (m === 'supervisada') return 'bg-card text-navy-ink ring-1 ring-navy shadow-[0_1px_2px_rgba(14,42,82,0.10)]';
   return 'bg-card text-foreground shadow-[0_1px_2px_rgba(14,42,82,0.10)]';
 }
 
@@ -218,6 +218,6 @@ function Icono({ clase }: { clase: ClaseAutoRespuesta }) {
     return <AlertTriangle size={14} className="shrink-0 text-warning" />;
 
   return (
-    <Bot size={14} className={'shrink-0 ' + (clase === 'supervisada' ? 'text-navy' : 'text-muted-foreground')} />
+    <Bot size={14} className={'shrink-0 ' + (clase === 'supervisada' ? 'text-navy-ink' : 'text-muted-foreground')} />
   );
 }

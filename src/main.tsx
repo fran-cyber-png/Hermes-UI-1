@@ -6,9 +6,15 @@ import App from './App.tsx'
 import { queryClient } from './lib/datos/cliente'
 import { arrancarCacheDeHermes } from './lib/datos/cacheDeHermes'
 import { conectarEnlacesExternos } from './lib/enlacesExternos'
+import { arrancarTema } from './lib/tema'
 
 // En la cáscara Tauri, los target=_blank van al navegador del sistema.
 conectarEnlacesExternos()
+
+// El tema, ANTES de montar nada. Corre síncrono y con la raíz todavía vacía: si
+// esperara al efecto del botón, el primer cuadro saldría con el tema del sistema
+// y recién después saltaría al elegido. Ver `lib/tema.ts`.
+arrancarTema()
 
 /**
  * El caché del estado del SERVIDOR envuelve toda la app.

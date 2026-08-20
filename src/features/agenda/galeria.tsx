@@ -108,18 +108,15 @@ if (params.has('detalle')) {
 }
 
 /**
- * El tema oscuro de la agenda NO es un prop: lo pone `DarkModeToggle` como una
- * clase en el contenedor (`agenda-dark-mode`). Para fotografiarlo hay que TOCAR
- * el botón — el mismo que toca la vendedora. El selector pide el rótulo de
- * «ir a oscuro» a propósito: si el navegador ya viene en oscuro (localStorage),
- * el botón dice lo contrario y esto no lo apaga por accidente.
+ * El tema oscuro ya no es de la Agenda: es de la app, y se estampa en `<html>`
+ * (ver `src/lib/tema.ts`). Esta galería monta VistaAgenda SOLA, sin la barra de
+ * la app, así que acá no hay botón que tocar — se pone el mismo atributo que
+ * pondría el botón, que es exactamente lo que el navegador termina viendo.
  *
  *  - `?oscuro=1` — cualquiera de las vistas, en tema oscuro.
  */
 if (params.has('oscuro')) {
-  setTimeout(() => {
-    document.querySelector<HTMLButtonElement>('[aria-label="Cambiar a modo oscuro"]')?.click();
-  }, 300);
+  document.documentElement.dataset.theme = 'dark';
 }
 
 createRoot(document.getElementById('galeria')!).render(

@@ -249,7 +249,7 @@ export function TarjetaEmbudo({
             telefono={c.canal === 'whatsapp' ? c.persona_id : null}
             numeroPropio={c.numero_propio}
             conFoto={conFoto}
-            className="size-7 rounded-full bg-secondary text-[10px] font-bold text-navy"
+            className="size-7 rounded-full bg-secondary text-[10px] font-bold text-navy-ink"
           />
           <span className="absolute -bottom-1 -right-1 scale-90">
             <BadgeCanal canal={c.canal} />
@@ -311,7 +311,7 @@ export function TarjetaEmbudo({
             e.stopPropagation();
             onAbrir(c);
           }}
-          className="shrink-0 rounded-md p-1 text-muted-foreground opacity-0 transition-[color,background-color,opacity] duration-200 group-hover:opacity-100 hover:bg-secondary hover:text-navy focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.96]"
+          className="shrink-0 rounded-md p-1 text-muted-foreground opacity-0 transition-[color,background-color,opacity] duration-200 group-hover:opacity-100 hover:bg-secondary hover:text-navy-ink focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.96]"
         >
           <MessageSquareText size={13} />
         </button>

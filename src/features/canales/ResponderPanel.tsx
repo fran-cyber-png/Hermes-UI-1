@@ -155,7 +155,7 @@ export default function ResponderPanel({ interaccion, onCerrar, onRespondido, on
         {/* Cabecera del contacto — la misma anatomía en los tres canales */}
         <header className="flex shrink-0 items-start justify-between gap-3 border-b border-border px-4 py-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-[11px] bg-secondary font-heading text-xs font-bold text-navy">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-[11px] bg-secondary font-heading text-xs font-bold text-navy-ink">
               {avatarIniciales}
             </span>
             <div className="min-w-0">
@@ -188,7 +188,7 @@ export default function ResponderPanel({ interaccion, onCerrar, onRespondido, on
           {/* La cita editorial: esto dijo, así respondo. */}
           <figure className={`rounded-xl border-l-4 ${fileteCanal} bg-muted/50 py-4 pl-4 pr-5`}>
             <blockquote className="flex items-start gap-1.5">
-              <span aria-hidden="true" className="-mt-1.5 shrink-0 select-none font-heading text-3xl font-bold leading-none text-navy">
+              <span aria-hidden="true" className="-mt-1.5 shrink-0 select-none font-heading text-3xl font-bold leading-none text-navy-ink">
                 “
               </span>
               <p className="font-heading text-lg leading-snug text-foreground">{interaccion.texto}</p>

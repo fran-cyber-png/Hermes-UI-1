@@ -327,7 +327,7 @@ function PropuestaDelAnuncio({
   // #129 vino a arreglar, no a repetir.
   return (
     <span
-      className="inline-flex max-w-full flex-wrap items-center gap-x-1 gap-y-0.5 rounded-md border border-dashed border-navy/40 bg-navy/[0.04] px-1.5 py-0.5 text-[11px] font-semibold text-navy"
+      className="inline-flex max-w-full flex-wrap items-center gap-x-1 gap-y-0.5 rounded-md border border-dashed border-navy/40 bg-navy/[0.04] px-1.5 py-0.5 text-[11px] font-semibold text-navy-ink"
       title={propuesta.detalle}
     >
       <Megaphone size={10} aria-hidden className="shrink-0" />

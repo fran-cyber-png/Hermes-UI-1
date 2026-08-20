@@ -134,7 +134,7 @@ export function BarraReparto({
               {n === 1 ? 'contacto elegido' : 'contactos elegidos'}
             </span>
             {seleccion.modo === 'recorte' && (
-              <span className="rounded-full bg-navy/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-navy">
+              <span className="rounded-full bg-navy/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-navy-ink">
                 todo el filtro
               </span>
             )}
@@ -238,7 +238,7 @@ function Confirmacion({
           <div className="p-5">
             <p className="font-heading text-lg font-bold text-foreground">
               Vas a habilitar{' '}
-              <span className="tabular-nums text-navy">{cantidad.toLocaleString('es')}</span> contactos
+              <span className="tabular-nums text-navy-ink">{cantidad.toLocaleString('es')}</span> contactos
               a {nombreCorto(destino)}.
             </p>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
@@ -349,7 +349,7 @@ function ElegirDestino({
                       d === elegido ? 'bg-muted' : ''
                     }`}
                   >
-                    <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-navy/10 text-[10px] font-bold uppercase text-navy">
+                    <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-navy/10 text-[10px] font-bold uppercase text-navy-ink">
                       {nombreCorto(d).slice(0, 2)}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -370,7 +370,7 @@ function ElegirDestino({
                         </span>
                       </span>
                     </span>
-                    {d === elegido && <Check size={13} className="shrink-0 text-navy" />}
+                    {d === elegido && <Check size={13} className="shrink-0 text-navy-ink" />}
                   </button>
                 );
               })

@@ -174,12 +174,12 @@ function Ficha({ d }: { d: DatosFicha }) {
   return (
     <header className={'shrink-0 px-3 pb-2.5 pt-2.5 ' + FONDO[d.acento]}>
       <div className="flex items-start gap-2.5">
-        <span className="relative grid size-10 shrink-0 place-items-center rounded-[13px] bg-card font-heading text-xs font-bold text-navy shadow-[0_0_0_1px_var(--border)]">
+        <span className="relative grid size-10 shrink-0 place-items-center rounded-[13px] bg-card font-heading text-xs font-bold text-navy-ink shadow-[0_0_0_1px_var(--border)]">
           {d.iniciales}
           <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-card bg-success" />
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="line-clamp-2 font-heading text-sm font-bold leading-tight text-navy">
+          <h2 className="line-clamp-2 font-heading text-sm font-bold leading-tight text-navy-ink">
             {d.nombre}
           </h2>
           <p className="mt-0.5 truncate text-[11px] leading-tight text-muted-foreground">
@@ -201,7 +201,7 @@ function Ficha({ d }: { d: DatosFicha }) {
         </span>
 
         {d.plata ? (
-          <span className="font-heading text-[15px] font-bold leading-none tabular-nums text-navy">
+          <span className="font-heading text-[15px] font-bold leading-none tabular-nums text-navy-ink">
             {d.plata.monto}
             <span className="ml-1 font-sans text-[11px] font-medium text-muted-foreground">
               · {d.plata.compras} {d.plata.compras === 1 ? 'compra' : 'compras'}
@@ -469,7 +469,7 @@ function EnviarRapido({
                 }
               >
                 <div className="flex items-baseline gap-1.5">
-                  <span className="font-heading text-xs font-bold text-navy">{s.rotulo}</span>
+                  <span className="font-heading text-xs font-bold text-navy-ink">{s.rotulo}</span>
                   {s.conImagen && <Imagen size={10} className="shrink-0 text-muted-foreground" />}
                   <span className="ml-auto shrink-0 font-mono text-[10px] text-muted-foreground">
                     {s.pasos}
@@ -519,7 +519,7 @@ function EnviarRapido({
                     <button
                       type="button"
                       title="Tocá para ponerlo en la caja (no lo manda)"
-                      className="rounded-full border border-border bg-card px-2 py-[3px] text-[11px] font-medium text-navy transition-colors hover:border-primary/40 hover:bg-secondary/40"
+                      className="rounded-full border border-border bg-card px-2 py-[3px] text-[11px] font-medium text-navy-ink transition-colors hover:border-primary/40 hover:bg-secondary/40"
                     >
                       {h}
                     </button>
@@ -575,7 +575,7 @@ function Pie() {
             type="button"
             title={title}
             aria-label={title}
-            className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-navy"
+            className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-navy-ink"
           >
             <Icono size={15} />
           </button>
@@ -770,11 +770,11 @@ function Antes() {
       <div className="h-[3px] w-full shrink-0 bg-warning" />
       <div className="bg-warning/[0.07] px-3 pb-2.5 pt-2.5">
         <div className="flex items-start gap-2.5">
-          <span className="grid size-10 shrink-0 place-items-center rounded-[13px] bg-card font-heading text-xs font-bold text-navy shadow-[0_0_0_1px_var(--border)]">
+          <span className="grid size-10 shrink-0 place-items-center rounded-[13px] bg-card font-heading text-xs font-bold text-navy-ink shadow-[0_0_0_1px_var(--border)]">
             CV
           </span>
           <div className="min-w-0 flex-1">
-            <h2 className="font-heading text-sm font-bold leading-tight text-navy">Cliver</h2>
+            <h2 className="font-heading text-sm font-bold leading-tight text-navy-ink">Cliver</h2>
             <p className="mt-0.5 truncate text-[11px] leading-tight text-muted-foreground">
               del formulario · en WhatsApp: CVILLANUEVA
             </p>
@@ -804,7 +804,7 @@ function Antes() {
           <span className="text-[11px] font-semibold text-primary">Buscar curso</span>
         </div>
         <div className="mt-1.5 flex items-center gap-1.5">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-2 py-1 text-[11px] font-semibold text-navy">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-2 py-1 text-[11px] font-semibold text-navy-ink">
             Bicameral · del formulario
             <span className="rounded bg-navy px-1.5 py-0.5 text-[10px] font-bold text-white">
               Confirmar
@@ -843,7 +843,7 @@ function Caso({ titulo, nota, children }: { titulo: string; nota: string; childr
   return (
     <figure className="m-0 flex flex-col gap-2">
       <figcaption>
-        <h2 className="font-heading text-sm font-bold text-navy">{titulo}</h2>
+        <h2 className="font-heading text-sm font-bold text-navy-ink">{titulo}</h2>
         <p className="mt-0.5 max-w-[22.5rem] text-xs leading-snug text-muted-foreground">{nota}</p>
       </figcaption>
       {children}
@@ -858,7 +858,7 @@ function Galeria() {
         <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
           Propuesta · no es el panel que corre
         </p>
-        <h1 className="mt-1 font-heading text-2xl font-extrabold text-navy">
+        <h1 className="mt-1 font-heading text-2xl font-extrabold text-navy-ink">
           El panel derecho: Ficha · Timeline · Enviar rápido
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">

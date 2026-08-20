@@ -104,8 +104,8 @@ export function HojaContacto({
           esta conversación, no una marca personal; antes solo existía en la
           barra del chat. */}
       <header className="flex shrink-0 items-center gap-2 rounded-xl bg-card px-3 py-2 shadow-panel">
-        <IdCard size={14} strokeWidth={2.1} className="shrink-0 text-navy" />
-        <h2 className="font-heading text-xs font-bold text-navy">Ficha</h2>
+        <IdCard size={14} strokeWidth={2.1} className="shrink-0 text-navy-ink" />
+        <h2 className="font-heading text-xs font-bold text-navy-ink">Ficha</h2>
         <span className="ml-2">
           <PasarConversacion conversacion={conversacion} miVendedora={miVendedora} />
         </span>

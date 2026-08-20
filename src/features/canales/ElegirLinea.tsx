@@ -60,7 +60,7 @@ export function ElegirLinea({
           <div className="p-5">
             <p className="mb-3 text-sm text-foreground">
               ¿Desde qué número le escribís a{' '}
-              <span className="font-mono tabular-nums text-navy">{formatoTelefono(telefono)}</span>?
+              <span className="font-mono tabular-nums text-navy-ink">{formatoTelefono(telefono)}</span>?
             </p>
             <div className="flex flex-col gap-2">
               {lineas.map((linea) => (

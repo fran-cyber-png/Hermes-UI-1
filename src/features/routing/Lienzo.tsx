@@ -267,7 +267,7 @@ export function Lienzo({
             stroke="currentColor"
             strokeWidth={2}
             strokeDasharray="5 4"
-            className="text-navy"
+            className="text-navy-ink"
           />
         )}
       </svg>
@@ -326,8 +326,8 @@ const ICONO = { producto: Boxes, campana: Megaphone, formulario: FileText, vende
 const TONO = {
   campana: { texto: 'text-cat-morado', borde: 'border-cat-morado', rotulo: 'Campaña de Meta' },
   formulario: { texto: 'text-cat-cian', borde: 'border-cat-cian', rotulo: 'Formulario' },
-  producto: { texto: 'text-navy', borde: 'border-navy', rotulo: 'Producto' },
-  vendedora: { texto: 'text-navy', borde: 'border-navy', rotulo: '' },
+  producto: { texto: 'text-navy-ink', borde: 'border-navy', rotulo: 'Producto' },
+  vendedora: { texto: 'text-navy-ink', borde: 'border-navy', rotulo: '' },
 } as const;
 
 function Nodo({
@@ -441,7 +441,7 @@ function Nodo({
               onClick={onEntrar}
               aria-expanded={Boolean(nodo.abierto)}
               aria-label={`${nodo.abierto ? 'Cerrar' : 'Ver'} los anuncios de ${nodo.titulo}`}
-              className="-mr-1 shrink-0 rounded p-0.5 text-muted-foreground transition-colors duration-200 ease-house hover:text-navy focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+              className="-mr-1 shrink-0 rounded p-0.5 text-muted-foreground transition-colors duration-200 ease-house hover:text-navy-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
             >
               <ChevronRight
                 size={13}

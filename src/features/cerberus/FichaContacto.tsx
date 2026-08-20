@@ -132,7 +132,7 @@ export function FichaContacto({
               telefono={conFotoDePerfil ? telefono : null}
               numeroPropio={conversacion.numero_propio}
               conFoto={conFotoDePerfil}
-              className="size-8 shrink-0 rounded-[11px] bg-secondary text-xs font-bold text-navy"
+              className="size-8 shrink-0 rounded-[11px] bg-secondary text-xs font-bold text-navy-ink"
             />
             <div className="min-w-0 truncate text-sm font-bold text-foreground">
               {conversacion.persona_nombre ?? telefono ?? 'Contacto'}
@@ -235,7 +235,7 @@ export function FichaContacto({
                       <span className="ml-auto shrink-0 font-mono tabular-nums text-muted-foreground">
                         {fechaCorta(v.fecha)}
                       </span>
-                      <span className="shrink-0 font-semibold tabular-nums text-navy">
+                      <span className="shrink-0 font-semibold tabular-nums text-navy-ink">
                         {v.moneda} {v.monto}
                       </span>
                     </li>

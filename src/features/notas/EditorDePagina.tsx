@@ -12,6 +12,7 @@ import {
   soloEstilosConocidos,
 } from './editor';
 import { BarraFlotante } from './BarraFlotante';
+import { useTema } from '../../lib/tema';
 
 /**
  * EL EDITOR de una página. Va con `key` de afuera para que cambiar de nota lo
@@ -175,11 +176,17 @@ export function EditorDePagina({
   // superpuestos que el comentario de más abajo ya documenta.
   const menuPropio = Boolean(onAbrirPlantillas || onAbrirRespuestasRapidas);
 
+  // BlockNote trae hoja propia y NO mira el `data-theme` de la app: el tema hay
+  // que dárselo como prop. Estuvo clavado en `light`, y con la app en oscuro eso
+  // dejaba la tinta gris de Mantine sobre #0F1419 —1.4:1—: la página se escribía
+  // bien, se guardaba bien y no se leía.
+  const { tema } = useTema();
+
   return (
     <BlockNoteView
       editor={editor}
       editable={!soloLectura}
-      theme="light"
+      theme={tema === 'oscuro' ? 'dark' : 'light'}
       // La flotante del paquete se apaga acá y la monta `BarraFlotante`: la
       // del paquete sola tiene un bug real (ver su docblock — cerraba la
       // barrita entera al tocar «Colores»), y el arreglo es envolverla.

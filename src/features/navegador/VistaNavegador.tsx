@@ -216,7 +216,7 @@ function BotonBarra({
       aria-label={titulo}
       onClick={onClick}
       disabled={apagado}
-      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 ease-house hover:bg-secondary hover:text-navy disabled:cursor-not-allowed disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 ease-house hover:bg-secondary hover:text-navy-ink disabled:cursor-not-allowed disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
       {children}
     </button>
@@ -249,7 +249,7 @@ function Lanzador({
     <div className="absolute inset-0 overflow-y-auto px-6 py-8">
       <div className="mx-auto max-w-3xl">
         <header className="flex items-start gap-3">
-          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-secondary text-navy">
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-secondary text-navy-ink">
             <Compass size={18} strokeWidth={1.9} />
           </div>
           <p className="min-w-0 text-[13px] leading-relaxed text-muted-foreground">
@@ -297,13 +297,13 @@ function Lanzador({
               className="group flex items-start gap-3 rounded-xl border border-border bg-card p-3 text-left transition-[border-color,box-shadow,transform] duration-200 ease-house hover:border-navy/30 hover:shadow-panel active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-navy">{d.nombre}</p>
+                <p className="truncate text-sm font-semibold text-navy-ink">{d.nombre}</p>
                 <p className="mt-0.5 truncate text-[12px] text-muted-foreground">{d.para}</p>
               </div>
               <ExternalLink
                 size={14}
                 strokeWidth={1.9}
-                className="mt-0.5 shrink-0 text-muted-foreground transition-colors duration-200 group-hover:text-navy"
+                className="mt-0.5 shrink-0 text-muted-foreground transition-colors duration-200 group-hover:text-navy-ink"
               />
             </button>
           ))}

@@ -125,7 +125,7 @@ function Fila({ l }: { l: Lista }) {
     <li className="rounded-xl border border-border bg-card p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-heading text-sm font-bold text-foreground">{l.nombre}</span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-navy/10 px-2 py-0.5 text-[11px] font-bold text-navy">
+        <span className="inline-flex items-center gap-1 rounded-full bg-navy/10 px-2 py-0.5 text-[11px] font-bold text-navy-ink">
           <Users2 size={11} />
           {cuantos === undefined ? (
             <Loader2 size={10} className="animate-spin" />

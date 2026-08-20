@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Escudo } from './components/Marca';
 import { Avisos } from './components/Avisos';
+import { BotonDeTema } from './components/BotonDeTema';
 import { useLocalStorage } from './lib/useLocalStorage';
 import { ColaUnificada } from './features/canales/ColaUnificada';
 import { ConversacionActiva } from './features/canales/ConversacionActiva';
@@ -230,13 +231,13 @@ function Cabina({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/20" onClick={onCerrar} role="dialog" aria-modal="true" aria-label="Atajos de teclado">
       <div className="w-72 rounded-2xl bg-card p-5 shadow-panel animate-entrar" onClick={(e) => e.stopPropagation()}>
-        <h2 className="font-heading text-sm font-bold text-navy">La cabina</h2>
+        <h2 className="font-heading text-sm font-bold text-navy-ink">La cabina</h2>
         <p className="mt-0.5 text-[11px] text-muted-foreground">Todo Hermes sin soltar el teclado.</p>
         {/* Las de la revisión van PRIMERO y solo cuando se está adentro: es el
             único momento en que alguien abre esto para buscar una tecla. */}
         {enRevision && (
           <>
-            <p className="mt-3 font-mono text-[10px] font-bold uppercase tracking-wide text-navy">En la revisión</p>
+            <p className="mt-3 font-mono text-[10px] font-bold uppercase tracking-wide text-navy-ink">En la revisión</p>
             <dl className="mt-1.5 space-y-1.5">
               {ATAJOS_REVISION.map((a) => (
                 <div key={a.tecla + a.que} className="flex items-center justify-between gap-3">
@@ -781,11 +782,14 @@ function AppAutenticada({ vendedora, reintentar, entrar, salir, cerberusVivo }: 
                   'relative flex w-[4.25rem] flex-col items-center gap-0.5 rounded-xl py-1.5 transition-[color,background-color,box-shadow,transform] duration-200 ease-house active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
                   (activa
                     ? 'bg-navy text-white shadow-[0_4px_14px_-4px_rgba(14,42,82,0.55)]'
-                    : 'text-muted-foreground hover:bg-secondary hover:text-navy')
+                    : 'text-muted-foreground hover:bg-secondary hover:text-navy-ink')
                 }
               >
                 <Icono size={17} strokeWidth={activa ? 2.2 : 1.8} />
                 <span className="max-w-full truncate px-0.5 text-[11px] font-medium leading-none">{v.label}</span>
+                {/* `text-navy` y no `text-navy-ink`: es la única chapa de la app cuyo fondo
+                    NO se apaga en el tema oscuro —el oro es señal de tiempo que se acaba, no
+                    decoración—, así que su tinta tampoco se aclara. */}
                 {v.id === 'agenda' && apuran > 0 && (
                   <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-gold px-1 font-mono text-[11px] font-bold leading-none text-navy ring-2 ring-card">
                     {apuran}
@@ -814,8 +818,13 @@ function AppAutenticada({ vendedora, reintentar, entrar, salir, cerberusVivo }: 
           style={ARRASTRABLE}
           data-tauri-drag-region
         >
-          <h1 className="font-heading text-sm font-bold tracking-tight text-navy">{vistaActiva.label}</h1>
+          <h1 className="font-heading text-sm font-bold tracking-tight text-navy-ink">{vistaActiva.label}</h1>
           <div className="ml-auto flex items-center gap-2" style={NO_ARRASTRABLE}>
+            {/* Claro u oscuro, para toda la app. Primero de la fila porque es lo
+                único de esta barra que no informa de nada: las otras piezas son
+                estado (¿el canal vive?, ¿la máquina contesta sola?) y el estado
+                se lee de derecha a izquierda, pegado a su semáforo. */}
+            <BotonDeTema />
             {/* Preguntarle a Ivi. Va en la barra y no en el riel porque no es una vista: no
                 se «va» a Ivi, se lo consulta sin soltar lo que estabas haciendo. Y va con
                 rótulo porque una tecla que nadie descubre no existe. */}
@@ -823,7 +832,7 @@ function AppAutenticada({ vendedora, reintentar, entrar, salir, cerberusVivo }: 
               type="button"
               onClick={() => setIvi(true)}
               title="Preguntarle a Ivi · i"
-              className="flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-[color,border-color,transform] duration-200 ease-house hover:border-primary/40 hover:text-navy active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-[color,border-color,transform] duration-200 ease-house hover:border-primary/40 hover:text-navy-ink active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               <BrainCircuit size={13} strokeWidth={2} />
               Ivi
@@ -936,7 +945,7 @@ function AppAutenticada({ vendedora, reintentar, entrar, salir, cerberusVivo }: 
                 title={panelColapsado ? 'Mostrar la ficha del contacto' : 'Ocultar la ficha del contacto'}
                 aria-label={panelColapsado ? 'Mostrar la ficha del contacto' : 'Ocultar la ficha del contacto'}
                 aria-pressed={panelColapsado}
-                className="absolute left-0 top-1/2 z-10 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-[color,border-color,transform] duration-200 ease-house hover:border-primary/40 hover:text-navy active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="absolute left-0 top-1/2 z-10 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-[color,border-color,transform] duration-200 ease-house hover:border-primary/40 hover:text-navy-ink active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
                 {panelColapsado ? <ChevronLeft size={13} strokeWidth={2} /> : <ChevronRight size={13} strokeWidth={2} />}
               </button>

@@ -547,7 +547,7 @@ export function VistaEmbudo({
                     <h3
                       className={
                         'font-heading text-[13px] font-bold ' +
-                        (esCierre ? 'text-navy' : esPerdidos ? 'text-muted-foreground' : 'text-foreground')
+                        (esCierre ? 'text-navy-ink' : esPerdidos ? 'text-muted-foreground' : 'text-foreground')
                       }
                     >
                       {col.titulo}
@@ -557,7 +557,7 @@ export function VistaEmbudo({
                     )}
                   </div>
                   {esCierre && arrastrada != null && etapaArrastrada !== 'cierre' ? (
-                    <p className="mt-0.5 text-xs font-semibold leading-tight text-navy">
+                    <p className="mt-0.5 text-xs font-semibold leading-tight text-navy-ink">
                       Soltá para registrar la venta
                     </p>
                   ) : (
