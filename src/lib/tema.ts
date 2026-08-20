@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useSyncExternalStore } from 'react';
+import { useCallback, useLayoutEffect, useSyncExternalStore } from 'react';
 import { useLocalStorage } from './useLocalStorage';
 
 /**
@@ -100,7 +100,12 @@ export function useTema(): { tema: Tema; alternar: () => void } {
   const delSistema = useSyncExternalStore(suscribirAlSistema, temaDelSistema, () => 'claro' as Tema);
   const tema = guardado ?? delSistema;
 
-  useEffect(() => {
+  // `useLayoutEffect`, no `useEffect`: el click ya cambió el ícono del botón en
+  // este mismo render. Un `useEffect` corre DESPUÉS de que el navegador pinta
+  // ese frame, así que había un cuadro con el ícono nuevo y el `data-theme`
+  // (y con él, todo el fondo/color) todavía viejo — el parpadeo. `useLayoutEffect`
+  // corre antes de pintar: los dos cambios llegan en el mismo frame.
+  useLayoutEffect(() => {
     aplicarTema(tema);
   }, [tema]);
 
