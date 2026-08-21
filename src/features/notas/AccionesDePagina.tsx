@@ -5,6 +5,7 @@ import { ModalDeLink } from './ModalDeLink';
 import { TituloEditable } from './TituloEditable';
 import type { DondeEstoy, Espacio } from './espacios';
 import type { Alcance, Nota, Permiso } from './notas';
+import { boton } from '../../lib/styles';
 
 /**
  * QUÉ SE PUEDE HACER CON UNA PÁGINA — mover de lugar y compartirla con un link
@@ -47,11 +48,11 @@ function ConfirmarSacarDelEquipo({
         <button
           type="button"
           onClick={onSi}
-          className="rounded-lg bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary-hover"
+          className={boton()}
         >
           Traerla igual
         </button>
-        <button type="button" onClick={onNo} className="rounded-lg px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted">
+        <button type="button" onClick={onNo} className={boton('terciario')}>
           Dejarla acá
         </button>
       </div>
@@ -142,7 +143,7 @@ export function AccionesDePagina({
       <button
         type="button"
         onClick={() => setAbierto(abierto === 'mover' ? null : 'mover')}
-        className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        className={boton('secundario')}
       >
         <MoveRight className="size-3.5" />
         Mover

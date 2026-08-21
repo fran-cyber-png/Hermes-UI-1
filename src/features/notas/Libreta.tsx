@@ -40,6 +40,7 @@ import { SelectorDeEspacio } from './SelectorDeEspacio';
 import { tokenDeLaUrl, usePaginaPorLink } from './porLink';
 import { renglonDeEstado } from './guardado';
 import { useAutoguardado, type ContenidoDePagina } from './useAutoguardado';
+import { boton } from '../../lib/styles';
 import {
   type Nota,
   docParaEditor,
@@ -883,7 +884,7 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
             <button
               type="button"
               onClick={() => setSeleccion({ tipo: 'nueva' })}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover"
+              className={boton() + ' w-full'}
             >
               <Plus className="size-4" />
               Nueva página
@@ -1096,7 +1097,7 @@ export function Libreta({ vendedoraId }: { vendedoraId?: string | null }) {
               <button
                 type="button"
                 onClick={() => setSeleccion({ tipo: 'nueva' })}
-                className="mt-1 flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover"
+                className={boton() + ' mt-1'}
               >
                 <Plus className="size-4" />
                 Escribir la primera

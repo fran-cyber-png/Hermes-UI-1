@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ArrowDown, ArrowUp, ImagePlus, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { API_URL } from '../../config';
 import { tokenGuardado } from '../../lib/datos/token';
-import { sectionLabel } from '../../lib/styles';
+import { boton, sectionLabel } from '../../lib/styles';
 import {
   useFamiliasCurso,
   useGuardarPlantilla,
@@ -273,7 +273,7 @@ export function EditorPlantilla({
           type="button"
           onClick={enviar}
           disabled={vacia || faltaCurso || guardar.isPending}
-          className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-navy py-2 text-xs font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+          className={boton() + ' w-full'}
         >
           {guardar.isPending && <Loader2 size={12} className="animate-spin" />}
           Guardar secuencia

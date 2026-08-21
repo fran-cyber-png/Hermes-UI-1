@@ -16,6 +16,7 @@ import { Intereses } from '../gestion/Intereses';
 import { FormularioVenta } from '../venta/FormularioVenta';
 import { useFicha } from '../cerberus/useFicha';
 import { cotizarEnUnClic, nombreDeTarjeta } from './tarjeta';
+import { boton } from '../../lib/styles';
 
 /**
  * LOS MODALES DE LAS COMPUERTAS DEL PIPELINE (#60).
@@ -147,7 +148,7 @@ export function ModalInteresCotizado({
         <button
           type="button"
           onClick={onCancelar}
-          className="rounded-xl border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-muted"
+          className={boton('secundario')}
         >
           Cancelar — la tarjeta vuelve
         </button>
@@ -233,7 +234,7 @@ export function ModalVentaCierre({
         <button
           type="button"
           onClick={onCerrar}
-          className="rounded-xl border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-muted"
+          className={boton('secundario')}
         >
           Cancelar
         </button>
@@ -244,7 +245,7 @@ export function ModalVentaCierre({
               onAbrir(c);
               onCerrar();
             }}
-            className="flex items-center gap-2 rounded-xl bg-navy px-4 py-2 text-sm font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98]"
+            className={boton()}
           >
             <MessageSquareText size={14} /> Abrir la conversación
           </button>

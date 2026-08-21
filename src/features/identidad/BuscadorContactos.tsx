@@ -5,6 +5,7 @@ import { fechaCorta } from '../../lib/formato';
 import { BadgeCanal, nombreCanal } from '../../components/BadgeCanal';
 import { etiquetaDeOrigen } from './etiquetaOrigen';
 import { MOTIVO_ENLACE, useBuscarContactos, useEnlazar, type ContactoBuscado } from './enlaces';
+import { boton } from '../../lib/styles';
 
 /**
  * «ES LA MISMA PERSONA QUE…» — buscar el otro contacto y confirmar la unión (#58).
@@ -207,7 +208,7 @@ function Confirmacion({
           type="button"
           onClick={onVolver}
           disabled={enlazando}
-          className="rounded-xl border border-border px-4 py-2.5 text-sm font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+          className={boton('secundario')}
         >
           Volver
         </button>
@@ -215,7 +216,7 @@ function Confirmacion({
           type="button"
           onClick={onConfirmar}
           disabled={enlazando}
-          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-navy py-2.5 text-sm font-bold text-white shadow-[0_4px_16px_-4px_rgba(14,42,82,0.5)] transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] disabled:opacity-50"
+          className={boton() + ' flex-1 shadow-[0_4px_16px_-4px_rgba(14,42,82,0.5)]'}
         >
           {enlazando ? <Loader2 size={15} className="animate-spin" /> : <Link2 size={15} />}
           Sí, es la misma persona

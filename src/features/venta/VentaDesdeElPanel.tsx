@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Loader2, ShoppingCart, UserPlus, X } from 'lucide-react';
 import { useEscape } from '../../lib/teclado/useEscape';
-import { fieldClass, sectionLabel } from '../../lib/styles';
+import { boton, fieldClass, sectionLabel } from '../../lib/styles';
 import { ErrorApi } from '../../lib/datos/cliente';
 import { useFicha } from '../cerberus/useFicha';
 import { FormularioVenta } from './FormularioVenta';
@@ -345,7 +345,7 @@ function AltaCliente({ telefono, nombreSugerido }: { telefono: string; nombreSug
         type="button"
         onClick={crearAhora}
         disabled={!puedeCrear}
-        className="flex w-full items-center justify-center gap-2 rounded-xl bg-navy py-2.5 text-sm font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] disabled:opacity-40"
+        className={boton() + ' w-full'}
       >
         {crear.isPending ? <Loader2 size={15} className="animate-spin" /> : <UserPlus size={15} />}
         Crear cliente en Cerberus
@@ -430,7 +430,7 @@ export function VentaDesdeElPanel({
         <button
           type="button"
           onClick={onCerrar}
-          className="rounded-xl border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-muted"
+          className={boton('secundario')}
         >
           Cerrar
         </button>

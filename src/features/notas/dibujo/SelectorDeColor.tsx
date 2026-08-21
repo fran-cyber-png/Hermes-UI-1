@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { type Hsv, aByte, aHex, desdeHex, hexAHsv, hsvAHex, hsvARgb, rgbAHsv, tintaSobre } from './color';
+import { boton } from '../../../lib/styles';
 
 /**
  * EL SELECTOR AVANZADO — el cuadrado, la barra de matiz, RGB y HEX.
@@ -330,14 +331,14 @@ export function SelectorDeColor({
         <button
           type="button"
           onClick={cancelar}
-          className="flex-1 rounded-lg border border-border px-2 py-1.5 text-xs text-foreground transition hover:bg-muted"
+          className={boton('secundario') + ' flex-1'}
         >
           Cancelar
         </button>
         <button
           type="button"
           onClick={() => onAceptar(hex)}
-          className="flex-1 rounded-lg bg-primary px-2 py-1.5 text-xs font-medium text-primary-foreground transition hover:bg-primary-hover"
+          className={boton() + ' flex-1'}
         >
           Aceptar
         </button>

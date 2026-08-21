@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { FileText, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useEscape } from '../../lib/teclado/useEscape';
 import { useMutacionesPlantillasTexto, usePlantillasTexto, type PlantillaTexto } from './plantillas';
+import { boton } from '../../lib/styles';
 
 /**
  * EL MODAL DE PLANTILLAS — se abre desde el `/` del editor de la Libreta.
@@ -102,7 +103,7 @@ export function ModalDePlantillas({ onCerrar, onElegir }: { onCerrar: () => void
               <button
                 type="button"
                 onClick={abrirCrear}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover"
+                className={boton() + ' w-full'}
               >
                 <Plus className="size-4" />
                 Nueva plantilla
@@ -146,7 +147,7 @@ export function ModalDePlantillas({ onCerrar, onElegir }: { onCerrar: () => void
                       <button
                         type="button"
                         onClick={() => setConfirmandoBorrar(null)}
-                        className="rounded px-2 py-1 text-xs text-muted-foreground transition hover:bg-muted"
+                        className={boton('terciario')}
                       >
                         Cancelar
                       </button>
@@ -211,7 +212,7 @@ export function ModalDePlantillas({ onCerrar, onElegir }: { onCerrar: () => void
                 type="button"
                 onClick={guardar}
                 disabled={guardando}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover disabled:opacity-60"
+                className={boton()}
               >
                 {vista.editando ? 'Guardar cambios' : 'Crear plantilla'}
               </button>

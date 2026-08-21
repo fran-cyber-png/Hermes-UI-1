@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Check } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
+import { boton } from '../../lib/styles';
 
 /**
  * LAS LECCIONES — lo único que se le puede ENSEÑAR al bot en caliente (#259).
@@ -98,7 +99,7 @@ export function PanelLecciones() {
             type="button"
             onClick={() => escribir.mutate()}
             disabled={!puedeEscribir}
-            className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-40"
+            className={boton()}
           >
             Guardar como borrador
           </button>
@@ -133,7 +134,7 @@ export function PanelLecciones() {
                 <button
                   type="button"
                   onClick={() => setConfirmando(l.id)}
-                  className="rounded-md border border-border px-2.5 py-1 text-sm hover:bg-muted"
+                  className={boton('secundario')}
                 >
                   Publicar
                 </button>
@@ -152,7 +153,7 @@ export function PanelLecciones() {
                     type="button"
                     onClick={() => publicar.mutate(l.id)}
                     disabled={publicar.isPending}
-                    className="ml-auto flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-sm text-primary-foreground disabled:opacity-40"
+                    className={boton() + ' ml-auto'}
                   >
                     <Check className="size-3.5" aria-hidden />
                     Sí, publicar
@@ -160,7 +161,7 @@ export function PanelLecciones() {
                   <button
                     type="button"
                     onClick={() => setConfirmando(null)}
-                    className="rounded-md border border-border px-2.5 py-1 text-sm hover:bg-muted"
+                    className={boton('secundario')}
                   >
                     No
                   </button>
@@ -170,7 +171,7 @@ export function PanelLecciones() {
                 <button
                   type="button"
                   onClick={() => retirar.mutate(l.id)}
-                  className="rounded-md border border-border px-2.5 py-1 text-sm hover:bg-muted"
+                  className={boton('secundario')}
                 >
                   Retirar
                 </button>

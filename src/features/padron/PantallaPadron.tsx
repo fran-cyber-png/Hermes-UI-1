@@ -18,6 +18,7 @@ import type { DestinoCorreo } from '../../lib/puente';
 import { useSesionWa } from '../whatsapp/conversacionWa';
 import { BarraReparto } from './BarraReparto';
 import { FiltroFaceta } from './FiltroFaceta';
+import { boton } from '../../lib/styles';
 import {
   alternarFila,
   alternarPagina,
@@ -348,7 +349,7 @@ export function PantallaPadron({
             type="button"
             disabled={paginaActual <= 1}
             onClick={() => setFiltros((f) => ({ ...f, pagina: (f.pagina ?? 1) - 1 }))}
-            className="flex items-center gap-1 rounded-lg px-2 py-1 font-semibold text-foreground hover:bg-muted disabled:opacity-30"
+            className={boton('terciario')}
           >
             <ChevronLeft size={13} /> Anterior
           </button>
@@ -359,7 +360,7 @@ export function PantallaPadron({
             type="button"
             disabled={paginaActual >= ultimaPagina}
             onClick={() => setFiltros((f) => ({ ...f, pagina: (f.pagina ?? 1) + 1 }))}
-            className="flex items-center gap-1 rounded-lg px-2 py-1 font-semibold text-foreground hover:bg-muted disabled:opacity-30"
+            className={boton('terciario')}
           >
             Siguiente <ChevronRight size={13} />
           </button>

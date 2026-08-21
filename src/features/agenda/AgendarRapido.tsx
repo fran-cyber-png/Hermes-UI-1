@@ -80,10 +80,10 @@ export function AgendarRapido({ conversacion }: { conversacion: Conversacion }) 
             ? 'bg-success/10 text-success'
             : abierto
               ? 'bg-navy text-white'
-              : 'border border-border text-muted-foreground hover:border-primary hover:text-foreground')
+              : 'bg-[color-mix(in_oklab,var(--muted)_88%,black)] text-foreground hover:bg-[color-mix(in_oklab,var(--muted)_76%,black)]')
         }
       >
-        {listo ? <Check size={14} /> : <AlarmClock size={14} />}
+        {listo ? <Check size={14} /> : <AlarmClock size={14} className={abierto ? undefined : 'text-icono-naranja'} />}
         {listo ? `Agendado · ${listo}` : 'Agendar'}
       </button>
 

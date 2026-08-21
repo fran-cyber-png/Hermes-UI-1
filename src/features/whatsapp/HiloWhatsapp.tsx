@@ -27,6 +27,7 @@ import { lecturaDeMotivo } from './motivoEntrega';
 import { avisoDeComposer } from '../../dominio/ventana';
 import { citaDeMensaje, clavesDelHilo, respondidos, rotuloDeCita, sePuedeCitar, type CitaHilo } from './cita';
 import { Avatar } from '../../components/Avatar';
+import { boton } from '../../lib/styles';
 import type { Conversacion } from '../../dominio/conversaciones';
 import {
   urlMedia,
@@ -508,7 +509,7 @@ function EditorDeMensaje({
           type="button"
           disabled={!texto.trim() || pendiente}
           onClick={onGuardar}
-          className="flex items-center gap-1 rounded-md bg-navy px-2.5 py-1 text-[11px] font-bold text-white transition-colors hover:bg-navy/90 disabled:opacity-40"
+          className="flex items-center gap-1 rounded-md bg-navy px-2.5 py-1 text-[11px] font-bold text-white transition-colors hover:bg-navy-hover disabled:opacity-40"
         >
           {pendiente && <Loader2 size={11} className="animate-spin" />}
           Guardar
@@ -924,7 +925,7 @@ export function HiloWhatsapp({
               <button
                 type="button"
                 onClick={() => void hilo.refetch()}
-                className="mt-2 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1"
+                className={boton('secundario') + ' mt-2'}
               >
                 Reintentar
               </button>
@@ -2305,7 +2306,7 @@ function AccionesSugerencia({
             ? 'Aprobar el texto como quedó (queda marcado «editada») · ⌘↵'
             : 'Aprobar la plantilla tal cual · ⌘↵'
         }
-        className="flex h-10 items-center gap-2 rounded-xl bg-navy px-4 text-xs font-bold text-white shadow-[0_2px_10px_-2px_rgba(14,42,82,0.5)] transition-[background-color,box-shadow,transform] duration-200 ease-house hover:bg-navy/90 hover:shadow-[0_4px_16px_-2px_rgba(14,42,82,0.55)] active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:opacity-40 disabled:shadow-none disabled:active:scale-100"
+        className={boton() + ' shadow-[0_2px_10px_-2px_rgba(14,42,82,0.5)] hover:shadow-[0_4px_16px_-2px_rgba(14,42,82,0.55)] disabled:shadow-none'}
       >
         {sugerencia.trabajando ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
         {textoDelBoton({ editado })}

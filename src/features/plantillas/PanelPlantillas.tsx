@@ -12,7 +12,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { sectionLabel } from '../../lib/styles';
+import { boton, sectionLabel } from '../../lib/styles';
 import type { Conversacion } from '../../dominio/conversaciones';
 import {
   useArchivarPlantilla,
@@ -232,7 +232,7 @@ export function PanelPlantillas({
             <button
               type="button"
               onClick={() => setEditando('nueva')}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-navy px-3 py-1.5 text-xs font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98]"
+              className={boton() + ' mt-3'}
             >
               <Plus size={13} /> Escribir la primera
             </button>
@@ -351,7 +351,7 @@ export function PanelPlantillas({
                                     })),
                                   )
                                 }
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-navy px-2.5 py-1.5 text-[11px] font-bold text-white shadow-[0_4px_14px_-6px_rgba(14,42,82,0.6)] transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-navy px-2.5 py-1.5 text-[11px] font-bold text-white shadow-[0_4px_14px_-6px_rgba(14,42,82,0.6)] transition-[background-color,transform] duration-200 ease-house hover:bg-navy-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
                               >
                                 <Send size={12} /> Mandar {preparada.total}{' '}
                                 {preparada.total === 1 ? 'mensaje' : 'mensajes'}

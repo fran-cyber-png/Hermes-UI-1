@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, Check, ExternalLink, Lock, MessageCircle, Send, Trash2, X } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
-import { sectionLabel } from '../../lib/styles';
+import { boton, sectionLabel } from '../../lib/styles';
 import { iniciales } from '../../lib/iniciales';
 import { useEscape } from '../../lib/teclado/useEscape';
 import type { Interaccion } from './types';
@@ -239,7 +239,7 @@ export default function ResponderPanel({ interaccion, onCerrar, onRespondido, on
                       <button
                         type="button"
                         onClick={onSiguiente}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-navy px-3 py-1.5 text-xs font-bold text-white transition-transform duration-200 ease-house hover:bg-navy/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 active:scale-[0.98]"
+                        className={boton()}
                       >
                         Siguiente de la cola →
                       </button>

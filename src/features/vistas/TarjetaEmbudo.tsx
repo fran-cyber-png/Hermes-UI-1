@@ -22,6 +22,7 @@ import { etiquetaDeMedia } from '../../lib/etiquetaMedia';
 import { horasDesde, tempClass, tempDegradado } from '../../lib/formato';
 import { usePopover } from '../../lib/teclado/usePopover';
 import { cursoDeTarjeta, haceCorto, nombreDeTarjeta, turnoDeTarjeta } from './tarjeta';
+import { boton } from '../../lib/styles';
 
 /** Los 6 destinos del selector «Escribir en» — bandera + nombre, en el orden pedido. */
 const PAISES_ESCRIBIR_EN = [
@@ -394,7 +395,7 @@ export function TarjetaEmbudo({
                       setMenuAbierto(false);
                       onAbrir(c);
                     }}
-                    className="flex flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-center transition-colors duration-200 ease-house hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                    className={boton('terciario')}
                   >
                     <span className="text-base leading-none">{bandera}</span>
                     <span className="truncate text-[11px] leading-tight text-muted-foreground">{pais}</span>

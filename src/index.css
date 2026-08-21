@@ -18,6 +18,9 @@
 
   --primary: #2563EB;
   --primary-hover: #1D4ED8;
+  /* El tercer peldaño del botón primario. `--primary-hover` ya existía y ya
+     invertía el sentido por tema; esto sólo completa la escalera. */
+  --primary-active: #1E40AF;
   --primary-foreground: #FFFFFF;
 
   --secondary: #EFF4FE;
@@ -57,6 +60,13 @@
 
   /* Marca */
   --navy: #0E2A52;
+  /* Los dos peldaños del botón primario (ADR pendiente; ver
+     scratchpad/mapa-ui-notion-21-ago-2026.md). Notion baja de `blue-400` a
+     `blue-700` porque tiene rampas de 9 tonos; acá hay UN navy, así que el
+     escalón se deriva. NO se hace con alfa: `bg-navy/90` sobre un fondo claro
+     ACLARA, que es al revés de lo que un hover de botón sólido debe hacer. */
+  --navy-hover: color-mix(in oklab, var(--navy) 88%, black);
+  --navy-active: color-mix(in oklab, var(--navy) 76%, black);
   /* EL MISMO AZUL, CON EL PAPEL ESCRITO EN EL NOMBRE. `--navy` es SUPERFICIE
      (`bg-navy text-white`, el velo `bg-navy/20` de los modales, el borde de una
      chapa); `--navy-ink` es TINTA (`text-navy-ink`, el título de cada pantalla).
@@ -86,6 +96,15 @@
   --cat-cian: #0891B2;
   --cat-morado: #7C3AED;
   --cat-rosa: #DB2777;
+
+  /* ÍCONOS DE ACCIÓN — el tier más saturado, y SOLO para el glifo de un botón
+     de relleno neutro (Llamar, Agendar, Anotar, Registrar contacto). No son de
+     la paleta de categorías ni de la de estado: ahí el color significa algo y
+     acá solo distingue una acción de otra. Por eso viven aparte y no se reusan
+     como fondo — un `bg` con esta saturación se comería la barra. */
+  --icono-verde: #22C55E;
+  --icono-naranja: #F97316;
+  --icono-azul: #3B82F6;
 
   /* Única excepción documentada: color de marca externa (Meta), para el CTA
      "Ver en Ads Manager" — ver crear_campana.html en goberna-dashboard. */
@@ -137,6 +156,7 @@
 
   --primary: #3B82F6;
   --primary-hover: #60A5FA;
+  --primary-active: #93C5FD;
   --primary-foreground: #F1F5F9;
 
   --secondary: #1E293B;
@@ -161,6 +181,10 @@
      #1A2332, contraste 1.1:1. Un título que ocupa su lugar y no se lee.
      Lo mide `src/temaOscuroLegible.test.ts`. */
   --navy-ink: #DCE7F7;
+  /* En tema oscuro el navy ya está casi contra el fondo: oscurecerlo más no se
+     percibe. El peldaño va hacia la luz — misma escalera, sentido invertido. */
+  --navy-hover: color-mix(in oklab, var(--navy) 82%, white);
+  --navy-active: color-mix(in oklab, var(--navy) 68%, white);
 
   --riel: #334155;
   --riel-activo: #64748B;
@@ -177,6 +201,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -196,6 +221,8 @@
   --color-navy: var(--navy);
   --color-navy-ink: var(--navy-ink);
   --color-navy-muted: var(--navy-muted);
+  --color-navy-hover: var(--navy-hover);
+  --color-navy-active: var(--navy-active);
   --color-gold: var(--gold);
   --color-gold-ink: var(--gold-ink);
   --color-cat-pizarra: var(--cat-pizarra);
@@ -206,6 +233,9 @@
   --color-cat-cian: var(--cat-cian);
   --color-cat-morado: var(--cat-morado);
   --color-cat-rosa: var(--cat-rosa);
+  --color-icono-verde: var(--icono-verde);
+  --color-icono-naranja: var(--icono-naranja);
+  --color-icono-azul: var(--icono-azul);
   --color-meta-blue: var(--meta-blue);
   --color-meta-blue-hover: var(--meta-blue-hover);
   --color-temp-fresco: var(--temp-fresco);

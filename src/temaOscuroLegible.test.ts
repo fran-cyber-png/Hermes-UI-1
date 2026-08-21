@@ -109,6 +109,10 @@ describe('el tema oscuro se lee', () => {
     expect(
       archivosConTintaDeSuperficie(),
       'apareció otro `text-navy`: o es tinta y va `text-navy-ink`, o es otra chapa que no se apaga en oscuro y entonces se documenta acá',
-    ).toEqual(['./App.tsx']);
+    ).toEqual([
+      './App.tsx',
+      // El chip «Solo calientes» del radar: misma chapa de oro, mismo motivo.
+      './features/dashboard/VistaDashboard.tsx',
+    ]);
   });
 });

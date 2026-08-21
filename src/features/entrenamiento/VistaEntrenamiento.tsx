@@ -6,6 +6,7 @@ import { useLineas } from '../../dominio/lineas';
 import { PanelCorridas } from './PanelCorridas';
 import { PanelLecciones } from './PanelLecciones';
 import { PanelAgujeros } from './PanelAgujeros';
+import { boton } from '../../lib/styles';
 import {
   lecturaDeSilencio,
   motivoParaNoProbar,
@@ -137,7 +138,7 @@ export function VistaEntrenamiento() {
               cajaRef.current?.focus();
             }}
             disabled={turnos.length === 0}
-            className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-muted disabled:opacity-40"
+            className={boton('secundario')}
           >
             <RotateCcw className="size-3.5" aria-hidden />
             Empezar de nuevo
@@ -238,7 +239,7 @@ export function VistaEntrenamiento() {
               type="button"
               onClick={mandar}
               disabled={motivoBloqueo !== null}
-              className="ml-auto flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-40"
+              className={boton() + ' ml-auto'}
             >
               Mandar
               <CornerDownLeft className="size-3.5" aria-hidden />

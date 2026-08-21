@@ -9,6 +9,7 @@ import {
   type FiltrosPadron,
 } from './padron';
 import { cuantos, necesitaConfirmar, type Seleccion } from './seleccion';
+import { boton } from '../../lib/styles';
 
 /**
  * REPARTIR EL LOTE — la barra que aparece cuando hay algo elegido.
@@ -154,7 +155,7 @@ export function BarraReparto({
               type="button"
               disabled={!destino || trabajando}
               onClick={() => (necesitaConfirmar(n) ? setConfirmando(true) : repartir())}
-              className="flex items-center gap-1.5 rounded-full bg-navy px-4 py-2 text-sm font-bold text-white shadow-[0_4px_16px_-6px_rgba(14,42,82,0.6)] transition-[background-color,transform,opacity] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] disabled:opacity-35 disabled:shadow-none disabled:active:scale-100"
+              className={boton() + ' shadow-[0_4px_16px_-6px_rgba(14,42,82,0.6)] disabled:shadow-none'}
             >
               {trabajando && !confirmando ? (
                 <Loader2 size={13} className="animate-spin" />
@@ -254,7 +255,7 @@ function Confirmacion({
               type="button"
               onClick={onCancelar}
               disabled={trabajando}
-              className="rounded-xl border border-border px-4 py-2.5 text-sm font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+              className={boton('secundario')}
             >
               Volver
             </button>
@@ -262,7 +263,7 @@ function Confirmacion({
               type="button"
               onClick={onConfirmar}
               disabled={trabajando}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-navy py-2.5 text-sm font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] disabled:opacity-50"
+              className={boton() + ' flex-1'}
             >
               {trabajando ? <Loader2 size={15} className="animate-spin" /> : <UserPlus size={15} />}
               Sí, habilitar {cantidad.toLocaleString('es')}

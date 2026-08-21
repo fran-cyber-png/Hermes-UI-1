@@ -268,9 +268,7 @@ export function FilaConversacion({
         'group relative flex w-full items-start gap-3 border-b border-border py-3 pl-4 pr-9 text-left transition-colors last:border-b-0 ' +
         (seleccionada
           ? 'bg-secondary shadow-[inset_-3px_0_0_var(--color-primary)] active:bg-muted'
-          : c.respondida
-            ? 'bg-success/5'
-            : 'hover:bg-muted/50') +
+          : 'hover:bg-muted/50') +
         (esNueva ? ' animate-in fade-in slide-in-from-top-1 duration-300 ease-house' : '')
       }
     >

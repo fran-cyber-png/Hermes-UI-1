@@ -81,7 +81,7 @@ function AccionesFicha({ telefono, onEscribir, onVenta }: { telefono: string; on
         <button
           type="button"
           onClick={() => onEscribir(telefono)}
-          className={`flex items-center gap-1.5 rounded-full bg-navy px-3.5 py-1.5 text-sm font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] ${FOCO_ANILLO}`}
+          className={`flex items-center gap-1.5 rounded-full bg-navy px-3.5 py-1.5 text-sm font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy-hover active:scale-[0.98] ${FOCO_ANILLO}`}
         >
           <MessageCircle size={13} /> Escribirle
         </button>

@@ -55,9 +55,9 @@ export function BotonLlamar({ telefono, compacto = false }: { telefono: string; 
           type="button"
           title={`Llamar al +${digitos}`}
           onClick={llamar}
-          className="flex h-7 items-center gap-1.5 rounded-md border border-border px-2 text-sm font-normal text-muted-foreground transition-colors hover:border-success hover:text-success"
+          className="flex h-7 items-center gap-1.5 rounded-md bg-[color-mix(in_oklab,var(--muted)_88%,black)] hover:bg-[color-mix(in_oklab,var(--muted)_76%,black)] px-2 text-sm font-normal text-foreground transition-colors"
         >
-          <Phone size={14} /> Llamar
+          <Phone size={14} className="text-icono-verde" /> Llamar
         </button>
       )}
 
@@ -79,7 +79,7 @@ export function BotonLlamar({ telefono, compacto = false }: { telefono: string; 
               onClick={copiar}
               className={
                 'flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-bold transition-colors ' +
-                (copiado ? 'bg-success/10 text-success' : 'bg-navy text-white hover:bg-navy/90')
+                (copiado ? 'bg-success/10 text-success' : 'bg-navy text-white hover:bg-navy-hover')
               }
             >
               {copiado ? <Check size={11} /> : <Copy size={11} />}

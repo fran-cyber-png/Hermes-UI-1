@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, HelpCircle } from 'lucide-react';
 import { api } from '../../lib/datos/cliente';
+import { boton } from '../../lib/styles';
 
 /**
  * LO QUE EL BOT NO SUPO CONTESTAR (#261).
@@ -113,7 +114,7 @@ export function PanelAgujeros({ linea }: { linea: string | null }) {
                       type="button"
                       onClick={() => enseniar.mutate(`Le preguntaron: «${a.pregunta ?? '—'}» y no supo.`)}
                       disabled={texto.trim().length < 5 || enseniar.isPending}
-                      className="ml-auto flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-sm text-primary-foreground disabled:opacity-40"
+                      className={boton() + ' ml-auto'}
                     >
                       <Check className="size-3.5" aria-hidden />
                       Guardar borrador
@@ -121,7 +122,7 @@ export function PanelAgujeros({ linea }: { linea: string | null }) {
                     <button
                       type="button"
                       onClick={() => setEscribiendo(null)}
-                      className="rounded-md border border-border px-2.5 py-1 text-sm hover:bg-muted"
+                      className={boton('secundario')}
                     >
                       Cancelar
                     </button>
@@ -134,7 +135,7 @@ export function PanelAgujeros({ linea }: { linea: string | null }) {
                     setEscribiendo(a.clave);
                     setTexto('');
                   }}
-                  className="rounded-md border border-border px-2.5 py-1 text-sm hover:bg-muted"
+                  className={boton('secundario')}
                 >
                   Enseñarle esto
                 </button>

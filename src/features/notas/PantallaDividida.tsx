@@ -4,6 +4,7 @@ import { ColumnaDeEscritura, DiagramaPerezoso, EditorPerezoso } from './perezoso
 import { TituloEditable } from './TituloEditable';
 import { renglonDeEstado } from './guardado';
 import { useAutoguardado, type DestinoDeGuardado } from './useAutoguardado';
+import { boton } from '../../lib/styles';
 import {
   type Nota,
   docParaEditor,
@@ -245,7 +246,7 @@ export function PantallaDividida({
           <button
             type="button"
             onClick={() => setFase('creando')}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover"
+            className={boton() + ' flex-1'}
           >
             <Plus className="size-4" />
             Página nueva
@@ -254,7 +255,7 @@ export function PantallaDividida({
             type="button"
             onClick={() => setFase('creando-diagrama')}
             title="Un lienzo de nodos y conexiones (React Flow), en vez de texto"
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted"
+            className={boton('secundario') + ' flex-1'}
           >
             <Workflow className="size-4" />
             Nuevo Diagrama

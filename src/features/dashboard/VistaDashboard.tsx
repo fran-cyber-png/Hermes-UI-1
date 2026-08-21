@@ -7,7 +7,7 @@ import { iniciales } from '../../lib/iniciales';
 import { useSelloDeViejo } from '../../lib/datos/useSelloDeViejo';
 import { SelloDeAntes } from '../../components/SelloDeAntes';
 import { horasDesde, tempBorde, tempClass } from '../../lib/formato';
-import { kicker, sectionLabel } from '../../lib/styles';
+import { boton, kicker, sectionLabel } from '../../lib/styles';
 import { ETAPAS, ETAPA_CHIP, colorSegmento, rotuloEtapa } from '../../lib/etapas';
 import { Columnas } from '../../components/graficos/Columnas';
 import { BarraSegmentada } from '../../components/graficos/BarraSegmentada';
@@ -505,7 +505,7 @@ export function VistaDashboard({
           <button
             type="button"
             onClick={() => onAbrir(conversacionDeChat(atender))}
-            className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-[0_4px_14px_-4px_rgba(37,99,235,0.5)] transition-[transform,background-color] duration-200 ease-house hover:bg-primary-hover active:scale-[0.98]"
+            className={boton()}
           >
             Atender a {(atender.persona_nombre ?? atender.telefono ?? 'lead').split(' ')[0]}
             <ArrowRight size={14} />
@@ -529,7 +529,7 @@ export function VistaDashboard({
         {/* ── B · EL RADAR — el punto vivo + el contador identifican la zona ── */}
         <section aria-label="El radar" className="flex min-h-0 min-w-0 flex-1 flex-col rounded-2xl bg-card shadow-panel">
           <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
-            <span className="font-mono text-[11px] tabular-nums text-muted-foreground">{filas.length}</span>
+            <span className="font-mono text-sm tabular-nums text-muted-foreground">{filas.length}</span>
             {deAntes ? (
               <SelloDeAntes texto={deAntes} actualizando={actualizando} />
             ) : (
@@ -538,7 +538,7 @@ export function VistaDashboard({
                   <span className="absolute inline-flex size-1.5 animate-ping rounded-full bg-success opacity-60" />
                   <span className="relative inline-flex size-1.5 rounded-full bg-success" />
                 </span>
-                <span className="text-[11px] text-muted-foreground">en vivo</span>
+                <span className="text-sm text-muted-foreground">en vivo</span>
               </>
             )}
 
@@ -553,32 +553,41 @@ export function VistaDashboard({
             )}
 
             <div className="ml-auto flex flex-wrap items-center gap-1">
-              {fuentesVisibles.map((f) => {
-                const ult = f.id && ultimaPor[f.id] ? horasDesde(ultimaPor[f.id]) : null;
-                return (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => setFuente(f.id)}
-                    className={
-                      'rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ' +
-                      (fuente === f.id ? 'bg-navy text-white' : 'text-muted-foreground hover:bg-secondary hover:text-foreground')
-                    }
-                  >
-                    {f.label} {countPor(f.id) > 0 && <span className="font-mono">{countPor(f.id)}</span>}
-                    {ult !== null && ult > 24 && <span className="ml-1 font-normal opacity-70">· sin caídas {hace(ult)}</span>}
-                  </button>
-                );
-              })}
+              {/* Las fuentes son UNA sola pregunta —de dónde salen estas filas— con una
+                  respuesta a la vez, así que van adentro de una pista que las junta.
+                  Es el MISMO molde que los tabs de la cola (`ColaUnificada.tsx:515`):
+                  pista `bg-muted/60` + pastillas propias, la elegida en `bg-card` con
+                  sombra, o sea que sube en vez de encenderse.
+                  «Solo calientes» queda AFUERA a propósito: es otra pregunta, y es un
+                  interruptor que se combina con la fuente elegida, no que la reemplaza. */}
+              <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-muted/60 p-0.5">
+                {fuentesVisibles.map((f) => {
+                  const ult = f.id && ultimaPor[f.id] ? horasDesde(ultimaPor[f.id]) : null;
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setFuente(f.id)}
+                      className={
+                        'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-normal transition-colors ' +
+                        (fuente === f.id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')
+                      }
+                    >
+                      {f.label} {countPor(f.id) > 0 && <span className="font-mono">{countPor(f.id)}</span>}
+                      {ult !== null && ult > 24 && <span className="ml-1 font-normal opacity-70">· sin caídas {hace(ult)}</span>}
+                    </button>
+                  );
+                })}
+              </div>
               <button
                 type="button"
                 onClick={() => setSoloCalientes((v) => !v)}
                 className={
-                  'ml-1 flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ' +
-                  (soloCalientes ? 'border-gold-ink bg-gold/15 text-gold-ink' : 'border-border text-muted-foreground hover:text-foreground')
+                  'ml-1 flex h-7 items-center gap-1.5 rounded-md border px-2 text-sm font-normal transition-colors ' +
+                  (soloCalientes ? 'border-transparent bg-muted/60 text-gold' : 'border-gold bg-gold text-navy')
                 }
               >
-                <span className="size-1.5 rounded-full bg-gold-ink" /> Solo calientes
+                Solo calientes
               </button>
             </div>
           </header>
@@ -603,7 +612,7 @@ export function VistaDashboard({
                        el motivo, la vendedora lee «se rompió algo» o «hoy no hay
                        trabajo», que son las dos conclusiones equivocadas. */
                     soloMisAsignadas && !fuente && !etapaFiltro && !soloCalientes
-                    ? 'Todavía no tenés conversaciones asignadas. Acá aparecen las que te reparte el supervisor — no es que no haya caído nada.'
+                    ? 'Todavía no tienes conversaciones asignadas. Acá aparecen las que te reparte el supervisor — no es que no haya caído nada.'
                     : soloMisAsignadas
                       ? 'Ninguna de las tuyas con estos filtros. Este radar muestra solo lo que te asignaron.'
                       : 'Nada cayó con estos filtros. Si la frescura del header está verde, este vacío es real.'}
@@ -1017,13 +1026,16 @@ export function VistaDashboard({
                   />
                 )}
               </div>
-              <div className="flex rounded-full border border-border p-0.5">
+              <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-muted/60 p-0.5">
                 {(['hoy', '7d'] as const).map((p) => (
                   <button
                     key={p}
                     type="button"
                     onClick={() => setPeriodo(p)}
-                    className={'rounded-full px-2 py-0.5 text-[11px] font-semibold ' + (periodo === p ? 'bg-navy text-white' : 'text-muted-foreground')}
+                    className={
+                      'flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-normal transition-colors ' +
+                      (periodo === p ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')
+                    }
                   >
                     {p === 'hoy' ? 'Hoy' : '7d'}
                   </button>
@@ -1064,7 +1076,7 @@ export function VistaDashboard({
                   return (
                     <div key={v.vendedora} className="flex items-center gap-2 border-t border-border/60 py-1.5 text-xs">
                       <span
-                        title={soyYo ? 'vos' : undefined}
+                        title={soyYo ? 'tú' : undefined}
                         className={
                           'flex size-7 shrink-0 items-center justify-center rounded-[8px] bg-secondary font-heading text-[11px] font-bold text-navy-ink' +
                           (soyYo ? ' ring-2 ring-navy' : '')

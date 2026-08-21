@@ -859,7 +859,13 @@ function AppAutenticada({ vendedora, reintentar, entrar, salir, cerberusVivo }: 
               no una cuenta de cabeza. A 1280 el chat pasa de ~396 (25rem) a
               ~332 px — sigue cómodo para un hilo de chat, pero si hace falta
               subir esto una vez más, medí el DOM primero, no supongas. */}
-          <main className={'min-h-0 shrink-0 ' + (revision.activo ? 'w-[20rem]' : 'w-[27.75rem]')}>
+          {/* Desde el riel de canales (21-ago-2026) la cola YA NO fija su ancho
+              acá: los 27.75rem se los quedó su columna interna y el riel suma
+              su ancho encima, que cambia al desplegarlo. Con el ancho fijo acá
+              el riel recortaba el header —búsqueda, «N en cola» y el chip de
+              línea salían cortados. La revisión sí lo sigue fijando: no tiene
+              riel. */}
+          <main className={'min-h-0 shrink-0 ' + (revision.activo ? 'w-[20rem]' : 'w-auto')}>
             {revision.activo ? (
               <ColaRevision
                 grupos={revision.grupos}

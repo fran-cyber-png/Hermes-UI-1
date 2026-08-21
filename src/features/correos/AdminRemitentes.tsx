@@ -5,7 +5,7 @@ import { api } from '../../lib/datos/cliente';
 import { tokenGuardado } from '../../lib/datos/token';
 import { quienDiceSer } from '../auth/sesion';
 import { useEscape } from '../../lib/teclado/useEscape';
-import { kicker } from '../../lib/styles';
+import { boton, kicker } from '../../lib/styles';
 import {
   dominioAceptado,
   dominioDe,
@@ -318,7 +318,7 @@ export function AdminRemitentes({ onCerrar }: { onCerrar: () => void }) {
                   <button
                     type="button"
                     onClick={() => void lista.refetch()}
-                    className="mt-2.5 rounded-lg border border-border px-3 py-1.5 font-semibold transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                    className={boton('secundario') + ' mt-2.5'}
                   >
                     Reintentar
                   </button>
@@ -438,7 +438,7 @@ function SinPermiso({
         <button
           type="button"
           onClick={onReintentar}
-          className="mt-2.5 rounded-lg border border-border px-3 py-1.5 font-semibold transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          className={boton('secundario') + ' mt-2.5'}
         >
           Reintentar
         </button>
@@ -811,7 +811,7 @@ function FormularioRemitente(p: FormularioProps) {
               p.onGuardar(campos);
             }}
             disabled={!veredicto.puede}
-            className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 py-1.5 text-sm font-bold text-primary-foreground transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover active:scale-[0.98] disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1"
+            className={boton()}
           >
             {p.enVuelo && <Loader2 size={12} className="animate-spin" />}
             Guardar

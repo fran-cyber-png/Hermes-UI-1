@@ -226,10 +226,10 @@ export function RegistrarEvento({
             ? 'bg-success/10 text-success'
             : abierto
               ? 'bg-navy text-white'
-              : 'border border-border text-muted-foreground hover:border-primary hover:text-foreground')
+              : 'bg-[color-mix(in_oklab,var(--muted)_88%,black)] text-foreground hover:bg-[color-mix(in_oklab,var(--muted)_76%,black)]')
         }
       >
-        {listo ? <Check size={14} /> : <NotebookPen size={14} />}
+        {listo ? <Check size={14} /> : <NotebookPen size={14} className={abierto ? undefined : 'text-icono-azul'} />}
         {/* «Anotar» y no «Registrar»: al lado quedó el botón que registra el
             CONTACTO, y dos «Registrar» en la misma barra no se distinguen. Lo
             que este chip hace no cambió (ADR 0037): un HECHO tipado que cae en

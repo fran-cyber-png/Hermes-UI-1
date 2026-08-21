@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ChevronLeft, Eye, EyeOff, Lightbulb, Plus, RotateCcw, ServerCrash, X } from 'lucide-react';
 import { ErrorApi } from '../../lib/datos/cliente';
 import { useEscape } from '../../lib/teclado/useEscape';
-import { sectionLabel } from '../../lib/styles';
+import { boton, sectionLabel } from '../../lib/styles';
 import { MOMENTOS, PORQUE_DEL_MOMENTO, type MomentoDeVenta } from './hechos';
 import {
   claveSugerida,
@@ -348,7 +348,7 @@ function Editor({
           type="button"
           onClick={guardar}
           disabled={!editable || Boolean(motivoParaNoGuardar) || trabajando}
-          className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover disabled:opacity-50"
+          className={boton()}
         >
           {trabajando ? 'Guardando…' : esNuevo ? 'Agregar el dato' : 'Guardar'}
         </button>
@@ -364,7 +364,7 @@ function Editor({
               );
             }}
             disabled={trabajando}
-            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+            className={boton('secundario')}
           >
             {hecho.activo ? <EyeOff size={14} /> : <RotateCcw size={14} />}
             {hecho.activo ? 'Apagar' : 'Volver a prender'}
@@ -488,7 +488,7 @@ export function PantallaHechos({
             <button
               type="button"
               onClick={() => setSeleccion({ tipo: 'previa' })}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:hidden"
+              className={boton('secundario') + ' w-full'}
             >
               <Eye className="size-4" />
               Qué ve la vendedora
@@ -497,7 +497,7 @@ export function PantallaHechos({
               type="button"
               disabled={!editable}
               onClick={() => setSeleccion({ tipo: 'nuevo' })}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover disabled:opacity-50"
+              className={boton() + ' w-full'}
             >
               <Plus className="size-4" />
               Agregar un dato
