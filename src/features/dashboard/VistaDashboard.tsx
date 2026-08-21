@@ -431,7 +431,7 @@ export function VistaDashboard({
                 onClick={() => setLectura(id)}
                 aria-pressed={lecturaEfectiva === id}
                 className={
-                  'rounded-full px-3 py-1 text-xs font-bold transition-[background-color,color] duration-200 ease-house ' +
+                  'rounded-full px-3.5 py-1.5 text-sm font-normal transition-[background-color,color] duration-200 ease-house ' +
                   (lecturaEfectiva === id ? 'bg-card text-navy-ink shadow-panel' : 'text-muted-foreground hover:text-foreground')
                 }
               >
@@ -440,7 +440,7 @@ export function VistaDashboard({
             ))}
           </div>
         ) : (
-          <h2 className="shrink-0 font-heading text-xs font-bold text-navy-ink">Mi turno</h2>
+          <h2 className="shrink-0 font-heading text-sm font-bold text-navy-ink">Mi turno</h2>
         )}
         <span className="h-7 w-px shrink-0 bg-border" aria-hidden="true" />
 
@@ -453,7 +453,7 @@ export function VistaDashboard({
         ) : (
           <div className="flex shrink-0 items-center gap-2">
             <span className="size-1.5 shrink-0 rounded-full bg-gold-ink" />
-            <span className="font-heading text-2xl font-bold tabular-nums text-foreground">{nCalientes}</span>
+            <span className="font-heading text-3xl font-bold tabular-nums text-foreground">{nCalientes}</span>
             <span className="text-xs text-muted-foreground">
               {nCalientes === 1 ? 'persona espera' : 'personas esperan'}
               {nCalientes > 0 && masViejaHoras !== null
@@ -505,10 +505,10 @@ export function VistaDashboard({
           <button
             type="button"
             onClick={() => onAbrir(conversacionDeChat(atender))}
-            className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow-[0_4px_14px_-4px_rgba(37,99,235,0.5)] transition-[transform,background-color] duration-200 ease-house hover:bg-primary-hover active:scale-[0.98]"
+            className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-[0_4px_14px_-4px_rgba(37,99,235,0.5)] transition-[transform,background-color] duration-200 ease-house hover:bg-primary-hover active:scale-[0.98]"
           >
             Atender a {(atender.persona_nombre ?? atender.telefono ?? 'lead').split(' ')[0]}
-            <ArrowRight size={13} />
+            <ArrowRight size={14} />
           </button>
         )}
           </>
@@ -726,7 +726,7 @@ export function VistaDashboard({
                         <span className="flex min-w-0 flex-1 items-center gap-2">
                           {alta && <span title="caliente" className="size-1.5 shrink-0 rounded-full bg-gold-ink" />}
                           {esChat ? <BadgeCanal canal={fila.chat.canal} size={13} /> : null}
-                          <span className="max-w-[40%] shrink truncate text-[11px] font-semibold text-foreground">
+                          <span className="max-w-[40%] shrink truncate text-sm font-semibold text-foreground">
                             {base.persona_nombre ?? (
                               <span className="font-mono font-normal text-muted-foreground">
                                 {(esChat ? fila.chat.telefono : (fila.form.telefono ?? fila.form.correo)) ?? 'sin dato'}
@@ -792,7 +792,7 @@ export function VistaDashboard({
                             Preguntó
                           </span>
                         )}
-                        <p className="min-w-0 flex-1 truncate text-[13px] text-foreground">
+                        <p className="min-w-0 flex-1 truncate text-sm text-foreground">
                           {esChat
                             ? textoDePreview({
                                 texto: fila.chat.texto,
@@ -890,8 +890,8 @@ export function VistaDashboard({
         <aside className="flex w-80 shrink-0 flex-col gap-2.5 overflow-y-auto">
           {/* C1 · Embudo: UNA barra segmentada, click filtra */}
           <section className="rounded-xl bg-card p-3.5 shadow-panel">
-            <h3 className="text-xs font-medium text-foreground">
-              <span className="font-mono tabular-nums">{totalEmbudo}</span> en el embudo
+            <h3 className={sectionLabel}>
+              <span className="font-mono tabular-nums text-foreground">{totalEmbudo}</span> en el embudo
             </h3>
             {isPending ? (
               <div className="mt-2.5 h-2 animate-pulse rounded-full bg-muted" />

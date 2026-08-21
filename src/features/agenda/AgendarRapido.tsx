@@ -75,7 +75,7 @@ export function AgendarRapido({ conversacion }: { conversacion: Conversacion }) 
         }}
         title="Agendar seguimiento (A)"
         className={
-          'flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ' +
+          'flex h-7 items-center gap-1.5 rounded-md px-2 text-sm font-normal transition-colors ' +
           (listo
             ? 'bg-success/10 text-success'
             : abierto
@@ -83,7 +83,7 @@ export function AgendarRapido({ conversacion }: { conversacion: Conversacion }) 
               : 'border border-border text-muted-foreground hover:border-primary hover:text-foreground')
         }
       >
-        {listo ? <Check size={11} /> : <AlarmClock size={11} />}
+        {listo ? <Check size={14} /> : <AlarmClock size={14} />}
         {listo ? `Agendado · ${listo}` : 'Agendar'}
       </button>
 
@@ -122,7 +122,7 @@ export function AgendarRapido({ conversacion }: { conversacion: Conversacion }) 
 
             {/* A QUÉ HORA — no agenda: reencuadra los días de arriba. */}
             <div className="mt-2 flex flex-wrap items-center gap-1">
-              <span className="mr-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className="mr-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Hora
               </span>
               {HORAS_RAPIDAS.map((h) => (
@@ -144,7 +144,7 @@ export function AgendarRapido({ conversacion }: { conversacion: Conversacion }) 
             {/* QUÉ ES — el tipo viaja guardado, así que el color del calendario
                 deja de adivinarse del texto de la nota (`tipoDeNota.ts`). */}
             <div className="mt-2 flex flex-wrap items-center gap-1">
-              <span className="mr-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className="mr-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Qué es
               </span>
               {TIPOS_ELEGIBLES.map((t) => (

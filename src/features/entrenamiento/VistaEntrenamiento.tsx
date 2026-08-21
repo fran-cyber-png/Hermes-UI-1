@@ -106,7 +106,7 @@ export function VistaEntrenamiento() {
     <div className="flex h-full flex-col overflow-hidden">
       <header className="flex flex-wrap items-center gap-3 border-b border-border px-6 py-4">
         <div className="mr-auto">
-          <h1 className="text-lg font-semibold">Entrenamiento del bot</h1>
+          <h1 className="font-heading text-sm font-bold text-navy-ink">Entrenamiento del bot</h1>
           <p className="text-sm text-muted-foreground">
             Escribile como si fueras una persona y mirá qué contesta.
           </p>

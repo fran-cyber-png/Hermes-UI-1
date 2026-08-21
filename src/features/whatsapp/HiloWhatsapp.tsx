@@ -179,7 +179,7 @@ function ReaccionesEnBurbuja({
           }
         >
           <span aria-hidden="true">{emoji}</span>
-          {n > 1 && <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{n}</span>}
+          {n > 1 && <span className="font-mono text-[11px] tabular-nums text-muted-foreground">{n}</span>}
         </span>
       ))}
     </div>
@@ -356,7 +356,7 @@ function BotonCopiar({ texto }: { texto: string }) {
       {copiado && (
         <span
           role="status"
-          className="pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded-full bg-navy px-1.5 py-0.5 text-[10px] font-semibold text-white"
+          className="pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded-full bg-navy px-1.5 py-0.5 text-[11px] font-semibold text-white"
         >
           Copiado
         </span>
@@ -1128,7 +1128,7 @@ export function HiloWhatsapp({
                           {m.automatico && (
                             <span
                               className={
-                                'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide ' +
+                                'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 font-sans text-[11px] font-semibold uppercase tracking-wide ' +
                                 (m.aprobada_por ? 'bg-navy text-white' : 'bg-navy/10 text-navy-ink')
                               }
                               title={
@@ -1840,10 +1840,10 @@ function ComposerWa({
             Preparada por Hermes
             {sugerencia.campana ? <span className="font-normal text-muted-foreground"> · {sugerencia.campana}</span> : null}
             {editado && (
-              <span className="ml-1.5 rounded bg-navy px-1 py-px font-mono text-[9px] font-bold text-white">editada</span>
+              <span className="ml-1.5 rounded bg-navy px-1 py-px font-mono text-[11px] font-bold text-white">editada</span>
             )}
           </p>
-          <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
+          <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
             {sugerencia.paso.actual}/{sugerencia.paso.total}
           </span>
         </div>

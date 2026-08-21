@@ -62,7 +62,7 @@ export function PantallaCampanas({ seccionInicial }: { seccionInicial?: string }
             key={s.id}
             type="button"
             onClick={() => setSeccion(s.id)}
-            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-bold transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-normal transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
               seccion === s.id
                 ? 'bg-card text-navy-ink shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
@@ -79,7 +79,7 @@ export function PantallaCampanas({ seccionInicial }: { seccionInicial?: string }
         <button
           type="button"
           onClick={() => setArmando(true)}
-          className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-navy px-3 py-1 text-xs font-bold text-white transition-colors hover:bg-navy/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-navy px-3 py-1.5 text-sm font-bold text-white transition-colors hover:bg-navy/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
           <Send size={12} /> Armar una campaña
         </button>

@@ -112,7 +112,7 @@ export function FiltrosNegocio({
             </button>
           ))}
         </div>
-        <span className="mt-0.5 pl-2 font-mono text-[10px] tabular-nums text-muted-foreground">
+        <span className="mt-0.5 pl-2 font-mono text-[11px] tabular-nums text-muted-foreground">
           {datos ? rotuloRango(datos.rango) : '—'}
         </span>
       </div>
@@ -214,7 +214,7 @@ export function PanelNegocio({
                     llega ni al mínimo de texto grande. Va como punto —una marca, no
                     tinta— y el número lleva la tinta de la casa. */}
                 <span className="size-2 shrink-0 rounded-full bg-gold-ink" />
-                <span className="font-heading text-[44px] font-bold leading-none text-foreground">{a?.esperan ?? 0}</span>
+                <span className="font-heading text-5xl font-bold leading-none text-foreground">{a?.esperan ?? 0}</span>
               </p>
               <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
                 de <span className="font-mono tabular-nums text-foreground">{a?.conversaciones ?? 0}</span> conversaciones
@@ -299,7 +299,7 @@ export function PanelNegocio({
           <div className="flex items-baseline justify-between gap-2">
             <h3 className={sectionLabel}>Cobertura horaria</h3>
             {!cargando && (
-              <span className="truncate font-mono text-[10px] tabular-nums text-muted-foreground">
+              <span className="truncate font-mono text-[11px] tabular-nums text-muted-foreground">
                 fuera de horario: {hueco.entran} entran · {hueco.salen} salen
               </span>
             )}
@@ -477,7 +477,7 @@ function Fila({ fila, sinAtribuir }: { fila: FilaNegocio; sinAtribuir: string })
         <span className={'block truncate ' + (anonima ? 'italic text-muted-foreground' : 'text-foreground')} title={fila.clave ?? sinAtribuir}>
           {fila.clave ?? sinAtribuir}
         </span>
-        {fila.ad_id && <span className="block truncate font-mono text-[10px] text-muted-foreground">{fila.ad_id}</span>}
+        {fila.ad_id && <span className="block truncate font-mono text-[11px] text-muted-foreground">{fila.ad_id}</span>}
       </th>
       <td className="px-2 py-1.5">
         <BarraSegmentada

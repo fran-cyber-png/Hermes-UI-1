@@ -142,7 +142,7 @@ export function AccionesDePagina({
       <button
         type="button"
         onClick={() => setAbierto(abierto === 'mover' ? null : 'mover')}
-        className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
       >
         <MoveRight className="size-3.5" />
         Mover
@@ -152,7 +152,7 @@ export function AccionesDePagina({
         type="button"
         onClick={() => setAbierto(abierto === 'link' ? null : 'link')}
         aria-pressed={Boolean(token)}
-        className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition ${
+        className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-sm transition ${
           token
             ? // Compartida: se dice, y se dice siempre. Una página que está afuera y
               // no lo parece es la peor forma de tener esta función.
@@ -179,7 +179,7 @@ export function AccionesDePagina({
         type="button"
         onClick={() => (dividiendo ? onCortarDivision() : onTocarDividir())}
         aria-pressed={dividiendo}
-        className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition ${
+        className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-sm transition ${
           dividiendo
             ? 'border-primary bg-secondary text-foreground'
             : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'

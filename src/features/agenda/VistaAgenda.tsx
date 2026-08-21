@@ -102,7 +102,7 @@ function FilaDia({ r, vencido, onVer }: { r: Recordatorio; vencido: boolean; onV
       onClick={() => onVer(r)}
       className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-secondary/30"
     >
-      <span className="w-12 shrink-0 font-mono text-xs tabular-nums text-muted-foreground">{horaDe(r)}</span>
+      <span className="w-12 shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">{horaDe(r)}</span>
       <span aria-hidden className={'h-8 w-1 shrink-0 rounded-full ' + barraDeNota(r, vencido, hecho)} />
       <span className="min-w-0 flex-1">
         <span
@@ -175,7 +175,7 @@ function Detalle({
             </button>
           </div>
 
-          <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
             <span className="relative shrink-0">
               <span className="flex size-7 items-center justify-center rounded-[9px] bg-secondary font-heading text-[11px] font-bold text-secondary-foreground">
                 {(r.personaNombre ?? r.personaId ?? '·').replace(/^@/, '').slice(0, 2).toUpperCase()}
@@ -186,7 +186,7 @@ function Detalle({
             </span>
             <span className="truncate">
               {r.personaNombre ??
-                (r.personaId ? <span className="font-mono text-[11px] tabular-nums">{formatoTelefono(r.personaId)}</span> : 'sin conversación atada')}
+                (r.personaId ? <span className="font-mono tabular-nums">{formatoTelefono(r.personaId)}</span> : 'sin conversación atada')}
             </span>
           </div>
 
@@ -210,7 +210,7 @@ function Detalle({
                   onAbrir(conversacionDeRecordatorio(r));
                   onCerrar();
                 }}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary py-2 text-xs font-bold text-primary-foreground transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover active:scale-[0.98]"
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary py-2 text-sm font-bold text-primary-foreground transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover active:scale-[0.98]"
               >
                 <MessageSquareText size={13} /> Abrir chat
               </button>
@@ -224,7 +224,7 @@ function Detalle({
                 );
               }}
               className={
-                'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-bold transition-[color,background-color,transform] duration-200 ease-house active:scale-[0.98] ' +
+                'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-bold transition-[color,background-color,transform] duration-200 ease-house active:scale-[0.98] ' +
                 (hecho ? 'border border-border text-muted-foreground hover:text-foreground' : 'bg-success/10 text-success hover:bg-success/20')
               }
             >
@@ -366,7 +366,7 @@ function Crear({
             <button
               type="submit"
               disabled={crear.isPending || !nota.trim()}
-              className="mt-1 flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-5 py-2 text-xs font-bold text-primary-foreground transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover active:scale-[0.98] disabled:opacity-40"
+              className="mt-1 flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-5 py-2 text-sm font-bold text-primary-foreground transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover active:scale-[0.98] disabled:opacity-40"
             >
               {crear.isPending ? <Loader2 size={13} className="animate-spin" /> : <CalendarPlus size={13} />}
               {confirmarSinAtar ? 'Agendar sin atar' : 'Agendar'}

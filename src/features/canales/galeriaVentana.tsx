@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import '../../index.css';
 import { queryClient } from '../../lib/datos/cliente';
-import { BarraFiltros } from './BarraFiltros';
+import { BarraFiltros, SelectorLinea } from './BarraFiltros';
 import { FilaConversacion } from './FilaConversacion';
 import type { Conversacion } from '../../dominio/conversaciones';
 
@@ -198,6 +198,9 @@ function Galeria() {
             detrás de un scroll invisible. Un chip más lo empeoraba.
           </p>
           <div className="rounded-xl border border-border bg-card p-3">
+            <div className="mb-2">
+              <SelectorLinea lineas={LINEAS} lineaActiva="" onLinea={() => {}} />
+            </div>
             <BarraFiltros
               filtroSec=""
               onFiltro={() => {}}
@@ -206,15 +209,15 @@ function Galeria() {
                 teEscribieron: 33,
                 puedoEscribirle: 25,
               }}
-              lineas={LINEAS}
-              lineaActiva=""
-              onLinea={() => {}}
               categoriaActiva={null}
               onCategoria={() => {}}
               onListas={() => {}}
             />
           </div>
           <div className="rounded-xl border border-border bg-card p-3">
+            <div className="mb-2">
+              <SelectorLinea lineas={LINEAS} lineaActiva="mias" onLinea={() => {}} hayMias />
+            </div>
             <BarraFiltros
               filtroSec="puedo-escribirle"
               onFiltro={() => {}}
@@ -223,10 +226,6 @@ function Galeria() {
                 teEscribieron: 5,
                 puedoEscribirle: 25,
               }}
-              lineas={LINEAS}
-              lineaActiva="mias"
-              onLinea={() => {}}
-              hayMias
               categoriaActiva={null}
               onCategoria={() => {}}
               onListas={() => {}}

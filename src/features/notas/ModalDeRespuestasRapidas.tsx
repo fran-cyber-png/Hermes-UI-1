@@ -45,7 +45,7 @@ export function ModalDeRespuestasRapidas({
       >
         <div className="flex items-start justify-between gap-3 px-6 pt-6">
           <div>
-            <h2 className="flex items-center gap-1.5 text-lg font-semibold text-foreground">
+            <h2 className="flex items-center gap-1.5 font-heading text-sm font-bold text-navy-ink">
               <MessageSquareQuote className="size-4 shrink-0 text-primary" />
               Respuestas rápidas
             </h2>
@@ -89,7 +89,7 @@ export function ModalDeRespuestasRapidas({
                 <span className="truncate text-sm font-medium text-foreground transition-colors group-hover:text-navy-ink">
                   {h.rotulo}
                 </span>
-                <span className="shrink-0 font-mono text-[10px] text-muted-foreground">/{h.clave}</span>
+                <span className="shrink-0 font-mono text-[11px] text-muted-foreground">/{h.clave}</span>
               </div>
               <span className="mt-0.5 block truncate text-xs text-muted-foreground">
                 {h.texto.replace(/\s+/g, ' ')}

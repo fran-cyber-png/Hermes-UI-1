@@ -65,7 +65,7 @@ export function useRueda(numeroPropio: string | null | undefined) {
     destinos: q.data?.destinos ?? [],
     nombres: q.data?.nombres,
     /** Hay reparto configurado en esta línea: recién ahí se ofrece pasarla. */
-    hayReparto: (q.data?.destinos.length ?? 0) > 0,
+    hayReparto: (q.data?.destinos?.length ?? 0) > 0,
     cargando: q.isPending,
   };
 }

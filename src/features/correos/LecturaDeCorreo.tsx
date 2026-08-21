@@ -81,7 +81,7 @@ export function LecturaDeCorreo({
             <h2 className="truncate font-heading text-sm font-bold leading-tight text-navy-ink" title={fila.asunto}>
               {fila.asunto}
             </h2>
-            <p className="truncate text-[10px] leading-tight text-muted-foreground" title={fila.vendedoraId}>
+            <p className="truncate text-[11px] leading-tight text-muted-foreground" title={fila.vendedoraId}>
               {/* Quién, con el mismo criterio que la fila de la lista: el nombre
                   corto, y el `vendedora_id` completo en el `title` del renglón.
                   ⚠️ Y la fecha ABSOLUTA **además** del «hace 11 días»: lo relativo ya
@@ -167,7 +167,7 @@ export function LecturaDeCorreo({
                agregaría una superficie para que lo que alguien tipeó en el composer
                se ejecute en el navegador de otra vendedora. Los saltos de línea se
                respetan con CSS, que es todo lo que hace falta. */
-            <pre className="whitespace-pre-wrap break-words font-sans text-xs leading-relaxed text-foreground">
+            <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-foreground">
               {correo?.cuerpo}
             </pre>
           )}

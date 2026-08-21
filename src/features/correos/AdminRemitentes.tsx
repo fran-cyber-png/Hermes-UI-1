@@ -217,7 +217,7 @@ export function AdminRemitentes({ onCerrar }: { onCerrar: () => void }) {
           <AtSign size={16} strokeWidth={2.1} className="shrink-0 text-navy-ink" />
           <div className="min-w-0 flex-1">
             <h2 className="font-heading text-sm font-bold leading-tight text-navy-ink">Remitentes</h2>
-            <p className="truncate text-[10px] leading-tight text-muted-foreground">
+            <p className="truncate text-[11px] leading-tight text-muted-foreground">
               Con qué correo sale lo que manda el equipo, y a dónde vuelven las respuestas.
             </p>
           </div>
@@ -292,7 +292,7 @@ export function AdminRemitentes({ onCerrar }: { onCerrar: () => void }) {
                     setEditando(null);
                     setAlta(true);
                   }}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs font-semibold text-navy-ink transition-colors duration-200 ease-house hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-sm font-normal text-navy-ink transition-colors duration-200 ease-house hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
                   <Plus size={14} />
                   Nuevo remitente
@@ -569,7 +569,7 @@ function FilaRemitente(p: FilaProps) {
     >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-semibold text-foreground" title={identidad}>
+          <p className="truncate text-sm font-semibold text-foreground" title={identidad}>
             {identidad}
           </p>
           <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
@@ -588,7 +588,7 @@ function FilaRemitente(p: FilaProps) {
           </p>
         </div>
         {!r.activo && (
-          <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+          <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
             desactivado
           </span>
         )}
@@ -724,11 +724,11 @@ function FormularioRemitente(p: FormularioProps) {
 
   return (
     <section className="rounded-xl border border-border bg-card p-3">
-      <h3 className="truncate font-heading text-xs font-bold text-navy-ink">{p.titulo}</h3>
+      <h3 className="truncate font-heading text-sm font-bold text-navy-ink">{p.titulo}</h3>
 
       <div className="mt-2.5 flex flex-col gap-2">
         <label className="flex flex-col gap-1">
-          <span className="text-[10px] font-semibold text-muted-foreground">Sale desde</span>
+          <span className="text-[11px] font-semibold text-muted-foreground">Sale desde</span>
           <input
             value={campos.direccion}
             onChange={campo('direccion')}
@@ -738,7 +738,7 @@ function FormularioRemitente(p: FormularioProps) {
             className="rounded-lg border border-border bg-muted/40 px-3 py-2 font-mono text-sm outline-none transition-[border-color,box-shadow] duration-200 placeholder:font-sans focus:border-primary focus:shadow-[0_0_0_3px_rgba(37,99,235,0.12)] disabled:opacity-60"
           />
           {!p.direccionEditable && (
-            <span className="text-[10px] leading-snug text-muted-foreground">
+            <span className="text-[11px] leading-snug text-muted-foreground">
               El buzón no se cambia: es la identidad del remitente y lo que ya salió salió con él. Para usar
               otro, dá de baja éste y creá uno nuevo.
             </span>
@@ -746,7 +746,7 @@ function FormularioRemitente(p: FormularioProps) {
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-[10px] font-semibold text-muted-foreground">Nombre que se ve</span>
+          <span className="text-[11px] font-semibold text-muted-foreground">Nombre que se ve</span>
           <input
             value={campos.nombre}
             onChange={campo('nombre')}
@@ -756,7 +756,7 @@ function FormularioRemitente(p: FormularioProps) {
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-[10px] font-semibold text-muted-foreground">
+          <span className="text-[11px] font-semibold text-muted-foreground">
             Responder a <span className="font-normal">(opcional)</span>
           </span>
           <input
@@ -769,14 +769,14 @@ function FormularioRemitente(p: FormularioProps) {
           {/* Este es el único lugar donde el dominio no verificado está BIEN: SES
               mira de quién sale, no a dónde se contesta. Decirlo acá evita que
               alguien lo copie al campo de arriba «para que sea igual». */}
-          <span className="text-[10px] leading-snug text-muted-foreground">
+          <span className="text-[11px] leading-snug text-muted-foreground">
             El respaldo: se usa cuando el usuario de quien escribe no es un buzón. Acá sí vale cualquier
             dominio — SES verifica de quién sale, no a dónde se contesta.
           </span>
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-[10px] font-semibold text-muted-foreground">
+          <span className="text-[11px] font-semibold text-muted-foreground">
             Firma <span className="font-normal">(opcional)</span>
           </span>
           <textarea
@@ -811,7 +811,7 @@ function FormularioRemitente(p: FormularioProps) {
               p.onGuardar(campos);
             }}
             disabled={!veredicto.puede}
-            className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-primary-foreground transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover active:scale-[0.98] disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1"
+            className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 py-1.5 text-sm font-bold text-primary-foreground transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover active:scale-[0.98] disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1"
           >
             {p.enVuelo && <Loader2 size={12} className="animate-spin" />}
             Guardar
@@ -819,7 +819,7 @@ function FormularioRemitente(p: FormularioProps) {
           <button
             type="button"
             onClick={p.onCancelar}
-            className="shrink-0 rounded-full border border-border px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="shrink-0 rounded-full border border-border px-3 py-1.5 text-sm font-normal transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
             Cancelar
           </button>
@@ -870,7 +870,7 @@ function VistaPreviaDelSobre({
 
   if (!FORMA_DE_CORREO.test(direccion) || !dominioAceptado(direccion, dominios)) {
     return (
-      <p className="rounded-lg border border-dashed border-border px-2.5 py-2 text-[10px] leading-snug text-muted-foreground">
+      <p className="rounded-lg border border-dashed border-border px-2.5 py-2 text-[11px] leading-snug text-muted-foreground">
         Escribí una dirección de un dominio verificado y acá se dibuja, tal cual, el sobre que va a recibir el
         lead.
       </p>
@@ -913,7 +913,7 @@ function VistaPreviaDelSobre({
           </div>
         )}
       </dl>
-      <p className="mt-1.5 text-[10px] leading-snug text-muted-foreground">
+      <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
         A otra vendedora el «responde a» le va a decir otra cosa: gana su propio correo, y el de acá arriba es
         el respaldo.
       </p>

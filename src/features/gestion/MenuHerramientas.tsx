@@ -67,7 +67,7 @@ export function MenuHerramientas({ conversacion }: { conversacion: Conversacion 
         title="Más herramientas"
         onClick={() => setAbierto((v) => !v)}
         className={
-          'flex items-center rounded-full p-1 transition-colors ' +
+          'flex h-7 w-7 items-center justify-center rounded-md transition-colors ' +
           (abierto ? 'bg-navy text-white' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground')
         }
       >

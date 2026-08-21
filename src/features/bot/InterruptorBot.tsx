@@ -1,6 +1,13 @@
-import { AlertTriangle, Bot, Loader2, Undo2 } from 'lucide-react';
+import { Bot, BotMessageSquare, BotOff } from 'lucide-react';
 import { useBot } from './datos';
-import { MODOS_BOT, NOMBRE_MODO, puertaDelFreno, type ClaseBot, type ModoBot, type VistaBot } from './estado';
+import { MODOS_BOT, NOMBRE_MODO, type ModoBot, type VistaBot } from './estado';
+
+/** Un ícono por modo — apagado, pensando en silencio (sombra) y hablando solo (automático). */
+const ICONO_MODO: Record<ModoBot, typeof Bot> = {
+  apagado: BotOff,
+  sombra: Bot,
+  automatico: BotMessageSquare,
+};
 
 /**
  * EL CHIP DEL BOT, en la cabecera — el kill-switch que no tenía dónde apretarse.
@@ -26,135 +33,55 @@ import { MODOS_BOT, NOMBRE_MODO, puertaDelFreno, type ClaseBot, type ModoBot, ty
  * acá los tres modos son destinos vivos: `sombra` es el que deja al bot pensar
  * sin hablar, y existe justamente para poder bajar un escalón sin apagar todo.
  *
- * ── El oro no aparece acá ──
- * En Hermes el dorado significa tiempo que se acaba, y un modo no es eso: no
- * corre ningún plazo. La escala es: neutro apagado · delineado sombra (trabaja,
- * no habla) · **sólido navy automático**, el único en el que un lead recibe algo.
- * El rojo queda reservado para lo que grita —el freno y el modo que no se
- * entiende—, así que un `automatico` normal no vive en alarma permanente: si
- * gritara siempre, dejaría de gritar el día que importe.
+ * ── El oro SÍ aparece acá, y es una excepción a propósito ──
+ * (20-ago-2026, pedido explícito) Antes esta regla decía que el dorado (`--gold`)
+ * es solo «tiempo que se acaba» y un modo no corre ningún plazo, así que no lo
+ * llevaba. Se pidió igual para el anillo: vacío apagado · medio dorado sombra ·
+ * completo y sólido dorado automático, el único en el que un lead recibe algo.
+ * Ya no hay forma de decir «frenado» ni «modo raro» en rojo (se fueron con el
+ * recorte a solo-anillo) — si eso vuelve a hacer falta, el dorado del anillo NO
+ * es el lugar: confundiría «está mandando» con «se está por acabar el tiempo».
  */
 export function InterruptorBot() {
-  const { vista, cargando, cambiando, errorAlCambiar, cambiarModo, soltarFreno } = useBot();
+  const { vista, cargando, cambiando, cambiarModo } = useBot();
 
-  if (cargando) return <div className="h-9 w-56 animate-pulse rounded-xl bg-muted" />;
+  if (cargando) return <div className="size-12 animate-pulse rounded-full bg-muted" />;
   // El server viejo (front por N4, server por N5) no tiene la ruta: ahí esta
   // feature no existe, así que el chip tampoco. Alarmar por algo que en ese
   // server no está sería ruido.
   if (vista.clase === 'ausente') return null;
 
-  const puerta = puertaDelFreno(vista);
-
-  return (
-    <div
-      /* ⚠️ El `max-w` NO es decoración, y lo encontró la CAPTURA, no un test: el
-         renglón de abajo dice de dónde sale el modo («del entorno
-         (BOT_MODO=automatico) · nadie lo tocó desde acá»), mucho más largo que el
-         «12 esperando tu OK» del molde. Sin techo el chip medía **395 px**, y
-         esta barra ya lleva Ivi + la frescura + la auto-respuesta + el semáforo
-         de WhatsApp a 1280. Con techo, `truncate` recién hace algo — y no se
-         pierde nada: el `title` de acá lleva el detalle entero. */
-      className={
-        'flex max-w-[15rem] items-center gap-2 rounded-xl border px-2 py-1 transition-colors duration-200 ease-house ' +
-        envoltura(vista.clase)
-      }
-      title={vista.detalle}
-    >
-      <Icono clase={vista.clase} />
-
-      <div className="flex min-w-0 flex-col gap-1">
-        {/* El rótulo ruidoso: lo que el selector NO puede expresar. Molde del
-            «RETIRADO» de la auto-respuesta — el control dice a dónde se puede
-            ir, este rótulo dice qué está pasando ahora. */}
-        {vista.aviso && (
-          <span className="font-mono text-[10px] font-bold uppercase leading-none tracking-wide text-destructive">
-            {vista.aviso}
-          </span>
-        )}
-
-        {vista.puedeCambiar ? (
-          <SelectorDeModo vista={vista} deshabilitado={cambiando} onElegir={cambiarModo} />
-        ) : (
-          <span className="font-mono text-[11px] text-muted-foreground">{vista.etiqueta}</span>
-        )}
-
-        <Renglon
-          abre={puerta.abre && !errorAlCambiar}
-          texto={errorAlCambiar ?? puerta.texto}
-          error={Boolean(errorAlCambiar)}
-          onSoltar={soltarFreno}
-        />
-      </div>
-
-      {cambiando && <Loader2 size={12} className="shrink-0 animate-spin text-muted-foreground" />}
-    </div>
-  );
-}
-
-/**
- * EL RENGLÓN DE ABAJO — texto cuando no hay nada que hacer, puerta cuando sí.
- *
- * Mismo lugar en los dos casos, como en la auto-respuesta: la vendedora aprende
- * una vez dónde mirar y lo que cambia es si responde al dedo. Sin freno dice **de
- * dónde sale el modo**, que es la pregunta de las 2 AM: «lo apagué yo» y «lo apaga
- * el entorno» se ven igual en el selector y se arreglan en lugares distintos.
- *
- * Un renglón que parece botón y no hace nada enseña que ahí no se toca, y al día
- * siguiente —cuando sí haya un freno que soltar— ya nadie lo toca.
- */
-function Renglon({
-  abre,
-  texto,
-  error,
-  onSoltar,
-}: {
-  abre: boolean;
-  texto: string;
-  error: boolean;
-  onSoltar: () => void;
-}) {
-  if (!texto) return null;
-
-  if (!abre) {
-    return (
-      <span
-        className={
-          'truncate font-mono text-[10px] leading-none ' +
-          (error ? 'font-semibold text-destructive' : 'text-muted-foreground')
-        }
-      >
-        {texto}
-      </span>
-    );
+  // 🔴 **Reducido a solo el anillo** (20-ago-2026, pedido explícito): sin
+  // contenedor, sin ícono de robot, sin el texto de aviso/fuente/freno que
+  // vivían alrededor. El anillo agrandó al alto que ocupaba el chip entero
+  // (48px, medido en el DOM antes del recorte — era `size-6`/24px, ahora
+  // `size-12`/48px, el doble). Lo que se pierde: el aviso rojo de FRENADO/MODO
+  // RARO, el «de dónde sale el modo» y el botón de soltar el freno — si hace
+  // falta, `title` sigue llevando `vista.detalle` completo.
+  if (!vista.puedeCambiar) {
+    return <span className="font-mono text-[11px] text-muted-foreground" title={vista.detalle}>{vista.etiqueta}</span>;
   }
 
-  return (
-    <button
-      type="button"
-      onClick={onSoltar}
-      title="Soltar el freno: la línea vuelve al modo que dice el selector y puede empezar a mandar"
-      className="group -mx-1 flex items-center gap-1 rounded-md px-1 py-0.5 text-left font-mono text-[10px] font-bold leading-none text-destructive transition-colors duration-200 ease-house hover:bg-destructive hover:text-destructive-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
-    >
-      <span className="truncate">{texto}</span>
-      <Undo2 size={11} className="shrink-0" />
-    </button>
-  );
+  return <AnilloDeModo vista={vista} deshabilitado={cambiando} onElegir={cambiarModo} />;
 }
 
 /**
- * LOS TRES DESTINOS, los tres a la vista. Es un `radiogroup` de verdad (no tres
- * botones sueltos) para que un lector de pantalla lo lea como lo que es.
+ * EL ANILLO DE MODO — un solo botón circular en vez de tres segmentos.
  *
- * Con el modo puesto en `null` —el server informó uno que esta app no conoce— no
- * queda ningún segmento marcado, **y está bien**: el control dice a dónde se
- * puede ir, no dónde se está. Dónde se está lo dice el rótulo rojo de arriba.
- * Colapsarlo al segmento más parecido sería inventar el estado de una máquina
- * que le escribe a la gente.
+ * Un clic avanza un escalón: apagado → sombra → automático → apagado, en un
+ * ciclo. El TRAZO dorado dice cuánto: vacío en apagado, a mitad de vuelta en
+ * sombra, dando la vuelta entera en automático — un anillo que se completa,
+ * nunca un disco relleno (se probaron las dos y se descartó el relleno:
+ * un trazo lee mejor «progreso», un disco sólido lee «ocupado»).
  *
- * `title` por segmento con lo que hace cada modo — y sale del SERVER cuando el
- * server lo manda (`vista.queHace`), para que no haya dos textos que diverjan.
+ * ⚠️ **Deja de ser un `radiogroup`**: no se puede saltar directo a un modo, solo
+ * avanzar. `aria-label` dice el modo actual y a cuál pasa el próximo clic, para
+ * que un lector de pantalla no pierda la información que el `radiogroup` daba
+ * gratis. Con el modo en `null` (el server informó uno que esta app no conoce)
+ * el anillo arranca vacío, como apagado: el próximo clic manda a apagado de
+ * verdad, nunca inventa un salto a la mitad.
  */
-function SelectorDeModo({
+function AnilloDeModo({
   vista,
   deshabilitado,
   onElegir,
@@ -163,82 +90,73 @@ function SelectorDeModo({
   deshabilitado: boolean;
   onElegir: (m: ModoBot) => void;
 }) {
+  // El SVG mide 48px reales sobre un viewBox de 24 unidades (2px por unidad),
+  // así que `strokeWidth={2}` = 4px de grosor real, a propósito.
+  const RADIO = 8;
+  const CIRCUNFERENCIA = 2 * Math.PI * RADIO;
+  const indiceActual = vista.modo ? MODOS_BOT.indexOf(vista.modo) : -1;
+  const fraccion = Math.max(indiceActual, 0) / (MODOS_BOT.length - 1);
+  const siguiente = MODOS_BOT[(indiceActual + 1 + MODOS_BOT.length) % MODOS_BOT.length];
+
   return (
-    <div
-      role="radiogroup"
-      aria-label={`Modo del bot${vista.numero ? ` de la línea ${vista.numero}` : ''}`}
-      className="flex items-center rounded-lg bg-muted p-0.5"
+    <button
+      type="button"
+      disabled={deshabilitado}
+      onClick={() => onElegir(siguiente)}
+      title={`${vista.modo ? NOMBRE_MODO[vista.modo] : 'Sin modo puesto'} — clic para pasar a ${NOMBRE_MODO[siguiente]}`}
+      aria-label={`Modo del bot${vista.numero ? ` de la línea ${vista.numero}` : ''}: ${vista.modo ? NOMBRE_MODO[vista.modo] : 'sin modo puesto'}. Clic para pasar a ${NOMBRE_MODO[siguiente]}.`}
+      className="group relative flex size-12 shrink-0 items-center justify-center rounded-full transition-transform duration-200 ease-house focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-default active:scale-90"
     >
-      {MODOS_BOT.map((m) => {
-        const activo = m === vista.modo;
+      {/* `stroke-dashoffset` es un número simple — a diferencia de un
+          `background` con gradiente, SÍ lo anima una `transition` común, sin
+          necesitar `@property`. El `-rotate-90` arranca el trazo arriba (las
+          12), como un reloj de arena vaciándose al revés. */}
+      <svg viewBox="0 0 24 24" className="size-12 -rotate-90">
+        <circle cx="12" cy="12" r={RADIO} fill="none" stroke="var(--border)" strokeWidth={2} />
+        <circle
+          cx="12"
+          cy="12"
+          r={RADIO}
+          fill="none"
+          stroke="var(--gold)"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeDasharray={CIRCUNFERENCIA}
+          strokeDashoffset={CIRCUNFERENCIA * (1 - fraccion)}
+          className="transition-[stroke-dashoffset] duration-500 ease-house"
+        />
+      </svg>
+
+      {/* El ícono dice QUÉ modo es sin tener que leer el trazo — el trazo dice
+          CUÁNTO falta para el próximo. Las dos lecturas conviven: una es
+          discreta (tres iconos, tres modos) y la otra continua (0→180→360°). */}
+      {(() => {
+        const IconoModo = vista.modo ? ICONO_MODO[vista.modo] : BotOff;
         return (
-          <button
-            key={m}
-            type="button"
-            role="radio"
-            aria-checked={activo}
-            disabled={deshabilitado || activo}
-            title={vista.queHace[m]}
-            onClick={() => onElegir(m)}
+          <IconoModo
+            size={18}
             className={
-              'rounded-[6px] px-2 py-0.5 text-[10px] font-semibold tracking-wide transition-[background-color,color,box-shadow] duration-200 ease-house ' +
-              'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:cursor-default ' +
-              (activo
-                ? colorActivo(m)
-                : 'text-muted-foreground hover:bg-card hover:text-navy-ink disabled:opacity-60')
+              'pointer-events-none absolute inset-0 m-auto ' +
+              (vista.modo === 'automatico' ? 'text-gold-ink' : 'text-muted-foreground')
             }
-          >
-            {NOMBRE_MODO[m]}
-          </button>
+          />
         );
-      })}
-    </div>
-  );
-}
+      })()}
 
-/**
- * El segmento puesto. La escala es deliberada y sube con lo que el lead recibe:
- * apagado neutro · sombra delineada (piensa, no habla) · automático SÓLIDO, que
- * es el único que manda. Sin oro: acá no corre ningún plazo.
- */
-function colorActivo(m: ModoBot): string {
-  if (m === 'automatico') return 'bg-navy text-white shadow-[0_1px_2px_rgba(14,42,82,0.10)]';
-  if (m === 'sombra') return 'bg-card text-navy-ink ring-1 ring-navy shadow-[0_1px_2px_rgba(14,42,82,0.10)]';
-  return 'bg-card text-foreground shadow-[0_1px_2px_rgba(14,42,82,0.10)]';
-}
-
-/**
- * El fondo del chip entero. Solo grita cuando está frenado o cuando el estado no
- * se pudo leer — y **lo que no se pudo leer se ve distinto de lo apagado**: ese
- * es el punto entero (la cicatriz de `sinLineasPropias`, quien ve algo vacío no
- * lee «no hay», lee «se rompió»).
- */
-function envoltura(clase: ClaseBot): string {
-  switch (clase) {
-    case 'frenado':
-      return 'border-destructive/40 bg-destructive/10';
-    case 'desconocida':
-    case 'sin-linea':
-    case 'sin-efecto':
-      return 'border-warning bg-warning/5';
-    case 'automatico':
-      return 'border-navy/40 bg-navy/5';
-    case 'sombra':
-      return 'border-navy/25 bg-card';
-    default:
-      return 'border-border bg-card';
-  }
-}
-
-function Icono({ clase }: { clase: ClaseBot }) {
-  if (clase === 'frenado') return <AlertTriangle size={14} className="shrink-0 text-destructive" />;
-  if (clase === 'desconocida' || clase === 'sin-linea' || clase === 'sin-efecto')
-    return <AlertTriangle size={14} className="shrink-0 text-warning" />;
-
-  return (
-    <Bot
-      size={14}
-      className={'shrink-0 ' + (clase === 'automatico' || clase === 'sombra' ? 'text-navy-ink' : 'text-muted-foreground')}
-    />
+      {/* La burbuja del hover — el nombre y QUÉ HACE, con las mismas palabras
+          del `title` nativo, pero legibles sin esperar el tooltip del sistema.
+          `group-focus-visible` la trae también con teclado, no solo con mouse. */}
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute right-full top-1/2 mr-2 w-max max-w-40 -translate-y-1/2 translate-x-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-left opacity-0 shadow-panel transition-[opacity,transform] duration-200 ease-house group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100"
+      >
+        <span className="block text-[11px] font-bold leading-tight text-foreground">
+          {vista.modo ? NOMBRE_MODO[vista.modo] : 'Sin modo puesto'}
+        </span>
+        <span className="block text-[10px] leading-tight text-muted-foreground">
+          {vista.modo ? vista.queHace[vista.modo] : 'El server informó un modo que esta app no reconoce.'}
+        </span>
+      </span>
+    </button>
   );
 }

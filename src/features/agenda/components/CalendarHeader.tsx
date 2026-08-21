@@ -67,7 +67,7 @@ export function CalendarHeader({
             onClick={onToday}
             aria-current={enHoy ? 'date' : undefined}
             className={
-              'shrink-0 rounded-full px-3 py-1 text-xs font-bold transition-all duration-150 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ' +
+              'shrink-0 rounded-full px-3 py-1 text-sm font-normal transition-all duration-150 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ' +
               (enHoy
                 ? 'bg-navy text-white'
                 : 'border border-border text-foreground hover:border-primary hover:bg-secondary/30')
@@ -94,7 +94,7 @@ export function CalendarHeader({
               type="button"
               onClick={() => onModoChange(m)}
               className={
-                'rounded px-2.5 py-1 text-xs font-semibold transition-all duration-150 ' +
+                'rounded px-2.5 py-1 text-sm font-normal transition-all duration-150 ' +
                 (modo === m
                   ? 'bg-navy text-white shadow-sm'
                   : 'text-muted-foreground hover:bg-secondary/30 hover:text-foreground')
@@ -107,7 +107,7 @@ export function CalendarHeader({
         <button
           type="button"
           onClick={onCreateClick}
-          className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground transition-all duration-150 hover:bg-primary/90 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          className="rounded-lg bg-primary px-3 py-1.5 text-sm font-bold text-primary-foreground transition-all duration-150 hover:bg-primary/90 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         >
           + Crear
         </button>

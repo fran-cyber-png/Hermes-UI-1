@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { MessageCircle } from 'lucide-react';
+import { sectionLabel } from '../../lib/styles';
 import type { Conversacion } from '../../dominio/conversaciones';
 import { marcaDeCliente } from '../../dominio/cliente';
 import { useFicha } from '../cerberus/useFicha';
@@ -184,7 +185,7 @@ export function PanelDerecho({
     // Sólo los de ESTA conversación: `useAgenda` trae la agenda entera de quien
     // mira (una sola query compartida con el riel y la vista Agenda), y el
     // timeline es de una persona.
-    seguimientos: agenda.data?.recordatorios.filter((r) => r.clave === conversacion.clave),
+    seguimientos: agenda.data?.recordatorios?.filter((r) => r.clave === conversacion.clave),
   });
 
   const nombre = nombreData.principal ?? 'Sin nombre';
@@ -237,13 +238,13 @@ export function PanelDerecho({
             <button
               type="button"
               onClick={() => onEscribir(telefono)}
-              className="mb-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-navy px-3 py-2 text-xs font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="mb-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-navy px-3 py-2 text-sm font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               <MessageCircle size={13} /> Escribirle
             </button>
           )}
           <ZonaPendientes pendientes={timeline.pendientes} progreso={timeline.progreso} />
-          <h3 className="text-xs font-semibold text-muted-foreground">Timeline</h3>
+          <h3 className={sectionLabel}>Timeline</h3>
           <ol className="mt-1">
             {timeline.grupos.map((grupo) => (
               <li key={grupo.etiqueta}>
@@ -293,7 +294,7 @@ export function PanelDerecho({
               dibujaría una segunda tarjeta con el nombre repetido. */}
           {conCerberus && (
           <div className="mt-3 border-t border-border pt-3">
-            <h3 className="mb-1.5 text-xs font-semibold text-muted-foreground">Ficha de Cerberus</h3>
+            <h3 className={'mb-1.5 ' + sectionLabel}>Ficha de Cerberus</h3>
             {/* 🔴 EL SEGUNDO PUENTE MUERTO DE ESTE MISMO COMPONENTE, y el
                 diagnóstico es idéntico al de tres líneas más arriba: hasta hoy
                 `grep 'onCorreo=' src/` daba **CERO**. `FichaContacto` declaraba

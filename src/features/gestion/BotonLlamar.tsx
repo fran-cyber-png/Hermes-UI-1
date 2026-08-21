@@ -55,9 +55,9 @@ export function BotonLlamar({ telefono, compacto = false }: { telefono: string; 
           type="button"
           title={`Llamar al +${digitos}`}
           onClick={llamar}
-          className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-success hover:text-success"
+          className="flex h-7 items-center gap-1.5 rounded-md border border-border px-2 text-sm font-normal text-muted-foreground transition-colors hover:border-success hover:text-success"
         >
-          <Phone size={11} /> Llamar
+          <Phone size={14} /> Llamar
         </button>
       )}
 

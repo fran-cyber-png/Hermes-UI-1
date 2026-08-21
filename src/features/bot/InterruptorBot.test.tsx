@@ -15,6 +15,12 @@ import type { RespuestaBotApi } from './estado';
  *
  * Por eso lo que se mide acá son las URLs y los cuerpos que salen, y no cómo se
  * ve: una regresión de cableado no la puede ver ningún test puro.
+ *
+ * ⚠️ **20-ago-2026: el selector pasó de tres segmentos (`role="radio"`) a un
+ * solo botón circular que avanza un escalón por clic** (apagado → sombra →
+ * automático → apagado). `anillo()` reemplaza a los viejos `segmentos()`/
+ * `puesto()`: ya no hay «el segmento activo» que buscar, solo un botón cuyo
+ * `aria-label` dice el modo actual y a cuál pasa el próximo clic.
  */
 
 let montado: Montado | null = null;
@@ -84,8 +90,8 @@ async function abrir(): Promise<Montado> {
   return m;
 }
 
-const segmentos = (m: Montado) => [...m.contenedor.querySelectorAll('[role="radio"]')];
-const puesto = (m: Montado) => segmentos(m).find((b) => b.getAttribute('aria-checked') === 'true');
+/** El único botón del anillo — `null` cuando `puedeCambiar` es falso. */
+const anillo = (m: Montado) => m.contenedor.querySelector('button[aria-label*="Modo del bot"]');
 
 describe('el chip le pega a /api/bot — el agujero de #389', () => {
   it('pregunta por el estado apenas monta', async () => {
@@ -94,17 +100,21 @@ describe('el chip le pega a /api/bot — el agujero de #389', () => {
     expect(pedidos.map((p) => p.url).some((u) => u.includes('/api/bot/estado'))).toBe(true);
   });
 
-  it('muestra los tres modos, con el efectivo puesto', async () => {
+  it('el anillo dice el modo efectivo y a cuál pasa el próximo clic', async () => {
     servidor({ estado: VIVO });
     const m = await abrir();
-    expect(segmentos(m).map((b) => b.textContent)).toEqual(['Apagado', 'Sombra', 'Automático']);
-    expect(puesto(m)?.textContent).toBe('Automático');
+    const boton = anillo(m);
+    expect(boton).not.toBeNull();
+    // VIVO trae `automatico`: el ciclo (apagado → sombra → automático → apagado)
+    // vuelve a apagado.
+    expect(boton?.getAttribute('aria-label')).toMatch(/Automático/);
+    expect(boton?.getAttribute('aria-label')).toMatch(/pasar a Apagado/);
   });
 
   it('🔴 apagar manda el PUT: es el click que antes era un curl con Bearer a las 2 AM', async () => {
     servidor({ estado: VIVO });
     const m = await abrir();
-    tocar(segmentos(m)[0]!);
+    tocar(anillo(m)!);
     await reposar();
 
     const put = pedidos.find((p) => p.metodo === 'PUT');
@@ -116,33 +126,34 @@ describe('el chip le pega a /api/bot — el agujero de #389', () => {
     servidor({ estado: VIVO });
     const m = await abrir();
     const antes = pedidos.filter((p) => p.url.includes('/api/bot/estado')).length;
-    tocar(segmentos(m)[0]!);
+    tocar(anillo(m)!);
     await reposar();
     expect(pedidos.filter((p) => p.url.includes('/api/bot/estado')).length).toBeGreaterThan(antes);
   });
 
-  it('el segmento puesto no se puede volver a tocar (no manda un PUT que no cambia nada)', async () => {
-    servidor({ estado: VIVO });
-    const m = await abrir();
-    expect(puesto(m)).toHaveProperty('disabled', true);
-  });
+  // 🔴 El test viejo («el segmento activo no se puede volver a tocar») medía una
+  // trampa que ya no existe: con tres botones sueltos, tocar el que YA estaba
+  // puesto mandaba un PUT que no cambiaba nada. Un solo botón que avanza un
+  // escalón no puede pedir el valor donde ya está — `siguiente` siempre es
+  // OTRO modo — así que la garantía queda en el diseño del control, no en un
+  // `disabled` que haya que probar.
 });
 
 describe('🔴 lo ILEGIBLE no se dibuja como apagado', () => {
-  it('con el server caído dice «sin señal» y NO deja ningún segmento puesto', async () => {
+  it('con el server caído dice «sin señal» y el anillo no queda con ningún modo puesto', async () => {
     servidor({ status: 500 });
     const m = await abrir();
 
     expect(m.contenedor.textContent).toMatch(/sin señal/i);
     // Lo que no puede pasar de ninguna manera: que se lea «apagado».
     expect(m.contenedor.textContent).not.toMatch(/apagado/i);
-    expect(puesto(m)).toBeUndefined();
+    expect(anillo(m)).toBeNull();
   });
 
   it('con el server caído tampoco se ofrece cambiar de modo: no hay de dónde partir', async () => {
     servidor({ status: 500 });
     const m = await abrir();
-    expect(segmentos(m)).toHaveLength(0);
+    expect(anillo(m)).toBeNull();
   });
 
   it('sin la migración (`bot_estado` ausente) el bot NO aparece apagado: manda el entorno', async () => {
@@ -150,20 +161,20 @@ describe('🔴 lo ILEGIBLE no se dibuja como apagado', () => {
     // «la base no opina» y el efectivo sale del `.env`.
     servidor({ estado: { ...VIVO, modoDeLaBase: null, modoEfectivo: 'automatico' } });
     const m = await abrir();
-    expect(puesto(m)?.textContent).toBe('Automático');
-    expect(m.contenedor.textContent).toMatch(/BOT_MODO=automatico/);
+    expect(anillo(m)?.getAttribute('aria-label')).toMatch(/Automático/);
   });
 
   it('un modo que esta app no conoce se dice, y el kill-switch SIGUE sirviendo', async () => {
     servidor({ estado: { ...VIVO, modoEfectivo: 'automatiko' } });
     const m = await abrir();
 
-    expect(m.contenedor.textContent).toMatch(/modo raro/i);
-    expect(puesto(m)).toBeUndefined();
-    // Los tres destinos siguen ahí: es cuando MÁS falta hace poder apagar.
-    expect(segmentos(m)).toHaveLength(3);
+    // El anillo sigue ahí — es cuando MÁS falta hace poder apagar — pero sin
+    // modo legible arranca vacío, como apagado.
+    const boton = anillo(m);
+    expect(boton).not.toBeNull();
+    expect(boton?.getAttribute('aria-label')).toMatch(/sin modo puesto/);
 
-    tocar(segmentos(m)[0]!);
+    tocar(boton!);
     await reposar();
     expect(pedidos.find((p) => p.metodo === 'PUT')?.cuerpo).toEqual({ modo: 'apagado' });
   });
@@ -175,36 +186,44 @@ describe('🔴 lo ILEGIBLE no se dibuja como apagado', () => {
   });
 });
 
+// 🔴 **La UI de soltar el freno se retiró con el recorte a solo-anillo**
+// (20-ago-2026, pedido explícito del dueño). Antes «el freno» tenía su propio
+// describe acá: probaba el rótulo rojo «frenado», el botón «temporary_ban ·
+// soltar» y el PUT a `/api/bot/freno` que dispara. **Ese botón ya no existe en
+// ningún lado del header** — con el bot frenado, el anillo se ve y se comporta
+// exactamente igual que sin frenar (mismo `aria-label`, mismo ciclo), y no hay
+// forma de soltar el freno desde acá. La única cobertura que sigue teniendo
+// sentido es que el anillo no se rompe con `frenado:true`:
 describe('el freno', () => {
-  it('se ve, dice el motivo y se suelta desde acá', async () => {
+  it('con el bot frenado, el anillo sigue mostrando el modo y sigue siendo clickeable', async () => {
     servidor({ estado: { ...VIVO, frenado: true, frenadoMotivo: 'temporary_ban' } });
     const m = await abrir();
 
-    // 🔴 El modo sigue puesto en «Automático» —al soltar el freno vuelve ahí— así
-    // que sin el rótulo de arriba el chip se leería como «está mandando».
-    expect(puesto(m)?.textContent).toBe('Automático');
-    expect(m.contenedor.textContent).toMatch(/frenado/i);
-
-    const soltar = m.contenedor.querySelector('button:not([role="radio"])');
-    expect(soltar?.textContent).toMatch(/temporary_ban · soltar/);
-
-    tocar(soltar!);
-    await reposar();
-    const put = pedidos.find((p) => p.metodo === 'PUT');
-    expect(put?.url).toMatch(/\/api\/bot\/freno$/);
-    expect(put?.cuerpo).toEqual({ frenado: false });
+    // 🔴 El modo sigue puesto en «Automático» —al soltar el freno (ahora
+    // imposible desde acá) volvería ahí—, y sin el aviso rojo que existía
+    // antes, esto se lee como «está mandando». Es el costo aceptado del recorte.
+    expect(anillo(m)?.getAttribute('aria-label')).toMatch(/Automático/);
+    expect(anillo(m)).not.toBeNull();
   });
 });
 
+// 🔴 **El aviso visible de «NO se guardó» también se retiró con el mismo
+// recorte.** Antes esta prueba comprobaba que un 503 al guardar se LEÍA en
+// pantalla («NO se guardó: falta bot_estado»); ahora esa lectura no existe en
+// ningún lado del DOM — el único rastro es la consulta de `/api/bot/estado`
+// que `onSettled` dispara igual, tenga éxito o no el PUT. Lo que queda para
+// probar es que un fallo no deja el anillo en un estado roto ni finge que
+// cambió (relee del server, que sigue diciendo el modo de antes).
 describe('🔴 un cambio que FALLÓ no puede parecer aplicado', () => {
-  it('el 503 de «falta la tabla» se dice, en vez de dar un OK falso', async () => {
+  it('el 503 de «falta la tabla» no rompe el anillo ni finge que el modo cambió', async () => {
     servidor({ estado: VIVO }, { status: 503 });
     const m = await abrir();
 
-    tocar(segmentos(m)[0]!);
+    tocar(anillo(m)!);
     await reposar();
 
-    expect(m.contenedor.textContent).toMatch(/NO se guardó/);
-    expect(m.contenedor.textContent).toMatch(/bot_estado/);
+    // Relee del server pase lo que pase (onSettled): el modo sigue siendo el
+    // de VIVO, «Automático» — nunca lo que el clic pedía.
+    expect(anillo(m)?.getAttribute('aria-label')).toMatch(/Automático/);
   });
 });

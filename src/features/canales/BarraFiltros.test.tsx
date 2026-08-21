@@ -2,23 +2,21 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { montar, type Montado } from '../../pruebas/dom';
 import { BarraFiltros } from './BarraFiltros';
-import { LINEA_MIAS } from '../../dominio/cola';
 
 /**
  * LO QUE ESTE TEST CUIDA, Y POR QUÉ NO ALCANZABA UN TEST PURO.
  *
- * Las dos reglas nuevas de la barra son de CABLEADO, no de decisión:
+ * Los dos chips del bot solo se dibujan cuando tienen algo que decir. El bot
+ * corre en una línea de cuatro; en las otras tres serían dos chips muertos
+ * comiéndose el ancho de los que se usan todos los días. Y al revés: el chip
+ * APARECIENDO es el aviso de que el bot escaló algo.
  *
- *  1. Los dos chips del bot solo se dibujan cuando tienen algo que decir. El bot
- *     corre en una línea de cuatro; en las otras tres serían dos chips muertos
- *     comiéndose el ancho de los que se usan todos los días. Y al revés: el chip
- *     APARECIENDO es el aviso de que el bot escaló algo.
- *  2. «Las mías» solo se ofrece a quien tiene líneas asignadas — si no, es un
- *     botón que no cambia nada (la misma regla por la que el selector entero no
- *     existe con una sola línea).
+ * Se puede romper sin que falle ningún test puro: es un `filter` adentro del
+ * JSX. Es la lección del ADR 0024 aplicada a otro componente.
  *
- * Las dos se pueden romper sin que falle ningún test puro: son un `filter` y un
- * `&&` adentro del JSX. Es la lección del ADR 0024 aplicada a otro componente.
+ * ⚠️ El segmentado de línea («Las mías», «Todas»...) ya NO vive acá — se mudó
+ * a `SelectorLinea` (`BarraFiltros.tsx`, ver su docblock) el 20-ago-2026, y
+ * sus tests de cableado están en `SelectorLinea.test.tsx`.
  */
 
 let montado: Montado | null = null;
@@ -26,11 +24,6 @@ afterEach(() => {
   montado?.desmontar();
   montado = null;
 });
-
-const LINEAS = [
-  { numero: '51986394450', etiqueta: 'Escuela', estado: 'conectado' },
-  { numero: '51984429504', etiqueta: 'Bot', estado: 'conectado', mias: true },
-];
 
 /** Lo mínimo que la barra necesita para pintarse; cada test cambia lo suyo. */
 function pintar(props: Partial<Parameters<typeof BarraFiltros>[0]> = {}) {
@@ -81,31 +74,6 @@ describe('el chip de la ventana de conversación', () => {
     expect(chip).toContain('Puedo escribirle');
     expect(chip).not.toContain('0');
   });
-
-  /**
-   * LA RAZÓN POR LA QUE ESTE PR RESCATA LAS DOS PISTAS. Con las cuatro líneas
-   * vivas y un chip más, en una sola pista «Te escribieron» —la red que devuelve
-   * la deuda entera cuando lo leído baja— quedaba detrás de un scroll invisible.
-   */
-  it('con las cuatro líneas vivas, «Te escribieron» sigue en la pista de los filtros', () => {
-    const c = pintar({
-      conteos: { preguntoPrecio: 28, teEscribieron: 454, puedoEscribirle: 47, yaCompraron: 78 },
-      lineas: [
-        { numero: '51986394450', etiqueta: 'Ventas Perú', estado: 'conectado' },
-        { numero: '51941654039', etiqueta: 'Walter Ventas', estado: 'conectado' },
-        { numero: '51944531711', etiqueta: 'Venta Perú', estado: 'conectado' },
-        { numero: '51984429504', etiqueta: 'Ventas Meta', estado: 'conectado' },
-      ],
-      onLinea: () => {},
-    });
-    const pistas = c.querySelectorAll('[role="toolbar"]');
-    expect(pistas.length).toBe(2);
-    const filtros = Array.from(pistas[1]!.querySelectorAll('[data-chip]')).map(
-      (b) => b.textContent?.trim() ?? '',
-    );
-    expect(filtros.join('|')).toContain('Te escribieron');
-    expect(filtros.join('|')).toContain('Puedo escribirle');
-  });
 });
 
 describe('los chips del bot', () => {
@@ -151,103 +119,3 @@ describe('los chips del bot', () => {
   });
 });
 
-/**
- * ⚠️ ESTE BLOQUE CAMBIÓ DE REGLA EL 4-AGO-2026, y los tres tests de abajo
- * afirmaban la anterior.
- *
- * Antes el selector ofrecía **todas las líneas vivas** más «Todas», y «Las mías»
- * era una opción más. Eso era razonable con una línea y una vendedora; con cinco
- * vendedoras nuevas que atienden UNA sola, les ponía adelante tres colas ajenas
- * —y dos de esos rótulos se distinguen por una `s` y una tilde, «Ventas Perú» y
- * «Venta Peru»—. Ahora el selector ofrece **lo tuyo** cuando el mapa te asigna
- * algo, y con una sola línea propia directamente no se dibuja: una opción no es
- * una elección. La decisión vive pura en `alcance.ts`; acá se fija el CABLEADO.
- */
-describe('el segmentado de línea', () => {
-  it('sin líneas propias ofrece «Todas» y las cuatro: fail-open, como siempre', () => {
-    const texto = rotulos(pintar({ lineas: LINEAS, onLinea: () => {}, hayMias: false })).join('|');
-    expect(texto).toContain('Todas');
-    expect(texto).toContain('Escuela');
-    expect(texto).toContain('Bot');
-  });
-
-  /**
-   * EL CASO DE LAS CINCO NUEVAS: una sola línea propia ⇒ el control desaparece.
-   * Y con él tiene que desaparecer «Todas», que es la puerta a las colas ajenas.
-   */
-  it('con UNA línea propia el selector no se dibuja — ni «Todas» ni las ajenas', () => {
-    const texto = rotulos(pintar({ lineas: LINEAS, onLinea: () => {}, hayMias: true })).join('|');
-    expect(texto).not.toContain('Todas');
-    expect(texto).not.toContain('Escuela');
-    expect(texto).not.toContain('Las mías');
-    // La barra sigue viva: lo que se fue es el selector, no los filtros.
-    expect(texto).toContain('Preguntaron precio');
-  });
-
-  it('con VARIAS propias sí hay elección: «Las mías» + las suyas, sin «Todas»', () => {
-    const dosPropias = LINEAS.map((l) => ({ ...l, mias: true }));
-    const c = pintar({ lineas: dosPropias, onLinea: () => {}, hayMias: true });
-    const texto = rotulos(c).join('|');
-    expect(texto).toContain('Las mías');
-    expect(texto).toContain('Escuela');
-    expect(texto).not.toContain('Todas');
-  });
-
-  it('«Las mías» manda el valor reservado del MISMO eje, no una bandera aparte', () => {
-    const onLinea = vi.fn();
-    const c = pintar({ lineas: LINEAS.map((l) => ({ ...l, mias: true })), onLinea, hayMias: true });
-    const boton = Array.from(c.querySelectorAll<HTMLButtonElement>('[data-chip]')).find((b) =>
-      b.textContent?.includes('Las mías'),
-    );
-    boton?.click();
-    expect(onLinea).toHaveBeenCalledWith(LINEA_MIAS);
-  });
-
-  /**
-   * 🔴 DOS PISTAS, NO UNA — y no es cosmética.
-   *
-   * Compartiendo una sola barra, cuatro líneas vivas se comían los 336 px y
-   * «Te escribieron» quedaba fuera de la vista, detrás de un scroll horizontal
-   * que no se anuncia. Desde que la cola ordena por la banda de leído, ese chip
-   * es la RED DE SEGURIDAD de la cola entera: lo que ya se miró baja, y él lo
-   * trae de vuelta. Una red detrás de un scroll invisible no es una red.
-   *
-   * Se fija la SEPARACIÓN y no el ancho: jsdom no hace layout, así que
-   * `scrollWidth` es siempre 0 y «entra sin scrollear» no se puede afirmar acá.
-   * Lo que sí se puede romper de un tipeo es el cableado — volver a meter el
-   * segmentado adentro de la pista de los filtros—, y eso es lo que se mira.
-   */
-  it('la línea y los filtros viven en pistas SEPARADAS', () => {
-    const c = pintar({ lineas: LINEAS, onLinea: () => {}, hayMias: false, conteos: { preguntoPrecio: 12, teEscribieron: 454 } });
-    const pistas = Array.from(c.querySelectorAll<HTMLElement>('[role="toolbar"]'));
-    expect(pistas).toHaveLength(2);
-
-    const textoDe = (el: HTMLElement) =>
-      Array.from(el.querySelectorAll('[data-chip]')).map((b) => b.textContent?.trim() ?? '').join('|');
-    expect(textoDe(pistas[0]!)).toContain('Todas');
-    expect(textoDe(pistas[0]!)).not.toContain('Te escribieron');
-    expect(textoDe(pistas[1]!)).toContain('Te escribieron');
-    expect(textoDe(pistas[1]!)).not.toContain('Todas');
-  });
-
-  it('sin selector de línea queda UNA sola pista: la de los filtros', () => {
-    // Con una línea propia el segmentado no se dibuja (regla de `alcance.ts`), y
-    // entonces no hay por qué gastar los 26 px de una fila vacía.
-    const c = pintar({ lineas: LINEAS, onLinea: () => {}, hayMias: true, conteos: { preguntoPrecio: 12, teEscribieron: 454 } });
-    expect(c.querySelectorAll('[role="toolbar"]')).toHaveLength(1);
-  });
-
-  it('lo activo se ve activo, y se cambia de línea con un click', () => {
-    const onLinea = vi.fn();
-    const c = pintar({
-      lineas: LINEAS.map((l) => ({ ...l, mias: true })),
-      onLinea,
-      hayMias: true,
-      lineaActiva: LINEA_MIAS,
-    });
-    const botones = Array.from(c.querySelectorAll<HTMLButtonElement>('[data-chip]'));
-    expect(botones.find((b) => b.textContent?.includes('Las mías'))?.getAttribute('aria-pressed')).toBe('true');
-    botones.find((b) => b.textContent?.trim() === 'Escuela')?.click();
-    expect(onLinea).toHaveBeenCalledWith('51986394450');
-  });
-});

@@ -59,7 +59,7 @@ function Chip({ h, telefono }: { h: HechoRecomendado; telefono: string | null })
         className="min-w-0 flex-1 text-left disabled:opacity-50"
       >
         <span className="block text-[11px] font-semibold leading-tight text-navy-ink">{h.rotulo}</span>
-        <span className="mt-0.5 block truncate text-[10px] leading-tight text-muted-foreground">
+        <span className="mt-0.5 block truncate text-[11px] leading-tight text-muted-foreground">
           {h.texto}
         </span>
       </button>
@@ -124,7 +124,7 @@ export function BloqueHechos({ conversacion }: { conversacion: Conversacion }) {
         <h3 className={'flex items-center gap-1.5 ' + sectionLabel}>
           <Lightbulb size={12} /> Datos que ayudan acá
         </h3>
-        <span className="shrink-0 text-[10px] text-muted-foreground">tocá para ponerlo en la caja</span>
+        <span className="shrink-0 text-[11px] text-muted-foreground">tocá para ponerlo en la caja</span>
       </div>
 
       <ul className="mt-1.5 flex flex-col gap-1">
@@ -134,7 +134,7 @@ export function BloqueHechos({ conversacion }: { conversacion: Conversacion }) {
       </ul>
 
       <div className="mt-1 flex items-baseline justify-between gap-2">
-        <p className="min-w-0 text-[10px] leading-snug text-muted-foreground">
+        <p className="min-w-0 text-[11px] leading-snug text-muted-foreground">
           {data ? PORQUE_DEL_MOMENTO[data.momento] : ''}
           {data?.origen === 'sin-tabla' && ' · catálogo de fábrica: falta la migración para poder editarlo'}
         </p>

@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { arrastrar, montar, reposar, tocar, type Montado } from '../../pruebas/dom';
 import type { Conversacion } from '../../dominio/conversaciones';
 import { TarjetaEmbudo } from './TarjetaEmbudo';
-import { ETAPA_ROTULO } from '../../lib/etapas';
 
 /**
  * LA TARJETA CLICKEABLE, ADENTRO DE UNA TARJETA ARRASTRABLE.
@@ -50,7 +49,6 @@ function pintar(props: Partial<Parameters<typeof TarjetaEmbudo>[0]> = {}) {
     alTerminar: vi.fn(),
     arrastrando: false,
     rebotada: false,
-    cotizando: false,
     ...props,
   };
   vista = montar(<TarjetaEmbudo {...todo} />);
@@ -92,36 +90,31 @@ describe('TarjetaEmbudo — el clic que abre la ficha', () => {
     expect(onFicha).toHaveBeenCalledTimes(1);
   });
 
-  it('el botón de Mensajes lleva al chat y NO abre además la ficha', () => {
-    // Sin `stopPropagation`, el clic haría las dos: la vista se va a Mensajes y
-    // queda una hoja abierta atrás, en una vista que ya nadie está mirando.
+  it('el botón de Mensajes abre el selector «Escribir en» con los 6 países, y NO abre además la ficha', () => {
+    // Sin `stopPropagation`, el clic haría las dos: se abriría el popover Y la
+    // ficha de al lado, en una vista que ya está tapada por el cuadrito.
     const { contenedor, onAbrir, onFicha } = pintar();
 
     const boton = contenedor.querySelector('button[title="Abrir en Mensajes"]');
     expect(boton).not.toBeNull();
     tocar(boton!);
 
+    // El primer clic solo abre el selector — todavía no manda a Mensajes.
+    expect(onAbrir).not.toHaveBeenCalled();
+    expect(onFicha).not.toHaveBeenCalled();
+
+    // El cuadrito va por PORTAL a `document.body` — escapa del recorte de la
+    // columna del Pipeline (`overflow-y-auto`), así que no cuelga de `contenedor`.
+    const paises = ['Estados Unidos', 'Perú', 'Ecuador', 'México', 'Brasil', 'Bolivia'];
+    const botonesDePais = paises.map((p) => document.body.querySelector(`button[title="${p}"]`));
+    expect(botonesDePais.every(Boolean)).toBe(true);
+
+    // Elegir un país recién ahí manda a Mensajes.
+    tocar(botonesDePais[2]!); // Ecuador
     expect(onAbrir).toHaveBeenCalledWith(BASE);
     expect(onFicha).not.toHaveBeenCalled();
-  });
-
-  it('el botón del atajo asienta el interés y NO abre además la ficha', () => {
-    const onCotizar = vi.fn();
-    const { contenedor, onFicha } = pintar({
-      c: { ...BASE, precio_enviado: true, interes_curso: 'Inteligencia y Contrainteligencia' },
-      onCotizar,
-    });
-
-    // Por el rótulo canónico y no por una copia literal: este test se rompió al
-    // unificar los nombres, que es justo lo que no tiene que volver a pasar.
-    const boton = [...contenedor.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes(ETAPA_ROTULO.cotizado.uno),
-    );
-    expect(boton).toBeDefined();
-    tocar(boton!);
-
-    expect(onCotizar).toHaveBeenCalledTimes(1);
-    expect(onFicha).not.toHaveBeenCalled();
+    // Y el selector se cierra: no queda ningún botón de país en el DOM.
+    expect(document.body.querySelector('button[title="Ecuador"]')).toBeNull();
   });
 
   it('sin `onFicha` la tarjeta no se anuncia como clickeable', () => {
@@ -136,7 +129,6 @@ describe('TarjetaEmbudo — el clic que abre la ficha', () => {
         alTerminar={vi.fn()}
         arrastrando={false}
         rebotada={false}
-        cotizando={false}
       />,
     );
 

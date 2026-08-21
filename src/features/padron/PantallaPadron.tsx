@@ -188,7 +188,7 @@ export function PantallaPadron({
               value={filtros.orden ?? 'recientes'}
               onChange={(e) => cambiar({ orden: e.target.value as FiltrosPadron['orden'] })}
               aria-label="Ordenar"
-              className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground"
+              className="rounded-full border border-border bg-card px-3 py-1.5 text-sm font-normal text-foreground"
             >
               <option value="recientes">Más nuevos</option>
               <option value="antiguos">Más antiguos</option>
@@ -533,10 +533,10 @@ function Fila({
         <div className="truncate font-semibold text-foreground">{c.nombre ?? '—'}</div>
         {c.correo && <div className="truncate text-[11px] text-muted-foreground">{c.correo}</div>}
       </td>
-      <td className="whitespace-nowrap px-3 py-2 font-mono text-xs tabular-nums text-muted-foreground">
+      <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums text-muted-foreground">
         {telefono ? formatoTelefono(telefono) : '—'}
       </td>
-      <td className="px-3 py-2 text-xs text-muted-foreground">{c.pais ?? '—'}</td>
+      <td className="px-3 py-2 text-muted-foreground">{c.pais ?? '—'}</td>
       {/*
         🔴 DOS DATOS DISTINTOS EN UNA COLUMNA, y por eso se dibujan distinto.
         `comprado` es lo que PAGÓ (sale de la venta) y va con peso; `curso` es lo
@@ -546,18 +546,18 @@ function Fila({
       */}
       <td className="max-w-[14rem] px-3 py-2">
         {c.comprado ? (
-          <span className="block truncate text-xs font-medium text-foreground" title={c.comprado}>
+          <span className="block truncate font-medium text-foreground" title={c.comprado}>
             {c.comprado}
           </span>
         ) : c.curso ? (
-          <span className="block truncate text-xs italic text-muted-foreground" title={`Le interesa: ${c.curso}`}>
+          <span className="block truncate italic text-muted-foreground" title={`Le interesa: ${c.curso}`}>
             {c.curso}
           </span>
         ) : (
-          <span className="text-xs text-muted-foreground">—</span>
+          <span className="text-muted-foreground">—</span>
         )}
         {c.comprado && c.curso && c.curso !== c.comprado && (
-          <span className="block truncate text-[10px] italic text-muted-foreground" title={`Le interesa: ${c.curso}`}>
+          <span className="block truncate text-[11px] italic text-muted-foreground" title={`Le interesa: ${c.curso}`}>
             le interesa: {c.curso}
           </span>
         )}
@@ -578,10 +578,10 @@ function Fila({
             <AlertTriangle size={10} /> sin respaldo
           </span>
         ) : (
-          <span className="text-xs text-muted-foreground">—</span>
+          <span className="text-muted-foreground">—</span>
         )}
       </td>
-      <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-muted-foreground">
+      <td className="whitespace-nowrap px-3 py-2 tabular-nums text-muted-foreground">
         {c.creadoEn ? fechaCorta(c.creadoEn) : '—'}
       </td>
       <td className="px-3 py-2">
@@ -621,7 +621,7 @@ function Toggle({
       type="button"
       onClick={onClick}
       title={titulo}
-      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors duration-200 ${
+      className={`rounded-full border px-3 py-1.5 text-sm font-normal transition-colors duration-200 ${
         activo
           ? 'border-navy bg-navy text-white'
           : 'border-border bg-card text-muted-foreground hover:text-foreground'

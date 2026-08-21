@@ -6,7 +6,6 @@ import '@fontsource/montserrat/800.css';
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   AlarmClock,
-  BrainCircuit,
   ChevronLeft,
   ChevronRight,
   Columns3,
@@ -20,18 +19,15 @@ import {
   Bot,
 } from 'lucide-react';
 import { Escudo } from './components/Marca';
-import { Avisos } from './components/Avisos';
 import { BotonDeTema } from './components/BotonDeTema';
+import { Avisos } from './components/Avisos';
 import { useLocalStorage } from './lib/useLocalStorage';
 import { ColaUnificada } from './features/canales/ColaUnificada';
 import { ConversacionActiva } from './features/canales/ConversacionActiva';
 import type { Conversacion } from './dominio/conversaciones';
 import { conversacionDeTelefono } from './dominio/conversacionNueva';
-import BarraFrescura from './features/canales/BarraFrescura';
-import { EstadoWhatsapp } from './features/whatsapp/EstadoWhatsapp';
 import { useLineas } from './dominio/lineas';
 import { ElegirLinea } from './features/canales/ElegirLinea';
-import { InterruptorAutoRespuesta } from './features/autorespuesta/InterruptorAutoRespuesta';
 import { InterruptorBot } from './features/bot/InterruptorBot';
 import { ColaRevision } from './features/autorespuesta/ColaRevision';
 import { PorQueEstaSugerencia } from './features/autorespuesta/PorQueEstaSugerencia';
@@ -814,46 +810,28 @@ function AppAutenticada({ vendedora, reintentar, entrar, salir, cerberusVivo }: 
       {/* ── EL CONTENIDO: barra fina arriba (título + línea de salud) y la vista ── */}
       <div className="flex min-w-0 flex-1 flex-col">
         <header
-          className="flex shrink-0 items-center gap-3 border-b border-border bg-card px-3 pb-2 pt-8"
+          className="flex shrink-0 items-center gap-3 border-b border-border bg-card px-3 py-4"
           style={ARRASTRABLE}
           data-tauri-drag-region
         >
-          <h1 className="font-heading text-sm font-bold tracking-tight text-navy-ink">{vistaActiva.label}</h1>
-          <div className="ml-auto flex items-center gap-2" style={NO_ARRASTRABLE}>
-            {/* Claro u oscuro, para toda la app. Primero de la fila porque es lo
-                único de esta barra que no informa de nada: las otras piezas son
-                estado (¿el canal vive?, ¿la máquina contesta sola?) y el estado
-                se lee de derecha a izquierda, pegado a su semáforo. */}
-            <BotonDeTema />
-            {/* Preguntarle a Ivi. Va en la barra y no en el riel porque no es una vista: no
-                se «va» a Ivi, se lo consulta sin soltar lo que estabas haciendo. Y va con
-                rótulo porque una tecla que nadie descubre no existe. */}
-            <button
-              type="button"
-              onClick={() => setIvi(true)}
-              title="Preguntarle a Ivi · i"
-              className="flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground transition-[color,border-color,transform] duration-200 ease-house hover:border-primary/40 hover:text-navy-ink active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              <BrainCircuit size={13} strokeWidth={2} />
-              Ivi
-            </button>
+          <h1 className="flex h-12 items-center font-heading text-sm font-bold tracking-tight text-navy-ink">{vistaActiva.label}</h1>
+          <div className="ml-auto flex items-center gap-0" style={NO_ARRASTRABLE}>
             {/* Primero lo que le impide COBRAR: es lo único de esta barra que
                 bloquea plata, así que va antes que la salud de los datos. */}
             {cerberusVivo === false && <AvisoCerberus usuario={vendedora.id} entrar={entrar} />}
-            <BarraFrescura />
-            {/* El interruptor va PEGADO al semáforo de WhatsApp: los dos hablan
-                del estado del canal. Que la máquina esté contestando sola es
-                parte de la misma pregunta que «¿el número está vivo?» (#125). */}
-            <InterruptorAutoRespuesta onRevisar={revision.entrar} />
-            {/* Y pegado a él, el del BOT. Son la misma pregunta —«¿qué máquina
-                le está escribiendo a mis leads ahora mismo?»— y hasta acá esta
-                mitad no se podía ni mirar: `/api/bot` estaba montada y el front
-                no la llamaba desde ningún lado, así que apagar el bot costaba un
-                `PUT` a mano con un Bearer. Va DESPUÉS de la auto-respuesta
-                porque el bot contesta en el acto: es el que puede estar mandando
-                mientras leés esto. */}
             <InterruptorBot />
-            <EstadoWhatsapp />
+            {/* Claro u oscuro, para toda la app.
+                ⚠️ El `gap-0` del contenedor solo empareja las CAJAS de 48px —
+                cada botón tiene su gráfico real (el anillo, el círculo
+                sol/luna) centrado con relleno invisible alrededor, así que con
+                `gap-0` solo los DIBUJOS ya quedan a ~16px, no a 0. El pedido de
+                8px se mide contra ESE borde, no contra la caja: `-ml-2` (8px)
+                le resta la mitad a esos 16px. Si el tamaño de cualquiera de
+                los dos íconos cambia, esta medida hay que rehacerla contra el
+                borde real. */}
+            <div className="-ml-2">
+              <BotonDeTema />
+            </div>
           </div>
         </header>
 
@@ -869,8 +847,19 @@ function AppAutenticada({ vendedora, reintentar, entrar, salir, cerberusVivo }: 
           {/* La lista de revisión pide MENOS ancho que la cola: no tiene
               búsqueda, ni tabs, ni chips de categoría — solo quién y cuánto
               hace que espera. Devolverle esos 80 px al chat importa a 1280,
-              donde el panel derecho ya se lleva 22,5rem. */}
-          <main className={'min-h-0 shrink-0 ' + (revision.activo ? 'w-[20rem]' : 'w-[25rem]')}>
+              donde el panel derecho ya se lleva 22,5rem.
+              ⚠️ **27.75rem, no 25 (20-ago-2026, pedido explícito, subido dos
+              veces el mismo día)**: primero a 26rem porque «N en cola» quedaba
+              pegado al borde con el selector de línea compartiendo fila con
+              los tabs; después a 27.75rem porque el botón «ver todas las
+              etiquetas» tampoco entraba — medido en el DOM, los tres chips
+              del trabajo diario («Preguntaron precio»/«Te escribieron»/«Puedo
+              escribirle») YA miden 372 px solos, más 16 px de margen a cada
+              lado del header más 24+4 px del botón: 436 px como piso real,
+              no una cuenta de cabeza. A 1280 el chat pasa de ~396 (25rem) a
+              ~332 px — sigue cómodo para un hilo de chat, pero si hace falta
+              subir esto una vez más, medí el DOM primero, no supongas. */}
+          <main className={'min-h-0 shrink-0 ' + (revision.activo ? 'w-[20rem]' : 'w-[27.75rem]')}>
             {revision.activo ? (
               <ColaRevision
                 grupos={revision.grupos}

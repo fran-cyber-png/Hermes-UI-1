@@ -158,12 +158,12 @@ export function VistaNavegador({
             spellCheck={false}
             autoCapitalize="off"
             autoCorrect="off"
-            className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-1.5 font-mono text-[13px] text-foreground placeholder:font-sans placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-1.5 font-mono text-sm text-foreground placeholder:font-sans placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           />
           <button
             type="submit"
             disabled={!destino.ok}
-            className="flex shrink-0 items-center gap-1 rounded-lg bg-navy px-3 py-1.5 text-[13px] font-semibold text-white transition-[opacity,transform] duration-200 ease-house active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex shrink-0 items-center gap-1 rounded-lg bg-navy px-3 py-1.5 text-sm font-semibold text-white transition-[opacity,transform] duration-200 ease-house active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40"
           >
             Ir
             <ArrowUpRight size={14} strokeWidth={2.2} />
@@ -252,7 +252,7 @@ function Lanzador({
           <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-secondary text-navy-ink">
             <Compass size={18} strokeWidth={1.9} />
           </div>
-          <p className="min-w-0 text-[13px] leading-relaxed text-muted-foreground">
+          <p className="min-w-0 text-sm leading-relaxed text-muted-foreground">
             {embebido
               ? 'Se abre acá adentro, con la sesión de trabajo de Hermes — separada de tu navegador personal. Las cuentas que enlaces quedan enlazadas.'
               : enLaCascara
@@ -264,7 +264,7 @@ function Lanzador({
         {/* El motivo se dice solo cuando hay algo escrito: con la caja vacía, un
             cartel de «no es una dirección» reta por no haber empezado. */}
         {!destino.ok && destino.motivo === 'no_es_direccion' && (
-          <p className="mt-3 text-[12px] text-muted-foreground">
+          <p className="mt-3 text-xs text-muted-foreground">
             Eso no parece una dirección. Arriba va un sitio (<span className="font-mono">app.goberna.us</span>), no una
             búsqueda.
           </p>
@@ -273,19 +273,19 @@ function Lanzador({
         {error && (
           <p
             role="alert"
-            className="mt-3 rounded-lg bg-destructive/10 px-3 py-2 text-[12px] font-medium text-destructive"
+            className="mt-3 rounded-lg bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive"
           >
             {error}
           </p>
         )}
 
         {ultimo && !error && (
-          <p className="mt-3 text-[12px] text-muted-foreground">
+          <p className="mt-3 text-xs text-muted-foreground">
             Abierto: <span className="font-mono text-foreground">{ultimo}</span>
           </p>
         )}
 
-        <h2 className="mt-8 font-mono text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+        <h2 className="mt-8 font-mono text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
           A dónde se va todos los días
         </h2>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -298,7 +298,7 @@ function Lanzador({
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-navy-ink">{d.nombre}</p>
-                <p className="mt-0.5 truncate text-[12px] text-muted-foreground">{d.para}</p>
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">{d.para}</p>
               </div>
               <ExternalLink
                 size={14}
@@ -311,7 +311,7 @@ function Lanzador({
 
         {/* Lo que NO hace, dicho donde se pregunta. La regla es de toda la casa:
             un envío es una acción humana por el composer (ADR 0015). */}
-        <p className="mt-6 text-[12px] leading-relaxed text-muted-foreground">
+        <p className="mt-6 text-xs leading-relaxed text-muted-foreground">
           {embebido
             ? 'Una sola página a la vez: abrir otro sitio te lleva ahí. Y no manda nada — lo que sale hacia un lead sale del chat.'
             : 'Una sola ventana: abrir otro sitio la lleva ahí, no acumula ventanas. Y no manda nada — lo que sale hacia un lead sale del chat.'}

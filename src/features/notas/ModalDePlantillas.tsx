@@ -81,7 +81,7 @@ export function ModalDePlantillas({ onCerrar, onElegir }: { onCerrar: () => void
       <div className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-card shadow-panel" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3 px-6 pt-6">
           <div>
-            <h2 className="text-lg font-semibold text-foreground">Plantillas</h2>
+            <h2 className="font-heading text-sm font-bold text-navy-ink">Plantillas</h2>
             {vista.tipo === 'lista' && (
               <p className="mt-0.5 text-xs text-muted-foreground">Elegí una para pegarla acá, o creá una nueva.</p>
             )}

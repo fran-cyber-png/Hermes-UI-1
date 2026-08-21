@@ -181,7 +181,7 @@ export function Intereses({
             {g.cursos.map((c) => (
               <span
                 key={c}
-                className="group/int inline-flex max-w-full items-center gap-1 rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-semibold text-secondary-foreground"
+                className="group/int flex h-7 max-w-full items-center gap-1.5 rounded-md bg-secondary px-2 text-sm font-normal text-secondary-foreground"
                 title={g.etiqueta ? `${c} · ${g.etiqueta}` : c}
               >
                 <span className="truncate">{compacto && c.length > 22 ? c.slice(0, 22) + '…' : c}</span>
@@ -194,7 +194,7 @@ export function Intereses({
                   }}
                   className="opacity-40 transition-opacity focus-visible:opacity-100 group-hover/int:opacity-100"
                 >
-                  <X size={9} />
+                  <X size={12} />
                 </button>
               </span>
             ))}
@@ -214,10 +214,10 @@ export function Intereses({
             setAbierto((v) => !v);
           }}
           title="Agregar curso de interés"
-          className="rounded-md border border-dashed border-border px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+          className="flex h-7 items-center gap-1.5 rounded-md border border-dashed border-border px-2 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
         >
-          <Plus size={10} className="inline" />
-          {lista.length === 0 && !propuesta && <span className="ml-0.5">interés</span>}
+          <Plus size={14} />
+          {lista.length === 0 && !propuesta && <span>interés</span>}
         </button>
       </div>
 
@@ -327,10 +327,10 @@ function PropuestaDelAnuncio({
   // #129 vino a arreglar, no a repetir.
   return (
     <span
-      className="inline-flex max-w-full flex-wrap items-center gap-x-1 gap-y-0.5 rounded-md border border-dashed border-navy/40 bg-navy/[0.04] px-1.5 py-0.5 text-[11px] font-semibold text-navy-ink"
+      className="inline-flex min-h-7 max-w-full flex-wrap items-center gap-x-1.5 gap-y-1 rounded-md border border-dashed border-navy/40 bg-navy/[0.04] px-2 py-1 text-sm font-normal text-navy-ink"
       title={propuesta.detalle}
     >
-      <Megaphone size={10} aria-hidden className="shrink-0" />
+      <Megaphone size={14} aria-hidden className="shrink-0" />
       {/* Sin recorte a mano: el nombre de la FAMILIA ya es corto (#129) y lo que
           sobre lo resuelve el `truncate` con el ancho real, no un slice fijo que
           cortaba justo donde estaba el dato que distingue un curso de otro. */}
@@ -345,9 +345,9 @@ function PropuestaDelAnuncio({
             e.stopPropagation();
             onConfirmar();
           }}
-          className="ml-0.5 inline-flex shrink-0 items-center gap-0.5 rounded bg-navy px-1.5 py-[1px] text-[10px] font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] disabled:opacity-60"
+          className="ml-0.5 inline-flex shrink-0 items-center gap-1 rounded px-2 py-1 text-xs font-bold text-white transition-[background-color,transform] duration-200 ease-house bg-navy hover:bg-navy/90 active:scale-[0.98] disabled:opacity-60"
         >
-          <Check size={9} aria-hidden /> {confirmando ? 'Guardando…' : 'Confirmar'}
+          <Check size={12} aria-hidden /> {confirmando ? 'Guardando…' : 'Confirmar'}
         </button>
       )}
     </span>

@@ -22,7 +22,7 @@ import {
   type Tab,
 } from '../../dominio/cola';
 import { lineaEfectiva, opcionesDeLinea } from './alcance';
-import { BarraFiltros } from './BarraFiltros';
+import { BarraFiltros, SelectorLinea } from './BarraFiltros';
 import { RotuloDeLaCola } from './RotuloDeLaCola';
 import { VacioDeLineaPropia } from './VacioDeLineaPropia';
 import { useConversaciones, useEstadoConversacion, type Conversacion } from '../../dominio/conversaciones';
@@ -190,7 +190,7 @@ export function ColaUnificada({
   // se lee una vez, no un radar.
   const statsDia = useDashboard({ activa: despachada && miVendedora != null });
   const nHoy = miVendedora
-    ? statsDia.data?.porVendedora.find((v) => v.vendedora === miVendedora)?.conversaciones_hoy
+    ? statsDia.data?.porVendedora?.find((v) => v.vendedora === miVendedora)?.conversaciones_hoy
     : undefined;
 
   /**
@@ -398,11 +398,11 @@ export function ColaUnificada({
     return (
       <>
         <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
-          <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
+          <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2">
             <button
               type="button"
               onClick={() => setModoListas(false)}
-              className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold text-primary transition-colors hover:bg-primary/10"
+              className="flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-normal text-primary transition-colors hover:bg-primary/10"
             >
               <ChevronLeft size={14} /> Cola
             </button>
@@ -418,8 +418,15 @@ export function ColaUnificada({
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
-      {/* Header: búsqueda + acciones arriba, tabs + filtros abajo, un solo bloque. */}
-      <div className="shrink-0 border-b border-border px-3 pb-2 pt-3">
+      {/* Header: búsqueda + acciones arriba, tabs + filtros abajo, un solo bloque.
+          ⚠️ `px-4` y no `px-3` (20-ago-2026, pedido explícito): con `px-3` el
+          borde derecho de «N en cola» quedaba a solo 12px del borde de la
+          card, mientras la búsqueda —adentro de su propio `px-3`— empezaba
+          visualmente a 24px del izquierdo. `px-4` empareja los dos lados Y de
+          paso alinea el margen izquierdo del header con el `pl-4` que
+          `FilaConversacion` ya usaba para las filas — antes desalineados por
+          4px sin que nadie lo hubiera pedido así. */}
+      <div className="shrink-0 border-b border-border px-4 pb-2 pt-3">
         <div className="mb-2 flex items-center gap-2">
           <div className="flex flex-1 items-center gap-2 rounded-full border border-border bg-muted/50 px-3 py-1.5 transition-[border-color,background-color] focus-within:border-primary focus-within:bg-card">
             <Search size={13} className="shrink-0 text-muted-foreground" />
@@ -439,7 +446,7 @@ export function ColaUnificada({
                 }
               }}
               placeholder="Buscar nombre, teléfono o texto…"
-              className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+              className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
             {busqueda && (
               <button type="button" onClick={() => setBusqueda('')} className="text-muted-foreground hover:text-foreground">
@@ -471,20 +478,20 @@ export function ColaUnificada({
                 autoFocus
                 inputMode="tel"
                 placeholder="Teléfono con país, ej. 51 986…"
-                className="w-0 flex-1 rounded-lg border border-border bg-card px-2 py-1.5 font-mono text-xs outline-none focus:border-primary placeholder:font-sans"
+                className="w-0 flex-1 rounded-lg border border-border bg-card px-2 py-1.5 font-mono text-sm outline-none focus:border-primary placeholder:font-sans"
               />
               <input
                 value={nuevoNombre}
                 onChange={(e) => setNuevoNombre(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && abrirChatNuevo()}
                 placeholder="Nombre (opcional)"
-                className="w-0 flex-1 rounded-lg border border-border bg-card px-2 py-1.5 text-xs outline-none focus:border-primary"
+                className="w-0 flex-1 rounded-lg border border-border bg-card px-2 py-1.5 text-sm outline-none focus:border-primary"
               />
               <button
                 type="button"
                 onClick={abrirChatNuevo}
                 disabled={nuevoTel.replace(/\D/g, '').length < 8}
-                className="rounded-lg bg-navy px-3 text-xs font-bold text-white transition-[background-color,transform] hover:bg-navy/90 active:scale-[0.97] disabled:opacity-40"
+                className="rounded-lg bg-navy px-3 text-sm font-bold text-white transition-[background-color,transform] hover:bg-navy/90 active:scale-[0.97] disabled:opacity-40"
               >
                 Abrir
               </button>
@@ -496,23 +503,32 @@ export function ColaUnificada({
         )}
 
         <div className="flex items-center justify-between gap-2">
-          {/* Tabs: el eje de la cola. No se encogen: son el control principal. */}
-          <div className="flex shrink-0 gap-0.5 rounded-lg bg-muted/60 p-0.5" role="tablist" aria-label="Filtrar la cola">
-            {TABS.map((t) => (
-              <button
-                key={t.valor}
-                type="button"
-                role="tab"
-                aria-selected={tab === t.valor}
-                onClick={() => setTab(t.valor)}
-                className={
-                  'rounded-md px-2.5 py-1 text-xs font-bold transition-colors ' +
-                  (tab === t.valor ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')
-                }
-              >
-                {t.label}
-              </button>
-            ))}
+          {/* Tabs + línea, EN LA MISMA FILA desde el 20-ago-2026 (pedido
+              explícito: antes eran dos filas separadas). La línea vivía como
+              segmentado propio en `BarraFiltros` — volvió acá como
+              `SelectorLinea` (un dropdown, ver su docblock): un segmentado de
+              N líneas al lado de los tabs repetiría el problema que ya rompió
+              esta barra una vez (ver «DOS FILAS, NO UNA» en `BarraFiltros.tsx`),
+              y un dropdown mide lo mismo sin importar cuántas líneas haya. */}
+          <div className="flex min-w-0 shrink-0 items-center gap-1.5">
+            <div className="flex shrink-0 gap-0.5 rounded-lg bg-muted/60 p-0.5" role="tablist" aria-label="Filtrar la cola">
+              {TABS.map((t) => (
+                <button
+                  key={t.valor}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === t.valor}
+                  onClick={() => setTab(t.valor)}
+                  className={
+                    'rounded-md px-2.5 py-1 text-sm font-normal transition-colors ' +
+                    (tab === t.valor ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')
+                  }
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <SelectorLinea lineas={lineas} lineaActiva={linea} onLinea={setLinea} hayMias={hayMias} />
           </div>
           {deAntes ? (
             <SelloDeAntes texto={deAntes} actualizando={actualizando} />
@@ -540,10 +556,6 @@ export function ColaUnificada({
             filtroSec={filtroSec}
             onFiltro={setFiltroSec}
             conteos={conteosFiltro}
-            lineas={lineas}
-            lineaActiva={linea}
-            onLinea={setLinea}
-            hayMias={hayMias}
             catalogo={catalogo}
             categoriaActiva={categoriaActiva?.nombre ?? null}
             /* Desde la BARRA la categoría afina lo que ya se está mirando (el tab
@@ -587,7 +599,7 @@ export function ColaUnificada({
       </div>
 
       {avisoPin && (
-        <div className="flex items-center justify-between gap-2 border-b border-border bg-warning/10 px-3 py-2 text-[12px] font-medium text-warning-foreground">
+        <div className="flex items-center justify-between gap-2 border-b border-border bg-warning/10 px-3 py-2 text-xs font-medium text-warning-foreground">
           <span className="min-w-0 flex-1">{avisoPin}</span>
           <button type="button" onClick={() => setAvisoPin(null)} className="shrink-0 text-muted-foreground hover:text-foreground">
             <X size={13} />
@@ -598,7 +610,7 @@ export function ColaUnificada({
       {/* El server no pudo leer el estado personal: la cola sirve igual, pero
           fijar/marcar no va a guardar nada. Se dice, no se esconde. */}
       {sinEstado && (
-        <p className="border-b border-border bg-warning/10 px-3 py-2 text-[12px] font-medium text-warning-foreground">
+        <p className="border-b border-border bg-warning/10 px-3 py-2 text-xs font-medium text-warning-foreground">
           Fijar, favoritos y «sin leer» no están disponibles todavía — falta aplicar el cambio de base en
           el servidor. El resto de la cola funciona normal.
         </p>
@@ -609,7 +621,7 @@ export function ColaUnificada({
           filtro encendido se ve idéntica a una cola filtrada — y la vendedora
           creería que esas conversaciones son suyas. */}
       {sinLineasPropias && (
-        <p className="border-b border-border bg-warning/10 px-3 py-2 text-[12px] font-medium text-warning-foreground">
+        <p className="border-b border-border bg-warning/10 px-3 py-2 text-xs font-medium text-warning-foreground">
           Todavía no tenés líneas asignadas, así que estás viendo todas. Pedí que te asignen la tuya
           desde el panel de Cerberus.
         </p>

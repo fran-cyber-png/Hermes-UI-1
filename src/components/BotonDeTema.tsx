@@ -24,9 +24,15 @@ export function BotonDeTema() {
       onClick={alternar}
       aria-label={aOscuro ? 'Cambiar a modo oscuro' : 'Cambiar a modo claro'}
       title={aOscuro ? 'Modo oscuro' : 'Modo claro'}
-      className="flex items-center rounded-lg border border-border px-1.5 py-1 text-muted-foreground transition-[color,border-color,transform] duration-200 ease-house hover:border-primary/40 hover:text-navy-ink-ink active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      className="group flex size-12 shrink-0 items-center justify-center rounded-full transition-transform duration-200 ease-house active:scale-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
-      {aOscuro ? <Moon size={13} strokeWidth={2} /> : <Sun size={13} strokeWidth={2} />}
+      {/* El relleno blanco mide 32px — lo mismo que el círculo VISIBLE del
+          anillo del bot (medido: su `<circle>` da 32px de diámetro dentro de
+          un botón de 48px). El botón entero sigue midiendo 48px, para que el
+          área de clic no encoja; lo que se achica es solo el disco pintado. */}
+      <span className="flex size-8 items-center justify-center rounded-full bg-white text-muted-foreground transition-colors duration-200 ease-house group-hover:text-navy-ink">
+        {aOscuro ? <Moon size={18} strokeWidth={2} /> : <Sun size={18} strokeWidth={2} className="text-gold-ink" />}
+      </span>
     </button>
   );
 }

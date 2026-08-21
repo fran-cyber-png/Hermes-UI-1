@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import '../../index.css';
 import { queryClient } from '../../lib/datos/cliente';
-import { BarraFiltros } from '../canales/BarraFiltros';
+import { BarraFiltros, SelectorLinea } from '../canales/BarraFiltros';
 import { FilaConversacion } from '../canales/FilaConversacion';
 import { PanelDerecho } from '../panel/PanelDerecho';
 import { ContenidoUsuario } from '../auth/PanelUsuario';
@@ -162,30 +162,28 @@ function Galeria() {
           </p>
           <p className="text-xs text-muted-foreground">Lo que ve una de las 5 (una línea propia): sin selector.</p>
           <div className="rounded-2xl bg-card p-3 shadow-panel">
-            <BarraFiltros
-              filtroSec=""
-              onFiltro={() => {}}
-              conteos={CONTEOS}
-              categoriaActiva={null}
-              onCategoria={() => {}}
-              onListas={() => {}}
+            <SelectorLinea
               lineas={LINEAS.map((l) => ({ ...l, mias: l.numero === '51984429504' }))}
               lineaActiva="51984429504"
               onLinea={() => {}}
               hayMias
             />
+            <div className="mt-2">
+              <BarraFiltros
+                filtroSec=""
+                onFiltro={() => {}}
+                conteos={CONTEOS}
+                categoriaActiva={null}
+                onCategoria={() => {}}
+                onListas={() => {}}
+              />
+            </div>
           </div>
           <p className="text-xs text-muted-foreground">
             Lo que ve Luz (dos líneas propias): «Las mías» + las suyas, sin «Todas».
           </p>
           <div className="rounded-2xl bg-card p-3 shadow-panel">
-            <BarraFiltros
-              filtroSec=""
-              onFiltro={() => {}}
-              conteos={CONTEOS}
-              categoriaActiva={null}
-              onCategoria={() => {}}
-              onListas={() => {}}
+            <SelectorLinea
               lineas={LINEAS.map((l) => ({
                 ...l,
                 mias: l.numero === '51984429504' || l.numero === '51986394450',
@@ -194,6 +192,16 @@ function Galeria() {
               onLinea={() => {}}
               hayMias
             />
+            <div className="mt-2">
+              <BarraFiltros
+                filtroSec=""
+                onFiltro={() => {}}
+                conteos={CONTEOS}
+                categoriaActiva={null}
+                onCategoria={() => {}}
+                onListas={() => {}}
+              />
+            </div>
           </div>
 
         </section>

@@ -147,7 +147,7 @@ export function AuditoriaDeLink({ notaId, onCerrar }: { notaId: number; onCerrar
     >
       <div className="mx-auto max-w-3xl px-6 py-8">
         <div className="flex flex-wrap items-end gap-4 border-b border-border pb-5">
-          <h2 className="mr-2 shrink-0 text-xl font-semibold text-foreground">Registro</h2>
+          <h2 className="mr-2 shrink-0 font-heading text-sm font-bold text-navy-ink">Registro</h2>
 
           <label className="min-w-[10rem] flex-1">
             <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Filtrar por persona</span>
@@ -191,7 +191,7 @@ export function AuditoriaDeLink({ notaId, onCerrar }: { notaId: number; onCerrar
             >
               <X className="size-4" />
             </button>
-            <span className="mt-1 text-[0.625rem] uppercase tracking-wide text-muted-foreground">Esc</span>
+            <span className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">Esc</span>
           </div>
         </div>
 

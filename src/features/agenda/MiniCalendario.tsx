@@ -55,7 +55,7 @@ export function MiniCalendario({
       {/* Días de semana */}
       <div className="grid grid-cols-7 gap-0 mb-2 px-1">
         {DIAS_SEMANA.map((dia) => (
-          <div key={dia} className="text-center font-mono text-[9px] font-bold text-muted-foreground/70 py-1">
+          <div key={dia} className="text-center font-mono text-[11px] font-bold text-muted-foreground/70 py-1">
             {dia}
           </div>
         ))}
@@ -99,7 +99,7 @@ export function MiniCalendario({
 
               {/* Tooltip al pasar el mouse */}
               {hoveredDia && mismaFecha(hoveredDia, fecha) && delDia.length > 0 && (
-                <div className="absolute left-[calc(100%+8px)] top-0 z-50 w-56 rounded-lg bg-card border border-border text-foreground p-3 text-[10px] shadow-xl pointer-events-none">
+                <div className="absolute left-[calc(100%+8px)] top-0 z-50 w-56 rounded-lg bg-card border border-border text-foreground p-3 text-[11px] shadow-xl pointer-events-none">
                   <div className="font-bold mb-2 text-xs">
                     {fecha.toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' })}
                   </div>
@@ -111,7 +111,7 @@ export function MiniCalendario({
                         )}
                         <div className="min-w-0 flex-1">
                           <div className="truncate font-medium text-foreground">{r.nota}</div>
-                          <div className="text-[9px] text-muted-foreground">
+                          <div className="text-[11px] text-muted-foreground">
                             {new Date(r.cuando).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
                           </div>
                         </div>

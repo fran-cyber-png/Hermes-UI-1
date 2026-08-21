@@ -23,7 +23,6 @@ import { ModalInteresCotizado, ModalVentaCierre } from './ModalesCompuerta';
 import { HojaContacto } from '../panel/HojaContacto';
 import type { DestinoCorreo } from '../../lib/puente';
 import { TarjetaEmbudo } from './TarjetaEmbudo';
-import { cotizarEnUnClic } from './tarjeta';
 import {
   cifrasDeColumna,
   columnasDe,
@@ -69,16 +68,16 @@ import {
  */
 
 /**
- * La grilla: el ancho es una declaración de dónde está el trabajo. Aguanta 1280
- * sin reflow (es una app de escritorio, no una página) y sin scroll horizontal,
- * que en esta app no existe.
+ * La grilla: aguanta 1280 sin reflow (es una app de escritorio, no una página) y
+ * sin scroll horizontal, que en esta app no existe.
  *
  * ⚠️ **LA CUENTA SE REHIZO DOS VECES EN DOS DÍAS.** El 10-ago entró «Te esperan»
  * y salió «Nunca contestaron» (cinco); el 11-ago volvió «Nunca contestaron»
  * porque sacarla escondía el trabajo del día (ADR 0052), así que son **seis**.
  *
  * A 1280 el contenido son ~1.256 px (menos el padding de 12 de cada lado) y los
- * cuatro gaps de 8 px se comen 32. Los mínimos suman **1.035**, con ~189 de aire.
+ * cuatro gaps de 8 px se comen 32. Con las cinco a **200px mínimo** los mínimos
+ * suman **1.000**, con ~224 de aire.
  *
  * 🔴 **SE INTENTARON SEIS Y NO ENTRAN.** Dos cuentas distintas (1.120 y 1.020 de
  * mínimos) dieron la última columna **cortada contra el borde**, con las tarjetas
@@ -88,13 +87,24 @@ import {
  * `sin_respuesta`. **La cuenta se verifica con una captura a 1280, no en la
  * cabeza**: las dos veces que la hice de memoria, me equivoqué.
  *
- * El reparto sigue diciendo dónde está el trabajo: las dos columnas donde se
- * vende («Contestaron», «Saben el precio») se llevan el ancho, y «Te esperan» va
- * cerca porque sus tarjetas son las más ricas de la mesa —traen el mensaje que la
- * persona acaba de mandar—. «Dijeron que no» sigue siendo un cajón.
+ * **20-ago-2026: pedido explícito de que las cinco pesen IGUAL.** Esto reemplaza
+ * el reparto por trabajo que este mismo comentario documentaba (Contestaron/Saben
+ * el precio se llevaban más `fr` que las demás) — si el reparto desigual vuelve a
+ * hacer falta, es una decisión de producto a tomar de nuevo, no algo que se infiere
+ * de este historial.
+ *
+ * **Y las tarjetas también se alinean, con `subgrid`.** Cada columna muestra un
+ * header de altura distinta (Te esperan trae bandeja+botón; algunas traen chips
+ * de recorte; Compraron no trae nada de eso), así que con `flex-col` simple la
+ * primera tarjeta de cada columna arrancaba a una altura distinta — se notaba
+ * dibujando una línea horizontal sobre la captura. La fila 1 (`auto`) del GRID
+ * la define el header MÁS ALTO de las cinco, y cada `<section>` hereda esas
+ * filas con `grid-rows-subgrid` en vez de tener las suyas propias — es el
+ * navegador el que empareja, no un número puesto a mano que se desincroniza el
+ * día que a un header le crece o le encoge el contenido.
  */
 const GRID =
-  'grid min-h-0 flex-1 grid-cols-[minmax(215px,1fr)_minmax(180px,0.75fr)_minmax(240px,1.2fr)_minmax(240px,1.2fr)_minmax(160px,0.6fr)] gap-2 overflow-x-auto';
+  'grid min-h-0 flex-1 grid-cols-[repeat(5,minmax(200px,1fr))] grid-rows-[auto_1fr] gap-2 overflow-x-auto';
 
 /**
  * El ícono de cada recorte. Vive acá y no en `tablero.ts` porque un componente de
@@ -345,26 +355,6 @@ export function VistaEmbudo({
     if (vars) mover.mutate(vars);
   }
 
-  /**
-   * EL CAMINO CORTO A COTIZADO — el botón de la tarjeta. Si ya sabemos el curso
-   * (registrado, o el que la persona eligió en el formulario), un clic asienta el
-   * interés y mueve. Si no lo sabemos, no se inventa: se abre el modal que lo
-   * pregunta, que es exactamente el mismo camino del arrastre.
-   */
-  function cotizarDesdeTarjeta(c: Conversacion) {
-    setAviso(null);
-    const unClic = cotizarEnUnClic(c);
-    if (!unClic) {
-      setOverrides((o) => ({ ...o, [c.clave]: 'cotizado' }));
-      setPendienteInteres(c);
-      return;
-    }
-    // El interés se asienta con el texto CRUDO del catálogo (`unClic.crudo`), no
-    // con el nombre corto del chip: registrar «Inteligencia y Contrainteligencia»
-    // guardaría un curso que no existe en Cerberus (ver `tarjeta.ts`).
-    mover.mutate({ c, etapa: 'cotizado', curso: unClic.hayQueRegistrar ? unClic.crudo : undefined });
-  }
-
   function empezarArrastre(c: Conversacion) {
     setArrastrada(c);
     setAviso(null); // el próximo arrastre limpia el aviso de compuerta
@@ -502,7 +492,6 @@ export function VistaEmbudo({
             const esPerdidos = false;
             const esCierre = col.id === 'cierre';
             const esTeEsperan = col.id === 'interesado';
-            const esContactados = col.id === 'contactado';
             const fondo = esDestino ? 'bg-secondary' : esPerdidos ? 'bg-transparent' : 'bg-secondary/50';
             return (
               <section
@@ -518,7 +507,7 @@ export function VistaEmbudo({
                   soltar(col.id);
                 }}
                 className={
-                  'flex min-h-0 flex-col rounded-2xl p-2 transition-colors ' +
+                  'grid min-h-0 row-span-2 grid-rows-subgrid rounded-2xl p-2 transition-colors ' +
                   fondo +
                   (esPerdidos ? ' border border-dashed border-border' : '') +
                   (esDestino && !esCierre ? ' ring-1 ring-primary/40' : '')
@@ -546,7 +535,7 @@ export function VistaEmbudo({
                     )}
                     <h3
                       className={
-                        'font-heading text-[13px] font-bold ' +
+                        'font-heading text-sm font-bold ' +
                         (esCierre ? 'text-navy-ink' : esPerdidos ? 'text-muted-foreground' : 'text-foreground')
                       }
                     >
@@ -646,7 +635,7 @@ export function VistaEmbudo({
                   )}
                 </header>
 
-                <div data-scroll-columna className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-0.5">
+                <div data-scroll-columna className="flex min-h-0 flex-col gap-1.5 overflow-y-auto p-0.5">
                   {enEtapa.map((c, i) => (
                     <TarjetaEmbudo
                       key={c.clave}
@@ -659,14 +648,6 @@ export function VistaEmbudo({
                       alTerminar={terminarArrastre}
                       arrastrando={arrastrada?.clave === c.clave}
                       rebotada={rebotada === c.clave}
-                      // El camino corto solo desde Contactados, y solo donde hay
-                      // algo que asentar: un botón en toda tarjeta es ruido.
-                      onCotizar={
-                        esContactados && (c.precio_enviado || Boolean(c.interes_curso))
-                          ? cotizarDesdeTarjeta
-                          : undefined
-                      }
-                      cotizando={mover.isPending && mover.variables?.c.clave === c.clave}
                       columna={col.titulo}
                     />
                   ))}

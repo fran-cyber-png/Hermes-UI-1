@@ -81,7 +81,7 @@ function AccionesFicha({ telefono, onEscribir, onVenta }: { telefono: string; on
         <button
           type="button"
           onClick={() => onEscribir(telefono)}
-          className={`flex items-center gap-1.5 rounded-full bg-navy px-3.5 py-1.5 text-xs font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] ${FOCO_ANILLO}`}
+          className={`flex items-center gap-1.5 rounded-full bg-navy px-3.5 py-1.5 text-sm font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] ${FOCO_ANILLO}`}
         >
           <MessageCircle size={13} /> Escribirle
         </button>
@@ -91,7 +91,7 @@ function AccionesFicha({ telefono, onEscribir, onVenta }: { telefono: string; on
         <button
           type="button"
           onClick={onVenta}
-          className={`flex items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs font-bold text-navy-ink transition-[background-color,transform] duration-200 ease-house hover:bg-muted active:scale-[0.98] ${FOCO_ANILLO}`}
+          className={`flex items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-1.5 text-sm font-normal text-navy-ink transition-[background-color,transform] duration-200 ease-house hover:bg-muted active:scale-[0.98] ${FOCO_ANILLO}`}
         >
           <ShoppingCart size={13} /> Registrar venta
         </button>
@@ -190,7 +190,7 @@ function Solapa({
     <button
       type="button"
       onClick={onClick}
-      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors duration-200 ${FOCO_ANILLO} ${
+      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-normal transition-colors duration-200 ${FOCO_ANILLO} ${
         activa ? 'bg-navy text-white' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
       }`}
     >

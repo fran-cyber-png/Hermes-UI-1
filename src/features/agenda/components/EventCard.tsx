@@ -57,7 +57,7 @@ export function EventCard({
       {/* Title */}
       <span
         className={
-          'block truncate text-xs font-semibold ' +
+          'block truncate text-sm font-semibold ' +
           (hecho
             ? 'text-muted-foreground line-through'
             : vencido

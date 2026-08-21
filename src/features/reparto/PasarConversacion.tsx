@@ -78,12 +78,12 @@ export function PasarConversacion({
             : 'Esta conversación no tiene dueño: tocá para asignarla'
         }
         className={
-          'flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ' +
+          'flex h-7 items-center gap-1.5 rounded-md border px-2 text-sm font-normal ' +
           'transition-colors hover:border-primary/60 hover:text-foreground ' +
           (dueno ? 'border-navy/40 text-navy-ink' : 'border-dashed border-border text-muted-foreground')
         }
       >
-        <UserRound size={11} className="shrink-0" aria-hidden="true" />
+        <UserRound size={14} className="shrink-0" aria-hidden="true" />
         {/* Sin dueño se dice «Sin asignar», no se deja el botón mudo: acá la
             ausencia SÍ es información —es la acción que falta hacer—, al revés
             que en la fila de la cola, donde serían 1.900 píldoras iguales. */}

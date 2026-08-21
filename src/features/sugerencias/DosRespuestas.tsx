@@ -55,12 +55,12 @@ function Tarjeta({
     >
       <div className="flex items-baseline gap-1.5">
         <span className="font-heading text-xs font-bold text-navy-ink">{s.rotulo}</span>
-        <span className="ml-auto shrink-0 font-mono text-[10px] text-muted-foreground">
+        <span className="ml-auto shrink-0 font-mono text-[11px] text-muted-foreground">
           {s.totalPasos > 1 ? `${s.totalPasos} mensajes` : '1 mensaje'}
         </span>
         {s.conImagen && <Icono size={10} className="shrink-0 text-muted-foreground" />}
       </div>
-      <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">{s.porque}</p>
+      <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{s.porque}</p>
 
       {/* El texto ES el botón de editar: tocarlo lo abre en el composer. */}
       <button
@@ -90,13 +90,13 @@ function Tarjeta({
         <span className="line-clamp-3 whitespace-pre-wrap break-words text-[11px] leading-relaxed text-foreground">
           {s.vistaPrevia.texto || '(solo archivo)'}
         </span>
-        <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-primary opacity-0 transition-opacity group-hover:opacity-100">
+        <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-primary opacity-0 transition-opacity group-hover:opacity-100">
           <Pencil size={9} /> Editar antes de mandar
         </span>
       </button>
 
       {hayHueco && (
-        <p className="mt-1 flex items-start gap-1 text-[10px] text-destructive">
+        <p className="mt-1 flex items-start gap-1 text-[11px] text-destructive">
           <AlertTriangle size={10} className="mt-px shrink-0" />
           No se pudo traer {s.vistaPrevia.faltantes.join(' ni ')}: completalo a mano.
         </p>
@@ -120,7 +120,7 @@ function Tarjeta({
           <button
             type="button"
             onClick={onIrAPlantillas}
-            className="ml-auto text-[10px] font-semibold text-muted-foreground transition-colors hover:text-primary"
+            className="ml-auto text-[11px] font-semibold text-muted-foreground transition-colors hover:text-primary"
           >
             Ver secuencia
           </button>

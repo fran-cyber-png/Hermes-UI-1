@@ -34,7 +34,7 @@ export function ArmarCampana({ onCerrar }: { onCerrar: () => void }) {
   const [plantilla, setPlantilla] = useState<PlantillaConEstado | null>(null);
   const [lista, setLista] = useState<Lista | null>(null);
 
-  const enviables = plantillas.data?.plantillas.filter((p) => p.enviable) ?? [];
+  const enviables = plantillas.data?.plantillas?.filter((p) => p.enviable) ?? [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-foreground/20 p-4 backdrop-blur-sm">

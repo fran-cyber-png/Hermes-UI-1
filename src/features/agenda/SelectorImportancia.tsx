@@ -25,7 +25,7 @@ export function SelectorImportancia({
             disabled={disabled}
             onClick={() => onChange(opcion)}
             className={`
-              flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all
+              flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-normal transition-all
               ${esActiva
                 ? colores
                   ? `${colores.bg} border-2 ${colores.border}`

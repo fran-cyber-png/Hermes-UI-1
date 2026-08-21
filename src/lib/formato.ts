@@ -2,9 +2,16 @@
  * La voz de imprenta: helpers de formato compartidos entre vistas.
  *
  * tempClass/tempBorde son EL contrato único de la rampa de temperatura: tiñen
- * solo tinta de marcas de tiempo (y el filete de 2px del kanban) — jamás fondos
- * ni bordes en masa. El oro NO vive acá: la ventana de 20-24h la maneja quien
- * conoce la ventana, no esta rampa.
+ * solo tinta de marcas de tiempo — jamás fondos ni bordes en masa. El oro NO
+ * vive acá: la ventana de 20-24h la maneja quien conoce la ventana, no esta
+ * rampa.
+ *
+ * `tempDegradado` es la EXCEPCIÓN, pedida a mano el 20-ago-2026: solo para las
+ * tarjetas del Pipeline, reemplaza el filete de 2px por un degradado de fondo
+ * que se apaga a los pocos píxeles (`/25` de opacidad, a transparente) — no es
+ * el «fondo en masa» que el párrafo de arriba prohíbe, es la misma rampa con
+ * otro pincel. `tempBorde` sigue siendo el canon de las LISTAS (Dashboard,
+ * «banda izquierda») y no se tocó.
  */
 
 /** Horas transcurridas desde una fecha hasta ahora. Acepta ISO, epoch ms o Date. */
@@ -21,13 +28,22 @@ export function tempClass(fecha: string | Date): string {
   return 'text-temp-helado';
 }
 
-/** Filete izquierdo (border-l) de temperatura para tarjetas del kanban. */
+/** Filete izquierdo (border-l) de temperatura — canon de las listas (Dashboard). */
 export function tempBorde(fecha: string | Date): string {
   const h = horasDesde(fecha);
   if (h < 24) return 'border-l-temp-fresco';
   if (h < 72) return 'border-l-temp-tibio';
   if (h < 336) return 'border-l-temp-frio';
   return 'border-l-temp-helado';
+}
+
+/** Degradado izquierda→derecha de temperatura para las tarjetas del Pipeline. */
+export function tempDegradado(fecha: string | Date): string {
+  const h = horasDesde(fecha);
+  if (h < 24) return 'bg-gradient-to-r from-temp-fresco/25 to-transparent to-50%';
+  if (h < 72) return 'bg-gradient-to-r from-temp-tibio/25 to-transparent to-50%';
+  if (h < 336) return 'bg-gradient-to-r from-temp-frio/25 to-transparent to-50%';
+  return 'bg-gradient-to-r from-temp-helado/25 to-transparent to-50%';
 }
 
 /** '51986394450' → '51 986 394 450' (código de país + tríos). */

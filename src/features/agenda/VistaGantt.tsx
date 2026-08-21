@@ -63,7 +63,7 @@ function EtiquetaFila({ r }: { r: Recordatorio }) {
     r.personaNombre ?? (r.personaId ? formatoTelefono(r.personaId) : 'sin conversación atada');
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <span className="flex size-7 shrink-0 items-center justify-center rounded-[9px] bg-secondary font-heading text-[10px] font-bold text-secondary-foreground">
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-[9px] bg-secondary font-heading text-[11px] font-bold text-secondary-foreground">
         {(r.personaNombre ?? r.personaId ?? '·').replace(/^@/, '').slice(0, 2).toUpperCase()}
       </span>
       <span className="min-w-0">
@@ -73,7 +73,7 @@ function EtiquetaFila({ r }: { r: Recordatorio }) {
             {r.nota}
           </span>
         </span>
-        <span className="block truncate text-[10px] text-muted-foreground">{quien}</span>
+        <span className="block truncate text-[11px] text-muted-foreground">{quien}</span>
       </span>
     </div>
   );
@@ -110,7 +110,7 @@ export function VistaGantt({
         {/* ── Columna de las promesas: qué es y de quién ── */}
         <div className="sticky left-0 z-20 w-64 shrink-0 border-r border-border bg-card">
           <div className="h-11 border-b border-border px-3 py-2">
-            <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Seguimiento
             </span>
           </div>
@@ -141,10 +141,10 @@ export function VistaGantt({
                     (finde ? 'bg-muted/30 ' : '')
                   }
                 >
-                  <span className={'font-mono text-[10px] tabular-nums ' + (esHoy ? 'font-bold text-gold-ink' : 'text-muted-foreground')}>
+                  <span className={'font-mono text-[11px] tabular-nums ' + (esHoy ? 'font-bold text-gold-ink' : 'text-muted-foreground')}>
                     {d.toLocaleDateString('es', { day: 'numeric', month: 'short' })}
                   </span>
-                  <span className={'font-mono text-[9px] uppercase ' + (esHoy ? 'font-bold text-gold-ink' : 'text-muted-foreground/60')}>
+                  <span className={'font-mono text-[11px] uppercase ' + (esHoy ? 'font-bold text-gold-ink' : 'text-muted-foreground/60')}>
                     {d.toLocaleDateString('es', { weekday: 'short' })}
                   </span>
                 </div>
@@ -187,7 +187,7 @@ export function VistaGantt({
                 }
               >
                 <span className="truncate">{b.r.nota}</span>
-                <span className="ml-auto shrink-0 font-mono text-[10px] tabular-nums opacity-80">
+                <span className="ml-auto shrink-0 font-mono text-[11px] tabular-nums opacity-80">
                   {new Date(b.r.cuando).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </button>

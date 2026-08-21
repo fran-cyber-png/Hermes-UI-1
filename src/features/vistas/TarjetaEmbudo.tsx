@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlarmClock,
   ArrowLeft,
@@ -6,10 +7,7 @@ import {
   Check,
   Clock,
   ClipboardList,
-  GraduationCap,
   History,
-  Loader2,
-  Megaphone,
   MessageSquareText,
 } from 'lucide-react';
 import type { Conversacion } from '../../dominio/conversaciones';
@@ -21,8 +19,19 @@ import { hace } from '../../lib/datos/frescura';
 import { lecturaDeVentana } from '../../dominio/ventana';
 import { lecturaDeAntiguedad } from '../../dominio/antiguedad';
 import { etiquetaDeMedia } from '../../lib/etiquetaMedia';
-import { horasDesde, tempBorde, tempClass } from '../../lib/formato';
-import { cotizarEnUnClic, cursoDeTarjeta, haceCorto, nombreDeTarjeta, turnoDeTarjeta } from './tarjeta';
+import { horasDesde, tempClass, tempDegradado } from '../../lib/formato';
+import { usePopover } from '../../lib/teclado/usePopover';
+import { cursoDeTarjeta, haceCorto, nombreDeTarjeta, turnoDeTarjeta } from './tarjeta';
+
+/** Los 6 destinos del selector «Escribir en» — bandera + nombre, en el orden pedido. */
+const PAISES_ESCRIBIR_EN = [
+  { pais: 'Estados Unidos', bandera: '🇺🇸' },
+  { pais: 'Perú', bandera: '🇵🇪' },
+  { pais: 'Ecuador', bandera: '🇪🇨' },
+  { pais: 'México', bandera: '🇲🇽' },
+  { pais: 'Brasil', bandera: '🇧🇷' },
+  { pais: 'Bolivia', bandera: '🇧🇴' },
+] as const;
 
 /**
  * LA TARJETA DEL PIPELINE — lo que decide a quién tocar y qué decirle.
@@ -117,8 +126,6 @@ export function TarjetaEmbudo({
   alTerminar,
   arrastrando,
   rebotada,
-  onCotizar,
-  cotizando,
   columna,
 }: {
   c: Conversacion;
@@ -132,13 +139,51 @@ export function TarjetaEmbudo({
   alTerminar: () => void;
   arrastrando: boolean;
   rebotada: boolean;
-  /** El camino corto a Cotizados. `null` = esta columna no lo ofrece. */
-  onCotizar?: (c: Conversacion) => void;
-  cotizando: boolean;
   /** El título de la columna, solo para el `title` de la antigüedad («lleva 3 d en Cotizados»). */
   columna?: string;
 }) {
   const { conFoto, elRef } = useConFotoVisible(indice, c.canal);
+  /**
+   * EL SELECTOR «ESCRIBIR EN» — en vez de ir directo a Mensajes, el botón de la
+   * burbuja abre un cuadrito con los 6 países. Un país por tarjeta, no por app:
+   * si dos tarjetas se abren a la vez (no debería pasar, pero) cada una tiene su
+   * propio estado, no uno solo compartido por el tablero entero.
+   *
+   * 🔴 **Va por portal a `document.body`, con `position: fixed` medido contra el
+   * VIEWPORT.** La columna del tablero es `overflow-y-auto` (`data-scroll-columna`
+   * en `VistaEmbudo.tsx`) — y un `overflow-y` que no sea `visible` recorta
+   * también el eje X, aunque nadie haya puesto `overflow-x` a mano. Un
+   * `absolute` normal, aunque midiera bien, quedaba invisible: recortado por la
+   * columna antes de llegar a pintarse. Mismo problema que resolvió
+   * `MenuFila.tsx` para su propio scroller, pero acá el recorte es horizontal,
+   * así que la salida es escapar del DOM de la columna entera, no solo elegir
+   * un lado.
+   */
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  const [posicionMenu, setPosicionMenu] = useState<{ top: number; left: number; lado: 'derecha' | 'izquierda' } | null>(null);
+  const disparadorRef = useRef<HTMLButtonElement>(null);
+  const { propsOverlay } = usePopover(menuAbierto, () => setMenuAbierto(false), { z: 'z-40' });
+
+  const ANCHO_MENU_PX = 176; // w-44
+
+  function alternarMenu() {
+    if (menuAbierto) {
+      setMenuAbierto(false);
+      return;
+    }
+    const r = disparadorRef.current?.getBoundingClientRect();
+    if (!r) return;
+    // Si a la derecha no entra (columnas del final del tablero, pegadas al
+    // borde de la pantalla), abre hacia la izquierda del ícono en vez de
+    // salirse de la ventana.
+    const entraADerecha = r.right + 8 + ANCHO_MENU_PX <= window.innerWidth;
+    setPosicionMenu({
+      top: r.top + r.height / 2,
+      left: entraADerecha ? r.right + 8 : r.left - 8 - ANCHO_MENU_PX,
+      lado: entraADerecha ? 'derecha' : 'izquierda',
+    });
+    setMenuAbierto(true);
+  }
   /**
    * ⚠️ ARRASTRAR NO ES CLICKEAR, y el navegador no siempre está de acuerdo.
    *
@@ -153,7 +198,6 @@ export function TarjetaEmbudo({
   const nombre = nombreDeTarjeta(c);
   const { turno, apremia } = turnoDeTarjeta(c);
   const curso = cursoDeTarjeta(c);
-  const unClic = cotizarEnUnClic(c);
   const horas = horasDesde(c.referencia);
 
   // El preview solo cuando la pelota es NUESTRA: si el último mensaje es el
@@ -189,7 +233,7 @@ export function TarjetaEmbudo({
     // `landing` entra a la lista porque su píldora VIVE en ese renglón: un lead
     // sin curso ni preview no dibujaría el renglón, y entonces la marca que lo
     // distingue de un chat desaparecería justo en la tarjeta más pobre.
-    curso || c.precio_enviado || ventana || antiguedad || preview || onCotizar || c.canal === 'landing',
+    curso || c.precio_enviado || ventana || antiguedad || preview || c.canal === 'landing',
   );
 
   return (
@@ -232,8 +276,8 @@ export function TarjetaEmbudo({
         alTerminar();
       }}
       className={
-        'group cursor-grab rounded-xl border-l-2 bg-card px-2.5 py-1.5 shadow-[0_1px_2px_rgba(14,42,82,0.06)] transition-[box-shadow,opacity,transform] duration-200 ease-house hover:shadow-panel active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
-        tempBorde(c.referencia) +
+        'group cursor-grab rounded-xl bg-card px-2.5 py-1.5 shadow-[0_1px_2px_rgba(14,42,82,0.06)] transition-[box-shadow,opacity,transform] duration-200 ease-house hover:shadow-panel active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
+        tempDegradado(c.referencia) +
         (arrastrando ? ' scale-[0.98] opacity-40' : '') +
         (rebotada ? ' ring-1 ring-temp-frio' : '') +
         // De cuál se está leyendo la ficha. Navy y no oro: acá no hay ningún
@@ -249,10 +293,10 @@ export function TarjetaEmbudo({
             telefono={c.canal === 'whatsapp' ? c.persona_id : null}
             numeroPropio={c.numero_propio}
             conFoto={conFoto}
-            className="size-7 rounded-full bg-secondary text-[10px] font-bold text-navy-ink"
+            className="size-7 rounded-full bg-secondary text-[11px] font-bold text-navy-ink"
           />
-          <span className="absolute -bottom-1 -right-1 scale-90">
-            <BadgeCanal canal={c.canal} />
+          <span className="absolute -bottom-1 right-0">
+            <BadgeCanal canal={c.canal} size={8} />
           </span>
         </span>
 
@@ -260,8 +304,8 @@ export function TarjetaEmbudo({
           <span
             title={nombre.delFormulario ? `${nombre.texto} · del formulario` : nombre.texto}
             className={
-              'min-w-0 truncate font-heading text-[13px] ' +
-              (turno === 'silencio' ? 'font-medium text-foreground/85' : 'font-bold text-foreground')
+              'min-w-0 truncate font-heading text-sm font-bold ' +
+              (turno === 'silencio' ? 'text-foreground/85' : 'text-foreground')
             }
           >
             {nombre.texto}
@@ -303,19 +347,64 @@ export function TarjetaEmbudo({
         )}
 
         <button
+          ref={disparadorRef}
           type="button"
           title="Abrir en Mensajes"
+          aria-haspopup="true"
+          aria-expanded={menuAbierto}
           onClick={(e) => {
-            // Sin esto el clic también abriría la ficha al costado, y la vista ya
-            // se está yendo a Mensajes: quedaría una hoja abierta atrás.
+            // Sin esto el clic también abriría la ficha al costado, y el
+            // popover ya está tapando la tarjeta.
             e.stopPropagation();
-            onAbrir(c);
+            alternarMenu();
           }}
-          className="shrink-0 rounded-md p-1 text-muted-foreground opacity-0 transition-[color,background-color,opacity] duration-200 group-hover:opacity-100 hover:bg-secondary hover:text-navy-ink focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.96]"
+          className={
+            'shrink-0 rounded-md p-1 text-muted-foreground transition-[color,background-color,opacity] duration-200 hover:bg-secondary hover:text-navy-ink focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.96] ' +
+            (menuAbierto ? 'bg-secondary text-navy-ink opacity-100' : 'opacity-0 group-hover:opacity-100')
+          }
         >
           <MessageSquareText size={13} />
         </button>
       </div>
+
+      {/* El cuadrito «Escribir en» va por PORTAL a `document.body` — ver el
+          porqué arriba, en `alternarMenu`. `position: fixed` con las
+          coordenadas ya resueltas contra el viewport (no contra la tarjeta):
+          por eso no lleva `absolute`/`relative` acá. */}
+      {menuAbierto &&
+        posicionMenu &&
+        createPortal(
+          <>
+            <span {...propsOverlay} />
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{ top: posicionMenu.top, left: posicionMenu.left }}
+              className="fixed z-50 w-44 -translate-y-1/2 rounded-xl border border-border bg-card p-2 shadow-panel"
+            >
+              <p className="px-1 pb-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                Escribir en
+              </p>
+              <div className="grid grid-cols-2 gap-1">
+                {PAISES_ESCRIBIR_EN.map(({ pais, bandera }) => (
+                  <button
+                    key={pais}
+                    type="button"
+                    title={pais}
+                    onClick={() => {
+                      setMenuAbierto(false);
+                      onAbrir(c);
+                    }}
+                    className="flex flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-center transition-colors duration-200 ease-house hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  >
+                    <span className="text-base leading-none">{bandera}</span>
+                    <span className="truncate text-[11px] leading-tight text-muted-foreground">{pais}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>,
+          document.body,
+        )}
 
       {/* ── DE QUÉ, Y QUÉ FALTA PARA COBRARLO ── */}
       {haySegundoRenglon && (
@@ -343,24 +432,7 @@ export function TarjetaEmbudo({
             </Chip>
           )}
           {curso && (
-            <Chip
-              tono="marca"
-              encoge
-              // El icono dice DE DÓNDE salió el curso, que es lo que decide
-              // cuánto vale: birrete = lo asentó la vendedora · portapapeles = lo
-              // eligió ella en el formulario · megáfono = solo es el anuncio por
-              // el que entró. El `title` lo dice con todas las letras.
-              icono={
-                curso.fuente === 'interes' ? (
-                  <GraduationCap size={10} className="shrink-0" />
-                ) : curso.fuente === 'lead' ? (
-                  <ClipboardList size={10} className="shrink-0" />
-                ) : (
-                  <Megaphone size={10} className="shrink-0" />
-                )
-              }
-              titulo={detalleDeCurso(curso)}
-            >
+            <Chip tono="marca" encoge titulo={detalleDeCurso(curso)}>
               {curso.nombre}
             </Chip>
           )}
@@ -405,30 +477,7 @@ export function TarjetaEmbudo({
             </Chip>
           )}
           {!curso && !c.precio_enviado && preview && (
-            <p className="min-w-0 flex-1 truncate text-xs text-foreground">{preview}</p>
-          )}
-          {onCotizar && (
-            <button
-              type="button"
-              disabled={cotizando}
-              onClick={(e) => {
-                e.stopPropagation();
-                onCotizar(c);
-              }}
-              title={
-                unClic
-                  ? `Marcar que ya sabe el precio de «${unClic.etiqueta}»`
-                  : 'Marcar que ya sabe el precio — te va a pedir el curso'
-              }
-              // Quieta por defecto: son 611 tarjetas con este botón y 611 CTAs
-              // gritando son ruido. Se enciende al pasar por encima.
-              className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-px text-[11px] font-bold text-primary/70 transition-[background-color,color,transform] duration-200 ease-house group-hover:bg-primary/10 group-hover:text-primary focus-visible:bg-primary/10 focus-visible:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.97] disabled:opacity-50"
-            >
-              {cotizando ? <Loader2 size={10} className="animate-spin" /> : <GraduationCap size={10} />}
-              {/* El botón es un ATAJO a la columna, así que dice el nombre de la
-                  columna en singular — no un verbo que no está en ningún lado. */}
-              Sabe el precio
-            </button>
+            <p className="min-w-0 flex-1 truncate text-sm text-foreground">{preview}</p>
           )}
         </div>
       )}

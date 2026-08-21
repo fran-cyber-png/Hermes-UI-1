@@ -50,7 +50,7 @@ export function DayColumn({
         }
       >
         <div className="text-center">
-          <div className="font-mono text-xs opacity-70">{diasDiaFecha.substring(0, 2).toUpperCase()}</div>
+          <div className="font-mono text-[11px] opacity-70">{diasDiaFecha.substring(0, 2).toUpperCase()}</div>
           <div className="font-semibold text-sm">{diasDiaFecha.split(' ')[1]}</div>
         </div>
       </div>

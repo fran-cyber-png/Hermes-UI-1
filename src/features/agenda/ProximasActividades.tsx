@@ -42,11 +42,11 @@ function Renglon({
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
           {r.importancia && <span className={`size-1.5 shrink-0 rounded-full ${colorPuntoImportancia(r.importancia)}`} />}
-          <span className={'block truncate text-xs font-semibold ' + (vencido ? 'text-destructive' : 'text-foreground')}>
+          <span className={'block truncate text-sm font-semibold ' + (vencido ? 'text-destructive' : 'text-foreground')}>
             {r.nota}
           </span>
         </span>
-        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+        <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
           <BadgeCanal canal={r.canal} size={10} />
           <span className="truncate">{quien}</span>
         </span>
@@ -80,9 +80,9 @@ export function ProximasActividades({
         className="flex w-full items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-secondary/20"
       >
         <ListChecks size={15} className="shrink-0 text-muted-foreground" />
-        <span className="font-heading text-xs font-bold text-foreground">Próximas actividades</span>
+        <span className="font-heading text-sm font-bold text-foreground">Próximas actividades</span>
         {vencidas > 0 && (
-          <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-bold text-destructive">
+          <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-bold text-destructive">
             {vencidas} vencida{vencidas === 1 ? '' : 's'}
           </span>
         )}
@@ -107,7 +107,7 @@ export function ProximasActividades({
                 <div key={g.etiqueta + (g.dia?.toISOString() ?? '')} className="w-64 shrink-0">
                   <div
                     className={
-                      'mb-1 px-2 font-mono text-[10px] font-semibold uppercase tracking-wider ' +
+                      'mb-1 px-2 font-mono text-[11px] font-semibold uppercase tracking-wider ' +
                       (g.vencido ? 'text-destructive' : 'text-muted-foreground')
                     }
                   >

@@ -286,8 +286,8 @@ export function FilaConversacion({
           conFoto={conFoto}
           className="size-9 rounded-full bg-secondary text-xs font-bold text-navy-ink"
         />
-        <span className="absolute -bottom-0.5 -right-0.5">
-          <BadgeCanal canal={c.canal} />
+        <span className="absolute -bottom-1 right-0">
+          <BadgeCanal canal={c.canal} size={10} />
         </span>
       </span>
 

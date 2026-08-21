@@ -139,7 +139,7 @@ export function ModalDeLink({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3 px-6 pt-6">
-          <h2 className="text-lg font-semibold text-foreground">Configuración del link</h2>
+          <h2 className="font-heading text-sm font-bold text-navy-ink">Configuración del link</h2>
           <button
             type="button"
             onClick={onCerrar}

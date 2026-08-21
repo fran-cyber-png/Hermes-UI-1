@@ -25,7 +25,7 @@ export function TimeColumn({ ahora }: TimeColumnProps) {
             >
               <span
                 className={
-                  'font-mono text-xs transition-colors ' +
+                  'font-mono text-[11px] transition-colors ' +
                   (isCurrentHour
                     ? 'text-foreground font-semibold opacity-100'
                     : 'text-muted-foreground opacity-60')

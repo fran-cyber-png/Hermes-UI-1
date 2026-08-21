@@ -76,7 +76,7 @@ export function FiltroFaceta({
         type="button"
         onClick={() => setAbierto((v) => !v)}
         aria-expanded={abierto}
-        className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+        className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-normal transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
           n > 0
             ? 'border-navy bg-navy text-white'
             : 'border-border bg-card text-muted-foreground hover:text-foreground'
@@ -84,7 +84,7 @@ export function FiltroFaceta({
       >
         {rotulo}
         {n > 0 && (
-          <span className="rounded-full bg-white/25 px-1.5 text-[10px] font-bold tabular-nums">{n}</span>
+          <span className="rounded-full bg-white/25 px-1.5 text-[11px] font-bold tabular-nums">{n}</span>
         )}
         <ChevronDown size={12} className={abierto ? 'rotate-180 transition-transform' : 'transition-transform'} />
       </button>

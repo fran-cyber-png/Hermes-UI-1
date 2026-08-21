@@ -120,15 +120,15 @@ function EtiquetasInline({ clave, senalAbrir = 0 }: { clave: string; senalAbrir?
   }
 
   return (
-    <span className="relative flex items-center gap-1">
-      <Tag size={11} className="shrink-0 text-muted-foreground" />
+    <span className="relative flex items-center gap-1.5">
+      <Tag size={14} className="shrink-0 text-muted-foreground" />
       {lista.map((etq) => {
         const color = resolverColor(etq, categorias);
         return (
           <span
             key={etq}
             className={
-              'group/tag inline-flex items-center gap-1 rounded-full border bg-card px-2 py-0.5 text-[11px] font-semibold ' +
+              'group/tag flex h-7 items-center gap-1.5 rounded-md border bg-card px-2 text-sm font-normal ' +
               claseBorde(color) +
               (color ? ' ' + CLASE_TEXTO[color] : ' text-muted-foreground')
             }
@@ -141,7 +141,7 @@ function EtiquetasInline({ clave, senalAbrir = 0 }: { clave: string; senalAbrir?
               onClick={() => quitar.mutate(etq)}
               className="opacity-40 transition-opacity focus-visible:opacity-100 group-hover/tag:opacity-100"
             >
-              <X size={9} />
+              <X size={12} />
             </button>
           </span>
         );
@@ -153,13 +153,13 @@ function EtiquetasInline({ clave, senalAbrir = 0 }: { clave: string; senalAbrir?
         title="Asignar categoría"
         aria-label="Asignar categoría"
         className={
-          'rounded-full border border-dashed px-1.5 py-0.5 text-[11px] transition-colors ' +
+          'flex h-7 w-7 items-center justify-center rounded-md border border-dashed transition-colors ' +
           (abierto
             ? 'border-primary text-foreground'
             : 'border-border text-muted-foreground hover:border-primary hover:text-foreground')
         }
       >
-        +
+        <Plus size={14} />
       </button>
 
       {abierto && (
@@ -309,13 +309,13 @@ function SelectorEtapa({
         title="Cambiar la etapa (E)"
         onClick={() => setAbierto((v) => !v)}
         className={
-          'flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-opacity disabled:opacity-50 ' +
+          'flex h-7 items-center gap-1.5 rounded-md px-2 text-sm font-normal transition-opacity disabled:opacity-50 ' +
           (ETAPA_CHIP[etapa] ?? 'bg-muted text-foreground')
         }
       >
-        {moviendo ? <Loader2 size={11} className="animate-spin" /> : null}
+        {moviendo ? <Loader2 size={14} className="animate-spin" /> : null}
         {rotuloEtapa(etapa)}
-        <ChevronDown size={11} className="opacity-70" />
+        <ChevronDown size={14} className="opacity-70" />
       </button>
 
       {abierto && (
@@ -432,13 +432,13 @@ function ContactoRegistrado({
         onClick={() => setAbierto(true)}
         title={ficha ? 'Ver la ficha del contacto (R)' : 'Registrar el contacto (R)'}
         className={
-          'flex max-w-[13rem] items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ' +
+          'flex h-7 max-w-[13rem] items-center gap-1.5 rounded-md px-2 text-sm font-normal transition-colors ' +
           (ficha
             ? 'bg-success/10 text-success hover:bg-success/15'
             : 'bg-primary text-primary-foreground hover:bg-primary-hover')
         }
       >
-        {ficha ? <Check size={11} className="shrink-0" /> : <UserPlus size={11} className="shrink-0" />}
+        {ficha ? <Check size={14} className="shrink-0" /> : <UserPlus size={14} className="shrink-0" />}
         <span className="truncate">{ficha ? nombre || 'Registrado' : 'Registrar contacto'}</span>
       </button>
       {abierto && (
@@ -545,10 +545,10 @@ export function BarraGestion({
           senalAbrir={senalEstado}
         />
 
-        <span className="hidden h-4 w-px bg-border sm:block" />
+        <span className="hidden h-5 w-px bg-border sm:block" />
         <EtiquetasInline clave={conversacion.clave} senalAbrir={senalEtiqueta} />
 
-        <span className="hidden h-4 w-px bg-border sm:block" />
+        <span className="hidden h-5 w-px bg-border sm:block" />
         <Intereses clave={conversacion.clave} compacto resaltado={guiaIntereses} senalAbrir={senalIntereses} />
 
         <span className="ml-auto flex items-center gap-1.5">

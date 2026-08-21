@@ -134,7 +134,7 @@ export function BarraReparto({
               {n === 1 ? 'contacto elegido' : 'contactos elegidos'}
             </span>
             {seleccion.modo === 'recorte' && (
-              <span className="rounded-full bg-navy/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-navy-ink">
+              <span className="rounded-full bg-navy/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-navy-ink">
                 todo el filtro
               </span>
             )}
@@ -142,7 +142,7 @@ export function BarraReparto({
           <button
             type="button"
             onClick={onLimpiar}
-            className="text-xs font-semibold text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            className="text-sm font-normal text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
           >
             Limpiar
           </button>
@@ -154,7 +154,7 @@ export function BarraReparto({
               type="button"
               disabled={!destino || trabajando}
               onClick={() => (necesitaConfirmar(n) ? setConfirmando(true) : repartir())}
-              className="flex items-center gap-1.5 rounded-full bg-navy px-4 py-2 text-xs font-bold text-white shadow-[0_4px_16px_-6px_rgba(14,42,82,0.6)] transition-[background-color,transform,opacity] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] disabled:opacity-35 disabled:shadow-none disabled:active:scale-100"
+              className="flex items-center gap-1.5 rounded-full bg-navy px-4 py-2 text-sm font-bold text-white shadow-[0_4px_16px_-6px_rgba(14,42,82,0.6)] transition-[background-color,transform,opacity] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] disabled:opacity-35 disabled:shadow-none disabled:active:scale-100"
             >
               {trabajando && !confirmando ? (
                 <Loader2 size={13} className="animate-spin" />
@@ -181,7 +181,7 @@ export function BarraReparto({
                   },
                 });
               }}
-              className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-2 text-xs font-bold text-foreground transition-colors hover:bg-muted disabled:opacity-40"
+              className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-2 text-sm font-normal text-foreground transition-colors hover:bg-muted disabled:opacity-40"
             >
               {quitar.isPending ? <Loader2 size={13} className="animate-spin" /> : <UserMinus size={13} />}
               Quitar
@@ -317,7 +317,7 @@ function ElegirDestino({
         type="button"
         onClick={() => setAbierto((v) => !v)}
         aria-expanded={abierto}
-        className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-sm font-normal text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       >
         <Users size={13} className="text-muted-foreground" />
         {elegido ? nombreCorto(elegido) : 'Elegir a quién'}
@@ -326,7 +326,7 @@ function ElegirDestino({
 
       {abierto && (
         <div className="absolute bottom-full right-0 z-30 mb-1.5 w-64 overflow-hidden rounded-xl border border-border bg-card shadow-panel">
-          <p className="border-b border-border px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+          <p className="border-b border-border px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
             A quién se lo doy
           </p>
           <div className="max-h-64 overflow-y-auto p-1">
@@ -349,7 +349,7 @@ function ElegirDestino({
                       d === elegido ? 'bg-muted' : ''
                     }`}
                   >
-                    <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-navy/10 text-[10px] font-bold uppercase text-navy-ink">
+                    <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-navy/10 text-[11px] font-bold uppercase text-navy-ink">
                       {nombreCorto(d).slice(0, 2)}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -365,7 +365,7 @@ function ElegirDestino({
                             style={{ width: `${Math.round((tiene / masCargado) * 100)}%` }}
                           />
                         </span>
-                        <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
                           {tiene.toLocaleString('es')}
                         </span>
                       </span>

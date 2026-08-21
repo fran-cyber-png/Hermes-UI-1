@@ -374,7 +374,7 @@ export function VistaCorreos({ correoInicial, claveInicial, nombreInicial, onCon
                 <button
                   type="button"
                   onClick={() => setAdminAbierto(true)}
-                  className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1"
+                  className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-sm font-normal text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1"
                 >
                   <Settings2 size={12} />
                   Administrar remitentes
@@ -686,7 +686,7 @@ export function VistaCorreos({ correoInicial, claveInicial, nombreInicial, onCon
                       key={c.id}
                       onClick={() => setLeyendo(c)}
                       title="Ver el correo"
-                      className="flex w-full items-center gap-3 border-b border-border/70 px-4 py-2.5 text-left text-xs transition-colors last:border-b-0 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+                      className="flex w-full items-center gap-3 border-b border-border/70 px-4 py-2.5 text-left text-sm transition-colors last:border-b-0 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
                     >
                       {c.estado === 'enviado' ? (
                         <span className="size-1.5 shrink-0 rounded-full bg-success" title="enviado" />

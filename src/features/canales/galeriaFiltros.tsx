@@ -4,7 +4,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import '../../index.css';
 import { queryClient } from '../../lib/datos/cliente';
 import { AvisoFilaQueBajo } from './AvisoFilaQueBajo';
-import { BarraFiltros } from './BarraFiltros';
+import { BarraFiltros, SelectorLinea } from './BarraFiltros';
 import { FilaConversacion } from './FilaConversacion';
 import type { FiltroSec } from '../../dominio/cola';
 import type { Conversacion } from '../../dominio/conversaciones';
@@ -170,16 +170,15 @@ function Galeria() {
 
         <section className="rounded-xl border border-border bg-card p-3">
           <p className="mb-2 px-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-            La barra — tres chips de recorte, cada uno con su número
+            La línea (dropdown) y la barra — tres chips de recorte, cada uno con su número
           </p>
+          <div className="mb-2">
+            <SelectorLinea lineas={LINEAS} lineaActiva="" onLinea={() => {}} hayMias />
+          </div>
           <BarraFiltros
             filtroSec={filtroSec}
             onFiltro={setFiltroSec}
             conteos={CONTEOS}
-            lineas={LINEAS}
-            lineaActiva=""
-            onLinea={() => {}}
-            hayMias
             categoriaActiva={null}
             onCategoria={() => {}}
             onListas={() => {}}

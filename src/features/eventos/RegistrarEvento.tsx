@@ -221,7 +221,7 @@ export function RegistrarEvento({
         }}
         title="Anotar algo en el timeline del contacto (E)"
         className={
-          'flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold transition-colors ' +
+          'flex h-7 items-center gap-1.5 rounded-md px-2 text-sm font-normal transition-colors ' +
           (listo
             ? 'bg-success/10 text-success'
             : abierto
@@ -229,7 +229,7 @@ export function RegistrarEvento({
               : 'border border-border text-muted-foreground hover:border-primary hover:text-foreground')
         }
       >
-        {listo ? <Check size={11} /> : <NotebookPen size={11} />}
+        {listo ? <Check size={14} /> : <NotebookPen size={14} />}
         {/* «Anotar» y no «Registrar»: al lado quedó el botón que registra el
             CONTACTO, y dos «Registrar» en la misma barra no se distinguen. Lo
             que este chip hace no cambió (ADR 0037): un HECHO tipado que cae en

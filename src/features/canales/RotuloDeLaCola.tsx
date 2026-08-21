@@ -82,7 +82,7 @@ export function RotuloDeLaCola({
   return (
     <span
       title={explicacionDelRotulo(recortada, lineaPropia)}
-      className="pr-1 font-mono text-[11px] tabular-nums text-muted-foreground"
+      className="shrink-0 whitespace-nowrap pr-1 font-mono text-[11px] tabular-nums text-muted-foreground"
     >
       {total.toLocaleString('es')} {recortada ? 'para vos' : 'en cola'}
     </span>

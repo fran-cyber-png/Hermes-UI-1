@@ -94,7 +94,7 @@ function Fila({ f }: { f: FilaDeHistorial }) {
     <tr className="border-b border-border/60">
       {/* El QUIÉN va primero: es la pregunta que trae a alguien a esta pantalla. */}
       <td className="px-3 py-2 font-semibold text-foreground">{nombreCorto(f.autorizadaPor)}</td>
-      <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-muted-foreground">
+      <td className="whitespace-nowrap px-3 py-2 tabular-nums text-muted-foreground">
         {new Date(f.autorizadaEn).toLocaleString('es-PE', {
           day: '2-digit',
           month: 'short',
@@ -102,7 +102,7 @@ function Fila({ f }: { f: FilaDeHistorial }) {
           minute: '2-digit',
         })}
       </td>
-      <td className="px-3 py-2 font-mono text-xs">{f.piezaRef}</td>
+      <td className="px-3 py-2 font-mono">{f.piezaRef}</td>
       <td className="px-3 py-2 tabular-nums">{f.totalPrevisto}</td>
       <td className="px-3 py-2">
         <Desenlace f={f} />
@@ -114,7 +114,7 @@ function Fila({ f }: { f: FilaDeHistorial }) {
 function Desenlace({ f }: { f: FilaDeHistorial }) {
   if (f.estado === 'frenada') {
     return (
-      <span className="text-xs text-destructive">
+      <span className="text-destructive">
         <strong>Frenada</strong>
         {/* `frenada_por` es null cuando la frenó el despachador por un error de
             Meta. Decir «la frenó alguien» ahí sería mentir sobre la única
@@ -125,9 +125,9 @@ function Desenlace({ f }: { f: FilaDeHistorial }) {
     );
   }
   if (f.estado === 'despachando') {
-    return <span className="text-xs font-bold text-success">saliendo</span>;
+    return <span className="font-bold text-success">saliendo</span>;
   }
-  return <span className="text-xs text-muted-foreground">terminada</span>;
+  return <span className="text-muted-foreground">terminada</span>;
 }
 
 function nombreCorto(id: string): string {
