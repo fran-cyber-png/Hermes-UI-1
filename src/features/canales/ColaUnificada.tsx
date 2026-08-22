@@ -22,7 +22,8 @@ import {
   type Tab,
 } from '../../dominio/cola';
 import { lineaEfectiva, opcionesDeLinea } from './alcance';
-import { BarraFiltros, SelectorLinea } from './BarraFiltros';
+import { BarraFiltros } from './BarraFiltros';
+import { RielCanales } from './RielCanales';
 import { RotuloDeLaCola } from './RotuloDeLaCola';
 import { VacioDeLineaPropia } from './VacioDeLineaPropia';
 import { useConversaciones, useEstadoConversacion, type Conversacion } from '../../dominio/conversaciones';
@@ -33,6 +34,7 @@ import { avisoDeFilaQueSeFue } from './filaQueSeFue';
 import { MenuFila } from './MenuFila';
 import { ListaCategorias } from './ListaCategorias';
 import { nombreCanal } from '../../components/BadgeCanal';
+import { boton } from '../../lib/styles';
 
 /** Solo anima lo que llegó AHORA (SSE): lo viejo que entra por «Ver más» no. */
 const RECIEN_LLEGADA_MS = 10 * 60_000;
@@ -96,6 +98,8 @@ export function ColaUnificada({
   const opcionesLinea = opcionesDeLinea(lineas, hayMias);
   const linea = lineaEfectiva(lineaGuardada, opcionesLinea);
   // Filtros secundarios y modo Listas: efímeros (la sesión arranca en limpio).
+  /** El canal abierto en el riel de la izquierda. `null` = la cola mezclada. */
+  const [canalRiel, setCanalRiel] = useState<string | null>(null);
   const [filtroSec, setFiltroSec] = useState<FiltroSec>('');
   const [modoListas, setModoListas] = useState(false);
   const [categoriaActiva, setCategoriaActiva] = useState<{ nombre: string; color: string } | null>(null);
@@ -169,6 +173,21 @@ export function ColaUnificada({
   }, [items, busqueda]);
 
   /**
+   * EL RECORTE DEL RIEL — se aplica DESPUÉS de la búsqueda y ANTES de pintar,
+   * así el contador de cada canal cuenta lo que el riel realmente mostraría.
+   * No reordena: la urgencia que mandó el server queda intacta.
+   */
+  const conteosCanal = useMemo(() => {
+    const acc: Record<string, number> = {};
+    for (const c of visibles) acc[c.canal] = (acc[c.canal] ?? 0) + 1;
+    return acc;
+  }, [visibles]);
+  const enRiel = useMemo(
+    () => (canalRiel ? visibles.filter((c) => c.canal === canalRiel) : visibles),
+    [visibles, canalRiel],
+  );
+
+  /**
    * El estado vacío NO puede decir «estás al día» si en realidad no estamos
    * mirando: cero filas significa o que no hay trabajo, o que la captura está
    * muerta — y sin este chequeo la pantalla elige siempre la versión que deja a
@@ -180,8 +199,8 @@ export function ColaUnificada({
   // Cierre de edición despachada: la cola de «Todo» en cero CON datos frescos y
   // sin ningún filtro es trabajo terminado — la Deuda en cero. Se celebra con la
   // cifra del día + la siguiente jugada.
-  const sinFiltros = tab === 'todo' && !filtroSec && !categoriaActiva;
-  const despachada = !cargando && visibles.length === 0 && !busqueda && sinFiltros && frescura?.fresca === true;
+  const sinFiltros = tab === 'todo' && !filtroSec && !categoriaActiva && !canalRiel;
+  const despachada = !cargando && enRiel.length === 0 && !busqueda && sinFiltros && frescura?.fresca === true;
 
   // La cifra del día sale del MISMO hook que el radar (issue #5): acá vivía un
   // `useQuery` a mano sobre la misma `queryKey` con `staleTime` donde el hook
@@ -245,12 +264,12 @@ export function ColaUnificada({
   // Roving tabindex: una sola fila tabulable; ↑↓ mueven el foco, Enter abre.
   const refsFilas = useRef<(HTMLButtonElement | null)[]>([]);
   const [idxFoco, setIdxFoco] = useState(0);
-  const idxSeguro = Math.min(idxFoco, Math.max(0, visibles.length - 1));
+  const idxSeguro = Math.min(idxFoco, Math.max(0, enRiel.length - 1));
   function onTeclasLista(e: KeyboardEvent<HTMLDivElement>) {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
     if ((e.target as HTMLElement).closest('input, textarea, select')) return;
     e.preventDefault();
-    const proximo = Math.min(Math.max(idxSeguro + (e.key === 'ArrowDown' ? 1 : -1), 0), visibles.length - 1);
+    const proximo = Math.min(Math.max(idxSeguro + (e.key === 'ArrowDown' ? 1 : -1), 0), enRiel.length - 1);
     setIdxFoco(proximo);
     refsFilas.current[proximo]?.focus();
   }
@@ -312,14 +331,14 @@ export function ColaUnificada({
 
   // Fila pin de orientación: la conversación abierta no aparece bajo el filtro
   // (o la búsqueda) activo — se fija arriba para que la vendedora no la pierda.
-  const noEstaEnLista = seleccionada != null && !cargando && !visibles.some((c) => c.clave === seleccionada);
+  const noEstaEnLista = seleccionada != null && !cargando && !enRiel.some((c) => c.clave === seleccionada);
   // Los recortes activos, nombrados: es lo que la cabecera muestra y lo que
   // decide si «Ver todo» tiene sentido (lógica pura, `cola.ts`).
   const recortes = filtrosActivos({ tab, filtroSec, categoria: categoriaActiva?.nombre ?? null, busqueda });
   const hayFiltroActivo = recortes.some((r) => r.clave !== 'busqueda');
   // Con búsqueda el recorte lo hace el front sobre lo cargado, así que el número
   // honesto es el que se ve; sin ella manda el total que contó el server.
-  const nVisibles = busqueda ? visibles.length : total;
+  const nVisibles = busqueda || canalRiel ? enRiel.length : total;
   const pinVisible = noEstaEnLista && (busqueda !== '' || hayFiltroActivo);
 
   /**
@@ -345,7 +364,7 @@ export function ColaUnificada({
    * El separador es seguro: una clave es `conv:<canal>:<persona>:<numero>` o
    * `int:<id>`, y ninguna de las dos formas lleva `|`.
    */
-  const clavesAhora = visibles.map((c) => c.clave).join('|');
+  const clavesAhora = enRiel.map((c) => c.clave).join('|');
   const aviso = avisoDeFilaQueSeFue({
     abierta: seleccionada,
     nombre: conversacionAbierta?.persona_nombre,
@@ -417,7 +436,22 @@ export function ColaUnificada({
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-card shadow-panel">
+    <div className="flex h-full overflow-hidden rounded-2xl bg-card shadow-panel">
+      {/* EL RIEL — al filo izquierdo, fuera del `px-4` del header a propósito:
+          es un eje propio, no un control de la barra de filtros. */}
+      <RielCanales
+        canal={canalRiel}
+        onCanal={setCanalRiel}
+        conteos={conteosCanal}
+        lineas={lineas}
+        hayMias={hayMias}
+        lineaActiva={linea}
+        onLinea={setLinea}
+      />
+
+      {/* 27.75rem es el piso MEDIDO del header (ver el comentario en `App.tsx`),
+          y vive acá para que el riel no se lo coma. */}
+      <div className="flex w-[27.75rem] shrink-0 flex-col overflow-hidden">
       {/* Header: búsqueda + acciones arriba, tabs + filtros abajo, un solo bloque.
           ⚠️ `px-4` y no `px-3` (20-ago-2026, pedido explícito): con `px-3` el
           borde derecho de «N en cola» quedaba a solo 12px del borde de la
@@ -491,7 +525,7 @@ export function ColaUnificada({
                 type="button"
                 onClick={abrirChatNuevo}
                 disabled={nuevoTel.replace(/\D/g, '').length < 8}
-                className="rounded-lg bg-navy px-3 text-sm font-bold text-white transition-[background-color,transform] hover:bg-navy/90 active:scale-[0.97] disabled:opacity-40"
+                className={boton()}
               >
                 Abrir
               </button>
@@ -503,13 +537,12 @@ export function ColaUnificada({
         )}
 
         <div className="flex items-center justify-between gap-2">
-          {/* Tabs + línea, EN LA MISMA FILA desde el 20-ago-2026 (pedido
-              explícito: antes eran dos filas separadas). La línea vivía como
-              segmentado propio en `BarraFiltros` — volvió acá como
-              `SelectorLinea` (un dropdown, ver su docblock): un segmentado de
-              N líneas al lado de los tabs repetiría el problema que ya rompió
-              esta barra una vez (ver «DOS FILAS, NO UNA» en `BarraFiltros.tsx`),
-              y un dropdown mide lo mismo sin importar cuántas líneas haya. */}
+          {/* Solo los tabs. La línea vivió acá como `SelectorLinea` —un dropdown
+              al lado de los tabs, desde el 20-ago-2026— hasta que el RIEL de
+              canales se la llevó (21-ago-2026, pedido explícito): elegir línea
+              en dos lugares sobre el mismo estado era el mismo control dibujado
+              dos veces. `SelectorLinea` sigue exportado y con tests: lo usan las
+              galerías. */}
           <div className="flex min-w-0 shrink-0 items-center gap-1.5">
             <div className="flex shrink-0 gap-0.5 rounded-lg bg-muted/60 p-0.5" role="tablist" aria-label="Filtrar la cola">
               {TABS.map((t) => (
@@ -528,7 +561,6 @@ export function ColaUnificada({
                 </button>
               ))}
             </div>
-            <SelectorLinea lineas={lineas} lineaActiva={linea} onLinea={setLinea} hayMias={hayMias} />
           </div>
           {deAntes ? (
             <SelloDeAntes texto={deAntes} actualizando={actualizando} />
@@ -667,7 +699,7 @@ export function ColaUnificada({
               </div>
             ))}
           </div>
-        ) : visibles.length === 0 ? (
+        ) : enRiel.length === 0 ? (
           busqueda ? (
             <p className="px-4 py-12 text-center text-sm text-muted-foreground">
               Ninguna conversación cargada coincide con «{busqueda}».
@@ -760,7 +792,7 @@ export function ColaUnificada({
             </div>
           )
         ) : (
-          visibles.map((c, i) => (
+          enRiel.map((c, i) => (
             <div key={c.clave} className="group/fila relative">
               <FilaConversacion
                 c={c}
@@ -806,16 +838,17 @@ export function ColaUnificada({
               disabled={cargandoMas}
               className="w-full rounded-lg border border-border py-2 text-xs font-bold text-muted-foreground transition-colors hover:border-primary hover:text-foreground disabled:opacity-50"
             >
-              {cargandoMas ? 'Cargando…' : busqueda && visibles.length === 0 ? 'Buscar en más historia' : 'Ver más'}
+              {cargandoMas ? 'Cargando…' : busqueda && enRiel.length === 0 ? 'Buscar en más historia' : 'Ver más'}
             </button>
           </div>
         )}
-        {!cargando && !hayMas && busqueda !== '' && visibles.length === 0 && (
+        {!cargando && !hayMas && busqueda !== '' && enRiel.length === 0 && (
           <p className="pb-4 text-center text-[11px] text-muted-foreground">Ya está cargada toda la historia.</p>
         )}
       </div>
 
       {gestorAbierto && <GestorCategorias onCerrar={() => setGestorAbierto(false)} />}
+      </div>
     </div>
   );
 }

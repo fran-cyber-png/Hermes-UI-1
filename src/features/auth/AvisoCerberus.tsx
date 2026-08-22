@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { KeyRound, Loader2 } from 'lucide-react';
 import { usePopover } from '../../lib/teclado/usePopover';
 import { tieneSesionDeCerberus } from './identidad';
+import { boton } from '../../lib/styles';
 
 /**
  * «PERDISTE LA LLAVE DE CERBERUS» — el aviso que llega ANTES de la venta.
@@ -121,7 +122,7 @@ export function AvisoCerberus({
               type="button"
               onClick={() => void reconectar()}
               disabled={!clave || yendo}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-navy px-3 py-2 text-xs font-bold text-white transition-[background-color,transform] hover:bg-navy/90 active:scale-[0.98] disabled:opacity-40"
+              className={boton() + ' mt-3 w-full'}
             >
               {yendo ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
               Reconectar
@@ -152,7 +153,7 @@ export function VentaSinCerberus({ onReconectar }: { onReconectar: () => void })
       <button
         type="button"
         onClick={onReconectar}
-        className="flex items-center gap-2 rounded-lg bg-navy px-4 py-2 text-xs font-bold text-white transition-[background-color,transform] hover:bg-navy/90 active:scale-[0.98]"
+        className={boton()}
       >
         <KeyRound size={14} /> Reconectar con Cerberus
       </button>

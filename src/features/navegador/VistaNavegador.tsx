@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowRight, ArrowUpRight, Compass, ExternalLink, RotateCw, X } from 'lucide-react';
+import { boton, kicker } from '../../lib/styles';
 import { enTauri } from '../../lib/tauri';
 import { abrirNavegador } from './abrir';
 import { DESTINOS, interpretar } from './destino';
@@ -163,7 +164,7 @@ export function VistaNavegador({
           <button
             type="submit"
             disabled={!destino.ok}
-            className="flex shrink-0 items-center gap-1 rounded-lg bg-navy px-3 py-1.5 text-sm font-semibold text-white transition-[opacity,transform] duration-200 ease-house active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40"
+            className={boton()}
           >
             Ir
             <ArrowUpRight size={14} strokeWidth={2.2} />
@@ -285,7 +286,7 @@ function Lanzador({
           </p>
         )}
 
-        <h2 className="mt-8 font-mono text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+        <h2 className={'mt-8 ' + kicker}>
           A dónde se va todos los días
         </h2>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">

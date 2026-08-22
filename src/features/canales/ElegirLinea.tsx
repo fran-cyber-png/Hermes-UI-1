@@ -2,6 +2,7 @@ import { MessageCircle, Phone, X } from 'lucide-react';
 import { useEscape } from '../../lib/teclado/useEscape';
 import { formatoTelefono } from '../../lib/formato';
 import type { LineaWhatsapp } from '../../dominio/lineas';
+import { boton } from '../../lib/styles';
 
 /**
  * ELEGIR LÍNEA PARA ESCRIBIR — cuando hay varias, no se adivina.
@@ -86,7 +87,7 @@ export function ElegirLinea({
             <button
               type="button"
               onClick={onCerrar}
-              className="rounded-xl border border-border px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-muted"
+              className={boton('secundario')}
             >
               Cancelar
             </button>

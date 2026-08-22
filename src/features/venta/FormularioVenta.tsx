@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, CalendarPlus, Check, Copy, Loader2, Megaphone, Plus, Search, ShoppingCart, Trash2, X } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
-import { sectionLabel } from '../../lib/styles';
+import { boton, sectionLabel } from '../../lib/styles';
 import { useEscape } from '../../lib/teclado/useEscape';
 import { ETAPAS, colorSegmento, rotuloEtapa } from '../../lib/etapas';
 import { BarraSegmentada } from '../../components/graficos/BarraSegmentada';
@@ -373,7 +373,7 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
                       onAgendarBienvenida(telefono || null);
                       onCerrar();
                     }}
-                    className="mt-2 flex items-center gap-2 rounded-xl bg-navy px-4 py-2 text-sm font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98]"
+                    className={boton() + ' mt-2'}
                   >
                     <CalendarPlus size={15} /> Agendar bienvenida al curso
                   </button>
@@ -618,7 +618,7 @@ export function FormularioVenta({ clienteId, clienteNombre, telefono, canal, cla
                 type="button"
                 onClick={() => void registrar('venta')}
                 disabled={!puedeVender}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-navy py-2.5 text-sm font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] disabled:opacity-40"
+                className={boton() + ' flex-1'}
               >
                 {crear.isPending ? <Loader2 size={15} className="animate-spin" /> : <ShoppingCart size={15} />}
                 Registrar venta

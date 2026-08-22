@@ -5,6 +5,7 @@ import { PantallaPlantillas } from './PantallaPlantillas';
 import { PantallaHistorial } from './PantallaHistorial';
 import { PantallaListas } from './PantallaListas';
 import { ArmarCampana } from './ArmarCampana';
+import { boton } from '../../lib/styles';
 
 /**
  * CAMPAÑAS — el lugar donde se administra todo lo de campañas.
@@ -79,7 +80,7 @@ export function PantallaCampanas({ seccionInicial }: { seccionInicial?: string }
         <button
           type="button"
           onClick={() => setArmando(true)}
-          className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-navy px-3 py-1.5 text-sm font-bold text-white transition-colors hover:bg-navy/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          className={boton() + ' ml-auto'}
         >
           <Send size={12} /> Armar una campaña
         </button>

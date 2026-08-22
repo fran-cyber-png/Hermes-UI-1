@@ -8,6 +8,7 @@ import { useFicha } from '../cerberus/useFicha';
 import type { Ficha } from '../cerberus/ficha';
 import { useLeadForm } from '../cerberus/BloqueLeadForm';
 import { Intereses } from '../gestion/Intereses';
+import { boton } from '../../lib/styles';
 import {
   faltaLoMinimo,
   prellenar,
@@ -292,7 +293,7 @@ export function FichaRapida({
             <button
               type="submit"
               disabled={guardar.isPending || faltaLoMinimo(datos)}
-              className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-bold text-primary-foreground transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover active:scale-[0.98] disabled:opacity-40"
+              className={boton()}
             >
               {guardar.isPending ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
               {yaRegistrado ? 'Guardar cambios' : 'Registrar contacto'}

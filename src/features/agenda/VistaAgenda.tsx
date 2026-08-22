@@ -29,6 +29,7 @@ import { CalendarHeader } from './components/CalendarHeader';
 import type { Modo } from './modos';
 import { colorPuntoImportancia } from './importancia';
 import { SelectorImportancia } from './SelectorImportancia';
+import { boton } from '../../lib/styles';
 
 /**
  * LA AGENDA — el calendario de la vendedora, estilo Google Calendar pero de
@@ -366,7 +367,7 @@ function Crear({
             <button
               type="submit"
               disabled={crear.isPending || !nota.trim()}
-              className="mt-1 flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-5 py-2 text-sm font-bold text-primary-foreground transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover active:scale-[0.98] disabled:opacity-40"
+              className={boton() + ' mt-1'}
             >
               {crear.isPending ? <Loader2 size={13} className="animate-spin" /> : <CalendarPlus size={13} />}
               {confirmarSinAtar ? 'Agendar sin atar' : 'Agendar'}
@@ -619,7 +620,7 @@ export function VistaAgenda({
             <button
               type="button"
               onClick={() => void agenda.refetch()}
-              className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+              className={boton('secundario')}
             >
               Reintentar
             </button>

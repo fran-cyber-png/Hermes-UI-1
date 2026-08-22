@@ -2,7 +2,7 @@ import { useState, type FormEvent, type KeyboardEvent } from 'react';
 import { AlertTriangle, Loader2, LogIn } from 'lucide-react';
 import { Escudo } from '../../components/Marca';
 import { ErrorApi } from '../../lib/datos/cliente';
-import { fieldClass, sectionLabel } from '../../lib/styles';
+import { boton, fieldClass, sectionLabel } from '../../lib/styles';
 import { CLAVE_ULTIMO_USUARIO } from './sesion';
 
 /**
@@ -139,7 +139,7 @@ export function Login({
               <button
                 type="button"
                 onClick={reintentar}
-                className="shrink-0 rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1"
+                className={boton('secundario')}
               >
                 Reintentar
               </button>

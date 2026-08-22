@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { MODOS, MODO_ROTULO, type Modo } from '../modos';
+import { boton } from '../../../lib/styles';
 
 /**
  * LA BARRA DE LA AGENDA.
@@ -107,7 +108,7 @@ export function CalendarHeader({
         <button
           type="button"
           onClick={onCreateClick}
-          className="rounded-lg bg-primary px-3 py-1.5 text-sm font-bold text-primary-foreground transition-all duration-150 hover:bg-primary/90 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          className={boton()}
         >
           + Crear
         </button>

@@ -345,7 +345,7 @@ function PropuestaDelAnuncio({
             e.stopPropagation();
             onConfirmar();
           }}
-          className="ml-0.5 inline-flex shrink-0 items-center gap-1 rounded px-2 py-1 text-xs font-bold text-white transition-[background-color,transform] duration-200 ease-house bg-navy hover:bg-navy/90 active:scale-[0.98] disabled:opacity-60"
+          className="ml-0.5 inline-flex shrink-0 items-center gap-1 rounded px-2 py-1 text-xs font-bold text-white transition-[background-color,transform] duration-200 ease-house bg-navy hover:bg-navy-hover active:scale-[0.98] disabled:opacity-60"
         >
           <Check size={12} aria-hidden /> {confirmando ? 'Guardando…' : 'Confirmar'}
         </button>

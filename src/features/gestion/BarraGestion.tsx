@@ -435,10 +435,10 @@ function ContactoRegistrado({
           'flex h-7 max-w-[13rem] items-center gap-1.5 rounded-md px-2 text-sm font-normal transition-colors ' +
           (ficha
             ? 'bg-success/10 text-success hover:bg-success/15'
-            : 'bg-primary text-primary-foreground hover:bg-primary-hover')
+            : 'bg-[color-mix(in_oklab,var(--muted)_88%,black)] text-foreground hover:bg-[color-mix(in_oklab,var(--muted)_76%,black)]')
         }
       >
-        {ficha ? <Check size={14} className="shrink-0" /> : <UserPlus size={14} className="shrink-0" />}
+        {ficha ? <Check size={14} className="shrink-0" /> : <UserPlus size={14} className="shrink-0 text-icono-azul" />}
         <span className="truncate">{ficha ? nombre || 'Registrado' : 'Registrar contacto'}</span>
       </button>
       {abierto && (

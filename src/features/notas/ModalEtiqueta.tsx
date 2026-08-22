@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
+import { boton } from '../../lib/styles';
 
 /**
  * EL MODAL PARA RENOMBRAR — nodos y bordes, el mismo componente (17-ago-2026).
@@ -105,14 +106,14 @@ export function ModalEtiqueta({
           <button
             type="button"
             onClick={onCancelar}
-            className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted"
+            className={boton('terciario')}
           >
             Cancelar
           </button>
           <button
             type="submit"
             disabled={!puedeGuardar}
-            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
+            className={boton()}
           >
             Guardar
           </button>

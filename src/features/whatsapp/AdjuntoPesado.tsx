@@ -3,6 +3,7 @@ import { AlertTriangle, Loader2, Play, X } from 'lucide-react';
 import { pesoLegible } from './pegarAdjunto';
 import { leerMetadatosVideo } from './metadatosVideo';
 import { duracionAproximada, planDeCompresion, type Plan } from './planDeCompresion';
+import { boton } from '../../lib/styles';
 
 /**
  * UN VIDEO QUE NO ENTRA — y qué se puede hacer al respecto.
@@ -82,7 +83,7 @@ function VistaPreviaComprimido({
         <button
           type="button"
           onClick={onUsar}
-          className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          className={boton()}
         >
           Usar este
         </button>
@@ -205,7 +206,7 @@ export function AdjuntoPesado({
               <button
                 type="button"
                 onClick={() => void comprimir(estado.plan)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-navy px-2.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-navy/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                className={boton()}
               >
                 <Play size={12} /> Achicarlo acá
               </button>

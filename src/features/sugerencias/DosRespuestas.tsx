@@ -110,7 +110,7 @@ function Tarjeta({
           className={
             'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition-[background-color,transform] duration-200 ease-house active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 ' +
             (primaria
-              ? 'bg-navy text-white shadow-[0_4px_14px_-6px_rgba(14,42,82,0.6)] hover:bg-navy/90'
+              ? 'bg-navy text-white shadow-[0_4px_14px_-6px_rgba(14,42,82,0.6)] hover:bg-navy-hover'
               : 'border border-border text-foreground hover:bg-muted')
           }
         >

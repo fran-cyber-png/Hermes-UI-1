@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Archive, ListChecks, Loader2, Plus, Users2, X } from 'lucide-react';
 import { api } from '../../lib/datos/cliente';
-import { sectionLabel } from '../../lib/styles';
+import { boton, sectionLabel } from '../../lib/styles';
 import { DIMENSIONES, useFacetas, type Dimension } from '../padron/padron';
 import { useArchivarLista, useGuardarLista, useListas, type Lista } from './plantillas';
 
@@ -69,7 +69,7 @@ export function PantallaListas() {
         <button
           type="button"
           onClick={() => setCreando(true)}
-          className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-navy px-3 py-1.5 text-sm font-bold text-white transition-colors hover:bg-navy/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          className={boton() + ' ml-auto'}
         >
           <Plus size={13} /> Crear una lista
         </button>
@@ -288,7 +288,7 @@ function Formulario({ onCerrar }: { onCerrar: () => void }) {
         onClick={() =>
           guardar.mutate({ nombre, filtros, nota }, { onSuccess: onCerrar })
         }
-        className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-navy px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+        className={boton() + ' mt-3'}
       >
         {guardar.isPending && <Loader2 size={13} className="animate-spin" />}
         Guardar la lista

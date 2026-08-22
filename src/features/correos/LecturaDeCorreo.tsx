@@ -5,6 +5,7 @@ import { useEscape } from '../../lib/teclado/useEscape';
 import { fechaCorta, hace } from '../../lib/formato';
 import { nombreCorto } from '../../dominio/dueno';
 import type { CorreoCompleto, CorreoEnLista } from './tipos';
+import { boton } from '../../lib/styles';
 
 /**
  * LEER UN CORREO QUE YA SALIÓ — el cuerpo se PIDE, de a uno.
@@ -150,7 +151,7 @@ export function LecturaDeCorreo({
               <button
                 type="button"
                 onClick={() => void detalle.refetch()}
-                className="mt-2.5 rounded-lg border border-border px-3 py-1.5 font-semibold transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1"
+                className={boton('secundario') + ' mt-2.5'}
               >
                 Reintentar
               </button>

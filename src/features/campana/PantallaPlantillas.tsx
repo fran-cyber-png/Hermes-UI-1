@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Loader2, Plus, X } from 'lucide-react';
-import { sectionLabel } from '../../lib/styles';
+import { boton, sectionLabel } from '../../lib/styles';
 import {
   CATEGORIAS,
   useCrearPlantilla,
@@ -80,7 +80,7 @@ export function PantallaPlantillas() {
         <button
           type="button"
           onClick={() => setCreando(true)}
-          className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-navy px-3 py-1.5 text-sm font-bold text-white transition-colors hover:bg-navy/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          className={boton() + ' ml-auto'}
         >
           <Plus size={13} /> Crear una plantilla
         </button>
@@ -368,7 +368,7 @@ function Formulario({ onCerrar }: { onCerrar: () => void }) {
           type="button"
           disabled={!listaParaMandar || crear.isPending}
           onClick={() => crear.mutate(b)}
-          className="inline-flex items-center gap-1.5 rounded-full bg-navy px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+          className={boton()}
         >
           {crear.isPending && <Loader2 size={13} className="animate-spin" />}
           Mandarla a revisión

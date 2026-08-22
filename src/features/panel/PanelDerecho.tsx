@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { MessageCircle } from 'lucide-react';
-import { sectionLabel } from '../../lib/styles';
+import { boton, sectionLabel } from '../../lib/styles';
 import type { Conversacion } from '../../dominio/conversaciones';
 import { marcaDeCliente } from '../../dominio/cliente';
 import { useFicha } from '../cerberus/useFicha';
@@ -238,7 +238,7 @@ export function PanelDerecho({
             <button
               type="button"
               onClick={() => onEscribir(telefono)}
-              className="mb-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-navy px-3 py-2 text-sm font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className={boton() + ' mb-3 w-full'}
             >
               <MessageCircle size={13} /> Escribirle
             </button>

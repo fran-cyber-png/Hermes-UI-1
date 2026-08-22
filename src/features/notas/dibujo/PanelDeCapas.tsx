@@ -18,6 +18,7 @@ import { MiniaturaDeCapa } from './MiniaturaDeCapa';
 import type { Capa } from './capas';
 import { figurasDe } from './capas';
 import type { Figura, Reordenamiento } from './figuras';
+import { boton } from '../../../lib/styles';
 
 /**
  * EL PANEL DE CAPAS — qué hay en cada una, cuál está activa, qué se ve.
@@ -199,7 +200,7 @@ export function PanelDeCapas({
           onClick={onAgregar}
           aria-label="Nueva capa"
           title="Nueva capa"
-          className="flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[0.6875rem] text-foreground transition hover:bg-muted"
+          className={boton('secundario')}
         >
           <Plus className="size-3" />
           Nueva

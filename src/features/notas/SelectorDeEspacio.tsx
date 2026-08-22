@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Check, Lock, Plus, Users, X } from 'lucide-react';
+import { boton } from '../../lib/styles';
 import {
   type DondeEstoy,
   type Espacio,
@@ -128,11 +129,11 @@ function NuevoEspacio({ onListo, onCancelar }: { onListo: () => void; onCancelar
         <button
           type="submit"
           disabled={!puedeGuardar}
-          className="rounded-lg bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition hover:bg-primary-hover disabled:opacity-50"
+          className={boton()}
         >
           {crear.isPending ? 'Creando…' : 'Crear'}
         </button>
-        <button type="button" onClick={onCancelar} className="rounded-lg px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted">
+        <button type="button" onClick={onCancelar} className={boton('terciario')}>
           Cancelar
         </button>
       </div>

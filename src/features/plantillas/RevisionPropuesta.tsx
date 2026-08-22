@@ -203,7 +203,7 @@ export function RevisionPropuesta({
                   { onSuccess: onAbrir },
                 )
               }
-              className="inline-flex items-center gap-1.5 rounded-lg bg-navy px-2.5 py-1.5 text-[11px] font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-navy px-2.5 py-1.5 text-[11px] font-bold text-white transition-[background-color,transform] duration-200 ease-house hover:bg-navy-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
             >
               {aprobar.isPending ? (
                 <Loader2 size={12} className="animate-spin" />

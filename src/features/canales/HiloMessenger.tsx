@@ -4,6 +4,7 @@ import { ExternalLink, Lock } from 'lucide-react';
 import { api } from '../../lib/datos/cliente';
 import { agruparPorDia, SeparadorDia, SkeletonHilo, tintaSeparador } from '../whatsapp/HiloWhatsapp';
 import type { Conversacion } from '../../dominio/conversaciones';
+import { boton } from '../../lib/styles';
 
 /**
  * EL HILO DE MESSENGER — leer la conversación completa, con las dos mitades.
@@ -73,7 +74,7 @@ export function HiloMessenger({ conversacion }: { conversacion: Conversacion }) 
             <button
               type="button"
               onClick={() => void refetch()}
-              className="mt-2 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1"
+              className={boton('secundario') + ' mt-2'}
             >
               Reintentar
             </button>

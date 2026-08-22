@@ -3,11 +3,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   ArrowRight,
-  BadgeDollarSign,
   Check,
   Clock,
   History,
-  MessageSquareOff,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -114,10 +112,10 @@ const GRID =
  */
 const ICONO_RECORTE: Record<Recorte, LucideIcon | null> = {
   todas: null,
-  precio: BadgeDollarSign,
+  precio: null,
   ventana: Clock,
   seguir: History,
-  seCallo: MessageSquareOff,
+  seCallo: null,
 };
 
 export function VistaEmbudo({
@@ -587,7 +585,7 @@ export function VistaEmbudo({
                     <button
                       type="button"
                       onClick={onIrAMensajes}
-                      className="group mt-1.5 inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-1 text-[11px] font-bold text-primary-foreground transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 active:scale-[0.98]"
+                      className="group mt-[21px] inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-1 text-[11px] font-bold text-primary-foreground transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 active:scale-[0.98]"
                     >
                       Responder en Mensajes
                       <ArrowRight
@@ -607,7 +605,7 @@ export function VistaEmbudo({
                     que no recorta nada es un botón que no hace nada.
                   */}
                   {opciones.length > 1 && (
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                    <div className="mt-[39px] flex flex-wrap items-center gap-1">
                       {opciones.map((r) => {
                         const activo = recorte === r.id;
                         const Icono = ICONO_RECORTE[r.id];
@@ -619,13 +617,13 @@ export function VistaEmbudo({
                             aria-pressed={activo}
                             title={r.ayuda}
                             className={
-                              'inline-flex items-center gap-1 rounded-full border px-2 py-px text-[11px] font-semibold transition-colors ' +
+                              'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ' +
                               (activo
-                                ? 'border-navy bg-navy text-white'
-                                : 'border-border text-muted-foreground hover:text-foreground')
+                                ? 'bg-navy text-white'
+                                : 'bg-muted/50 text-muted-foreground hover:text-foreground')
                             }
                           >
-                            {Icono && <Icono size={10} />}
+                            {Icono && <Icono size={11} />}
                             {r.label}
                             {r.n != null && ` ${r.n.toLocaleString('es-PE')}`}
                           </button>

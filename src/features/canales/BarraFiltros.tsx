@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 import { Check, ChevronDown, Smartphone, Tags, X } from 'lucide-react';
 import type { LineaWhatsapp } from '../../dominio/lineas';
 import {
-  CLASE_BORDE,
   CLASE_FONDO,
   CLASE_FONDO_SUAVE,
   CLASE_TEXTO,
@@ -348,12 +347,12 @@ export function BarraFiltros({
             title={activo ? `Quitar el filtro «${f.label}»` : f.ayuda}
             onClick={() => onFiltro(activo ? '' : f.valor)}
             className={
-              'flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ' +
-              'transition-[background-color,border-color,color] duration-200 ease-house active:scale-[0.97] ' +
+              'flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ' +
+              'transition-[background-color,color] duration-200 ease-house active:scale-[0.97] ' +
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ' +
               (activo
-                ? 'border-primary bg-primary text-primary-foreground'
-                : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground')
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted/40 text-muted-foreground hover:text-foreground')
             }
           >
             {f.label}
@@ -381,12 +380,16 @@ export function BarraFiltros({
             title={activa ? `Salir de la lista «${c.nombre}»` : `Ver solo «${c.nombre}»`}
             onClick={() => onCategoria(activa ? null : { nombre: c.nombre, color: c.color })}
             className={
-              'flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ' +
-              'transition-[background-color,border-color,color] duration-200 ease-house active:scale-[0.97] ' +
+              'flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ' +
+              'transition-[background-color,color] duration-200 ease-house active:scale-[0.97] ' +
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ' +
-              CLASE_BORDE[color] +
-              ' ' +
-              (activa ? CLASE_FONDO_SUAVE[color] + ' ' + CLASE_TEXTO[color] : 'text-muted-foreground hover:text-foreground')
+              // Sin borde desde el 21-ago-2026 (pedido explícito): el color de la
+              // categoría lo sigue diciendo el punto de la izquierda, que es el
+              // único lugar donde el color va a plena saturación. Apagada va en
+              // `bg-muted`; encendida, en su color al 10 % con el texto al tono.
+              (activa
+                ? CLASE_FONDO_SUAVE[color] + ' ' + CLASE_TEXTO[color]
+                : 'bg-muted/40 text-muted-foreground hover:text-foreground')
             }
           >
             <span className={'size-2 shrink-0 rounded-full ' + CLASE_FONDO[color]} aria-hidden="true" />
@@ -429,11 +432,19 @@ export function BarraFiltros({
         onClick={() => setExpandido((v) => !v)}
         aria-expanded={expandido}
         title={expandido ? 'Mostrar menos etiquetas' : 'Ver todas las etiquetas'}
-        className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border bg-muted/40 text-muted-foreground transition-colors hover:text-foreground"
+        className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted/40 text-muted-foreground transition-colors hover:text-foreground"
       >
         <ChevronDown
           size={13}
-          className={'shrink-0 transition-transform duration-200 ease-house ' + (expandido ? 'rotate-180' : '')}
+          /* CENTRADO ÓPTICO, no geométrico: medido, el svg ya cae en el centro
+             exacto del círculo (desfase 0.00px). Lo que se ve corrido es que la
+             tinta del chevron está toda en las colas y nada en el vértice, así
+             que el ojo lo lee empujado hacia el lado ancho. Medio píxel alcanza,
+             y va al revés en cada estado porque el glifo se da vuelta. */
+          className={
+            'shrink-0 transition-transform duration-200 ease-house ' +
+            (expandido ? '-translate-y-[0.5px] rotate-180' : 'translate-y-[0.5px]')
+          }
           aria-hidden="true"
         />
       </button>

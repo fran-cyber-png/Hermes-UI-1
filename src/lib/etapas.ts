@@ -167,7 +167,7 @@ export const ETAPA_CHIP: Record<string, string> = {
   // Tinta apagada y sin borde: es un estado de espera, no un peldaño ganado.
   // Sin oro — acá no hay ningún plazo corriendo, hay silencio.
   sin_respuesta: 'bg-muted text-muted-foreground',
-  interesado: 'bg-primary/10 text-primary',
+  interesado: 'bg-gold-ink text-navy',
   contactado: 'bg-secondary text-secondary-foreground',
   cotizado: 'bg-navy text-white',
   cierre: 'bg-success/10 text-success',

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Check, Loader2, Mail, Send, Settings2, X } from 'lucide-react';
 import { api, ErrorApi } from '../../lib/datos/cliente';
 import { tokenGuardado } from '../../lib/datos/token';
-import { kicker } from '../../lib/styles';
+import { boton, kicker } from '../../lib/styles';
 import { hace } from '../../lib/formato';
 import { nombreCorto } from '../../dominio/dueno';
 import { quienDiceSer } from '../auth/sesion';
@@ -374,7 +374,7 @@ export function VistaCorreos({ correoInicial, claveInicial, nombreInicial, onCon
                 <button
                   type="button"
                   onClick={() => setAdminAbierto(true)}
-                  className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-sm font-normal text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1"
+                  className={boton('secundario')}
                 >
                   <Settings2 size={12} />
                   Administrar remitentes
@@ -389,7 +389,7 @@ export function VistaCorreos({ correoInicial, claveInicial, nombreInicial, onCon
               <button
                 type="button"
                 onClick={() => void estado.refetch()}
-                className="mt-2.5 rounded-lg border border-border px-3 py-1.5 font-semibold transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1"
+                className={boton('secundario') + ' mt-2.5'}
               >
                 Reintentar
               </button>
@@ -615,7 +615,7 @@ export function VistaCorreos({ correoInicial, claveInicial, nombreInicial, onCon
                   type="button"
                   onClick={() => enviar.mutate()}
                   disabled={!veredicto.puede}
-                  className="flex shrink-0 items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-bold text-primary-foreground shadow-[0_4px_16px_-4px_rgba(37,99,235,0.5)] transition-[background-color,transform] duration-200 ease-house hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
+                  className={boton()}
                 >
                   {enviar.isPending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                   Enviar
@@ -657,7 +657,7 @@ export function VistaCorreos({ correoInicial, claveInicial, nombreInicial, onCon
               <button
                 type="button"
                 onClick={() => void enviados.refetch()}
-                className="mt-2.5 rounded-lg border border-border px-3 py-1.5 font-semibold transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1"
+                className={boton('secundario') + ' mt-2.5'}
               >
                 Reintentar
               </button>

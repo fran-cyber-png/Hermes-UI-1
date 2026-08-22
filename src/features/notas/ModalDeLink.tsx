@@ -3,6 +3,7 @@ import { Check, Copy, History, Link2Off, X } from 'lucide-react';
 import { useEscape } from '../../lib/teclado/useEscape';
 import { PLAZOS, plazoInicial, venceAtDelPlazo, type Plazo } from './auditoria';
 import type { Alcance, Nota, Permiso } from './notas';
+import { boton } from '../../lib/styles';
 
 /**
  * EL MODAL DEL LINK — configurar la puerta de una página, en una sola pantalla
@@ -230,7 +231,7 @@ export function ModalDeLink({
                     void navigator.clipboard?.writeText(url);
                     setCopiado(true);
                   }}
-                  className="flex h-9 shrink-0 items-center gap-1 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground transition hover:bg-primary-hover"
+                  className={boton()}
                 >
                   {copiado ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
                   {copiado ? 'Copiado' : 'Copiar'}
@@ -314,7 +315,7 @@ export function ModalDeLink({
                     <button
                       type="button"
                       onClick={() => setConfirmandoCorte(false)}
-                      className="rounded-lg px-2.5 py-1 text-xs text-muted-foreground transition hover:bg-muted"
+                      className={boton('terciario')}
                     >
                       Dejarlo andando
                     </button>
@@ -336,7 +337,7 @@ export function ModalDeLink({
           <button
             type="button"
             onClick={guardar}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover"
+            className={boton()}
           >
             {/* Ver el docblock: reconfigurar NO genera un link nuevo. */}
             {token ? 'Guardar cambios' : 'Generar el link'}
